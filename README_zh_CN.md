@@ -12,6 +12,41 @@
 更新日志见: [CHANGELOG.md](https://cdn.jsdelivr.net/gh/Achuan-2/siyuan-plugin-task-note-management@main/CHANGELOG.md
 )
 
+## 📚 作者的其他项目
+
+以下是作者开发的其他项目，按类型分类：
+
+### 科研
+- [volume_view](https://github.com/Achuan-2/volume_view) - 用MATLAB绘制3D volume的工具
+- [calcium_deltaF_caculate](https://github.com/Achuan-2/calcium_deltaF_caculate) - GUI界面快速计算钙信号的ΔF/F
+- [Alzheimer_16S_analysis](https://github.com/Achuan-2/Alzheimer_16S_analysis) - 阿尔茨海默病患者的16S扩增子测序分析实践
+- [Splicing-Sites-Predicter](https://github.com/Achuan-2/Splicing-Sites-Predicter) - 使用WAM、SVM、BN预测真核基因剪接位点
+- [mini](https://github.com/Achuan-2/mini) - 机器学习相关的Jupyter Notebook项目
+- [xiaobai_ai](https://github.com/Achuan-2/xiaobai_ai) - 《小白也能听懂的人工智能原理》学习笔记
+- [math_in_machine_learning](https://github.com/Achuan-2/math_in_machine_learning) - 《白话机器学习的数学》学习笔记
+- [machine_learning_record](https://github.com/Achuan-2/machine_learning_record) - 个人机器学习学习记录
+- [doubantop250](https://github.com/Achuan-2/doubantop250) - 使用Python解析豆瓣电影Top250页面
+
+### 效率插件
+- [SlideSCI](https://github.com/Achuan-2/SlideSCI) - PowerPoint插件，支持一键添加图片标题、复制粘贴位置、一键图片对齐、一键插入Markdown等功能
+- [illustrator_sci_plugin](https://github.com/Achuan-2/illustrator_sci_plugin) - Adobe Illustrator插件，专为科研绘图设计，支持复制粘贴相对位置、形状尺寸批量设置等
+- [pandoc_word_template](https://github.com/Achuan-2/pandoc_word_template) - 使用pandoc将Markdown导出为Word的模板
+
+### 思源笔记
+- [siyuan-themes-tsundoku](https://github.com/Achuan-2/siyuan-themes-tsundoku) - 简洁美观的思源笔记主题
+- [siyuan-plugin-task-note-management](https://github.com/Achuan-2/siyuan-plugin-task-note-management) - 思源笔记任务管理插件，支持文档和块提醒、日历视图等功能
+- [siyuan-plugin-blockref-footnote](https://github.com/Achuan-2/siyuan-plugin-blockref-footnote) - 用块引实现脚注功能的思源笔记插件
+- [siyuan-plugin-text-process](https://github.com/Achuan-2/siyuan-plugin-text-process) - 思源笔记文本处理插件，支持粘贴时自动处理各种格式
+- [siyuan-plugin-formatPainter](https://github.com/Achuan-2/siyuan-plugin-formatPainter) - 思源笔记格式刷插件，批量应用样式
+- [siyuan-plugin-highlight-cloze](https://github.com/Achuan-2/siyuan-plugin-highlight-cloze) - 思源笔记高亮文本隐藏/显示插件
+- [siyuan-plugin-childdoc-organizer](https://github.com/Achuan-2/siyuan-plugin-childdoc-organizer) - 简化思源笔记子文档创建、归档、排序等操作
+- [siyuan-plugin-doctree-autosort](https://github.com/Achuan-2/siyuan-plugin-doctree-autosort) - 思源笔记文档树自定义排序+自动排序
+- [siyuan-plugin-imgAddLink](https://github.com/Achuan-2/siyuan-plugin-imgAddLink) - 思源笔记插件，支持图片添加超链接
+- [siyuan-note-templates](https://github.com/Achuan-2/siyuan-note-templates) - 思源笔记个人模板集合
+- [siyuan-widget-clockpac](https://github.com/Achuan-2/siyuan-widget-clockpac) - 显示当前时间的思源笔记挂件
+- [siyuan-widget-dayCounter](https://github.com/Achuan-2/siyuan-widget-dayCounter) - 思源笔记倒计时/正计时挂件
+- [markdown2wechat](https://github.com/Achuan-2/markdown2wechat) - Markdown转微信公众号格式工具
+
 ## 🤔插件背后的指导思想：防弹笔记法
 
 ### 什么是防弹笔记法

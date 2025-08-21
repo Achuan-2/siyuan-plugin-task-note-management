@@ -6,6 +6,41 @@ A task management plugin for SiYuan Notes, developed to practice the Bullet Jour
 
 > Please note that this plugin is for personal use. We are not responsible for any data loss caused by the plugin. Please consider carefully before using.
 
+## 📚 Author's Other Projects
+
+Here are other projects developed by the author, categorized by type:
+
+### Research
+- [volume_view](https://github.com/Achuan-2/volume_view) - Tool for drawing 3D volumes using MATLAB
+- [calcium_deltaF_caculate](https://github.com/Achuan-2/calcium_deltaF_caculate) - GUI tool for quickly calculating calcium signal ΔF/F
+- [Alzheimer_16S_analysis](https://github.com/Achuan-2/Alzheimer_16S_analysis) - 16S amplicon sequencing analysis practice for Alzheimer's disease patients
+- [Splicing-Sites-Predicter](https://github.com/Achuan-2/Splicing-Sites-Predicter) - Predict splicing sites in eukaryotic genes using WAM, SVM, BN
+- [mini](https://github.com/Achuan-2/mini) - Machine learning related Jupyter Notebook project
+- [xiaobai_ai](https://github.com/Achuan-2/xiaobai_ai) - Learning notes for "AI Principles for Beginners"
+- [math_in_machine_learning](https://github.com/Achuan-2/math_in_machine_learning) - Learning notes for "Mathematics in Machine Learning Made Easy"
+- [machine_learning_record](https://github.com/Achuan-2/machine_learning_record) - Personal machine learning study records
+- [doubantop250](https://github.com/Achuan-2/doubantop250) - Parse Douban Movie Top 250 pages using Python
+
+### Productivity Plugins
+- [SlideSCI](https://github.com/Achuan-2/SlideSCI) - PowerPoint plugin supporting one-click image titles, copy-paste positioning, one-click image alignment, and Markdown insertion
+- [illustrator_sci_plugin](https://github.com/Achuan-2/illustrator_sci_plugin) - Adobe Illustrator plugin designed for scientific drawing, supporting relative positioning copy-paste, batch shape sizing, etc.
+- [pandoc_word_template](https://github.com/Achuan-2/pandoc_word_template) - Template for exporting Markdown to Word using pandoc
+
+### SiYuan Notes
+- [siyuan-themes-tsundoku](https://github.com/Achuan-2/siyuan-themes-tsundoku) - Simple and beautiful theme for SiYuan Notes
+- [siyuan-plugin-task-note-management](https://github.com/Achuan-2/siyuan-plugin-task-note-management) - SiYuan Notes task management plugin with document/block reminders, calendar view, and more
+- [siyuan-plugin-blockref-footnote](https://github.com/Achuan-2/siyuan-plugin-blockref-footnote) - SiYuan Notes plugin implementing footnote functionality using block references
+- [siyuan-plugin-text-process](https://github.com/Achuan-2/siyuan-plugin-text-process) - SiYuan Notes text processing plugin for automatic formatting during paste operations
+- [siyuan-plugin-formatPainter](https://github.com/Achuan-2/siyuan-plugin-formatPainter) - SiYuan Notes format painter plugin for batch style application
+- [siyuan-plugin-highlight-cloze](https://github.com/Achuan-2/siyuan-plugin-highlight-cloze) - SiYuan Notes plugin for hiding/showing highlighted text
+- [siyuan-plugin-childdoc-organizer](https://github.com/Achuan-2/siyuan-plugin-childdoc-organizer) - Simplify SiYuan Notes sub-document creation, archiving, and sorting operations
+- [siyuan-plugin-doctree-autosort](https://github.com/Achuan-2/siyuan-plugin-doctree-autosort) - SiYuan Notes document tree custom sorting + auto sorting
+- [siyuan-plugin-imgAddLink](https://github.com/Achuan-2/siyuan-plugin-imgAddLink) - SiYuan Notes plugin supporting hyperlinks for images
+- [siyuan-note-templates](https://github.com/Achuan-2/siyuan-note-templates) - Personal template collection for SiYuan Notes
+- [siyuan-widget-clockpac](https://github.com/Achuan-2/siyuan-widget-clockpac) - SiYuan Notes widget for displaying current time
+- [siyuan-widget-dayCounter](https://github.com/Achuan-2/siyuan-widget-dayCounter) - SiYuan Notes countdown/countup widget
+- [markdown2wechat](https://github.com/Achuan-2/markdown2wechat) - Tool for converting Markdown to WeChat public account format
+
 ## 🤔 Guiding Philosophy Behind the Plugin: Bullet Journal Method
 
 ### What is the Bullet Journal Method
