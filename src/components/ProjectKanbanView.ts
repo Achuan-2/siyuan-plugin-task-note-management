@@ -701,6 +701,9 @@ export class ProjectKanbanView {
             this.draggedTask = task;
             element.style.opacity = '0.5';
             element.style.cursor = 'grabbing';
+            element.classList.add('kanban-task-dragging');
+            
+            console.log('开始拖拽任务:', task.title, '优先级:', task.priority, '状态:', task.status);
 
             if (e.dataTransfer) {
                 e.dataTransfer.effectAllowed = 'move';
@@ -714,6 +717,16 @@ export class ProjectKanbanView {
             this.draggedTask = null;
             element.style.opacity = '';
             element.style.cursor = 'grab';
+            element.classList.remove('kanban-task-dragging');
+            this.hideDropIndicator();
+            
+            // 清理所有可能的拖拽状态
+            const allTasks = this.container.querySelectorAll('.kanban-task');
+            allTasks.forEach(task => {
+                (task as HTMLElement).classList.remove('kanban-task-dragging');
+            });
+            
+            console.log('拖拽结束，清理状态完成');
         });
 
         element.addEventListener('dragover', (e) => {
@@ -725,6 +738,8 @@ export class ProjectKanbanView {
                 if (targetTask && this.canDropHere(this.draggedTask, targetTask)) {
                     e.dataTransfer.dropEffect = 'move';
                     this.showDropIndicator(element, e);
+                } else {
+                    e.dataTransfer.dropEffect = 'none';
                 }
             }
         });
@@ -735,7 +750,10 @@ export class ProjectKanbanView {
 
                 const targetTask = this.getTaskFromElement(element);
                 if (targetTask && this.canDropHere(this.draggedTask, targetTask)) {
+                    console.log('拖拽放置: 从', this.draggedTask.title, '到', targetTask.title);
                     this.handleDrop(this.draggedTask, targetTask, e);
+                } else {
+                    console.log('拖拽放置被拒绝');
                 }
             }
             this.hideDropIndicator();
@@ -768,8 +786,25 @@ export class ProjectKanbanView {
         const draggedStatus = draggedTask.status;
         const targetStatus = targetTask.status;
 
+        // 只在优先级排序模式下启用手动拖拽
+        if (this.currentSort !== 'priority') {
+            return false;
+        }
+
         // 只允许同优先级且同状态内的拖拽
-        return draggedPriority === targetPriority && draggedStatus === targetStatus;
+        const canDrop = draggedPriority === targetPriority && draggedStatus === targetStatus;
+        
+        if (!canDrop) {
+            console.log('拖拽被拒绝:', {
+                draggedPriority,
+                targetPriority,
+                draggedStatus,
+                targetStatus,
+                reason: draggedPriority !== targetPriority ? '优先级不同' : '状态不同'
+            });
+        }
+        
+        return canDrop;
     }
 
     // 新增：显示拖放指示器 - 完全照着 ReminderPanel.showDropIndicator 重写
@@ -1992,6 +2027,17 @@ export class ProjectKanbanView {
                 pointer-events: none;
                 border-radius: 1px;
                 box-shadow: 0 0 4px rgba(0, 123, 255, 0.3);
+            }
+
+            .kanban-task-dragging {
+                transform: rotate(3deg);
+                box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+                z-index: 1000;
+            }
+
+            .kanban-task:hover {
+                transform: translateY(-1px);
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
             }
 
             .reminder-dialog .b3-form__group {
