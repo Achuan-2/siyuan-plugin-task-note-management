@@ -10,6 +10,7 @@ import { PomodoroManager } from "../utils/pomodoroManager";
 import { CategoryManageDialog } from "./CategoryManageDialog";
 import { generateRepeatInstances, getRepeatDescription } from "../utils/repeatUtils";
 import { getSolarDateLunarString } from "../utils/lunarUtils";
+import { QuickReminderDialog } from "./QuickReminderDialog";
 
 // 层级化任务接口
 interface HierarchicalTask {
@@ -2016,285 +2017,33 @@ export class ProjectKanbanView {
     }
 
     private showCreateTaskDialog(parentTask?: any) {
-        const dialog = new Dialog({
-            title: parentTask ? `为 "${parentTask.title}" 创建子任务` : "新建任务",
-            content: `
-                <div class="reminder-dialog">
-                <div class="b3-dialog__content">
-                    <div class="b3-form__group">
-                        <label class="b3-form__label">任务标题</label>
-                        <input type="text" id="taskTitle" class="b3-text-field" placeholder="请输入任务标题" required style="width: 100%;">
-                    </div>
-                    <div class="b3-form__group">
-                        <label class="b3-form__label">分类
-                            <button type="button" id="manageCategoriesBtn" class="b3-button b3-button--outline" title="管理分类" style="margin-left: 8px; vertical-align: middle;">
-                                <svg class="b3-button__icon"><use xlink:href="#iconSettings"></use></svg>
-                            </button>
-                        </label>
-                        <div class="category-selector" id="categorySelector" style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;"></div>
-                    </div>
-                    <div class="b3-form__group">
-                        <label class="b3-form__label">优先级</label>
-                        <div class="priority-selector" id="prioritySelector">
-                            <div class="priority-option" data-priority="high"><div class="priority-dot high"></div><span>高</span></div>
-                            <div class="priority-option" data-priority="medium"><div class="priority-dot medium"></div><span>中</span></div>
-                            <div class="priority-option" data-priority="low"><div class="priority-dot low"></div><span>低</span></div>
-                            <div class="priority-option selected" data-priority="none"><div class="priority-dot none"></div><span>无</span></div>
-                        </div>
-                    </div>
-                    <div class="b3-form__group">
-                        <label class="b3-form__label">任务类型</label>
-                        <div class="term-type-selector" id="termTypeSelector">
-                            <div class="term-type-option selected" data-term-type="short_term">
-                                <span>📝</span><span>短期任务</span>
-                            </div>
-                            <div class="term-type-option" data-term-type="long_term">
-                                <span>🎯</span><span>长期任务</span>
-                            </div>
-                        </div>
-                    </div>
-                     <div class="b3-form__group">
-                        <label class="b3-form__label">任务日期</label>
-                        <div class="reminder-date-container">
-                            <input type="date" id="taskStartDate" class="b3-text-field" title="开始日期">
-                            <span class="reminder-arrow">→</span>
-                            <input type="date" id="taskEndDate" class="b3-text-field" title="结束日期">
-                        </div>
-                    </div>
-                    <div class="b3-form__group">
-                        <label class="b3-form__label">绑定块 (可选)</label>
-                        <div class="b3-form__desc">输入块ID将任务绑定到指定块</div>
-                        <input type="text" id="taskBlockId" class="b3-text-field" placeholder="请输入块ID (可选)" style="width: 100%; margin-top: 8px;">
-                        <div id="blockPreview" class="block-content-preview" style="
-                            display: none;
-                            padding: 8px;
-                            background-color: var(--b3-theme-surface-lighter);
-                            border-radius: 4px;
-                            border: 1px solid var(--b3-theme-border);
-                            max-height: 60px;
-                            overflow-y: auto;
-                            font-size: 12px;
-                            color: var(--b3-theme-on-surface);
-                            margin-top: 8px;
-                        "></div>
-                    </div>
-                    <div class="b3-form__group">
-                        <label class="b3-form__label">备注</label>
-                        <textarea id="taskNote" class="b3-text-field" placeholder="请输入任务备注" rows="2" style="width: 100%;resize: vertical; min-height: 60px;"></textarea>
-                    </div>
-                </div>
-                <div class="b3-dialog__action">
-                    <button class="b3-button b3-button--cancel" id="cancelBtn">取消</button>
-                    <button class="b3-button b3-button--primary" id="createBtn">创建</button>
-                </div>
-                </div>
-            `,
-            width: "500px",
-            height: "720px"
-        });
+        // 使用今天作为默认日期，不指定特定时间
+        const today = new Date();
+        const defaultDate = today.toISOString().split('T')[0];
 
-        const titleInput = dialog.element.querySelector('#taskTitle') as HTMLInputElement;
-        const noteInput = dialog.element.querySelector('#taskNote') as HTMLTextAreaElement;
-        const startDateInput = dialog.element.querySelector('#taskStartDate') as HTMLInputElement;
-        const endDateInput = dialog.element.querySelector('#taskEndDate') as HTMLInputElement;
-        const prioritySelector = dialog.element.querySelector('#prioritySelector') as HTMLElement;
-        const termTypeSelector = dialog.element.querySelector('#termTypeSelector') as HTMLElement;
-        const categorySelector = dialog.element.querySelector('#categorySelector') as HTMLElement;
-        const manageCategoriesBtn = dialog.element.querySelector('#manageCategoriesBtn') as HTMLButtonElement;
-        const blockIdInput = dialog.element.querySelector('#taskBlockId') as HTMLInputElement;
-        const blockPreview = dialog.element.querySelector('#blockPreview') as HTMLElement;
-        const cancelBtn = dialog.element.querySelector('#cancelBtn') as HTMLButtonElement;
-        const createBtn = dialog.element.querySelector('#createBtn') as HTMLButtonElement;
-
-        // 渲染并绑定分类选择器
-        this.renderCategorySelector(categorySelector, this.project.categoryId);
-
-        // 绑定优先级选择事件
-        prioritySelector.addEventListener('click', (e) => {
-            const target = e.target as HTMLElement;
-            const option = target.closest('.priority-option') as HTMLElement;
-            if (option) {
-                prioritySelector.querySelectorAll('.priority-option').forEach(opt => opt.classList.remove('selected'));
-                option.classList.add('selected');
+        // 创建 QuickReminderDialog，配置为项目看板模式
+        const quickDialog = new QuickReminderDialog(
+            defaultDate,
+            undefined, // 不指定时间
+            async () => {
+                // 任务创建成功后的回调
+                await this.loadTasks();
+                window.dispatchEvent(new CustomEvent('reminderUpdated'));
+            },
+            undefined, // timeRangeOptions
+            {
+                defaultProjectId: this.projectId, // 默认为当前项目
+                defaultCategoryId: parentTask?.categoryId || this.project.categoryId, // 如果是子任务，使用父任务的分类，否则使用项目分类
+                defaultPriority: parentTask?.priority, // 如果是子任务，使用父任务的优先级
+                defaultTermType: parentTask?.termType || 'short_term', // 如果是子任务，使用父任务的任务类型
+                hideProjectSelector: true, // 隐藏项目选择器
+                showTermTypeSelector: true, // 显示任务类型选择器
+                parentTask: parentTask, // 传入父任务引用
+                plugin: this.plugin // 传入plugin实例
             }
-        });
+        );
 
-        // 绑定任务类型选择事件
-        termTypeSelector.addEventListener('click', (e) => {
-            const target = e.target as HTMLElement;
-            const option = target.closest('.term-type-option') as HTMLElement;
-            if (option) {
-                termTypeSelector.querySelectorAll('.term-type-option').forEach(opt => opt.classList.remove('selected'));
-                option.classList.add('selected');
-            }
-        });
-
-        // 管理分类按钮事件
-        manageCategoriesBtn.addEventListener('click', () => {
-            new CategoryManageDialog(() => {
-                this.renderCategorySelector(categorySelector, this.project.categoryId);
-            }).show();
-        });
-
-        // 监听块ID输入变化
-        blockIdInput.addEventListener('input', async () => {
-            const blockId = blockIdInput.value.trim();
-            if (blockId.length >= 20) { // 块ID通常是20位字符
-                try {
-                    const block = await getBlockByID(blockId);
-                    if (block) {
-                        const blockContent = block.content || block.fcontent || '未命名块';
-                        blockPreview.textContent = `预览: ${blockContent}`;
-                        blockPreview.style.display = 'block';
-                    } else {
-                        blockPreview.style.display = 'none';
-                    }
-                } catch (error) {
-                    blockPreview.style.display = 'none';
-                }
-            } else {
-                blockPreview.style.display = 'none';
-            }
-        });
-
-        cancelBtn.addEventListener('click', () => dialog.destroy());
-
-        // 如果是创建子任务，预填父任务信息
-        if (parentTask) {
-            // 预选分类
-            const categoryOption = categorySelector.querySelector(`.category-option[data-category="${parentTask.categoryId || ''}"]`) as HTMLElement;
-            if (categoryOption) {
-                categorySelector.querySelectorAll('.category-option').forEach(opt => opt.classList.remove('selected'));
-                categoryOption.classList.add('selected');
-            }
-
-            // 预选优先级
-            const priorityOption = prioritySelector.querySelector(`.priority-option[data-priority="${parentTask.priority || 'none'}"]`) as HTMLElement;
-            if (priorityOption) {
-                prioritySelector.querySelectorAll('.priority-option').forEach(opt => opt.classList.remove('selected'));
-                priorityOption.classList.add('selected');
-            }
-        }
-
-        createBtn.addEventListener('click', async () => {
-            const title = titleInput.value.trim();
-            if (!title) {
-                showMessage("请输入任务标题");
-                return;
-            }
-
-            const selectedPriority = prioritySelector.querySelector('.priority-option.selected') as HTMLElement;
-            const priority = selectedPriority?.getAttribute('data-priority') || 'none';
-
-            const selectedTermType = termTypeSelector.querySelector('.term-type-option.selected') as HTMLElement;
-            const termType = selectedTermType?.getAttribute('data-term-type') || 'short_term';
-
-            const selectedCategory = categorySelector.querySelector('.category-option.selected') as HTMLElement;
-            const categoryId = selectedCategory?.getAttribute('data-category') || undefined;
-
-            const blockId = blockIdInput.value.trim() || undefined;
-
-            await this.createTask({
-                title: title,
-                note: noteInput.value.trim(),
-                date: startDateInput.value,
-                endDate: endDateInput.value,
-                priority: priority,
-                termType: termType,
-                categoryId: categoryId,
-                blockId: blockId
-            }, parentTask);
-
-            dialog.destroy();
-        });
-
-    }
-
-    private async createTask(taskData: any, parentTask?: any) {
-        const reminderData = await readReminderData();
-        const taskId = `quick_${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-
-        const newTask: any = {
-            id: taskId,
-            title: taskData.title,
-            note: taskData.note || '',
-            date: taskData.date || undefined,
-            endDate: taskData.endDate || undefined,
-            priority: taskData.priority || 'none',
-            categoryId: taskData.categoryId,
-            projectId: this.projectId,
-            completed: false,
-            kanbanStatus: 'todo',
-            termType: taskData.termType || 'short_term', // 默认为短期任务
-            createdTime: new Date().toISOString(),
-        };
-
-        // 如果是子任务，添加 parentId
-        if (parentTask) {
-            newTask.parentId = parentTask.id;
-            // 子任务继承父任务的状态
-            if (parentTask.status === 'doing') {
-                newTask.kanbanStatus = 'doing';
-            }
-        }
-
-        // 如果提供了块ID，添加绑定信息
-        if (taskData.blockId) {
-            try {
-                const block = await getBlockByID(taskData.blockId);
-                if (block) {
-                    newTask.blockId = taskData.blockId;
-                    newTask.docId = block.root_id || taskData.blockId;
-
-                    // 更新块的书签状态
-                    await updateBlockReminderBookmark(taskData.blockId);
-                }
-            } catch (error) {
-                console.error('绑定块失败:', error);
-                showMessage("警告：块绑定失败，但任务已创建");
-            }
-        }
-
-        // 计算 newTask 应该插入的分组（同项目，同父任务/顶层，同状态，同优先级）的最大 sort
-        try {
-            const parentId = parentTask ? parentTask.id : undefined;
-            const desiredPriority = taskData.priority || 'none';
-            // 目标状态（使用与加载任务时相同的判定逻辑）
-            const desiredStatus = parentTask && parentTask.status === 'doing' ? 'doing' : 'todo';
-
-            const maxSortForGroup = Object.values(reminderData)
-                .filter((r: any) => r && r.projectId === this.projectId)
-                .filter((r: any) => {
-                    const rParent = r.parentId || undefined;
-                    // 父任务分组一致
-                    if (parentId !== undefined) {
-                        if (rParent !== parentId) return false;
-                    } else {
-                        if (rParent !== undefined) return false;
-                    }
-                    // 状态一致
-                    const rStatus = this.getTaskStatus(r);
-                    if (rStatus !== desiredStatus) return false;
-                    // 优先级一致
-                    const rPriority = r.priority || 'none';
-                    if (rPriority !== desiredPriority) return false;
-                    return typeof r.sort === 'number';
-                })
-                .reduce((max: number, t: any) => Math.max(max, t.sort || 0), 0) as number;
-
-            // 使用步长10与批量创建保持一致，确保插到末尾
-            newTask.sort = maxSortForGroup + 10;
-        } catch (err) {
-            // 如果任何错误，回退为默认排序0
-            newTask.sort = 0;
-        }
-
-        reminderData[taskId] = newTask;
-        await writeReminderData(reminderData);
-
-        showMessage("任务创建成功");
-        await this.loadTasks();
-        window.dispatchEvent(new CustomEvent('reminderUpdated'));
+        quickDialog.show();
     }
 
     private async editTask(task: any) {
@@ -3619,40 +3368,6 @@ export class ProjectKanbanView {
             }
        `;
         document.head.appendChild(style);
-    }
-    private renderCategorySelector(container: HTMLElement, defaultCategoryId?: string) {
-        container.innerHTML = '';
-        const categories = this.categoryManager.getCategories();
-
-        const noCategoryEl = document.createElement('div');
-        noCategoryEl.className = 'category-option';
-        noCategoryEl.setAttribute('data-category', '');
-        noCategoryEl.innerHTML = `<span>无分类</span>`;
-        if (!defaultCategoryId) {
-            noCategoryEl.classList.add('selected');
-        }
-        container.appendChild(noCategoryEl);
-
-        categories.forEach(category => {
-            const categoryEl = document.createElement('div');
-            categoryEl.className = 'category-option';
-            categoryEl.setAttribute('data-category', category.id);
-            categoryEl.style.backgroundColor = category.color;
-            categoryEl.innerHTML = `<span>${category.icon ? category.icon + ' ' : ''}${category.name}</span>`;
-            if (category.id === defaultCategoryId) {
-                categoryEl.classList.add('selected');
-            }
-            container.appendChild(categoryEl);
-        });
-
-        container.addEventListener('click', (e) => {
-            const target = e.target as HTMLElement;
-            const option = target.closest('.category-option') as HTMLElement;
-            if (option) {
-                container.querySelectorAll('.category-option').forEach(opt => opt.classList.remove('selected'));
-                option.classList.add('selected');
-            }
-        });
     }
 
     // 设置任务优先级

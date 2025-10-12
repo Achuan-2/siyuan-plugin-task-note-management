@@ -30,6 +30,10 @@ export class QuickReminderDialog {
     private defaultPriority?: string;
     private defaultBlockId?: string;
     private plugin: any; // 添加plugin引用以访问设置
+    private hideProjectSelector?: boolean; // 是否隐藏项目选择器
+    private showTermTypeSelector?: boolean; // 是否显示任务类型选择器
+    private defaultTermType?: string; // 默认任务类型
+    private parentTask?: any; // 父任务引用
 
     constructor(initialDate: string, initialTime?: string, onSaved?: () => void, timeRangeOptions?: {
         endDate?: string;
@@ -44,6 +48,10 @@ export class QuickReminderDialog {
         defaultPriority?: string;
         defaultBlockId?: string;
         plugin?: any; // 添加plugin选项
+        hideProjectSelector?: boolean; // 隐藏项目选择器
+        showTermTypeSelector?: boolean; // 显示任务类型选择器
+        defaultTermType?: string; // 默认任务类型
+        parentTask?: any; // 父任务引用
     }) {
         // 确保日期格式正确 - 只保留 YYYY-MM-DD 部分
         this.initialDate = this.formatDateForInput(initialDate);
@@ -75,6 +83,10 @@ export class QuickReminderDialog {
             this.defaultPriority = options.defaultPriority;
             this.defaultBlockId = options.defaultBlockId;
             this.plugin = options.plugin; // 保存plugin引用
+            this.hideProjectSelector = options.hideProjectSelector; // 隐藏项目选择器
+            this.showTermTypeSelector = options.showTermTypeSelector; // 显示任务类型选择器
+            this.defaultTermType = options.defaultTermType || 'short_term'; // 默认任务类型
+            this.parentTask = options.parentTask; // 父任务引用
         }
 
         this.categoryManager = CategoryManager.getInstance();
@@ -495,6 +507,7 @@ export class QuickReminderDialog {
                                 <!-- 分类选择器将在这里渲染 -->
                             </div>
                         </div>
+                        ${this.hideProjectSelector ? '' : `
                         <div class="b3-form__group">
                             <label class="b3-form__label">${t("projectManagement")}</label>
                             <select id="quickProjectSelector" class="b3-select" style="width: 100%;">
@@ -502,6 +515,20 @@ export class QuickReminderDialog {
                                 <!-- 项目选择器将在这里渲染 -->
                             </select>
                         </div>
+                        `}
+                        ${this.showTermTypeSelector ? `
+                        <div class="b3-form__group">
+                            <label class="b3-form__label">任务类型</label>
+                            <div class="term-type-selector" id="quickTermTypeSelector">
+                                <div class="term-type-option ${this.defaultTermType === 'short_term' ? 'selected' : ''}" data-term-type="short_term">
+                                    <span>📝</span><span>短期任务</span>
+                                </div>
+                                <div class="term-type-option ${this.defaultTermType === 'long_term' ? 'selected' : ''}" data-term-type="long_term">
+                                    <span>🎯</span><span>长期任务</span>
+                                </div>
+                            </div>
+                        </div>
+                        ` : ''}
                         <div class="b3-form__group">
                             <label class="b3-form__label">${t("priority")}</label>
                             <div class="priority-selector" id="quickPrioritySelector">
@@ -568,8 +595,23 @@ export class QuickReminderDialog {
 
         this.bindEvents();
         await this.renderCategorySelector();
-        await this.renderProjectSelector();
+        if (!this.hideProjectSelector) {
+            await this.renderProjectSelector();
+        }
         await this.renderPrioritySelector();
+        
+        // 如果显示任务类型选择器，绑定事件
+        if (this.showTermTypeSelector) {
+            const termTypeSelector = this.dialog.element.querySelector('#quickTermTypeSelector') as HTMLElement;
+            termTypeSelector?.addEventListener('click', (e) => {
+                const target = e.target as HTMLElement;
+                const option = target.closest('.term-type-option') as HTMLElement;
+                if (option) {
+                    termTypeSelector.querySelectorAll('.term-type-option').forEach(opt => opt.classList.remove('selected'));
+                    option.classList.add('selected');
+                }
+            });
+        }
 
         // 确保日期和时间输入框正确设置初始值
         setTimeout(() => {
@@ -1142,13 +1184,15 @@ export class QuickReminderDialog {
         const projectSelector = this.dialog.element.querySelector('#quickProjectSelector') as HTMLSelectElement;
         const selectedPriority = this.dialog.element.querySelector('#quickPrioritySelector .priority-option.selected') as HTMLElement;
         const selectedCategory = this.dialog.element.querySelector('#quickCategorySelector .category-option.selected') as HTMLElement;
+        const selectedTermType = this.dialog.element.querySelector('#quickTermTypeSelector .term-type-option.selected') as HTMLElement;
 
         const title = titleInput.value.trim();
         const inputId = blockInput?.value?.trim() || undefined;
         const note = noteInput.value.trim() || undefined;
         const priority = selectedPriority?.getAttribute('data-priority') || 'none';
         const categoryId = selectedCategory?.getAttribute('data-category') || undefined;
-        const projectId = projectSelector.value || undefined;
+        const projectId = this.hideProjectSelector ? this.defaultProjectId : (projectSelector?.value || undefined);
+        const termType = selectedTermType?.getAttribute('data-term-type') || this.defaultTermType;
 
         // 解析日期和时间
         let date: string;
@@ -1221,6 +1265,20 @@ export class QuickReminderDialog {
                 quadrant: this.defaultQuadrant // 添加象限信息
             };
 
+            // 如果是项目看板任务，添加看板特定字段
+            if (this.showTermTypeSelector) {
+                reminder.termType = termType || 'short_term';
+                reminder.kanbanStatus = 'todo';
+                // 如果有父任务，添加 parentId
+                if (this.parentTask) {
+                    reminder.parentId = this.parentTask.id;
+                    // 子任务继承父任务的状态
+                    if (this.parentTask.status === 'doing') {
+                        reminder.kanbanStatus = 'doing';
+                    }
+                }
+            }
+
             // 如果任务时间早于当前时间，则标记为已通知
             const reminderDateTime = new Date(time ? `${date}T${time}` : date);
             if (!time) {
@@ -1245,6 +1303,21 @@ export class QuickReminderDialog {
 
             if (note) {
                 reminder.note = note;
+            }
+
+            // 如果提供了块ID，尝试绑定块并更新docId
+            if (inputId) {
+                try {
+                    const block = await getBlockByID(inputId);
+                    if (block) {
+                        reminder.docId = block.root_id || inputId;
+                        // 更新块的书签状态
+                        await updateBlockReminderBookmark(inputId);
+                    }
+                } catch (error) {
+                    console.error('绑定块失败:', error);
+                    showMessage("警告：块绑定失败，但任务已创建");
+                }
             }
 
             reminderData[reminderId] = reminder;
