@@ -48,7 +48,7 @@ export class RepeatSettingsDialog {
             title: t("repeatSettings"),
             content: this.createDialogContent(),
             width: "480px",
-            height: "600px"
+            height: "256px"
         });
 
         this.bindEvents();
