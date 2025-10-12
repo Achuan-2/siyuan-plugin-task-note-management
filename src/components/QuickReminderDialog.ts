@@ -8,6 +8,7 @@ import { RepeatSettingsDialog, RepeatConfig } from "./RepeatSettingsDialog";
 import { getRepeatDescription } from "../utils/repeatUtils";
 import { CategoryManageDialog } from "./CategoryManageDialog";
 import * as chrono from 'chrono-node';
+import { parseLunarDateText, getCurrentYearLunarToSolar } from "../utils/lunarUtils";
 
 export class QuickReminderDialog {
     private dialog: Dialog;
@@ -239,6 +240,19 @@ export class QuickReminderDialog {
                     const dayStr = day.toString().padStart(2, '0');
                     return {
                         date: `${year}-${monthStr}-${dayStr}`,
+                        hasTime: false
+                    };
+                }
+            }
+
+            // 处理农历日期格式（例如：八月廿一、正月初一）
+            const lunarDate = parseLunarDateText(processedText);
+            if (lunarDate && lunarDate.month > 0) {
+                // 有完整的农历月日
+                const solarDate = getCurrentYearLunarToSolar(lunarDate.month, lunarDate.day);
+                if (solarDate) {
+                    return {
+                        date: solarDate,
                         hasTime: false
                     };
                 }

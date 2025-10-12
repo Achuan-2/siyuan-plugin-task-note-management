@@ -10,6 +10,7 @@ import { t } from "../utils/i18n";
 import { getRepeatDescription } from "../utils/repeatUtils";
 import { CategoryManageDialog } from "./CategoryManageDialog";
 import * as chrono from 'chrono-node'; // 导入chrono-node
+import { parseLunarDateText, getCurrentYearLunarToSolar } from "../utils/lunarUtils";
 
 export class ReminderDialog {
     private blockId: string;
@@ -234,6 +235,19 @@ export class ReminderDialog {
                     const dayStr = day.toString().padStart(2, '0');
                     return {
                         date: `${year}-${monthStr}-${dayStr}`,
+                        hasTime: false
+                    };
+                }
+            }
+
+            // 处理农历日期格式（例如：八月廿一、正月初一）
+            const lunarDate = parseLunarDateText(processedText);
+            if (lunarDate && lunarDate.month > 0) {
+                // 有完整的农历月日
+                const solarDate = getCurrentYearLunarToSolar(lunarDate.month, lunarDate.day);
+                if (solarDate) {
+                    return {
+                        date: solarDate,
                         hasTime: false
                     };
                 }

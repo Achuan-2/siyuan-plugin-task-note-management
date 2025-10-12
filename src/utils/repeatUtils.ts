@@ -1,6 +1,7 @@
 import { RepeatConfig } from '../components/RepeatSettingsDialog';
 import { compareDateStrings } from './dateUtils';
 import { t } from './i18n';
+import { solarToLunar } from './lunarUtils';
 
 export interface RepeatInstance {
     date: string;
@@ -134,6 +135,12 @@ function shouldGenerateInstance(currentDate: Date, originalDate: string, repeatC
         case 'ebbinghaus':
             return checkEbbinghausRepeat(currentDate, originalDateObj, repeatConfig);
 
+        case 'lunar-monthly':
+            return checkLunarMonthlyRepeat(currentDate, repeatConfig);
+
+        case 'lunar-yearly':
+            return checkLunarYearlyRepeat(currentDate, repeatConfig);
+
         default:
             return false;
     }
@@ -178,6 +185,42 @@ function checkEbbinghausRepeat(currentDate: Date, originalDate: Date, repeatConf
 }
 
 /**
+ * 检查农历每月重复规则
+ */
+function checkLunarMonthlyRepeat(currentDate: Date, repeatConfig: RepeatConfig): boolean {
+    if (!repeatConfig.lunarDay) {
+        return false;
+    }
+    
+    try {
+        const currentDateStr = getLocalDateString(currentDate);
+        const lunar = solarToLunar(currentDateStr);
+        return lunar.day === repeatConfig.lunarDay;
+    } catch (error) {
+        console.error('Error checking lunar monthly repeat:', error);
+        return false;
+    }
+}
+
+/**
+ * 检查农历每年重复规则
+ */
+function checkLunarYearlyRepeat(currentDate: Date, repeatConfig: RepeatConfig): boolean {
+    if (!repeatConfig.lunarMonth || !repeatConfig.lunarDay) {
+        return false;
+    }
+    
+    try {
+        const currentDateStr = getLocalDateString(currentDate);
+        const lunar = solarToLunar(currentDateStr);
+        return lunar.month === repeatConfig.lunarMonth && lunar.day === repeatConfig.lunarDay;
+    } catch (error) {
+        console.error('Error checking lunar yearly repeat:', error);
+        return false;
+    }
+}
+
+/**
  * 获取下一个检查日期
  */
 function getNextDate(currentDate: Date, repeatConfig: RepeatConfig): Date {
@@ -187,15 +230,12 @@ function getNextDate(currentDate: Date, repeatConfig: RepeatConfig): Date {
         case 'daily':
         case 'custom':
         case 'ebbinghaus':
-            nextDate.setDate(nextDate.getDate() + 1);
-            break;
         case 'weekly':
-            nextDate.setDate(nextDate.getDate() + 1);
-            break;
         case 'monthly':
-            nextDate.setDate(nextDate.getDate() + 1);
-            break;
         case 'yearly':
+        case 'lunar-monthly':
+        case 'lunar-yearly':
+            // For all types, we check daily to find the next valid date
             nextDate.setDate(nextDate.getDate() + 1);
             break;
         default:
@@ -247,6 +287,12 @@ export function getRepeatDescription(repeatConfig: RepeatConfig): string {
             break;
         case 'yearly':
             description = interval === 1 ? t("everyYear") : t("everyNYears", { n: interval.toString() });
+            break;
+        case 'lunar-monthly':
+            description = t("lunarMonthlyRepeat");
+            break;
+        case 'lunar-yearly':
+            description = t("lunarYearlyRepeat");
             break;
         case 'custom':
             description = t("customRepeat");

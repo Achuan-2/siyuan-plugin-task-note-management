@@ -17,6 +17,7 @@ import { generateRepeatInstances, RepeatInstance } from "../utils/repeatUtils";
 import { CalendarConfigManager } from "../utils/calendarConfigManager";
 import { TaskSummaryDialog } from "@/components/TaskSummaryDialog";
 import { PomodoroManager } from "../utils/pomodoroManager";
+import { getNextLunarMonthlyDate, getNextLunarYearlyDate } from "../utils/lunarUtils";
 export class CalendarView {
     private container: HTMLElement;
     private calendar: Calendar;
@@ -2947,6 +2948,10 @@ export class CalendarView {
                     return repeat.interval === 1 ? t("monthlyRepeat") : t("everyNMonthsRepeat", { n: repeat.interval });
                 case 'yearly':
                     return repeat.interval === 1 ? t("yearlyRepeat") : t("everyNYearsRepeat", { n: repeat.interval });
+                case 'lunar-monthly':
+                    return t("lunarMonthlyRepeat");
+                case 'lunar-yearly':
+                    return t("lunarYearlyRepeat");
                 case 'custom':
                     return t("customRepeat");
                 case 'ebbinghaus':
@@ -3224,6 +3229,10 @@ export class CalendarView {
                 return this.calculateMonthlyNext(startDate, repeat.interval || 1);
             case 'yearly':
                 return this.calculateYearlyNext(startDate, repeat.interval || 1);
+            case 'lunar-monthly':
+                return this.calculateLunarMonthlyNext(startDateStr, repeat.lunarDay);
+            case 'lunar-yearly':
+                return this.calculateLunarYearlyNext(startDateStr, repeat.lunarMonth, repeat.lunarDay);
             default:
                 console.error("Unknown repeat type:", repeat.type);
                 return null;
@@ -3275,6 +3284,34 @@ export class CalendarView {
             nextDate.setDate(0); // 设置为前一个月的最后一天
         }
 
+        return nextDate;
+    }
+
+    /**
+     * 计算农历每月重复的下一个日期
+     */
+    private calculateLunarMonthlyNext(currentDateStr: string, lunarDay: number): Date {
+        const nextDateStr = getNextLunarMonthlyDate(currentDateStr, lunarDay);
+        if (nextDateStr) {
+            return new Date(nextDateStr + 'T12:00:00');
+        }
+        // 如果计算失败，返回明天
+        const nextDate = new Date(currentDateStr + 'T12:00:00');
+        nextDate.setDate(nextDate.getDate() + 1);
+        return nextDate;
+    }
+
+    /**
+     * 计算农历每年重复的下一个日期
+     */
+    private calculateLunarYearlyNext(currentDateStr: string, lunarMonth: number, lunarDay: number): Date {
+        const nextDateStr = getNextLunarYearlyDate(currentDateStr, lunarMonth, lunarDay);
+        if (nextDateStr) {
+            return new Date(nextDateStr + 'T12:00:00');
+        }
+        // 如果计算失败，返回明天
+        const nextDate = new Date(currentDateStr + 'T12:00:00');
+        nextDate.setDate(nextDate.getDate() + 1);
         return nextDate;
     }
 

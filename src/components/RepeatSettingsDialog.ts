@@ -3,11 +3,13 @@ import { t } from "../utils/i18n";
 
 export interface RepeatConfig {
     enabled: boolean;
-    type: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom' | 'ebbinghaus';
+    type: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom' | 'ebbinghaus' | 'lunar-monthly' | 'lunar-yearly';
     interval: number; // 间隔，如每2天、每3周
     weekDays?: number[]; // 每周的哪几天 (0-6, 0为周日)
     monthDays?: number[]; // 每月的哪几天 (1-31)
     months?: number[]; // 每年的哪几个月 (1-12)
+    lunarDay?: number; // 农历日期（1-30）
+    lunarMonth?: number; // 农历月份（1-12）
     endDate?: string; // 重复截止日期
     endCount?: number; // 重复次数限制
     endType: 'never' | 'date' | 'count'; // 结束类型
@@ -76,6 +78,8 @@ export class RepeatSettingsDialog {
                                 <option value="weekly" ${this.repeatConfig.type === 'weekly' ? 'selected' : ''}>${t("weekly")}</option>
                                 <option value="monthly" ${this.repeatConfig.type === 'monthly' ? 'selected' : ''}>${t("monthly")}</option>
                                 <option value="yearly" ${this.repeatConfig.type === 'yearly' ? 'selected' : ''}>${t("yearly")}</option>
+                                <option value="lunar-monthly" ${this.repeatConfig.type === 'lunar-monthly' ? 'selected' : ''}>${t("lunarMonthly")}</option>
+                                <option value="lunar-yearly" ${this.repeatConfig.type === 'lunar-yearly' ? 'selected' : ''}>${t("lunarYearly")}</option>
                                 <option value="custom" ${this.repeatConfig.type === 'custom' ? 'selected' : ''}>${t("custom")}</option>
                                 <option value="ebbinghaus" ${this.repeatConfig.type === 'ebbinghaus' ? 'selected' : ''}>${t("ebbinghaus")}</option>
                             </select>
@@ -124,6 +128,28 @@ export class RepeatSettingsDialog {
                                 ${t("ebbinghausDesc")}
                                 <br>
                                 <span class="ebbinghaus-pattern">${t("ebbinghausPattern")}: 1, 2, 4, 7, 15 ${t("days")}</span>
+                            </div>
+                        </div>
+
+                        <!-- 农历日期选择 -->
+                        <div id="lunarOptions" class="b3-form__group" style="display: none;">
+                            <label class="b3-form__label">${t("lunarDate")}</label>
+                            <div class="lunar-date-selector">
+                                <span id="lunarMonthlyGroup" style="display: none;">
+                                    ${t("lunarDay")}: 
+                                    <input type="number" id="lunarDay" class="b3-text-field" min="1" max="30" value="${this.repeatConfig.lunarDay || 1}" style="width: 60px; margin: 0 8px;">
+                                </span>
+                                <span id="lunarYearlyGroup" style="display: none;">
+                                    ${t("lunarMonth")}: 
+                                    <select id="lunarMonth" class="b3-select" style="width: 100px; margin: 0 8px;">
+                                        ${this.createLunarMonthSelector()}
+                                    </select>
+                                    ${t("lunarDay")}: 
+                                    <input type="number" id="lunarDayYearly" class="b3-text-field" min="1" max="30" value="${this.repeatConfig.lunarDay || 1}" style="width: 60px; margin: 0 8px;">
+                                </span>
+                            </div>
+                            <div class="b3-form__desc" style="margin-top: 8px;">
+                                ${t("lunarDateDesc")}
                             </div>
                         </div>
 
@@ -223,6 +249,18 @@ export class RepeatSettingsDialog {
         `).join('');
     }
 
+    private createLunarMonthSelector(): string {
+        const lunarMonths = [
+            t("lunarMonth1"), t("lunarMonth2"), t("lunarMonth3"), t("lunarMonth4"),
+            t("lunarMonth5"), t("lunarMonth6"), t("lunarMonth7"), t("lunarMonth8"),
+            t("lunarMonth9"), t("lunarMonth10"), t("lunarMonth11"), t("lunarMonth12")
+        ];
+
+        return lunarMonths.map((month, index) => `
+            <option value="${index + 1}" ${this.repeatConfig.lunarMonth === (index + 1) ? 'selected' : ''}>${month}</option>
+        `).join('');
+    }
+
     private bindEvents() {
         const enableRepeat = this.dialog.element.querySelector('#enableRepeat') as HTMLInputElement;
         const repeatType = this.dialog.element.querySelector('#repeatType') as HTMLSelectElement;
@@ -266,6 +304,9 @@ export class RepeatSettingsDialog {
         const monthlyOptions = this.dialog.element.querySelector('#monthlyOptions') as HTMLElement;
         const yearlyOptions = this.dialog.element.querySelector('#yearlyOptions') as HTMLElement;
         const ebbinghausInfo = this.dialog.element.querySelector('#ebbinghausInfo') as HTMLElement;
+        const lunarOptions = this.dialog.element.querySelector('#lunarOptions') as HTMLElement;
+        const lunarMonthlyGroup = this.dialog.element.querySelector('#lunarMonthlyGroup') as HTMLElement;
+        const lunarYearlyGroup = this.dialog.element.querySelector('#lunarYearlyGroup') as HTMLElement;
         const endDateGroup = this.dialog.element.querySelector('#endDateGroup') as HTMLElement;
         const endCountGroup = this.dialog.element.querySelector('#endCountGroup') as HTMLElement;
         const intervalUnit = this.dialog.element.querySelector('#intervalUnit') as HTMLElement;
@@ -277,7 +318,8 @@ export class RepeatSettingsDialog {
             intervalUnit.textContent = this.getIntervalUnit();
 
             // 显示/隐藏相关选项
-            const showInterval = this.repeatConfig.type !== 'ebbinghaus' && this.repeatConfig.type !== 'custom';
+            const showInterval = this.repeatConfig.type !== 'ebbinghaus' && this.repeatConfig.type !== 'custom' && 
+                                 this.repeatConfig.type !== 'lunar-monthly' && this.repeatConfig.type !== 'lunar-yearly';
             intervalGroup.style.display = showInterval ? 'block' : 'none';
 
             const showCustom = this.repeatConfig.type === 'custom';
@@ -294,6 +336,15 @@ export class RepeatSettingsDialog {
             }
 
             ebbinghausInfo.style.display = this.repeatConfig.type === 'ebbinghaus' ? 'block' : 'none';
+
+            // 显示/隐藏农历选项
+            const showLunar = this.repeatConfig.type === 'lunar-monthly' || this.repeatConfig.type === 'lunar-yearly';
+            lunarOptions.style.display = showLunar ? 'block' : 'none';
+            
+            if (showLunar) {
+                lunarMonthlyGroup.style.display = this.repeatConfig.type === 'lunar-monthly' ? 'inline' : 'none';
+                lunarYearlyGroup.style.display = this.repeatConfig.type === 'lunar-yearly' ? 'inline' : 'none';
+            }
 
             // 结束条件
             endDateGroup.style.display = this.repeatConfig.endType === 'date' ? 'block' : 'none';
@@ -339,6 +390,26 @@ export class RepeatSettingsDialog {
 
             if (this.repeatConfig.type === 'ebbinghaus') {
                 this.repeatConfig.ebbinghausPattern = [1, 2, 4, 7, 15]; // 默认艾宾浩斯曲线
+            }
+
+            if (this.repeatConfig.type === 'lunar-monthly') {
+                const lunarDayInput = this.dialog.element.querySelector('#lunarDay') as HTMLInputElement;
+                this.repeatConfig.lunarDay = parseInt(lunarDayInput.value) || 1;
+                if (this.repeatConfig.lunarDay < 1 || this.repeatConfig.lunarDay > 30) {
+                    showMessage(t("invalidLunarDay"));
+                    return;
+                }
+            }
+
+            if (this.repeatConfig.type === 'lunar-yearly') {
+                const lunarMonthInput = this.dialog.element.querySelector('#lunarMonth') as HTMLSelectElement;
+                const lunarDayYearlyInput = this.dialog.element.querySelector('#lunarDayYearly') as HTMLInputElement;
+                this.repeatConfig.lunarMonth = parseInt(lunarMonthInput.value) || 1;
+                this.repeatConfig.lunarDay = parseInt(lunarDayYearlyInput.value) || 1;
+                if (this.repeatConfig.lunarDay < 1 || this.repeatConfig.lunarDay > 30) {
+                    showMessage(t("invalidLunarDay"));
+                    return;
+                }
             }
 
             if (this.repeatConfig.endType === 'date') {

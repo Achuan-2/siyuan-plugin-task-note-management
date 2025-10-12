@@ -9,6 +9,7 @@ import * as chrono from 'chrono-node';
 import { ReminderDialog } from "./ReminderDialog";
 import { CategoryManager } from "../utils/categoryManager";
 import { ProjectManager } from "../utils/projectManager";
+import { parseLunarDateText, getCurrentYearLunarToSolar } from "../utils/lunarUtils";
 
 export interface BlockDetail {
     blockId: string;
@@ -357,6 +358,20 @@ export class BatchReminderDialog {
                     };
                 }
             }
+
+            // 处理农历日期格式（例如：八月廿一、正月初一）
+            const lunarDate = parseLunarDateText(processedText);
+            if (lunarDate && lunarDate.month > 0) {
+                // 有完整的农历月日
+                const solarDate = getCurrentYearLunarToSolar(lunarDate.month, lunarDate.day);
+                if (solarDate) {
+                    return {
+                        date: solarDate,
+                        hasTime: false
+                    };
+                }
+            }
+
             const results = this.chronoParser.parse(processedText, new Date(), { forwardDate: false });
 
             if (results.length === 0) {
@@ -1530,6 +1545,18 @@ class BlockEditDialog {
     // 解析自然语言日期时间 - 复用父类的逻辑
     private parseNaturalDateTime(text: string): { date?: string; time?: string; hasTime?: boolean } {
         try {
+            // 先尝试解析农历日期
+            const lunarDate = parseLunarDateText(text);
+            if (lunarDate && lunarDate.month > 0) {
+                const solarDate = getCurrentYearLunarToSolar(lunarDate.month, lunarDate.day);
+                if (solarDate) {
+                    return {
+                        date: solarDate,
+                        hasTime: false
+                    };
+                }
+            }
+
             const results = this.chronoParser.parse(text, new Date());
 
             if (results && results.length > 0) {
