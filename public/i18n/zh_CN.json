@@ -604,5 +604,8 @@
     "lunarMonth12": "腊月",
     "lunarMonthlyRepeat": "农历每月重复",
     "lunarYearlyRepeat": "农历每年重复",
-    "showOnlyWithDoingTasks": "进行中"
+    "showOnlyWithDoingTasks": "进行中",
+    "projectKanban": "项目看板",
+    "shortTerm": "短期",
+    "longTerm": "长期"
 }

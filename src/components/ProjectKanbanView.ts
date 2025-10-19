@@ -101,7 +101,7 @@ export class ProjectKanbanView {
         titleContainer.className = 'project-kanban-title';
 
         const titleEl = document.createElement('h2');
-        titleEl.textContent = this.project?.title || '项目看板';
+        titleEl.textContent = this.project?.title || t('projectKanban');
         titleEl.style.cssText = `
             margin: 0;
             font-size: 18px;
@@ -205,10 +205,10 @@ export class ProjectKanbanView {
         this.container.appendChild(kanbanContainer);
 
         // 创建四个列：进行中、短期、长期、已完成
-        this.createKanbanColumn(kanbanContainer, 'doing', '进行中', '#f39c12');
-        this.createKanbanColumn(kanbanContainer, 'short_term', '短期', '#3498db');
-        this.createKanbanColumn(kanbanContainer, 'long_term', '长期', '#9b59b6');
-        this.createKanbanColumn(kanbanContainer, 'done', '已完成', '#27ae60');
+        this.createKanbanColumn(kanbanContainer, 'doing', t('doing'), '#f39c12');
+        this.createKanbanColumn(kanbanContainer, 'short_term', t('shortTerm'), '#3498db');
+        this.createKanbanColumn(kanbanContainer, 'long_term', t('longTerm'), '#9b59b6');
+        this.createKanbanColumn(kanbanContainer, 'done', t('done'), '#27ae60');
 
         // 添加自定义样式
         this.addCustomStyles();

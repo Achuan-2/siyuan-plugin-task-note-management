@@ -605,5 +605,8 @@
     "unboundReminder": "Unbound Reminder",
     "uncategorized": "Uncategorized",
     "year": "Year",
-    "yearlyHeatmap": "Yearly Heatmap"
+    "yearlyHeatmap": "Yearly Heatmap",
+    "projectKanban": "Project Kanban",
+    "shortTerm": "Short Term",
+    "longTerm": "Long Term"
 }
