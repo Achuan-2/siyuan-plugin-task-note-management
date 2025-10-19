@@ -13,7 +13,9 @@
 > 前排提醒，插件为个人自用，对任何因为插件导致的数据丢失问题概不负责
 > 请考虑清楚再使用。
 
-更新日志见: [CHANGELOG.md](https://cdn.jsdelivr.net/gh/Achuan-2/siyuan-plugin-task-note-management@main/CHANGELOG.md
+## 更新日志
+
+见: [CHANGELOG.md](https://cdn.jsdelivr.net/gh/Achuan-2/siyuan-plugin-task-note-management@main/CHANGELOG.md
 )
 
 ## 🤔插件背后的指导思想：防弹笔记法

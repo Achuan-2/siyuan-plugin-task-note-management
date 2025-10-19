@@ -591,9 +591,9 @@ export class ReminderDialog {
                         <div class="b3-form__group">
                             <label class="b3-form__label">${t("reminderDate")}</label>
                             <div class="reminder-date-container">
-                                <input type="date" id="reminderDate" class="b3-text-field" value="${initialDate}" required>
+                                <input type="date" id="reminderDate" class="b3-text-field" value="${initialDate}" required max="9999-12-31">
                                 <span class="reminder-arrow">→</span>
-                                <input type="date" id="reminderEndDate" class="b3-text-field reminder-end-date" placeholder="${t("endDateOptional")}" title="${t("spanningEventDesc")}">
+                                <input type="date" id="reminderEndDate" class="b3-text-field reminder-end-date" placeholder="${t("endDateOptional")}" title="${t("spanningEventDesc")}" max="9999-12-31">
                             </div>
                             <div class="b3-form__desc" id="dateTimeDesc">${initialNoTime ? t("dateOnlyDesc") : t("dateTimeDesc")}</div>
                         </div>
@@ -1139,9 +1139,11 @@ export class ReminderDialog {
             const startValue = startDateInput.value;
             const endValue = endDateInput.value;
 
-            // 切换类型
+            // 切换类型和max属性
             startDateInput.type = 'date';
             endDateInput.type = 'date';
+            startDateInput.max = '9999-12-31';
+            endDateInput.max = '9999-12-31';
 
             // 如果当前值包含时间，只保留日期部分，不清空日期
             if (startValue && startValue.includes('T')) {
@@ -1165,9 +1167,11 @@ export class ReminderDialog {
             const startValue = startDateInput.value;
             const endValue = endDateInput.value;
 
-            // 切换类型
+            // 切换类型和max属性
             startDateInput.type = 'datetime-local';
             endDateInput.type = 'datetime-local';
+            startDateInput.max = '9999-12-31T23:59';
+            endDateInput.max = '9999-12-31T23:59';
 
             // 如果当前值只有日期，添加默认时间，保留原有日期
             if (startValue && !startValue.includes('T')) {
@@ -1272,27 +1276,13 @@ export class ReminderDialog {
         // 日期验证
         startDateInput?.addEventListener('change', () => {
             const startDate = startDateInput.value;
-            const endDate = endDateInput.value;
-
-            // 如果结束日期已设置且早于开始日期，自动调整
-            if (endDate && endDate < startDate) {
-                endDateInput.value = startDate;
-                showMessage(t("endDateAdjusted"));
-            }
-
             // 设置结束日期的最小值
             endDateInput.min = startDate;
         });
 
         // 结束日期验证
         endDateInput?.addEventListener('change', () => {
-            const startDate = startDateInput.value;
-            const endDate = endDateInput.value;
-
-            if (endDate && endDate < startDate) {
-                endDateInput.value = startDate;
-                showMessage(t("endDateCannotBeEarlier"));
-            }
+            // 移除立即验证逻辑，只在保存时验证
         });
 
         // 重复设置按钮
@@ -1314,7 +1304,20 @@ export class ReminderDialog {
     private showRepeatSettingsDialog() {
         // 获取当前设置的开始日期
         const startDateInput = this.dialog.element.querySelector('#reminderDate') as HTMLInputElement;
-        const startDate = startDateInput?.value;
+        let startDate = startDateInput?.value;
+
+        // 如果没有设置开始日期，使用今天的日期
+        if (!startDate) {
+            startDate = getLocalDateString();
+        }
+
+        // 如果是农历重复类型，需要重新计算农历日期
+        if (this.repeatConfig.enabled &&
+            (this.repeatConfig.type === 'lunar-monthly' || this.repeatConfig.type === 'lunar-yearly')) {
+            // 清除现有的农历日期，让 RepeatSettingsDialog 重新计算
+            this.repeatConfig.lunarDay = undefined;
+            this.repeatConfig.lunarMonth = undefined;
+        }
 
         const repeatDialog = new RepeatSettingsDialog(this.repeatConfig, (config: RepeatConfig) => {
             this.repeatConfig = config;
@@ -1414,9 +1417,15 @@ export class ReminderDialog {
             return;
         }
 
-        if (endDate && endDate < date) {
-            showMessage(t("endDateCannotBeEarlier"));
-            return;
+        // 验证结束日期时间不能早于开始日期时间
+        if (endDate && date) {
+            const startDateTime = time ? `${date}T${time}` : `${date}T00:00:00`;
+            const endDateTime = endTime ? `${endDate}T${endTime}` : `${endDate}T00:00:00`;
+
+            if (new Date(endDateTime) < new Date(startDateTime)) {
+                showMessage(t("endDateCannotBeEarlier"));
+                return;
+            }
         }
 
         try {

@@ -235,28 +235,20 @@ export class EisenhowerMatrixView {
                 // 如果该任务或其任一祖先父任务已完成，则跳过
                 if (isAncestorCompleted(reminder)) continue;
 
-                // 跳过已完成的顶层任务
+                // 对于子任务，即使已完成也要保留（用于计算父任务进度）
+                // 只跳过已完成的顶层任务
                 if (reminder?.completed && !reminder?.parentId) continue;
 
                 // 对于农历重复任务，只添加符合农历日期的实例，不添加原始日期
                 const isLunarRepeat = reminder.repeat?.enabled &&
                     (reminder.repeat.type === 'lunar-monthly' || reminder.repeat.type === 'lunar-yearly');
 
-                // 对于周期任务的处理：
-                // 1. 农历重复：不添加原始任务，只添加实例
-                // 2. 非农历重复且原始日期早于今天：不添加原始任务，只添加实例
-                // 3. 非农历重复且原始日期是今天或未来：添加原始任务
-                // 4. 非周期任务：正常添加
+                // 修改后的逻辑：对于所有重复事件，只显示实例，不显示原始任务
                 if (!reminder.repeat?.enabled) {
                     // 非周期任务，正常添加
                     allRemindersWithInstances.push({ ...reminder, id });
-                } else if (!isLunarRepeat) {
-                    // 非农历周期任务，只有当原始日期是今天或未来时才添加原始任务
-                    if (reminder.date && compareDateStrings(reminder.date, today) >= 0) {
-                        allRemindersWithInstances.push({ ...reminder, id });
-                    }
                 }
-                // 农历重复任务不添加原始任务，只添加实例
+                // 对于所有重复事件（农历和非农历），都不添加原始任务，只添加实例
 
                 // 如果是周期事件，生成实例
                 if (reminder.repeat?.enabled) {
@@ -267,11 +259,6 @@ export class EisenhowerMatrixView {
                     const completedInstances = reminder.repeat?.completedInstances || [];
                     const instanceModifications = reminder.repeat?.instanceModifications || {};
 
-                    // 检查原始任务的日期是否是今天且未完成
-                    const isOriginalTaskToday = reminder.date && compareDateStrings(reminder.date, today) === 0;
-                    const isOriginalTaskCompleted = reminder.completed;
-                    const hasTodayTask = isOriginalTaskToday && !isOriginalTaskCompleted;
-
                     // 将实例分类为：过去未完成、今天未完成、未来未完成、未来已完成、过去已完成
                     let pastIncompleteList: any[] = [];
                     let todayIncompleteList: any[] = [];
@@ -280,51 +267,48 @@ export class EisenhowerMatrixView {
                     let pastCompletedList: any[] = [];
 
                     repeatInstances.forEach(instance => {
-                        // 对于农历重复，所有实例都添加（包括原始日期，如果它匹配农历）
-                        // 对于非农历重复，只添加不同日期的实例
-                        if (isLunarRepeat || instance.date !== reminder.date) {
-                            const isInstanceCompleted = completedInstances.includes(instance.date);
-                            const instanceMod = instanceModifications[instance.date];
+                        // 对于所有重复事件，只添加实例，不添加原始任务
+                        const isInstanceCompleted = completedInstances.includes(instance.date);
+                        const instanceMod = instanceModifications[instance.date];
 
-                            const instanceTask = {
-                                ...reminder,
-                                id: instance.instanceId,
-                                date: instance.date,
-                                endDate: instance.endDate,
-                                time: instance.time,
-                                endTime: instance.endTime,
-                                isRepeatInstance: true,
-                                originalId: instance.originalId,
-                                completed: isInstanceCompleted,
-                                note: instanceMod?.note || reminder.note,
-                                // 为已完成的实例添加完成时间（用于排序）
-                                completedTime: isInstanceCompleted ? getLocalDateTimeString(new Date(instance.date)) : undefined
-                            };
+                        const instanceTask = {
+                            ...reminder,
+                            id: instance.instanceId,
+                            date: instance.date,
+                            endDate: instance.endDate,
+                            time: instance.time,
+                            endTime: instance.endTime,
+                            isRepeatInstance: true,
+                            originalId: instance.originalId,
+                            completed: isInstanceCompleted,
+                            note: instanceMod?.note || reminder.note,
+                            // 为已完成的实例添加完成时间（用于排序）
+                            completedTime: isInstanceCompleted ? getLocalDateTimeString(new Date(instance.date)) : undefined
+                        };
 
-                            // 按日期和完成状态分类
-                            const dateComparison = compareDateStrings(instance.date, today);
+                        // 按日期和完成状态分类
+                        const dateComparison = compareDateStrings(instance.date, today);
 
-                            if (dateComparison < 0) {
-                                // 过去的日期
-                                if (isInstanceCompleted) {
-                                    pastCompletedList.push(instanceTask);
-                                } else {
-                                    pastIncompleteList.push(instanceTask);
-                                }
-                            } else if (dateComparison === 0) {
-                                // 今天的日期（只收集未完成的）
-                                if (!isInstanceCompleted) {
-                                    todayIncompleteList.push(instanceTask);
-                                } else {
-                                    pastCompletedList.push(instanceTask); // 今天已完成算作过去
-                                }
+                        if (dateComparison < 0) {
+                            // 过去的日期
+                            if (isInstanceCompleted) {
+                                pastCompletedList.push(instanceTask);
                             } else {
-                                // 未来的日期
-                                if (isInstanceCompleted) {
-                                    futureCompletedList.push(instanceTask);
-                                } else {
-                                    futureIncompleteList.push(instanceTask);
-                                }
+                                pastIncompleteList.push(instanceTask);
+                            }
+                        } else if (dateComparison === 0) {
+                            // 今天的日期（只收集未完成的）
+                            if (!isInstanceCompleted) {
+                                todayIncompleteList.push(instanceTask);
+                            } else {
+                                pastCompletedList.push(instanceTask); // 今天已完成算作过去
+                            }
+                        } else {
+                            // 未来的日期
+                            if (isInstanceCompleted) {
+                                futureCompletedList.push(instanceTask);
+                            } else {
+                                futureIncompleteList.push(instanceTask);
                             }
                         }
                     });
@@ -338,24 +322,14 @@ export class EisenhowerMatrixView {
                     // 添加未来的第一个未完成实例（如果存在）
                     // 这样即使有多个已完成的未来实例，也能显示下一个未完成的实例
                     if (futureIncompleteList.length > 0) {
+                        // 对于所有重复事件，如果今天没有未完成实例，就添加未来第一个未完成的
                         const hasTodayIncomplete = todayIncompleteList.length > 0;
-
-                        if (isLunarRepeat) {
-                            // 农历重复：如果今天没有实例，就添加未来第一个未完成的
-                            if (!hasTodayIncomplete) {
-                                allRemindersWithInstances.push(futureIncompleteList[0]);
-                            }
-                        } else {
-                            // 非农历重复：如果今天没有任何未完成任务，就添加未来第一个未完成的
-                            if (!hasTodayTask && !hasTodayIncomplete) {
-                                allRemindersWithInstances.push(futureIncompleteList[0]);
-                            }
+                        if (!hasTodayIncomplete) {
+                            allRemindersWithInstances.push(futureIncompleteList[0]);
                         }
                     }
 
-                    // 添加所有已完成的实例（包括过去和未来的）
-                    allRemindersWithInstances.push(...pastCompletedList);
-                    allRemindersWithInstances.push(...futureCompletedList);
+                    // 注意：不再添加已完成的实例，按照用户要求隐藏已完成的实例
                 }
             }
 
@@ -717,11 +691,16 @@ export class EisenhowerMatrixView {
                 const taskMap = new Map(tasks.map(t => [t.id, t]));
                 const topLevelTasks = tasks.filter(t => !t.parentId || !taskMap.has(t.parentId));
                 const renderTaskWithChildren = (task: QuadrantTask, level: number) => {
+                    // 只渲染未完成的子任务，已完成的子任务不显示但用于进度计算
+                    if (task.completed && level > 0) {
+                        return;
+                    }
+
                     const taskEl = this.createTaskElement(task, level);
                     projectGroup.appendChild(taskEl);
 
-                    // 渲染子任务
-                    const childTasks = tasks.filter(t => t.parentId === task.id);
+                    // 渲染子任务（只渲染未完成的）
+                    const childTasks = tasks.filter(t => t.parentId === task.id && !t.completed);
                     if (childTasks.length > 0 && !this.collapsedTasks.has(task.id)) {
                         childTasks.forEach(childTask => renderTaskWithChildren(childTask, level + 1));
                     }
@@ -878,8 +857,8 @@ export class EisenhowerMatrixView {
         const taskMeta = document.createElement('div');
         taskMeta.className = 'task-meta';
 
-        // 显示看板状态（仅当任务未完成时显示）
-        if (!task.completed) {
+        // 显示看板状态（仅当任务未完成且不是子任务时显示）
+        if (!task.completed && level === 0) {
             const kanbanStatus = task.extendedProps?.kanbanStatus || 'todo';
             const termType = task.extendedProps?.termType;
 
@@ -924,6 +903,28 @@ export class EisenhowerMatrixView {
                 flex-wrap: wrap;
             `;
 
+            // 获取当前年份
+            const currentYear = new Date().getFullYear();
+
+            // 辅助函数：格式化日期显示
+            const formatDateWithYear = (dateStr: string): string => {
+                const date = new Date(dateStr);
+                const year = date.getFullYear();
+                return year !== currentYear
+                    ? date.toLocaleDateString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric' })
+                    : date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+            };
+
+            // 辅助函数：计算过期天数
+            const getExpiredDays = (targetDate: string): number => {
+                return Math.ceil((new Date().getTime() - new Date(targetDate).getTime()) / (1000 * 60 * 60 * 24));
+            };
+
+            // 辅助函数：创建过期徽章
+            const createExpiredBadge = (days: number): string => {
+                return `<span class="countdown-badge countdown-normal" style="background-color: rgba(231, 76, 60, 0.15); color: #e74c3c; border: 1px solid rgba(231, 76, 60, 0.3); font-size: 11px; padding: 2px 6px; border-radius: 10px; font-weight: 500; margin-left: 4px; display: inline-block;">已过期${days}天</span>`;
+            };
+
             // 添加周期图标（如果是周期事件或周期实例）
             if (task.extendedProps?.repeat?.enabled || task.extendedProps?.isRepeatInstance) {
                 const repeatIcon = document.createElement('span');
@@ -934,9 +935,25 @@ export class EisenhowerMatrixView {
             }
 
             // 如果有结束日期，显示日期跨度
-            let dateText = task.date;
+            let dateText = '';
             if (task.endDate && task.endDate !== task.date) {
-                dateText = `${task.date} ~ ${task.endDate}`;
+                // 检查结束日期是否过期
+                if (task.endDate < getLocalDateString()) {
+                    const daysDiff = getExpiredDays(task.endDate);
+                    const formattedEndDate = formatDateWithYear(task.endDate);
+                    dateText = `${formatDateWithYear(task.date)} ~ ${formattedEndDate} ${createExpiredBadge(daysDiff)}`;
+                } else {
+                    dateText = `${formatDateWithYear(task.date)} ~ ${formatDateWithYear(task.endDate)}`;
+                }
+            } else {
+                // 检查开始日期是否过期
+                if (task.date < getLocalDateString()) {
+                    const daysDiff = getExpiredDays(task.date);
+                    const formattedDate = formatDateWithYear(task.date);
+                    dateText = `${formattedDate} ${createExpiredBadge(daysDiff)}`;
+                } else {
+                    dateText = formatDateWithYear(task.date);
+                }
             }
 
             // 如果是农历循环事件，添加农历日期显示
@@ -953,7 +970,7 @@ export class EisenhowerMatrixView {
             }
 
             const dateTextSpan = document.createElement('span');
-            dateTextSpan.textContent = `📅 ${dateText}`;
+            dateTextSpan.innerHTML = `📅 ${dateText}`;
             dateSpan.appendChild(dateTextSpan);
 
             taskMeta.appendChild(dateSpan);
@@ -1320,7 +1337,11 @@ export class EisenhowerMatrixView {
         try {
             const reminderData = await readReminderData();
 
-            if (reminderData[task.id]) {
+            if (task.isRepeatInstance && task.originalId) {
+                // 对于重复实例，使用不同的完成逻辑
+                await this.toggleRepeatInstanceCompletion(task, completed);
+            } else if (reminderData[task.id]) {
+                // 对于普通任务，使用原有逻辑
                 reminderData[task.id].completed = completed;
 
                 // 如果是完成任务，记录完成时间并自动完成所有子任务
@@ -1355,13 +1376,79 @@ export class EisenhowerMatrixView {
                         this.updateParentProgressUI((task as any).parentId);
                     }
                 }
-
-                // 广播更新事件给其他组件（不在本组件触发完整刷新）
-                window.dispatchEvent(new CustomEvent('reminderUpdated'));
             }
         } catch (error) {
             console.error('更新任务状态失败:', error);
             showMessage(t('updateTaskStatusFailed'));
+        }
+    }
+
+    /**
+     * 切换重复实例的完成状态
+     * @param task 重复实例任务
+     * @param completed 是否完成
+     */
+    private async toggleRepeatInstanceCompletion(task: QuadrantTask, completed: boolean) {
+        try {
+            const reminderData = await readReminderData();
+            const originalReminder = reminderData[task.originalId!];
+
+            if (!originalReminder) {
+                showMessage("原始重复事件不存在");
+                return;
+            }
+
+            // 初始化完成实例列表
+            if (!originalReminder.repeat.completedInstances) {
+                originalReminder.repeat.completedInstances = [];
+            }
+
+            const instanceDate = task.date;
+            const completedInstances = originalReminder.repeat.completedInstances;
+
+            if (completed) {
+                // 添加到完成列表（如果还没有的话）
+                if (!completedInstances.includes(instanceDate)) {
+                    completedInstances.push(instanceDate);
+                }
+
+                // 记录完成时间
+                if (!originalReminder.repeat.instanceCompletedTimes) {
+                    originalReminder.repeat.instanceCompletedTimes = {};
+                }
+                originalReminder.repeat.instanceCompletedTimes[instanceDate] = getLocalDateTimeString(new Date());
+            } else {
+                // 从完成列表中移除
+                const index = completedInstances.indexOf(instanceDate);
+                if (index > -1) {
+                    completedInstances.splice(index, 1);
+                }
+
+                // 移除完成时间记录
+                if (originalReminder.repeat.instanceCompletedTimes) {
+                    delete originalReminder.repeat.instanceCompletedTimes[instanceDate];
+                }
+            }
+
+            await writeReminderData(reminderData);
+
+            // 更新本地缓存
+            const localTask = this.allTasks.find(t => t.id === task.id);
+            if (localTask) {
+                localTask.completed = completed;
+                if (completed) {
+                    localTask.extendedProps = localTask.extendedProps || {};
+                    localTask.extendedProps.completedTime = originalReminder.repeat.instanceCompletedTimes?.[instanceDate];
+                } else {
+                    if (localTask.extendedProps) delete localTask.extendedProps.completedTime;
+                }
+            }
+
+            // 广播更新事件
+            window.dispatchEvent(new CustomEvent('reminderUpdated'));
+        } catch (error) {
+            console.error('切换重复实例完成状态失败:', error);
+            showMessage('操作失败，请重试');
         }
     }
 
@@ -2165,6 +2252,41 @@ export class EisenhowerMatrixView {
                 color: var(--b3-theme-on-surface-light);
                 margin-left: 8px;
             }
+
+            /* 倒计时样式 */
+            .countdown-badge {
+                font-size: 11px;
+                padding: 2px 6px;
+                border-radius: 10px;
+                font-weight: 500;
+                margin-left: 4px;
+                display: inline-block;
+            }
+
+            .countdown-urgent {
+                background-color: rgba(231, 76, 60, 0.15);
+                color: #e74c3c;
+                border: 1px solid rgba(231, 76, 60, 0.3);
+            }
+
+            .countdown-warning {
+                background-color: rgba(243, 156, 18, 0.15);
+                color: #f39c12;
+                border: 1px solid rgba(243, 156, 18, 0.3);
+            }
+
+            .countdown-normal {
+                background-color: rgba(46, 204, 113, 0.15);
+                color: #2ecc71;
+                border: 1px solid rgba(46, 204, 113, 0.3);
+            }
+
+            /* 过期任务样式 - 复用倒计时样式 */
+            .countdown-badge.countdown-normal[style*="rgba(231, 76, 60"] {
+                background-color: rgba(231, 76, 60, 0.15) !important;
+                color: #e74c3c !important;
+                border: 1px solid rgba(231, 76, 60, 0.3) !important;
+            }
             
             /* 象限预览样式 */
             .quadrant-preview {
@@ -2226,28 +2348,37 @@ export class EisenhowerMatrixView {
             label: "创建子任务",
             click: () => this.showCreateTaskDialog(task.quadrant, task)
         });
-
         menu.addSeparator();
 
-        // 添加项目分配菜单
-        menu.addItem({
-            label: t('addToProject'),
-            icon: 'iconProject',
-            click: async () => {
-                await this.assignTaskToProject(task, event);
-            }
-        });
-
-        // 如果任务已有项目，添加移除项目选项
-        if (task.projectId) {
+        // 绑定块功能
+        if (task.blockId) {
             menu.addItem({
-                label: t('removeFromProject'),
-                icon: 'iconRemove',
-                click: async () => {
-                    await this.removeTaskFromProject(task);
-                }
+                iconHTML: "🔗",
+                label: "打开绑定块",
+                click: () => this.openTaskBlock(task.blockId!)
+            });
+
+            menu.addItem({
+                iconHTML: "📋",
+                label: "复制块引用",
+                click: () => this.copyBlockRef(task)
+            });
+
+            menu.addItem({
+                iconHTML: "🔓",
+                label: "解除绑定",
+                click: () => this.unbindTaskFromBlock(task.blockId!)
+            });
+        } else {
+            menu.addItem({
+                iconHTML: "🔗",
+                label: "绑定到块",
+                click: () => this.showBindToBlockDialog(task)
             });
         }
+        menu.addSeparator();
+
+
 
         // 设置优先级子菜单
         const createPriorityMenuItems = () => {
@@ -2335,34 +2466,7 @@ export class EisenhowerMatrixView {
             click: () => this.startPomodoroCountUp(task)
         });
 
-        menu.addSeparator();
 
-        // 绑定块功能
-        if (task.blockId) {
-            menu.addItem({
-                iconHTML: "🔗",
-                label: "打开绑定块",
-                click: () => this.openTaskBlock(task.blockId!)
-            });
-
-            menu.addItem({
-                iconHTML: "📋",
-                label: "复制块引用",
-                click: () => this.copyBlockRef(task)
-            });
-
-            menu.addItem({
-                iconHTML: "🔓",
-                label: "解除绑定",
-                click: () => this.unbindTaskFromBlock(task.blockId!)
-            });
-        } else {
-            menu.addItem({
-                iconHTML: "🔗",
-                label: "绑定到块",
-                click: () => this.showBindToBlockDialog(task)
-            });
-        }
 
         menu.addSeparator();
 

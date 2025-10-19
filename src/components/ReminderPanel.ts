@@ -645,7 +645,7 @@ export class ReminderPanel {
             const menu = new Menu("reminderSortMenu");
 
             const sortOptions = [
-                { key: 'time', label: t("sortByTime"), icon: '🕐' },
+                { key: 'time', label: t("sortByTime"), icon: '🗓' },
                 { key: 'priority', label: t("sortByPriority"), icon: '🎯' },
                 { key: 'title', label: t("sortByTitle"), icon: '📝' }
             ];
@@ -2372,7 +2372,7 @@ export class ReminderPanel {
             const timeEl = document.createElement('div');
             timeEl.className = 'reminder-item__time';
             const timeText = this.formatReminderTime(reminder.date, reminder.time, today, reminder.endDate, reminder.endTime, reminder);
-            timeEl.textContent = '🕐' + timeText;
+            timeEl.textContent = '🗓' + timeText;
             timeEl.style.cursor = 'pointer';
             timeEl.title = t("clickToModifyTime");
             timeEl.addEventListener('click', (e) => {
@@ -2846,6 +2846,45 @@ export class ReminderPanel {
         return false;
     }
 
+    // 新增：检查是否为同级排序（不需要移除父子关系）
+    private isSameLevelSort(draggedReminder: any, targetReminder: any): boolean {
+        // 如果被拖拽的任务没有父任务，则一定是同级排序
+        if (!draggedReminder.parentId) {
+            return true;
+        }
+
+        // 如果目标任务的父任务ID与被拖拽任务的父任务ID相同，则为同级排序
+        if (targetReminder.parentId === draggedReminder.parentId) {
+            return true;
+        }
+
+        // 检查目标任务是否是被拖拽任务的祖先（在同一棵树内）
+        const reminderMap = new Map<string, any>();
+        this.currentRemindersCache.forEach(r => reminderMap.set(r.id, r));
+
+        let currentId: string | undefined = draggedReminder.parentId;
+        while (currentId) {
+            if (currentId === targetReminder.id) {
+                return true; // 目标任务是被拖拽任务的祖先，属于同级排序
+            }
+            const current = reminderMap.get(currentId);
+            currentId = current?.parentId;
+        }
+
+        // 检查被拖拽任务是否是目标任务的祖先（这种情况很少见，但也要处理）
+        currentId = targetReminder.parentId;
+        while (currentId) {
+            if (currentId === draggedReminder.id) {
+                return true; // 被拖拽任务是目标任务的祖先，属于同级排序
+            }
+            const current = reminderMap.get(currentId);
+            currentId = current?.parentId;
+        }
+
+        // 其他情况：父任务ID不同，且不在同一棵树内，则为不同级排序
+        return false;
+    }
+
     // 新增：显示拖放指示器
     private showDropIndicator(element: HTMLElement, event: DragEvent) {
         this.hideDropIndicator(); // 先清除之前的指示器
@@ -2955,13 +2994,19 @@ export class ReminderPanel {
                 // 设置父子关系
                 await this.setParentRelation(draggedReminder, targetReminder);
             } else {
-                // 排序操作：拖到其他任务上下方时，如果有父子关系则自动移除（静默）
-                if (draggedReminder.parentId) {
-                    await this.removeParentRelation(draggedReminder, true); // 传入 silent 参数
-                }
+                // 排序操作：智能判断是否需要移除父子关系
                 const insertBefore = dropType === 'before';
+
+                // 检查是否为同级排序（不需要移除父子关系的情况）
+                const isSameLevelSort = this.isSameLevelSort(draggedReminder, targetReminder);
+
+                if (draggedReminder.parentId && !isSameLevelSort) {
+                    // 不同级排序：自动移除父子关系
+                    await this.removeParentRelation(draggedReminder, true);
+                }
+
+                // 执行排序操作
                 await this.reorderReminders(draggedReminder, targetReminder, insertBefore);
-                // 只更新DOM，不刷新整个列表
                 this.updateDOMOrder(draggedReminder, targetReminder, insertBefore);
             }
         } catch (error) {
@@ -5023,9 +5068,9 @@ export class ReminderPanel {
                          <div class="b3-form__group">
                             <label class="b3-form__label">任务日期</label>
                             <div class="reminder-date-container">
-                                <input type="date" id="taskStartDate" class="b3-text-field" title="开始日期">
+                                <input type="date" id="taskStartDate" class="b3-text-field" title="开始日期" max="9999-12-31">
                                 <span class="reminder-arrow">→</span>
-                                <input type="date" id="taskEndDate" class="b3-text-field" title="结束日期">
+                                <input type="date" id="taskEndDate" class="b3-text-field" title="结束日期" max="9999-12-31">
                             </div>
                         </div>
                         <div class="b3-form__group">
@@ -5359,7 +5404,8 @@ export class ReminderPanel {
                 note: '',
                 date: task.startDate || undefined,
                 endDate: task.endDate || undefined,
-                priority: task.priority === 'none' ? undefined : task.priority,
+                // 如果子任务没指定优先级，继承父任务的优先级
+                priority: task.priority && task.priority !== 'none' ? task.priority : (parent ? parent.priority : undefined),
                 categoryId: parent ? parent.categoryId : undefined,
                 projectId: projectId,
                 parentId: parentId || parentIdForAllTopLevel,
@@ -5762,7 +5808,8 @@ export class ReminderPanel {
             note: taskData.note || '',
             date: taskData.date || undefined,
             endDate: taskData.endDate || undefined,
-            priority: taskData.priority === 'none' ? undefined : taskData.priority,
+            // 如果子任务没指定优先级，要继承父任务的优先级
+            priority: taskData.priority && taskData.priority !== 'none' ? taskData.priority : (parentReminder ? parentReminder.priority : undefined),
             categoryId: taskData.categoryId,
             projectId: taskData.projectId, // 添加项目ID
             parentId: parentReminder.id,

@@ -532,7 +532,7 @@ class SmartBatchDialog {
                                 <div class="batch-operation-item">
                                     <label class="b3-form__label">${t("batchSetDate")}</label>
                                     <div class="batch-date-container">
-                                        <input type="date" id="batchDateInput" class="b3-text-field" value="${getLocalDateString()}">
+                                        <input type="date" id="batchDateInput" class="b3-text-field" value="${getLocalDateString()}" max="9999-12-31">
                                         <button type="button" id="batchApplyDateBtn" class="b3-button b3-button--primary">
                                             ${t("applyDateToAll")}
                                         </button>
@@ -1405,9 +1405,9 @@ class BlockEditDialog {
                     <div class="b3-form__group">
                         <label class="b3-form__label">${t("reminderDate")}</label>
                         <div class="reminder-date-container">
-                            <input type="date" id="editReminderDate" class="b3-text-field" value="${this.setting.date}">
+                            <input type="date" id="editReminderDate" class="b3-text-field" value="${this.setting.date}" max="9999-12-31">
                             <span class="reminder-arrow">→</span>
-                            <input type="date" id="editReminderEndDate" class="b3-text-field" placeholder="${t("endDateOptional")}">
+                            <input type="date" id="editReminderEndDate" class="b3-text-field" placeholder="${t("endDateOptional")}" max="9999-12-31">
                         </div>
                         <div class="b3-form__desc" id="editDateTimeDesc">${this.setting.hasTime ? t("dateTimeDesc") : t("dateOnlyDesc")}</div>
                     </div>

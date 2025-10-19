@@ -205,7 +205,7 @@ export class RepeatSettingsDialog {
                         <!-- 结束日期 -->
                         <div id="endDateGroup" class="b3-form__group" style="display: ${this.repeatConfig.endType === 'date' ? 'block' : 'none'}">
                             <label class="b3-form__label">${t("endDate")}</label>
-                            <input type="date" id="endDate" class="b3-text-field" value="${this.repeatConfig.endDate || ''}">
+                            <input type="date" id="endDate" class="b3-text-field" value="${this.repeatConfig.endDate || ''}" max="9999-12-31">
                         </div>
 
                         <!-- 结束次数 -->

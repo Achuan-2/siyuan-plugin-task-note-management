@@ -385,21 +385,12 @@ export class ProjectKanbanView {
                 const isLunarRepeat = reminder.repeat?.enabled &&
                     (reminder.repeat.type === 'lunar-monthly' || reminder.repeat.type === 'lunar-yearly');
 
-                // 对于周期任务的处理：
-                // 1. 农历重复：不添加原始任务，只添加实例
-                // 2. 非农历重复且原始日期早于今天：不添加原始任务，只添加实例
-                // 3. 非农历重复且原始日期是今天或未来：添加原始任务
-                // 4. 非周期任务：正常添加
+                // 修改后的逻辑：对于所有重复事件，只显示实例，不显示原始任务
                 if (!reminder.repeat?.enabled) {
                     // 非周期任务，正常添加
                     allTasksWithInstances.push(reminder);
-                } else if (!isLunarRepeat) {
-                    // 非农历周期任务，只有当原始日期是今天或未来时才添加原始任务
-                    if (reminder.date && compareDateStrings(reminder.date, today) >= 0) {
-                        allTasksWithInstances.push(reminder);
-                    }
                 }
-                // 农历重复任务不添加原始任务，只添加实例
+                // 对于所有重复事件（农历和非农历），都不添加原始任务，只添加实例
 
                 // 如果是周期事件，生成实例
                 if (reminder.repeat?.enabled) {
@@ -410,11 +401,6 @@ export class ProjectKanbanView {
                     const completedInstances = reminder.repeat?.completedInstances || [];
                     const instanceModifications = reminder.repeat?.instanceModifications || {};
 
-                    // 检查原始任务的日期是否是今天且未完成
-                    const isOriginalTaskToday = reminder.date && compareDateStrings(reminder.date, today) === 0;
-                    const isOriginalTaskCompleted = reminder.completed;
-                    const hasTodayTask = isOriginalTaskToday && !isOriginalTaskCompleted;
-
                     // 将实例分类为：过去未完成、今天未完成、未来未完成、未来已完成、过去已完成
                     let pastIncompleteList: any[] = [];
                     let todayIncompleteList: any[] = [];
@@ -423,51 +409,48 @@ export class ProjectKanbanView {
                     let pastCompletedList: any[] = [];
 
                     repeatInstances.forEach(instance => {
-                        // 对于农历重复，所有实例都添加（包括原始日期，如果它匹配农历）
-                        // 对于非农历重复，只添加不同日期的实例
-                        if (isLunarRepeat || instance.date !== reminder.date) {
-                            const isInstanceCompleted = completedInstances.includes(instance.date);
-                            const instanceMod = instanceModifications[instance.date];
+                        // 对于所有重复事件，只添加实例，不添加原始任务
+                        const isInstanceCompleted = completedInstances.includes(instance.date);
+                        const instanceMod = instanceModifications[instance.date];
 
-                            const instanceTask = {
-                                ...reminder,
-                                id: instance.instanceId,
-                                date: instance.date,
-                                endDate: instance.endDate,
-                                time: instance.time,
-                                endTime: instance.endTime,
-                                isRepeatInstance: true,
-                                originalId: instance.originalId,
-                                completed: isInstanceCompleted,
-                                note: instanceMod?.note || reminder.note,
-                                // 为已完成的实例添加完成时间（用于排序）
-                                completedTime: isInstanceCompleted ? getLocalDateTimeString(new Date(instance.date)) : undefined
-                            };
+                        const instanceTask = {
+                            ...reminder,
+                            id: instance.instanceId,
+                            date: instance.date,
+                            endDate: instance.endDate,
+                            time: instance.time,
+                            endTime: instance.endTime,
+                            isRepeatInstance: true,
+                            originalId: instance.originalId,
+                            completed: isInstanceCompleted,
+                            note: instanceMod?.note || reminder.note,
+                            // 为已完成的实例添加完成时间（用于排序）
+                            completedTime: isInstanceCompleted ? getLocalDateTimeString(new Date(instance.date)) : undefined
+                        };
 
-                            // 按日期和完成状态分类
-                            const dateComparison = compareDateStrings(instance.date, today);
+                        // 按日期和完成状态分类
+                        const dateComparison = compareDateStrings(instance.date, today);
 
-                            if (dateComparison < 0) {
-                                // 过去的日期
-                                if (isInstanceCompleted) {
-                                    pastCompletedList.push(instanceTask);
-                                } else {
-                                    pastIncompleteList.push(instanceTask);
-                                }
-                            } else if (dateComparison === 0) {
-                                // 今天的日期（只收集未完成的）
-                                if (!isInstanceCompleted) {
-                                    todayIncompleteList.push(instanceTask);
-                                } else {
-                                    pastCompletedList.push(instanceTask); // 今天已完成算作过去
-                                }
+                        if (dateComparison < 0) {
+                            // 过去的日期
+                            if (isInstanceCompleted) {
+                                pastCompletedList.push(instanceTask);
                             } else {
-                                // 未来的日期
-                                if (isInstanceCompleted) {
-                                    futureCompletedList.push(instanceTask);
-                                } else {
-                                    futureIncompleteList.push(instanceTask);
-                                }
+                                pastIncompleteList.push(instanceTask);
+                            }
+                        } else if (dateComparison === 0) {
+                            // 今天的日期（只收集未完成的）
+                            if (!isInstanceCompleted) {
+                                todayIncompleteList.push(instanceTask);
+                            } else {
+                                pastCompletedList.push(instanceTask); // 今天已完成算作过去
+                            }
+                        } else {
+                            // 未来的日期
+                            if (isInstanceCompleted) {
+                                futureCompletedList.push(instanceTask);
+                            } else {
+                                futureIncompleteList.push(instanceTask);
                             }
                         }
                     });
@@ -481,22 +464,14 @@ export class ProjectKanbanView {
                     // 添加未来的第一个未完成实例（如果存在）
                     // 这样即使有多个已完成的未来实例，也能显示下一个未完成的实例
                     if (futureIncompleteList.length > 0) {
+                        // 对于所有重复事件，如果今天没有未完成实例，就添加未来第一个未完成的
                         const hasTodayIncomplete = todayIncompleteList.length > 0;
-
-                        if (isLunarRepeat) {
-                            // 农历重复：如果今天没有实例，就添加未来第一个未完成的
-                            if (!hasTodayIncomplete) {
-                                allTasksWithInstances.push(futureIncompleteList[0]);
-                            }
-                        } else {
-                            // 非农历重复：如果今天没有任何未完成任务，就添加未来第一个未完成的
-                            if (!hasTodayTask && !hasTodayIncomplete) {
-                                allTasksWithInstances.push(futureIncompleteList[0]);
-                            }
+                        if (!hasTodayIncomplete) {
+                            allTasksWithInstances.push(futureIncompleteList[0]);
                         }
                     }
 
-                    // 添加所有已完成的实例（包括过去和未来的）
+                    // 添加所有已完成的实例（包括过去和未来的）- ProjectKanbanView需要显示已完成的实例
                     allTasksWithInstances.push(...pastCompletedList);
                     allTasksWithInstances.push(...futureCompletedList);
                 }
@@ -962,8 +937,8 @@ export class ProjectKanbanView {
         checkboxEl.title = '点击完成/取消完成任务';
         checkboxEl.addEventListener('click', (e) => {
             e.stopPropagation();
-            const newStatus = checkboxEl.checked ? 'done' : 'todo';
-            this.changeTaskStatus(task, newStatus);
+            const completed = checkboxEl.checked;
+            this.toggleTaskCompletion(task, completed);
         });
         taskMainContainer.appendChild(checkboxEl);
 
@@ -1085,7 +1060,7 @@ export class ProjectKanbanView {
             }
 
             const dateText = this.formatTaskDate(task);
-            let dateHtml = `<span>📅</span><span>${dateText}</span>`;
+            let dateHtml = `<span>📅${dateText}</span>`;
 
             // 添加倒计时显示
             if (!task.completed) {
@@ -1373,15 +1348,46 @@ export class ProjectKanbanView {
         tomorrow.setDate(tomorrow.getDate() + 1);
         const tomorrowStr = getLocalDateString(tomorrow);
 
+        // 获取当前年份
+        const currentYear = new Date().getFullYear();
+
+        // 辅助函数：格式化日期显示
+        const formatDateWithYear = (dateStr: string, date: Date): string => {
+            const year = date.getFullYear();
+            return year !== currentYear
+                ? date.toLocaleDateString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric' })
+                : date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+        };
+
+        // 辅助函数：计算过期天数
+        const getExpiredDays = (targetDate: string): number => {
+            return Math.ceil((new Date(today).getTime() - new Date(targetDate).getTime()) / (1000 * 60 * 60 * 24));
+        };
+
+        // 辅助函数：创建过期徽章
+        const createExpiredBadge = (days: number): string => {
+            return `<span class="countdown-badge countdown-normal" style="background-color: rgba(231, 76, 60, 0.15); color: #e74c3c; border: 1px solid rgba(231, 76, 60, 0.3);">已过期${days}天</span>`;
+        };
+
         // 如果只有截止时间，显示截止时间
         if (!task.date && task.endDate) {
             const endDate = new Date(task.endDate);
+            const endYear = endDate.getFullYear();
+
+            // 检查是否过期
+            if (task.endDate < today) {
+                const daysDiff = getExpiredDays(task.endDate);
+                const dateStr = formatDateWithYear(task.endDate, endDate);
+                return `${dateStr} ${createExpiredBadge(daysDiff)}`;
+            }
+
             if (task.endDate === today) {
                 return t('todayDeadline');
             } else if (task.endDate === tomorrowStr) {
                 return t('tomorrowDeadline');
             } else {
-                return endDate.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }) + ' ' + t('countdownEnd');
+                const dateStr = formatDateWithYear(task.endDate, endDate);
+                return `${dateStr} 截止`;
             }
         }
 
@@ -1393,7 +1399,17 @@ export class ProjectKanbanView {
             dateStr = t('tomorrow');
         } else {
             const taskDate = new Date(task.date);
-            dateStr = taskDate.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+            const taskYear = taskDate.getFullYear();
+
+            // 检查是否过期
+            if (task.date < today) {
+                const daysDiff = getExpiredDays(task.date);
+                const formattedDate = formatDateWithYear(task.date, taskDate);
+                dateStr = `${formattedDate} ${createExpiredBadge(daysDiff)}`;
+            } else {
+                // 如果不在今年，显示年份
+                dateStr = formatDateWithYear(task.date, taskDate);
+            }
         }
 
         // 如果是农历循环事件，添加农历日期显示
@@ -1411,7 +1427,17 @@ export class ProjectKanbanView {
         let endDateStr = '';
         if (task.endDate && task.endDate !== task.date) {
             const taskEndDate = new Date(task.endDate);
-            endDateStr = taskEndDate.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+            const endYear = taskEndDate.getFullYear();
+
+            // 检查结束日期是否过期
+            if (task.endDate < today) {
+                const daysDiff = getExpiredDays(task.endDate);
+                const formattedEndDate = formatDateWithYear(task.endDate, taskEndDate);
+                endDateStr = `${formattedEndDate} ${createExpiredBadge(daysDiff)}`;
+            } else {
+                // 如果结束日期不在今年，显示年份
+                endDateStr = formatDateWithYear(task.endDate, taskEndDate);
+            }
         }
 
         if (endDateStr) {
@@ -1759,6 +1785,90 @@ export class ProjectKanbanView {
         });
     }
 
+    private async toggleTaskCompletion(task: any, completed: boolean) {
+        try {
+            if (task.isRepeatInstance && task.originalId) {
+                // 对于重复实例，使用不同的完成逻辑
+                await this.toggleRepeatInstanceCompletion(task, completed);
+            } else {
+                // 对于普通任务，使用原有逻辑
+                const newStatus = completed ? 'done' : 'todo';
+                await this.changeTaskStatus(task, newStatus);
+            }
+        } catch (error) {
+            console.error('切换任务完成状态失败:', error);
+            showMessage('操作失败，请重试');
+        }
+    }
+
+    /**
+     * 切换重复实例的完成状态
+     * @param task 重复实例任务
+     * @param completed 是否完成
+     */
+    private async toggleRepeatInstanceCompletion(task: any, completed: boolean) {
+        try {
+            const reminderData = await readReminderData();
+            const originalReminder = reminderData[task.originalId];
+
+            if (!originalReminder) {
+                showMessage("原始重复事件不存在");
+                return;
+            }
+
+            // 初始化完成实例列表
+            if (!originalReminder.repeat.completedInstances) {
+                originalReminder.repeat.completedInstances = [];
+            }
+
+            const instanceDate = task.date;
+            const completedInstances = originalReminder.repeat.completedInstances;
+
+            if (completed) {
+                // 添加到完成列表（如果还没有的话）
+                if (!completedInstances.includes(instanceDate)) {
+                    completedInstances.push(instanceDate);
+                }
+
+                // 记录完成时间
+                if (!originalReminder.repeat.instanceCompletedTimes) {
+                    originalReminder.repeat.instanceCompletedTimes = {};
+                }
+                originalReminder.repeat.instanceCompletedTimes[instanceDate] = getLocalDateTimeString(new Date());
+            } else {
+                // 从完成列表中移除
+                const index = completedInstances.indexOf(instanceDate);
+                if (index > -1) {
+                    completedInstances.splice(index, 1);
+                }
+
+                // 移除完成时间记录
+                if (originalReminder.repeat.instanceCompletedTimes) {
+                    delete originalReminder.repeat.instanceCompletedTimes[instanceDate];
+                }
+            }
+
+            await writeReminderData(reminderData);
+
+            // 更新本地缓存
+            const localTask = this.tasks.find(t => t.id === task.id);
+            if (localTask) {
+                localTask.completed = completed;
+                if (completed) {
+                    localTask.completedTime = originalReminder.repeat.instanceCompletedTimes?.[instanceDate];
+                } else {
+                    delete localTask.completedTime;
+                }
+            }
+
+            // 广播更新事件
+            window.dispatchEvent(new CustomEvent('reminderUpdated'));
+        } catch (error) {
+            console.error('切换重复实例完成状态失败:', error);
+            showMessage('操作失败，请重试');
+        }
+    }
+
     private async changeTaskStatus(task: any, newStatus: string) {
         try {
             const reminderData = await readReminderData();
@@ -2084,11 +2194,17 @@ export class ProjectKanbanView {
                     if (latestTask) {
                         // 设置父任务关系
                         (latestTask as any).parentId = parentTask.id;
+        
+                        // 如果最新创建的任务没有优先级，继承父任务的优先级
+                        if (!(latestTask as any).priority || (latestTask as any).priority === 'none') {
+                            (latestTask as any).priority = parentTask.priority || 'none';
+                        }
+        
                         reminderData[(latestTask as any).id] = latestTask;
                         await writeReminderData(reminderData);
-
+        
                         showMessage(`子任务已创建并关联到 "${parentTask.title}"`);
-
+        
                         // 再次刷新看板
                         this.loadTasks();
                     }
@@ -2306,16 +2422,20 @@ export class ProjectKanbanView {
         // 递归创建任务
         const createTaskRecursively = async (
             task: HierarchicalTask,
-            parentId?: string
+            parentId?: string,
+            parentPriority?: string
         ): Promise<string> => {
             const taskId = `quick_${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
             sortCounter += 10;
+
+            // 如果子任务没有指定优先级，继承父任务的优先级
+            const inheritedPriority = task.priority || parentPriority || 'none';
 
             const newTask: any = {
                 id: taskId,
                 title: task.title,
                 note: '',
-                priority: task.priority || 'none',
+                priority: inheritedPriority,
                 categoryId: categoryId,
                 projectId: this.projectId,
                 completed: false,
@@ -2359,7 +2479,7 @@ export class ProjectKanbanView {
             // 递归创建子任务
             if (task.children && task.children.length > 0) {
                 for (let i = 0; i < task.children.length; i++) {
-                    await createTaskRecursively(task.children[i], taskId);
+                    await createTaskRecursively(task.children[i], taskId, inheritedPriority);
                 }
             }
 
@@ -2370,7 +2490,16 @@ export class ProjectKanbanView {
         for (let i = 0; i < tasks.length; i++) {
             // 如果提供了 parentIdForAllTopLevel，则把解析出的顶级任务作为该父任务的子任务
             const topParent = parentIdForAllTopLevel ? parentIdForAllTopLevel : undefined;
-            await createTaskRecursively(tasks[i], topParent);
+
+            // 如果有父任务ID，获取父任务的优先级用于继承
+            let parentPriority: string | undefined;
+            if (topParent) {
+                const reminderData = await readReminderData();
+                const parentTask = reminderData[topParent];
+                parentPriority = parentTask?.priority;
+            }
+
+            await createTaskRecursively(tasks[i], topParent, parentPriority);
         }
 
         await writeReminderData(reminderData);
@@ -3286,6 +3415,7 @@ export class ProjectKanbanView {
                 border-radius: 10px;
                 font-weight: 500;
                 margin-left: 4px;
+                display: inline-block;
             }
 
             .countdown-urgent {
@@ -3304,6 +3434,13 @@ export class ProjectKanbanView {
                 background-color: rgba(46, 204, 113, 0.15);
                 color: #2ecc71;
                 border: 1px solid rgba(46, 204, 113, 0.3);
+            }
+
+            /* 过期任务样式 - 复用倒计时样式 */
+            .countdown-badge.countdown-normal[style*="rgba(231, 76, 60"] {
+                background-color: rgba(231, 76, 60, 0.15) !important;
+                color: #e74c3c !important;
+                border: 1px solid rgba(231, 76, 60, 0.3) !important;
             }
 
            .kanban-task-checkbox {

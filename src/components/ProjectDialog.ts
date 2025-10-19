@@ -101,12 +101,12 @@ export class ProjectDialog {
                     
                     <div class="form-group">
                         <label>${t("startDate") || "开始日期"}:</label>
-                        <input type="date" id="projectStartDate" class="b3-text-field" value="${existingProject?.startDate || today}">
+                        <input type="date" id="projectStartDate" class="b3-text-field" value="${existingProject?.startDate || today}" max="9999-12-31">
                     </div>
                     
                     <div class="form-group">
                         <label>${t("endDate") || "截止日期"}:</label>
-                        <input type="date" id="projectEndDate" class="b3-text-field" value="${existingProject?.endDate || ''}">
+                        <input type="date" id="projectEndDate" class="b3-text-field" value="${existingProject?.endDate || ''}" max="9999-12-31">
                     </div>
                 </div>
                 
