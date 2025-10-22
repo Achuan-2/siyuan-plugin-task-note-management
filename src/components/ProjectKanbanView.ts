@@ -2041,14 +2041,14 @@ export class ProjectKanbanView {
         menuEl.className = 'kanban-sort-menu';
         menuEl.style.cssText = `
                 position: absolute;
-                background: var(--b3 - theme - surface);
-                border: 1px solid var(--b3 - theme - border);
-                border - radius: 6px;
-                box - shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            background: var(--b3-theme-surface);
+            border: 1px solid var(--b3-theme-border);
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
                 padding: 8px;
-                z - index: 100;
+            z-index: 100;
                 display: flex;
-                flex - direction: column;
+            flex-direction: column;
                 gap: 4px;
                 `;
 
@@ -2063,15 +2063,15 @@ export class ProjectKanbanView {
             button.className = 'b3-button b3-button--outline';
             const isActive = this.currentSort === option.key && this.currentSortOrder === order;
             button.style.cssText = `
-                width: 100 %;
-                justify - content: flex - start;
-                text - align: left;
-                background - color: ${isActive ? 'var(--b3-theme-primary-lightest)' : 'transparent'};
+                width: 100%;
+                justify-content: flex-start;
+                text-align: left;
+                background-color: ${isActive ? 'var(--b3-theme-primary-lightest)' : 'transparent'};
                 color: ${isActive ? 'var(--b3-theme-primary)' : 'var(--b3-theme-on-surface)'};
                 `;
             button.innerHTML = `
-                    < span style = "font-size: 16px; margin-right: 8px;" > ${option.icon} </span>
-                        < span > ${option.label} (${order === 'asc' ? t('ascendingOrder') : t('descendingOrder')})</span>
+                    < span style="font-size: 16px; margin-right: 8px;" > ${option.icon} </span>
+                        < span>${option.label} (${order === 'asc' ? t('ascendingOrder') : t('descendingOrder')})</span>
                             `;
             button.addEventListener('click', () => {
                 this.currentSort = option.key;
@@ -2248,34 +2248,34 @@ export class ProjectKanbanView {
         const dialog = new Dialog({
             title: "粘贴列表新建任务",
             content: `
-                    < div class="b3-dialog__content" >
+                <div class="b3-dialog__content">
                         <p>粘贴Markdown列表或多行文本，每行将创建一个任务。支持多层级列表自动创建父子任务。</p>
-                            < p style = "font-size: 12px; color: var(--b3-theme-on-surface); opacity: 0.8; margin-bottom: 4px;" >
-                                支持语法：<code>@priority=high & startDate=2025 -08 - 12 & endDate=2025 -08 - 30 </code>
+                    <p style="font-size: 12px; color: var(--b3-theme-on-surface); opacity: 0.8; margin-bottom: 4px;">
+                        支持语法：<code>@priority=high&startDate=2025-08-12&endDate=2025-08-30</code>
                                     </p>
-                                    < p style = "font-size: 12px; color: var(--b3-theme-on-surface); opacity: 0.8; margin-bottom: 4px;" >
+                    <p style="font-size: 12px; color: var(--b3-theme-on-surface); opacity: 0.8; margin-bottom: 4px;">
                                         支持块链接：<code>[任务标题](siyuan://blocks/块ID)</code> 或 <code>((块ID '任务标题'))</code>
                                             </p>
-                                            < p style = "font-size: 12px; color: var(--b3-theme-on-surface); opacity: 0.8; margin-bottom: 8px;" >
-                                            支持多层级：使用缩进或多个 < code > -</code>符号创建父子任务关系
+                    <p style="font-size: 12px; color: var(--b3-theme-on-surface); opacity: 0.8; margin-bottom: 8px;">
+                        支持多层级：使用缩进或多个<code>-</code>符号创建父子任务关系
                                             </p>
-                                        < textarea id = "taskList" class= "b3-text-field"
-                        placeholder = "示例：
-                                            - 完成项目文档 @priority = high & startDate=2025 -08 - 12 & endDate=2025 -08 - 15
+                    <textarea id="taskList" class="b3-text-field"
+                        placeholder="示例：
+- 完成项目文档 @priority=high&startDate=2025-08-12&endDate=2025-08-15
                                             - 需求文档
                                             - 技术方案
                                             - 架构设计
                                             - 接口设计
-                                        - 准备会议材料 @priority = medium & startDate=2025 -08 - 13
+- 准备会议材料 @priority=medium&startDate=2025-08-13
                                         - PPT制作
                                         - 数据整理
                                         - [思源笔记插件开发丨任务笔记管理插件](siyuan://blocks/20250610000808-3vqwuh3)
-                                            - 学习新技术 @priority = low"
-                        style = "width: 100%; height: 250px; resize: vertical;" > </textarea>
+- 学习新技术 @priority=low"
+                        style="width: 100%; height: 250px; resize: vertical;"></textarea>
                                             </div>
-                                            < div class= "b3-dialog__action" >
-                                            <button class="b3-button b3-button--cancel" id = "cancelBtn" > 取消 </button>
-                                            < button class= "b3-button b3-button--primary" id = "createBtn" > 创建任务 </button>
+                <div class="b3-dialog__action">
+                    <button class="b3-button b3-button--cancel" id="cancelBtn">取消</button>
+                    <button class="b3-button b3-button--primary" id="createBtn">创建任务</button>
                                             </div>
                                                 `,
             width: "500px",
@@ -2425,7 +2425,7 @@ export class ProjectKanbanView {
             parentId?: string,
             parentPriority?: string
         ): Promise<string> => {
-            const taskId = `quick_${Date.now()} - ${Math.random().toString(36).substring(2, 9)}`;
+            const taskId = `quick_${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
             sortCounter += 10;
 
             // 如果子任务没有指定优先级，继承父任务的优先级
@@ -2925,338 +2925,338 @@ export class ProjectKanbanView {
         const style = document.createElement('style');
         style.id = 'project-kanban-custom-styles';
         style.textContent = `
-                                            .project - kanban - view {
-                                                height: 100 %;
+            .project-kanban-view {
+                height: 100%;
                                                 display: flex;
-                                                flex- direction: column;
-                background: var(--b3 - theme - background);
+                                                flex-direction: column;
+                background: var(--b3-theme-background);
             }
 
-            .project - kanban - toolbar {
+            .project-kanban-toolbar {
                 display: flex;
-                align - items: center;
+                align-items: center;
                 padding: 12px 16px;
-                border - bottom: 1px solid var(--b3 - theme - border);
-                background: var(--b3 - theme - surface);
+                border-bottom: 1px solid var(--b3-theme-border);
+                background: var(--b3-theme-surface);
                 gap: 16px;
-                flex - wrap: wrap;
+                flex-wrap: wrap;
             }
 
-            .project - kanban - title {
+            .project-kanban-title {
                 flex: 1;
-                min - width: 200px;
+                min-width: 200px;
             }
 
-            .project - kanban - controls {
+            .project-kanban-controls {
                 display: flex;
-                align - items: center;
+                align-items: center;
                 gap: 8px;
-                flex - wrap: wrap;
+                flex-wrap: wrap;
             }
 
             /* 响应式布局 - 窄屏优化 */
-            @media(max - width: 600px) {
-                .project - kanban - toolbar {
-                    flex - direction: column;
-                    align - items: stretch;
+            @media (max-width: 600px) {
+                .project-kanban-toolbar {
+                    flex-direction: column;
+                    align-items: stretch;
                     gap: 12px;
                 }
 
-                .project - kanban - title {
-                    width: 100 %;
-                    min - width: auto;
+                .project-kanban-title {
+                    width: 100%;
+                    min-width: auto;
                 }
 
-                .project - kanban - controls {
-                    width: 100 %;
-                    justify - content: flex - start;
-                    margin - left: 0;
+                .project-kanban-controls {
+                    width: 100%;
+                    justify-content: flex-start;
+                    margin-left: 0;
                     gap: 6px;
                 }
 
-                .project - kanban - controls.b3 - button {
+                .project-kanban-controls .b3-button {
                     flex: 1;
-                    min - width: 0;
-                    font - size: 12px;
+                    min-width: 0;
+                    font-size: 12px;
                     padding: 4px 8px;
                 }
             }
 
-            @media(max - width: 400px) {
-                .project - kanban - toolbar {
+            @media (max-width: 400px) {
+                .project-kanban-toolbar {
                     padding: 8px 12px;
                 }
 
-                .project - kanban - title h2 {
-                    font - size: 16px;
+                .project-kanban-title h2 {
+                    font-size: 16px;
                 }
 
-                .project - kanban - description {
-                    font - size: 12px;
+                .project-kanban-description {
+                    font-size: 12px;
                 }
 
-                .project - kanban - controls {
-                    flex - direction: column;
+                .project-kanban-controls {
+                    flex-direction: column;
                     gap: 4px;
                 }
 
-                .project - kanban - controls.b3 - button {
-                    width: 100 %;
-                    justify - content: center;
+                .project-kanban-controls .b3-button {
+                    width: 100%;
+                    justify-content: center;
                 }
             }
 
-            .project - kanban - container {
+            .project-kanban-container {
                 flex: 1;
                 display: grid;
                 gap: 16px;
                 padding: 16px;
-                overflow - y: auto;
-                min - height: 0;
+                overflow-y: auto;
+                min-height: 0;
                 /* 自适应列布局：每列最小280px，最大1fr，自动填充 */
-                grid - template - columns: repeat(auto - fit, minmax(200px, 1fr));
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             }
 
             /* 确保在极窄屏幕上也能正常显示 */
-            @media(max - width: 320px) {
-                .project - kanban - container {
-                    grid - template - columns: 1fr;
+            @media (max-width: 320px) {
+                .project-kanban-container {
+                    grid-template-columns: 1fr;
                     padding: 8px;
                     gap: 8px;
                 }
             }
 
-            .kanban - column {
-                background: var(--b3 - theme - surface);
-                border - radius: 8px;
-                border: 1px solid var(--b3 - theme - border);
+            .kanban-column {
+                background: var(--b3-theme-surface);
+                border-radius: 8px;
+                border: 1px solid var(--b3-theme-border);
                 display: flex;
-                flex - direction: column;
-                min - width: 0; /* 允许网格收缩 */
-                max - height: 100 %;
+                flex-direction: column;
+                min-width: 0; /* 允许网格收缩 */
+                max-height: 100%;
             }
 
-            .kanban - column - header {
+            .kanban-column-header {
                 padding: 12px 16px;
-                border - bottom: 1px solid var(--b3 - theme - border);
+                border-bottom: 1px solid var(--b3-theme-border);
                 display: flex;
-                align - items: center;
-                justify - content: space - between;
+                align-items: center;
+                justify-content: space-between;
             }
 
-            .kanban - column - content {
+            .kanban-column-content {
                 flex: 1;
                 padding: 8px;
-                overflow - y: auto;
-                min - height: 200px;
+                overflow-y: auto;
+                min-height: 200px;
             }
 
-            .kanban - column - count {
-                border - radius: 12px;
+            .kanban-column-count {
+                border-radius: 12px;
                 padding: 2px 8px;
-                font - size: 12px;
-                font - weight: 500;
-                min - width: 20px;
-                text - align: center;
+                font-size: 12px;
+                font-weight: 500;
+                min-width: 20px;
+                text-align: center;
             }
 
             /* 基础任务卡片样式 */
-            .kanban - task {
-                background: var(--b3 - theme - surface - lighter);
-                border: 1px solid var(--b3 - theme - border);
-                border - radius: 6px;
+            .kanban-task {
+                background: var(--b3-theme-surface-lighter);
+                border: 1px solid var(--b3-theme-border);
+                border-radius: 6px;
                 padding: 12px;
-                margin - bottom: 8px;
+                margin-bottom: 8px;
                 cursor: grab;
                 transition: all 0.2s ease;
                 position: relative;
             }
 
-            .kanban - task:hover {
+            .kanban-task:hover {
                 transform: translateY(-2px);
-                box - shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
             }
 
-            .kanban - task.dragging {
+            .kanban-task.dragging {
                 opacity: 0.5;
                 cursor: grabbing;
             }
 
             /* 优先级样式美化 - 使用思源主题颜色 */
 
-            .kanban - task - priority - high:hover {
-                box - shadow: 0 0 0 1px var(--b3 - card - error - color), 0 4px 12px rgba(231, 76, 60, 0.25)!important;
+            .kanban-task-priority-high:hover {
+                box-shadow: 0 0 0 1px var(--b3-card-error-color), 0 4px 12px rgba(231, 76, 60, 0.25) !important;
             }
 
 
-            .kanban - task - priority - medium:hover {
-                box - shadow: 0 0 0 1px var(--b3 - card - warning - color), 0 4px 12px rgba(243, 156, 18, 0.25)!important;
+            .kanban-task-priority-medium:hover {
+                box-shadow: 0 0 0 1px var(--b3-card-warning-color), 0 4px 12px rgba(243, 156, 18, 0.25) !important;
             }
 
 
 
-            .kanban - task - priority - low:hover {
-                box - shadow: 0 0 0 1px var(--b3 - card - info - color), 0 4px 12px rgba(52, 152, 219, 0.25)!important;
+            .kanban-task-priority-low:hover {
+                box-shadow: 0 0 0 1px var(--b3-card-info-color), 0 4px 12px rgba(52, 152, 219, 0.25) !important;
             }
 
-            .kanban - task - title {
-                font - weight: 500;
-                margin - bottom: 8px;
-                color: var(--b3 - theme - on - surface);
-                line - height: 1.4;
+            .kanban-task-title {
+                font-weight: 500;
+                margin-bottom: 8px;
+                color: var(--b3-theme-on-surface);
+                line-height: 1.4;
             }
 
-            .kanban - task - info {
+            .kanban-task-info {
                 display: flex;
-                flex - direction: column;
+                flex-direction: column;
                 gap: 4px;
             }
 
-            .kanban - task - date {
-                font - size: 12px;
-                color: var(--b3 - theme - on - surface);
+            .kanban-task-date {
+                font-size: 12px;
+                color: var(--b3-theme-on-surface);
                 opacity: 0.7;
                 display: flex;
-                align - items: center;
+                align-items: center;
                 gap: 4px;
             }
 
             /* 优先级标签样式 - 参考 project-priority-label */
-            .kanban - task - priority {
-                display: inline - flex;
-                align - items: center;
+            .kanban-task-priority {
+                display: inline-flex;
+                align-items: center;
                 gap: 2px;
                 padding: 1px 4px;
-                border - radius: 3px;
-                font - size: 10px;
-                font - weight: 500;
-                margin - top: 2px;
-                width: fit - content;
-                align - self: flex - start;
+                border-radius: 3px;
+                font-size: 10px;
+                font-weight: 500;
+                margin-top: 2px;
+                width: fit-content;
+                align-self: flex-start;
             }
 
-            .priority - label - high {
-                background - color: rgba(231, 76, 60, 0.1);
+            .priority-label-high {
+                background-color: rgba(231, 76, 60, 0.1);
                 color: #e74c3c;
             }
 
-            .priority - label - medium {
-                background - color: rgba(243, 156, 18, 0.1);
+            .priority-label-medium {
+                background-color: rgba(243, 156, 18, 0.1);
                 color: #f39c12;
             }
 
-            .priority - label - low {
-                background - color: rgba(52, 152, 219, 0.1);
+            .priority-label-low {
+                background-color: rgba(52, 152, 219, 0.1);
                 color: #3498db;
             }
 
-            .priority - dot {
+            .priority-dot {
                 width: 6px;
                 height: 6px;
-                border - radius: 50 %;
+                border-radius: 50%;
             }
 
-            .priority - dot.high {
+            .priority-dot.high {
                 background: #e74c3c;
             }
 
-            .priority - dot.medium {
+            .priority-dot.medium {
                 background: #f39c12;
             }
 
-            .priority - dot.low {
+            .priority-dot.low {
                 background: #3498db;
             }
 
-            .priority - dot.none {
+            .priority-dot.none {
                 background: #95a5a6;
             }
 
-            .kanban - task - category {
-                display: inline - flex;
-                align - items: center;
+            .kanban-task-category {
+                display: inline-flex;
+                align-items: center;
                 gap: 4px;
                 padding: 2px 6px;
-                border - radius: 4px;
-                font - size: 11px;
+                border-radius: 4px;
+                font-size: 11px;
                 color: white;
-                font - weight: 500;
-                align - self: flex - start;
+                font-weight: 500;
+                align-self: flex-start;
             }
 
-            .kanban - task - note {
-                font - size: 12px;
-                color: var(--b3 - theme - on - surface);
+            .kanban-task-note {
+                font-size: 12px;
+                color: var(--b3-theme-on-surface);
                 opacity: 0.8;
-                margin - top: 4px;
-                line - height: 1.3;
-                max - height: 40px;
+                margin-top: 4px;
+                line-height: 1.3;
+                max-height: 40px;
                 overflow: hidden;
-                text - overflow: ellipsis;
+                text-overflow: ellipsis;
                 padding: 4px 8px;
-                background: var(--b3 - theme - surface - lighter);
-                border - radius: 4px;
-                border: 1px solid var(--b3 - border - color);
+                background: var(--b3-theme-surface-lighter);
+                border-radius: 4px;
+                border: 1px solid var(--b3-border-color);
                 transition: all 0.2s ease;
             }
 
             /* 优先级任务的备注样式 */
-            .kanban - task - priority - high.kanban - task - note {
-                background - color: rgba(231, 76, 60, 0.08)!important;
-                border - color: rgba(231, 76, 60, 0.2)!important;
-                color: var(--b3 - card - error - color)!important;
+            .kanban-task-priority-high .kanban-task-note {
+                background-color: rgba(231, 76, 60, 0.08) !important;
+                border-color: rgba(231, 76, 60, 0.2) !important;
+                color: var(--b3-card-error-color) !important;
             }
 
-            .kanban - task - priority - medium.kanban - task - note {
-                background - color: rgba(243, 156, 18, 0.08)!important;
-                border - color: rgba(243, 156, 18, 0.2)!important;
-                color: var(--b3 - card - warning - color)!important;
+            .kanban-task-priority-medium .kanban-task-note {
+                background-color: rgba(243, 156, 18, 0.08) !important;
+                border-color: rgba(243, 156, 18, 0.2) !important;
+                color: var(--b3-card-warning-color) !important;
             }
 
-            .kanban - task - priority - low.kanban - task - note {
-                background - color: rgba(52, 152, 219, 0.08)!important;
-                border - color: rgba(52, 152, 219, 0.2)!important;
-                color: var(--b3 - card - info - color)!important;
+            .kanban-task-priority-low .kanban-task-note {
+                background-color: rgba(52, 152, 219, 0.08) !important;
+                border-color: rgba(52, 152, 219, 0.2) !important;
+                color: var(--b3-card-info-color) !important;
             }
 
-            .kanban - drop - zone - active {
-                background: var(--b3 - theme - primary - lightest);
-                border - color: var(--b3 - theme - primary);
+            .kanban-drop-zone-active {
+                background: var(--b3-theme-primary-lightest);
+                border-color: var(--b3-theme-primary);
             }
 
             /* 父子任务拖拽样式 */
-            .parent - child - drop - target {
-                border: 2px dashed var(--b3 - theme - primary)!important;
-                background: var(--b3 - theme - primary - lightest)!important;
-                transform: scale(1.02)!important;
-                box - shadow: 0 4px 20px rgba(0, 123, 255, 0.3)!important;
+            .parent-child-drop-target {
+                border: 2px dashed var(--b3-theme-primary) !important;
+                background: var(--b3-theme-primary-lightest) !important;
+                transform: scale(1.02) !important;
+                box-shadow: 0 4px 20px rgba(0, 123, 255, 0.3) !important;
                 position: relative;
             }
 
-            .parent - child - indicator {
-                animation: fadeInUp 0.2s ease - out;
+            .parent-child-indicator {
+                animation: fadeInUp 0.2s ease-out;
             }
 
             @keyframes fadeInUp {
                 from {
                     opacity: 0;
-                    transform: translateX(-50 %) translateY(5px);
+                    transform: translateX(-50%) translateY(5px);
                 }
                 to {
                     opacity: 1;
-                    transform: translateX(-50 %) translateY(0);
+                    transform: translateX(-50%) translateY(0);
                 }
             }
 
-            .parent - child - hint {
+            .parent-child-hint {
                 display: flex;
-                align - items: center;
-                justify - content: center;
+                align-items: center;
+                justify-content: center;
             }
 
             /* 排序拖拽提示样式 */
-            .sort - hint {
-                animation: fadeInRight 0.2s ease - out;
+            .sort-hint {
+                animation: fadeInRight 0.2s ease-out;
             }
 
             @keyframes fadeInRight {
@@ -3270,289 +3270,289 @@ export class ProjectKanbanView {
                 }
             }
 
-            .reminder - dialog.b3 - form__group {
-                margin - bottom: 16px;
+            .reminder-dialog .b3-form__group {
+                margin-bottom: 16px;
             }
-            .reminder - dialog.b3 - form__label {
+            .reminder-dialog .b3-form__label {
                 display: block;
-                margin - bottom: 8px;
-                font - weight: 500;
+                margin-bottom: 8px;
+                font-weight: 500;
             }
-            .priority - selector {
+            .priority-selector {
                 display: flex;
                 gap: 8px;
             }
-            .priority - option {
+            .priority-option {
                 display: flex;
-                align - items: center;
+                align-items: center;
                 gap: 6px;
                 padding: 6px 12px;
-                border - radius: 16px;
+                border-radius: 16px;
                 cursor: pointer;
-                border: 1px solid var(--b3 - theme - border);
+                border: 1px solid var(--b3-theme-border);
                 transition: all 0.2s ease;
             }
-            .priority - option:hover {
-                background - color: var(--b3 - theme - surface - lighter);
+            .priority-option:hover {
+                background-color: var(--b3-theme-surface-lighter);
             }
-            .priority - option.selected {
-                font - weight: 600;
-                border - color: var(--b3 - theme - primary);
-                background - color: var(--b3 - theme - primary - lightest);
-                color: var(--b3 - theme - primary);
+            .priority-option.selected {
+                font-weight: 600;
+                border-color: var(--b3-theme-primary);
+                background-color: var(--b3-theme-primary-lightest);
+                color: var(--b3-theme-primary);
             }
-            .priority - option.priority - dot {
+            .priority-option .priority-dot {
                 width: 10px;
                 height: 10px;
-                border - radius: 50 %;
+                border-radius: 50%;
             }
-            .priority - option.priority - dot.high { background - color: #e74c3c; }
-            .priority - option.priority - dot.medium { background - color: #f39c12; }
-            .priority - option.priority - dot.low { background - color: #3498db; }
-            .priority - option.priority - dot.none { background - color: #95a5a6; }
+            .priority-option .priority-dot.high { background-color: #e74c3c; }
+            .priority-option .priority-dot.medium { background-color: #f39c12; }
+            .priority-option .priority-dot.low { background-color: #3498db; }
+            .priority-option .priority-dot.none { background-color: #95a5a6; }
             
-            .term - type - selector {
+            .term-type-selector {
                 display: flex;
                 gap: 12px;
             }
-            .term - type - option {
+            .term-type-option {
                 display: flex;
-                align - items: center;
+                align-items: center;
                 gap: 8px;
                 padding: 8px 16px;
-                border - radius: 20px;
+                border-radius: 20px;
                 cursor: pointer;
-                border: 2px solid var(--b3 - theme - border);
+                border: 2px solid var(--b3-theme-border);
                 transition: all 0.2s ease;
-                background - color: var(--b3 - theme - surface);
+                background-color: var(--b3-theme-surface);
             }
-            .term - type - option:hover {
-                background - color: var(--b3 - theme - surface - lighter);
-                border - color: var(--b3 - theme - primary - lighter);
+            .term-type-option:hover {
+                background-color: var(--b3-theme-surface-lighter);
+                border-color: var(--b3-theme-primary-lighter);
             }
-            .term - type - option.selected {
-                font - weight: 600;
-                border - color: var(--b3 - theme - primary);
-                background - color: var(--b3 - theme - primary - lightest);
-                color: var(--b3 - theme - primary);
+            .term-type-option.selected {
+                font-weight: 600;
+                border-color: var(--b3-theme-primary);
+                background-color: var(--b3-theme-primary-lightest);
+                color: var(--b3-theme-primary);
             }
 
             
-            .category - selector.category - option {
+            .category-selector .category-option {
                 padding: 4px 10px;
-                border - radius: 14px;
+                border-radius: 14px;
                 cursor: pointer;
                 transition: transform 0.15s ease;
                 border: 1px solid transparent;
                 color: white;
             }
-            .category - selector.category - option.selected {
+            .category-selector .category-option.selected {
                 transform: scale(1.05);
-                box - shadow: 0 0 0 2px var(--b3 - theme - primary - lightest);
-                font - weight: bold;
+                box-shadow: 0 0 0 2px var(--b3-theme-primary-lightest);
+                font-weight: bold;
             }
-            .category - selector.category - option[data - category=""] {
-                background - color: var(--b3 - theme - surface - lighter);
-                color: var(--b3 - theme - on - surface);
+            .category-selector .category-option[data-category=""] {
+                background-color: var(--b3-theme-surface-lighter);
+                color: var(--b3-theme-on-surface);
             }
-            .reminder - date - container {
+            .reminder-date-container {
                 display: flex;
-                align - items: center;
+                align-items: center;
                 gap: 8px;
             }
-            .reminder - date - container.b3 - text - field {
+            .reminder-date-container .b3-text-field {
                 flex: 1;
             }
-            .reminder - arrow {
-                color: var(--b3 - theme - on - surface);
+            .reminder-arrow {
+                color: var(--b3-theme-on-surface);
                 opacity: 0.7;
             }
 
-            .kanban - task - block - info {
-                font - size: 11px;
-                color: var(--b3 - theme - on - background);
-                margin - top: 4px;
+            .kanban-task-block-info {
+                font-size: 11px;
+                color: var(--b3-theme-on-background);
+                margin-top: 4px;
                 opacity: 0.9;
                 display: flex;
-                align - items: center;
+                align-items: center;
                 gap: 4px;
                 padding: 2px 6px;
-                background - color: var(--b3 - theme - surface - lighter);
-                border - radius: 4px;
-                border: 1px solid var(--b3 - theme - border);
+                background-color: var(--b3-theme-surface-lighter);
+                border-radius: 4px;
+                border: 1px solid var(--b3-theme-border);
                 transition: all 0.2s ease;
             }
 
-            .kanban - task - block - info:hover {
-                background - color: var(--b3 - theme - primary - lightest);
-                border - color: var(--b3 - theme - primary);
+            .kanban-task-block-info:hover {
+                background-color: var(--b3-theme-primary-lightest);
+                border-color: var(--b3-theme-primary);
             }
 
-            .kanban - task - block - info span[data - type= "a"] {
+            .kanban-task-block-info span[data-type="a"] {
                 cursor: pointer;
-                color: var(--b3 - theme - primary);
-                text - decoration: underline;
-                text - decoration - style: dotted;
+                color: var(--b3-theme-primary);
+                text-decoration: underline;
+                text-decoration-style: dotted;
                 flex: 1;
                 overflow: hidden;
-                text - overflow: ellipsis;
-                white - space: nowrap;
+                text-overflow: ellipsis;
+                white-space: nowrap;
                 transition: color 0.2s ease;
             }
 
-            .kanban - task - block - info span[data - type= "a"]:hover {
-                color: var(--b3 - theme - primary - light);
+            .kanban-task-block-info span[data-type="a"]:hover {
+                color: var(--b3-theme-primary-light);
             }
 
-            .kanban - task - pomodoro - count {
+            .kanban-task-pomodoro-count {
                 /* Styles for pomodoro count */
             }
 
             /* 倒计时样式 */
-            .countdown - badge {
-                font - size: 11px;
+            .countdown-badge {
+                font-size: 11px;
                 padding: 2px 6px;
-                border - radius: 10px;
-                font - weight: 500;
-                margin - left: 4px;
-                display: inline - block;
+                border-radius: 10px;
+                font-weight: 500;
+                margin-left: 4px;
+                display: inline-block;
             }
 
-            .countdown - urgent {
-                background - color: rgba(231, 76, 60, 0.15);
+            .countdown-urgent {
+                background-color: rgba(231, 76, 60, 0.15);
                 color: #e74c3c;
                 border: 1px solid rgba(231, 76, 60, 0.3);
             }
 
-            .countdown - warning {
-                background - color: rgba(243, 156, 18, 0.15);
+            .countdown-warning {
+                background-color: rgba(243, 156, 18, 0.15);
                 color: #f39c12;
                 border: 1px solid rgba(243, 156, 18, 0.3);
             }
 
-            .countdown - normal {
-                background - color: rgba(46, 204, 113, 0.15);
+            .countdown-normal {
+                background-color: rgba(46, 204, 113, 0.15);
                 color: #2ecc71;
                 border: 1px solid rgba(46, 204, 113, 0.3);
             }
 
             /* 过期任务样式 - 复用倒计时样式 */
-            .countdown - badge.countdown - normal[style *= "rgba(231, 76, 60"] {
-                background - color: rgba(231, 76, 60, 0.15)!important;
-                color: #e74c3c!important;
-                border: 1px solid rgba(231, 76, 60, 0.3)!important;
+            .countdown-badge.countdown-normal[style*="rgba(231, 76, 60"] {
+                background-color: rgba(231, 76, 60, 0.15) !important;
+                color: #e74c3c !important;
+                border: 1px solid rgba(231, 76, 60, 0.3) !important;
             }
 
-           .kanban - task - checkbox {
-                -webkit - appearance: none;
+           .kanban-task-checkbox {
+                -webkit-appearance: none;
                 appearance: none;
-                background - color: var(--b3 - theme - surface);
+                background-color: var(--b3-theme-surface);
                 margin: 0;
-                margin - top: 5px; /* 微调对齐 */
+                margin-top: 5px; /* 微调对齐 */
                 font: inherit;
-                color: var(--b3 - theme - on - surface);
+                color: var(--b3-theme-on-surface);
                 width: 1.15em;
                 height: 1.15em;
-                border: 0.1em solid var(--b3 - theme - on - surface);
-                border - radius: 0.25em;
+                border: 0.1em solid var(--b3-theme-on-surface);
+                border-radius: 0.25em;
                 transform: translateY(-0.075em);
                 display: grid;
-                place - content: center;
+                place-content: center;
                 cursor: pointer;
                 transition: all 0.2s ease;
-                flex - shrink: 0;
+                flex-shrink: 0;
             }
 
-           .kanban - task - checkbox:hover {
-                border - color: var(--b3 - theme - primary);
+           .kanban-task-checkbox:hover {
+                border-color: var(--b3-theme-primary);
             }
 
-           .kanban - task - checkbox::before {
+           .kanban-task-checkbox::before {
                 content: "";
                 width: 0.65em;
                 height: 0.65em;
                 transform: scale(0);
-                transition: 120ms transform ease -in -out;
-                box - shadow: inset 1em 1em var(--b3 - theme - primary);
-                transform - origin: bottom left;
-                clip - path: polygon(14 % 44 %, 0 65 %, 50 % 100 %, 100 % 16 %, 80 % 0 %, 43 % 62 %);
+                transition: 120ms transform ease-in-out;
+                box-shadow: inset 1em 1em var(--b3-theme-primary);
+                transform-origin: bottom left;
+                clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
             }
 
-           .kanban - task - checkbox:checked {
-                background: var(--b3 - theme - primary);
-                border - color: var(--b3 - theme - primary);
+           .kanban-task-checkbox:checked {
+                background: var(--b3-theme-primary);
+                border-color: var(--b3-theme-primary);
             }
 
-           .kanban - task - checkbox: checked::before {
+           .kanban-task-checkbox:checked::before {
                 transform: scale(1);
-                box - shadow: inset 1em 1em var(--b3 - theme - surface);
+                box-shadow: inset 1em 1em var(--b3-theme-surface);
             }
 
-           .kanban - task - collapse - btn {
+           .kanban-task-collapse-btn {
                 width: 10px;
-                min - width: auto;
-                color: var(--b3 - theme - on - surface);
+                min-width: auto;
+                color: var(--b3-theme-on-surface);
                 opacity: 0.6;
                 display: flex;
-                align - items: center;
-                justify - content: center;
+                align-items: center;
+                justify-content: center;
             }
-           .kanban - task - collapse - btn.b3 - button__icon {
+           .kanban-task-collapse-btn .b3-button__icon {
                 margin: 0;
             }
-            .kanban - task - collapse - btn svg{
+            .kanban-task-collapse-btn svg{
                 height: 10px;
                 width: 10px;
             }
-           .kanban - task - collapse - btn:hover {
+           .kanban-task-collapse-btn:hover {
                 opacity: 1;
-                color: var(--b3 - theme - primary);
-                background: var(--b3 - theme - surface - lighter);
+                color: var(--b3-theme-primary);
+                background: var(--b3-theme-surface-lighter);
             }
 
            /* 项目标题点击样式 */
-           .project - kanban - title h2 {
+           .project-kanban-title h2 {
                 cursor: pointer;
                 transition: color 0.2s ease;
             }
            
-           .project - kanban - title h2:hover {
-                color: var(--b3 - theme - primary);
+           .project-kanban-title h2:hover {
+                color: var(--b3-theme-primary);
             }
            
-           .project - kanban - title h2[data - has - note= "true"] {
-                text - decoration: underline;
-                text - decoration - style: dotted;
+           .project-kanban-title h2[data-has-note="true"] {
+                text-decoration: underline;
+                text-decoration-style: dotted;
             }
            
-           .project - kanban - title h2[data - has - note= "true"]:hover {
-                color: var(--b3 - theme - primary);
+           .project-kanban-title h2[data-has-note="true"]:hover {
+                color: var(--b3-theme-primary);
             }
             /* 父任务子任务进度条 */
-            .kanban - task - progress - container {
-                margin - top: 8px;
+            .kanban-task-progress-container {
+                margin-top: 8px;
             }
 
-            .kanban - task - progress - wrap {
-                background: rgba(0, 0, 0, 0.06);
+            .kanban-task-progress-wrap {
+                background: rgba(0,0,0,0.06);
                 height: 8px;
-                border - radius: 6px;
+                border-radius: 6px;
                 overflow: hidden;
             }
 
-            .kanban - task - progress - bar {
-                height: 100 %;
-                background: linear - gradient(90deg, #2ecc71, #27ae60);
+            .kanban-task-progress-bar {
+                height: 100%;
+                background: linear-gradient(90deg, #2ecc71, #27ae60);
                 transition: width 0.3s ease;
-                border - radius: 6px 0 0 6px;
+                border-radius: 6px 0 0 6px;
             }
 
-            .kanban - task - progress - text {
-                font - size: 12px;
-                color: var(--b3 - theme - on - surface);
+            .kanban-task-progress-text {
+                font-size: 12px;
+                color: var(--b3-theme-on-surface);
                 opacity: 0.9;
-                min - width: 34px;
-                text - align: right;
+                min-width: 34px;
+                text-align: right;
             }
             `;
         document.head.appendChild(style);
@@ -3564,7 +3564,7 @@ export class ProjectKanbanView {
         const noCategoryEl = document.createElement('div');
         noCategoryEl.className = 'category-option';
         noCategoryEl.setAttribute('data-category', '');
-        noCategoryEl.innerHTML = `< span > 无分类 </span>`;
+        noCategoryEl.innerHTML = `<span>无分类</span>`;
         if (!defaultCategoryId) {
             noCategoryEl.classList.add('selected');
         }
