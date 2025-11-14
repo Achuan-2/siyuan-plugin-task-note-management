@@ -278,6 +278,7 @@ export class ReminderPanel {
             <option value="today" selected>${t("todayReminders")}</option>
             <option value="tomorrow">${t("tomorrowReminders")}</option>
             <option value="future7">${t("future7Reminders")}</option>
+            <option value="futureAll">${t("futureReminders")}</option>
             <option value="overdue">${t("overdueReminders")}</option>
             <option value="all">${t("past7Reminders")}</option>
             <option value="todayCompleted">${t("todayCompletedReminders")}</option>
@@ -1971,6 +1972,13 @@ export class ReminderPanel {
                     const startDate = r.date;
                     const endDate = r.endDate || r.date;
                     return compareDateStrings(tomorrow, startDate) <= 0 && compareDateStrings(startDate, future7Days) <= 0;
+                });
+            case 'futureAll':
+                return reminders.filter(r => {
+                    if (isEffectivelyCompleted(r) || !r.date) return false;
+                    const startDate = r.date;
+                    // const endDate = r.endDate || r.date;
+                    return compareDateStrings(tomorrow, startDate) <= 0;
                 });
             case 'completed':
                 return reminders.filter(r => isEffectivelyCompleted(r));
@@ -5775,7 +5783,7 @@ export class ReminderPanel {
             .priority-option .priority-dot.medium { background-color: #f39c12; }
             .priority-option .priority-dot.low { background-color: #3498db; }
             .priority-option .priority-dot.none { background-color: #95a5a6; }
-            
+
             .category-selector .category-option {
                 padding: 4px 10px;
                 border-radius: 14px;
@@ -5793,7 +5801,7 @@ export class ReminderPanel {
                 background-color: var(--b3-theme-surface-lighter);
                 color: var(--b3-theme-on-surface);
             }
-            
+
             .reminder-date-container {
                 display: flex;
                 align-items: center;
