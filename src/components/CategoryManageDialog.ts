@@ -564,7 +564,7 @@ export class CategoryManageDialog {
                 this.sharedPicker = new Picker({
                     i18n: zh_CN,
                     locale: 'zh_CN',
-                    dataSource: window.siyuan.config.system.dataDir + '/plugins/siyuan-plugin-task-note-management/assets/emojis_search.json'
+                    dataSource: '/plugins/siyuan-plugin-task-note-management/assets/emojis_search.json'
                 });
             } catch (e) {
                 // @ts-ignore - fall back to DOM creation
@@ -572,7 +572,7 @@ export class CategoryManageDialog {
                 if (this.sharedPicker) {
                     // Set attributes for DOM-created picker
                     this.sharedPicker.setAttribute('locale', 'zh_CN');
-                    this.sharedPicker.setAttribute('data-source', window.siyuan.config.system.dataDir + '/plugins/siyuan-plugin-task-note-management/assets/emojis_search.json');
+                    this.sharedPicker.setAttribute('data-source', '/plugins/siyuan-plugin-task-note-management/assets/emojis_search.json');
                 }
             }
             this.sharedPicker.style.cssText = 'position: fixed; left: 0; top: 0; z-index: 2147483647; display: none; margin-top: 8px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2); border-radius: 12px; background: var(--b3-theme-surface);';
