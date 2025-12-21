@@ -9,6 +9,7 @@ import { t } from "../utils/i18n";
 import { generateRepeatInstances, getRepeatDescription } from "../utils/repeatUtils";
 import { PomodoroTimer } from "./PomodoroTimer";
 import { PomodoroStatsView } from "./PomodoroStatsView";
+import { TaskTimeStatsView } from "./TaskTimeStatsView";
 import { EisenhowerMatrixView } from "./EisenhowerMatrixView";
 import { QuickReminderDialog } from "./QuickReminderDialog";
 import { PomodoroManager } from "../utils/pomodoroManager";
@@ -231,6 +232,16 @@ export class ReminderPanel {
                 this.showPomodoroStatsView();
             });
             actionContainer.appendChild(pomodoroStatsBtn);
+
+            // 添加任务时间统计按钮
+            const taskTimeStatsBtn = document.createElement('button');
+            taskTimeStatsBtn.className = 'b3-button b3-button--outline';
+            taskTimeStatsBtn.innerHTML = '&#x23F1;';
+            taskTimeStatsBtn.title = t("taskTimeStats");
+            taskTimeStatsBtn.addEventListener('click', () => {
+                this.showTaskTimeStatsView();
+            });
+            actionContainer.appendChild(taskTimeStatsBtn);
 
             // 添加刷新按钮
             const refreshBtn = document.createElement('button');
@@ -6375,6 +6386,19 @@ export class ReminderPanel {
         } catch (error) {
             console.error('打开番茄钟统计视图失败:', error);
             showMessage("打开番茄钟统计视图失败");
+        }
+    }
+
+    /**
+     * 显示任务时间统计视图
+     */
+    private showTaskTimeStatsView() {
+        try {
+            const statsView = new TaskTimeStatsView();
+            statsView.show();
+        } catch (error) {
+            console.error('打开任务时间统计视图失败:', error);
+            showMessage("打开任务时间统计视图失败");
         }
     }
 
