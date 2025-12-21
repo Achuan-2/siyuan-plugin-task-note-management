@@ -80,16 +80,16 @@ export class TaskTimeStatsView {
                         📊 ${t("overview")}
                     </button>
                     <button class="nav-btn ${this.currentView === 'details' ? 'active' : ''}" data-view="details">
-                        📈 ${t("focusDetails")}
+                        📈 ${t("taskDetails")}
                     </button>
                     <button class="nav-btn ${this.currentView === 'records' ? 'active' : ''}" data-view="records">
-                        📝 ${t("focusRecords")}
+                        📝 ${t("taskRecords")}
                     </button>
                     <button class="nav-btn ${this.currentView === 'trends' ? 'active' : ''}" data-view="trends">
-                        📉 ${t("focusTrends")}
+                        📉 ${t("taskTrends")}
                     </button>
                     <button class="nav-btn ${this.currentView === 'timeline' ? 'active' : ''}" data-view="timeline">
-                        ⏰ ${t("focusTimeline")}
+                        ⏰ ${t("taskTimeline")}
                     </button>
                     <button class="nav-btn ${this.currentView === 'heatmap' ? 'active' : ''}" data-view="heatmap">
                         🔥 ${t("yearlyHeatmap")}
@@ -159,7 +159,7 @@ export class TaskTimeStatsView {
                     </div>
                 </div>
 
-                <!-- 今日专注进度 -->
+                <!-- 今日任务进度 -->
                 <div class="today-progress">
                     <h3>📈 ${t("todayProgress")}</h3>
                     ${this.renderTodayProgress()}
@@ -180,7 +180,7 @@ export class TaskTimeStatsView {
             <div class="details-container">
                 <div class="details-header">
                     <div class="details-title">
-                        <h3>📈 ${t("focusDetails")}</h3>
+                        <h3>📈 ${t("taskDetails")}</h3>
                         ${dateRangeText ? `<span class="date-range-text">${dateRangeText}</span>` : ''}
                     </div>
                     <div class="detail-group-selector">
@@ -227,7 +227,7 @@ export class TaskTimeStatsView {
         return `
             <div class="records-container">
                 <div class="records-header">
-                    <h3>📝 ${t("focusRecords")}</h3>
+                    <h3>📝 ${t("taskRecords")}</h3>
                     <div class="records-subtitle">${t("recent7DaysFocus")}</div>
                 </div>
                 
@@ -244,7 +244,7 @@ export class TaskTimeStatsView {
             <div class="trends-container">
                 <div class="trends-header">
                     <div class="trends-title">
-                        <h3>📉 ${t("focusTrends")}</h3>
+                        <h3>📉 ${t("taskTrends")}</h3>
                         ${dateRangeText ? `<span class="date-range-text">${dateRangeText}</span>` : ''}
                     </div>
                     <div class="time-range-selector">
@@ -277,7 +277,7 @@ export class TaskTimeStatsView {
             <div class="timeline-container">
                 <div class="timeline-header">
                     <div class="timeline-title">
-                        <h3>⏰ ${t("focusTimeline")}</h3>
+                        <h3>⏰ ${t("taskTimeline")}</h3>
                         ${dateRangeText ? `<span class="date-range-text">${dateRangeText}</span>` : ''}
                     </div>
                     <div class="time-range-selector">
@@ -336,7 +336,7 @@ export class TaskTimeStatsView {
                     <span class="progress-value">${taskCount}</span>
                 </div>
                 <div class="progress-item">
-                    <span class="progress-label">${t("focusTime")}</span>
+                    <span class="progress-label">${t("taskTime")}</span>
                     <span class="progress-value">${this.formatTime(todayTime)}</span>
                 </div>
             </div>
@@ -941,7 +941,7 @@ export class TaskTimeStatsView {
             let monthlyTime = 0;
             const daysInMonth = new Date(targetYear, index + 1, 0).getDate();
 
-            // 计算该月的总专注时间
+            // 计算该月的总任务时间
             for (let day = 1; day <= daysInMonth; day++) {
                 const date = new Date(targetYear, index, day);
                 const dateStr = getLocalDateString(date);
@@ -981,12 +981,12 @@ export class TaskTimeStatsView {
                 break;
 
             case 'month':
-                // 显示本月所有天的平均专注时间分布
+                // 显示本月所有天的平均任务时间分布
                 data.push(this.getAverageTimelineDataForMonth());
                 break;
 
             case 'year':
-                // 显示本年所有天的平均专注时间分布
+                // 显示本年所有天的平均任务时间分布
                 data.push(this.getAverageTimelineDataForYear());
                 break;
 
@@ -1049,7 +1049,7 @@ export class TaskTimeStatsView {
                 const startMinute = startTime.getMinutes();
                 const duration = session.duration;
 
-                // 将专注时间分布到对应的小时中
+                // 将任务时间分布到对应的小时中
                 let remainingDuration = duration;
                 let currentHour = startHour;
                 let currentMinute = startMinute;
@@ -1124,7 +1124,7 @@ export class TaskTimeStatsView {
                     const startMinute = startTime.getMinutes();
                     const duration = session.duration;
 
-                    // 将专注时间分布到对应的小时中
+                    // 将任务时间分布到对应的小时中
                     let remainingDuration = duration;
                     let currentHour = startHour;
                     let currentMinute = startMinute;
@@ -1318,7 +1318,7 @@ export class TaskTimeStatsView {
                 },
                 series: [
                     {
-                        name: t("focusTime"),
+                        name: t("taskTime"),
                         type: 'pie',
                         radius: ['40%', '70%'],
                         center: ['50%', '45%'],
@@ -1412,7 +1412,7 @@ export class TaskTimeStatsView {
             // 配置选项 - GitHub风格热力图
             const option = {
                 title: {
-                    text: `${this.currentYear}年专注时间热力图`,
+                    text: `${this.currentYear}年任务时间热力图`,
                     left: 'center',
                     top: 10,
                     textStyle: {
@@ -1431,10 +1431,10 @@ export class TaskTimeStatsView {
                         });
                         const time = params.data[1];
                         if (time === 0) {
-                            return `${dateStr}<br/>无专注记录`;
+                            return `${dateStr}<br/>无任务记录`;
                         }
                         const timeStr = this.formatTime(time);
-                        return `${dateStr}<br/>专注时间: ${timeStr}`;
+                        return `${dateStr}<br/>任务时间: ${timeStr}`;
                     }
                 },
                 visualMap: {
@@ -1565,7 +1565,7 @@ export class TaskTimeStatsView {
                             const startX = api.coord([start, 0])[0];
                             const endX = api.coord([end, 0])[0];
 
-                            // 根据平均专注时长调整颜色深度和高度
+                            // 根据平均任务时长调整颜色深度和高度
                             const maxDuration = Math.max(...data.map(d => d[4]));
                             const intensity = duration / maxDuration;
                             const height = 30 + intensity * 20; // 基础高度30px，最大增加20px
@@ -1760,7 +1760,7 @@ export class TaskTimeStatsView {
             if (view && view !== this.currentView) {
                 this.currentView = view;
 
-                // 当切换到专注趋势或专注时间线Tab时，默认设置为本周并重置偏移量
+                // 当切换到任务趋势或任务时间线Tab时，默认设置为本周并重置偏移量
                 if (view === 'trends' || view === 'timeline') {
                     this.currentTimeRange = 'week';
                     this.currentWeekOffset = 0;
