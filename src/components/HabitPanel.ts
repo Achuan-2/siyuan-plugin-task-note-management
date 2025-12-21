@@ -1,6 +1,6 @@
 import { showMessage, Dialog, Menu, confirm } from "siyuan";
 import { readHabitData, writeHabitData, getBlockByID, getBlockDOM, openBlock } from "../api";
-import { getLocalDateString, getLocalDateTimeString } from "../utils/dateUtils";
+import { getLocalDateTimeString, getLogicalDateString, getRelativeDateString } from "../utils/dateUtils";
 import { HabitGroupManager } from "../utils/habitGroupManager";
 import { HabitCalendarDialog } from "./HabitCalendarDialog";
 import { t } from "../utils/i18n";
@@ -380,9 +380,9 @@ export class HabitPanel {
     }
 
     private applyFilter(habits: Habit[]): Habit[] {
-        const today = getLocalDateString();
-        const tomorrow = getLocalDateString(new Date(Date.now() + 86400000));
-        const yesterday = getLocalDateString(new Date(Date.now() - 86400000));
+        const today = getLogicalDateString();
+        const tomorrow = getRelativeDateString(1);
+        const yesterday = getRelativeDateString(-1);
 
         switch (this.currentTab) {
             case 'today':
@@ -770,7 +770,7 @@ export class HabitPanel {
         card.appendChild(titleRow);
 
         // 打卡信息
-        const today = getLocalDateString();
+        const today = getLogicalDateString();
         const checkIn = habit.checkIns?.[today];
         const currentCount = checkIn?.count || 0;
         const targetCount = habit.target;
@@ -1003,7 +1003,7 @@ export class HabitPanel {
     }
 
     private async renderCompletedHabitsSection(excludeIds?: Set<string>) {
-        const today = getLocalDateString();
+        const today = getLogicalDateString();
         const habitData = await readHabitData();
         const habits: Habit[] = Object.values(habitData || {});
 
@@ -1230,7 +1230,7 @@ export class HabitPanel {
     private createCheckInSubmenu(habit: Habit): any[] {
         const submenu: any[] = [];
 
-        const today = getLocalDateString();
+        const today = getLogicalDateString();
         const todayCheckIn = habit.checkIns?.[today];
         const checkedEmojisToday = new Set<string>();
 
@@ -1273,7 +1273,7 @@ export class HabitPanel {
 
     private async checkInHabit(habit: Habit, emojiConfig: HabitCheckInEmoji) {
         try {
-            const today = getLocalDateString();
+            const today = getLogicalDateString();
             const now = getLocalDateTimeString(new Date());
 
             if (!habit.checkIns) {

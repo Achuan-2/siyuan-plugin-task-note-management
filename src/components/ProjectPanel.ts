@@ -4,7 +4,7 @@ import { PomodoroStatsView } from "./PomodoroStatsView";
 // 添加四象限面板常量
 const EISENHOWER_TAB_TYPE = "reminder_eisenhower_tab";
 import { readProjectData, writeProjectData, getBlockByID, openBlock, readReminderData, writeReminderData } from "../api";
-import { getLocalDateString, compareDateStrings } from "../utils/dateUtils";
+import { compareDateStrings, getLogicalDateString } from "../utils/dateUtils";
 import { CategoryManager } from "../utils/categoryManager";
 import { StatusManager } from "../utils/statusManager";
 import { ProjectDialog } from "./ProjectDialog";
@@ -686,7 +686,7 @@ export class ProjectPanel {
     }
 
     private createProjectElement(project: any): HTMLElement {
-        const today = getLocalDateString();
+        const today = getLogicalDateString();
         const isOverdue = project.endDate && compareDateStrings(project.endDate, today) < 0;
         const priority = project.priority || 'none';
         const status = project.status || 'active';
@@ -1404,7 +1404,7 @@ export class ProjectPanel {
 
     private formatProjectTime(startDate: string, endDate?: string, today?: string): string {
         if (!today) {
-            today = getLocalDateString();
+            today = getLogicalDateString();
         }
 
         let timeStr = '';

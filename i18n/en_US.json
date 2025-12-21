@@ -750,6 +750,7 @@
     "tomorrowStart": "Tomorrow start",
     "startsInNDays": "Starts in ${days} days",
     "todayStart": "Today start",
+    "todayStartDesc": "Set the start of a day, e.g. 03:00. Records before this time count for the previous day",
     "todayEnd": "Ends today",
     "endsInNDays": "Ends in ${days} days",
     "tomorrowEnd": "Ends tomorrow",

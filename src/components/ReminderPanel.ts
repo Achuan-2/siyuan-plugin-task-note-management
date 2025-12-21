@@ -1,6 +1,6 @@
 import { showMessage, confirm, Dialog, Menu, openTab } from "siyuan";
 import { refreshSql, readReminderData, writeReminderData, sql, updateBlock, getBlockKramdown, getBlockByID, updateBlockReminderBookmark, openBlock, createDocWithMd, renderSprig, readProjectData } from "../api";
-import { getLocalDateString, compareDateStrings, getLocalDateTime, getLocalDateTimeString } from "../utils/dateUtils";
+import { getLocalDateString, compareDateStrings, getLocalDateTime, getLocalDateTimeString, getLogicalDateString, getRelativeDateString } from "../utils/dateUtils";
 import { loadSortConfig, saveSortConfig, getSortMethodName } from "../utils/sortConfig";
 import { QuickReminderDialog } from "./QuickReminderDialog";
 import { CategoryManager, Category } from "../utils/categoryManager";
@@ -1063,7 +1063,7 @@ export class ReminderPanel {
                 } else {
                     // 元素不存在：尝试基于所有可见提醒和默认数据创建元素（缺省 asyncDataCache）
                     try {
-                        const today = getLocalDateString();
+                        const today = getLogicalDateString();
                         const asyncCache = this.asyncDataCache && this.asyncDataCache.size > 0 ? this.asyncDataCache : new Map<string, any>();
                         const allVisible = this.currentRemindersCache.concat(children);
                         // 如果 asyncCache 中没有 child 的数据，提前加载以避免闪烁
@@ -1145,7 +1145,7 @@ export class ReminderPanel {
                 return;
             }
 
-            const today = getLocalDateString();
+            const today = getLogicalDateString();
             const allRemindersWithInstances = this.generateAllRemindersWithInstances(reminderData, today);
 
             // 构造 map 便于查找父子关系
@@ -2070,9 +2070,9 @@ export class ReminderPanel {
     }
 
     private filterRemindersByTab(reminders: any[], today: string): any[] {
-        const tomorrow = getLocalDateString(new Date(Date.now() + 86400000));
-        const future7Days = getLocalDateString(new Date(Date.now() + 7 * 86400000));
-        const sevenDaysAgo = getLocalDateString(new Date(Date.now() - 7 * 86400000));
+        const tomorrow = getRelativeDateString(1);
+        const future7Days = getRelativeDateString(7);
+        const sevenDaysAgo = getRelativeDateString(-7);
         // 修复昨天计算：基于本地日期而不是UTC时间
         const todayDate = new Date(today + 'T00:00:00');
         const yesterdayDate = new Date(todayDate);
@@ -2205,7 +2205,7 @@ export class ReminderPanel {
      * @returns 是否已标记今日已完成
      */
     private isSpanningEventTodayCompleted(reminder: any): boolean {
-        const today = getLocalDateString();
+        const today = getLogicalDateString();
 
         if (reminder.isRepeatInstance) {
             // 重复事件实例：检查原始事件的每日完成记录
@@ -2227,7 +2227,7 @@ export class ReminderPanel {
      * @returns 是否已标记昨日已完成
      */
     private isSpanningEventYesterdayCompleted(reminder: any): boolean {
-        const today = getLocalDateString();
+        const today = getLogicalDateString();
         const todayDate = new Date(today + 'T00:00:00');
         const yesterdayDate = new Date(todayDate);
         yesterdayDate.setDate(yesterdayDate.getDate() - 1);
@@ -2691,12 +2691,10 @@ export class ReminderPanel {
 
     private formatReminderTime(date: string, time?: string, today?: string, endDate?: string, endTime?: string, reminder?: any): string {
         if (!today) {
-            today = getLocalDateString();
+            today = getLogicalDateString();
         }
 
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const tomorrowStr = getLocalDateString(tomorrow);
+        const tomorrowStr = getRelativeDateString(1);
 
         let dateStr = '';
         if (date === today) {
@@ -3043,7 +3041,7 @@ export class ReminderPanel {
             // 如果任务没有日期，且当前在"今日任务"视图中，自动添加今日日期
             // 这样可以确保拖拽出来的子任务不会从今日任务视图中消失
             if (!reminderData[childId].date && this.currentTab === 'today') {
-                reminderData[childId].date = getLocalDateString();
+                reminderData[childId].date = getLogicalDateString();
             }
 
             await writeReminderData(reminderData);
@@ -3618,7 +3616,7 @@ export class ReminderPanel {
      */
     private formatCompletedTime(completedTime: string): string {
         try {
-            const today = getLocalDateString();
+            const today = getLogicalDateString();
             const yesterday = new Date();
             yesterday.setDate(yesterday.getDate() - 1);
             const yesterdayStr = getLocalDateString(yesterday);
@@ -3651,7 +3649,7 @@ export class ReminderPanel {
 
     private showReminderContextMenu(event: MouseEvent, reminder: any) {
         const menu = new Menu("reminderContextMenu");
-        const today = getLocalDateString();
+        const today = getLogicalDateString();
         const isSpanningDays = reminder.endDate && reminder.endDate !== reminder.date;
 
         // 判断是否为重复/循环任务或重复实例
@@ -4095,7 +4093,7 @@ export class ReminderPanel {
      */
     private async markSpanningEventTodayCompleted(reminder: any) {
         try {
-            const today = getLocalDateString();
+            const today = getLogicalDateString();
             const reminderData = await readReminderData();
 
             let updatedReminder: any = null;
@@ -4146,7 +4144,7 @@ export class ReminderPanel {
      */
     private async unmarkSpanningEventTodayCompleted(reminder: any) {
         try {
-            const today = getLocalDateString();
+            const today = getLogicalDateString();
             const reminderData = await readReminderData();
 
             let updatedReminder: any = null;
@@ -6035,9 +6033,9 @@ export class ReminderPanel {
      * 检查提醒是否应该在当前视图中显示
      */
     private shouldShowInCurrentView(reminder: any): boolean {
-        const today = getLocalDateString();
-        const tomorrow = getLocalDateString(new Date(Date.now() + 86400000));
-        const future7Days = getLocalDateString(new Date(Date.now() + 7 * 86400000));
+        const today = getLogicalDateString();
+        const tomorrow = getRelativeDateString(1);
+        const future7Days = getRelativeDateString(7);
 
         // 检查分类筛选
         if (this.currentCategoryFilter !== 'all') {
@@ -6078,7 +6076,7 @@ export class ReminderPanel {
                 return (reminder.endDate && compareDateStrings(reminder.date, today) <= 0 && compareDateStrings(today, reminder.endDate) <= 0) ||
                     reminder.date === today;
             case 'all':
-                const sevenDaysAgo = getLocalDateString(new Date(Date.now() - 7 * 86400000));
+                const sevenDaysAgo = getRelativeDateString(-7);
                 return reminder.date && compareDateStrings(sevenDaysAgo, reminder.date) <= 0 &&
                     compareDateStrings(reminder.endDate || reminder.date, today) < 0;
             default:
@@ -6398,7 +6396,7 @@ export class ReminderPanel {
      */
     private showNewTaskDialog() {
         try {
-            const today = getLocalDateString();
+            const today = getLogicalDateString();
             const quickDialog = new QuickReminderDialog(
                 today, // 初始日期为今天
                 undefined, // 不指定初始时间
@@ -6667,7 +6665,7 @@ export class ReminderPanel {
             const { PomodoroRecordManager } = await import("../utils/pomodoroRecord");
             const pomodoroManager = PomodoroRecordManager.getInstance();
 
-            const targetDate = date || getLocalDateString();
+            const targetDate = date || getLogicalDateString();
 
             // If it's a repeat instance or an instance id (contains date), try direct event count
             if (reminder && reminder.isRepeatInstance) {
@@ -6764,7 +6762,7 @@ export class ReminderPanel {
         try {
             const { PomodoroRecordManager } = await import("../utils/pomodoroRecord");
             const pomodoroManager = PomodoroRecordManager.getInstance();
-            const targetDate = date || getLocalDateString();
+            const targetDate = date || getLogicalDateString();
 
             // If it's a repeat instance, use event-specific focus time
             if (reminder && reminder.isRepeatInstance) {

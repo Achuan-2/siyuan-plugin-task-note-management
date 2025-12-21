@@ -1,6 +1,6 @@
 import { Dialog, showMessage } from "siyuan";
 import { readProjectData, writeProjectData, getBlockByID } from "../api";
-import { getLocalDateString } from "../utils/dateUtils";
+import { getLogicalDateString } from "../utils/dateUtils";
 import { CategoryManager } from "../utils/categoryManager";
 import { StatusManager } from "../utils/statusManager";
 import { t } from "../utils/i18n";
@@ -51,7 +51,7 @@ export class ProjectDialog {
     }
 
     private generateDialogHTML(title: string, existingProject?: any): string {
-        const today = getLocalDateString();
+        const today = getLogicalDateString();
         const categories = this.categoryManager.getCategories();
         const statuses = this.statusManager.getStatuses();
 

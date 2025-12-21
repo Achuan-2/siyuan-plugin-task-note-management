@@ -4,7 +4,7 @@ import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import { showMessage, confirm, openTab, Menu, Dialog } from "siyuan";
 import { refreshSql, readReminderData, writeReminderData, getBlockByID, sql, updateBlock, getBlockKramdown, updateBlockReminderBookmark, openBlock, readProjectData } from "../api";
-import { getLocalDateString, getLocalDateTime, getLocalDateTimeString, compareDateStrings } from "../utils/dateUtils";
+import { getLocalDateString, getLocalDateTime, getLocalDateTimeString, compareDateStrings, getLogicalDateString, getRelativeDateString } from "../utils/dateUtils";
 import { QuickReminderDialog } from "./QuickReminderDialog";
 import { CategoryManager, Category } from "../utils/categoryManager";
 import { ProjectManager } from "../utils/projectManager";
@@ -3499,10 +3499,8 @@ export class CalendarView {
      */
     private formatCompletedTimeForTooltip(completedTime: string): string {
         try {
-            const today = getLocalDateString();
-            const yesterday = new Date();
-            yesterday.setDate(yesterday.getDate() - 1);
-            const yesterdayStr = getLocalDateString(yesterday);
+            const today = getLogicalDateString();
+            const yesterdayStr = getRelativeDateString(-1);
 
             // 解析完成时间
             const completedDate = new Date(completedTime);
@@ -3534,10 +3532,8 @@ export class CalendarView {
      */
     private formatEventDateTime(reminder: any): string {
         try {
-            const today = getLocalDateString();
-            const tomorrow = new Date();
-            tomorrow.setDate(tomorrow.getDate() + 1);
-            const tomorrowStr = getLocalDateString(tomorrow);
+            const today = getLogicalDateString();
+            const tomorrowStr = getRelativeDateString(1);
 
             let dateStr = '';
             if (reminder.date === today) {

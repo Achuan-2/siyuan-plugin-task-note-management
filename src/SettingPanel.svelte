@@ -170,6 +170,14 @@
                     description: t('dayStartTimeDesc'),
                     placeholder: '08:00',
                 },
+                {
+                    key: 'todayStartTime',
+                    value: settings.todayStartTime,
+                    type: 'textinput',
+                    title: t('todayStart'),
+                    description: t('todayStartDesc'),
+                    placeholder: '03:00',
+                },
             ],
         },
         {
@@ -596,6 +604,27 @@
                     } else {
                         // 如果无法解析，回退到默认
                         v = DEFAULT_SETTINGS.dailyNotificationTime;
+                    }
+                }
+                settings[detail.key] = v;
+            } else if (detail.key === 'todayStartTime') {
+                let v = detail.value;
+                if (typeof v === 'number') {
+                    const h = Math.max(0, Math.min(23, Math.floor(v)));
+                    v = (h < 10 ? '0' : '') + h.toString() + ':00';
+                } else if (typeof v === 'string') {
+                    const m = v.match(/^(\d{1,2})(?::(\d{1,2}))?$/);
+                    if (m) {
+                        const h = Math.max(0, Math.min(23, parseInt(m[1], 10) || 0));
+                        const min = Math.max(0, Math.min(59, parseInt(m[2] || '0', 10) || 0));
+                        v =
+                            (h < 10 ? '0' : '') +
+                            h.toString() +
+                            ':' +
+                            (min < 10 ? '0' : '') +
+                            min.toString();
+                    } else {
+                        v = DEFAULT_SETTINGS.todayStartTime;
                     }
                 }
                 settings[detail.key] = v;

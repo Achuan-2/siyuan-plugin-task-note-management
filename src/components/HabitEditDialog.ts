@@ -1,7 +1,7 @@
 import { Dialog, showMessage } from "siyuan";
 import { getBlockByID, getBlockDOM } from "../api";
 import { Habit } from "./HabitPanel";
-import { getLocalDateTimeString, getLocalDateString } from "../utils/dateUtils";
+import { getLocalDateTimeString, getLogicalDateString } from "../utils/dateUtils";
 import { HabitGroupManager } from "../utils/habitGroupManager";
 
 export class HabitEditDialog {
@@ -688,7 +688,7 @@ export class HabitEditDialog {
             if (timesChanged && newTimes.length > 0) {
                 try {
                     const now = new Date();
-                    const todayStr = getLocalDateString();
+                    const todayStr = getLogicalDateString();
                     // 如果新的某个提醒时间在今日，且晚于当前时间，则清理当天的 hasNotify 中该时间/条目，或者清空当天记录
                     const laterThanNow = newTimes.some(t => {
                         try {

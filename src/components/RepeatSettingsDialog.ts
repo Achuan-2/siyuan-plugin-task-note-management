@@ -1,7 +1,7 @@
 import { Dialog, showMessage } from "siyuan";
 import { t } from "../utils/i18n";
 import { solarToLunar } from "../utils/lunarUtils";
-import { getLocalDateString } from "../utils/dateUtils";
+import { getLogicalDateString } from "../utils/dateUtils";
 
 export interface RepeatConfig {
     enabled: boolean;
@@ -59,7 +59,7 @@ export class RepeatSettingsDialog {
     private initLunarDateFromStartDate() {
         try {
             // 如果没有设置 startDate，使用今天的日期
-            const dateToUse = this.startDate || getLocalDateString();
+            const dateToUse = this.startDate || getLogicalDateString();
 
             const lunar = solarToLunar(dateToUse);
 

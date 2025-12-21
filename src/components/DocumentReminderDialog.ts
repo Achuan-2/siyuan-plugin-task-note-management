@@ -1,6 +1,6 @@
 import { Dialog, showMessage, confirm } from "siyuan";
 import { readReminderData, writeReminderData, updateBlockReminderBookmark, sql, getBlockByID, openBlock } from "../api";
-import { getLocalDateString, compareDateStrings, getLocalDateTimeString } from "../utils/dateUtils";
+import { getLocalDateString, compareDateStrings, getLocalDateTimeString, getLogicalDateString, getRelativeDateString } from "../utils/dateUtils";
 import { CategoryManager } from "../utils/categoryManager";
 import { QuickReminderDialog } from "./QuickReminderDialog";
 import { generateRepeatInstances, getRepeatDescription } from "../utils/repeatUtils";
@@ -268,7 +268,7 @@ export class DocumentReminderDialog {
 
                 // 如果是重复事件，生成实例
                 if (reminder.repeat?.enabled) {
-                    const today = getLocalDateString();
+                    const today = getLogicalDateString();
                     const isLunarRepeat = reminder.repeat.type === 'lunar-monthly' || reminder.repeat.type === 'lunar-yearly';
 
                     const instances = this.generateInstancesWithFutureGuarantee(reminder, today, isLunarRepeat);
@@ -516,7 +516,7 @@ export class DocumentReminderDialog {
         }
 
         this.remindersContainer.innerHTML = '';
-        const today = getLocalDateString();
+        const today = getLogicalDateString();
 
         reminders.forEach(reminder => {
             const reminderEl = this.createReminderElement(reminder, today);
@@ -805,12 +805,10 @@ export class DocumentReminderDialog {
 
     private formatReminderTime(date: string, time?: string, today?: string, endDate?: string): string {
         if (!today) {
-            today = getLocalDateString();
+            today = getLogicalDateString();
         }
 
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const tomorrowStr = getLocalDateString(tomorrow);
+        const tomorrowStr = getRelativeDateString(1);
 
         let dateStr = '';
         if (date === today) {
@@ -849,10 +847,8 @@ export class DocumentReminderDialog {
 
     private formatCompletedTime(completedTime: string): string {
         try {
-            const today = getLocalDateString();
-            const yesterday = new Date();
-            yesterday.setDate(yesterday.getDate() - 1);
-            const yesterdayStr = getLocalDateString(yesterday);
+            const today = getLogicalDateString();
+            const yesterdayStr = getRelativeDateString(-1);
 
             const completedDate = new Date(completedTime);
             const completedDateStr = getLocalDateString(completedDate);

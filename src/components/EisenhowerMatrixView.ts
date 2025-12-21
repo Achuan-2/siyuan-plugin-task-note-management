@@ -7,7 +7,7 @@ import { PomodoroTimer } from "./PomodoroTimer";
 import { PomodoroManager } from "../utils/pomodoroManager";
 import { showMessage, confirm, Menu, Dialog } from "siyuan";
 import { t } from "../utils/i18n";
-import { getLocalDateTimeString, getLocalDateString, compareDateStrings } from "../utils/dateUtils";
+import { getLocalDateTimeString, getLocalDateString, compareDateStrings, getLogicalDateString } from "../utils/dateUtils";
 import { getSolarDateLunarString } from "../utils/lunarUtils";
 import { generateRepeatInstances, getRepeatDescription } from "../utils/repeatUtils";
 interface QuadrantTask {
@@ -211,7 +211,7 @@ export class EisenhowerMatrixView {
     private async loadTasks() {
         try {
             const reminderData = await readReminderData();
-            const today = getLocalDateString();
+            const today = getLogicalDateString();
             this.allTasks = [];
 
             // 辅助函数：检查祖先是否已完成
@@ -1075,7 +1075,7 @@ export class EisenhowerMatrixView {
             let dateText = '';
             if (task.endDate && task.endDate !== task.date) {
                 // 检查结束日期是否过期
-                if (task.endDate < getLocalDateString()) {
+                if (task.endDate < getLogicalDateString()) {
                     const daysDiff = getExpiredDays(task.endDate);
                     const formattedEndDate = formatDateWithYear(task.endDate);
                     dateText = `${formatDateWithYear(task.date)} ~ ${formattedEndDate} ${createExpiredBadge(daysDiff)}`;
@@ -1084,7 +1084,7 @@ export class EisenhowerMatrixView {
                 }
             } else {
                 // 检查开始日期是否过期
-                if (task.date < getLocalDateString()) {
+                if (task.date < getLogicalDateString()) {
                     const daysDiff = getExpiredDays(task.date);
                     const formattedDate = formatDateWithYear(task.date);
                     dateText = `${formattedDate} ${createExpiredBadge(daysDiff)}`;

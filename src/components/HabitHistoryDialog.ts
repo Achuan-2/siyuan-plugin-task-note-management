@@ -1,6 +1,6 @@
 import { Dialog, confirm, showMessage } from "siyuan";
 import type { Habit, HabitCheckInEmoji } from "./HabitPanel";
-import { getLocalDateTimeString, getLocalDateString } from "../utils/dateUtils";
+import { getLocalDateTimeString, getLogicalDateString } from "../utils/dateUtils";
 
 export class HabitHistoryDialog {
     private dialog: Dialog;
@@ -223,7 +223,7 @@ export class HabitHistoryDialog {
     }
 
     private async openAddEntryDialog(dateStr?: string) {
-        const today = getLocalDateString();
+        const today = getLogicalDateString();
         const defaultDate = dateStr || today;
         const dialog = new Dialog({
             title: `补录 ${this.habit.title} 打卡`,
@@ -321,7 +321,7 @@ export class HabitHistoryDialog {
                 showMessage('请选择一个打卡状态', 2000, 'error');
                 return;
             }
-            const chosenDate = dateInput.value || getLocalDateString();
+            const chosenDate = dateInput.value || getLogicalDateString();
             const chosenTime = timeInput.value || `${hh}:${mm}`;
             const timestamp = `${chosenDate} ${chosenTime}`;
 

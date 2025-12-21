@@ -1,6 +1,6 @@
 import { t } from "../utils/i18n";
 import { openTab } from "siyuan";
-import { getLocalDateString } from "../utils/dateUtils";
+import { getLogicalDateString } from "../utils/dateUtils";
 import { openBlock } from "../api"
 
 interface ReminderInfo {
@@ -141,7 +141,7 @@ export class NotificationDialog {
 
     private createAllDayBatchContent() {
         const reminders = this.reminderInfo as ReminderInfo[];
-        const today = getLocalDateString(); // 使用本地时间获取今日日期
+        const today = getLogicalDateString(); // 使用本地时间获取今日日期
 
         // 构建时间显示的辅助函数
         const getTimeDisplay = (reminder: ReminderInfo) => {

@@ -1,6 +1,6 @@
 import { Dialog, showMessage, confirm } from "siyuan";
 import type { Habit, HabitCheckInEmoji } from "./HabitPanel";
-import { getLocalDateString, getLocalDateTimeString } from "../utils/dateUtils";
+import { getLocalDateTimeString, getLogicalDateString } from "../utils/dateUtils";
 
 export class HabitDayDialog {
     private dialog: Dialog;
@@ -146,7 +146,7 @@ export class HabitDayDialog {
     }
 
     private openAddEntryDialog() {
-        const today = getLocalDateString();
+        const today = getLogicalDateString();
         const dialog = new Dialog({ title: `添加 ${this.habit.title} 打卡`, content: '<div id="habitDayAddEntry"></div>', width: '420px', height: '360px' });
         const container = dialog.element.querySelector('#habitDayAddEntry') as HTMLElement;
         if (!container) return;

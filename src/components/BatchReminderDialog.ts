@@ -2,7 +2,7 @@ import { Dialog, showMessage } from "siyuan";
 import { t } from "../utils/i18n";
 import { ensureReminderDataFile, updateBlockReminderBookmark, getBlockByID, getBlockDOM } from "../api";
 import { getRepeatDescription } from "../utils/repeatUtils";
-import { getLocalDateString, getLocalTimeString } from "../utils/dateUtils";
+import { getLocalDateString, getLocalTimeString, getLogicalDateString } from "../utils/dateUtils";
 import { RepeatConfig, RepeatSettingsDialog } from "./RepeatSettingsDialog";
 import { NotificationDialog } from "./NotificationDialog";
 import * as chrono from 'chrono-node';
@@ -253,7 +253,7 @@ export class BatchReminderDialog {
                         content: content,
                         docId: block.root_id || blockId,
                         ...autoDetected,
-                        selectedDate: autoDetected.date || getLocalDateString(),
+                        selectedDate: autoDetected.date || getLogicalDateString(),
                         selectedTime: autoDetected.time || '',
                         hasTime: autoDetected.hasTime || false,
                         priority: 'none',
@@ -367,7 +367,7 @@ export class BatchReminderDialog {
                 if (lunarDate) {
                     if (lunarDate.month === 0) {
                         try {
-                            const cur = solarToLunar(getLocalDateString());
+                            const cur = solarToLunar(getLogicalDateString());
                             lunarDate.month = cur.month;
                         } catch (e) {
                             // ignore
@@ -438,7 +438,7 @@ class SmartBatchDialog {
                 blockId: data.blockId,
                 content: data.content,
                 cleanTitle: data.cleanTitle || data.content,
-                date: data.date || getLocalDateString(),
+                date: data.date || getLogicalDateString(),
                 time: data.time || '',
                 hasTime: data.hasTime || false,
                 priority: 'none',
@@ -545,7 +545,7 @@ class SmartBatchDialog {
                                 <div class="batch-operation-item">
                                     <label class="b3-form__label">${t("batchSetDate")}</label>
                                     <div class="batch-date-container">
-                                        <input type="date" id="batchDateInput" class="b3-text-field" value="${getLocalDateString()}" max="9999-12-31">
+                                        <input type="date" id="batchDateInput" class="b3-text-field" value="${getLogicalDateString()}" max="9999-12-31">
                                         <button type="button" id="batchApplyDateBtn" class="b3-button b3-button--primary">
                                             ${t("applyDateToAll")}
                                         </button>
@@ -1270,7 +1270,7 @@ class SmartBatchDialog {
                     if (setting.repeatConfig?.enabled && setting.date) {
                         const { generateRepeatInstances } = await import("../utils/repeatUtils");
                         const { getLocalDateString } = await import("../utils/dateUtils");
-                        const today = getLocalDateString();
+                        const today = getLogicalDateString();
 
                         // 计算从开始日期到今天的天数，用于设置 maxInstances
                         const startDateObj = new Date(setting.date);

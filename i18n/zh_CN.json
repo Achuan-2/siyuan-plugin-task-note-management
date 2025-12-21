@@ -735,6 +735,7 @@
     "tomorrowStart": "明天开始",
     "startsInNDays": "${days}天后开始",
     "todayStart": "今天开始",
+    "todayStartDesc": "设置一天的开始时间，例如 03:00。此时间之前的打卡和任务计入前一天",
     "todayEnd": "今天截止",
     "endsInNDays": "${days}天后截止",
     "tomorrowEnd": "明天截止",

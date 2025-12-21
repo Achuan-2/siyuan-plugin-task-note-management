@@ -2,7 +2,7 @@ import { showMessage, confirm, Menu, Dialog } from "siyuan";
 
 import { refreshSql, readReminderData, writeReminderData, readProjectData, getBlockByID, updateBlockReminderBookmark, openBlock } from "../api";
 import { t } from "../utils/i18n";
-import { getLocalDateString, getLocalDateTimeString, compareDateStrings } from "../utils/dateUtils";
+import { getLocalDateString, getLocalDateTimeString, compareDateStrings, getLogicalDateString, getRelativeDateString } from "../utils/dateUtils";
 import { CategoryManager } from "../utils/categoryManager";
 import { PomodoroTimer } from "./PomodoroTimer";
 import { PomodoroManager } from "../utils/pomodoroManager";
@@ -1817,7 +1817,7 @@ export class ProjectKanbanView {
             };
 
             // 处理周期事件：生成实例并筛选
-            const today = getLocalDateString();
+            const today = getLogicalDateString();
             const allTasksWithInstances: any[] = [];
 
             projectTasks.forEach((reminder: any) => {
@@ -2230,7 +2230,7 @@ export class ProjectKanbanView {
     public static countTopLevelTasksByStatus(projectId: string, reminderData: any): { doing: number; short_term: number; long_term: number; done: number } {
         const allReminders = reminderData && typeof reminderData === 'object' ? Object.values(reminderData) : [];
         let doing = 0, short_term = 0, long_term = 0, done = 0;
-        const today = getLocalDateString();
+        const today = getLogicalDateString();
 
         allReminders.forEach((r: any) => {
             if (!r || typeof r !== 'object') return;
@@ -2350,7 +2350,7 @@ export class ProjectKanbanView {
 
         // 如果未完成的任务设置了日期，且日期为今天或过期，放入进行中列
         if (task.date) {
-            const today = getLocalDateString();
+            const today = getLogicalDateString();
             const dateComparison = compareDateStrings(task.date, today);
             if (dateComparison <= 0) { // 今天或过去
                 return 'doing';
@@ -4040,7 +4040,7 @@ export class ProjectKanbanView {
                         timePart = s;
                     }
 
-                    const today = getLocalDateString();
+                    const today = getLogicalDateString();
                     const effectiveDate = datePart || task.date || today;
 
                     // 比较日期（格式 YYYY-MM-DD 可直接字符串比较）
@@ -4477,10 +4477,8 @@ export class ProjectKanbanView {
     }
 
     private formatTaskDate(task: any): string {
-        const today = getLocalDateString();
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const tomorrowStr = getLocalDateString(tomorrow);
+        const today = getLogicalDateString();
+        const tomorrowStr = getRelativeDateString(1);
 
         // 获取当前年份
         const currentYear = new Date().getFullYear();
@@ -5128,7 +5126,7 @@ export class ProjectKanbanView {
             // 如果当前是通过拖拽触发的状态变更，并且任务有设置日期且该日期为今天或已过
             // 则阻止直接把它移出 "进行中"，提示用户需要修改任务时间才能移出。
             try {
-                const today = getLocalDateString();
+                const today = getLogicalDateString();
                 if (this.isDragging && task && task.date && compareDateStrings(task.date, today) <= 0 && newStatus !== 'doing') {
                     const dialog = new Dialog({
                         title: '提示',

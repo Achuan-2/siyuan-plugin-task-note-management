@@ -1,6 +1,6 @@
 import { showMessage, Dialog } from "siyuan";
 import { readReminderData, writeReminderData, getBlockByID, getBlockDOM, updateBlockReminderBookmark } from "../api";
-import { getLocalDateString, getLocalTimeString, compareDateStrings } from "../utils/dateUtils";
+import { getLocalTimeString, compareDateStrings, getLogicalDateString } from "../utils/dateUtils";
 import { CategoryManager, Category } from "../utils/categoryManager";
 import { ProjectManager } from "../utils/projectManager";
 import { t } from "../utils/i18n";
@@ -444,7 +444,7 @@ export class QuickReminderDialog {
             } else if (typeof val === 'string' && this.reminder.date) {
                 this.customTimes.push({ time: `${this.reminder.date}T${val}`, note: '' });
             } else if (typeof val === 'string') {
-                const today = getLocalDateString();
+                const today = getLogicalDateString();
                 this.customTimes.push({ time: `${today}T${val}`, note: '' });
             }
         }
@@ -483,7 +483,7 @@ export class QuickReminderDialog {
                 }
             } else if (this.reminder.endTime) {
                 // 如果有 endTime 但没有 endDate，默认 endDate 为任务的开始日期或今天
-                const defaultEndDate = this.reminder.date || getLocalDateString();
+                const defaultEndDate = this.reminder.date || getLogicalDateString();
                 if (this.reminder.time) {
                     // 如果开始时间存在，使用 datetime-local 格式
                     endDateInput.value = `${defaultEndDate}T${this.reminder.endTime}`;
@@ -715,7 +715,7 @@ export class QuickReminderDialog {
                     // 如果只识别到日期（month === 0），使用当前月作为默认月
                     if (lunarDate.month === 0) {
                         try {
-                            const cur = solarToLunar(getLocalDateString());
+                            const cur = solarToLunar(getLogicalDateString());
                             lunarDate.month = cur.month;
                         } catch (e) {
                             // ignore and fall back
@@ -2766,7 +2766,7 @@ export class QuickReminderDialog {
                 // 如果是周期任务，自动完成所有过去的实例
                 if (this.repeatConfig.enabled && date) {
                     const { generateRepeatInstances } = await import("../utils/repeatUtils");
-                    const today = getLocalDateString();
+                    const today = getLogicalDateString();
 
                     // 计算从开始日期到今天的天数，用于设置 maxInstances
                     const startDateObj = new Date(date);
@@ -2832,7 +2832,7 @@ export class QuickReminderDialog {
 
             // 如果是新建任务且有日期，且日期为今天或过去，但用户没有显式设置为进行中，提示自动显示为进行中
             try {
-                const today = getLocalDateString();
+                const today = getLogicalDateString();
                 if (!this.mode || this.mode !== 'edit') {
                     if (reminder.date && typeof compareDateStrings === 'function') {
                         const cmp = compareDateStrings(reminder.date, today);
