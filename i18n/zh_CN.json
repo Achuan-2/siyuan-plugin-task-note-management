@@ -613,6 +613,7 @@
     "shortcutSetBlockAsTask": "设置当前块为任务",
     "shortcutProjectManagement": "设置项目管理",
     "shortcutBatchSetReminder": "批量设置时间提醒",
+    "shortcutOpenCalendarView": "打开日历视图",
     "dataStorageLocation": "数据存储",
     "dataStorageLocationTitle": "数据存储说明",
     "dataStorageLocationDesc": "插件的所有数据（任务提醒、项目管理、番茄钟记录等）存放在：<br><code>data/storage/petal/siyuan-plugin-task-note-management</code><br>",

@@ -3232,6 +3232,18 @@ export default class ReminderPlugin extends Plugin {
      * 注册快捷键命令
      */
     private registerCommands() {
+        // 快捷键：打开日历视图
+        this.addCommand({
+            langKey: "shortcutOpenCalendarView",
+            hotkey: "Alt+T",
+            editorCallback: () => {
+                this.openCalendarTab();
+            },
+            callback: () => {
+                this.openCalendarTab();
+            }
+        });
+
         // 快捷键：设置当前文档为任务
         this.addCommand({
             langKey: "shortcutSetDocumentAsTask",
