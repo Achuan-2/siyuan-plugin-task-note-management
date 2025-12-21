@@ -2020,7 +2020,7 @@ export class ProjectPanel {
      */
     private showTaskTimeStatsView() {
         try {
-            const statsView = new TaskTimeStatsView();
+            const statsView = new TaskTimeStatsView(this.plugin);
             statsView.show();
         } catch (error) {
             console.error('打开任务时间统计视图失败:', error);

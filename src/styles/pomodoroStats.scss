@@ -4,7 +4,8 @@
     flex-direction: column;
     height: 100%;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    .range-btn{
+    .range-btn,
+    .group-btn{
             padding: 6px 12px;
             border: 1px solid var(--b3-theme-border);
             background: var(--b3-theme-background);

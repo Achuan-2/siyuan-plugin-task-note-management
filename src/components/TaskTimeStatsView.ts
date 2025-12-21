@@ -1,8 +1,9 @@
 ﻿import { Dialog } from "siyuan";
-import { readReminderData } from "../api";
+import { readReminderData, readProjectData } from "../api";
 import { generateRepeatInstances } from "../utils/repeatUtils";
 import { t } from "../utils/i18n";
 import { getLocalDateString } from "../utils/dateUtils";
+import { CategoryManager } from "../utils/categoryManager";
 import { init, use } from 'echarts/core';
 import { PieChart, HeatmapChart, CustomChart } from 'echarts/charts';
 import { TooltipComponent, VisualMapComponent, GridComponent, TitleComponent, LegendComponent, CalendarComponent } from 'echarts/components';
@@ -30,22 +31,31 @@ interface TaskSession {
     duration: number;
     completed: boolean;
     type: 'task';
+    projectId?: string;
+    categoryId?: string;
 }
 
 export class TaskTimeStatsView {
     private dialog: Dialog;
+    private plugin?: any;
     private reminderData: Record<string, any> = {};
+    private projectData: Record<string, any> = {};
+    private categoryManager?: CategoryManager;
+    private categoryMap: Map<string, string> = new Map();
     private sessionsCache: Map<string, TaskSession[]> = new Map();
     private isDataLoaded: boolean = false;
     private isDataLoading: boolean = false;
     private currentView: 'overview' | 'details' | 'records' | 'trends' | 'timeline' | 'heatmap' = 'overview';
     private currentTimeRange: 'today' | 'week' | 'month' | 'year' = 'today';
+    private currentDetailGroup: 'task' | 'project' | 'category' = 'task';
     private currentYear: number = new Date().getFullYear();
     private currentWeekOffset: number = 0; // 周偏移量，0表示本周，-1表示上周，1表示下周
     private currentMonthOffset: number = 0; // 月偏移量，0表示本月，-1表示上月，1表示下月
     private currentYearOffset: number = 0; // 年偏移量，0表示今年，-1表示去年，1表示明年
 
-    constructor() {
+    constructor(plugin?: any) {
+        this.plugin = plugin;
+        this.categoryManager = plugin ? CategoryManager.getInstance(plugin) : undefined;
         this.createDialog();
     }
 
@@ -172,6 +182,17 @@ export class TaskTimeStatsView {
                     <div class="details-title">
                         <h3>📈 ${t("focusDetails")}</h3>
                         ${dateRangeText ? `<span class="date-range-text">${dateRangeText}</span>` : ''}
+                    </div>
+                    <div class="detail-group-selector">
+                        <button class="group-btn ${this.currentDetailGroup === 'task' ? 'active' : ''}" data-group="task">
+                            ${t("detailGroupTask")}
+                        </button>
+                        <button class="group-btn ${this.currentDetailGroup === 'project' ? 'active' : ''}" data-group="project">
+                            ${t("detailGroupProject")}
+                        </button>
+                        <button class="group-btn ${this.currentDetailGroup === 'category' ? 'active' : ''}" data-group="category">
+                            ${t("detailGroupCategory")}
+                        </button>
                     </div>
                     <div class="time-range-selector">
                         <button class="range-btn ${this.currentTimeRange === 'today' ? 'active' : ''}" data-range="today">
@@ -476,6 +497,26 @@ export class TaskTimeStatsView {
             } else {
                 this.reminderData = {};
             }
+            try {
+                const projectData = await readProjectData();
+                this.projectData = projectData && typeof projectData === 'object' ? projectData : {};
+            } catch (error) {
+                console.warn('加载项目数据失败:', error);
+                this.projectData = {};
+            }
+
+            if (this.categoryManager) {
+                try {
+                    await this.categoryManager.initialize();
+                    const categories = this.categoryManager.getCategories();
+                    this.categoryMap = new Map(categories.map(category => [category.id, category.name]));
+                } catch (error) {
+                    console.warn('加载分类数据失败:', error);
+                    this.categoryMap.clear();
+                }
+            } else {
+                this.categoryMap.clear();
+            }
         } catch (error) {
             console.error('加载任务数据失败:', error);
             this.reminderData = {};
@@ -645,7 +686,9 @@ export class TaskTimeStatsView {
             endTime: end.toISOString(),
             duration,
             completed: !!reminder.completed,
-            type: 'task'
+            type: 'task',
+            projectId: reminder.projectId || undefined,
+            categoryId: reminder.categoryId || undefined
         };
     }
 
@@ -715,15 +758,33 @@ export class TaskTimeStatsView {
         const stats: Record<string, { time: number, count: number }> = {};
 
         sessions.forEach(session => {
-            const category = session.title || t("uncategorized");
-            if (!stats[category]) {
-                stats[category] = { time: 0, count: 0 };
+            const groupName = this.getDetailGroupName(session);
+            if (!stats[groupName]) {
+                stats[groupName] = { time: 0, count: 0 };
             }
-            stats[category].time += session.duration;
-            stats[category].count++;
+            stats[groupName].time += session.duration;
+            stats[groupName].count++;
         });
 
         return stats;
+    }
+
+    private getDetailGroupName(session: TaskSession): string {
+        switch (this.currentDetailGroup) {
+            case 'project': {
+                const projectId = session.projectId;
+                const projectName = projectId && this.projectData[projectId]?.title;
+                return projectName || t("uncategorized");
+            }
+            case 'category': {
+                const categoryId = session.categoryId;
+                const categoryName = categoryId ? this.categoryMap.get(categoryId) : undefined;
+                return categoryName || t("uncategorized");
+            }
+            case 'task':
+            default:
+                return session.title || t("unnamedNote");
+        }
     }
 
     private getTodaySessionsWithOffset(): TaskSession[] {
@@ -1723,6 +1784,14 @@ export class TaskTimeStatsView {
             }
         }
 
+        if (target.classList.contains('group-btn')) {
+            const group = target.dataset.group as any;
+            if (group && group !== this.currentDetailGroup) {
+                this.currentDetailGroup = group;
+                this.updateContent();
+            }
+        }
+
         if (target.classList.contains('nav-arrow')) {
             const action = target.dataset.action;
             this.handleNavigation(action);
@@ -1804,6 +1873,11 @@ export class TaskTimeStatsView {
         this.dialog.element.querySelectorAll('.range-btn').forEach(btn => {
             const element = btn as HTMLElement;
             element.classList.toggle('active', element.dataset.range === this.currentTimeRange);
+        });
+
+        this.dialog.element.querySelectorAll('.group-btn').forEach(btn => {
+            const element = btn as HTMLElement;
+            element.classList.toggle('active', element.dataset.group === this.currentDetailGroup);
         });
 
         // 如果当前是详情视图，初始化饼图
