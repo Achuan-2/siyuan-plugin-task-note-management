@@ -85,8 +85,12 @@ export class CalendarView {
         // 获取周开始日设置
         const weekStartDay = await this.getWeekStartDay();
 
-        // 获取一天起始时间设置
+        // 获取日历视图滚动位置（dayStartTime）
         const dayStartTime = await this.getDayStartTime();
+
+        // 获取逻辑一天起始时间（todayStartTime）
+        const todayStartTime = await this.getTodayStartTime();
+        const slotMaxTime = this.calculateSlotMaxTime(todayStartTime);
 
         this.container.classList.add('reminder-calendar-view');
 
@@ -295,9 +299,11 @@ export class CalendarView {
             selectMirror: true,
             selectOverlap: true,
             locale: window.siyuan.config.lang.toLowerCase().replace('_', '-'),
-            scrollTime: dayStartTime, // 使用用户设置的一天起始时间作为滚动位置
+            scrollTime: dayStartTime, // 日历视图初始滚动位置
             firstDay: weekStartDay, // 使用用户设置的周开始日
-            slotMinTime: '00:00', // 显示全天时间槽，从00:00开始
+            slotMinTime: todayStartTime, // 逻辑一天的起始时间
+            slotMaxTime: slotMaxTime, // 逻辑一天的结束时间（可能超过24小时）
+            nextDayThreshold: todayStartTime, // 跨天事件的判断阈值
             nowIndicator: true, // 显示当前时间指示线
             snapDuration: '00:05:00', // 设置吸附间隔为5分钟
             slotDuration: '00:15:00', // 设置默认时间间隔为15分钟
@@ -4711,7 +4717,7 @@ export class CalendarView {
     }
 
     /**
-     * 获取一天起始时间设置
+     * 获取一天起始时间设置（用于日历视图滚动位置）
      */
     private async getDayStartTime(): Promise<string> {
         try {
@@ -4733,6 +4739,60 @@ export class CalendarView {
     }
 
     /**
+     * 获取逻辑一天起始时间设置（todayStartTime）
+     * 用于日历视图的时间范围显示
+     */
+    private async getTodayStartTime(): Promise<string> {
+        try {
+            const settings = await this.plugin.loadSettings();
+            const todayStartTime = settings.todayStartTime;
+
+            // 验证时间格式 (HH:MM)
+            if (typeof todayStartTime === 'string' && /^\d{1,2}:\d{2}$/.test(todayStartTime)) {
+                return todayStartTime;
+            }
+
+            // 如果配置无效，返回默认值
+            return '00:00';
+        } catch (error) {
+            console.error('获取逻辑一天起始时间设置失败:', error);
+            // 出错时返回默认值
+            return '00:00';
+        }
+    }
+
+    /**
+     * 计算 slotMaxTime（一天的结束时间）
+     * 如果 todayStartTime 是 03:00，则 slotMaxTime 应该是 27:00（次日 03:00）
+     * 如果 todayStartTime 是 00:00，则 slotMaxTime 应该是 24:00（次日 00:00）
+     */
+    private calculateSlotMaxTime(todayStartTime: string): string {
+        try {
+            // 解析时间字符串
+            const match = todayStartTime.match(/^(\d{1,2}):(\d{2})$/);
+            if (!match) {
+                return '24:00'; // 默认值
+            }
+
+            const hours = parseInt(match[1], 10);
+            const minutes = parseInt(match[2], 10);
+
+            // 计算下一天的同一时间（24小时后）
+            const maxHours = 24 + hours;
+            const maxMinutes = minutes;
+
+            // 格式化为 HH:MM
+            const formattedHours = maxHours.toString().padStart(2, '0');
+            const formattedMinutes = maxMinutes.toString().padStart(2, '0');
+
+            return `${formattedHours}:${formattedMinutes}`;
+        } catch (error) {
+            console.error('计算 slotMaxTime 失败:', error);
+            return '24:00';
+        }
+    }
+
+    /**
      * 应用周开始日设置到日历
      */
     private async applyWeekStartDay() {
@@ -4750,9 +4810,18 @@ export class CalendarView {
      */
     private async applyDayStartTime() {
         try {
+            // 获取日历视图滚动位置
             const dayStartTime = await this.getDayStartTime();
-            // 更新日历的scrollTime设置，保持slotMinTime为00:00以显示全天
-            this.calendar.setOption('scrollTime', dayStartTime);
+
+            // 获取逻辑一天起始时间
+            const todayStartTime = await this.getTodayStartTime();
+            const slotMaxTime = this.calculateSlotMaxTime(todayStartTime);
+
+            // 更新日历的时间范围设置
+            this.calendar.setOption('scrollTime', dayStartTime); // 滚动位置
+            this.calendar.setOption('slotMinTime', todayStartTime); // 逻辑一天起始
+            this.calendar.setOption('slotMaxTime', slotMaxTime); // 逻辑一天结束
+            this.calendar.setOption('nextDayThreshold', todayStartTime); // 跨天阈值
         } catch (error) {
             console.error('应用一天起始时间设置失败:', error);
         }
