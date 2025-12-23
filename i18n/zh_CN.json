@@ -750,7 +750,7 @@
     "tomorrowStart": "明天开始",
     "startsInNDays": "${days}天后开始",
     "todayStart": "一天起始时间",
-    "todayStartDesc": "设置一天的开始时间，例如 03:00。此时间之前的习惯打卡和任务计入前一天，并影响日历视图时间轴范围",
+    "todayStartDesc": "设置一天的开始时间，例如 03:00。此时间之前的习惯打卡和任务计入前一天，并影响日历视图时间轴范围，适合夜猫子",
     "todayEnd": "今天截止",
     "endsInNDays": "${days}天后截止",
     "tomorrowEnd": "明天截止",
