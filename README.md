@@ -1,469 +1,450 @@
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=Achuan-2/siyuan-plugin-task-note-management&type=Date)](https://star-history.com/Achuan-2/siyuan-plugin-task-note-management&Date)
+![](https://fastly.jsdelivr.net/gh/Achuan-2/PicBed@pic/assets/17664627371481766462737091.png)
 
 
+## ✨Star History
 
+<img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Achuan-2/siyuan-plugin-task-note-management&type=Date" />
 
-## Plugin Introduction
+## 📒插件简介
 
-A task management plugin for SiYuan Notes, developed to practice the Bullet Journal method. Supports document and block reminders, calendar view for scheduling, Pomodoro timer for focus, project kanban boards, Eisenhower Matrix view, and more.
+一款在思源笔记里实现任务管理功能的插件，为了践行防弹笔记法而开发。支持文档和块提醒、日历视图查看行事历、番茄钟专注等功能
 
-> Please note that this plugin is for personal use. We are not responsible for any data loss caused by the plugin. Please consider carefully before using.
+> 前排提醒，插件为个人自用，对任何因为插件导致的数据丢失问题概不负责。  
+> 请考虑清楚再使用。
 
-## Changelog
+## 📝更新日志
 
-See: [CHANGELOG.md](https://cdn.jsdelivr.net/gh/Achuan-2/siyuan-plugin-task-note-management@main/CHANGELOG.md)
+见: [CHANGELOG.md](https://cdn.jsdelivr.net/gh/Achuan-2/siyuan-plugin-task-note-management@main/CHANGELOG.md
+)
 
-## 🤔 Guiding Philosophy Behind the Plugin: Bullet Journal Method
+## 🛡️插件背后的指导思想：防弹笔记法
 
-### What is the Bullet Journal Method
+### 什么是防弹笔记法
 
-For those who want to learn about the Bullet Journal method, you can read ["The Bullet Journal Method: Track Your Past, Order Your Present, Plan Your Future"](https://book.douban.com/subject/35115765/) and ["Bullet Journaling: A Comprehensive Guide"](https://book.douban.com/subject/36289807/)
+想要了解防弹笔记法的朋友可以阅读[《大脑减压的子弹笔记法 》](https://book.douban.com/subject/35115765/)和[《防弹笔记法》](https://book.douban.com/subject/36289807/)
 
-Brief introduction to the Bullet Journal method:
+简单介绍下防弹笔记法：
 
-> "Most people don't need to organize materials, they need to organize tasks."
+> 「绝大数人不需要整理资料，需要的是整理任务。」
 
-Many knowledge management books and blogs advocate building a "second brain," but this concept should not be simply understood as creating a database. If we only aim to organize materials when building our second brain, we easily fall into the trap of categorizing for the sake of categorizing. In this case, we might spend a lot of time on detailed classification and structuring of materials, but this work has no connection to our actual goals or task advancement.
+许多知识管理书籍和博客提倡打造“第二大脑”，但这一概念不应被简单理解为建立一个资料库。如果我们在构建第二大脑时，仅仅以整理资料为目标，就容易陷入为了分类而分类的误区。这种情况下，我们可能会花费大量时间对资料进行细致的分类和结构化处理，但这些工作却与我们的实际目标或任务推进毫无关联。
 
-A true "second brain" is not merely a data storage system, but a practical tool that can guide action.
+真正的“第二大脑”并不是一个单纯的资料存储系统，而是一个能够指引行动的实践工具。
 
-The Bullet Journal method, simply put, transforms note-taking from recording materials to avoid forgetting into **task-centered recording of "core task notes"**. This method emphasizes using notes as tools for action, rather than pure knowledge storage. It encourages us to **focus on actual tasks and actions, rather than over-focusing on organizing and categorizing materials**.
+防弹笔记法，简单来说就是，从为了避免遗忘记录资料笔记，变成**以任务为中心、记录「核心任务笔记」**  。  
+这种方法强调的是将笔记作为行动的工具，而不是单纯的知识存储。它鼓励我们**将注意力集中在实际的任务和行动上，而不是过度关注资料的整理和分类**。
 
-Notes should not be for copying and storing, but for creating, to help us turn everything into "what we want it to be."
+笔记不应该是为了复制和存储，而是为了创造，让知识转化为行动，是为了帮助自己把万事万物变成「想要的样子」。
 
-### Why Not Use To-Do Apps Like TickTick for Task Management
+### 为什么我不用滴答清单等待办软件进行任务管理
 
-The Bullet Journal method recommends not using to-do list software, but directly using note-taking software for task management, creating a task note system that can support yourself.
+「防弹笔记法」推荐不用待办清单软件进行任务管理，而推荐直接用笔记软件进行任务管理，打造一个可以支援自己的任务笔记系统。
 
-Why?
+为什么呢？
 
-1. **These to-do list apps lack a support system behind them:** You can easily list today's or recent action items, but many times you just list a bunch of miscellaneous tasks or fixed work schedules, miscellaneous tasks are simply moved from a chaotic mind to the app's list, remaining in a chaotic state. This is suitable for solving fixed work schedules and short-term projects, but when we advance long-term projects, we feel full of pressure, confusion, and anxiety, because long-term projects need a powerful "support system" to support **systematic task breakdown and association**, **dynamic resource integration**, **long-term progress tracking**. To-do apps' flat lists cannot carry this complexity and context (Context), leading us to feel stressed, confused, and anxious when facing to-do lists. So when we face to-do lists, we still feel stressed, confused, and anxious.
+1. **这类待办清单软件背后没有支援系统：** 你可以很简单地列出今天或者最近的行动清单，但很多时候你只是列出了一堆杂事或者固定的工作日程，杂事只是从混乱的大脑中，原封不动地移到软件的清单里，依然是混乱的状态。这种方式只适合解决固定的工作日程和短期项目，但在我们推进长期项目时，就会感觉充满压力、混乱和焦虑，因为这些长期项目需要一个强大的“支援系统”来支撑 **，** 需要有<u>系统性的任务拆解与关联</u>，<u>动态的资源整合</u>、<u>长期的进度跟踪</u>，需要有 “目标 - 阶段 - 子任务” 这样的管理逻辑。待办软件的扁平清单无法承载这种复杂性和上下文（Context），导致我们每次看到任务时，都需要重新回忆“为什么要做这个？”以及“相关的资料在哪里？”
+2. **从功能适配性来看，滴答清单更偏向短期、固定日期的行程管理**（如 “周三 14 点对接供应商”“周日晚完成月度总结”），但在长期项目管理、目标管理上存在明显短板。长期项目（如筹备一场 3 个月后的行业峰会、撰写一本半年周期的书）需要拆解阶段目标（如 “峰会嘉宾邀约”“书籍大纲搭建”）、跟踪跨环节进度（如 “嘉宾确认后同步物料设计”）、关联多维度资源（如 “嘉宾资料、沟通记录、物料初稿”），而滴答清单缺乏搭建项目整体框架的能力，只能零散记录单个任务，易导致长期项目出现进度断层、资源丢失的问题，无法支撑目标的系统性推进。导致我们在长期项目中很容易陷入 “不知该先做什么”“埋头做并不重要的事情” 的被动局面。
+3. **待办软件里任务完成后就被会划掉！对这些完成的任务没有很好的归档整理流程。** 也许你会说，这样不是很有成就感吗？如果一个任务做完后它就结束了，那意味着这个任务不重要，或是无法延伸出更多的价值。这些软件的笔记和任务管理功能，往往是为了方便快速记录和完成任务，但它们并没有提供一个系统化的方式来持续跟踪和完善这些任务，没有把这些任务和项目当成个人珍宝，永久保留下来。
+4.  **「知行合一」的核心逻辑来看，待办清单软件天然割裂了「知识沉淀」与「任务实践」的关联**。在执行任务时，我们常需要结合项目背景、过往经验、临时思考等「知识类信息」。任务执行后，实践中产生的新认知也难以快速补充到知识体系中，导致 “做过的事没留下经验，下次遇到仍要重新摸索”，无法实现「知」与「行」的同步闭环；而笔记软件的任务系统能让任务与关联知识（资料、反思、经验）同处一页，实践时可随时调用知识，实践后能即时更新知识，真正让知识为实践赋能，实践反哺知识。
 
-2. **From a functional adaptability perspective, TickTick is more inclined towards short-term, fixed-date itinerary management** (such as "Wednesday 2 PM to connect with suppliers" "Weekend to complete monthly summary"), but it has obvious shortcomings in long-term project management and goal management. Long-term projects (such as preparing for a 3-month industry summit, writing a 6-month book) need to break down phased goals (such as "summit guest invitations" "book outline construction"), track cross-link progress (such as "after guest confirmation, synchronize material design"), associate multi-dimensional resources (such as "guest information, communication records, initial drafts"), while TickTick lacks the ability to build a complete project framework, can only record individual tasks scattered, prone to progress gaps in long-term projects, resource loss issues, unable to support goal systematic advancement. This leads us to easily fall into "don't know what to do next" "burying head in unimportant things" passive situation in long-term projects.
+    虽然滴答清单有笔记功能，也支持 Markdown，但是滴答清单的笔记管理和编辑体验和专门的笔记软件是没法比的，而且笔记也无法导出。就决定了我只用滴答清单的笔记功能作为多平台同步记录 inbox 笔记。
 
-3. **Tasks are crossed off after completion in to-do apps! There is no good archiving and organizing process for these completed tasks.** You might say, isn't this very satisfying? If a task ends after it's done, it means the task is unimportant or cannot extend more value. These apps' note-taking and task management features are often designed for quick recording and task completion, but they don't provide a systematic way to continuously track and improve these tasks, nor do they treat these tasks and projects as personal treasures to be permanently preserved.
+    而用笔记软件搭建任务管理系统的好处是，可以不断完善项目笔记和任务笔记，随着时间积累和实践，项目笔记和任务笔记会记录满满我们的劳动成果和智慧结晶。哪怕项目已经归档了，将来哪天需要，可以很方便调用出来查看和编辑，这些笔记才会成为自己的经验宝库，这样才能让价值不断延伸，帮助自己不断成长，不断进步，越做越好
 
-4. **From the core logic of "knowing and doing in unison", to-do list apps inherently separate "knowledge accumulation" and "task practice"**. In task execution, we often need to combine project background, past experience, temporary thinking and other "knowledge-type information". After task execution, the new cognition produced in practice is difficult to quickly supplement to the knowledge system, leading to "done things have no experience left, next time encounter still have to re-explore", unable to achieve "know" and "do" synchronous closed loop; Note-taking software's task system can let tasks and associated knowledge (materials, reflections, experience) coexist in one page, when executing, can call knowledge at any time, after execution, can update knowledge immediately, truly let knowledge empower practice, practice feeds back knowledge.
+### 防弹笔记法创建笔记的核心原则
 
-Although TickTick has note functionality, its note management and editing experience cannot compare with specialized note-taking software, and notes cannot be exported. This determines that I only use TickTick's note function for multi-platform synchronized recording of inbox notes.
+1. **一个任务，一条笔记，以任务为中心**：笔记的核心是任务，而不是资料。每个笔记都应围绕一个具体的任务展开。每个笔记都应包含明确的行动目的和行动步骤。
+2. **持续迭代**：笔记应随着时间和实践不断完善，成为个人知识和经验的积累。
+3. **整体视角**：笔记应从整体上把握任务和项目，避免碎片化和孤立化。
+4. **搭建项目主页，善用链接**：将项目需要的所有资料、相关笔记、任务计划与实际任务进展等都链接到项目主页上，形成一个完整的项目主页。
 
-The advantage of using note-taking software to build a task management system is that you can continuously improve project notes and task notes. Over time and with practice, project notes and task notes will record our full labor results and wisdom crystallization. Even if projects are archived, they can be easily retrieved when needed in the future. Only this way can these notes become our experience treasury, allowing value to continuously extend, helping us grow continuously, improve constantly, and do better and better.
+### 运行防弹笔记法进行时间管理和任务管理的重要理念
 
-### Core Principles of Creating Notes with the Bullet Journal Method
+1. **时间管理和任务管理真正需要整理的是什么？**
 
-1. **One task, one note, task-centered**: The core of notes is tasks, not materials. Each note should revolve around a specific task. Each note should contain clear action purposes and action steps.
-2. **Continuous iteration**: Notes should be continuously improved over time and practice, becoming an accumulation of personal knowledge and experience.
-3. **Holistic perspective**: Notes should grasp tasks and projects from an overall perspective, avoiding fragmentation and isolation.
-4. **Build project homepages, make good use of links**: Link all materials, related notes, task plans, and actual task progress needed for the project to the project homepage, forming a complete project homepage.
+    1. 选择什么是重要的。
+    2. 选择我现在应该如何行动。
+2. **时间管理和任务管理的核心目标是把想做的事情都做完吗？**
 
-### Important Concepts for Running Time Management and Task Management with the Bullet Journal Method
+    1. 时间管理的核心目标，不是把所有事情都做完，因为本质上我们不可能把所有事情都做完，我们想做、要做的事情永远多于我们可以支配的时间。
+    2. 所以我们必须做出选择，选择不是随心所欲的，而是依赖系统，通过行动的关联、任务的拆解、项目的整合，让我们明确最佳的行动是什么。
+3. **搭建任务管理系统的正确流程是什么**
 
-1. **What really needs to be organized in time management and task management?**
+    - 我们不应该埋首于一大堆杂乱的事情中苦干，这样虽然可能解决一些问题，但会花费许多时间、精力，甚至有可能走错方向，最后却一事无成，感觉自己在瞎忙。
+    - 以下顺序非常重要：
 
-   1. Choose what is important.
-   2. Choose how I should act now.
+      - 第一步，先设定好自己想达成的目标。
+      - 第二步，根据目标，设定我们需要的功能，或是需要完成哪些阶段性任务。
+      - 第三步，开始安排我们的行动，逐步实现这些功能、目标。
+4. **如何搭建不遗漏事项的时间管理和任务管理系统？**
 
-2. **Is the core goal of time management and task management to get everything done?**
+    1. 时间提醒
+    2. 但仅仅靠时间提醒，也会因为没看到、事项变动而遗忘。另一个技巧是，把行动、任务放在我需要时一定会经过的地方，通常就是项目笔记、项目文件夹里的某个位置。当我需要时一定会经过，一定会看到它，进而采取行动。就可以把相关的任务按照行动顺序放在项目笔记里，这样执行这个项目的时候，就可以知道自己下一步要做什么。这就是搭建项目笔记的另一个意义。
+5. **任务管理的几个阶段**
 
-   1. The core goal of time management is not to get everything done, because essentially we cannot get everything done. The things we want to do and need to do are always more than the time we can allocate.
-   2. So we must make choices. Choices are not arbitrary, but depend on systems. Through action correlation, task breakdown, and project integration, we can clarify what the best action is.
+    - **想到什么创建什么任务** (被动响应)
+    - **专注重要的任务** (主动过滤)
+    - **管理项目，看重项目的整体进展，学会延迟满足** (过程管理)
+    - **打造防弹笔记系统，构建任务支援体系，对齐目标，让任务在正确的上下文中被管理和执行。**  (生态建设)
 
-3. **What is the correct process for building a task management system?**
+## ✨插件主要功能
 
-   - We should not bury ourselves in a pile of messy things and work hard. This might solve some problems, but will spend a lot of time and energy, and might even go in the wrong direction, ending up with nothing accomplished, feeling like we're busy for nothing.
-   - The following order is very important:
+为了践行防弹笔记法而开发。支持任务提醒、项目看板、日历视图查看行事历、番茄钟专注、四象限看板等功能
 
-     - First step: Set the goals you want to achieve.
-     - Second step: Based on goals, set the functions we need, or what phased tasks need to be completed.
-     - Third step: Start arranging our actions to gradually realize these functions and goals.
+- **任务管理**
 
-4. **How to build a time management and task management system that doesn't miss anything?**
+  - **提醒设置**：支持为文档或块设置时间提醒，包含重复事件创建功能。支持根据标题智能自动识别时间提醒。
+  - **绑定块功能：** 与笔记功能深度绑定，可以绑定文档和块，点击跳转到笔记内容，悬浮可以预览笔记内容，更利于打造任务笔记，把笔记当做自己的任务工作台，管理任务、记录笔记。
+  - **分类设置**：为任务添加分类，方便组织和筛选。
+  - **优先级设置**：支持高、中、低及无优先级设置。
+  - **消息提醒通知功能**：
 
-   1. Time reminders
-   2. But relying only on time reminders can still lead to forgetting due to not seeing them or changes in matters. Another technique is to place actions and tasks where I will definitely pass when I need them, usually somewhere in the project. When I need them, I will definitely pass by, definitely see them, and then take action. You can put related tasks in project notes according to action sequence, so when executing this project, you can know what to do next. This is another meaning of building project notes.
+    - 在顶栏和停靠栏显示未完成的任务数量。
+    - 支持设置每天x点后统一通知今天所有待办
+    - 事件到达提醒时间时自动弹出通知。
+- **项目看板：** 管理项目中的所有任务，区分进行中、短期待办、长期待办任务
+- **番茄钟管理**：记录工作时长、休息时长及长休息时长，支持背景音设置，支持切换。
+- **日历视图**：提供直观的日历视图，方便查看和管理任务。
+- **四象限看板**：区分重要且紧急、重要不紧急、不重要不紧急、不重要但紧急任务，支持过滤只显示进行中任务、某个项目的任务
 
-5. **Several stages of task management**
+## 📺视频与博客介绍
 
-   - **Create tasks as you think of them (passive response)**
-   - **Focus on important tasks (active filtering)**
-   - **Manage projects, value project overall progress, learn to delay gratification** (process management)
-   - **Build Bullet Journal system, construct task support system, align with goals, let tasks be managed and executed in the correct context.** (ecosystem construction)
+- [为了在笔记软件里进行任务管理，我写了一个插件，代替滴答清单-哔哩哔哩 ](https://b23.tv/t8ECHHT)
+- [给笔记软件写了一个番茄钟+随机提示音插件，助力高效创作_哔哩哔哩_bilibili](https://www.bilibili.com/video/BV1eUNmzXEBE/?spm_id_from=0.0.upload.video_card.click)
+- [思源笔记任务笔记管理插件的使用技巧分享 - 知乎](https://zhuanlan.zhihu.com/p/1944797779588282139)
 
-## ✨ Main Plugin Features
+## 📝使用本插件的推荐流程
 
-Developed to practice the Bullet Journal method. Supports task reminders, project kanban, calendar view for scheduling, Pomodoro timer for focus, Eisenhower Matrix view, and more.
+1. 新建一个项目笔记，将其设置为项目。注意，要整理的任务应该是自己有方向的目标，琐事无需特别管理，要把主要精力花在重要的事情上
+2. 在项目笔记里添加本项目的任务计划，之后在项目看板添加任务，设置优先级和行动日期
+3. 推进项目进行
+4. 任务进行中和完成后的笔记放在项目笔记里，随着项目进行，不断迭代更新
 
-- **Task Management**
+## 📝详细使用介绍
 
-  - **Reminder Settings**: Supports setting time reminders for documents or blocks, including recurring event creation functionality. Supports intelligent automatic recognition of time reminders based on titles.
-  - **Block Binding Function**: Deeply bound with note-taking function, can bind documents and blocks, click to jump to SiYuan notes content, hover to preview note content, more conducive to building task notes, managing tasks, recording notes.
-  - **Category Settings**: Add categories to tasks for convenient organization and filtering.
-  - **Priority Settings**: Supports high, medium, low, and no priority settings.
-  - **Message Reminder Notification Function**:
+### 项目笔记管理
 
-    - Displays the number of unfinished tasks in the top bar and dock.
-    - Supports setting daily x time to remind once about all today's to-dos.
-    - Automatically pops up notifications when reminder time is reached.
-- **Project Kanban**: Manage all tasks in the project, distinguish ongoing, short-term pending, long-term pending tasks.
-- **Pomodoro Timer Management**: Records work duration, break duration, and long break duration, with background sound settings and switching support.
-- **Calendar View**: Provides an intuitive calendar view for convenient task viewing and management.
-- **Eisenhower Matrix View**: Distinguish important and urgent, important not urgent, unimportant not urgent, unimportant but urgent tasks, supports filtering to display only ongoing tasks, tasks of a certain project.
+为了方便管理长期项目，实践防弹笔记法的项目笔记概念
 
-## 📺 Videos and Blog Introductions
+插件支持项目管理
 
-- [To manage tasks in note-taking software, I wrote a plugin to replace TickTick - Bilibili](https://b23.tv/t8ECHHT)
-- [I wrote a Pomodoro timer + random prompt sound plugin for note-taking software to assist efficient creation_Bilibili_bilibili](https://www.bilibili.com/video/BV1eUNmzXEBE/?spm_id_from=0.0.upload.video_card.click)
-- [SiYuan Notes Task Note Management Plugin Usage Tips Sharing - Zhihu](https://zhuanlan.zhihu.com/p/1944797779588282139)
-
-## 📝 Recommended Process for Using This Plugin
-
-1. Create a project note, set it as a project. Note that the tasks to be organized should be goals you have direction for, miscellaneous tasks do not need special management, put main energy on important things.
-2. Add project tasks in the project note, set priorities and action dates in the project kanban.
-3. Advance project execution.
-4. Task progress and completed notes are placed in the project note, continuously iterate and update as the project progresses.
-
-## 📝 Detailed Usage Introduction
-
-### Project Note Management
-
-To facilitate the management of long-term projects, practice the project note concept of the Bullet Journal method.
-
-The plugin supports project management.
-
-Added "📂Set as Project Note" function to the document block menu.
+在文档块菜单添加了“📂设置为项目笔记”功能
 
 <img alt="PixPin_2025-06-15_11-56-59" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-15_11-56-59-20250615115700-peeu9x2.png" style="width: 382px;" />
 
-You can also quickly create a new project using the "New Project" button in the sidebar.
+也可以根据侧栏的「新建项目」按钮快速新建项目
 
 <img alt="PixPin_2025-10-23_00-49-30" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2025-10-23_00-49-30-20251023004943-ubwqep1.png" />
 
-After setting a document as a project note, you can view and manage projects in the Project Management Dock panel.
+将文档设置为项目笔记后，可以在项目管理Dock面板查看、管理项目
 
-- Support setting project status: In Progress, Maybe Future, Archived
-- Support setting project categories
-- Support setting project priorities
-- Support setting project start and end times
-- Support sorting projects by time, priority, and title
+- 支持设置项目状态：正在进行、未来也许、已归档
+- 支持设置项目分类
+- 支持设置项目优先级
+- 支持设置项目起始、截止时间
+- 支持对项目进行时间、优先级、标题排序
 
-  - In priority sorting mode, support drag-and-drop sorting of projects with the same priority
-- Support searching projects
-- Support filtering projects by category
+  - 在优先级排序模式下，支持对同一优先级的项目进行拖拽排序
+- 支持搜索项目
+- 支持按分类过滤项目
 
 <img alt="PixPin_2025-10-23_00-48-41" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2025-10-23_00-48-41-20251023004842-l4geyzz.png" />
 
-### Project Kanban Function
+### 项目看板功能
 
-Projects support double-click or right-click to open the project kanban.
+项目管理侧栏支持双击或者右键打开项目看板
 
-<img alt="PixPin_2025-10-23_00-51-26" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2025-10-23_00-51-26-20251023005145-qaxltad.png" />
+<img alt="PixPin_2025-10-23_10-34-04" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2025-10-23_10-34-04-20251023103406-kyynpg1.png" style="width: 352px;" />
 
-Create tasks
+支持新建任务
 
 <img alt="PixPin_2025-10-23_00-52-24" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2025-10-23_00-52-24-20251023005228-o5m5xv2.png" />
 
-Paste list to quickly create tasks
+粘贴列表快速新建任务
 
 <img alt="PixPin_2025-10-23_00-52-16" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2025-10-23_00-52-16-20251023005219-wrl3ppz.png" />
 
-The project kanban has two styles:
+项目看板有两个样式
 
-1. **Task Status Kanban**: Displays ongoing, short-term, long-term, and completed tasks
-2. **Custom Grouping Kanban**: Custom grouping based on task types
+1. 任务状态看板：显示进行中、短期、长期、已完成任务
+2. 自定义分组看板：根据任务类型自定义分组
 
-**Task Status Kanban**
+任务状态看板
 
 <img alt="PixPin20251023102608.png" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2025-10-23_10-26-08-DEgjVQZ-20251023103303-zsi2mo5.png" />
 
-**Custom Grouping Kanban**
+自定义分组看板
 
 <img alt="PixPin20251023102454.png" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2025-10-23_10-24-54-zZ6RAPo-20251023103303-zog0g50.png" />
 
-Custom grouping kanban supports custom colors and emojis
+自定义分组看板支持自定义颜色和 emoji
 
 <img alt="PixPin20251023102527.png" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2025-10-23_10-25-27-0le3lv2-20251023103303-vqoo5pd.png" />
 
-### Setting Task Reminders
 
-1. Support setting task reminders for note blocks.
 
-   1. Set time reminders through block labels
+### 设置任务提醒
 
-      <img alt="PixPin_2025-10-23_00-45-19" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2025-10-23_00-45-19-20251023004520-ega6now.png" style="width: 434px;" />
-   2. Support multi-selection of blocks for batch time reminder settings
+1. 在对笔记块支持设置任务提醒。
 
-      <img alt="PixPin_2025-06-14_12-47-45" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-14_12-47-45-20250614124759-afjmj4v.png" />
-2. **Set Reminder:** Select reminder date, time, priority, category, and other information. (If a block or its document block already has a reminder set, the system will automatically inherit the previously set priority and category)
+    1. 通过块标设置时间提醒
 
-   <img alt="PixPin_2025-06-14_12-36-42" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-14_12-36-42-20250614123644-zr0a8pz.png" />
-3. Tasks created by the plugin that have bound blocks can directly click to jump to the corresponding block in SiYuan notes, hovering over the task can also preview task details. This allows task management to be linked with SiYuan notes, task planning, process, experience insights can all be written in SiYuan notes.
+        <img alt="PixPin_2025-10-23_00-45-19" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2025-10-23_00-45-19-20251023004520-ega6now.png" style="width: 434px;" />
+    2. 支持多选块，批量设置时间提醒
 
-   <img alt="image" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/image-20251023010120-kvibyl1.png" />
+        <img alt="PixPin_2025-06-14_12-47-45" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-14_12-47-45-20250614124759-afjmj4v.png" />
+2. **设置提醒：**  选择提醒日期、时间、优先级、分类等信息。（如果一个块或者其文档块已经设置了提醒，系统会自动继承之前设置的优先级和分类）
 
-   > Block binding tips
-   >
-   > I usually create a document corresponding to the project, set it as a project, then create sub-headings in that project note, set the <u>heading</u> as the task, convenient to record task plans, implementation details, problems encountered in the process, so my notes are always in the project note. **The reason for using headings instead of task lists** is that headings are very low-pressure for me, and convenient to compare to lists for easier searching, easier to write notes, SiYuan's directory outline can display all heading levels, and can drag to change heading sorting and levels, for me headings are better than lists, more suitable for managing very messy tasks.
-   >
-   > <img alt="PixPin_2025-10-23_01-02-20" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2025-10-23_01-02-20-20251023010227-gsyui0x.png" />
+    <img alt="PixPin_2025-06-14_12-36-42" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-14_12-36-42-20250614123644-zr0a8pz.png" />
+3. 插件创建的任务如果有绑定块，是可以直接点击跳转到思源笔记的对应块的，悬浮这个任务还可以预览任务详情。这样任务管理就能和思源笔记联动起来，任务计划、过程、经验心得都可以写在思源笔记里
 
-4. Intelligent recognition of dates and times in titles
+    <img alt="image" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/image-20251023010120-kvibyl1.png" />
 
-   1. When adding reminders, the plugin will intelligently recognize dates and times automatically based on event titles
+    > 绑定块技巧
+    >
+    > 我一般习惯，有一个项目，就创建项目对应的文档，将其设置为项目，然后在该项目笔记里创建子标题，把<u>标题</u>设置为任务，方便记录任务的计划、实现细节，过程中遇到的问题，这样自己的笔记就一直在项目笔记里。**之所以用标题而不是任务列表**，是因为标题对我而言非常无压，而且方便相比列表而言更方便查找、更方便写笔记，思源的目录大纲可以显示所有的标题层级，还可以拖拽改变标题排序和标题层级，对我而言标题是比列表更好用的，更适合管理非常杂乱的任务。
+    >
+    > <img alt="PixPin_2025-10-23_01-02-20" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2025-10-23_01-02-20-20251023010227-gsyui0x.png" />
+    >
+4. 智能识别标题中的日期和时间
 
-      <img alt="PixPin_2025-06-14_12-39-30" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-14_12-39-30-20250614123936-2hxw68b.png" />
-   2. Click the ✨ button to the right of the title to automatically set time through natural language input
+    1. 添加提醒时，插件会智能根据事件标题自动识别日期和时间
 
-      <img alt="PixPin_2025-06-14_12-40-30" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-14_12-40-30-20250614124033-1xh2k1f.png" />
-   3. Multi-selection of blocks also supports intelligent recognition of dates and times
+        <img alt="PixPin_2025-06-14_12-39-30" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-14_12-39-30-20250614123936-2hxw68b.png" />
+    2. 点击标题右边的✨按钮，可以再通过输入自然语言，进行自动设置时间
 
-      <img alt="PixPin_2025-06-14_12-49-05" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-14_12-49-05-20250614124909-hj02c5y.png" />
-5. Support setting categories, adjusting category display order, setting category colors and icons
+        <img alt="PixPin_2025-06-14_12-40-30" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-14_12-40-30-20250614124033-1xh2k1f.png" />
+    3. 多选块也支持智能识别日期和时间
 
-   <img alt="PixPin_2025-06-15_11-58-31" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-15_11-58-31-20250615115835-mncf5ne.png" />
-6. After creating a reminder, the plugin adds a "⏰" bookmark to the block. After deleting a reminder, it checks if the block still has unfinished reminders - if not, it removes the bookmark. When tasks are completed, it changes to use a "✅" bookmark. If the added block is a task list block and tasks are completed, it will automatically check the task list item.
+        <img alt="PixPin_2025-06-14_12-49-05" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-14_12-49-05-20250614124909-hj02c5y.png" />
+5. 支持设置分类、调整分类展示顺序、设置分类颜色和图标
 
-### Reminder Notification Logic
+    <img alt="PixPin_2025-06-15_11-58-31" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-15_11-58-31-20250615115835-mncf5ne.png" />
+6. 在创建提醒后插件给对块添加“⏰”书签，在删除提醒后检查该块是否还有未完成的提醒，如果没有则移除书签，完成任务则改为使用“✅”书签。如果添加的块是任务列表块，完成任务勾，会自动给任务列表项打勾
 
-1. The plugin supports setting a daily time to remind once about all today's events.
+### 提醒通知逻辑
 
-   <img alt="PixPin_2025-10-23_00-43-27" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2025-10-23_00-43-27-20251023004334-ndrlzyq.png" style="width: 518px;" />
+1. 插件支持设置每日某个时间提醒一次今天的所有事件。
 
-   <img alt="PixPin_2025-06-12_21-22-15" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-12_21-22-15-20250612212226-ji5482r.png" />
-2. If a task has a reminder time set, the plugin will pop up a notification for the corresponding event when the reminder time is reached.
+    <img alt="PixPin_2025-10-23_00-43-27" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2025-10-23_00-43-27-20251023004334-ndrlzyq.png" style="width: 518px;" />
 
-   <img alt="PixPin_2025-06-14_12-53-20" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-14_12-53-20-20250614125324-h9cbba6.png" />
-3. When notifications arrive, notification sounds will play. You can customize notification sounds in the plugin settings.
+    <img alt="PixPin_2025-06-12_21-22-15" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-12_21-22-15-20250612212226-ji5482r.png" />
+2. 如果任务设置了提醒时间，插件会在到达提醒时间时弹出对应事件的通知。
 
-   <img alt="PixPin_2025-10-23_00-43-09" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2025-10-23_00-43-09-20251023004312-5qh5o66.png" />
+    <img alt="PixPin_2025-06-14_12-53-20" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-14_12-53-20-20250614125324-h9cbba6.png" />
+3. 通知到达时，会播放通知声音，可以在插件设置里可以自定义通知声音
 
-### View Today's Tasks and Completed Tasks in Sidebar List
+    <img alt="PixPin_2025-10-23_00-43-09" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2025-10-23_00-43-09-20251023004312-5qh5o66.png" />
 
-Click the button in the dock or top bar to open the list view for tasks.
+### 侧栏以列表视图查看今日任务和已完成任务
+
+dock栏和顶栏点击按钮，可打开列表视图查看任务
 
 <img alt="PixPin_2025-06-14_12-44-01" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-14_12-44-01-20250614124423-9qqzvwc.png" />
 
-If you find this task management somewhat too complex for you, you can create sub-tasks to break it down, then complete these sub-tasks one by one, breaking down big tasks into small tasks to complete, each time you complete a task, there will be positive feedback, more motivated. For this, I also added a progress bar display for parent tasks.
+如果你觉得这个任务对你而言有些太复杂了，你可以创建子任务进行拆解，然后一个个完成这些子任务，把大任务拆解为小任务完成，每完成一个任务，就会有正反馈，会更有干劲。为此我还给父任务加了进度条显示。
 
 <img alt="image" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/image-20251023010326-91z8egj.png" />
 
-Tasks in the sidebar task management that have joined projects will display the corresponding project name (with dotted underline), can click directly to open the management kanban of the corresponding project. This allows completing tasks while viewing other tasks of the project, making adjustments.
+任务管理侧栏的任务如果有加入项目，会显示对应项目名称（有下划虚线），是可以点击直接打开对应项目的管理看板的。这样完成任务中可以查看项目的其他任务，进行调整
 
 <img alt="image" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/image-20251023010353-hj5sdg2.png" />
 
-Plugin special feature: support "completed today" function for cross-day tasks, remove from today's task filter, reappear tomorrow, so every day has positive feedback, without having to wait until task completion to check.
+插件特色功能：跨天任务支持「今日已完成」功能，在今日任务筛选中去除，明天再度出现，这样每天都有正反馈，而不用等到任务完成才勾选
 
 <img alt="PixPin_2025-06-18_07-38-03" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-18_07-38-03-20250618073805-zp6ibr8.png" style="width: 428px;" />
 
-In priority sorting mode, support drag-and-drop sorting of tasks with the same priority.
+在优先级排序模式下，支持对同一优先级的任务进行拖拽排序
 
-### Calendar View for Tasks
+### 日历视图查看任务
 
-**How to open calendar view**: Click the calendar icon in the plugin dock icon to open the calendar view.
+**如何打开日历视图**：点击插件停靠栏图标的日历图标打开日历视图。
 
-**How to use calendar view**:
+**如何使用日历视图**
 
-1. View and manage tasks in the pop-up calendar view.
-2. Hovering over tasks in the calendar view will display detailed task information. Clicking on tasks can jump to documents or blocks.
-3. Calendar view supports category filtering.
-4. Calendar view does not currently support double-clicking to directly create new tasks (to be improved later).
+1. 在弹出的日历视图中查看和管理任务。
+2. 悬浮日历视图的任务会显示任务详细信息，点击任务可以跳转到文档或块
+3. 日历视图支持筛选分类
+4. 日历视图暂不支持双击直接新建任务（后面完善）。
 
 <img alt="PixPin_2025-06-13_00-03-52" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-13_00-03-52-20250613000359-cfu99eo.png" />
 
-### Eisenhower Matrix View for Multiple Project Tasks
+### 四象限看板查看多个项目任务
 
-The Eisenhower Matrix is very suitable for managing tasks of multiple projects.
+四象限看板很适合用来管理多个项目的任务，
 
-- Distinguish important and urgent, important not urgent, unimportant not urgent, unimportant but urgent tasks
+- 区分重要且紧急、重要不紧急、不重要不紧急、不重要但紧急任务
 
-  Key points for use
+  使用要点
 
-  - Excellent people often focus more on doing "important not urgent things", not accumulating "important and urgent things" to the last minute.
-  - Unimportant things should be done during free time, not occupying your time for important things.
-- Support filtering to display only ongoing tasks, tasks of a certain project.
+  - 优秀的人往往会更专注于做「重要不紧急的事情」，不堆积「重要且紧急的事」到最后才做
+  - 不重要的事情尽量在空闲时间做，不要占据自己做重要事情的时间
+- 支持过滤只显示进行中任务、某个项目的任务
 
 <img alt="PixPin_2025-10-23_00-58-00" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2025-10-23_00-58-00-20251023005802-953edqm.png" />
 
-### View All Reminders in Document
+### 查看文档的所有提醒
 
-The plugin adds a "View All Document Reminders" function to the document block breadcrumb and document menu.
+插件在文档块的文档菜单添加了“查看文档所有提醒”功能
 
 <img alt="PixPin_2025-06-15_12-03-12" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-15_12-03-12-20250615120314-cwhj439.png" />
 
-After clicking, you can view all reminders of this document and its child blocks, support filtering by completion status, and sorting by completion time, priority, and set time.
+点击之后可以查看这个文档以及其子块的所有提醒，支持按是否完成进行筛选，根据完成时间、优先级、设定时间进行排序。
 
 <img alt="PixPin_2025-06-15_11-54-51" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-15_11-54-51-20250615115454-47p1z96.png" />
 
-### Pomodoro Timer Usage Instructions
+### 番茄钟使用说明
 
-Supports right-clicking in the sidebar task note management panel to start Pomodoro timing.
+支持侧栏的任务笔记管理面板右键进行番茄钟计时
 
-#### The Important Significance of Pomodoro Timer
+#### 番茄钟的重要意义
 
-1. **Training Focus:**
+1. **训练专注：**
 
-   1. Clarify what your current task is
-   2. After starting the Pomodoro timer, you can only focus on the current task without thinking too much about things unrelated to the current task, and without thinking too much about long-term information that adds pressure. **"The past and future are not important, the only important moment is now"**. Making good use of the current Pomodoro, doing the current task well, and using the current time to do something are the priorities.
+    1. 明确自己当前的任务是什么
+    2. 开始番茄钟后，只能专注于当前的任务，而不要想太多与现在任务无关的事情，也不要想太多太长远的信息给自己增加压力。  **“过去和未来都不重要，唯一重要的时刻就是现在”**  。把当前的番茄钟利用好，把当前的任务做好，利用好当前时间做一些事情，才是首要。
+2. **训练停下：**
 
-2. **Training to Stop:**
+    - 番茄钟是劳逸结合的方法。
 
-   - The Pomodoro Technique is a method of combining work and rest.
+      - 长时间连续工作会让人身心俱疲，适当地进行休息，才能保证自己始终以最好的状态投入工作。
+      - 在进行休息时间前，你需要明确番茄工作法中**利用好休息时间甚至比专注时间更重要**！休息也是一种任务，必须要认真执行，不能做其他分心的事情
+    - 不会停下有什么问题
 
-     - Long-term continuous work will make people physically and mentally exhausted. Proper rest can ensure that you always invest in work with the best state.
-     - Before taking a break, you need to understand that **making good use of break time is even more important than focus time in the Pomodoro Technique**! Rest is also a task that must be executed seriously, and you cannot do other distracting things.
-   - What problems arise from not knowing how to stop?
+      - 有些人是工作狂，一工作起来就不会休息，虽然短期来看工作效率高，但其实很累，久而久之身体健康容易出问题，之后再想努力就是心有余而力不足。那些认为自己没有时间锻炼身体的人，迟早会为生病腾出时间，那些不愿意停下休息的人，也迟早会为精力不足而效率降低。我们要努力，但要聪明地努力。
+      - 有的时候容易死磕一个问题，折腾几个小时甚至一天，番茄钟可以让自己先休息下，或许休息能带来灵感，或者是思考下，自己能不能先做其他的事情，不纠结这个问题，避免在一个问题浪费太多时间
+      - 番茄钟是可以用来管理自己的欲望的，还可以拿番茄钟来控制自己打游戏、刷手机只玩25分钟
+    - 休息时间的意义
 
-     - Some people are workaholics who don't know how to rest once they start working. Although this seems highly efficient in the short term, it's actually very tiring. Over time, health problems are likely to occur, and later wanting to work hard becomes a case of the spirit being willing but the flesh being weak. Those who think they don't have time to exercise will sooner or later make time to be sick, and those who are unwilling to stop and rest will sooner or later have reduced efficiency due to lack of energy. We need to work hard, but we need to work hard smartly.
-     - Sometimes it's easy to get stuck on a problem for several hours or even a day. The Pomodoro timer can let you rest first, perhaps rest can bring inspiration, or think about whether you can do other things first without getting entangled in this problem, avoiding wasting too much time on one problem.
-     - The Pomodoro timer can be used to manage your desires, and you can also use the Pomodoro timer to control yourself to play games or browse your phone for only 25 minutes.
-   - The significance of break time
+      - **整理思想**：专注有利于你聚焦，而休息有助于让你**状态更好**地**掌控全局。**  在休息时间适当进行任务复盘。
+      - **利用间隔效应 (Gap Effects)进行信息巩固**：学习过程中哪怕短暂的、几秒钟的停顿，都能触发大脑海马体的“神经重放”（Neural Replay）机制。大脑会以几十倍的速度，重新“播放”你刚才学习和思考的内容，从而极大地加深记忆和理解。你的“休息”，其实是大脑在高效“自习”。
 
-     - **Organizing thoughts**: Focus helps you concentrate, while rest helps you **better control the overall situation with better condition**. Appropriately review tasks during break time.
-     - **Using Gap Effects for information consolidation**: Neuroscientist Professor Andrew Huberman points out that even brief pauses of a few seconds during learning can trigger the brain's hippocampus "Neural Replay" mechanism. The brain will "replay" what you just learned and thought about at dozens of times the speed, greatly deepening memory and understanding. Your "rest" is actually the brain efficiently "self-studying". Reference: Huberman Lab Podcast - [Learn Like a Genius (at 1:22:03)](https://www.bilibili.com/video/BV1BopsenEaW/?share_source=copy_web&vd_source=505d8555a7c1be8a7588c2a533326a6e&t=4924)
-     - **Proper stopping is to go further with better condition**: Let yourself restore focus ability in a relaxed state for more sustained work (10 hours of focus per day)
+        《Consolidation of human skill linked to waking hippocampo-neocortical replay》论文里做了一个研究，受试者需在键盘上以最快速度输入固定序列 “41324”，每次试验持续 10 秒，试验间隔插入 10 秒清醒休息时间，共完成 36 次试验。使用 275 通道脑磁图（MEG）技术，分别在训练前（5 分钟）、训练中（12 分钟）、训练后（5 分钟）记录大脑活动。
 
-3. **Quantifying task duration**: Understanding how much actual time you need to spend on a task, eliminating vague perception of time through quantified recording.
+        <img alt="image" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-image-20250617150553-654930l.png" />
 
-   When recording, you might find: "A task that seemed to take 2 Pomodoros actually took 5", further analysis might be because:
+        实验发现，在休息期间，大脑会自发地、无意识地重新激活与按键任务相关的神经回路。这种“重放”的速度比实际练习的速度**快了大约20倍**。一次完整的按键序列重放，仅需约50毫秒。
 
-   - Interrupted 3 times during the process (each time taking 10 minutes);
-   - Finding materials took 20 minutes;
-   - Repeatedly changing ideas wasted 15 minutes.
+        也就是说休息不是什么也不干，大脑会高速回顾过去的行为，强化记忆。
 
-   These details will help you identify "time-consuming black holes", reserve buffer time when planning next time, and reflect on how to improve and work more efficiently.
+        劳逸结合不仅仅能让身体休息，更能提高学习效率，休息时的学习效率比实际练习的效率还高！
+      - **适当的停下来是为了以更好的状态走得更远**：让自己在放空状态下恢复专注能力，以便更持久地工作（一天专注10小时）
+3. **量化任务耗时**：了解做一个任务自己需要花多少实际时间，通过量化记录消除对时间的模糊感知
 
-For more explanation, see my article: [In-depth Explanation of the "Pomodoro Technique": The Secret to Focusing for Ten Hours a Day Without Getting Tired](https://mp.weixin.qq.com/s/SoZ0ccPc7kJTYfwBnB5IGw)
+    记录时可能会发现：“看似 2 个番茄钟能完成的任务，实际用了 5 个”，进一步分析可能是因为：
 
-#### How to Rest After Completing a Pomodoro
+    - 中途被打断 3 次（每次耗时 10 分钟）；
+    - 找素材花费 20 分钟；
+    - 反复修改思路浪费 15 分钟。
 
-Rest is also a task that must be executed seriously, and you cannot do other distracting things.
+    这些细节会帮助你识别 “耗时黑洞”，下次规划时预留缓冲时间，以及反思如何改进，更高效做事。
 
-Remember, the purpose of rest is to **reduce cognitive load**, not to add new information input.
+更多讲解见我的文章：[深入讲解「番茄工作法」：一天专注十小时，还不累的秘密](https://mp.weixin.qq.com/s/SoZ0ccPc7kJTYfwBnB5IGw)
 
-**Absolutely don't do:** Open social media, browse short videos, read news. These seem relaxing but are actually bombarding your brain with higher-intensity stimulation, making it harder for you to return to calm and focus. Consuming entertainment information is actually not stress-relieving but stress-adding, and it doesn't let your body and eyes rest!
+#### 完成一个番茄后如何休息
 
-Moreover, transitioning from entertainment to work requires switching time, which will make starting the next Pomodoro particularly difficult, wasting the start time of the next Pomodoro. **Truly important and urgent matters will come to find you**. Most news doesn't even have the value of reading headlines - you should wait for important messages to find you, not actively wait for messages.
+休息也是一种任务，必须要认真执行，不能做其他分心的事情
 
-**Strongly recommended to do:**
+记住，休息的目的是**降低认知负荷**，而不是增加新的信息输入。
 
-- Stand up and walk around
-- Drink water
-- Look at the green outside the window
-- Close your eyes and rest
-- Take a few deep breaths
-- Meditate
+**绝对不要做：**   打开社交媒体、刷短视频、看新闻。这些看似放松，实则在用更高强度的刺激轰炸你的大脑，让你更难回归平静和专注。接触娱乐信息其实不是在减压而是增压，还会让身体和眼睛得不到休息！
 
-These activities can truly soothe your body and brain.
+而且从娱乐到工作是需要切换时间的，会让你开始下一个番茄特别困难，浪费下一个番茄开始的时间。**真正重要紧急的事情会来找你**，大多数新闻连看看标题的价值都没有，应该等重要消息来找你，而不是你主动等消息。
 
-Please remember one principle: **Truly important and urgent matters will find you through phone calls. You don't need to**
+**强烈推荐做：**
 
-#### Plugin Design
+- 站起来走动
+- 喝水
+- 看看窗外的绿色
+- 闭目养神
+- 做几个深呼吸
+- 进行冥想
 
-The plugin has been thoughtfully designed for the Pomodoro timer:
+这些活动能让你的身体和大脑真正得到舒缓。
 
-- Default window style
+请记住一个原则：**真正重要紧急的事情，会通过电话找到你。你不需要**
+
+#### 插件的设计
+
+插件对番茄钟进行了用心设计
+
+- 默认窗口样式
 
   <img alt="" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-network-asset-PixPin_2025-06-12_17-48-43-2025-06-12-20250612232102-ksxhyhu.png" />
-- Mini window style
+- mini窗口样式
 
   <img alt="" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-network-asset-PixPin_2025-06-12_17-36-35-2025-06-12-20250612232104-dmwpmng.png" />
 
-How to use the Pomodoro timer:
 
-1. Configure work duration, break duration, and background sound in plugin settings.
 
-   - **Pomodoro Work Duration**: Default 25 minutes.
-   - **Pomodoro Short Break Duration**: Default 5 minutes.
-   - **Pomodoro Long Break Duration**: Default 30 minutes.
-   - **Sound Settings**: Enter local file paths or network URLs to set work, break, and end notification sounds.
+如何使用番茄钟
 
-     > Pomodoro background sounds can refer to the files I provided
-     >
-     > Link: https://pan.baidu.com/s/1PW062MM7buXf5CdIYwstgw?pwd=5ete Extract code: 5ete
-     >
-     > Source from [https://github.com/remvze/moodist](https://github.com/remvze/moodist)
+1. 在插件设置中配置工作时长、休息时长及背景音。
 
-   <img alt="PixPin_2025-10-23_00-53-38" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2025-10-23_00-53-38-20251023005339-i9yw8mp.png" />
-2. After completing a Pomodoro, the plugin automatically records focus time and updates the Pomodoro count in the list panel.
+    - **番茄钟工作时长**：默认 25 分钟。
+    - **番茄钟短时休息时长**：默认 5 分钟。
+    - **番茄钟长时休息时长**：默认 30 分钟。
+    - **声音设置**：输入本地文件路径或网络url，来设置工作、休息及结束提示音。
 
-   <img alt="PixPin_2025-06-14_12-58-12" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-14_12-58-12-20250614125837-3gv1wti.png" />
-3. Support setting Pomodoro focus goals, and display progress bar
+      > 番茄钟背景声音可参考我提供的文件
+      >
+      > 链接: https://pan.baidu.com/s/1PW062MM7buXf5CdIYwstgw?pwd=5ete 提取码: 5ete
+      >
+      > 来源于[https://github.com/remvze/moodist](https://github.com/remvze/moodist)
+      >
 
-   <img alt="PixPin_2025-06-20_20-38-30" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-20_20-38-30-20250620203832-dl7yygb.png" />
-4. Pomodoro timer interactions:
+    <img alt="PixPin_2025-10-23_00-53-38" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2025-10-23_00-53-38-20251023005339-i9yw8mp.png" />
+2. 完成番茄钟后，插件会自动记录专注时间，在列表面板更新番茄计数。
 
-   1. **Double-click the time in the Pomodoro window**: Modify the current Pomodoro's work duration or break duration.
+    <img alt="PixPin_2025-06-14_12-58-12" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-14_12-58-12-20250614125837-3gv1wti.png" />
+3. 支持设置番茄专注目标，并显示进度条
 
-   2. **Support active switching between work and break states:**
+    <img alt="PixPin_2025-06-20_20-38-30" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-20_20-38-30-20250620203832-dl7yygb.png" />
+4. 番茄钟交互
 
-      1. Click 💪 to work
-      2. Click 🍵 to take a break
-      3. Click 🧘♀️ to take a long break
+    1. **双击番茄钟窗口的时间：**  修改当前番茄钟的工作时长或休息时长。
+    2. **支持主动切换工作、休息状态：**
 
-      <img alt="PixPin_2025-10-23_00-54-14" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2025-10-23_00-54-14-20251023005415-mv61t9x.png" />
-   3. **Support switching between countdown and count-up Pomodoro timer:**
+        1. 点击💪，进行工作
+        2. 点击🍵，进行休息
+        3. 点击🧘♀️，进行长休息
 
-      Click the ⏳ or ⏱ button to switch
+        <img alt="PixPin_2025-10-23_00-54-14" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2025-10-23_00-54-14-20251023005415-mv61t9x.png" />
+    3. **支持切换倒计时还是正计时番茄钟：**
 
-      <img alt="PixPin_2025-10-23_00-54-26" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2025-10-23_00-54-26-20251023005427-q8ultdm.png" />
-   4. **Mini window mode:** Click the tomato 🍅 button in the top-left corner to start mini window mode
+        点击⏳或者⏱按钮，进行切换
 
-      <img alt="PixPin_2025-06-14_12-59-56" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-14_12-59-56-20250614125957-61censs.png" />
+        <img alt="PixPin_2025-10-23_00-54-26" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2025-10-23_00-54-26-20251023005427-q8ultdm.png" />
+    4. **mini窗口模式：**  点击左上角番茄🍅按钮，可以开始mini窗口模式
 
-      Changes to mini window
+        <img alt="PixPin_2025-06-14_12-59-56" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-14_12-59-56-20250614125957-61censs.png" />
 
-      <img alt="PixPin_2025-06-14_13-00-03" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-14_13-00-03-20250614130006-i09m7s1.png" />
+        变为mini窗口
 
-      Floating icon shows expand button to expand again
+        <img alt="PixPin_2025-06-14_13-00-03" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-14_13-00-03-20250614130006-i09m7s1.png" />
 
-      <img alt="PixPin_2025-06-14_13-00-18" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-14_13-00-18-20250614130019-3jod6lm.png" />
-   5. Support full screen mode
+        悬浮图标出现展开按钮可以再展开
 
-      <img alt="PixPin_2025-06-21_10-10-03" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-21_10-10-03-20250621101017-mphfyin.png" />
+        <img alt="PixPin_2025-06-14_13-00-18" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-14_13-00-18-20250614130019-3jod6lm.png" />
+    5. 支持全屏模式
 
-#### Pomodoro Timer Interactions:
+        <img alt="PixPin_2025-06-21_10-10-03" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-21_10-10-03-20250621101017-mphfyin.png" />
 
-1. **Double-click the time in the Pomodoro window**: Modify the current Pomodoro's work duration or break duration.
-2. **Support active switching between work and break states:**
-   - Click 💪 to work
-   - Click 🍵 to take a break
-   - Click 🧘♀️ to take a long break
+## ❤️致谢
 
-   <img alt="PixPin_2025-10-23_00-54-14" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2025-10-23_00-54-14-20251023005415-mv61t9x.png" />
+- fullcalendar：日历视图开发
+- lunar-typescript：农历计算
+- echarts：番茄钟数据可视化
+- chrono-node： 自然语言时间解析
 
-3. **Support switching between countdown and count-up Pomodoro timer:**
-   - Click the ⏳ or ⏱ button to switch
+## ❤️用爱发电
 
-   <img alt="PixPin_2025-10-23_00-54-26" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2025-10-23_00-54-26-20251023005427-q8ultdm.png" />
+如果喜欢我的插件，欢迎给GitHub仓库点star和微信赞赏，这会激励我继续完善此插件和开发新插件。
 
-4. **Mini window mode:** Click the tomato 🍅 button in the top-left corner to start mini window mode
+维护插件费时费力，个人时间和精力有限，开源只是分享，不等于我要浪费我的时间免费帮用户实现ta需要的功能，
 
-   <img alt="PixPin_2025-06-14_12-59-56" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-14_12-59-56-20250614125957-61censs.png" />
+我需要的功能我会慢慢改进（打赏可以催更），有些我觉得可以改进、但是现阶段不必要的功能需要打赏才改进（会标注打赏标签和需要打赏金额），而不需要的功能、实现很麻烦的功能会直接关闭issue不考虑实现，我没实现的功能欢迎有大佬来pr
 
-   Changes to mini window
-
-   <img alt="PixPin_2025-06-14_13-00-03" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-14_13-00-03-20250614130006-i09m7s1.png" />
-
-   Floating icon shows expand button to expand again
-
-   <img alt="PixPin_2025-06-14_13-00-18" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-PixPin_2025-06-14_13-00-18-20250614130019-3jod6lm.png" />
-
-## ❤️ Acknowledgments
-
-- fullcalendar: Calendar view development
-- lunar-typescript: Lunar calendar calculation
-- echarts: Pomodoro data visualization
-- chrono-node: Natural language time parsing
-
-## ❤️ Support with Love
-
-If you like my plugin, please feel free to star the GitHub repository and donate. This will motivate me to continue improving this plugin and developing new plugins.
-
-Maintaining the plugin takes time and effort, open source is for sharing, not for me to waste my time providing free customer service to users.
-
-I will slowly improve the functions I need (donations can speed up), some functions that I think can be improved but are not necessary at present need donations to improve (will be marked with donation tags and required donation amount), functions that are not needed or very troublesome to implement will directly close the issue without consideration.
-
-Friends who accumulate 50 yuan in donations, if you want to add me on WeChat, you can send an email to achuan-2@outlook.com to apply for friends (donations less than 50 yuan, I will not reply to emails and add friends)
+累积赞赏50元的朋友如果想加我微信，可以在赞赏的时候备注微信号，或者发邮件到achuan-2@outlook.com来进行好友申请
 
 <img alt="image" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/network-asset-image-20250614123558-fuhir5v.png" />

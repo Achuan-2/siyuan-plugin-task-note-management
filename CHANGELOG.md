@@ -1,3 +1,50 @@
+## v4.2.0 / 20251224
+
+- 🎨 支持绑定块新建标题，绑定块支持搜索文档和标题块
+- 🎨 设置添加静默上传ics文件设置
+- 🎨 优化ics上传逻辑：检测事件有没有新生成（reminder.json时间是否新于上一次同步时间）。没有新生成则不上传（但还要更新上一次同步时间）
+- 🎨 支持设置绑定标题的完成状态样式
+- 🎨 quickreminder 把绑定块id清空保存要删除docid
+- 🎨 quickreminder 如果绑定块粘贴块引用时，标题输入框为空，需要自动获取块标题到标题
+
+## v4.1.1 / 20251223
+- 🎨 优化日历视图列表交互：
+  - 改进switchViewType，目前周视图和日视图的switchViewType是分别记忆的，不要分别记忆，switchViewType直接控制周视图和日视图显示风格
+  - 优化switchViewType按钮，目前如果窄的话，switchViewType label会变成一列显示，导致撑高
+
+## v4.1.0 / 20251223
+- 🎨 日历视图增加更多视图 [#223](https://github.com/Achuan-2/siyuan-plugin-task-note-management/issues/223)
+
+## v4.0.5 / 20251223
+
+- 🎨 设置插件最低思源版本为3.5.1
+- 🎨 支持直接上传ics文件到思源服务器，限制思源版本v3.5.1  [#219](https://github.com/Achuan-2/siyuan-plugin-task-note-management/issues/219)
+
+## v4.0.4 / 20251223
+- 🎨 任务管理侧栏的任务可以直接拖动到日历，调整任务时间 [#218](https://github.com/Achuan-2/siyuan-plugin-task-note-management/issues/218)
+- 🎨 任务管理侧栏添加设置，支持设置是否显示已完成的子任务 [#224](https://github.com/Achuan-2/siyuan-plugin-task-note-management/issues/224)
+
+
+## v4.0.3 / 20251223
+
+- 🎨 日历视图优化：
+  - 修复日历拖动重复渲染问题
+  - 全天事件拖动为定时事件，fullcalendar是有默认时间跨度的，1小时，而目前把全天事件拖动到某个时间点，没有给这个事件设置结束时间，导致刷新之后事件变短
+- 🎨 ics订阅刷新优化：不需要每次启动都拉取，根据lastSync来定时拉取
+
+## v4.0.0 / 20251223
+- ✨ 支持ics文件导入
+- ✨ 支持订阅ics链接
+
+## v3.9.3 / 20251223
+- 🎨 mac系统表情文件无法正确加载，改为相对路径 ([#214](https://github.com/Achuan-2/siyuan-plugin-task-note-management/issues/214))，感谢[QYLexpired](https://github.com/QYLexpired)贡献
+- 🎨 增加一天起始时间的设置，增加任务时间统计功能，增加日历快捷键 ([#221](https://github.com/Achuan-2/siyuan-plugin-task-note-management/issues/221))，感谢[ebAobS](https://github.com/ebAobS)贡献
+
+## v3.9.2 / 20251223
+- 🎨 改进S3设置：添加自定义域名，使用思源S3设置，还可以设置bucket和S3 存储路径
+
+## v3.9.0 / 20251222
+- ✨ 支持使用S3来同步ICS文件
 
 ## v3.8.0 / 20251215
 - 🎨 支持使用思源API

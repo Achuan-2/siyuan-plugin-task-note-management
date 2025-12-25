@@ -2,8 +2,8 @@
   "name": "siyuan-plugin-task-note-management",
   "author": "Achuan-2",
   "url": "https://github.com/Achuan-2/siyuan-plugin-task-note-management",
-  "version": "3.8.1",
-  "minAppVersion": "3.0.12",
+  "version": "4.2.0",
+  "minAppVersion": "3.5.1",
   "backends": [
     "windows",
     "linux",
@@ -30,8 +30,8 @@
     "zh_CN": "一款在思源笔记里实现任务笔记管理功能的插件，为了践行防弹笔记法而开发。支持文档和块提醒、日历视图查看行事历、番茄钟专注和数据统计、项目看板、四象限面板、习惯打卡等功能"
   },
   "readme": {
-    "default": "README.md",
-    "zh_CN": "README_zh_CN.md"
+    "default": "README_en_US.md",
+    "zh_CN": "README.md"
   },
   "funding": {
     "custom": [

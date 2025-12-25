@@ -119,6 +119,9 @@ export default defineConfig({
                     }
                     return assetInfo.name
                 },
+                // 禁用代码分割，将所有代码打包到单个文件中
+                manualChunks: undefined,
+                inlineDynamicImports: true,
             },
         },
     }

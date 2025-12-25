@@ -7,6 +7,7 @@ import { t } from "../utils/i18n";
 import { RepeatSettingsDialog, RepeatConfig } from "./RepeatSettingsDialog";
 import { getRepeatDescription } from "../utils/repeatUtils";
 import { CategoryManageDialog } from "./CategoryManageDialog";
+import { BlockBindingDialog } from "./BlockBindingDialog";
 import * as chrono from 'chrono-node';
 import { parseLunarDateText, getCurrentYearLunarToSolar, solarToLunar } from "../utils/lunarUtils";
 
@@ -581,6 +582,78 @@ export class QuickReminderDialog {
 
         // 填充完成时间
         this.updateCompletedTimeDisplay();
+
+        // 如果有块ID，显示预览
+        if (this.reminder.blockId) {
+            this.updateBlockPreview(this.reminder.blockId);
+        }
+    }
+
+    /**
+     * 更新块预览显示
+     */
+    private async updateBlockPreview(blockId: string) {
+        const preview = this.dialog.element.querySelector('#quickBlockPreview') as HTMLElement;
+        const content = this.dialog.element.querySelector('#quickBlockPreviewContent') as HTMLElement;
+
+        if (!blockId) {
+            preview.style.display = 'none';
+            return;
+        }
+
+        try {
+            const { getBlockByID } = await import("../api");
+            const block = await getBlockByID(blockId);
+
+            if (block) {
+                content.innerHTML = `
+                    <span style="font-weight: 500; margin-bottom: 4px; cursor: pointer; color: var(--b3-protyle-inline-blockref-color); border-bottom: 1px dashed var(--b3-protyle-inline-blockref-color); padding-bottom: 2px; max-width: 100%; word-wrap: break-word; overflow-wrap: break-word;" id="quickBlockPreviewHover">${(block.content || '无内容').length > 50 ? (block.content || '无内容').substring(0, 50) + '...' : (block.content || '无内容')}</span>
+                    <div style="font-size: 12px; color: var(--b3-theme-on-surface-light);">
+                        类型: ${block.type} | ID: ${block.id}
+                    </div>
+                `;
+                preview.style.display = 'block';
+
+                // 绑定悬浮预览事件
+                const hoverDiv = content.querySelector('#quickBlockPreviewHover') as HTMLElement;
+                if (hoverDiv && this.plugin && this.plugin.addFloatLayer) {
+                    let hoverTimeout: number | null = null;
+
+                    hoverDiv.addEventListener('mouseenter', (event) => {
+                        // 清除之前的定时器
+                        if (hoverTimeout) {
+                            clearTimeout(hoverTimeout);
+                        }
+
+                        // 设置500ms延迟后显示预览
+                        hoverTimeout = window.setTimeout(() => {
+                            const rect = hoverDiv.getBoundingClientRect();
+                            this.plugin.addFloatLayer({
+                                refDefs: [{ refID: blockId, defIDs: [] }],
+                                x: rect.left,
+                                y: rect.top - 70,
+                                isBacklink: false
+                            });
+                            hoverTimeout = null;
+                        }, 500);
+                    });
+
+                    hoverDiv.addEventListener('mouseleave', () => {
+                        // 清除定时器，取消预览显示
+                        if (hoverTimeout) {
+                            clearTimeout(hoverTimeout);
+                            hoverTimeout = null;
+                        }
+                    });
+                }
+            } else {
+                content.innerHTML = '<div style="color: var(--b3-theme-error);">块不存在</div>';
+                preview.style.display = 'block';
+            }
+        } catch (error) {
+            console.error('获取块信息失败:', error);
+            preview.style.display = 'none';
+        }
     }
 
     // 设置chrono解析器
@@ -725,7 +798,6 @@ export class QuickReminderDialog {
                     if (lunarDate.month > 0) {
                         const solarDate = getCurrentYearLunarToSolar(lunarDate.month, lunarDate.day);
                         if (solarDate) {
-                            console.log(`农历日期识别成功: 农历${lunarDate.month}月${lunarDate.day}日 -> 公历${solarDate}`);
                             return {
                                 date: solarDate,
                                 hasTime: false
@@ -1008,6 +1080,10 @@ export class QuickReminderDialog {
                                     <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
                                 </button>
                             </div>
+                        </div>
+                        <!-- 块预览区域 -->
+                        <div id="quickBlockPreview" style="margin-top: 8px; padding: 8px; background: var(--b3-theme-background-light); border: 1px solid var(--b3-border-color); border-radius: 4px; display: none;">
+                            <div id="quickBlockPreviewContent" style="font-size: 13px; color: var(--b3-theme-on-surface);"></div>
                         </div>
                         <!-- 网页链接输入 -->
                         <div class="b3-form__group">
@@ -1841,6 +1917,7 @@ export class QuickReminderDialog {
 
                     if (blockInput) {
                         blockInput.value = blockId;
+                        this.updateBlockPreview(blockId);
                     }
                     if (titleInput && title && (!titleInput.value || titleInput.value.trim().length === 0)) {
                         titleInput.value = title;
@@ -1855,22 +1932,59 @@ export class QuickReminderDialog {
             }
         });
 
-        // 规范化 quickBlockInput：当用户直接粘贴 ((id 'title')) 或链接时，自动替换为纯 id
+        // 规范化 quickBlockInput：当用户直接粘贴 ((id 'title')) 或链接时，自动替换为纯 id 并设置标题
         const quickBlockInput = this.dialog.element.querySelector('#quickBlockInput') as HTMLInputElement;
         if (quickBlockInput) {
             let isAutoSetting = false;
             quickBlockInput.addEventListener('input', async () => {
                 if (isAutoSetting) return;
                 const raw = quickBlockInput.value?.trim();
-                if (!raw) return;
-                const id = this.extractBlockId(raw);
-                if (id && id !== raw && (raw.includes('((') || raw.includes('siyuan://blocks/') || raw.includes(']('))) {
+                if (!raw) {
+                    this.updateBlockPreview('');
+                    return;
+                }
+
+                const blockRefRegex = /\(\(([\w\-]+)\s+'(.*)'\)\)/;
+                const blockLinkRegex = /\[(.*)\]\(siyuan:\/\/blocks\/([\w\-]+)\)/;
+                const urlRegex = /siyuan:\/\/blocks\/([\w\-]+)/;
+
+                let blockId: string | null = null;
+                let extractedTitle: string | null = null;
+
+                let match = raw.match(blockRefRegex);
+                if (match) {
+                    blockId = match[1];
+                    extractedTitle = match[2];
+                } else {
+                    match = raw.match(blockLinkRegex);
+                    if (match) {
+                        extractedTitle = match[1];
+                        blockId = match[2];
+                    } else {
+                        match = raw.match(urlRegex);
+                        if (match) {
+                            blockId = match[1];
+                        }
+                    }
+                }
+
+                if (blockId && (raw.includes('((') || raw.includes('siyuan://blocks/') || raw.includes(']('))) {
                     try {
                         isAutoSetting = true;
-                        quickBlockInput.value = id;
+                        quickBlockInput.value = blockId;
+
+                        // 如果标题输入框为空，自动设置标题
+                        const titleInput = this.dialog.element.querySelector('#quickReminderTitle') as HTMLInputElement;
+                        if (titleInput && extractedTitle && (!titleInput.value || titleInput.value.trim().length === 0)) {
+                            titleInput.value = extractedTitle;
+                        }
+
+                        this.updateBlockPreview(blockId);
                     } finally {
                         setTimeout(() => { isAutoSetting = false; }, 0);
                     }
+                } else {
+                    this.updateBlockPreview(raw);
                 }
             });
         }
@@ -2218,136 +2332,25 @@ export class QuickReminderDialog {
         }
     }
 
-    /**
-     * 显示创建文档对话框
-     */
     private showCreateDocumentDialog() {
-        // 检查plugin是否已初始化
-        if (!this.plugin) {
-            showMessage('⚠️ 无法创建文档：插件实例未初始化。请确保在创建QuickReminderDialog时传入plugin参数。');
-            console.error('QuickReminderDialog: plugin未初始化。请在构造函数的options参数中传入plugin实例。');
-            return;
-        }
-
         const titleInput = this.dialog.element.querySelector('#quickReminderTitle') as HTMLInputElement;
-        const defaultTitle = titleInput?.value?.trim() || '';
+        const currentTitle = titleInput?.value?.trim() || '';
 
-        const createDocDialog = new Dialog({
-            title: t("createNewDocument") || '新建文档',
-            content: `
-                <div class="create-doc-dialog">
-                    <div class="b3-dialog__content">
-                        <div class="b3-form__group">
-                            <label class="b3-form__label">文档标题</label>
-                            <input type="text" id="quickDocTitleInput" class="b3-text-field" value="${defaultTitle}" placeholder="请输入文档标题" style="width: 100%; margin-top: 8px;">
-                        </div>
-                        <div class="b3-form__group">
-                            <label class="b3-form__label">文档内容（可选）</label>
-                            <textarea id="quickDocContentInput" class="b3-text-field" placeholder="请输入文档内容" style="width: 100%; margin-top: 8px; min-height: 80px; resize: vertical;"></textarea>
-                        </div>
-                    </div>
-                    <div class="b3-dialog__action">
-                        <button class="b3-button b3-button--cancel" id="quickCreateDocCancelBtn">${t("cancel")}</button>
-                        <button class="b3-button b3-button--primary" id="quickCreateDocConfirmBtn">${t("confirm") || '确定'}</button>
-                    </div>
-                </div>
-            `,
-            width: "500px",
-            height: "300px"
+        const blockBindingDialog = new BlockBindingDialog(this.plugin, (blockId: string) => {
+            const blockInput = this.dialog.element.querySelector('#quickBlockInput') as HTMLInputElement;
+            if (blockInput) {
+                blockInput.value = blockId;
+            }
+            showMessage('✓ 已选择块');
+        }, {
+            defaultTab: 'heading',
+            defaultParentId: this.defaultParentId || this.reminder?.parentId,
+            defaultProjectId: this.defaultProjectId || this.reminder?.projectId,
+            defaultCustomGroupId: this.defaultCustomGroupId || this.reminder?.customGroupId,
+            reminder: this.reminder,
+            defaultTitle: currentTitle
         });
-
-        const docTitleInput = createDocDialog.element.querySelector('#quickDocTitleInput') as HTMLInputElement;
-        const docContentInput = createDocDialog.element.querySelector('#quickDocContentInput') as HTMLTextAreaElement;
-        const cancelBtn = createDocDialog.element.querySelector('#quickCreateDocCancelBtn') as HTMLButtonElement;
-        const confirmBtn = createDocDialog.element.querySelector('#quickCreateDocConfirmBtn') as HTMLButtonElement;
-
-        // 取消按钮
-        cancelBtn?.addEventListener('click', () => {
-            createDocDialog.destroy();
-        });
-
-        // 确认按钮
-        confirmBtn?.addEventListener('click', async () => {
-            const title = docTitleInput.value.trim();
-            const content = docContentInput.value.trim();
-
-            if (!title) {
-                showMessage(t("pleaseEnterTitle"));
-                return;
-            }
-
-            try {
-                const docId = await this.createDocument(title, content);
-                if (docId) {
-                    // 自动填入文档ID到绑定块输入框
-                    const blockInput = this.dialog.element.querySelector('#quickBlockInput') as HTMLInputElement;
-                    if (blockInput) {
-                        blockInput.value = docId;
-                    }
-                    showMessage('✓ 文档创建成功，已自动填入ID');
-                    createDocDialog.destroy();
-                }
-            } catch (error) {
-                console.error('创建文档失败:', error);
-                showMessage(t("createDocumentFailed") || '创建文档失败');
-            }
-        });
-
-        // 自动聚焦标题输入框
-        setTimeout(() => {
-            docTitleInput?.focus();
-        }, 100);
-    }
-
-    /**
-     * 创建文档
-     */
-    private async createDocument(title: string, content: string): Promise<string> {
-        try {
-            if (!this.plugin) {
-                const errorMsg = 'QuickReminderDialog: plugin未初始化。请在构造函数的options中传入plugin实例，例如：new QuickReminderDialog(date, time, callback, timeRangeOptions, { plugin: this.plugin })';
-                console.error(errorMsg);
-                throw new Error('插件实例未初始化');
-            }
-
-            // 获取插件设置
-            const settings = await this.plugin.loadSettings();
-            const notebook = settings.newDocNotebook;
-            const pathTemplate = settings.newDocPath || '/{{now | date "2006/200601"}}/';
-
-            if (!notebook) {
-                throw new Error(t("pleaseConfigureNotebook") || '请在设置中配置新建文档的笔记本');
-            }
-
-            // 导入API函数
-            const { renderSprig, createDocWithMd } = await import("../api");
-
-            // 渲染路径模板
-            let renderedPath: string;
-            try {
-                // 检测pathTemplate是否以/结尾，如果不是，则添加/
-                if (!pathTemplate.endsWith('/')) {
-                    renderedPath = pathTemplate + '/';
-                } else {
-                    renderedPath = pathTemplate;
-                }
-                renderedPath = await renderSprig(renderedPath + title);
-            } catch (error) {
-                console.error('渲染路径模板失败:', error);
-                throw new Error(t("renderPathFailed") || '渲染路径模板失败');
-            }
-
-            // 准备文档内容
-            const docContent = content;
-
-            // 创建文档
-            const docId = await createDocWithMd(notebook, renderedPath, docContent);
-
-            return docId;
-        } catch (error) {
-            console.error('创建文档失败:', error);
-            throw error;
-        }
+        blockBindingDialog.show();
     }
 
     private async saveReminder() {
@@ -2538,6 +2541,19 @@ export class QuickReminderDialog {
                     reminder.customReminderPreset = customReminderPreset;
                     reminder.reminderTimes = this.customTimes.length > 0 ? [...this.customTimes] : undefined;
                     reminder.repeat = this.repeatConfig.enabled ? this.repeatConfig : undefined;
+
+                    // 设置或删除 documentId
+                    if (inputId) {
+                        try {
+                            const block = await getBlockByID(inputId);
+                            reminder.docId = block.root_id;
+                        } catch (error) {
+                            console.error('获取块信息失败:', error);
+                            reminder.docId = undefined;
+                        }
+                    } else {
+                        delete reminder.docId;
+                    }
 
                     // 根据任务类型设置看板状态
                     if (termType === 'doing') {
@@ -2802,7 +2818,6 @@ export class QuickReminderDialog {
                             reminder.repeat.completedInstances = [];
                         }
                         reminder.repeat.completedInstances.push(...pastInstances);
-                        console.log(`自动完成了 ${pastInstances.length} 个过去的周期实例（共生成 ${instances.length} 个实例）`);
                     }
                 }
             }

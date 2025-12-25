@@ -9,6 +9,7 @@ export interface Project {
     color?: string;
     kanbanMode?: 'status' | 'custom';
     customGroups?: any[];
+    blockId?: string;
 }
 
 export class ProjectManager {
@@ -121,7 +122,8 @@ export class ProjectManager {
                         id: id,
                         name: project.title || '未命名项目',
                         status: project.status || 'doing',
-                        color: project.color
+                        color: project.color,
+                        blockId: project.blockId
                     }));
 
                 // 从项目中提取颜色到 projectColors

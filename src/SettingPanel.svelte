@@ -1,9 +1,8 @@
 <script lang="ts">
     import { onMount } from 'svelte';
+    import { Dialog } from 'siyuan';
     import SettingPanel from '@/libs/components/setting-panel.svelte';
     import { t } from './utils/i18n';
-    import * as ics from 'ics';
-    import { lunarToSolar, solarToLunar } from './utils/lunarUtils';
     import {
         DEFAULT_SETTINGS,
         SETTINGS_FILE,
@@ -16,9 +15,10 @@
         HABIT_GROUP_DATA_FILE,
         STATUSES_DATA_FILE,
     } from './index';
-    import { lsNotebooks, pushErrMsg, pushMsg, removeFile, putFile } from './api';
+    import { lsNotebooks, pushErrMsg, pushMsg, removeFile } from './api';
     import { Constants } from 'siyuan';
     import { exportIcsFile, uploadIcsToCloud } from './utils/icsUtils';
+    import { importIcsFile } from './utils/icsImport';
 
     export let plugin;
 
@@ -181,7 +181,7 @@
             ],
         },
         {
-            name: '✅' + t('timeReminder'),
+            name: '✅任务笔记设置',
             items: [
                 {
                     key: 'newDocNotebook',
@@ -203,6 +203,39 @@
                     type: 'textinput',
                     title: t('newDocPath'),
                     description: t('newDocPathDesc'),
+                },
+                {
+                    key: 'defaultHeadingLevel',
+                    value: settings.defaultHeadingLevel,
+                    type: 'select',
+                    title: t('defaultHeadingLevel'),
+                    description: t('defaultHeadingLevelDesc'),
+                    options: {
+                        1: '1',
+                        2: '2',
+                        3: '3',
+                        4: '4',
+                        5: '5',
+                        6: '6',
+                    },
+                },
+                {
+                    key: 'defaultHeadingPosition',
+                    value: settings.defaultHeadingPosition,
+                    type: 'select',
+                    title: t('defaultHeadingPosition'),
+                    description: t('defaultHeadingPositionDesc'),
+                    options: {
+                        prepend: t('prepend'),
+                        append: t('append'),
+                    },
+                },
+                {
+                    key: 'enableOutlinePrefix',
+                    value: settings.enableOutlinePrefix,
+                    type: 'checkbox',
+                    title: t('enableOutlinePrefix'),
+                    description: t('enableOutlinePrefixDesc'),
                 },
             ],
         },
@@ -468,7 +501,69 @@
             ],
         },
         {
-            name: '☁️日程同步',
+            name: '⬇️导入',
+            items: [
+                {
+                    key: 'importIcs',
+                    value: '',
+                    type: 'button',
+                    title: '导入 ICS 文件',
+                    description: '从 ICS 文件导入任务，支持批量设置所属项目、标签和优先级',
+                    button: {
+                        label: '选择文件导入',
+                        callback: async () => {
+                            // 创建文件输入元素
+                            const input = document.createElement('input');
+                            input.type = 'file';
+                            input.accept = '.ics';
+                            input.onchange = async (e: Event) => {
+                                const target = e.target as HTMLInputElement;
+                                const file = target.files?.[0];
+                                if (!file) return;
+
+                                try {
+                                    const content = await file.text();
+
+                                    // 显示批量设置对话框
+                                    showImportDialog(content);
+                                } catch (error) {
+                                    console.error('读取文件失败:', error);
+                                    await pushErrMsg('读取文件失败');
+                                }
+                            };
+                            input.click();
+                        },
+                    },
+                },
+            ],
+        },
+        {
+            name: '📅' + t('icsSubscription'),
+            items: [
+                {
+                    key: 'icsSubscriptionHint',
+                    value: '',
+                    type: 'hint',
+                    title: t('icsSubscription'),
+                    description: t('icsSubscriptionDesc'),
+                },
+                {
+                    key: 'manageSubscriptions',
+                    value: '',
+                    type: 'button',
+                    title: t('manageSubscriptions'),
+                    description: '管理ICS日历订阅，支持设置项目、分类、优先级和同步频率',
+                    button: {
+                        label: t('manageSubscriptions'),
+                        callback: async () => {
+                            showSubscriptionManagementDialog();
+                        },
+                    },
+                },
+            ],
+        },
+        {
+            name: '☁️日历上传',
             items: [
                 {
                     key: 'icsSyncHint',
@@ -476,7 +571,7 @@
                     type: 'hint',
                     title: 'ICS 云端同步',
                     description:
-                        '将ICS文件上传到思源云端，实现多设备间的提醒同步。需要开通思源会员并填写块ID。',
+                        '将ICS文件上传到云端，实现多设备间的提醒同步。支持思源服务器或S3存储。',
                 },
                 {
                     key: 'icsSyncEnabled',
@@ -497,12 +592,24 @@
                     },
                 },
                 {
-                    key: 'icsBlockId',
-                    value: settings.icsBlockId,
+                    key: 'icsFileName',
+                    value: settings.icsFileName,
                     type: 'textinput',
-                    title: 'ICS 云端同步块ID',
+                    title: 'ICS 文件名',
                     description:
-                        '输入包含ICS文件的块ID，用于云端同步。生成ICS后手动拖入某个块中，然后复制块ID粘贴此处',
+                        '自定义ICS文件名（不含.ics后缀），留空则自动生成为 reminder-随机ID',
+                    placeholder: 'reminder-' + (window.Lute?.NewNodeID?.() || 'auto'),
+                },
+                {
+                    key: 'icsSyncMethod',
+                    value: settings.icsSyncMethod,
+                    type: 'select',
+                    title: '同步方式',
+                    description: '选择ICS文件的同步方式',
+                    options: {
+                        siyuan: '思源订阅会员服务器',
+                        s3: 'S3存储',
+                    },
                 },
                 {
                     key: 'icsSyncInterval',
@@ -519,6 +626,27 @@
                     },
                 },
                 {
+                    key: 'icsSilentUpload',
+                    value: settings.icsSilentUpload,
+                    type: 'checkbox',
+                    title: '静默上传ICS文件',
+                    description: '启用后，定时上传ICS文件时不显示成功提示消息',
+                },
+                {
+                    key: 'uploadIcsToCloud',
+                    value: '',
+                    type: 'button',
+                    title: '生成并上传 ICS 到云端',
+                    description: '生成ICS文件并立即上传到云端',
+                    button: {
+                        label: '生成并上传',
+                        callback: async () => {
+                            await uploadIcsToCloud(plugin, settings);
+                        },
+                    },
+                },
+
+                {
                     key: 'icsCloudUrl',
                     value: settings.icsCloudUrl,
                     type: 'textinput',
@@ -526,18 +654,92 @@
                     description: '上传成功后自动生成的云端链接',
                     disabled: true,
                 },
+                // 思源服务器同步配置
+
+                // S3 同步配置
                 {
-                    key: 'uploadIcsToCloud',
-                    value: '',
-                    type: 'button',
-                    title: '生成并上传 ICS 到云端',
-                    description: '生成ICS文件并立即上传到思源云端',
-                    button: {
-                        label: '生成并上传',
-                        callback: async () => {
-                            await uploadIcsToCloud(plugin, settings);
-                        },
+                    key: 's3UseSiyuanConfig',
+                    value: settings.s3UseSiyuanConfig,
+                    type: 'checkbox',
+                    title: '使用思源S3设置',
+                    description: '启用后将使用思源的S3配置，无需手动配置下方的S3参数',
+                },
+                {
+                    key: 's3Bucket',
+                    value: settings.s3Bucket,
+                    type: 'textinput',
+                    title: 'S3 Bucket',
+                    description: 'S3存储桶名称',
+                    placeholder: 'my-bucket',
+                },
+                {
+                    key: 's3Endpoint',
+                    value: settings.s3Endpoint,
+                    type: 'textinput',
+                    title: 'S3 Endpoint',
+                    description: 'S3服务端点地址，可省略协议前缀（自动添加https://）',
+                    placeholder: 'oss-cn-shanghai.aliyuncs.com',
+                },
+                {
+                    key: 's3Region',
+                    value: settings.s3Region,
+                    type: 'textinput',
+                    title: 'S3 Region',
+                    description: 'S3区域，例如 oss-cn-shanghai',
+                    placeholder: 'auto',
+                },
+                {
+                    key: 's3AccessKeyId',
+                    value: settings.s3AccessKeyId,
+                    type: 'textinput',
+                    title: 'S3 Access Key ID',
+                    description: 'S3访问密钥ID',
+                },
+                {
+                    key: 's3AccessKeySecret',
+                    value: settings.s3AccessKeySecret,
+                    type: 'textinput',
+                    title: 'S3 Access Key Secret',
+                    description: 'S3访问密钥Secret',
+                },
+                {
+                    key: 's3StoragePath',
+                    value: settings.s3StoragePath,
+                    type: 'textinput',
+                    title: 'S3 存储路径',
+                    description: 'S3中的存储路径，例如: /calendar/ 或留空存储在根目录',
+                    placeholder: '/calendar/',
+                },
+                {
+                    key: 's3ForcePathStyle',
+                    value: settings.s3ForcePathStyle,
+                    type: 'select',
+                    title: 'S3 Addressing 风格',
+                    description:
+                        '访问文件URL，Path-style: https://endpoint/bucket/key, Virtual hosted: https://bucket.endpoint/key',
+                    options: {
+                        true: 'Path-style',
+                        false: 'Virtual hosted style',
                     },
+                },
+                {
+                    key: 's3TlsVerify',
+                    value: settings.s3TlsVerify,
+                    type: 'select',
+                    title: 'S3 TLS 证书验证',
+                    description: '是否验证TLS/SSL证书，关闭后可连接自签名证书的服务',
+                    options: {
+                        true: '启用验证',
+                        false: '禁用验证',
+                    },
+                },
+                {
+                    key: 's3CustomDomain',
+                    value: settings.s3CustomDomain,
+                    type: 'textinput',
+                    title: 'S3 自定义域名',
+                    description: '用于生成外链的自定义域名，留空则使用标准S3 URL',
+                    placeholder: 'cdn.example.com',
                 },
             ],
         },
@@ -584,6 +786,12 @@
             if (detail.key === 'weekStartDay' && typeof detail.value === 'string') {
                 const parsed = parseInt(detail.value, 10);
                 settings[detail.key] = isNaN(parsed) ? DEFAULT_SETTINGS.weekStartDay : parsed;
+            } else if (
+                (detail.key === 's3ForcePathStyle' || detail.key === 's3TlsVerify') &&
+                typeof detail.value === 'string'
+            ) {
+                // 将字符串 'true'/'false' 转换为布尔值
+                settings[detail.key] = detail.value === 'true';
             } else if (detail.key === 'dailyNotificationTime') {
                 // 允许用户输入 HH:MM，也兼容数字（小时）或单个小时字符串
                 let v = detail.value;
@@ -630,55 +838,6 @@
                 settings[detail.key] = v;
             } else {
                 settings[detail.key] = detail.value;
-            }
-
-            // 当块ID改变时，尝试从该块中解析已上传的文件名并自动生成云端链接
-            if (detail.key === 'icsBlockId' && detail.value) {
-                (async () => {
-                    try {
-                        const { getBlockByID } = await import('./api');
-                        const block = await getBlockByID(String(detail.value));
-                        let filename: string | null = null;
-                        const content =
-                            (block && (block.content || block.html || block.text)) || '';
-                        if (typeof content === 'string') {
-                            const m1 = content.match(
-                                /https?:\/\/assets\.b3logfile\.com\/siyuan\/[^\/]+\/assets\/([^"\)\]\s<>']+\.ics)/i
-                            );
-                            const m2 =
-                                content.match(/data\/assets\/([^"\)\]\s<>']+\.ics)/i) ||
-                                content.match(/assets\/([^"\)\]\s<>']+\.ics)/i);
-                            const found = m1 || m2;
-                            if (found && found[1]) {
-                                filename = found[1];
-                            }
-                        }
-
-                        // 回退到基于时间戳的文件名（保守策略）
-                        if (!filename) {
-                            const timestamp = new Date()
-                                .toISOString()
-                                .replace(/[:.]/g, '')
-                                .slice(0, -5);
-                            filename = `reminders-${timestamp}-kxg4mps.ics`;
-                        }
-
-                        const userId = window.siyuan?.user?.userId || '';
-                        if (userId && filename) {
-                            settings.icsCloudUrl = `https://assets.b3logfile.com/siyuan/${userId}/assets/${filename}`;
-                        }
-                    } catch (err) {
-                        // 出错时保持原有行为：使用时间戳文件名
-                        const timestamp = new Date()
-                            .toISOString()
-                            .replace(/[:.]/g, '')
-                            .slice(0, -5);
-                        const filename = `reminders-${timestamp}-kxg4mps.ics`;
-                        const userId = window.siyuan?.user?.userId || '';
-                        if (userId)
-                            settings.icsCloudUrl = `https://assets.b3logfile.com/siyuan/${userId}/assets/${filename}`;
-                    }
-                })();
             }
 
             saveSettings();
@@ -782,19 +941,686 @@
         }));
     }
 
-    // 根据 icsSyncEnabled 控制相关项的禁用状态
-    groups = groups.map(group => ({
+    // 根据 icsSyncEnabled 和 icsSyncMethod 控制相关项的显示和隐藏
+    $: filteredGroups = groups.map(group => ({
         ...group,
         items: group.items.map(item => {
             const updated = { ...item } as any;
-            if (['icsSyncInterval', 'icsBlockId', 'uploadIcsToCloud'].includes(item.key)) {
+
+            // 通用同步设置，仅在同步启用时可用
+            if (
+                [
+                    'icsSyncInterval',
+                    'icsFormat',
+                    'icsFileName',
+                    'icsSyncMethod',
+                    'uploadIcsToCloud',
+                ].includes(item.key)
+            ) {
                 updated.disabled = !settings.icsSyncEnabled;
             }
+
+            // S3专用设置 - s3UseSiyuanConfig仅在启用同步且选择S3存储时显示
+            if (item.key === 's3UseSiyuanConfig') {
+                updated.hidden = !settings.icsSyncEnabled || settings.icsSyncMethod !== 's3';
+            }
+
+            // S3 bucket、存储路径和自定义域名 - 仅在启用同步且选择S3存储时显示（即使使用思源配置也允许覆盖）
+            if (['s3Bucket', 's3StoragePath', 's3CustomDomain'].includes(item.key)) {
+                updated.hidden = !settings.icsSyncEnabled || settings.icsSyncMethod !== 's3';
+            }
+
+            // S3详细配置 - 仅在启用同步、选择S3存储且未启用"使用思源S3设置"时显示
+            if (
+                [
+                    's3Endpoint',
+                    's3Region',
+                    's3AccessKeyId',
+                    's3AccessKeySecret',
+                    's3ForcePathStyle',
+                    's3TlsVerify',
+                ].includes(item.key)
+            ) {
+                updated.hidden =
+                    !settings.icsSyncEnabled ||
+                    settings.icsSyncMethod !== 's3' ||
+                    settings.s3UseSiyuanConfig === true;
+            }
+
             return updated;
         }),
     }));
 
-    $: currentGroup = groups.find(group => group.name === focusGroup);
+    $: currentGroup = filteredGroups.find(group => group.name === focusGroup);
+
+    // ICS导入对话框
+    async function showImportDialog(icsContent: string) {
+        // 加载项目和标签数据
+        const { ProjectManager } = await import('./utils/projectManager');
+        const projectManager = ProjectManager.getInstance(plugin);
+        await projectManager.loadProjects();
+        const groupedProjects = projectManager.getProjectsGroupedByStatus();
+
+        const dialog = new Dialog({
+            title: '导入 ICS 文件',
+            content: `
+                <div class="b3-dialog__content" style="padding: 16px;">
+                    <div class="fn__flex-column" style="gap: 16px;">
+                        <div class="b3-label">
+                            <div class="b3-label__text">批量设置所属项目（可选）</div>
+                            <div class="fn__hr"></div>
+                            <div style="display: flex; gap: 8px;">
+                                <select class="b3-select fn__flex-1" id="import-project-select">
+                                    <option value="">不设置</option>
+                                    ${Object.entries(groupedProjects)
+                                        .map(([statusId, statusProjects]) => {
+                                            if (statusProjects.length === 0) return '';
+                                            const status = projectManager
+                                                .getStatusManager()
+                                                .getStatusById(statusId);
+                                            const label = status
+                                                ? `${status.icon || ''} ${status.name}`
+                                                : statusId;
+                                            return `
+                                        <optgroup label="${label}">
+                                            ${statusProjects
+                                                .map(
+                                                    p => `
+                                                <option value="${p.id}">${p.name}</option>
+                                            `
+                                                )
+                                                .join('')}
+                                        </optgroup>
+                                    `;
+                                        })
+                                        .join('')}
+                                </select>
+                                <button class="b3-button b3-button--outline" id="import-create-project" title="新建项目">
+                                    <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="b3-label">
+                            <div class="b3-label__text">批量设置分类（可选）</div>
+                            <div class="fn__hr"></div>
+                            <div id="import-category-selector" class="category-selector" style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;">
+                                <!-- 分类选择器将在这里渲染 -->
+                            </div>
+                        </div>
+                        
+                        <div class="b3-label">
+                            <div class="b3-label__text">批量设置优先级（可选）</div>
+                            <div class="fn__hr"></div>
+                            <select class="b3-select fn__flex-1" id="import-priority">
+                                <option value="">不设置</option>
+                                <option value="high">高优先级</option>
+                                <option value="medium">中优先级</option>
+                                <option value="low">低优先级</option>
+                                <option value="none">无优先级</option>
+                            </select>
+                        </div>
+                        
+                        <div class="fn__hr"></div>
+                        
+                        <div class="fn__flex" style="justify-content: flex-end; gap: 8px;">
+                            <button class="b3-button b3-button--cancel">取消</button>
+                            <button class="b3-button b3-button--text" id="import-confirm">导入</button>
+                        </div>
+                    </div>
+                </div>
+            `,
+            width: '500px',
+        });
+
+        const projectSelect = dialog.element.querySelector(
+            '#import-project-select'
+        ) as HTMLSelectElement;
+        const createProjectBtn = dialog.element.querySelector(
+            '#import-create-project'
+        ) as HTMLButtonElement;
+        const categorySelector = dialog.element.querySelector(
+            '#import-category-selector'
+        ) as HTMLElement;
+        const confirmBtn = dialog.element.querySelector('#import-confirm');
+        const cancelBtn = dialog.element.querySelector('.b3-button--cancel');
+
+        let selectedCategoryId: string = '';
+
+        // 渲染分类选择器
+        async function renderCategories() {
+            if (!categorySelector) return;
+
+            try {
+                const { CategoryManager } = await import('./utils/categoryManager');
+                const categoryManager = CategoryManager.getInstance(plugin);
+                await categoryManager.initialize();
+                const categories = categoryManager.getCategories();
+
+                // 清空并重新构建
+                categorySelector.innerHTML = '';
+
+                // 添加无分类选项
+                const noCategoryEl = document.createElement('div');
+                noCategoryEl.className = 'category-option';
+                noCategoryEl.setAttribute('data-category', '');
+                noCategoryEl.textContent = '无分类';
+                noCategoryEl.style.cssText = `
+                    display: inline-flex;
+                    align-items: center;
+                    padding: 6px 12px;
+                    font-size: 13px;
+                    border-radius: 6px;
+                    background: var(--b3-theme-background-light);
+                    border: 1px solid var(--b3-border-color);
+                    color: var(--b3-theme-on-surface);
+                    cursor: pointer;
+                    transition: all 0.2s ease;
+                    user-select: none;
+                `;
+                noCategoryEl.classList.add('selected');
+                categorySelector.appendChild(noCategoryEl);
+
+                // 添加所有分类选项
+                categories.forEach(category => {
+                    const categoryEl = document.createElement('div');
+                    categoryEl.className = 'category-option';
+                    categoryEl.setAttribute('data-category', category.id);
+                    categoryEl.textContent = `${category.icon ? category.icon + ' ' : ''}${category.name}`;
+                    categoryEl.style.cssText = `
+                        display: inline-flex;
+                        align-items: center;
+                        padding: 6px 12px;
+                        font-size: 13px;
+                        border-radius: 6px;
+                        background: ${category.color}20;
+                        border: 1px solid ${category.color};
+                        color: var(--b3-theme-on-surface);
+                        cursor: pointer;
+                        transition: all 0.2s ease;
+                        user-select: none;
+                    `;
+                    categorySelector.appendChild(categoryEl);
+                });
+
+                // 绑定点击事件
+                categorySelector.querySelectorAll('.category-option').forEach(el => {
+                    el.addEventListener('click', () => {
+                        // 移除所有选中状态
+                        categorySelector.querySelectorAll('.category-option').forEach(opt => {
+                            opt.classList.remove('selected');
+                            const catId = opt.getAttribute('data-category');
+                            if (catId) {
+                                const cat = categories.find(c => c.id === catId);
+                                if (cat) {
+                                    (opt as HTMLElement).style.background = cat.color + '20';
+                                    (opt as HTMLElement).style.fontWeight = '500';
+                                }
+                            } else {
+                                (opt as HTMLElement).style.background =
+                                    'var(--b3-theme-background-light)';
+                                (opt as HTMLElement).style.fontWeight = '500';
+                            }
+                        });
+
+                        // 设置当前选中
+                        el.classList.add('selected');
+                        const catId = el.getAttribute('data-category');
+                        selectedCategoryId = catId || '';
+
+                        if (catId) {
+                            const cat = categories.find(c => c.id === catId);
+                            if (cat) {
+                                (el as HTMLElement).style.background = cat.color;
+                                (el as HTMLElement).style.color = '#fff';
+                                (el as HTMLElement).style.fontWeight = '600';
+                            }
+                        } else {
+                            (el as HTMLElement).style.background = 'var(--b3-theme-surface)';
+                            (el as HTMLElement).style.fontWeight = '600';
+                        }
+                    });
+
+                    // 悬停效果
+                    el.addEventListener('mouseenter', () => {
+                        (el as HTMLElement).style.opacity = '0.8';
+                        (el as HTMLElement).style.transform = 'translateY(-1px)';
+                    });
+
+                    el.addEventListener('mouseleave', () => {
+                        (el as HTMLElement).style.opacity = '1';
+                        (el as HTMLElement).style.transform = 'translateY(0)';
+                    });
+                });
+            } catch (error) {
+                console.error('加载分类失败:', error);
+                categorySelector.innerHTML = '<div class="category-error">加载分类失败</div>';
+            }
+        }
+
+        // 初始化时渲染分类选择器
+        await renderCategories();
+
+        // 新建项目按钮
+        createProjectBtn.addEventListener('click', async () => {
+            try {
+                // 使用 ProjectDialog 创建项目
+                const { ProjectDialog } = await import('./components/ProjectDialog');
+                const projectDialog = new ProjectDialog(undefined, plugin);
+                await projectDialog.show();
+
+                // 监听项目创建成功事件
+                const handleProjectCreated = async (event: CustomEvent) => {
+                    // 重新加载项目列表
+                    await projectManager.loadProjects();
+                    const groupedProjects = projectManager.getProjectsGroupedByStatus();
+
+                    // 清空并重新填充下拉列表
+                    projectSelect.innerHTML = '<option value="">不设置</option>';
+                    Object.entries(groupedProjects).forEach(([statusId, statusProjects]) => {
+                        if (statusProjects.length === 0) return;
+                        const status = projectManager.getStatusManager().getStatusById(statusId);
+                        const optgroup = document.createElement('optgroup');
+                        optgroup.label = status ? `${status.icon || ''} ${status.name}` : statusId;
+
+                        statusProjects.forEach(p => {
+                            const option = document.createElement('option');
+                            option.value = p.id;
+                            option.textContent = p.name;
+                            optgroup.appendChild(option);
+                        });
+                        projectSelect.appendChild(optgroup);
+                    });
+
+                    // 选中新创建的项目
+                    if (event.detail && event.detail.projectId) {
+                        projectSelect.value = event.detail.projectId;
+                    }
+
+                    // 移除事件监听器
+                    window.removeEventListener(
+                        'projectUpdated',
+                        handleProjectCreated as EventListener
+                    );
+                };
+
+                window.addEventListener('projectUpdated', handleProjectCreated as EventListener);
+            } catch (error) {
+                console.error('创建项目失败:', error);
+                await pushErrMsg('创建项目失败');
+            }
+        });
+
+        // 确定按钮
+        confirmBtn?.addEventListener('click', async () => {
+            const projectId = projectSelect?.value.trim() || undefined;
+            const priority =
+                ((dialog.element.querySelector('#import-priority') as HTMLSelectElement)
+                    ?.value as any) || undefined;
+
+            try {
+                await importIcsFile(plugin, icsContent, {
+                    projectId,
+                    categoryId: selectedCategoryId || undefined,
+                    priority,
+                });
+                dialog.destroy();
+            } catch (error) {
+                console.error('导入失败:', error);
+            }
+        });
+
+        // 取消按钮
+        cancelBtn?.addEventListener('click', () => {
+            dialog.destroy();
+        });
+    }
+
+    // ICS订阅管理对话框
+    async function showSubscriptionManagementDialog() {
+        const {
+            loadSubscriptions,
+            saveSubscriptions,
+            syncSubscription,
+            removeSubscription,
+            updateSubscriptionTaskMetadata,
+        } = await import('./utils/icsSubscription');
+        const { ProjectManager } = await import('./utils/projectManager');
+        const projectManager = ProjectManager.getInstance(plugin);
+        await projectManager.loadProjects();
+        const groupedProjects = projectManager.getProjectsGroupedByStatus();
+
+        const { CategoryManager } = await import('./utils/categoryManager');
+        const categoryManager = CategoryManager.getInstance(plugin);
+        await categoryManager.initialize();
+        const categories = categoryManager.getCategories();
+
+        const data = await loadSubscriptions(plugin);
+        const subscriptions = Object.values(data.subscriptions);
+
+        const dialog = new Dialog({
+            title: t('manageSubscriptions'),
+            content: `
+                <div class="b3-dialog__content" style="padding: 16px;">
+                    <div class="fn__flex-column" style="gap: 16px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <h3 style="margin: 0;">${t('icsSubscription')}</h3>
+                            <button class="b3-button b3-button--outline" id="add-subscription">
+                                <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
+                                ${t('addSubscription')}
+                            </button>
+                        </div>
+                        <div id="subscription-list" style="max-height: 400px; overflow-y: auto;">
+                            ${subscriptions.length === 0 ? `<div style="text-align: center; padding: 32px; color: var(--b3-theme-on-surface-light);">${t('noSubscriptions')}</div>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `,
+            width: '800px',
+        });
+
+        const listContainer = dialog.element.querySelector('#subscription-list');
+        const addBtn = dialog.element.querySelector('#add-subscription');
+
+        // 渲染订阅列表
+        function renderSubscriptions() {
+            if (subscriptions.length === 0) {
+                listContainer.innerHTML = `<div style="text-align: center; padding: 32px; color: var(--b3-theme-on-surface-light);">${t('noSubscriptions')}</div>`;
+                return;
+            }
+
+            listContainer.innerHTML = subscriptions
+                .map(
+                    sub => `
+                <div class="b3-card" style="padding: 12px; margin-bottom: 8px;">
+                    <div style="display: flex; justify-content: space-between; align-items: start;">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 500; margin-bottom: 4px;">${sub.name}</div>
+                            <div style="font-size: 12px; color: var(--b3-theme-on-surface-light); margin-bottom: 4px;">${sub.url}</div>
+                            <div style="font-size: 12px; color: var(--b3-theme-on-surface-light);">
+                                ${t('subscriptionSyncInterval')}: ${t(sub.syncInterval === '15min' ? 'every15Minutes' : sub.syncInterval === '30min' ? 'every30Minutes' : sub.syncInterval === 'hourly' ? 'everyHour' : sub.syncInterval === '4hour' ? 'every4Hours' : sub.syncInterval === '12hour' ? 'every12Hours' : 'everyDay')}
+                                ${sub.lastSync ? ` | ${t('subscriptionLastSync')}: ${new Date(sub.lastSync).toLocaleString()}` : ''}
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 4px;">
+                            <button class="b3-button b3-button--outline" data-action="toggle" data-id="${sub.id}" title="${sub.enabled ? '停用' : '启用'}">
+                                <svg class="b3-button__icon ${!sub.enabled ? 'fn__opacity' : ''}"><use xlink:href="${sub.enabled ? '#iconEye' : '#iconEyeoff'}"></use></svg>
+                            </button>
+                            <button class="b3-button b3-button--outline" data-action="sync" data-id="${sub.id}" title="${t('syncNow')}">
+                                <svg class="b3-button__icon"><use xlink:href="#iconRefresh"></use></svg>
+                            </button>
+                            <button class="b3-button b3-button--outline" data-action="edit" data-id="${sub.id}" title="${t('editSubscription')}">
+                                <svg class="b3-button__icon"><use xlink:href="#iconEdit"></use></svg>
+                            </button>
+                            <button class="b3-button b3-button--outline" data-action="delete" data-id="${sub.id}" title="${t('deleteSubscription')}">
+                                <svg class="b3-button__icon"><use xlink:href="#iconTrashcan"></use></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `
+                )
+                .join('');
+
+            // 添加事件监听
+            listContainer.querySelectorAll('[data-action]').forEach(btn => {
+                btn.addEventListener('click', async e => {
+                    const target = e.currentTarget as HTMLElement;
+                    const action = target.dataset.action;
+                    const id = target.dataset.id;
+                    const sub = subscriptions.find(s => s.id === id);
+
+                    if (action === 'toggle' && sub) {
+                        sub.enabled = !sub.enabled;
+                        data.subscriptions[sub.id] = sub;
+                        await saveSubscriptions(plugin, data);
+                        renderSubscriptions();
+                        window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                    } else if (action === 'sync' && sub) {
+                        btn.innerHTML =
+                            '<svg class="b3-button__icon fn__rotate"><use xlink:href="#iconRefresh"></use></svg>';
+                        await syncSubscription(plugin, sub);
+                        renderSubscriptions();
+                    } else if (action === 'edit' && sub) {
+                        showEditSubscriptionDialog(sub);
+                    } else if (action === 'delete' && sub) {
+                        if (confirm(t('confirmDeleteSubscription').replace('${name}', sub.name))) {
+                            await removeSubscription(plugin, sub.id);
+                            delete data.subscriptions[sub.id];
+                            await saveSubscriptions(plugin, data);
+                            subscriptions.splice(
+                                subscriptions.findIndex(s => s.id === id),
+                                1
+                            );
+                            renderSubscriptions();
+                        }
+                    }
+                });
+            });
+        }
+
+        // 编辑/新建订阅对话框
+        function showEditSubscriptionDialog(subscription?: any) {
+            const isEdit = !!subscription;
+            const editDialog = new Dialog({
+                title: isEdit ? t('editSubscription') : t('addSubscription'),
+                content: `
+                    <div class="b3-dialog__content" style="padding: 16px;">
+                        <div class="fn__flex-column" style="gap: 12px;">
+                            <div class="b3-label">
+                                <div class="b3-label__text">${t('subscriptionName')}</div>
+                                <input class="b3-text-field fn__block" id="sub-name" value="${subscription?.name || ''}" placeholder="${t('pleaseEnterSubscriptionName')}">
+                            </div>
+                            <div class="b3-label">
+                                <div class="b3-label__text">${t('subscriptionUrl')}</div>
+                                <input class="b3-text-field fn__block" id="sub-url" value="${subscription?.url || ''}" placeholder="${t('subscriptionUrlPlaceholder')}">
+                            </div>
+                            <div class="b3-label">
+                                <div class="b3-label__text">${t('subscriptionSyncInterval')}</div>
+                                <select class="b3-select fn__block" id="sub-interval">
+                                    <option value="15min" ${subscription?.syncInterval === '15min' ? 'selected' : ''}>${t('every15Minutes')}</option>
+                                    <option value="30min" ${subscription?.syncInterval === '30min' ? 'selected' : ''}>${t('every30Minutes')}</option>
+                                    <option value="hourly" ${subscription?.syncInterval === 'hourly' ? 'selected' : ''}>${t('everyHour')}</option>
+                                    <option value="4hour" ${subscription?.syncInterval === '4hour' ? 'selected' : ''}>${t('every4Hours')}</option>
+                                    <option value="12hour" ${subscription?.syncInterval === '12hour' ? 'selected' : ''}>${t('every12Hours')}</option>
+                                    <option value="daily" ${subscription?.syncInterval === 'daily' ? 'selected' : ''}>${t('everyDay')}</option>
+                                </select>
+                            </div>
+                            <div class="b3-label">
+                                <div class="b3-label__text">${t('subscriptionProject')} *</div>
+                                <div class="fn__hr"></div>
+                                <div style="display: flex; gap: 8px;">
+                                    <select class="b3-select fn__flex-1" id="sub-project" required>
+                                        <option value="">${t('pleaseSelectProject')}</option>
+                                        ${Object.entries(groupedProjects)
+                                            .map(([statusId, statusProjects]) => {
+                                                if (statusProjects.length === 0) return '';
+                                                const status = projectManager
+                                                    .getStatusManager()
+                                                    .getStatusById(statusId);
+                                                const label = status
+                                                    ? `${status.icon || ''} ${status.name}`
+                                                    : statusId;
+                                                return `
+                                            <optgroup label="${label}">
+                                                ${statusProjects
+                                                    .map(
+                                                        p => `
+                                                    <option value="${p.id}" ${subscription?.projectId === p.id ? 'selected' : ''}>${p.name}</option>
+                                                `
+                                                    )
+                                                    .join('')}
+                                            </optgroup>
+                                        `;
+                                            })
+                                            .join('')}
+                                    </select>
+                                    <button class="b3-button b3-button--outline" id="sub-create-project" title="新建项目">
+                                        <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="b3-label">
+                                <div class="b3-label__text">${t('subscriptionPriority')}</div>
+                                <select class="b3-select fn__block" id="sub-priority">
+                                    <option value="none" ${!subscription?.priority || subscription?.priority === 'none' ? 'selected' : ''}>${t('noPriority')}</option>
+                                    <option value="high" ${subscription?.priority === 'high' ? 'selected' : ''}>${t('highPriority')}</option>
+                                    <option value="medium" ${subscription?.priority === 'medium' ? 'selected' : ''}>${t('mediumPriority')}</option>
+                                    <option value="low" ${subscription?.priority === 'low' ? 'selected' : ''}>${t('lowPriority')}</option>
+                                </select>
+                            </div>
+                            <div class="b3-label">
+                                <div class="b3-label__text">${t('subscriptionCategory')}</div>
+                                <select class="b3-select fn__block" id="sub-category">
+                                    <option value="" ${!subscription?.categoryId ? 'selected' : ''}>${t('noCategory') || '无分类'}</option>
+                                    ${categories.map(c => `<option value="${c.id}" ${subscription?.categoryId === c.id ? 'selected' : ''}>${c.name}</option>`).join('')}
+                                </select>
+                            </div>
+
+                        </div>
+                        <div class="b3-dialog__action" style="margin-top: 16px;">
+                            <button class="b3-button b3-button--cancel">${t('cancel')}</button>
+                            <button class="b3-button b3-button--text" id="confirm-sub">${t('save')}</button>
+                        </div>
+                    </div>
+                `,
+                width: '500px',
+            });
+
+            const createProjectBtn = editDialog.element.querySelector(
+                '#sub-create-project'
+            ) as HTMLButtonElement;
+            const projectSelect = editDialog.element.querySelector(
+                '#sub-project'
+            ) as HTMLSelectElement;
+            const confirmBtn = editDialog.element.querySelector('#confirm-sub');
+            const cancelBtn = editDialog.element.querySelector('.b3-button--cancel');
+
+            // 新建项目按钮逻辑
+            createProjectBtn?.addEventListener('click', async () => {
+                try {
+                    const { ProjectDialog } = await import('./components/ProjectDialog');
+                    const projectDialog = new ProjectDialog(undefined, plugin);
+                    await projectDialog.show();
+
+                    const handleProjectCreated = async (event: CustomEvent) => {
+                        await projectManager.loadProjects();
+                        const groupedProjects = projectManager.getProjectsGroupedByStatus();
+
+                        projectSelect.innerHTML = `<option value="">${t('pleaseSelectProject')}</option>`;
+                        Object.entries(groupedProjects).forEach(([statusId, statusProjects]) => {
+                            if (statusProjects.length === 0) return;
+                            const status = projectManager
+                                .getStatusManager()
+                                .getStatusById(statusId);
+                            const optgroup = document.createElement('optgroup');
+                            optgroup.label = status
+                                ? `${status.icon || ''} ${status.name}`
+                                : statusId;
+
+                            statusProjects.forEach(p => {
+                                const option = document.createElement('option');
+                                option.value = p.id;
+                                option.textContent = p.name;
+                                optgroup.appendChild(option);
+                            });
+                            projectSelect.appendChild(optgroup);
+                        });
+
+                        if (event.detail && event.detail.projectId) {
+                            projectSelect.value = event.detail.projectId;
+                        }
+
+                        window.removeEventListener(
+                            'projectUpdated',
+                            handleProjectCreated as EventListener
+                        );
+                    };
+
+                    window.addEventListener(
+                        'projectUpdated',
+                        handleProjectCreated as EventListener
+                    );
+                } catch (error) {
+                    console.error('创建项目失败:', error);
+                }
+            });
+
+            confirmBtn?.addEventListener('click', async () => {
+                const name = (
+                    editDialog.element.querySelector('#sub-name') as HTMLInputElement
+                ).value.trim();
+                const url = (
+                    editDialog.element.querySelector('#sub-url') as HTMLInputElement
+                ).value.trim();
+                const syncInterval = (
+                    editDialog.element.querySelector('#sub-interval') as HTMLSelectElement
+                ).value as any;
+                const projectId = (
+                    editDialog.element.querySelector('#sub-project') as HTMLSelectElement
+                ).value;
+                const priority = (
+                    editDialog.element.querySelector('#sub-priority') as HTMLSelectElement
+                ).value as any;
+                const categoryId = (
+                    editDialog.element.querySelector('#sub-category') as HTMLSelectElement
+                ).value;
+                const tagIds: string[] = [];
+
+                if (!name) {
+                    await pushErrMsg(t('pleaseEnterSubscriptionName'));
+                    return;
+                }
+                if (!url) {
+                    await pushErrMsg(t('pleaseEnterSubscriptionUrl'));
+                    return;
+                }
+                if (!projectId) {
+                    await pushErrMsg(t('pleaseSelectProject'));
+                    return;
+                }
+
+                const subData = {
+                    id: subscription?.id || window.Lute?.NewNodeID?.() || `sub-${Date.now()}`,
+                    name,
+                    url,
+                    syncInterval,
+                    projectId,
+                    priority,
+                    categoryId,
+                    tagIds,
+                    enabled: true,
+                    createdAt: subscription?.createdAt || new Date().toISOString(),
+                };
+
+                data.subscriptions[subData.id] = subData;
+                await saveSubscriptions(plugin, data);
+
+                if (isEdit) {
+                    const index = subscriptions.findIndex(s => s.id === subData.id);
+                    subscriptions[index] = subData;
+                    // 更新现有任务元数据
+                    await updateSubscriptionTaskMetadata(subData);
+                } else {
+                    subscriptions.push(subData);
+                }
+
+                renderSubscriptions();
+                editDialog.destroy();
+                await pushMsg(isEdit ? t('subscriptionUpdated') : t('subscriptionCreated'));
+            });
+
+            cancelBtn?.addEventListener('click', () => {
+                editDialog.destroy();
+            });
+        }
+
+        addBtn?.addEventListener('click', () => {
+            showEditSubscriptionDialog();
+        });
+
+        renderSubscriptions();
+    }
 </script>
 
 <div class="fn__flex-1 fn__flex config__panel">
@@ -804,6 +1630,7 @@
                 data-name="editor"
                 class:b3-list-item--focus={group.name === focusGroup}
                 class="b3-list-item"
+                role="button"
                 on:click={() => {
                     focusGroup = group.name;
                 }}

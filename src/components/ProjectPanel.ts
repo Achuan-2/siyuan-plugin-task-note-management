@@ -1,9 +1,7 @@
-import { showMessage, confirm, Menu, openTab, Dialog } from "siyuan";
+import { showMessage, confirm, Menu, Dialog } from "siyuan";
 import { PomodoroStatsView } from "./PomodoroStatsView";
-import { TaskTimeStatsView } from "./TaskTimeStatsView";
 
 // 添加四象限面板常量
-const EISENHOWER_TAB_TYPE = "reminder_eisenhower_tab";
 import { readProjectData, writeProjectData, getBlockByID, openBlock, readReminderData, writeReminderData } from "../api";
 import { compareDateStrings, getLogicalDateString } from "../utils/dateUtils";
 import { CategoryManager } from "../utils/categoryManager";
@@ -12,21 +10,21 @@ import { ProjectDialog } from "./ProjectDialog";
 import { CategoryManageDialog } from "./CategoryManageDialog";
 import { StatusManageDialog } from "./StatusManageDialog";
 import { ProjectKanbanView } from "./ProjectKanbanView";
+import { BlockBindingDialog } from "./BlockBindingDialog";
 import { t } from "../utils/i18n";
+import { getAllReminders } from "../utils/icsSubscription";
 
 
 export class ProjectPanel {
     private container: HTMLElement;
     private projectsContainer: HTMLElement;
     private filterSelect: HTMLSelectElement;
-    private categoryFilterSelect: HTMLSelectElement;
     private categoryFilterButton: HTMLButtonElement;
     private sortButton: HTMLButtonElement;
     private searchInput: HTMLInputElement;
     private showOnlyWithDoingCheckbox: HTMLInputElement;
     private plugin: any;
     private currentTab: string = 'all';
-    private currentCategoryFilter: string = 'all';
     private selectedCategories: string[] = [];
     private currentSort: string = 'priority';
     private currentSortOrder: 'asc' | 'desc' = 'desc';
@@ -166,16 +164,6 @@ export class ProjectPanel {
                 this.showPomodoroStatsView();
             });
             actionContainer.appendChild(pomodoroStatsBtn);
-
-            // 添加任务时间统计按钮
-            const taskTimeStatsBtn = document.createElement('button');
-            taskTimeStatsBtn.className = 'b3-button b3-button--outline';
-            taskTimeStatsBtn.innerHTML = '&#x23F1;';
-            taskTimeStatsBtn.title = t("taskTimeStats") || "任务时间统计";
-            taskTimeStatsBtn.addEventListener('click', () => {
-                this.showTaskTimeStatsView();
-            });
-            actionContainer.appendChild(taskTimeStatsBtn);
 
             // 添加刷新按钮
             const refreshBtn = document.createElement('button');
@@ -495,7 +483,7 @@ export class ProjectPanel {
 
             // 预先读取提醒数据缓存，用于计算每个项目的任务计数
             try {
-                this.reminderDataCache = await readReminderData();
+                this.reminderDataCache = await getAllReminders(this.plugin);
             } catch (err) {
                 console.warn('读取提醒数据失败，计数将异步回退：', err);
                 this.reminderDataCache = null;
@@ -1016,7 +1004,7 @@ export class ProjectPanel {
         try {
             let reminderData = this.reminderDataCache;
             if (!reminderData) {
-                reminderData = await readReminderData();
+                reminderData = await getAllReminders(this.plugin);
                 this.reminderDataCache = reminderData;
             }
 
@@ -1094,9 +1082,9 @@ export class ProjectPanel {
             for (const r of topLevelReminders) {
                 if (!r || typeof r !== 'object') continue;
                 if (typeof pomodoroManager.getAggregatedReminderPomodoroCount === 'function') {
-                    totalPomodoro += await pomodoroManager.getAggregatedReminderPomodoroCount(r.id);
+                    totalPomodoro += await pomodoroManager.getAggregatedReminderPomodoroCount((r as any).id);
                 } else if (typeof pomodoroManager.getReminderPomodoroCount === 'function') {
-                    totalPomodoro += await pomodoroManager.getReminderPomodoroCount(r.id);
+                    totalPomodoro += await pomodoroManager.getReminderPomodoroCount((r as any).id);
                 }
             }
         } catch (e) {
@@ -1882,46 +1870,18 @@ export class ProjectPanel {
     }
 
     private showBindToBlockDialog(project: any) {
-        const dialog = new Dialog({
-            title: t("bindToBlock"),
-            content: `<div class="b3-dialog__content">
-                        <input id="blockIdInput" class="b3-text-field fn__block" placeholder="${t("pleaseEnterBlockID") || "请输入块ID"}">
-                      </div>
-                      <div class="b3-dialog__action">
-                        <button class="b3-button b3-button--cancel">${t("cancel") || "取消"}</button><div class="fn__space"></div>
-                        <button class="b3-button b3-button--primary">${t("confirm") || "确定"}</button>
-                      </div>`,
-            width: "520px",
+        const blockBindingDialog = new BlockBindingDialog(this.plugin, async (blockId: string) => {
+            try {
+                await this.bindProjectToBlock(project, blockId);
+                showMessage(t("bindSuccess") || "绑定成功");
+            } catch (error) {
+                showMessage(t("bindFailed") || "绑定失败");
+                console.error(error);
+            }
+        }, {
+            defaultTab: 'bind'
         });
-
-        const input = dialog.element.querySelector('#blockIdInput') as HTMLInputElement;
-        const cancelBtn = dialog.element.querySelector('.b3-button--cancel');
-        const confirmBtn = dialog.element.querySelector('.b3-button--primary');
-
-        cancelBtn?.addEventListener('click', () => {
-            dialog.destroy();
-        });
-
-        if (confirmBtn) {
-            confirmBtn.addEventListener('click', async () => {
-                const blockId = input.value.trim();
-                if (blockId) {
-                    try {
-                        const targetBlock = await getBlockByID(blockId);
-                        if (targetBlock) {
-                            await this.bindProjectToBlock(project, blockId);
-                            showMessage(t("bindSuccess") || "绑定成功");
-                            dialog.destroy();
-                        } else {
-                            showMessage(t("blockNotFound") || "未找到块");
-                        }
-                    } catch (error) {
-                        showMessage(t("bindFailed") || "绑定失败");
-                        console.error(error);
-                    }
-                }
-            });
-        }
+        blockBindingDialog.show();
     }
 
     private async bindProjectToBlock(project: any, blockId: string) {
@@ -2012,19 +1972,6 @@ export class ProjectPanel {
         } catch (error) {
             console.error('打开番茄钟统计视图失败:', error);
             showMessage("打开番茄钟统计视图失败");
-        }
-    }
-
-    /**
-     * 显示任务时间统计视图
-     */
-    private showTaskTimeStatsView() {
-        try {
-            const statsView = new TaskTimeStatsView(this.plugin);
-            statsView.show();
-        } catch (error) {
-            console.error('打开任务时间统计视图失败:', error);
-            showMessage("打开任务时间统计视图失败");
         }
     }
 

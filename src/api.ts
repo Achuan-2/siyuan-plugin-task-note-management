@@ -91,6 +91,14 @@ export async function createDocWithMd(notebook: NotebookId, path: string, markdo
     return request(url, data);
 }
 
+export async function searchDocs(k: string, flashcard: boolean = false): Promise<IResSearchDocs[]> {
+    let data = {
+        k: k,
+        flashcard: flashcard
+    };
+    let url = '/api/filetree/searchDocs';
+    return request(url, data);
+}
 
 export async function renameDoc(notebook: NotebookId, path: string, title: string): Promise<DocumentId> {
     let data = {
@@ -287,6 +295,14 @@ export async function getBlockDOM(id: BlockId) {
     return request(url, data);
 }
 
+export async function getHeadingChildrenDOM(id: BlockId) {
+    let data = {
+        id: id
+    }
+    let url = '/api/block/getHeadingChildrenDOM';
+    return request(url, data);
+}
+
 export async function getChildBlocks(id: BlockId): Promise<IResGetChildBlock[]> {
     let data = {
         id: id
@@ -396,7 +412,14 @@ export async function sql(sql: string): Promise<any[]> {
     return request(url, sqldata);
 }
 
+export async function getHeadingDeleteTransaction(blockId: string): Promise<any> {
+    let data = { id: blockId };
+    let url = '/api/block/getHeadingDeleteTransaction';
+    return request(url, data);
+}
+
 export async function getBlockByID(blockId: string): Promise<Block> {
+    // 先flush
     let sqlScript = `select * from blocks where id ='${blockId}'`;
     let data = await sql(sqlScript);
     return data[0];
@@ -494,6 +517,32 @@ export const getFileBlob = async (path: string): Promise<Blob | null> => {
     }
     let data = await response.blob();
     return data;
+}
+
+export const getFileStat = async (path: string): Promise<{ mtime: number } | null> => {
+    // Extract directory and filename from path
+    const lastSlashIndex = path.lastIndexOf('/');
+    if (lastSlashIndex === -1) {
+        return null; // Invalid path
+    }
+    const dir = path.substring(0, lastSlashIndex);
+    const filename = path.substring(lastSlashIndex + 1);
+
+    try {
+        const dirData = await readDir(dir);
+        if (!dirData || !Array.isArray(dirData)) {
+            return null;
+        }
+        const fileEntry = dirData.find(entry => entry.name === filename);
+        if (!fileEntry || fileEntry.isDir) {
+            return null;
+        }
+        // updated is in seconds, convert to milliseconds
+        return { mtime: fileEntry.updated * 1000 };
+    } catch (error) {
+        console.warn('getFileStat failed:', error);
+        return null;
+    }
 }
 
 
@@ -1063,9 +1112,18 @@ export async function ensureHabitGroupDataFile(): Promise<void> {
 
 // **************************************** ICS Cloud Upload ****************************************
 
-export async function uploadIcsToCloud(blockId: string): Promise<string | null> {
+export async function uploadCloud(paths?: string[], silent: boolean = false): Promise<string | null> {
     try {
-        const response = await fetchPost('/api/asset/uploadCloud', { id: blockId });
+        // 支持两种调用方式：传入 blockId（旧用法）或传入 paths（资源路径数组）
+        const payload: any = {};
+        if (Array.isArray(paths) && paths.length > 0) {
+            payload.paths = paths; // 需要assets前缀
+        }
+        if (silent) {
+            payload.ignorePushMsg = true;
+        }
+
+        await fetchPost('/api/asset/uploadCloudByAssetsPaths', payload);
         return null;
     } catch (error) {
         console.error('上传ICS到云端失败:', error);

@@ -54,6 +54,14 @@ export class PomodoroStatsView {
     private createContent(): string {
         return `
             <div class="pomodoro-stats-view">
+                <div class="stats-switch">
+                    <button class="stats-switch-btn" data-mode="task">
+                        ✅ ${t("taskStats")}
+                    </button>
+                    <button class="stats-switch-btn active" data-mode="pomodoro">
+                        🍅 ${t("pomodoroStats")}
+                    </button>
+                </div>
                 <!-- 导航标签 -->
                 <div class="stats-nav">
                     <button class="nav-btn ${this.currentView === 'overview' ? 'active' : ''}" data-view="overview">
@@ -1525,6 +1533,18 @@ export class PomodoroStatsView {
 
     private handleClick(event: Event) {
         const target = event.target as HTMLElement;
+
+        if (target.classList.contains('stats-switch-btn')) {
+            const mode = target.dataset.mode;
+            if (mode === 'task') {
+                this.dialog.destroy();
+                import("./TaskStatsView").then(({ TaskStatsView }) => {
+                    const statsView = new TaskStatsView();
+                    statsView.show();
+                });
+            }
+            return;
+        }
 
         if (target.classList.contains('nav-btn')) {
             const view = target.dataset.view as any;

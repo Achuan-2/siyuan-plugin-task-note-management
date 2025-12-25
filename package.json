@@ -19,6 +19,7 @@
     "@fullcalendar/core": "^6.1.10",
     "@fullcalendar/daygrid": "^6.1.10",
     "@fullcalendar/interaction": "^6.1.10",
+    "@fullcalendar/multimonth": "^6.1.20",
     "@fullcalendar/timegrid": "^6.1.10",
     "@sveltejs/vite-plugin-svelte": "^3.1.0",
     "@tsconfig/svelte": "^4.0.1",
@@ -40,12 +41,14 @@
     "vite-plugin-zip-pack": "^1.0.5"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.956.0",
     "@types/node-notifier": "^8.0.5",
-    "chrono-node": "^2.8.2",
+    "chrono-node": "2.8.2",
     "echarts": "^5.6.0",
     "emoji-picker-element": "^1.28.0",
     "ical.js": "^2.2.1",
     "ics": "^3.8.1",
-    "lunar-typescript": "^1.8.2"
+    "lunar-typescript": "^1.8.2",
+    "node-ical": "^0.22.1"
   }
 }

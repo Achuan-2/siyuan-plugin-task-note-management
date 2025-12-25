@@ -10,6 +10,8 @@ import { CategoryManageDialog } from "./CategoryManageDialog";
 import { generateRepeatInstances, getRepeatDescription } from "../utils/repeatUtils";
 import { getSolarDateLunarString } from "../utils/lunarUtils";
 import { QuickReminderDialog } from "./QuickReminderDialog";
+import { BlockBindingDialog } from "./BlockBindingDialog";
+import { getAllReminders, saveReminders } from "../utils/icsSubscription";
 
 // 层级化任务接口
 interface HierarchicalTask {
@@ -1160,7 +1162,7 @@ export class ProjectKanbanView {
 
                 // 保存任务数据（如果有任务被修改或删除）
                 if (hasTasks) {
-                    await writeReminderData(reminderData);
+                    await saveReminders(this.plugin, reminderData);
                     window.dispatchEvent(new CustomEvent('reminderUpdated'));
                 }
 
@@ -1692,7 +1694,7 @@ export class ProjectKanbanView {
                 return;
             }
 
-            await writeReminderData(reminderData);
+            await saveReminders(this.plugin, reminderData);
 
             // 广播更新事件
             window.dispatchEvent(new CustomEvent('reminderUpdated'));
@@ -1767,7 +1769,7 @@ export class ProjectKanbanView {
                 }
             }
 
-            await writeReminderData(reminderData);
+            await saveReminders(this.plugin, reminderData);
 
             // 广播更新事件
             window.dispatchEvent(new CustomEvent('reminderUpdated'));
@@ -1798,7 +1800,7 @@ export class ProjectKanbanView {
             // 保存当前滚动状态，避免界面刷新时丢失滚动位置
             this.captureScrollState();
 
-            const reminderData = await readReminderData();
+            const reminderData = await getAllReminders(this.plugin);
             const projectTasks = Object.values(reminderData).filter((reminder: any) => reminder && reminder.projectId === this.projectId);
             // 修复遗留：如果任务中存在 customGroupId === 'ungrouped'，视为未分组（删除该字段）
             projectTasks.forEach((t: any) => {
@@ -3749,7 +3751,10 @@ export class ProjectKanbanView {
         if (level > 0) {
             taskEl.classList.add('is-subtask');
         }
-        taskEl.draggable = true;
+        taskEl.draggable = !task.isSubscribed;
+        if (task.isSubscribed) {
+            taskEl.style.cursor = 'default';
+        }
         taskEl.dataset.taskId = task.id;
 
         const priority = task.priority || 'none';
@@ -3846,11 +3851,16 @@ export class ProjectKanbanView {
         checkboxEl.className = 'kanban-task-checkbox';
         checkboxEl.checked = task.completed;
         checkboxEl.title = '点击完成/取消完成任务';
-        checkboxEl.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const completed = checkboxEl.checked;
-            this.toggleTaskCompletion(task, completed);
-        });
+        if (task.isSubscribed) {
+            checkboxEl.disabled = true;
+            checkboxEl.title = t("subscribedTaskReadOnly") || "订阅任务（只读）";
+        } else {
+            checkboxEl.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const completed = checkboxEl.checked;
+                this.toggleTaskCompletion(task, completed);
+            });
+        }
         taskMainContainer.appendChild(checkboxEl);
 
         const taskContentContainer = document.createElement('div');
@@ -4164,7 +4174,7 @@ export class ProjectKanbanView {
                                 const reminderData = await readReminderData();
                                 if (reminderData[task.id]) {
                                     reminderData[task.id].tagIds = validTagIds;
-                                    await writeReminderData(reminderData);
+                                    await saveReminders(this.plugin, reminderData);
                                 }
                             } catch (error) {
                                 console.error('清理无效标签失败:', error);
@@ -4294,10 +4304,9 @@ export class ProjectKanbanView {
             taskEl.appendChild(progressContainer);
         }
 
-        // 添加拖拽事件（状态切换）
+        // 所有任务均启用拖拽（订阅任务也支持排序）
+        taskEl.draggable = true;
         this.addTaskDragEvents(taskEl, task);
-
-        // 添加任务拖拽事件处理（排序和父子任务设置）
         taskEl.addEventListener('dragover', (e) => {
             if (this.isDragging && this.draggedElement && this.draggedElement !== taskEl) {
                 const targetTask = this.getTaskFromElement(taskEl);
@@ -4329,7 +4338,7 @@ export class ProjectKanbanView {
 
                     if (targetStatus && targetStatus !== 'completed') {
                         const draggedStatus = this.getTaskStatus(this.draggedTask);
-                        if (draggedStatus !== targetStatus) {
+                        if (draggedStatus !== targetStatus && !this.draggedTask.isSubscribed) {
                             canChangeStatus = true;
                         }
                     }
@@ -4457,6 +4466,11 @@ export class ProjectKanbanView {
         // 添加右键菜单
         taskEl.addEventListener('contextmenu', async (e) => {
             e.preventDefault();
+            e.stopPropagation();
+            if (task.isSubscribed) {
+                this.showSubscribedTaskContextMenu(e, task);
+                return;
+            }
             await this.showTaskContextMenu(e, task);
         });
 
@@ -4719,6 +4733,51 @@ export class ProjectKanbanView {
             });
             // 清除所有指示器和状态
             this.updateIndicator('none', null, null);
+        });
+    }
+
+    private showSubscribedTaskContextMenu(event: MouseEvent, task: any) {
+        const menu = new Menu("subscribedTaskContextMenu");
+
+        menu.addItem({
+            iconHTML: "ℹ️",
+            label: t("subscribedTaskReadOnly") || "订阅任务（只读）",
+            disabled: true
+        });
+        menu.addSeparator();
+
+        // 导航选项
+        const targetId = task.blockId || task.docId;
+        if (targetId) {
+            menu.addItem({
+                iconHTML: "📖",
+                label: t("openNote") || "打开笔记",
+                click: () => this.openBlockTab(targetId)
+            });
+            menu.addItem({
+                iconHTML: "📋",
+                label: t("copyBlockRef") || "复制块引用",
+                click: () => this.copyBlockRef(task)
+            });
+        }
+
+        menu.addSeparator();
+
+        // 生产力工具
+        menu.addItem({
+            iconHTML: "🍅",
+            label: t("startPomodoro") || "开始番茄钟",
+            click: () => this.startPomodoro(task)
+        });
+        menu.addItem({
+            iconHTML: "⏱️",
+            label: t("startCountUp") || "开始正向计时",
+            click: () => this.startPomodoroCountUp(task)
+        });
+
+        menu.open({
+            x: event.clientX,
+            y: event.clientY,
         });
     }
 
@@ -5100,7 +5159,7 @@ export class ProjectKanbanView {
                 }
             }
 
-            await writeReminderData(reminderData);
+            await saveReminders(this.plugin, reminderData);
 
             // 更新本地缓存
             const localTask = this.tasks.find(t => t.id === task.id);
@@ -5226,7 +5285,7 @@ export class ProjectKanbanView {
                     }
                 }
 
-                await writeReminderData(reminderData);
+                await saveReminders(this.plugin, reminderData);
 
                 // 更新块的书签状态（仅针对绑定块的任务）
                 if (task.blockId || task.docId) {
@@ -6070,7 +6129,7 @@ export class ProjectKanbanView {
                         }
                     }
 
-                    await writeReminderData(reminderData);
+                    await saveReminders(this.plugin, reminderData);
 
                     // 触发更新事件
                     window.dispatchEvent(new CustomEvent('reminderUpdated'));
@@ -7226,7 +7285,7 @@ export class ProjectKanbanView {
                 // 设置实例的优先级
                 originalReminder.repeat.instanceModifications[task.date].priority = priority;
 
-                await writeReminderData(reminderData);
+                await saveReminders(this.plugin, reminderData);
                 showMessage("实例优先级已更新");
             } else {
                 // 普通任务或原始重复事件，直接修改
@@ -7243,7 +7302,7 @@ export class ProjectKanbanView {
                         });
                     }
 
-                    await writeReminderData(reminderData);
+                    await saveReminders(this.plugin, reminderData);
                     showMessage("优先级已更新");
                 } else {
                     showMessage("任务不存在");
@@ -7281,251 +7340,26 @@ export class ProjectKanbanView {
 
     // 显示绑定到块的对话框（支持绑定现有块或创建新文档并绑定）
     private showBindToBlockDialog(reminder: any) {
-        const dialog = new Dialog({
-            title: t("bindReminderToBlock"),
-            content: `
-                <div class="bind-to-block-dialog">
-                    <div class="b3-dialog__content">
-                        <div class="mode-toggle" style="margin-bottom: 16px;">
-                            <button id="bindExistingBtn" class="b3-button b3-button--outline mode-btn active" style="margin-right: 8px;">
-                                绑定现有块
-                            </button>
-                            <button id="createNewBtn" class="b3-button b3-button--outline mode-btn">
-                                ${t("createNewDocument")}
-                            </button>
-                        </div>
-
-                        <div id="bindExistingPanel" class="mode-panel">
-                            <div class="b3-form__group">
-                                <label class="b3-form__label">输入块ID</label>
-                                <div class="b3-form__desc">支持块ID或块引用格式，如：((blockId '标题'))</div>
-                                <input type="text" id="blockIdInput" class="b3-text-field" placeholder="请输入块ID或粘贴块引用" style="width: 100%; margin-top: 8px;">
-                            </div>
-                            <div class="b3-form__group" id="selectedBlockInfo" style="display: none;">
-                                <label class="b3-form__label">块信息预览</label>
-                                <div id="blockContent" class="block-content-preview" style="
-                                    padding: 8px;
-                                    background-color: var(--b3-theme-surface-lighter);
-                                    border-radius: 4px;
-                                    border: 1px solid var(--b3-theme-border);
-                                    max-height: 100px;
-                                    overflow-y: auto;
-                                    font-size: 12px;
-                                    color: var(--b3-theme-on-surface);
-                                "></div>
-                            </div>
-                        </div>
-
-                        <div id="createNewPanel" class="mode-panel" style="display: none;">
-                            <div class="b3-form__group">
-                                <label class="b3-form__label">文档标题</label>
-                                <input type="text" id="docTitleInput" class="b3-text-field" placeholder="请输入文档标题" style="width: 100%; margin-top: 8px;">
-                            </div>
-                            <div class="b3-form__group">
-                                <label class="b3-form__label">文档内容（可选）</label>
-                                <textarea id="docContentInput" class="b3-text-field" placeholder="请输入文档内容" style="width: 100%; margin-top: 8px; min-height: 80px; resize: vertical;"></textarea>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="b3-dialog__action">
-                        <button class="b3-button b3-button--cancel" id="bindCancelBtn">${t("cancel")}</button>
-                        <button class="b3-button b3-button--primary" id="bindConfirmBtn">${t("bindToBlock")}</button>
-                    </div>
-                </div>
-            `,
-            width: "500px",
-            height: "400px"
-        });
-
-        // 获取DOM元素
-        const bindExistingBtn = dialog.element.querySelector('#bindExistingBtn') as HTMLButtonElement;
-        const createNewBtn = dialog.element.querySelector('#createNewBtn') as HTMLButtonElement;
-        const bindExistingPanel = dialog.element.querySelector('#bindExistingPanel') as HTMLElement;
-        const createNewPanel = dialog.element.querySelector('#createNewPanel') as HTMLElement;
-
-        const blockIdInput = dialog.element.querySelector('#blockIdInput') as HTMLInputElement;
-        const selectedBlockInfo = dialog.element.querySelector('#selectedBlockInfo') as HTMLElement;
-        const blockContentEl = dialog.element.querySelector('#blockContent') as HTMLElement;
-
-        const docTitleInput = dialog.element.querySelector('#docTitleInput') as HTMLInputElement;
-        const docContentInput = dialog.element.querySelector('#docContentInput') as HTMLTextAreaElement;
-
-        const cancelBtn = dialog.element.querySelector('#bindCancelBtn') as HTMLButtonElement;
-        const confirmBtn = dialog.element.querySelector('#bindConfirmBtn') as HTMLButtonElement;
-
-        let currentMode = 'existing';
-
-        // 模式切换事件
-        bindExistingBtn.addEventListener('click', () => {
-            currentMode = 'existing';
-            bindExistingBtn.classList.add('active');
-            createNewBtn.classList.remove('active');
-            bindExistingPanel.style.display = 'block';
-            createNewPanel.style.display = 'none';
-            confirmBtn.textContent = t("bindToBlock");
-        });
-
-        createNewBtn.addEventListener('click', () => {
-            currentMode = 'create';
-            createNewBtn.classList.add('active');
-            bindExistingBtn.classList.remove('active');
-            createNewPanel.style.display = 'block';
-            bindExistingPanel.style.display = 'none';
-            confirmBtn.textContent = t("createDocumentAndBind");
-
-            // 自动填充标题
-            if (!docTitleInput.value && reminder.title) {
-                docTitleInput.value = reminder.title;
-            }
-        });
-
-        // 监听块ID输入变化
-        blockIdInput.addEventListener('input', async () => {
-            const inputValue = blockIdInput.value.trim();
-
-            // 尝试从输入内容中提取块ID（支持块引用格式）
-            let blockId = this.extractBlockIdFromText(inputValue);
-
-            // 如果没有匹配到块引用格式，则将输入作为纯块ID使用
-            if (!blockId) {
-                blockId = inputValue;
-            }
-
-            if (blockId && blockId.length >= 20) { // 块ID通常是20位字符
-                try {
-                    const block = await getBlockByID(blockId);
-                    if (block) {
-                        const blockContent = block.content || block.fcontent || '未命名块';
-                        blockContentEl.textContent = blockContent;
-                        selectedBlockInfo.style.display = 'block';
-                    } else {
-                        selectedBlockInfo.style.display = 'none';
-                    }
-                } catch (error) {
-                    selectedBlockInfo.style.display = 'none';
-                }
-            } else {
-                selectedBlockInfo.style.display = 'none';
-            }
-        });
-
-        // 取消按钮
-        cancelBtn.addEventListener('click', () => {
-            dialog.destroy();
-        });
-
-        // 确认按钮
-        confirmBtn.addEventListener('click', async () => {
-            if (currentMode === 'existing') {
-                // 绑定现有块模式
-                const inputValue = blockIdInput.value.trim();
-                if (!inputValue) {
-                    showMessage('请输入块ID');
-                    return;
-                }
-
-                // 尝试从输入内容中提取块ID（支持块引用格式）
-                let blockId = this.extractBlockIdFromText(inputValue);
-
-                // 如果没有匹配到块引用格式，则将输入作为纯块ID使用
-                if (!blockId) {
-                    blockId = inputValue;
-                }
-
-                if (!blockId || blockId.length < 20) {
-                    showMessage('请输入有效的块ID或块引用');
-                    return;
-                }
-
-                try {
-                    await this.bindReminderToBlock(reminder, blockId);
-                    showMessage(t("reminderBoundToBlock"));
-                    dialog.destroy();
-                    this.queueLoadTasks();
-                } catch (error) {
-                    console.error('绑定提醒到块失败:', error);
-                    showMessage(t("bindToBlockFailed"));
-                }
-            } else {
-                // 创建新文档模式
-                const title = docTitleInput.value.trim();
-                const content = docContentInput.value.trim();
-
-                if (!title) {
-                    showMessage(t("pleaseEnterTitle"));
-                    return;
-                }
-
-                try {
-                    await this.createDocumentAndBind(reminder, title, content);
-                    showMessage(t("documentCreatedAndBound"));
-                    dialog.destroy();
-                    this.queueLoadTasks();
-                } catch (error) {
-                    console.error('创建文档并绑定失败:', error);
-                    showMessage(t("createDocumentFailed"));
-                }
-            }
-        });
-
-        // 自动聚焦输入框
-        setTimeout(() => {
-            if (currentMode === 'existing') {
-                blockIdInput.focus();
-            } else {
-                docTitleInput.focus();
-            }
-        }, 100);
-    }
-
-
-    /**
-     * 创建文档并绑定提醒（复用 ReminderPanel 中实现）
-     */
-    private async createDocumentAndBind(reminder: any, title: string, content: string): Promise<string> {
-        try {
-            // 获取插件设置
-            const settings = await this.plugin.loadSettings();
-            const notebook = settings.newDocNotebook;
-            const pathTemplate = settings.newDocPath || '/{{now | date "2006/200601"}}/';
-
-            if (!notebook) {
-                throw new Error(t("pleaseConfigureNotebook"));
-            }
-
-            // 导入API函数
-            const { renderSprig, createDocWithMd } = await import("../api");
-
-            // 渲染路径模板
-            let renderedPath: string;
+        const blockBindingDialog = new BlockBindingDialog(this.plugin, async (blockId: string) => {
             try {
-                // 需要检测pathTemplate是否以/结尾，如果不是，则添加/
-                if (!pathTemplate.endsWith('/')) {
-                    renderedPath = pathTemplate + '/';
-                } else {
-                    renderedPath = pathTemplate;
-                }
-                renderedPath = await renderSprig(renderedPath + title);
+                await this.bindReminderToBlock(reminder, blockId);
+                showMessage(t("reminderBoundToBlock"));
+                this.queueLoadTasks();
             } catch (error) {
-                console.error('渲染路径模板失败:', error);
-                throw new Error(t("renderPathFailed"));
+                console.error('绑定提醒到块失败:', error);
+                showMessage(t("bindToBlockFailed"));
             }
-
-            // 准备文档内容
-            const docContent = content;
-
-            // 创建文档
-            const docId = await createDocWithMd(notebook, renderedPath, docContent);
-            await refreshSql();
-            // 绑定提醒到新创建的文档
-            await this.bindReminderToBlock(reminder, docId);
-
-            return docId;
-        } catch (error) {
-            console.error('创建文档并绑定失败:', error);
-            throw error;
-        }
+        }, {
+            defaultTab: 'bind',
+            defaultParentId: reminder.parentId,
+            defaultProjectId: this.projectId, // 使用当前项目ID
+            defaultCustomGroupId: reminder.customGroupId,
+            reminder: reminder
+        });
+        blockBindingDialog.show();
     }
+
+
 
     /**
      * 将提醒绑定到指定的块（adapted from ReminderPanel）
@@ -7537,6 +7371,7 @@ export class ProjectKanbanView {
 
             if (reminderData[reminderId]) {
                 // 获取块信息
+                await refreshSql();
                 const block = await getBlockByID(blockId);
                 if (!block) {
                     throw new Error('目标块不存在');
@@ -7547,7 +7382,7 @@ export class ProjectKanbanView {
                 reminderData[reminderId].docId = block.root_id || blockId;
                 reminderData[reminderId].isQuickReminder = false; // 移除快速提醒标记
 
-                await writeReminderData(reminderData);
+                await saveReminders(this.plugin, reminderData);
 
                 // 将绑定的块添加项目ID属性 custom-task-projectId
                 const projectId = reminderData[reminderId].projectId;
@@ -7630,7 +7465,7 @@ export class ProjectKanbanView {
             });
 
             if (unboundCount > 0) {
-                await writeReminderData(reminderData);
+                await saveReminders(this.plugin, reminderData);
 
                 // 触发更新事件
                 window.dispatchEvent(new CustomEvent('reminderUpdated'));
@@ -7709,6 +7544,9 @@ export class ProjectKanbanView {
 
         // 不能将任务拖拽到自己身上
         if (draggedTask.id === targetTask.id) return false;
+
+        // 订阅任务不支持设置父子关系
+        if (draggedTask.isSubscribed || targetTask.isSubscribed) return false;
 
         // 如果两个任务都是子任务且属于同一个父任务，不显示父子关系提示
         // （应该显示排序提示）
@@ -7911,7 +7749,7 @@ export class ProjectKanbanView {
                 reminderData[childTask.id].kanbanStatus = 'doing';
             }
 
-            await writeReminderData(reminderData);
+            await saveReminders(this.plugin, reminderData);
             window.dispatchEvent(new CustomEvent('reminderUpdated'));
 
             // 重新加载任务以更新显示（防抖）
@@ -7945,7 +7783,7 @@ export class ProjectKanbanView {
             // 移除父任务ID
             delete reminderData[childTask.id].parentId;
 
-            await writeReminderData(reminderData);
+            await saveReminders(this.plugin, reminderData);
             window.dispatchEvent(new CustomEvent('reminderUpdated'));
 
             showMessage(`"${childTask.title}" 已从 "${parentTitle}" 中独立出来`);
@@ -7966,13 +7804,14 @@ export class ProjectKanbanView {
             const midpoint = rect.top + rect.height / 2;
             const insertBefore = event.clientY < midpoint;
 
+            // 如果是订阅任务且试图改变状态（KanbanStatus），则由于只读限制应阻止（除了同状态内的排序）
+            // 但如果 reorderTasks 中处理了这些逻辑，我们直接调用
             await this.reorderTasks(this.draggedTask, targetTask, insertBefore);
 
-            showMessage("排序已更新");
-            // 重新加载由 reorderTasks 中派发的 'reminderUpdated' 事件触发，此处无需重复调用
+            showMessage(t("sortUpdated") || "排序已更新");
         } catch (error) {
             console.error('处理拖放排序失败:', error);
-            showMessage("排序更新失败");
+            showMessage(t("sortUpdateFailed") || "排序更新失败");
         }
     }
 
@@ -8056,7 +7895,7 @@ export class ProjectKanbanView {
                 reminderData[task.id].sort = index * 10;
             });
 
-            await writeReminderData(reminderData);
+            await saveReminders(this.plugin, reminderData);
             window.dispatchEvent(new CustomEvent('reminderUpdated'));
 
         } catch (error) {
@@ -8067,7 +7906,7 @@ export class ProjectKanbanView {
 
     private async reorderTasks(draggedTask: any, targetTask: any, insertBefore: boolean) {
         try {
-            const reminderData = await readReminderData();
+            const reminderData = await getAllReminders(this.plugin);
 
             const draggedId = draggedTask.id;
             const targetId = targetTask.id;
@@ -8150,7 +7989,7 @@ export class ProjectKanbanView {
                     reminderData[task.id].sort = index * 10;
                 });
 
-                await writeReminderData(reminderData);
+                await saveReminders(this.plugin, reminderData);
                 window.dispatchEvent(new CustomEvent('reminderUpdated'));
                 return;
             }
@@ -8179,7 +8018,7 @@ export class ProjectKanbanView {
                     reminderData[task.id].sort = index * 10;
                 });
 
-                await writeReminderData(reminderData);
+                await saveReminders(this.plugin, reminderData);
                 window.dispatchEvent(new CustomEvent('reminderUpdated'));
                 return; // 子任务排序完成，直接返回
             }
@@ -8233,7 +8072,7 @@ export class ProjectKanbanView {
                 reminderData[task.id].sort = index * 10;
             });
 
-            await writeReminderData(reminderData);
+            await saveReminders(this.plugin, reminderData);
             window.dispatchEvent(new CustomEvent('reminderUpdated'));
 
         } catch (error) {
@@ -8371,7 +8210,7 @@ export class ProjectKanbanView {
                     reminderData[originalId].repeat.excludeDates.push(excludeDate);
                 }
 
-                await writeReminderData(reminderData);
+                await saveReminders(this.plugin, reminderData);
             } else {
                 throw new Error('原始事件不存在');
             }

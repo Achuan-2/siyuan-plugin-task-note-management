@@ -23,6 +23,8 @@ interface ISettingItemCore {
         label: string;
         callback: () => void;
     }
+    hidden?: boolean;
+    disabled?: boolean;
 }
 
 interface ISettingItem extends ISettingItemCore {

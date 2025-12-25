@@ -1,13 +1,26 @@
-﻿import { Dialog } from "siyuan";
-import { readReminderData, readProjectData } from "../api";
-import { generateRepeatInstances } from "../utils/repeatUtils";
+import { Dialog } from "siyuan";
+import { showMessage } from "siyuan";
+import { confirm } from "siyuan";
+import { PomodoroRecordManager } from "../utils/pomodoroRecord";
 import { t } from "../utils/i18n";
-import { getLocalDateString } from "../utils/dateUtils";
-import { CategoryManager } from "../utils/categoryManager";
-import { init, use } from 'echarts/core';
+import { compareDateStrings, getLocalDateString } from "../utils/dateUtils";
+import { readReminderData, readProjectData, getFile } from "../api";
+import { generateRepeatInstances } from "../utils/repeatUtils";
+import { init, use, EChartsType } from 'echarts/core';
 import { PieChart, HeatmapChart, CustomChart } from 'echarts/charts';
 import { TooltipComponent, VisualMapComponent, GridComponent, TitleComponent, LegendComponent, CalendarComponent } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
+type TaskSession = {
+    id: string;
+    date: string;
+    eventTitle: string;
+    projectId?: string;
+    categoryId?: string;
+    startTime?: string;
+    duration: number;
+    completed: boolean;
+    type: 'task';
+};
 
 // 注册 ECharts 组件
 use([
@@ -23,45 +36,30 @@ use([
     CanvasRenderer
 ]);
 
-interface TaskSession {
-    id: string;
-    title: string;
-    startTime: string;
-    endTime: string;
-    duration: number;
-    completed: boolean;
-    type: 'task';
-    projectId?: string;
-    categoryId?: string;
-}
-
-export class TaskTimeStatsView {
+export class TaskStatsView {
     private dialog: Dialog;
-    private plugin?: any;
     private reminderData: Record<string, any> = {};
-    private projectData: Record<string, any> = {};
-    private categoryManager?: CategoryManager;
-    private categoryMap: Map<string, string> = new Map();
-    private sessionsCache: Map<string, TaskSession[]> = new Map();
-    private isDataLoaded: boolean = false;
-    private isDataLoading: boolean = false;
+    private isLoading = false;
+    private isReady = false;
+    private timeFormatter: PomodoroRecordManager;
     private currentView: 'overview' | 'details' | 'records' | 'trends' | 'timeline' | 'heatmap' = 'overview';
     private currentTimeRange: 'today' | 'week' | 'month' | 'year' = 'today';
-    private currentDetailGroup: 'task' | 'project' | 'category' = 'task';
     private currentYear: number = new Date().getFullYear();
     private currentWeekOffset: number = 0; // 周偏移量，0表示本周，-1表示上周，1表示下周
     private currentMonthOffset: number = 0; // 月偏移量，0表示本月，-1表示上月，1表示下月
     private currentYearOffset: number = 0; // 年偏移量，0表示今年，-1表示去年，1表示明年
+    private currentDetailGroup: 'task' | 'project' | 'category' = 'task';
+    private projectNameMap: Record<string, string> = {};
+    private categoryNameMap: Record<string, string> = {};
 
-    constructor(plugin?: any) {
-        this.plugin = plugin;
-        this.categoryManager = plugin ? CategoryManager.getInstance(plugin) : undefined;
+    constructor() {
+        this.timeFormatter = PomodoroRecordManager.getInstance();
         this.createDialog();
     }
 
     private createDialog() {
         this.dialog = new Dialog({
-            title: "\u23F1 " + t("taskTimeStats"),
+            title: "✅ " + (t("taskStats") || "任务统计"),
             content: this.createContent(),
             width: "90vw",
             height: "85vh",
@@ -74,6 +72,14 @@ export class TaskTimeStatsView {
     private createContent(): string {
         return `
             <div class="pomodoro-stats-view">
+                <div class="stats-switch">
+                    <button class="stats-switch-btn active" data-mode="task">
+                        ✅ ${t("taskStats")}
+                    </button>
+                    <button class="stats-switch-btn" data-mode="pomodoro">
+                        🍅 ${t("pomodoroStats")}
+                    </button>
+                </div>
                 <!-- 导航标签 -->
                 <div class="stats-nav">
                     <button class="nav-btn ${this.currentView === 'overview' ? 'active' : ''}" data-view="overview">
@@ -105,6 +111,9 @@ export class TaskTimeStatsView {
     }
 
     private renderCurrentView(): string {
+        if (!this.isReady) {
+            return `<div class="no-data">${t("loading")}</div>`;
+        }
         switch (this.currentView) {
             case 'overview':
                 return this.renderOverview();
@@ -126,7 +135,7 @@ export class TaskTimeStatsView {
     private renderOverview(): string {
         const todayTime = this.getTodayTaskTime();
         const weekTime = this.getWeekTaskTime();
-        const totalTime = this.calculateTotalFocusTime();
+        const totalTime = this.getTotalTaskTime();
 
         return `
             <div class="overview-container">
@@ -134,40 +143,40 @@ export class TaskTimeStatsView {
                     <div class="overview-card today">
                         <div class="card-icon">🌅</div>
                         <div class="card-content">
-                            <div class="card-title">${t("taskToday")}</div>
+                            <div class="card-title">${t("todayTask")}</div>
                             <div class="card-value">${this.formatTime(todayTime)}</div>
-                            <div class="card-subtitle">${t("tasksCount", { count: this.getTodayTaskCount().toString() })}</div>
+                            <div class="card-subtitle">${this.getTodayTaskCount()}个任务</div>
                         </div>
                     </div>
                     
                     <div class="overview-card week">
                         <div class="card-icon">📅</div>
                         <div class="card-content">
-                            <div class="card-title">${t("taskWeek")}</div>
+                            <div class="card-title">${t("weekTask")}</div>
                             <div class="card-value">${this.formatTime(weekTime)}</div>
-                            <div class="card-subtitle">${t("tasksCount", { count: this.getWeekTaskCount().toString() })}</div>
+                            <div class="card-subtitle">${this.getWeekTaskCount()}个任务</div>
                         </div>
                     </div>
                     
                     <div class="overview-card total">
                         <div class="card-icon">🏆</div>
                         <div class="card-content">
-                            <div class="card-title">${t("totalTaskTime")}</div>
+                            <div class="card-title">${t("totalTask")}</div>
                             <div class="card-value">${this.formatTime(totalTime)}</div>
-                            <div class="card-subtitle">${t("tasksCount", { count: this.getTotalTaskCount().toString() })}</div>
+                            <div class="card-subtitle">${this.getTotalTaskCount()}个任务</div>
                         </div>
                     </div>
                 </div>
 
                 <!-- 今日任务进度 -->
                 <div class="today-progress">
-                    <h3>📈 ${t("todayProgress")}</h3>
+                    <h3>📈 ${t("todayTaskProgress")}</h3>
                     ${this.renderTodayProgress()}
                 </div>
 
                 <!-- 最近7天趋势 -->
                 <div class="recent-trend">
-                    <h3>📊 ${t("recentTrend")}</h3>
+                    <h3>📊 ${t("recentTaskTrend")}</h3>
                     ${this.renderRecentTrend()}
                 </div>
             </div>
@@ -182,17 +191,6 @@ export class TaskTimeStatsView {
                     <div class="details-title">
                         <h3>📈 ${t("taskDetails")}</h3>
                         ${dateRangeText ? `<span class="date-range-text">${dateRangeText}</span>` : ''}
-                    </div>
-                    <div class="detail-group-selector">
-                        <button class="group-btn ${this.currentDetailGroup === 'task' ? 'active' : ''}" data-group="task">
-                            ${t("detailGroupTask")}
-                        </button>
-                        <button class="group-btn ${this.currentDetailGroup === 'project' ? 'active' : ''}" data-group="project">
-                            ${t("detailGroupProject")}
-                        </button>
-                        <button class="group-btn ${this.currentDetailGroup === 'category' ? 'active' : ''}" data-group="category">
-                            ${t("detailGroupCategory")}
-                        </button>
                     </div>
                     <div class="time-range-selector">
                         <button class="range-btn ${this.currentTimeRange === 'today' ? 'active' : ''}" data-range="today">
@@ -212,6 +210,17 @@ export class TaskTimeStatsView {
                             <button class="nav-arrow" data-action="next">▶</button>
                         </div>
                     </div>
+                    <div class="details-group-selector">
+                        <button class="details-group-btn ${this.currentDetailGroup === 'task' ? 'active' : ''}" data-group="task">
+                            ${t("taskGroupByTask")}
+                        </button>
+                        <button class="details-group-btn ${this.currentDetailGroup === 'project' ? 'active' : ''}" data-group="project">
+                            ${t("taskGroupByProject")}
+                        </button>
+                        <button class="details-group-btn ${this.currentDetailGroup === 'category' ? 'active' : ''}" data-group="category">
+                            ${t("taskGroupByCategory")}
+                        </button>
+                    </div>
                 </div>
                 
                 <div class="details-content">
@@ -228,7 +237,7 @@ export class TaskTimeStatsView {
             <div class="records-container">
                 <div class="records-header">
                     <h3>📝 ${t("taskRecords")}</h3>
-                    <div class="records-subtitle">${t("recent7DaysFocus")}</div>
+                    <div class="records-subtitle">${t("recent7DaysTasks")}</div>
                 </div>
                 
                 <div class="records-list">
@@ -326,14 +335,13 @@ export class TaskTimeStatsView {
 
     private renderTodayProgress(): string {
         const todayTime = this.getTodayTaskTime();
-        const todaySessions = this.getTodaySessions();
-        const taskCount = todaySessions.length;
+        const todayCount = this.getTodayTaskCount();
 
         return `
             <div class="progress-info">
                 <div class="progress-item">
-                    <span class="progress-label">${t("taskCount")}</span>
-                    <span class="progress-value">${taskCount}</span>
+                    <span class="progress-label">${t("completedTasks")}</span>
+                    <span class="progress-value">${todayCount}</span>
                 </div>
                 <div class="progress-item">
                     <span class="progress-label">${t("taskTime")}</span>
@@ -396,22 +404,24 @@ export class TaskTimeStatsView {
     }
 
     private renderSessionRecord(session: TaskSession): string {
-        const date = new Date(session.startTime);
+        const date = new Date(session.startTime || `${session.date}T00:00:00`);
         const dateStr = date.toLocaleDateString('zh-CN');
-        const timeStr = date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+        const timeStr = session.startTime
+            ? date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+            : t("allDayReminder") || "全天";
 
         return `
-            <div class="record-item ${session.type}">
+            <div class="record-item task">
                 <div class="record-icon">
-                    &#x1F4DD;
+                    ${session.completed ? '\u2705' : '\u274c'}
                 </div>
                 <div class="record-content">
-                    <div class="record-title">${session.title}</div>
+                    <div class="record-title">${session.eventTitle}</div>
                     <div class="record-meta">
                         <span class="record-date">${dateStr}</span>
                         <span class="record-time">${timeStr}</span>
                         <span class="record-duration">${session.duration}${t("minutes")}</span>
-                        ${session.completed ? '<span class="record-completed">&#x2713;</span>' : ''}
+                        ${session.completed ? '<span class=\"record-completed\">\u2705</span>' : ''}
                     </div>
                 </div>
             </div>
@@ -476,242 +486,83 @@ export class TaskTimeStatsView {
         `;
     }
 
-    private formatTime(minutes: number): string {
-        const hours = Math.floor(minutes / 60);
-        const mins = Math.floor(minutes % 60);
-
-        if (hours > 0) {
-            return `${hours}h ${mins}m`;
+    // 数据获取方法
+    private async ensureDataReady() {
+        if (this.isReady || this.isLoading) {
+            return;
         }
-        return `${mins}m`;
-    }
-
-    private async loadReminderData(): Promise<void> {
-        if (this.isDataLoaded || this.isDataLoading) return;
-        this.isDataLoading = true;
-
+        this.isLoading = true;
         try {
-            const data = await readReminderData();
-            if (data && typeof data === 'object' && !data.code && !data.msg) {
-                this.reminderData = data;
-            } else {
-                this.reminderData = {};
-            }
-            try {
-                const projectData = await readProjectData();
-                this.projectData = projectData && typeof projectData === 'object' ? projectData : {};
-            } catch (error) {
-                console.warn('加载项目数据失败:', error);
-                this.projectData = {};
-            }
-
-            if (this.categoryManager) {
-                try {
-                    await this.categoryManager.initialize();
-                    const categories = this.categoryManager.getCategories();
-                    this.categoryMap = new Map(categories.map(category => [category.id, category.name]));
-                } catch (error) {
-                    console.warn('加载分类数据失败:', error);
-                    this.categoryMap.clear();
+            const [reminderData, projectData, categories] = await Promise.all([
+                readReminderData(),
+                readProjectData(),
+                this.readCategoryData()
+            ]);
+            this.reminderData = reminderData;
+            this.projectNameMap = {};
+            Object.entries(projectData || {}).forEach(([projectId, project]: [string, any]) => {
+                if (projectId.startsWith('_')) {
+                    return;
                 }
-            } else {
-                this.categoryMap.clear();
-            }
+                const name = project?.title || project?.name;
+                if (name) {
+                    this.projectNameMap[projectId] = name;
+                }
+            });
+            this.categoryNameMap = {};
+            (categories || []).forEach((category: any) => {
+                if (category?.id && category?.name) {
+                    this.categoryNameMap[category.id] = category.name;
+                }
+            });
         } catch (error) {
-            console.error('加载任务数据失败:', error);
+            console.error('任务统计加载失败:', error);
             this.reminderData = {};
+            this.projectNameMap = {};
+            this.categoryNameMap = {};
         } finally {
-            this.isDataLoaded = true;
-            this.isDataLoading = false;
-            this.sessionsCache.clear();
+            this.isLoading = false;
+            this.isReady = true;
         }
     }
 
-    private getDateSessions(dateStr: string): TaskSession[] {
-        if (!this.isDataLoaded) return [];
-        const cached = this.sessionsCache.get(dateStr);
-        if (cached) return cached;
+    private formatTime(minutes: number): string {
+        return this.timeFormatter.formatTime(minutes);
+    }
 
-        const sessions: TaskSession[] = [];
-        const reminders = Object.values(this.reminderData || {});
-
-        reminders.forEach((reminder: any) => {
-            if (!reminder || typeof reminder !== 'object') return;
-
-            if (reminder.date === dateStr) {
-                const session = this.buildSessionFromReminder(reminder, reminder.id, dateStr);
-                if (session) sessions.push(session);
-            }
-
-            if (reminder.repeat?.enabled) {
-                const instances = generateRepeatInstances(reminder, dateStr, dateStr, 1);
-                instances.forEach(instance => {
-                    if (instance.date !== dateStr) return;
-                    if (instance.date === reminder.date) return;
-                    const instanceReminder = {
-                        ...reminder,
-                        ...instance,
-                        completed: typeof instance.completed === 'boolean' ? instance.completed : reminder.completed
-                    };
-                    const session = this.buildSessionFromReminder(
-                        instanceReminder,
-                        instance.instanceId || `${reminder.id}_${instance.date}`,
-                        instance.date
-                    );
-                    if (session) sessions.push(session);
-                });
+    private getTotalTaskTime(): number {
+        let totalTime = 0;
+        Object.values(this.reminderData || {}).forEach((reminder: any) => {
+            const session = this.buildTaskSession(reminder, reminder?.id);
+            if (session) {
+                totalTime += session.duration;
             }
         });
-
-        this.sessionsCache.set(dateStr, sessions);
-        return sessions;
-    }
-
-    private getTodaySessions(): TaskSession[] {
-        const today = getLocalDateString(new Date());
-        return this.getDateSessions(today);
-    }
-
-    private getWeekSessions(): TaskSession[] {
-        const sessions: TaskSession[] = [];
-        const today = new Date();
-        const startOfWeek = new Date(today);
-        const dayOfWeek = today.getDay();
-        const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-        startOfWeek.setDate(today.getDate() + mondayOffset);
-
-        for (let i = 0; i < 7; i++) {
-            const date = new Date(startOfWeek);
-            date.setDate(startOfWeek.getDate() + i);
-            const dateStr = getLocalDateString(date);
-            sessions.push(...this.getDateSessions(dateStr));
-        }
-
-        return sessions;
+        return totalTime;
     }
 
     private getTodayTaskTime(): number {
-        return this.getTodaySessions().reduce((sum, session) => sum + session.duration, 0);
+        const dateStr = getLocalDateString(new Date());
+        return this.getSessionsForRange(dateStr, dateStr).reduce((sum, s) => sum + s.duration, 0);
     }
 
     private getWeekTaskTime(): number {
-        return this.getWeekSessions().reduce((sum, session) => sum + session.duration, 0);
-    }
-
-    private getSessionsInRange(startDate: string, endDate: string): TaskSession[] {
-        if (!startDate || !endDate) return [];
-        if (startDate > endDate) return [];
-
-        const sessions: TaskSession[] = [];
-        const start = new Date(`${startDate}T00:00:00`);
-        const end = new Date(`${endDate}T00:00:00`);
-
-        for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
-            const dateStr = getLocalDateString(date);
-            sessions.push(...this.getDateSessions(dateStr));
-        }
-
-        return sessions;
-    }
-
-    private getTotalRange(): { start: string; end: string } {
-        const today = getLocalDateString(new Date());
-        let start = today;
-        let end = today;
-        const reminders = Object.values(this.reminderData || {});
-
-        reminders.forEach((reminder: any) => {
-            if (!reminder || typeof reminder !== 'object') return;
-            if (reminder.date && reminder.date < start) {
-                start = reminder.date;
-            }
-            if (reminder.date && reminder.date > end) {
-                end = reminder.date;
-            }
-            if (reminder.endDate && reminder.endDate > end) {
-                end = reminder.endDate;
-            }
-            if (reminder.repeat?.endType === 'date' && reminder.repeat?.endDate && reminder.repeat.endDate > end) {
-                end = reminder.repeat.endDate;
-            }
-        });
-
-        return { start, end };
-    }
-
-    private buildSessionFromReminder(reminder: any, sessionId: string, fallbackDate: string): TaskSession | null {
-        const date = reminder.date || fallbackDate;
-        if (!date) return null;
-
-        let start: Date;
-        let end: Date;
-
-        if (reminder.endDate) {
-            if (reminder.time && reminder.endTime) {
-                start = new Date(`${date}T${reminder.time}:00`);
-                end = new Date(`${reminder.endDate}T${reminder.endTime}:00`);
-            } else {
-                start = new Date(`${date}T00:00:00`);
-                end = new Date(`${reminder.endDate}T00:00:00`);
-                end.setDate(end.getDate() + 1);
-            }
-        } else if (reminder.time) {
-            start = new Date(`${date}T${reminder.time}:00`);
-            if (reminder.endTime) {
-                end = new Date(`${date}T${reminder.endTime}:00`);
-            } else {
-                end = new Date(start);
-                end.setMinutes(end.getMinutes() + 30);
-                if (end.getDate() !== start.getDate()) {
-                    end = new Date(`${date}T23:59:00`);
-                }
-            }
-        } else {
-            start = new Date(`${date}T00:00:00`);
-            end = new Date(start);
-            end.setDate(end.getDate() + 1);
-        }
-
-        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
-        if (end.getTime() < start.getTime()) {
-            end = new Date(start);
-        }
-
-        const duration = Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
-
-        return {
-            id: sessionId,
-            title: reminder.title || t("unnamedNote"),
-            startTime: start.toISOString(),
-            endTime: end.toISOString(),
-            duration,
-            completed: !!reminder.completed,
-            type: 'task',
-            projectId: reminder.projectId || undefined,
-            categoryId: reminder.categoryId || undefined
-        };
-    }
-
-    // 数据获取方法
-    private calculateTotalFocusTime(): number {
-        const { start, end } = this.getTotalRange();
-        return this.getSessionsInRange(start, end)
-            .reduce((total, session) => total + session.duration, 0);
+        const range = this.getWeekRange(0);
+        return this.getSessionsForRange(range.start, range.end).reduce((sum, s) => sum + s.duration, 0);
     }
 
     private getTodayTaskCount(): number {
-        const todaySessions = this.getTodaySessions();
-        return todaySessions.length;
+        const dateStr = getLocalDateString(new Date());
+        return this.getSessionsForRange(dateStr, dateStr).length;
     }
 
     private getWeekTaskCount(): number {
-        const weekSessions = this.getWeekSessions();
-        return weekSessions.length;
+        const range = this.getWeekRange(0);
+        return this.getSessionsForRange(range.start, range.end).length;
     }
 
     private getTotalTaskCount(): number {
-        const { start, end } = this.getTotalRange();
-        return this.getSessionsInRange(start, end).length;
+        return Object.values(this.reminderData || {}).filter((reminder: any) => reminder && reminder.date).length;
     }
 
     private getLast7DaysData(): Array<{ label: string, value: number }> {
@@ -722,8 +573,8 @@ export class TaskTimeStatsView {
             const date = new Date(today);
             date.setDate(today.getDate() - i);
             const dateStr = getLocalDateString(date);
-            const sessions = this.getDateSessions(dateStr);
-            const value = sessions.reduce((sum, s) => sum + s.duration, 0);
+            const value = this.getSessionsForRange(dateStr, dateStr)
+                .reduce((sum, s) => sum + s.duration, 0);
 
             data.push({
                 label: i === 0 ? t("today") : date.toLocaleDateString('zh-CN', { weekday: 'short' }),
@@ -737,7 +588,11 @@ export class TaskTimeStatsView {
     private getTaskCategoryStats(): Record<string, { time: number, count: number }> {
         let sessions: TaskSession[] = [];
 
-        // 根据当前时间范围和偏移量获取会话数据
+        if (!this.isReady) {
+            return {};
+        }
+
+        // 构造当前时间范围的任务记录
         switch (this.currentTimeRange) {
             case 'today':
                 sessions = this.getTodaySessionsWithOffset();
@@ -752,121 +607,62 @@ export class TaskTimeStatsView {
                 sessions = this.getYearSessionsWithOffset();
                 break;
             default:
-                sessions = this.getTodaySessions();
+                sessions = this.getSessionsForRange(getLocalDateString(new Date()), getLocalDateString(new Date()));
         }
 
         const stats: Record<string, { time: number, count: number }> = {};
 
         sessions.forEach(session => {
-            const groupName = this.getDetailGroupName(session);
-            if (!stats[groupName]) {
-                stats[groupName] = { time: 0, count: 0 };
+            const label = this.getDetailGroupLabel(session);
+            if (!stats[label]) {
+                stats[label] = { time: 0, count: 0 };
             }
-            stats[groupName].time += session.duration;
-            stats[groupName].count++;
+            stats[label].time += session.duration;
+            if (session.completed) {
+                stats[label].count++;
+            }
         });
 
         return stats;
     }
 
-    private getDetailGroupName(session: TaskSession): string {
-        switch (this.currentDetailGroup) {
-            case 'project': {
-                const projectId = session.projectId;
-                const projectName = projectId && this.projectData[projectId]?.title;
-                return projectName || t("uncategorized");
-            }
-            case 'category': {
-                const categoryId = session.categoryId;
-                const categoryName = categoryId ? this.categoryMap.get(categoryId) : undefined;
-                return categoryName || t("uncategorized");
-            }
-            case 'task':
-            default:
-                return session.title || t("unnamedNote");
-        }
-    }
-
     private getTodaySessionsWithOffset(): TaskSession[] {
         const today = new Date();
         const targetDate = new Date(today);
-        targetDate.setDate(today.getDate() + this.currentWeekOffset); // 复用weekOffset作为日偏移
+        targetDate.setDate(today.getDate() + this.currentWeekOffset);
         const dateStr = getLocalDateString(targetDate);
-        return this.getDateSessions(dateStr);
+        return this.getSessionsForRange(dateStr, dateStr);
     }
 
     private getWeekSessionsWithOffset(): TaskSession[] {
-        const sessions = [];
-        const today = new Date();
-
-        // 计算目标周的开始日期（星期一）
-        const startOfWeek = new Date(today);
-        const dayOfWeek = today.getDay();
-        // 计算到星期一的偏移量：如果是星期日(0)，则偏移-6；否则偏移1-dayOfWeek
-        const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-        startOfWeek.setDate(today.getDate() + mondayOffset + (this.currentWeekOffset * 7));
-
-        for (let i = 0; i < 7; i++) {
-            const date = new Date(startOfWeek);
-            date.setDate(startOfWeek.getDate() + i);
-            const dateStr = getLocalDateString(date);
-            sessions.push(...this.getDateSessions(dateStr));
-        }
-
-        return sessions;
+        const range = this.getWeekRange(this.currentWeekOffset);
+        return this.getSessionsForRange(range.start, range.end);
     }
 
     private getMonthSessionsWithOffset(): TaskSession[] {
-        const sessions = [];
-        const today = new Date();
-
-        // 计算目标月份
-        const targetDate = new Date(today.getFullYear(), today.getMonth() + this.currentMonthOffset, 1);
-        const daysInMonth = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0).getDate();
-
-        for (let day = 1; day <= daysInMonth; day++) {
-            const date = new Date(targetDate.getFullYear(), targetDate.getMonth(), day);
-            const dateStr = getLocalDateString(date);
-            sessions.push(...this.getDateSessions(dateStr));
-        }
-
-        return sessions;
+        const range = this.getMonthRange(this.currentMonthOffset);
+        return this.getSessionsForRange(range.start, range.end);
     }
 
     private getYearSessionsWithOffset(): TaskSession[] {
-        const sessions = [];
-        const today = new Date();
-        const targetYear = today.getFullYear() + this.currentYearOffset;
-
-        // 获取整年的数据
-        for (let month = 0; month < 12; month++) {
-            const daysInMonth = new Date(targetYear, month + 1, 0).getDate();
-            for (let day = 1; day <= daysInMonth; day++) {
-                const date = new Date(targetYear, month, day);
-                const dateStr = getLocalDateString(date);
-                sessions.push(...this.getDateSessions(dateStr));
-            }
-        }
-
-        return sessions;
+        const range = this.getYearRange(this.currentYearOffset);
+        return this.getSessionsForRange(range.start, range.end);
     }
 
     private getRecentSessions(days: number): TaskSession[] {
-        const sessions = [];
         const today = new Date();
+        const startDate = new Date(today);
+        startDate.setDate(today.getDate() - (days - 1));
+        const sessions = this.getSessionsForRange(getLocalDateString(startDate), getLocalDateString(today));
 
-        for (let i = 0; i < days; i++) {
-            const date = new Date(today);
-            date.setDate(today.getDate() - i);
-            const dateStr = getLocalDateString(date);
-            sessions.push(...this.getDateSessions(dateStr));
-        }
-
-        return sessions.sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
+        return sessions.sort((a, b) => {
+            const aTime = a.startTime ? new Date(a.startTime).getTime() : new Date(`${a.date}T00:00:00`).getTime();
+            const bTime = b.startTime ? new Date(b.startTime).getTime() : new Date(`${b.date}T00:00:00`).getTime();
+            return bTime - aTime;
+        });
     }
 
     private getTrendsData(): Array<{ label: string, value: number }> {
-        // 根据当前时间范围返回趋势数据
         switch (this.currentTimeRange) {
             case 'week':
                 return this.getWeeklyTrendsData();
@@ -881,21 +677,15 @@ export class TaskTimeStatsView {
 
     private getWeeklyTrendsData(): Array<{ label: string, value: number }> {
         const data = [];
-        const today = new Date();
-
-        // 计算目标周的开始日期（星期一）
-        const startOfWeek = new Date(today);
-        const dayOfWeek = today.getDay();
-        // 计算到星期一的偏移量：如果是星期日(0)，则偏移-6；否则偏移1-dayOfWeek
-        const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-        startOfWeek.setDate(today.getDate() + mondayOffset + (this.currentWeekOffset * 7));
+        const range = this.getWeekRange(this.currentWeekOffset);
+        const start = new Date(range.start + 'T00:00:00');
 
         for (let i = 0; i < 7; i++) {
-            const date = new Date(startOfWeek);
-            date.setDate(startOfWeek.getDate() + i);
+            const date = new Date(start);
+            date.setDate(start.getDate() + i);
             const dateStr = getLocalDateString(date);
-            const sessions = this.getDateSessions(dateStr);
-            const value = sessions.reduce((sum, s) => sum + s.duration, 0);
+            const value = this.getSessionsForRange(dateStr, dateStr)
+                .reduce((sum, s) => sum + s.duration, 0);
 
             data.push({
                 label: date.toLocaleDateString('zh-CN', { weekday: 'short' }),
@@ -907,19 +697,17 @@ export class TaskTimeStatsView {
     }
 
     private getMonthlyTrendsData(): Array<{ label: string, value: number }> {
-        // 实现月度趋势数据获取
         const data = [];
-        const today = new Date();
-
-        // 计算目标月份
-        const targetDate = new Date(today.getFullYear(), today.getMonth() + this.currentMonthOffset, 1);
-        const daysInMonth = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0).getDate();
+        const range = this.getMonthRange(this.currentMonthOffset);
+        const startDate = new Date(range.start + 'T00:00:00');
+        const endDate = new Date(range.end + 'T00:00:00');
+        const daysInMonth = endDate.getDate();
 
         for (let day = 1; day <= daysInMonth; day++) {
-            const date = new Date(targetDate.getFullYear(), targetDate.getMonth(), day);
+            const date = new Date(startDate.getFullYear(), startDate.getMonth(), day);
             const dateStr = getLocalDateString(date);
-            const sessions = this.getDateSessions(dateStr);
-            const time = sessions.reduce((sum, s) => sum + s.duration, 0);
+            const time = this.getSessionsForRange(dateStr, dateStr)
+                .reduce((sum, s) => sum + s.duration, 0);
 
             data.push({
                 label: day.toString(),
@@ -931,22 +719,20 @@ export class TaskTimeStatsView {
     }
 
     private getYearlyTrendsData(): Array<{ label: string, value: number }> {
-        // 实现年度趋势数据获取
         const data = [];
-        const months = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
-        const today = new Date();
-        const targetYear = today.getFullYear() + this.currentYearOffset;
+        const months = ['1\u6708', '2\u6708', '3\u6708', '4\u6708', '5\u6708', '6\u6708', '7\u6708', '8\u6708', '9\u6708', '10\u6708', '11\u6708', '12\u6708'];
+        const range = this.getYearRange(this.currentYearOffset);
+        const year = parseInt(range.start.split('-')[0], 10);
 
         months.forEach((month, index) => {
             let monthlyTime = 0;
-            const daysInMonth = new Date(targetYear, index + 1, 0).getDate();
+            const daysInMonth = new Date(year, index + 1, 0).getDate();
 
-            // 计算该月的总任务时间
             for (let day = 1; day <= daysInMonth; day++) {
-                const date = new Date(targetYear, index, day);
+                const date = new Date(year, index, day);
                 const dateStr = getLocalDateString(date);
-                const sessions = this.getDateSessions(dateStr);
-                monthlyTime += sessions.reduce((sum, s) => sum + s.duration, 0);
+                monthlyTime += this.getSessionsForRange(dateStr, dateStr)
+                    .reduce((sum, s) => sum + s.duration, 0);
             }
 
             data.push({
@@ -959,20 +745,13 @@ export class TaskTimeStatsView {
     }
 
     private getTimelineData(): Array<{ date: string, sessions: Array<{ type: string, title: string, duration: number, startPercent: number, widthPercent: number }> }> {
-        // 实现时间线数据获取
         const data = [];
         const today = new Date();
 
-        // 根据当前时间范围和偏移量计算数据
         switch (this.currentTimeRange) {
             case 'week':
-                // 显示指定周的7天（从星期一开始）
-                const startOfWeek = new Date(today);
-                const dayOfWeek = today.getDay();
-                // 计算到星期一的偏移量：如果是星期日(0)，则偏移-6；否则偏移1-dayOfWeek
-                const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-                startOfWeek.setDate(today.getDate() + mondayOffset + (this.currentWeekOffset * 7));
-
+                const weekRange = this.getWeekRange(this.currentWeekOffset);
+                const startOfWeek = new Date(weekRange.start + 'T00:00:00');
                 for (let i = 0; i < 7; i++) {
                     const date = new Date(startOfWeek);
                     date.setDate(startOfWeek.getDate() + i);
@@ -981,17 +760,14 @@ export class TaskTimeStatsView {
                 break;
 
             case 'month':
-                // 显示本月所有天的平均任务时间分布
                 data.push(this.getAverageTimelineDataForMonth());
                 break;
 
             case 'year':
-                // 显示本年所有天的平均任务时间分布
                 data.push(this.getAverageTimelineDataForYear());
                 break;
 
             default:
-                // 默认显示最近7天
                 for (let i = 6; i >= 0; i--) {
                     const date = new Date(today);
                     date.setDate(today.getDate() - i);
@@ -1004,16 +780,16 @@ export class TaskTimeStatsView {
 
     private getTimelineDataForDate(date: Date): { date: string, sessions: Array<{ type: string, title: string, duration: number, startPercent: number, widthPercent: number }> } {
         const dateStr = getLocalDateString(date);
-        const sessions = this.getDateSessions(dateStr);
+        const sessions = this.getSessionsForRange(dateStr, dateStr).filter(s => s.startTime);
 
         const timelineSessions = sessions.map(session => {
-            const startTime = new Date(session.startTime);
+            const startTime = new Date(session.startTime as string);
             const startPercent = (startTime.getHours() * 60 + startTime.getMinutes()) / (24 * 60) * 100;
-            const widthPercent = Math.min(session.duration / (24 * 60) * 100, 100);
+            const widthPercent = session.duration / (24 * 60) * 100;
 
             return {
                 type: session.type,
-                title: session.title,
+                title: session.eventTitle,
                 duration: session.duration,
                 startPercent,
                 widthPercent
@@ -1027,42 +803,37 @@ export class TaskTimeStatsView {
     }
 
     private getAverageTimelineDataForMonth(): { date: string, sessions: Array<{ type: string, title: string, duration: number, startPercent: number, widthPercent: number }> } {
-        const today = new Date();
-        const targetDate = new Date(today.getFullYear(), today.getMonth() + this.currentMonthOffset, 1);
+        const range = this.getMonthRange(this.currentMonthOffset);
+        const targetDate = new Date(range.start + 'T00:00:00');
         const daysInMonth = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0).getDate();
 
-        // 创建24小时的时间段统计数组，按小时统计
-        const hourlyStats = new Array(24).fill(0); // 24个小时
+        const hourlyStats = new Array(24).fill(0);
         let totalDays = 0;
 
-        // 收集整个月的数据
         for (let day = 1; day <= daysInMonth; day++) {
             const date = new Date(targetDate.getFullYear(), targetDate.getMonth(), day);
             const dateStr = getLocalDateString(date);
-            const sessions = this.getDateSessions(dateStr);
+            const sessions = this.getSessionsForRange(dateStr, dateStr).filter(s => s.startTime);
 
             let hasData = false;
             sessions.forEach(session => {
                 hasData = true;
-                const startTime = new Date(session.startTime);
+                const startTime = new Date(session.startTime as string);
                 const startHour = startTime.getHours();
                 const startMinute = startTime.getMinutes();
                 const duration = session.duration;
 
-                // 将任务时间分布到对应的小时中
                 let remainingDuration = duration;
                 let currentHour = startHour;
                 let currentMinute = startMinute;
 
                 while (remainingDuration > 0 && currentHour < 24) {
-                    // 计算当前小时内剩余的分钟数
                     const minutesLeftInHour = 60 - currentMinute;
                     const durationInThisHour = Math.min(remainingDuration, minutesLeftInHour);
 
                     hourlyStats[currentHour] += durationInThisHour;
                     remainingDuration -= durationInThisHour;
 
-                    // 移动到下一个小时
                     currentHour++;
                     currentMinute = 0;
                 }
@@ -1073,18 +844,17 @@ export class TaskTimeStatsView {
             }
         }
 
-        // 计算平均值并转换为时间线格式
         const sessions = [];
         if (totalDays > 0) {
             for (let hour = 0; hour < 24; hour++) {
                 const avgDuration = hourlyStats[hour] / totalDays;
-                if (avgDuration > 1) { // 只显示平均时长超过1分钟的小时
+                if (avgDuration > 1) {
                     const startPercent = (hour * 60) / (24 * 60) * 100;
-                    const widthPercent = 60 / (24 * 60) * 100; // 1小时
+                    const widthPercent = 60 / (24 * 60) * 100;
 
                     sessions.push({
                         type: 'task',
-                        title: `${hour}:00-${hour + 1}:00 平均任务时长 ${avgDuration.toFixed(1)}分钟`,
+                        title: `${hour}:00-${hour + 1}:00 平均任务 ${avgDuration.toFixed(1)}分钟`,
                         duration: Math.round(avgDuration),
                         startPercent,
                         widthPercent
@@ -1101,43 +871,38 @@ export class TaskTimeStatsView {
     }
 
     private getAverageTimelineDataForYear(): { date: string, sessions: Array<{ type: string, title: string, duration: number, startPercent: number, widthPercent: number }> } {
-        const today = new Date();
-        const targetYear = today.getFullYear() + this.currentYearOffset;
+        const range = this.getYearRange(this.currentYearOffset);
+        const year = parseInt(range.start.split('-')[0], 10);
 
-        // 创建24小时的时间段统计数组，按小时统计
-        const hourlyStats = new Array(24).fill(0); // 24个小时
+        const hourlyStats = new Array(24).fill(0);
         let totalDays = 0;
 
-        // 收集整年的数据
         for (let month = 0; month < 12; month++) {
-            const daysInMonth = new Date(targetYear, month + 1, 0).getDate();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
             for (let day = 1; day <= daysInMonth; day++) {
-                const date = new Date(targetYear, month, day);
+                const date = new Date(year, month, day);
                 const dateStr = getLocalDateString(date);
-                const sessions = this.getDateSessions(dateStr);
+                const sessions = this.getSessionsForRange(dateStr, dateStr).filter(s => s.startTime);
 
                 let hasData = false;
                 sessions.forEach(session => {
                     hasData = true;
-                    const startTime = new Date(session.startTime);
+                    const startTime = new Date(session.startTime as string);
                     const startHour = startTime.getHours();
                     const startMinute = startTime.getMinutes();
                     const duration = session.duration;
 
-                    // 将任务时间分布到对应的小时中
                     let remainingDuration = duration;
                     let currentHour = startHour;
                     let currentMinute = startMinute;
 
                     while (remainingDuration > 0 && currentHour < 24) {
-                        // 计算当前小时内剩余的分钟数
                         const minutesLeftInHour = 60 - currentMinute;
                         const durationInThisHour = Math.min(remainingDuration, minutesLeftInHour);
 
                         hourlyStats[currentHour] += durationInThisHour;
                         remainingDuration -= durationInThisHour;
 
-                        // 移动到下一个小时
                         currentHour++;
                         currentMinute = 0;
                     }
@@ -1149,18 +914,17 @@ export class TaskTimeStatsView {
             }
         }
 
-        // 计算平均值并转换为时间线格式
         const sessions = [];
         if (totalDays > 0) {
             for (let hour = 0; hour < 24; hour++) {
                 const avgDuration = hourlyStats[hour] / totalDays;
-                if (avgDuration > 1) { // 只显示平均时长超过1分钟的小时
+                if (avgDuration > 1) {
                     const startPercent = (hour * 60) / (24 * 60) * 100;
-                    const widthPercent = 60 / (24 * 60) * 100; // 1小时
+                    const widthPercent = 60 / (24 * 60) * 100;
 
                     sessions.push({
                         type: 'task',
-                        title: `${hour}:00-${hour + 1}:00 平均任务时长 ${avgDuration.toFixed(1)}分钟`,
+                        title: `${hour}:00-${hour + 1}:00 平均任务 ${avgDuration.toFixed(1)}分钟`,
                         duration: Math.round(avgDuration),
                         startPercent,
                         widthPercent
@@ -1170,7 +934,7 @@ export class TaskTimeStatsView {
         }
 
         return {
-            date: `${targetYear}年平均分布`,
+            date: `${year}年平均分布`,
             sessions
         };
     }
@@ -1182,10 +946,9 @@ export class TaskTimeStatsView {
 
         for (let date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
             const dateStr = getLocalDateString(date);
-            const sessions = this.getDateSessions(dateStr);
-            const time = sessions.reduce((sum, s) => sum + s.duration, 0);
+            const time = this.getSessionsForRange(dateStr, dateStr)
+                .reduce((sum, s) => sum + s.duration, 0);
 
-            // 根据时间计算热力图等级 (0-4)
             let level = 0;
             if (time > 0) level = 1;
             if (time > 60) level = 2;
@@ -1202,6 +965,153 @@ export class TaskTimeStatsView {
         return data;
     }
 
+    private buildTaskSession(reminder: any, sessionId: string): TaskSession | null {
+        if (!reminder || !reminder.date) {
+            return null;
+        }
+        const timing = this.getTaskTiming(reminder);
+        return {
+            id: sessionId,
+            date: reminder.date,
+            eventTitle: reminder.title || t("unnamedNote"),
+            projectId: reminder.projectId || undefined,
+            categoryId: reminder.categoryId || undefined,
+            startTime: timing.startTime ? timing.startTime.toISOString() : undefined,
+            duration: timing.duration,
+            completed: !!reminder.completed,
+            type: 'task'
+        };
+    }
+
+    private async readCategoryData(): Promise<any[]> {
+        try {
+            const content = await getFile('data/storage/petal/siyuan-plugin-task-note-management/categories.json');
+            if (!content || content?.code === 404) {
+                return [];
+            }
+            const data = typeof content === 'string' ? JSON.parse(content) : content;
+            return Array.isArray(data) ? data : [];
+        } catch (error) {
+            console.warn('读取分类数据失败:', error);
+            return [];
+        }
+    }
+
+    private getDetailGroupLabel(session: TaskSession): string {
+        switch (this.currentDetailGroup) {
+            case 'project': {
+                const projectName = session.projectId ? this.projectNameMap[session.projectId] : '';
+                return projectName || t("uncategorizedProject");
+            }
+            case 'category': {
+                const categoryName = session.categoryId ? this.categoryNameMap[session.categoryId] : '';
+                return categoryName || t("uncategorizedCategory");
+            }
+            default:
+                return session.eventTitle || t("uncategorized");
+        }
+    }
+
+    private getTaskTiming(reminder: any): { startTime?: Date; duration: number } {
+        if (!reminder?.date || !reminder?.time) {
+            return { duration: 0 };
+        }
+
+        const startTime = new Date(`${reminder.date}T${reminder.time}:00`);
+        let endTime: Date | null = null;
+
+        if (reminder.endDate && reminder.endTime) {
+            endTime = new Date(`${reminder.endDate}T${reminder.endTime}:00`);
+        } else if (reminder.endTime) {
+            endTime = new Date(`${reminder.date}T${reminder.endTime}:00`);
+        } else {
+            endTime = new Date(startTime);
+            endTime.setMinutes(endTime.getMinutes() + 30);
+            if (endTime.getDate() !== startTime.getDate()) {
+                endTime.setDate(startTime.getDate());
+                endTime.setHours(23, 59, 0, 0);
+            }
+        }
+
+        const duration = Math.max(0, Math.round((endTime.getTime() - startTime.getTime()) / 60000));
+        return { startTime, duration };
+    }
+
+    private isDateInRange(date: string, startDate: string, endDate: string): boolean {
+        return compareDateStrings(date, startDate) >= 0 && compareDateStrings(date, endDate) <= 0;
+    }
+
+    private getSessionsForRange(startDate: string, endDate: string): TaskSession[] {
+        const sessions: TaskSession[] = [];
+        const reminders = Object.values(this.reminderData || {}) as any[];
+
+        reminders.forEach((reminder) => {
+            if (!reminder || typeof reminder !== 'object') {
+                return;
+            }
+            const baseSession = this.buildTaskSession(reminder, reminder.id);
+            if (baseSession && this.isDateInRange(baseSession.date, startDate, endDate)) {
+                sessions.push(baseSession);
+            }
+
+            if (reminder.repeat?.enabled) {
+                const instances = generateRepeatInstances(reminder, startDate, endDate);
+                instances.forEach(instance => {
+                    if (instance.date === reminder.date) {
+                        return;
+                    }
+                    const instanceReminder = {
+                        ...reminder,
+                        date: instance.date,
+                        time: instance.time,
+                        endDate: instance.endDate,
+                        endTime: instance.endTime,
+                        completed: instance.completed ?? reminder.completed
+                    };
+                    const session = this.buildTaskSession(instanceReminder, instance.instanceId);
+                    if (session) {
+                        sessions.push(session);
+                    }
+                });
+            }
+        });
+
+        return sessions;
+    }
+
+    private getWeekRange(weekOffset: number): { start: string; end: string } {
+        const today = new Date();
+        const startOfWeek = new Date(today);
+        const dayOfWeek = today.getDay();
+        const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+        startOfWeek.setDate(today.getDate() + mondayOffset + (weekOffset * 7));
+        const endOfWeek = new Date(startOfWeek);
+        endOfWeek.setDate(startOfWeek.getDate() + 6);
+
+        return {
+            start: getLocalDateString(startOfWeek),
+            end: getLocalDateString(endOfWeek)
+        };
+    }
+
+    private getMonthRange(monthOffset: number): { start: string; end: string } {
+        const today = new Date();
+        const targetDate = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
+        const endDate = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0);
+
+        return {
+            start: getLocalDateString(targetDate),
+            end: getLocalDateString(endDate)
+        };
+    }
+
+    private getYearRange(yearOffset: number): { start: string; end: string } {
+        const year = new Date().getFullYear() + yearOffset;
+        return {
+            start: `${year}-01-01`,
+            end: `${year}-12-31`
+        };
+    }
     private getEventColor(index: number): string {
         const colors = ['#FF6B6B', '#4CAF50', '#2196F3', '#FF9800', '#9C27B0', '#00BCD4', '#795548', '#607D8B'];
         return colors[index % colors.length];
@@ -1240,9 +1150,10 @@ export class TaskTimeStatsView {
         }
     }
 
-    public show() {
+    public async show() {
         this.dialog.element.addEventListener('click', this.handleClick.bind(this));
-        this.loadReminderData().then(() => this.updateContent());
+        await this.ensureDataReady();
+        this.updateContent();
     }
 
     private initPieChart(chartId: string) {
@@ -1295,8 +1206,8 @@ export class TaskTimeStatsView {
                                     <span style="display: inline-block; width: 10px; height: 10px; background-color: ${params.color}; border-radius: 50%; margin-right: 8px;"></span>
                                     <strong>${params.name}</strong>
                                 </div>
-                                <div style="margin-bottom: 2px;">任务时长: ${timeStr}</div>
-                                <div style="margin-bottom: 2px;">任务数量: ${countStr}个</div>
+                                <div style="margin-bottom: 2px;">任务时间: ${timeStr}</div>
+                                <div style="margin-bottom: 2px;">完成任务: ${countStr}个</div>
                                 <div>占比: ${percentage}%</div>
                             </div>
                         `;
@@ -1555,7 +1466,7 @@ export class TaskTimeStatsView {
 
                 if (data.length > 0) {
                     series.push({
-                        name: '平均任务时长',
+                        name: '平均任务时间',
                         type: 'custom',
                         renderItem: (params, api) => {
                             const start = api.value(0);
@@ -1602,10 +1513,10 @@ export class TaskTimeStatsView {
                 // 原有的多天数据处理逻辑
                 const sessionTypes = ['task'];
                 const typeNames = {
-                    'task': '任务时长'
+                    'task': '\u4efb\u52a1\u65f6\u95f4'
                 };
                 const typeColors = {
-                    'task': '#FF6B6B'
+                    'task': '#4CAF50'
                 };
 
                 sessionTypes.forEach(type => {
@@ -1673,7 +1584,7 @@ export class TaskTimeStatsView {
 
             // 配置选项
             const chartTitle = isAverageData ?
-                (timelineData[0].date.includes('月') ? '月度平均任务时长分布' : '年度平均任务时长分布') :
+                (timelineData[0].date.includes('\u6708') ? '\u6708\u5ea6\u5e73\u5747\u4efb\u52a1\u65f6\u95f4\u5206\u5e03' : '\u5e74\u5ea6\u5e73\u5747\u4efb\u52a1\u65f6\u95f4\u5206\u5e03') :
                 '任务时间线';
 
             const option = {
@@ -1755,6 +1666,27 @@ export class TaskTimeStatsView {
     private handleClick(event: Event) {
         const target = event.target as HTMLElement;
 
+        if (target.classList.contains('stats-switch-btn')) {
+            const mode = target.dataset.mode;
+            if (mode === 'pomodoro') {
+                this.dialog.destroy();
+                import("./PomodoroStatsView").then(({ PomodoroStatsView }) => {
+                    const statsView = new PomodoroStatsView();
+                    statsView.show();
+                });
+            }
+            return;
+        }
+
+        if (target.classList.contains('details-group-btn')) {
+            const group = target.dataset.group as any;
+            if (group && group !== this.currentDetailGroup) {
+                this.currentDetailGroup = group;
+                this.updateContent();
+            }
+            return;
+        }
+
         if (target.classList.contains('nav-btn')) {
             const view = target.dataset.view as any;
             if (view && view !== this.currentView) {
@@ -1784,19 +1716,36 @@ export class TaskTimeStatsView {
             }
         }
 
-        if (target.classList.contains('group-btn')) {
-            const group = target.dataset.group as any;
-            if (group && group !== this.currentDetailGroup) {
-                this.currentDetailGroup = group;
-                this.updateContent();
-            }
-        }
-
         if (target.classList.contains('nav-arrow')) {
             const action = target.dataset.action;
             this.handleNavigation(action);
         }
 
+        if (target.classList.contains('delete-btn')) {
+            const sessionId = target.dataset.sessionId;
+            if (sessionId) {
+                this.handleDeleteSession(sessionId);
+            }
+        }
+    }
+
+    private async handleDeleteSession(_sessionId: string) {
+        showMessage(t("taskStatsDeleteUnsupported") || "任务统计暂不支持删除记录", 3000, "error");
+    }
+
+    private showDeleteConfirmation(): Promise<boolean> {
+        return new Promise((resolve) => {
+            confirm(
+                "删除番茄记录",
+                "确定要删除此记录吗？此操作无法撤销",
+                () => {
+                    resolve(true);
+                },
+                () => {
+                    resolve(false);
+                }
+            );
+        });
     }
 
     private handleNavigation(action: string) {
@@ -1875,7 +1824,8 @@ export class TaskTimeStatsView {
             element.classList.toggle('active', element.dataset.range === this.currentTimeRange);
         });
 
-        this.dialog.element.querySelectorAll('.group-btn').forEach(btn => {
+        // 更新详情分组按钮状态
+        this.dialog.element.querySelectorAll('.details-group-btn').forEach(btn => {
             const element = btn as HTMLElement;
             element.classList.toggle('active', element.dataset.group === this.currentDetailGroup);
         });
@@ -1920,7 +1870,3 @@ export class TaskTimeStatsView {
         });
     }
 }
-
-
-
-

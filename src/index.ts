@@ -2,14 +2,10 @@ import {
     Plugin,
     getActiveEditor,
     showMessage,
-    confirm,
     Dialog,
-    Menu,
     openTab,
     openWindow,
-    adaptHotkey,
     getFrontend,
-    getBackend,
 } from "siyuan";
 import "./index.scss";
 
@@ -33,6 +29,7 @@ import { ProjectKanbanView } from "./components/ProjectKanbanView";
 import { PomodoroManager } from "./utils/pomodoroManager";
 import SettingPanelComponent from "./SettingPanel.svelte";
 import { exportIcsFile, uploadIcsToCloud } from "./utils/icsUtils";
+import { getFileStat } from "./api";
 
 export const SETTINGS_FILE = "reminder-settings.json";
 export const PROJECT_DATA_FILE = "project.json";
@@ -86,6 +83,8 @@ export const DEFAULT_SETTINGS = {
     autoDetectDateTime: false, // 新增：是否自动识别日期时间
     newDocNotebook: '', // 新增：新建文档的笔记本ID
     newDocPath: '/{{now | date "2006-01-02"}}/', // 新增：新建文档的路径模板，支持sprig语法
+    defaultHeadingLevel: 3, // 新增：新建标题的默认层级（1-6），默认为3级标题
+    defaultHeadingPosition: 'prepend', // 新增：新建标题的默认位置（'prepend' | 'append'），默认为最前
     weekStartDay: 1, // 新增：周视图的一周开始日 (0=周日, 1=周一，默认周一)
     // 控制侧边栏显示
     enableReminderDock: true, // 侧边栏：提醒（任务管理）
@@ -112,18 +111,30 @@ export const DEFAULT_SETTINGS = {
     projectSortOrder: [],
     projectSortMode: 'custom',
     // ICS 云端同步配置
-    icsBlockId: '',
     icsSyncInterval: 'daily', // '15min' | 'hourly' | '4hour' | '12hour' | 'daily'
     icsCloudUrl: '',
     icsSyncEnabled: false, // 是否启用ICS云端同步
     icsFormat: 'normal', // 'normal' | 'xiaomi' - ICS格式
+    icsFileName: '', // ICS文件名，默认为空时自动生成
+    icsSilentUpload: false, // 是否静默上传ICS文件，不显示成功提示
+    // ICS 同步方式配置
+    icsSyncMethod: 'siyuan', // 'siyuan' | 's3' - 同步方式
+    // S3 配置
+    s3UseSiyuanConfig: false, // 是否使用思源的S3配置
+    s3Bucket: '',
+    s3Endpoint: '',
+    s3Region: 'auto', // S3 区域，默认为 auto
+    s3AccessKeyId: '',
+    s3AccessKeySecret: '',
+    s3StoragePath: '', // S3存储路径，例如: /calendar/
+    s3ForcePathStyle: false, // S3 Addressing风格，true为Path-style，false为Virtual hosted style（默认）
+    s3TlsVerify: true, // S3 TLS证书验证，true为启用验证（默认），false为禁用验证
+    s3CustomDomain: '', // S3 自定义域名，用于生成外链
+    enableOutlinePrefix: true, // 是否在大纲中为绑定标题添加任务状态前缀
 };
 
 export default class ReminderPlugin extends Plugin {
-    private dockPanel: HTMLElement;
     private reminderPanel: ReminderPanel;
-    private topBarElement: HTMLElement;
-    private dockElement: HTMLElement;
     private tabViews: Map<string, any> = new Map(); // 存储所有Tab视图实例（日历、四象限、项目看板、番茄钟等）
     private categoryManager: CategoryManager;
     private settingUtils: SettingUtils;
@@ -150,6 +161,9 @@ export default class ReminderPlugin extends Plugin {
     // ICS 云端同步相关
     private icsSyncTimer: number | null = null;
     private isPerformingIcsSync: boolean = false;
+
+    // ICS 订阅同步相关
+    private icsSubscriptionSyncTimer: number | null = null;
 
     async onload() {
         await this.loadData(STORAGE_NAME);
@@ -221,6 +235,7 @@ export default class ReminderPlugin extends Plugin {
                 this.updateBadges();
                 this.updateProjectBadges();
                 this.updateHabitBadges();
+                this.updateOutlinePrefixes();
                 try {
                     window.dispatchEvent(new CustomEvent('reminderUpdated'));
                     window.dispatchEvent(new CustomEvent('habitUpdated'));
@@ -243,18 +258,9 @@ export default class ReminderPlugin extends Plugin {
                         if (String(pv) !== String(nv)) { relevantChanged = true; break; }
                     }
 
-                    // 检查是否存在番茄钟实例（任何状态：运行/暂停/停止）
-                    let anyInstanceExists = false;
                     const currentPomodoro = PomodoroManager.getInstance().getCurrentPomodoroTimer();
-                    if (currentPomodoro) {
-                        anyInstanceExists = true;
-                    } else {
-                        for (const [, view] of this.tabViews) {
-                            if (view && typeof view.updateState === 'function' && typeof view.getCurrentState === 'function') {
-                                anyInstanceExists = true; break;
-                            }
-                        }
-                    }
+
+
 
                     if (!relevantChanged) {
                         // 仅更新时间缓存，不做实例更新或广播
@@ -298,7 +304,7 @@ export default class ReminderPlugin extends Plugin {
                 }
 
                 // 处理ICS同步设置变更
-                if (settings.icsSyncEnabled && settings.icsBlockId && settings.icsSyncInterval) {
+                if (settings.icsSyncEnabled && settings.icsSyncInterval) {
                     // 启用时立即安排并尽快执行一次同步
                     await this.scheduleIcsSync(settings.icsSyncInterval, true);
                 } else if (this.icsSyncTimer) {
@@ -315,6 +321,9 @@ export default class ReminderPlugin extends Plugin {
 
         // 初始化ICS云端同步
         this.initIcsSync();
+
+        // 初始化ICS订阅同步
+        this.initIcsSubscriptionSync();
     }
 
     private enableAudioOnUserInteraction() {
@@ -367,7 +376,7 @@ export default class ReminderPlugin extends Plugin {
             content: `<div id="SettingPanel" style="height: 100%;"></div>`,
             width: "800px",
             height: "700px",
-            destroyCallback: (options) => {
+            destroyCallback: () => {
                 pannel.$destroy();
             }
         });
@@ -792,6 +801,71 @@ export default class ReminderPlugin extends Plugin {
         });
         // 为当前已存在的protyle添加按钮
         this.addBreadcrumbButtonsToExistingProtyles();
+
+        // 初始化大纲前缀监听
+        this.initOutlinePrefixObserver();
+    }
+
+    private initOutlinePrefixObserver() {
+        let updateTimeout: number | null = null;
+
+        // 防抖更新函数
+        const debouncedUpdate = () => {
+            if (updateTimeout) clearTimeout(updateTimeout);
+            updateTimeout = window.setTimeout(() => {
+                this.updateOutlinePrefixes();
+            }, 100);
+        };
+
+        // 创建观察器
+        const createObserver = () => {
+            const outlineContainer = document.querySelector('.file-tree');
+            if (!outlineContainer) return null;
+
+            const observer = new MutationObserver(debouncedUpdate);
+            observer.observe(outlineContainer, {
+                childList: true,
+                subtree: true,
+                characterData: true,
+                attributes: true,
+                attributeFilter: ['data-node-id', 'data-type']
+            });
+            return observer;
+        };
+
+        let currentObserver = createObserver();
+
+        // 定期检查和重新绑定观察器
+        const checkAndRebindObserver = () => {
+            const outlineContainer = document.querySelector('.file-tree');
+            if (!outlineContainer) {
+                if (currentObserver) {
+                    currentObserver.disconnect();
+                    currentObserver = null;
+                }
+                return;
+            }
+
+            if (!currentObserver) {
+                currentObserver = createObserver();
+            }
+
+            // 无论如何都更新一次，确保前缀正确
+            debouncedUpdate();
+        };
+
+        // 初始更新
+        setTimeout(checkAndRebindObserver, 500);
+
+        // 每隔一段时间检查观察器状态
+        setInterval(checkAndRebindObserver, 2000);
+
+        // 监听文档切换事件
+        this.eventBus.on('switch-doc', checkAndRebindObserver);
+        this.eventBus.on('loaded-doc', checkAndRebindObserver);
+
+        // 监听大纲相关事件
+        this.eventBus.on('outline', checkAndRebindObserver);
     }
 
     private addBreadcrumbButtonsToExistingProtyles() {
@@ -1326,6 +1400,52 @@ export default class ReminderPlugin extends Plugin {
         } catch (error) {
             console.error('更新习惯徽章失败:', error);
             this.setHabitDockBadge(0);
+        }
+    }
+
+    // 更新大纲标题前缀
+    private async updateOutlinePrefixes() {
+        try {
+            const settings = await this.loadSettings();
+            if (!settings.enableOutlinePrefix) return;
+
+            const outline = document.querySelector('.file-tree.sy__outline');
+            if (!outline) return;
+
+            const headingLis = outline.querySelectorAll('li[data-type="NodeHeading"]');
+            const blockIds = Array.from(headingLis).map(li => (li as HTMLElement).getAttribute('data-node-id')).filter(id => id) as string[];
+
+            if (blockIds.length === 0) return;
+
+            // 批量获取块属性
+            const { getBlockAttrs } = await import('./api');
+            const attrsPromises = blockIds.map(id => getBlockAttrs(id));
+            const attrsArray = await Promise.all(attrsPromises);
+
+            headingLis.forEach((li, index) => {
+                const attrs = attrsArray[index];
+                const bookmark = attrs?.bookmark || '';
+                const textElement = li.querySelector('.b3-list-item__text') as HTMLElement;
+
+                if (textElement) {
+                    let prefix = '';
+                    if (bookmark === '✅') {
+                        prefix = '✅ ';
+                    } else if (bookmark === '⏰') {
+                        prefix = '⏰ ';
+                    }
+
+                    // 移除现有前缀并添加新前缀
+                    const originalText = textElement.textContent || '';
+                    const newText = prefix + originalText.replace(/^[✅⏰]\s*/, '');
+
+                    if (textElement.textContent !== newText) {
+                        textElement.textContent = newText;
+                    }
+                }
+            });
+        } catch (error) {
+            console.error('更新大纲前缀失败:', error);
         }
     }
 
@@ -3898,7 +4018,7 @@ export default class ReminderPlugin extends Plugin {
     // 初始化ICS云端同步
     private async initIcsSync() {
         const settings = await this.loadSettings();
-        if (settings.icsSyncEnabled && settings.icsBlockId && settings.icsSyncInterval) {
+        if (settings.icsSyncEnabled && settings.icsSyncInterval) {
             // 启用时立即执行一次初始同步
             await this.scheduleIcsSync(settings.icsSyncInterval, true);
         }
@@ -4002,13 +4122,97 @@ export default class ReminderPlugin extends Plugin {
         this.isPerformingIcsSync = true;
         try {
             const settings = await this.loadSettings();
-            if (!settings.icsSyncEnabled || !settings.icsBlockId) return;
+            if (!settings.icsSyncEnabled) return;
 
-            await uploadIcsToCloud(this, settings);
+            // 检查reminder.json是否有新事件
+            const reminderPath = 'data/storage/petal/siyuan-plugin-task-note-management/reminder.json';
+            const stat = await getFileStat(reminderPath);
+            const lastSync = settings.icsLastSyncAt ? new Date(settings.icsLastSyncAt).getTime() : 0;
+            if (stat && stat.mtime <= lastSync) {
+                // 没有新事件，只更新同步时间
+                settings.icsLastSyncAt = new Date().toISOString();
+                await this.saveData(SETTINGS_FILE, settings);
+                return;
+            }
+
+            await uploadIcsToCloud(this, settings, settings.icsSilentUpload);
         } catch (error) {
             console.error('ICS自动同步失败:', error);
         } finally {
             this.isPerformingIcsSync = false;
+        }
+    }
+
+    // 初始化ICS订阅同步
+    private async initIcsSubscriptionSync() {
+        try {
+
+            // 启动定时检查 (参考 ICS 云端同步的短轮询机制)
+            this.scheduleIcsSubscriptionSync();
+        } catch (error) {
+            console.error('初始化ICS订阅同步失败:', error);
+        }
+    }
+
+    // 安排ICS订阅定时同步
+    private async scheduleIcsSubscriptionSync() {
+        if (this.icsSubscriptionSyncTimer) {
+            window.clearInterval(this.icsSubscriptionSyncTimer);
+            this.icsSubscriptionSyncTimer = null;
+        }
+
+        const shortPollMs = 60 * 1000; // 每分钟检查一次是否需要同步
+        this.icsSubscriptionSyncTimer = window.setInterval(async () => {
+            try {
+                await this.performIcsSubscriptionSync();
+            } catch (error) {
+                console.error('ICS订阅轮询同步检查失败:', error);
+            }
+        }, shortPollMs);
+    }
+
+    // 执行到期的订阅同步
+    private async performIcsSubscriptionSync() {
+        const { loadSubscriptions, syncSubscription, getSyncIntervalMs, saveSubscriptions } = await import('./utils/icsSubscription');
+
+        let data;
+        try {
+            data = await loadSubscriptions(this);
+        } catch (e) {
+            return;
+        }
+
+        const subscriptions = Object.values(data.subscriptions).filter((sub: any) => sub.enabled);
+        if (subscriptions.length === 0) return;
+
+        let changed = false;
+        const now = Date.now();
+
+        for (const sub of subscriptions as any[]) {
+            const intervalMs = getSyncIntervalMs(sub.syncInterval);
+            const lastSyncMs = sub.lastSync ? Date.parse(sub.lastSync) : 0;
+
+            // 如果到了同步时间
+            if (now >= lastSyncMs + intervalMs) {
+                console.log(`[Timer] Syncing ICS subscription: ${sub.name}`);
+                const result = await syncSubscription(this, sub);
+
+                // 更新订阅状态信息
+                sub.lastSync = new Date().toISOString();
+                sub.lastSyncStatus = result.success ? 'success' : 'error';
+                if (!result.success) {
+                    sub.lastSyncError = result.error;
+                } else {
+                    sub.lastSyncError = undefined;
+                }
+
+                data.subscriptions[sub.id] = sub;
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            await saveSubscriptions(this, data);
         }
     }
 }

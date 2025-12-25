@@ -1,9 +1,10 @@
 import { Calendar } from '@fullcalendar/core';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
+import multiMonthPlugin from '@fullcalendar/multimonth';
 import interactionPlugin from '@fullcalendar/interaction';
 import { showMessage, confirm, openTab, Menu, Dialog } from "siyuan";
-import { refreshSql, readReminderData, writeReminderData, getBlockByID, sql, updateBlock, getBlockKramdown, updateBlockReminderBookmark, openBlock, readProjectData } from "../api";
+import { refreshSql, getBlockByID, sql, updateBlock, getBlockKramdown, updateBlockReminderBookmark, openBlock, readProjectData } from "../api";
 import { getLocalDateString, getLocalDateTime, getLocalDateTimeString, compareDateStrings, getLogicalDateString, getRelativeDateString } from "../utils/dateUtils";
 import { QuickReminderDialog } from "./QuickReminderDialog";
 import { CategoryManager, Category } from "../utils/categoryManager";
@@ -14,10 +15,12 @@ import { ProjectColorDialog } from "./ProjectColorDialog";
 import { PomodoroTimer } from "./PomodoroTimer";
 import { t } from "../utils/i18n";
 import { generateRepeatInstances, RepeatInstance, getDaysDifference, addDaysToDate } from "../utils/repeatUtils";
+import { getAllReminders, saveReminders } from "../utils/icsSubscription";
 import { CalendarConfigManager } from "../utils/calendarConfigManager";
 import { TaskSummaryDialog } from "@/components/TaskSummaryDialog";
 import { PomodoroManager } from "../utils/pomodoroManager";
 import { getNextLunarMonthlyDate, getNextLunarYearlyDate, getSolarDateLunarString } from "../utils/lunarUtils";
+import { BlockBindingDialog } from "./BlockBindingDialog";
 export class CalendarView {
     private container: HTMLElement;
     private calendar: Calendar;
@@ -34,6 +37,8 @@ export class CalendarView {
     private initialProjectFilter: string | null = null;
     private colorBy: 'category' | 'priority' | 'project' = 'project'; // 按分类或优先级上色
     private tooltip: HTMLElement | null = null; // 添加提示框元素
+    private dropIndicator: HTMLElement | null = null; // 拖放放置指示器
+    private externalReminderUpdatedHandler: ((e: Event) => void) | null = null;
     private hideTooltipTimeout: number | null = null; // 添加提示框隐藏超时控制
     private tooltipShowTimeout: number | null = null; // 添加提示框显示延迟控制
     private lastClickTime: number = 0; // 添加双击检测
@@ -48,7 +53,8 @@ export class CalendarView {
     private monthBtn: HTMLButtonElement;
     private weekBtn: HTMLButtonElement;
     private dayBtn: HTMLButtonElement;
-    private matrixBtn: HTMLButtonElement;
+    private yearBtn: HTMLButtonElement;
+    private viewTypeSwitch: HTMLInputElement;
 
     // 使用全局番茄钟管理器
     private pomodoroManager: PomodoroManager = PomodoroManager.getInstance();
@@ -105,7 +111,15 @@ export class CalendarView {
         const viewGroup = document.createElement('div');
         viewGroup.className = 'reminder-calendar-view-group';
         toolbar.appendChild(viewGroup);
-
+        this.yearBtn = document.createElement('button');
+        this.yearBtn.className = 'b3-button b3-button--outline';
+        this.yearBtn.textContent = t("year");
+        this.yearBtn.addEventListener('click', async () => {
+            await this.calendarConfigManager.setViewMode('multiMonthYear');
+            this.calendar.changeView('multiMonthYear');
+            this.updateViewButtonStates();
+        });
+        viewGroup.appendChild(this.yearBtn);
         this.monthBtn = document.createElement('button');
         this.monthBtn.className = 'b3-button b3-button--outline';
         this.monthBtn.textContent = t("month");
@@ -120,8 +134,10 @@ export class CalendarView {
         this.weekBtn.className = 'b3-button b3-button--outline';
         this.weekBtn.textContent = t("week");
         this.weekBtn.addEventListener('click', async () => {
-            await this.calendarConfigManager.setViewMode('timeGridWeek');
-            this.calendar.changeView('timeGridWeek');
+            const viewType = this.calendarConfigManager.getViewType();
+            const viewMode = viewType === 'dayGrid' ? 'dayGridWeek' : 'timeGridWeek';
+            await this.calendarConfigManager.setViewMode(viewMode);
+            this.calendar.changeView(viewMode);
             this.updateViewButtonStates();
         });
         viewGroup.appendChild(this.weekBtn);
@@ -130,19 +146,42 @@ export class CalendarView {
         this.dayBtn.className = 'b3-button b3-button--outline';
         this.dayBtn.textContent = t("day");
         this.dayBtn.addEventListener('click', async () => {
-            await this.calendarConfigManager.setViewMode('timeGridDay');
-            this.calendar.changeView('timeGridDay');
+            const viewType = this.calendarConfigManager.getViewType();
+            const viewMode = viewType === 'dayGrid' ? 'dayGridDay' : 'timeGridDay';
+            await this.calendarConfigManager.setViewMode(viewMode);
+            this.calendar.changeView(viewMode);
             this.updateViewButtonStates();
         });
         viewGroup.appendChild(this.dayBtn);
 
-        this.matrixBtn = document.createElement('button');
-        this.matrixBtn.className = 'b3-button b3-button--outline';
-        this.matrixBtn.textContent = t("eisenhowerMatrix");
-        this.matrixBtn.addEventListener('click', async () => {
-            this.openEisenhowerTab();
+
+
+
+        // 添加视图类型切换开关
+        const switchContainer = document.createElement('div');
+        switchContainer.style.display = 'flex';
+        switchContainer.style.alignItems = 'center';
+        switchContainer.style.marginLeft = '8px';
+        switchContainer.style.whiteSpace = 'nowrap';
+        switchContainer.style.flexShrink = '0';
+        switchContainer.title = t("switchViewType");
+
+        const switchLabel = document.createElement('label');
+        switchLabel.className = 'b3-form__label';
+        switchLabel.textContent = t("switchViewType");
+        switchLabel.style.marginRight = '4px';
+        switchLabel.style.fontSize = '12px';
+
+        this.viewTypeSwitch = document.createElement('input');
+        this.viewTypeSwitch.type = 'checkbox';
+        this.viewTypeSwitch.className = 'b3-switch';
+        this.viewTypeSwitch.addEventListener('change', () => {
+            this.toggleViewType();
         });
-        viewGroup.appendChild(this.matrixBtn);
+
+        switchContainer.appendChild(switchLabel);
+        switchContainer.appendChild(this.viewTypeSwitch);
+        viewGroup.appendChild(switchContainer);
 
 
         // 添加统一过滤器
@@ -287,8 +326,9 @@ export class CalendarView {
 
         // 初始化日历 - 使用用户设置的周开始日
         this.calendar = new Calendar(calendarEl, {
-            plugins: [dayGridPlugin, timeGridPlugin, interactionPlugin],
+            plugins: [dayGridPlugin, timeGridPlugin, multiMonthPlugin, interactionPlugin],
             initialView: this.calendarConfigManager.getViewMode(),
+            multiMonthMaxColumns: 1, // force a single column
             headerToolbar: {
                 left: 'prev,next today',
                 center: 'title',
@@ -313,11 +353,18 @@ export class CalendarView {
                 hour12: false
             },
             eventClassNames: 'reminder-calendar-event',
+            displayEventTime: true,
             eventContent: this.renderEventContent.bind(this),
             eventClick: this.handleEventClick.bind(this),
             eventDrop: this.handleEventDrop.bind(this),
             eventResize: this.handleEventResize.bind(this),
-            eventAllow: this.handleEventAllow.bind(this),
+            eventAllow: (dropInfo, draggedEvent) => {
+                // 禁用订阅任务的拖拽和调整大小
+                if (draggedEvent.extendedProps.isSubscribed) {
+                    return false;
+                }
+                return this.handleEventAllow(dropInfo, draggedEvent);
+            },
             dateClick: this.handleDateClick.bind(this),
             select: this.handleDateSelect.bind(this),
             // 移除自动事件源，改为手动管理事件
@@ -381,8 +428,165 @@ export class CalendarView {
 
         this.calendar.render();
 
+        // 支持从提醒面板将任务拖拽到日历上以调整任务时间
+        // 接受 mime-type: 'application/x-reminder' (JSON) 或纯文本 reminder id
+        calendarEl.addEventListener('dragover', (e: DragEvent) => {
+            e.preventDefault();
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+            // 更新并显示放置指示器
+            try {
+                this.updateDropIndicator(e.clientX, e.clientY, calendarEl);
+            } catch (err) {
+                // ignore
+            }
+        });
+
+        calendarEl.addEventListener('dragleave', (e: DragEvent) => {
+            // 隐藏指示器（当拖出日历区域）
+            this.hideDropIndicator();
+        });
+
+        calendarEl.addEventListener('drop', async (e: DragEvent) => {
+            e.preventDefault();
+            // 隐藏指示器（优先）
+            this.hideDropIndicator();
+            try {
+                const dt = e.dataTransfer;
+                if (!dt) return;
+
+                let payloadStr = dt.getData('application/x-reminder') || dt.getData('text/plain') || '';
+                if (!payloadStr) return;
+
+                let payload: any;
+                try {
+                    payload = JSON.parse(payloadStr);
+                } catch (err) {
+                    // 如果只是 id 字符串
+                    payload = { id: payloadStr };
+                }
+
+                const reminderId = payload.id;
+                if (!reminderId) return;
+
+                // 找到放置位置对应的日期（通过坐标查找所有带 data-date 的元素）
+                const pointX = e.clientX;
+                const pointY = e.clientY;
+                const dateEls = Array.from(calendarEl.querySelectorAll('[data-date]')) as HTMLElement[];
+                let dateEl: HTMLElement | null = null;
+
+                // 优先查找包含该点的元素
+                for (const d of dateEls) {
+                    const r = d.getBoundingClientRect();
+                    if (pointX >= r.left && pointX <= r.right && pointY >= r.top && pointY <= r.bottom) {
+                        dateEl = d;
+                        break;
+                    }
+                }
+
+                // 若没有直接包含的元素，则选择距离点中心最近的日期单元格
+                if (!dateEl && dateEls.length > 0) {
+                    let minDist = Infinity;
+                    for (const d of dateEls) {
+                        const r = d.getBoundingClientRect();
+                        const cx = (r.left + r.right) / 2;
+                        const cy = (r.top + r.bottom) / 2;
+                        const dx = cx - pointX;
+                        const dy = cy - pointY;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        if (dist < minDist) {
+                            minDist = dist;
+                            dateEl = d;
+                        }
+                    }
+                }
+
+                // 若仍未找到，使用日历当前显示的日期作为回退
+                if (!dateEl) {
+                    const fallbackDate = this.calendar ? this.calendar.getDate() : new Date();
+                    const dateStrFallback = fallbackDate.toISOString().slice(0, 10);
+                    dateEl = null;
+                    // 直接使用回退日期字符串
+                    var dateStr = dateStrFallback;
+                } else {
+                    var dateStr = dateEl.getAttribute('data-date') || '';
+                }
+                if (!dateStr) {
+                    showMessage('无法识别放置位置，请放到日历的日期或时间格上。');
+                    return;
+                }
+
+                // 判断是否在时间网格（timeGrid）内部
+                const elAtPoint = document.elementFromPoint(pointX, pointY) as HTMLElement | null;
+                const inTimeGrid = !!(elAtPoint && elAtPoint.closest('.fc-timegrid'));
+
+                // 检测是否落在“全天”区域（FullCalendar 在 timeGrid 上方会渲染 dayGrid/all-day 区域）
+                const inAllDayArea = !!(elAtPoint && (elAtPoint.closest('.fc-daygrid') || elAtPoint.closest('.fc-daygrid-day') || elAtPoint.closest('.fc-daygrid-body') || elAtPoint.closest('.fc-all-day')));
+
+                let startDate: Date;
+                let isAllDay = false;
+
+                if (inAllDayArea) {
+                    // 明确放置到全天区域，按全天事件处理
+                    startDate = new Date(`${dateStr}T00:00:00`);
+                    isAllDay = true;
+                } else if (inTimeGrid) {
+                    // 计算时间：按放置点在当天列的相对纵向位置映射到 slotMinTime-slotMaxTime
+                    const dayCol = dateEl;
+                    const rect = dayCol.getBoundingClientRect();
+                    const y = e.clientY - rect.top;
+
+                    const todayStartTime = await this.getTodayStartTime();
+                    const slotMaxTime = this.calculateSlotMaxTime(todayStartTime);
+                    const slotMin = this.parseDuration(todayStartTime);
+                    const slotMax = this.parseDuration(slotMaxTime);
+
+                    const totalMinutes = Math.max(1, slotMax - slotMin);
+                    const clampedY = Math.max(0, Math.min(rect.height, y));
+                    const minutesFromMin = Math.round((clampedY / rect.height) * totalMinutes);
+
+                    startDate = new Date(`${dateStr}T00:00:00`);
+                    const m = slotMin + minutesFromMin;
+                    const hh = Math.floor(m / 60);
+                    const mm = m % 60;
+                    startDate.setHours(hh, mm, 0, 0);
+                    isAllDay = false;
+                } else {
+                    // 月视图或无时间信息：视为全天
+                    startDate = new Date(`${dateStr}T00:00:00`);
+                    isAllDay = true;
+                }
+
+                const durationMinutes = payload.durationMinutes || 60;
+                const endDate = new Date(startDate.getTime() + durationMinutes * 60000);
+
+                // 使用已有的方法更新提醒时间（复用现有逻辑）
+                await this.updateEventTime(reminderId, { event: { start: startDate, end: endDate, allDay: isAllDay } }, false);
+
+                // 通知全局提醒更新，触发 ReminderPanel 刷新
+                try {
+                    window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
+                } catch (err) {
+                    // ignore
+                }
+
+                // 刷新日历显示
+                await this.refreshEvents();
+                // 隐藏指示器
+                this.hideDropIndicator();
+            } catch (err) {
+                console.error('处理外部拖放失败', err);
+                showMessage(t('operationFailed'));
+                this.hideDropIndicator();
+            }
+        });
+
+
         // 更新视图按钮状态
         this.updateViewButtonStates();
+
+        // 设置任务摘要对话框的引用
+        this.taskSummaryDialog.setCalendar(this.calendar);
+        this.taskSummaryDialog.setCategoryManager(this);
 
         // datesSet 会在 render 后自动触发，无需额外调用 refreshEvents
 
@@ -390,7 +594,19 @@ export class CalendarView {
         this.addCustomStyles();
 
         // 监听提醒更新事件
-        window.addEventListener('reminderUpdated', () => this.refreshEvents());
+        this.externalReminderUpdatedHandler = (e: Event) => {
+            try {
+                const ev = e as CustomEvent;
+                if (ev && ev.detail && ev.detail.source === 'calendar') {
+                    // 忽略由日历自身发出的更新，防止循环刷新
+                    return;
+                }
+            } catch (err) {
+                // ignore and proceed
+            }
+            this.refreshEvents();
+        };
+        window.addEventListener('reminderUpdated', this.externalReminderUpdatedHandler);
         // 监听项目颜色更新事件
         window.addEventListener('projectColorUpdated', () => {
             this.colorCache.clear();
@@ -590,7 +806,7 @@ export class CalendarView {
                 await this.renderUnifiedFilter(unifiedFilterSelect);
             }
             this.refreshEvents();
-            window.dispatchEvent(new CustomEvent('reminderUpdated'));
+            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
         });
         categoryDialog.show();
     }
@@ -756,6 +972,48 @@ export class CalendarView {
 
         const menu = new Menu("calendarEventContextMenu");
 
+        if (calendarEvent.extendedProps.isSubscribed) {
+            menu.addItem({
+                iconHTML: "ℹ️",
+                label: t("subscribedTaskReadOnly") || "订阅任务（只读）",
+                disabled: true
+            });
+
+            if (calendarEvent.extendedProps.projectId) {
+                menu.addItem({
+                    iconHTML: "📂",
+                    label: t("openProjectKanban"),
+                    click: () => {
+                        this.openProjectKanban(calendarEvent.extendedProps.projectId);
+                    }
+                });
+            }
+
+            menu.addSeparator();
+
+            menu.addItem({
+                iconHTML: "🍅",
+                label: t("startPomodoro"),
+                click: () => {
+                    this.startPomodoro(calendarEvent);
+                }
+            });
+
+            menu.addItem({
+                iconHTML: "⏱️",
+                label: t("startCountUp"),
+                click: () => {
+                    this.startPomodoroCountUp(calendarEvent);
+                }
+            });
+
+            menu.open({
+                x: event.clientX,
+                y: event.clientY
+            });
+            return;
+        }
+
         // 如果事项没有绑定块，显示绑定块选项
         if (!calendarEvent.extendedProps.blockId || calendarEvent.extendedProps.isQuickReminder) {
             menu.addItem({
@@ -778,21 +1036,23 @@ export class CalendarView {
 
         // 对于重复事件实例，提供特殊选项
         if (calendarEvent.extendedProps.isRepeated) {
-            menu.addItem({
-                iconHTML: "📝",
-                label: t("modifyThisInstance"),
-                click: () => {
-                    this.showInstanceEditDialog(calendarEvent);
-                }
-            });
+            if (!calendarEvent.extendedProps.isSubscribed) {
+                menu.addItem({
+                    iconHTML: "📝",
+                    label: t("modifyThisInstance"),
+                    click: () => {
+                        this.showInstanceEditDialog(calendarEvent);
+                    }
+                });
 
-            menu.addItem({
-                iconHTML: "📝",
-                label: t("modifyAllInstances"),
-                click: () => {
-                    this.showTimeEditDialogForSeries(calendarEvent);
-                }
-            });
+                menu.addItem({
+                    iconHTML: "📝",
+                    label: t("modifyAllInstances"),
+                    click: () => {
+                        this.showTimeEditDialogForSeries(calendarEvent);
+                    }
+                });
+            }
         } else if (calendarEvent.extendedProps.repeat?.enabled) {
             // 对于周期原始事件，提供与实例一致的选项
             menu.addItem({
@@ -985,7 +1245,7 @@ export class CalendarView {
         const instanceDate = instanceIdStr.split('_').pop() || calendarEvent.extendedProps.date;
 
         try {
-            const reminderData = await readReminderData();
+            const reminderData = await getAllReminders(this.plugin);
             const originalReminder = reminderData[originalId];
 
             if (!originalReminder) {
@@ -1022,7 +1282,7 @@ export class CalendarView {
                     mode: 'edit',
                     onSaved: async () => {
                         await this.refreshEvents();
-                        window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                        window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
                     },
                     plugin: this.plugin,
                     isInstanceEdit: true
@@ -1051,7 +1311,7 @@ export class CalendarView {
 
                     showMessage(t("instanceDeleted"));
                     await this.refreshEvents();
-                    window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                    window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
                 } catch (error) {
                     console.error('删除重复实例失败:', error);
                     showMessage(t("deleteInstanceFailed"));
@@ -1062,7 +1322,7 @@ export class CalendarView {
     private async addExcludedDate(originalId: string, excludeDate: string) {
         // 为原始重复事件添加排除日期
         try {
-            const reminderData = await readReminderData();
+            const reminderData = await getAllReminders(this.plugin);
 
             if (reminderData[originalId]) {
                 if (!reminderData[originalId].repeat) {
@@ -1079,7 +1339,7 @@ export class CalendarView {
                     reminderData[originalId].repeat.excludeDates.push(excludeDate);
                 }
 
-                await writeReminderData(reminderData);
+                await saveReminders(this.plugin, reminderData);
             } else {
                 throw new Error('原始事件不存在');
             }
@@ -1225,14 +1485,14 @@ export class CalendarView {
                 calendarEvent.extendedProps.originalId :
                 calendarEvent.id;
 
-            const reminderData = await readReminderData();
+            const reminderData = await getAllReminders(this.plugin);
 
             if (reminderData[reminderId]) {
                 reminderData[reminderId].priority = priority;
-                await writeReminderData(reminderData);
+                await saveReminders(this.plugin, reminderData);
 
                 // 触发更新事件
-                window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
 
                 // 立即刷新事件显示
                 await this.refreshEvents();
@@ -1276,19 +1536,19 @@ export class CalendarView {
 
     private async performDeleteEvent(reminderId: string) {
         try {
-            const reminderData = await readReminderData();
+            const reminderData = await getAllReminders(this.plugin);
 
             if (reminderData[reminderId]) {
                 const blockId = reminderData[reminderId].blockId;
                 delete reminderData[reminderId];
-                await writeReminderData(reminderData);
+                await saveReminders(this.plugin, reminderData);
 
                 // 更新块的书签状态
                 if (blockId) {
                     await updateBlockReminderBookmark(blockId);
                 }
 
-                window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
 
                 // 立即刷新事件显示
                 await this.refreshEvents();
@@ -1312,10 +1572,15 @@ export class CalendarView {
         checkbox.type = 'checkbox';
         checkbox.className = 'reminder-calendar-event-checkbox';
         checkbox.checked = eventInfo.event.extendedProps.completed || false;
-        checkbox.addEventListener('click', (e) => {
-            e.stopPropagation(); // 阻止事件冒泡
-            this.toggleEventCompleted(eventInfo.event);
-        });
+        if (eventInfo.event.extendedProps.isSubscribed) {
+            checkbox.disabled = true;
+            checkbox.title = t("subscribedTaskReadOnly") || "订阅任务（只读）";
+        } else {
+            checkbox.addEventListener('click', (e) => {
+                e.stopPropagation(); // 阻止事件冒泡
+                this.toggleEventCompleted(eventInfo.event);
+            });
+        }
 
         // 添加事件内容容器
         const eventEl = document.createElement('div');
@@ -1347,6 +1612,31 @@ export class CalendarView {
         titleEl.innerHTML = eventInfo.event.title;
         eventEl.appendChild(titleEl);
 
+        // 在非全天事件中显示时间范围
+        if (!eventInfo.event.allDay) {
+            const timeEl = document.createElement('div');
+            timeEl.className = 'reminder-calendar-event-time';
+            timeEl.style.cssText = `
+                font-size: 10px;
+                opacity: 0.8;
+                margin-top: 2px;
+                line-height: 1.2;
+            `;
+
+            const startTime = eventInfo.event.start;
+            const endTime = eventInfo.event.end;
+
+            if (startTime && endTime) {
+                const startStr = startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const endStr = endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                timeEl.textContent = `${startStr} - ${endStr}`;
+            } else if (startTime) {
+                timeEl.textContent = startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+
+            eventEl.appendChild(timeEl);
+        }
+
         // 添加备注（如果存在）
         if (eventInfo.event.extendedProps.note) {
             const noteEl = document.createElement('div');
@@ -1355,8 +1645,14 @@ export class CalendarView {
             eventEl.appendChild(noteEl);
         }
 
-        // 添加分类emoji图标（如果有分类）
-        if (eventInfo.event.extendedProps.categoryId) {
+        // 添加分类emoji图标或订阅图标
+        if (eventInfo.event.extendedProps.isSubscribed) {
+            const subIcon = document.createElement('div');
+            subIcon.className = 'reminder-category-indicator';
+            subIcon.innerHTML = '🗓';
+            subIcon.title = t("subscribedTask") || "订阅任务";
+            wrapper.appendChild(subIcon);
+        } else if (eventInfo.event.extendedProps.categoryId) {
             const category = this.categoryManager.getCategoryById(eventInfo.event.extendedProps.categoryId);
             if (category && category.icon) {
                 const categoryIcon = document.createElement('div');
@@ -1367,8 +1663,8 @@ export class CalendarView {
             }
         }
 
-        // 添加链接图标（如果有绑定块且不是快速提醒）
-        if (eventInfo.event.extendedProps.blockId && !eventInfo.event.extendedProps.isQuickReminder) {
+        // 添加链接图标（如果有绑定块且不是快速提醒，且不是订阅任务）
+        if (eventInfo.event.extendedProps.blockId && !eventInfo.event.extendedProps.isQuickReminder && !eventInfo.event.extendedProps.isSubscribed) {
             const linkIcon = document.createElement('div');
             linkIcon.className = 'reminder-link-indicator';
             linkIcon.innerHTML = '🔗';
@@ -1406,7 +1702,7 @@ export class CalendarView {
 
     private async toggleEventCompleted(event) {
         try {
-            const reminderData = await readReminderData();
+            const reminderData = await getAllReminders(this.plugin);
 
             if (event.extendedProps.isRepeated) {
                 // 处理重复事件实例
@@ -1444,7 +1740,7 @@ export class CalendarView {
                         completedTimes[instanceDate] = getLocalDateTimeString(new Date());
                     }
 
-                    await writeReminderData(reminderData);
+                    await saveReminders(this.plugin, reminderData);
 
                     // 更新块的书签状态
                     const blockId = reminderData[originalId].blockId;
@@ -1459,7 +1755,7 @@ export class CalendarView {
                     }
 
                     // 触发更新事件
-                    window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                    window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
 
                     // 立即刷新事件显示
                     await this.refreshEvents();
@@ -1481,7 +1777,7 @@ export class CalendarView {
                         delete reminderData[reminderId].completedTime;
                     }
 
-                    await writeReminderData(reminderData);
+                    await saveReminders(this.plugin, reminderData);
 
                     // 更新块的书签状态
                     if (blockId) {
@@ -1498,7 +1794,7 @@ export class CalendarView {
                     event.setExtendedProp('completed', newCompletedState);
 
                     // 触发更新事件
-                    window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                    window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
 
                     // 立即刷新事件显示
                     await this.refreshEvents();
@@ -1668,9 +1964,13 @@ export class CalendarView {
         const reminder = info.event.extendedProps;
         const blockId = reminder.blockId || info.event.id; // 兼容旧数据格式
 
-        // 如果没有绑定块，提示用户绑定块
+        // 如果没有绑定块，提示用户绑定块 (订阅任务除外)
         if (!reminder.blockId) {
-            showMessage(t("unboundReminder") + "，请右键选择\"绑定到块\"");
+            if (reminder.isSubscribed) {
+                showMessage(t("subscribedTaskReadOnly") || "订阅任务（只读）");
+            } else {
+                showMessage(t("unboundReminder") + "，请右键选择\"绑定到块\"");
+            }
             return;
         }
 
@@ -1704,7 +2004,7 @@ export class CalendarView {
             const originalId = originalReminder.originalId;
             const instanceDate = info.event.startStr.split('T')[0];
 
-            const reminderData = await readReminderData();
+            const reminderData = await getAllReminders(this.plugin);
             const originalEvent = reminderData[originalId];
             const isAlreadyModified = originalEvent?.repeat?.instanceModifications?.[instanceDate];
 
@@ -1736,6 +2036,7 @@ export class CalendarView {
         } else {
             // 非重复事件，或重复事件的原始事件，直接更新
             await this.updateEventTime(reminderId, info, false);
+            try { window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } })); } catch (err) { /* ignore */ }
         }
     }
 
@@ -1749,7 +2050,7 @@ export class CalendarView {
             const originalId = originalReminder.originalId;
             const instanceDate = info.event.startStr.split('T')[0];
 
-            const reminderData = await readReminderData();
+            const reminderData = await getAllReminders(this.plugin);
             const originalEvent = reminderData[originalId];
             const isAlreadyModified = originalEvent?.repeat?.instanceModifications?.[instanceDate];
 
@@ -1781,6 +2082,7 @@ export class CalendarView {
         } else {
             // 非重复事件，或重复事件的原始事件，直接更新
             await this.updateEventTime(reminderId, info, true);
+            try { window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } })); } catch (err) { /* ignore */ }
         }
     }
 
@@ -1918,7 +2220,7 @@ export class CalendarView {
     private async updateRecurringEventSeries(info: any) {
         try {
             const originalId = info.event.extendedProps.originalId;
-            const reminderData = await readReminderData();
+            const reminderData = await getAllReminders(this.plugin);
             const originalReminder = reminderData[originalId];
 
             if (!originalReminder) {
@@ -2007,11 +2309,10 @@ export class CalendarView {
             // 4. 保存修改后的原始提醒和新的提醒。
             reminderData[originalId] = originalReminder;
             reminderData[newId] = newReminder;
-            await writeReminderData(reminderData);
+            await saveReminders(this.plugin, reminderData);
 
             showMessage(t("eventTimeUpdated"));
-            await this.refreshEvents();
-            window.dispatchEvent(new CustomEvent('reminderUpdated'));
+            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
 
         } catch (error) {
             console.error('更新重复事件系列失败:', error);
@@ -2146,8 +2447,7 @@ export class CalendarView {
             });
 
             showMessage(t("instanceTimeUpdated"));
-            await this.refreshEvents();
-            window.dispatchEvent(new CustomEvent('reminderUpdated'));
+            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
 
         } catch (error) {
             console.error('更新单个实例失败:', error);
@@ -2158,11 +2458,17 @@ export class CalendarView {
 
     private async updateEventTime(reminderId: string, info, isResize: boolean) {
         try {
-            const reminderData = await readReminderData();
+            const reminderData = await getAllReminders(this.plugin);
 
             if (reminderData[reminderId]) {
                 const newStartDate = info.event.start;
-                const newEndDate = info.event.end;
+                let newEndDate = info.event.end;
+
+                // 如果是将全天事件拖动为定时事件，FullCalendar 可能不会提供 end。
+                // 在这种情况下默认使用 1 小时时长，避免刷新后事件变短。
+                if (!newEndDate && !info.event.allDay && info.oldEvent && info.oldEvent.allDay) {
+                    newEndDate = new Date(newStartDate.getTime() + 60 * 60 * 1000); // 默认 1 小时
+                }
 
                 // 使用本地时间处理日期和时间
                 const { dateStr: startDateStr, timeStr: startTimeStr } = getLocalDateTime(newStartDate);
@@ -2264,15 +2570,9 @@ export class CalendarView {
                     }
                 }
 
-                await writeReminderData(reminderData);
-
-                // 触发更新事件
-                window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                await saveReminders(this.plugin, reminderData);
 
                 showMessage(t("eventTimeUpdated"));
-
-                // 立即刷新事件显示
-                await this.refreshEvents();
             } else {
                 throw new Error('提醒数据不存在');
             }
@@ -2307,7 +2607,7 @@ export class CalendarView {
             const originalId = instanceData.originalId;
             const instanceDate = instanceData.instanceDate;
 
-            const reminderData = await readReminderData();
+            const reminderData = await getAllReminders(this.plugin);
 
             if (!reminderData[originalId]) {
                 throw new Error('原始事件不存在');
@@ -2350,7 +2650,7 @@ export class CalendarView {
                 modifiedAt: getLocalDateString(new Date())
             };
 
-            await writeReminderData(reminderData);
+            await saveReminders(this.plugin, reminderData);
 
         } catch (error) {
             console.error('保存实例修改失败:', error);
@@ -2413,6 +2713,96 @@ export class CalendarView {
         document.head.appendChild(style);
     }
 
+    private async updateDropIndicator(pointX: number, pointY: number, calendarEl: HTMLElement): Promise<void> {
+        try {
+            if (!this.dropIndicator) {
+                const ind = document.createElement('div');
+                ind.className = 'reminder-drop-indicator';
+                ind.style.position = 'fixed';
+                ind.style.pointerEvents = 'none';
+                ind.style.zIndex = '9999';
+                ind.style.transition = 'all 0.08s linear';
+                document.body.appendChild(ind);
+                this.dropIndicator = ind;
+            }
+
+            const dateEls = Array.from(calendarEl.querySelectorAll('[data-date]')) as HTMLElement[];
+            if (dateEls.length === 0) {
+                this.hideDropIndicator();
+                return;
+            }
+
+            let dateEl: HTMLElement | null = null;
+            for (const d of dateEls) {
+                const r = d.getBoundingClientRect();
+                if (pointX >= r.left && pointX <= r.right && pointY >= r.top && pointY <= r.bottom) {
+                    dateEl = d;
+                    break;
+                }
+            }
+
+            if (!dateEl) {
+                let minDist = Infinity;
+                for (const d of dateEls) {
+                    const r = d.getBoundingClientRect();
+                    const cx = (r.left + r.right) / 2;
+                    const cy = (r.top + r.bottom) / 2;
+                    const dx = cx - pointX;
+                    const dy = cy - pointY;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        dateEl = d;
+                    }
+                }
+            }
+
+            if (!dateEl) {
+                this.hideDropIndicator();
+                return;
+            }
+
+            const elAtPoint = document.elementFromPoint(pointX, pointY) as HTMLElement | null;
+            const inTimeGrid = !!(elAtPoint && elAtPoint.closest('.fc-timegrid'));
+            const rect = dateEl.getBoundingClientRect();
+
+            if (inTimeGrid) {
+                const top = Math.max(rect.top, Math.min(rect.bottom, pointY));
+                this.dropIndicator.style.left = rect.left + 'px';
+                this.dropIndicator.style.top = (top - 1) + 'px';
+                this.dropIndicator.style.width = rect.width + 'px';
+                this.dropIndicator.style.height = '2px';
+                this.dropIndicator.style.background = 'var(--b3-theme-primary)';
+                this.dropIndicator.style.borderRadius = '2px';
+                this.dropIndicator.style.boxShadow = '0 0 6px var(--b3-theme-primary)';
+                this.dropIndicator.style.opacity = '1';
+            } else {
+                this.dropIndicator.style.left = rect.left + 'px';
+                this.dropIndicator.style.top = rect.top + 'px';
+                this.dropIndicator.style.width = rect.width + 'px';
+                this.dropIndicator.style.height = rect.height + 'px';
+                this.dropIndicator.style.background = 'rgba(0,128,255,0.06)';
+                this.dropIndicator.style.border = '2px dashed rgba(0,128,255,0.18)';
+                this.dropIndicator.style.borderRadius = '6px';
+                this.dropIndicator.style.boxShadow = 'none';
+                this.dropIndicator.style.opacity = '1';
+            }
+        } catch (err) {
+            console.error('updateDropIndicator error', err);
+        }
+    }
+
+    private hideDropIndicator(): void {
+        try {
+            if (this.dropIndicator) {
+                this.dropIndicator.remove();
+                this.dropIndicator = null;
+            }
+        } catch (err) {
+            // ignore
+        }
+    }
+
     private async showTimeEditDialog(calendarEvent: any) {
         try {
             // 对于重复事件实例，需要使用原始ID来获取原始提醒数据
@@ -2420,7 +2810,7 @@ export class CalendarView {
                 calendarEvent.extendedProps.originalId :
                 calendarEvent.id;
 
-            const reminderData = await readReminderData();
+            const reminderData = await getAllReminders(this.plugin);
 
             if (reminderData[reminderId]) {
                 const reminder = reminderData[reminderId];
@@ -2438,7 +2828,7 @@ export class CalendarView {
                             await this.refreshEvents();
 
                             // 触发全局更新事件
-                            window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
                         },
                         plugin: this.plugin
                     }
@@ -2461,7 +2851,7 @@ export class CalendarView {
                 calendarEvent.extendedProps.originalId :
                 calendarEvent.id;
 
-            const reminderData = await readReminderData();
+            const reminderData = await getAllReminders(this.plugin);
 
             if (reminderData[originalId]) {
                 const reminder = reminderData[originalId];
@@ -2479,7 +2869,7 @@ export class CalendarView {
                             await this.refreshEvents();
 
                             // 触发全局更新事件
-                            window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
                         },
                         plugin: this.plugin
                     }
@@ -2502,7 +2892,7 @@ export class CalendarView {
                 calendarEvent.extendedProps.originalId :
                 calendarEvent.id;
 
-            const reminderData = await readReminderData();
+            const reminderData = await getAllReminders(this.plugin);
 
             if (reminderData[reminderId]) {
                 if (calendarEvent.allDay) {
@@ -2515,10 +2905,10 @@ export class CalendarView {
                     delete reminderData[reminderId].endTime;
                 }
 
-                await writeReminderData(reminderData);
+                await saveReminders(this.plugin, reminderData);
 
                 // 触发更新事件
-                window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
 
                 // 立即刷新事件显示
                 await this.refreshEvents();
@@ -2746,7 +3136,7 @@ export class CalendarView {
 
     private async getEvents() {
         try {
-            const reminderData = await readReminderData();
+            const reminderData = await getAllReminders(this.plugin);
             const events = [];
 
             // 获取当前视图的日期范围
@@ -3152,6 +3542,9 @@ export class CalendarView {
             borderColor: colors.borderColor,
             textColor: isCompleted ? '#ffffffcc' : '#ffffff',
             className: classNames,
+            editable: !reminder.isSubscribed, // 如果是订阅任务，禁止编辑
+            startEditable: !reminder.isSubscribed, // 如果是订阅任务，禁止拖动开始时间
+            durationEditable: !reminder.isSubscribed, // 如果是订阅任务，禁止调整时长
             extendedProps: {
                 completed: isCompleted,
                 note: reminder.note || '',
@@ -3171,7 +3564,9 @@ export class CalendarView {
                 isRepeated: isRepeated,
                 originalId: originalId || reminder.id,
                 repeat: reminder.repeat,
-                isQuickReminder: reminder.isQuickReminder || false
+                isQuickReminder: reminder.isQuickReminder || false,
+                isSubscribed: reminder.isSubscribed || false,
+                subscriptionId: reminder.subscriptionId
             }
         };
 
@@ -3458,7 +3853,7 @@ export class CalendarView {
                 let completedTime = null;
 
                 try {
-                    const reminderData = await readReminderData();
+                    const reminderData = await getAllReminders(this.plugin);
 
                     if (reminder.isRepeated) {
                         // 重复事件实例的完成时间
@@ -3701,7 +4096,10 @@ export class CalendarView {
         }
 
         // 移除事件监听器
-        window.removeEventListener('reminderUpdated', () => this.refreshEvents());
+        if (this.externalReminderUpdatedHandler) {
+            window.removeEventListener('reminderUpdated', this.externalReminderUpdatedHandler);
+            this.externalReminderUpdatedHandler = null;
+        }
         window.removeEventListener('projectColorUpdated', () => {
             this.colorCache.clear();
             this.refreshEvents();
@@ -3724,7 +4122,7 @@ export class CalendarView {
     private async splitRecurringEvent(calendarEvent: any) {
         try {
             const reminder = calendarEvent.extendedProps;
-            const reminderData = await readReminderData();
+            const reminderData = await getAllReminders(this.plugin);
             const originalReminder = reminderData[calendarEvent.id];
 
             if (!originalReminder || !originalReminder.repeat?.enabled) {
@@ -3777,7 +4175,7 @@ export class CalendarView {
      */
     private async performSplitOperation(originalReminder: any, modifiedReminder: any) {
         try {
-            const reminderData = await readReminderData();
+            const reminderData = await getAllReminders(this.plugin);
 
             // 1. 修改原始事件为单次事件
             const singleReminder = {
@@ -3838,11 +4236,11 @@ export class CalendarView {
             // 4. 保存修改
             reminderData[originalReminder.id] = singleReminder;
             reminderData[newId] = newReminder;
-            await writeReminderData(reminderData);
+            await saveReminders(this.plugin, reminderData);
 
             // 5. 更新界面
             await this.refreshEvents();
-            window.dispatchEvent(new CustomEvent('reminderUpdated'));
+            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
             showMessage(t("seriesSplitSuccess"));
 
         } catch (error) {
@@ -3861,7 +4259,7 @@ export class CalendarView {
             t("confirmSkipFirstOccurrence"),
             async () => {
                 try {
-                    const reminderData = await readReminderData();
+                    const reminderData = await getAllReminders(this.plugin);
                     const originalReminder = reminderData[reminder.id];
 
                     if (!originalReminder || !originalReminder.repeat?.enabled) {
@@ -3909,9 +4307,9 @@ export class CalendarView {
                         }
                     }
 
-                    await writeReminderData(reminderData);
+                    await saveReminders(this.plugin, reminderData);
                     showMessage(t("firstOccurrenceSkipped"));
-                    window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                    window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
                 } catch (error) {
                     console.error('跳过首次发生失败:', error);
                     showMessage(t("operationFailed"));
@@ -4053,278 +4451,41 @@ export class CalendarView {
      * 显示绑定到块的对话框
      */
     private showBindToBlockDialog(calendarEvent: any) {
-        const dialog = new Dialog({
-            title: t("bindReminderToBlock"),
-            content: `
-                <div class="bind-to-block-dialog">
-                    <div class="b3-dialog__content">
-                        <div class="b3-form__group">
-                            <div class="b3-form__desc" style="margin-bottom: 12px;">选择绑定方式：</div>
-                            <div style="display: flex; gap: 8px; margin-bottom: 16px;">
-                                <button class="b3-button b3-button--outline" id="bindExistingBtn" style="flex: 1;">
-                                    <svg style="width: 16px; height: 16px; margin-right: 4px;"><use xlink:href="#iconLink"></use></svg>
-                                    绑定现有块
-                                </button>
-                                <button class="b3-button b3-button--outline" id="createNewDocBtn" style="flex: 1;">
-                                    <svg style="width: 16px; height: 16px; margin-right: 4px;"><use xlink:href="#iconAdd"></use></svg>
-                                    ${t("createNewDocument")}
-                                </button>
-                            </div>
-                        </div>
-                        
-                        <div id="bindExistingPanel" style="display: none;">
-                            <div class="b3-form__group">
-                                <label class="b3-form__label">输入块ID</label>
-                                <div class="b3-form__desc">支持块ID或块引用格式，如：((blockId '标题'))</div>
-                                <input type="text" id="blockIdInput" class="b3-text-field" placeholder="请输入块ID或粘贴块引用" style="width: 100%; margin-top: 8px;">
-                            </div>
-                            <div class="b3-form__group" id="selectedBlockInfo" style="display: none;">
-                                <label class="b3-form__label">块信息预览</label>
-                                <div id="blockContent" class="block-content-preview" style="
-                                    padding: 8px;
-                                    background-color: var(--b3-theme-surface-lighter);
-                                    border-radius: 4px;
-                                    border: 1px solid var(--b3-theme-border);
-                                    max-height: 100px;
-                                    overflow-y: auto;
-                                    font-size: 12px;
-                                    color: var(--b3-theme-on-surface);
-                                "></div>
-                            </div>
-                        </div>
-
-                        <div id="createNewDocPanel" style="display: none;">
-                            <div class="b3-form__group">
-                                <label class="b3-form__label">文档标题</label>
-                                <input type="text" id="docTitleInput" class="b3-text-field" placeholder="请输入文档标题" style="width: 100%; margin-top: 8px;" value="${calendarEvent.title || ''}">
-                            </div>
-                            <div class="b3-form__group">
-                                <label class="b3-form__label">文档内容（可选）</label>
-                                <textarea id="docContentInput" class="b3-text-field" placeholder="请输入文档内容..." style="width: 100%; height: 80px; margin-top: 8px; resize: vertical;"></textarea>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="b3-dialog__action">
-                        <button class="b3-button b3-button--cancel" id="bindCancelBtn">${t("cancel")}</button>
-                        <button class="b3-button b3-button--primary" id="bindConfirmBtn" style="display: none;">${t("bindToBlock")}</button>
-                        <button class="b3-button b3-button--primary" id="createDocConfirmBtn" style="display: none;">${t("createDocumentAndBind")}</button>
-                    </div>
-                </div>
-            `,
-            width: "500px",
-            height: "400px"
-        });
-
-        const bindExistingBtn = dialog.element.querySelector('#bindExistingBtn') as HTMLButtonElement;
-        const createNewDocBtn = dialog.element.querySelector('#createNewDocBtn') as HTMLButtonElement;
-        const bindExistingPanel = dialog.element.querySelector('#bindExistingPanel') as HTMLElement;
-        const createNewDocPanel = dialog.element.querySelector('#createNewDocPanel') as HTMLElement;
-
-        const blockIdInput = dialog.element.querySelector('#blockIdInput') as HTMLInputElement;
-        const selectedBlockInfo = dialog.element.querySelector('#selectedBlockInfo') as HTMLElement;
-        const blockContentEl = dialog.element.querySelector('#blockContent') as HTMLElement;
-
-        const docTitleInput = dialog.element.querySelector('#docTitleInput') as HTMLInputElement;
-        const docContentInput = dialog.element.querySelector('#docContentInput') as HTMLTextAreaElement;
-
-        const cancelBtn = dialog.element.querySelector('#bindCancelBtn') as HTMLButtonElement;
-        const confirmBtn = dialog.element.querySelector('#bindConfirmBtn') as HTMLButtonElement;
-        const createDocConfirmBtn = dialog.element.querySelector('#createDocConfirmBtn') as HTMLButtonElement;
-
-        // 切换到绑定现有块模式
-        bindExistingBtn.addEventListener('click', () => {
-            bindExistingBtn.classList.add('b3-button--primary');
-            bindExistingBtn.classList.remove('b3-button--outline');
-            createNewDocBtn.classList.remove('b3-button--primary');
-            createNewDocBtn.classList.add('b3-button--outline');
-
-            bindExistingPanel.style.display = 'block';
-            createNewDocPanel.style.display = 'none';
-            confirmBtn.style.display = 'inline-block';
-            createDocConfirmBtn.style.display = 'none';
-
-            setTimeout(() => blockIdInput.focus(), 100);
-        });
-
-        // 切换到新建文档模式
-        createNewDocBtn.addEventListener('click', () => {
-            createNewDocBtn.classList.add('b3-button--primary');
-            createNewDocBtn.classList.remove('b3-button--outline');
-            bindExistingBtn.classList.remove('b3-button--primary');
-            bindExistingBtn.classList.add('b3-button--outline');
-
-            createNewDocPanel.style.display = 'block';
-            bindExistingPanel.style.display = 'none';
-            confirmBtn.style.display = 'none';
-            createDocConfirmBtn.style.display = 'inline-block';
-
-            setTimeout(() => docTitleInput.focus(), 100);
-        });
-
-        // 监听块ID输入变化
-        blockIdInput.addEventListener('input', async () => {
-            const inputValue = blockIdInput.value.trim();
-
-            // 尝试从输入内容中提取块ID（支持块引用格式）
-            let blockId = this.extractBlockIdFromText(inputValue);
-
-            // 如果没有匹配到块引用格式，则将输入作为纯块ID使用
-            if (!blockId) {
-                blockId = inputValue;
-            }
-
-            if (blockId && blockId.length >= 20) { // 块ID通常是20位字符
+        const dialog = new BlockBindingDialog(
+            this.plugin,
+            async (blockId: string) => {
                 try {
-                    const block = await getBlockByID(blockId);
-                    if (block) {
-                        const blockContent = block.content || block.fcontent || '未命名块';
-                        blockContentEl.textContent = blockContent;
-                        selectedBlockInfo.style.display = 'block';
-                    } else {
-                        selectedBlockInfo.style.display = 'none';
-                    }
+                    await this.bindReminderToBlock(calendarEvent, blockId);
+                    showMessage(t("reminderBoundToBlock"));
+                    // 刷新日历显示
+                    await this.refreshEvents();
                 } catch (error) {
-                    selectedBlockInfo.style.display = 'none';
+                    console.error('绑定提醒到块失败:', error);
+                    showMessage(t("bindToBlockFailed"));
                 }
-            } else {
-                selectedBlockInfo.style.display = 'none';
+            },
+            {
+                title: t("bindReminderToBlock"),
+                defaultTab: 'bind',
+                reminder: calendarEvent,
+                defaultTitle: calendarEvent.title || ''
             }
-        });
-
-        // 取消按钮
-        cancelBtn.addEventListener('click', () => {
-            dialog.destroy();
-        });
-
-        // 确认绑定现有块
-        confirmBtn.addEventListener('click', async () => {
-            const inputValue = blockIdInput.value.trim();
-            if (!inputValue) {
-                showMessage('请输入块ID');
-                return;
-            }
-
-            // 尝试从输入内容中提取块ID（支持块引用格式）
-            let blockId = this.extractBlockIdFromText(inputValue);
-
-            // 如果没有匹配到块引用格式，则将输入作为纯块ID使用
-            if (!blockId) {
-                blockId = inputValue;
-            }
-
-            if (!blockId || blockId.length < 20) {
-                showMessage('请输入有效的块ID或块引用');
-                return;
-            }
-
-            try {
-                await this.bindReminderToBlock(calendarEvent, blockId);
-                showMessage(t("reminderBoundToBlock"));
-                dialog.destroy();
-
-                // 刷新日历显示
-                await this.refreshEvents();
-            } catch (error) {
-                console.error('绑定提醒到块失败:', error);
-                showMessage(t("bindToBlockFailed"));
-            }
-        });
-
-        // 确认新建文档并绑定
-        createDocConfirmBtn.addEventListener('click', async () => {
-            const title = docTitleInput.value.trim();
-            const content = docContentInput.value.trim();
-
-            if (!title) {
-                showMessage('请输入文档标题');
-                return;
-            }
-
-            try {
-                const blockId = await this.createDocumentAndBind(calendarEvent, title, content);
-                showMessage(t("documentCreated"));
-                dialog.destroy();
-
-                // 刷新日历显示
-                await this.refreshEvents();
-            } catch (error) {
-                console.error('创建文档并绑定失败:', error);
-                showMessage(t("createDocumentFailed"));
-            }
-        });
-
-        // 默认显示绑定现有块模式
-        bindExistingBtn.click();
+        );
+        dialog.show();
     }
 
-    /**
-     * 创建文档并绑定提醒
-     */
-    private async createDocumentAndBind(calendarEvent: any, title: string, content: string): Promise<string> {
-        try {
-            // 获取插件设置
-            const settings = await this.plugin.loadSettings();
-            const notebook = settings.newDocNotebook;
-            const pathTemplate = settings.newDocPath || '/任务管理/{{now | date "2006-01-02"}}/{{.title}}';
-
-            if (!notebook) {
-                throw new Error(t("pleaseConfigureNotebook"));
-            }
-
-            // 导入API函数
-            const { renderSprig, createDocWithMd } = await import("../api");
-
-            // 准备模板变量
-            const templateVars = {
-                title: title,
-                content: content,
-                date: calendarEvent.extendedProps?.date || new Date().toISOString().split('T')[0],
-                time: calendarEvent.extendedProps?.time || '',
-            };
-
-
-            // 渲染路径模板
-            let renderedPath: string;
-            try {
-                // 需要检测pathTemplate是否以/结尾，如果不是，则添加/
-                if (!pathTemplate.endsWith('/')) {
-                    renderedPath += pathTemplate + '/';
-                } else {
-                    renderedPath = pathTemplate;
-                }
-                renderedPath = await renderSprig(renderedPath + title);
-            } catch (error) {
-                console.error('渲染路径模板失败:', error);
-                throw new Error(t("renderPathFailed"));
-            }
-
-            // 准备文档内容
-            const docContent = content || `# ${title}\n\n`;
-
-            // 创建文档
-            const docId = await createDocWithMd(notebook, renderedPath, docContent);
-
-            await refreshSql();
-            // 绑定提醒到新创建的文档
-            await this.bindReminderToBlock(calendarEvent, docId);
-
-            return docId;
-        } catch (error) {
-            console.error('创建文档并绑定失败:', error);
-            throw error;
-        }
-    }
 
     /**
      * 将提醒绑定到指定的块
      */
     private async bindReminderToBlock(calendarEvent: any, blockId: string) {
         try {
-            const reminderData = await readReminderData();
+            const reminderData = await getAllReminders(this.plugin);
             const reminderId = calendarEvent.id;
 
             if (reminderData[reminderId]) {
                 // 获取块信息
+                await refreshSql();
                 const block = await getBlockByID(blockId);
                 if (!block) {
                     throw new Error('目标块不存在');
@@ -4335,7 +4496,7 @@ export class CalendarView {
                 reminderData[reminderId].docId = block.root_id || blockId;
                 reminderData[reminderId].isQuickReminder = false; // 移除快速提醒标记
 
-                await writeReminderData(reminderData);
+                await saveReminders(this.plugin, reminderData);
 
                 // 将绑定的块添加项目ID属性 custom-task-projectId
                 const projectId = reminderData[reminderId].projectId;
@@ -4348,8 +4509,8 @@ export class CalendarView {
                 // 更新块的书签状态（添加⏰书签）
                 await updateBlockReminderBookmark(blockId);
 
-                // 触发更新事件
-                window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                // 触发更新事件（标记来源为日历，避免自我触发）
+                window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
             } else {
                 throw new Error('提醒不存在');
             }
@@ -4603,23 +4764,38 @@ export class CalendarView {
             const project = projectData[projectId];
 
             // 使用openProjectKanbanTab打开项目看板
-            this.plugin.openProjectKanbanTab(project.blockId, project.title);
+            this.plugin.openProjectKanbanTab(projectId, project.title);
         } catch (error) {
             console.error('打开项目看板失败:', error);
             showMessage("打开项目看板失败");
         }
     }
 
+
+
     /**
-     * 打开四象限视图Tab
+     * 切换视图类型（timeGrid <-> dayGrid）
      */
-    private openEisenhowerTab() {
-        try {
-            this.plugin.openEisenhowerMatrixTab();
-        } catch (error) {
-            console.error('打开四象限面板失败:', error);
-            showMessage("打开四象限面板失败");
+    private async toggleViewType() {
+        const currentView = this.calendar.view.type;
+        let newView: string;
+        const viewType = this.viewTypeSwitch.checked ? 'dayGrid' : 'timeGrid';
+
+        if (currentView === 'timeGridWeek' || currentView === 'dayGridWeek') {
+            newView = viewType === 'dayGrid' ? 'dayGridWeek' : 'timeGridWeek';
+        } else if (currentView === 'timeGridDay' || currentView === 'dayGridDay') {
+            newView = viewType === 'dayGrid' ? 'dayGridDay' : 'timeGridDay';
+        } else {
+            // 如果不是周或日视图，不做任何操作
+            return;
         }
+
+        await this.calendarConfigManager.setViewType(viewType);
+        this.calendar.changeView(newView);
+        // 更新配置中的视图模式
+        this.calendarConfigManager.setViewMode(newView);
+        // 更新按钮状态
+        this.updateViewButtonStates();
     }
 
     /**
@@ -4632,18 +4808,31 @@ export class CalendarView {
         this.monthBtn.classList.remove('b3-button--primary');
         this.weekBtn.classList.remove('b3-button--primary');
         this.dayBtn.classList.remove('b3-button--primary');
-        this.matrixBtn.classList.remove('b3-button--primary');
+        this.yearBtn.classList.remove('b3-button--primary');
 
         // 根据当前视图模式设置激活按钮
         switch (currentViewMode) {
             case 'dayGridMonth':
                 this.monthBtn.classList.add('b3-button--primary');
+                this.viewTypeSwitch.disabled = true;
+                this.viewTypeSwitch.checked = false;
                 break;
             case 'timeGridWeek':
+            case 'dayGridWeek':
                 this.weekBtn.classList.add('b3-button--primary');
+                this.viewTypeSwitch.disabled = false;
+                this.viewTypeSwitch.checked = this.calendarConfigManager.getViewType() === 'dayGrid';
                 break;
             case 'timeGridDay':
+            case 'dayGridDay':
                 this.dayBtn.classList.add('b3-button--primary');
+                this.viewTypeSwitch.disabled = false;
+                this.viewTypeSwitch.checked = this.calendarConfigManager.getViewType() === 'dayGrid';
+                break;
+            case 'multiMonthYear':
+                this.yearBtn.classList.add('b3-button--primary');
+                this.viewTypeSwitch.disabled = true;
+                this.viewTypeSwitch.checked = false;
                 break;
         }
     }

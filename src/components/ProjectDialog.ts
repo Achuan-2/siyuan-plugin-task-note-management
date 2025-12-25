@@ -281,8 +281,10 @@ export class ProjectDialog {
             projectData[projectId] = project;
             await writeProjectData(projectData);
 
-            // 触发更新事件
-            window.dispatchEvent(new CustomEvent('projectUpdated'));
+            // 触发更新事件，包含项目ID
+            window.dispatchEvent(new CustomEvent('projectUpdated', {
+                detail: { projectId, project }
+            }));
 
             showMessage(t("reminderSaved") || "项目保存成功");
             this.dialog.destroy();
