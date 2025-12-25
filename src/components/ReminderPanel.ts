@@ -257,7 +257,7 @@ export class ReminderPanel {
             // 添加番茄钟统计按钮
             const pomodoroStatsBtn = document.createElement('button');
             pomodoroStatsBtn.className = 'b3-button b3-button--outline';
-            pomodoroStatsBtn.innerHTML = '🍅';
+            pomodoroStatsBtn.innerHTML = '⏰';
             pomodoroStatsBtn.title = t("pomodoroStats");
             pomodoroStatsBtn.addEventListener('click', () => {
                 this.showPomodoroStatsView();

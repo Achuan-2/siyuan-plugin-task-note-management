@@ -524,6 +524,15 @@
     "pleaseConfigureNotebook": "请先在设置中配置新建文档的笔记本",
     "renderPathFailed": "渲染文档路径失败",
     "pomodoroStats": "番茄钟统计",
+    "taskStats": "任务统计",
+    "todayTask": "今日任务",
+    "weekTask": "本周任务",
+    "totalTask": "总计任务",
+    "todayTaskProgress": "今日任务进度",
+    "recentTaskTrend": "最近7天趋势",
+    "completedTasks": "已完成任务",
+    "recent7DaysTasks": "最近7天任务",
+    "taskStatsDeleteUnsupported": "任务统计暂不支持删除记录",
     "taskTimeStats": "任务时间统计",
     "tasksCount": "${count}个任务",
     "taskCount": "任务数量",
@@ -952,5 +961,10 @@
     "pleaseSelectProject": "请选择项目",
     "subscribedTaskReadOnly": "订阅任务（只读）",
     "enableOutlinePrefix": "大纲标题前缀",
-    "enableOutlinePrefixDesc": "在大纲中为绑定标题添加任务状态前缀（✅完成 ⏰未完成），不影响标题内容"
+    "enableOutlinePrefixDesc": "在大纲中为绑定标题添加任务状态前缀（✅完成 ⏰未完成），不影响标题内容",
+    "taskGroupByTask": "任务区分",
+    "taskGroupByProject": "项目区分",
+    "taskGroupByCategory": "分类区分",
+    "uncategorizedProject": "未分配项目",
+    "uncategorizedCategory": "未分类"
 }
