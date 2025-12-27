@@ -26,7 +26,7 @@ export class QuickReminderDialog {
     private categoryManager: CategoryManager;
     private projectManager: ProjectManager;
     private chronoParser: any; // chrono解析器实例
-    private autoDetectDateTime: boolean; // 是否自动识别日期时间
+    private autoDetectDateTime?: boolean; // 是否自动识别日期时间（undefined 表示未指定，使用插件设置）
     private defaultProjectId?: string;
     private showKanbanStatus?: 'todo' | 'term' | 'none' = 'term'; // 看板状态显示模式，默认为 'term'
     private defaultTermType?: 'short_term' | 'long_term' | 'doing' | 'todo' = 'doing'; // 默认任务类型
@@ -93,7 +93,7 @@ export class QuickReminderDialog {
             this.reminder = options.reminder;
             this.onSaved = options.onSaved;
             this.mode = options.mode || 'quick';
-            this.autoDetectDateTime = options.autoDetectDateTime || false;
+            this.autoDetectDateTime = options.autoDetectDateTime;
             this.defaultProjectId = options.defaultProjectId;
             this.showKanbanStatus = options.showKanbanStatus || 'term';
             this.defaultTermType = options.defaultTermType || 'doing';
@@ -1007,6 +1007,21 @@ export class QuickReminderDialog {
         // 初始化分类管理器
         await this.categoryManager.initialize();
 
+        // 如果未通过构造器显式指定 autoDetectDateTime，则从插件设置中读取（如果有传入 plugin）
+        if (this.autoDetectDateTime === undefined) {
+            if (this.plugin && typeof this.plugin.getAutoDetectDateTimeEnabled === 'function') {
+                try {
+                    this.autoDetectDateTime = await this.plugin.getAutoDetectDateTimeEnabled();
+                } catch (err) {
+                    console.warn('获取自动识别设置失败，使用默认值 false:', err);
+                    this.autoDetectDateTime = false;
+                }
+            } else {
+                // 如果未提供 plugin，默认关闭自动识别以保守处理
+                this.autoDetectDateTime = false;
+            }
+        }
+
         // 初始化自定义提醒时间
         if (this.reminder && this.reminder.reminderTimes) {
             this.customTimes = this.reminder.reminderTimes.map((t: any) => {
@@ -1090,7 +1105,11 @@ export class QuickReminderDialog {
                             <label class="b3-form__label">${t("bindUrl")}</label>
                             <input type="url" id="quickUrlInput" class="b3-text-field" placeholder="${t("enterUrl")}" style="width: 100%;">
                         </div>
-                        <!-- 父任务显示 -->
+                        <!-- 备注 -->
+                        <div class="b3-form__group">
+                            <label class="b3-form__label">${t("reminderNoteOptional")}</label>
+                            <textarea id="quickReminderNote" class="b3-text-field" placeholder="${t("enterReminderNote")}" rows="2" style="width: 100%;resize: vertical; min-height: 60px;"></textarea>
+                        </div>
                         <div class="b3-form__group" id="quickParentTaskGroup" style="display: none;">
                             <label class="b3-form__label">${t("parentTask") || "父任务"}</label>
                             <div style="display: flex; gap: 8px; align-items: center;">
@@ -1223,11 +1242,6 @@ export class QuickReminderDialog {
                             </div>
                         </div>
                         
-                        <div class="b3-form__group">
-                            <label class="b3-form__label">${t("reminderNoteOptional")}</label>
-                            <textarea id="quickReminderNote" class="b3-text-field" placeholder="${t("enterReminderNote")}" rows="2" style="width: 100%;resize: vertical; min-height: 60px;"></textarea>
-                        </div>
-                        
                     </div>
                     <div class="b3-dialog__action">
                         <button class="b3-button b3-button--cancel" id="quickCancelBtn">${t("cancel")}</button>
@@ -1321,7 +1335,9 @@ export class QuickReminderDialog {
                         console.warn('自动识别标题日期失败:', err);
                     }
                 }
-            } else if (this.defaultTitle && titleInput) {
+            }
+
+            else if (this.defaultTitle && titleInput) {
                 titleInput.value = this.defaultTitle;
             }
 
@@ -1816,6 +1832,55 @@ export class QuickReminderDialog {
         const pasteBlockRefBtn = this.dialog.element.querySelector('#quickPasteBlockRefBtn') as HTMLButtonElement;
         const titleInput = this.dialog.element.querySelector('#quickReminderTitle') as HTMLInputElement;
         const dateTimeDesc = this.dialog.element.querySelector('#quickDateTimeDesc') as HTMLElement;
+
+        // 标题输入框粘贴事件处理
+        titleInput?.addEventListener('paste', (e) => {
+            e.preventDefault();
+            const pastedText = e.clipboardData?.getData('text') || '';
+            const lines = pastedText.split('\n').map(line => line.trim()).filter(line => line);
+            if (lines.length > 0) {
+                titleInput.value = lines[0];
+                if (lines.length > 1) {
+                    const noteInput = this.dialog.element.querySelector('#quickReminderNote') as HTMLTextAreaElement;
+                    if (noteInput) {
+                        noteInput.value = lines.slice(1).join('\n');
+                    }
+                }
+            }
+
+            // 如果启用了自动识别，检测日期时间
+            if (this.autoDetectDateTime) {
+                // 使用粘贴的所有非空行进行识别，以便第二行或后续行中的自然语言也能被识别
+                const joined = lines.join(' ');
+                const detected = this.autoDetectDateTimeFromTitle(joined);
+                if (detected && detected.date) {
+                    const dateInput = this.dialog.element.querySelector('#quickReminderDate') as HTMLInputElement;
+                    const noTimeCheckbox = this.dialog.element.querySelector('#quickNoSpecificTime') as HTMLInputElement;
+
+                    if (detected.hasTime && detected.time) {
+                        this.toggleDateTimeInputs(false);
+                        if (dateInput) {
+                            dateInput.value = `${detected.date}T${detected.time}`;
+                        }
+                        if (noTimeCheckbox) noTimeCheckbox.checked = false;
+                    } else {
+                        this.toggleDateTimeInputs(true);
+                        if (dateInput) {
+                            dateInput.value = detected.date;
+                        }
+                        if (noTimeCheckbox) noTimeCheckbox.checked = true;
+                    }
+
+                    // 显示识别消息（始终推送，当启用自动识别时即使已有时间也会覆盖/提示）
+                    showMessage(`✨ 已识别并设置：${new Date(detected.date + 'T00:00:00').toLocaleDateString('zh-CN')}${detected.time ? ` ${detected.time}` : ''}`);
+
+                    // 使用清理后的标题
+                    if (detected.cleanTitle && detected.cleanTitle.trim()) {
+                        titleInput.value = detected.cleanTitle;
+                    }
+                }
+            }
+        });
 
         // 添加自定义时间按钮
         const addCustomTimeBtn = this.dialog.element.querySelector('#quickAddCustomTimeBtn') as HTMLButtonElement;
