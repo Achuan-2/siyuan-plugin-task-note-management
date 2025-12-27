@@ -45,6 +45,35 @@
             border-color: var(--b3-theme-primary);
         }
     }
+    .stats-switch {
+        display: flex;
+        gap: 8px;
+        padding: 8px 16px;
+        border-bottom: 1px solid var(--b3-theme-border);
+        background: var(--b3-theme-surface);
+        flex-wrap: wrap;
+
+        .stats-switch-btn {
+            padding: 6px 12px;
+            border: 1px solid var(--b3-theme-border);
+            background: var(--b3-theme-background);
+            color: var(--b3-theme-on-background);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s ease;
+
+            &:hover {
+                background: var(--b3-theme-surface-hover);
+            }
+
+            &.active {
+                background: var(--b3-theme-primary);
+                color: var(--b3-theme-on-primary);
+                border-color: var(--b3-theme-primary);
+            }
+        }
+    }
     .stats-nav {
         display: flex;
         border-bottom: 1px solid var(--b3-theme-border);
@@ -345,6 +374,33 @@
                 }
             }
         }
+
+        .details-group-selector {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+
+            .details-group-btn {
+                padding: 6px 12px;
+                border: 1px solid var(--b3-theme-border);
+                background: var(--b3-theme-background);
+                color: var(--b3-theme-on-background);
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 12px;
+                transition: all 0.2s ease;
+
+                &:hover {
+                    background: var(--b3-theme-surface-hover);
+                }
+
+                &.active {
+                    background: var(--b3-theme-primary);
+                    color: var(--b3-theme-on-primary);
+                    border-color: var(--b3-theme-primary);
+                }
+            }
+        }
     }
 
     .category-chart {
@@ -542,6 +598,11 @@
 
             &.longBreak .record-icon {
                 background: linear-gradient(135deg, #9C27B0, #BA68C8);
+                color: white;
+            }
+
+            &.task .record-icon {
+                background: linear-gradient(135deg, #4CAF50, #66BB6A);
                 color: white;
             }
         }
@@ -982,6 +1043,11 @@
 
         .time-range-selector {
             justify-content: center;
+        }
+
+        .details-group-selector {
+            justify-content: center;
+            flex-wrap: wrap;
         }
     }
 
