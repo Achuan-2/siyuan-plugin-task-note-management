@@ -3,12 +3,31 @@ import { showMessage } from "siyuan";
 import { confirm } from "siyuan";
 import { PomodoroRecordManager, PomodoroSession } from "../utils/pomodoroRecord";
 import { t } from "../utils/i18n";
-import { getLocalDateString } from "../utils/dateUtils";
+import { getLogicalDateString } from "../utils/dateUtils";
 import { init, use, EChartsType } from 'echarts/core';
 import { PieChart, HeatmapChart, CustomChart } from 'echarts/charts';
 import { TooltipComponent, VisualMapComponent, GridComponent, TitleComponent, LegendComponent, CalendarComponent } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import { formatDate } from "@fullcalendar/core";
+
+export const STATS_MODE_STORAGE_KEY = "siyuan-plugin-task-note-management:stats-mode";
+
+export function getLastStatsMode(): 'pomodoro' | 'task' {
+    try {
+        const value = localStorage.getItem(STATS_MODE_STORAGE_KEY);
+        return value === 'task' ? 'task' : 'pomodoro';
+    } catch {
+        return 'pomodoro';
+    }
+}
+
+export function setLastStatsMode(mode: 'pomodoro' | 'task'): void {
+    try {
+        localStorage.setItem(STATS_MODE_STORAGE_KEY, mode);
+    } catch {
+        // ignore storage failures
+    }
+}
 
 // 注册 ECharts 组件
 use([
@@ -29,7 +48,7 @@ export class PomodoroStatsView {
     private recordManager: PomodoroRecordManager;
     private currentView: 'overview' | 'details' | 'records' | 'trends' | 'timeline' | 'heatmap' = 'overview';
     private currentTimeRange: 'today' | 'week' | 'month' | 'year' = 'today';
-    private currentYear: number = new Date().getFullYear();
+    private currentYear: number = parseInt(getLogicalDateString().split('-')[0], 10);
     private currentWeekOffset: number = 0; // 周偏移量，0表示本周，-1表示上周，1表示下周
     private currentMonthOffset: number = 0; // 月偏移量，0表示本月，-1表示上月，1表示下月
     private currentYearOffset: number = 0; // 年偏移量，0表示今年，-1表示去年，1表示明年
@@ -497,12 +516,12 @@ export class PomodoroStatsView {
 
     private getLast7DaysData(): Array<{ label: string, value: number }> {
         const data = [];
-        const today = new Date();
+        const today = new Date(`${getLogicalDateString()}T00:00:00`);
 
         for (let i = 6; i >= 0; i--) {
             const date = new Date(today);
             date.setDate(today.getDate() - i);
-            const dateStr = getLocalDateString(date);
+            const dateStr = getLogicalDateString(date);
             const sessions = this.recordManager.getDateSessions(dateStr);
             const value = sessions
                 .filter(s => s.type === 'work')
@@ -555,16 +574,16 @@ export class PomodoroStatsView {
     }
 
     private getTodaySessionsWithOffset(): PomodoroSession[] {
-        const today = new Date();
+        const today = new Date(`${getLogicalDateString()}T00:00:00`);
         const targetDate = new Date(today);
         targetDate.setDate(today.getDate() + this.currentWeekOffset); // 复用weekOffset作为日偏移
-        const dateStr = getLocalDateString(targetDate);
+        const dateStr = getLogicalDateString(targetDate);
         return this.recordManager.getDateSessions(dateStr);
     }
 
     private getWeekSessionsWithOffset(): PomodoroSession[] {
         const sessions = [];
-        const today = new Date();
+        const today = new Date(`${getLogicalDateString()}T00:00:00`);
 
         // 计算目标周的开始日期（星期一）
         const startOfWeek = new Date(today);
@@ -576,7 +595,7 @@ export class PomodoroStatsView {
         for (let i = 0; i < 7; i++) {
             const date = new Date(startOfWeek);
             date.setDate(startOfWeek.getDate() + i);
-            const dateStr = getLocalDateString(date);
+            const dateStr = getLogicalDateString(date);
             sessions.push(...this.recordManager.getDateSessions(dateStr));
         }
 
@@ -585,7 +604,7 @@ export class PomodoroStatsView {
 
     private getMonthSessionsWithOffset(): PomodoroSession[] {
         const sessions = [];
-        const today = new Date();
+        const today = new Date(`${getLogicalDateString()}T00:00:00`);
 
         // 计算目标月份
         const targetDate = new Date(today.getFullYear(), today.getMonth() + this.currentMonthOffset, 1);
@@ -593,7 +612,7 @@ export class PomodoroStatsView {
 
         for (let day = 1; day <= daysInMonth; day++) {
             const date = new Date(targetDate.getFullYear(), targetDate.getMonth(), day);
-            const dateStr = getLocalDateString(date);
+            const dateStr = getLogicalDateString(date);
             sessions.push(...this.recordManager.getDateSessions(dateStr));
         }
 
@@ -602,7 +621,7 @@ export class PomodoroStatsView {
 
     private getYearSessionsWithOffset(): PomodoroSession[] {
         const sessions = [];
-        const today = new Date();
+        const today = new Date(`${getLogicalDateString()}T00:00:00`);
         const targetYear = today.getFullYear() + this.currentYearOffset;
 
         // 获取整年的数据
@@ -610,7 +629,7 @@ export class PomodoroStatsView {
             const daysInMonth = new Date(targetYear, month + 1, 0).getDate();
             for (let day = 1; day <= daysInMonth; day++) {
                 const date = new Date(targetYear, month, day);
-                const dateStr = getLocalDateString(date);
+                const dateStr = getLogicalDateString(date);
                 sessions.push(...this.recordManager.getDateSessions(dateStr));
             }
         }
@@ -620,12 +639,12 @@ export class PomodoroStatsView {
 
     private getRecentSessions(days: number): PomodoroSession[] {
         const sessions = [];
-        const today = new Date();
+        const today = new Date(`${getLogicalDateString()}T00:00:00`);
 
         for (let i = 0; i < days; i++) {
             const date = new Date(today);
             date.setDate(today.getDate() - i);
-            const dateStr = getLocalDateString(date);
+            const dateStr = getLogicalDateString(date);
             sessions.push(...this.recordManager.getDateSessions(dateStr));
         }
 
@@ -648,7 +667,7 @@ export class PomodoroStatsView {
 
     private getWeeklyTrendsData(): Array<{ label: string, value: number }> {
         const data = [];
-        const today = new Date();
+        const today = new Date(`${getLogicalDateString()}T00:00:00`);
 
         // 计算目标周的开始日期（星期一）
         const startOfWeek = new Date(today);
@@ -660,7 +679,7 @@ export class PomodoroStatsView {
         for (let i = 0; i < 7; i++) {
             const date = new Date(startOfWeek);
             date.setDate(startOfWeek.getDate() + i);
-            const dateStr = getLocalDateString(date);
+            const dateStr = getLogicalDateString(date);
             const sessions = this.recordManager.getDateSessions(dateStr);
             const value = sessions
                 .filter(s => s.type === 'work')
@@ -678,7 +697,7 @@ export class PomodoroStatsView {
     private getMonthlyTrendsData(): Array<{ label: string, value: number }> {
         // 实现月度趋势数据获取
         const data = [];
-        const today = new Date();
+        const today = new Date(`${getLogicalDateString()}T00:00:00`);
 
         // 计算目标月份
         const targetDate = new Date(today.getFullYear(), today.getMonth() + this.currentMonthOffset, 1);
@@ -686,7 +705,7 @@ export class PomodoroStatsView {
 
         for (let day = 1; day <= daysInMonth; day++) {
             const date = new Date(targetDate.getFullYear(), targetDate.getMonth(), day);
-            const dateStr = getLocalDateString(date);
+            const dateStr = getLogicalDateString(date);
             const sessions = this.recordManager.getDateSessions(dateStr);
             const time = sessions
                 .filter(s => s.type === 'work')
@@ -705,7 +724,7 @@ export class PomodoroStatsView {
         // 实现年度趋势数据获取
         const data = [];
         const months = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
-        const today = new Date();
+        const today = new Date(`${getLogicalDateString()}T00:00:00`);
         const targetYear = today.getFullYear() + this.currentYearOffset;
 
         months.forEach((month, index) => {
@@ -715,7 +734,7 @@ export class PomodoroStatsView {
             // 计算该月的总专注时间
             for (let day = 1; day <= daysInMonth; day++) {
                 const date = new Date(targetYear, index, day);
-                const dateStr = getLocalDateString(date);
+                const dateStr = getLogicalDateString(date);
                 const sessions = this.recordManager.getDateSessions(dateStr);
                 monthlyTime += sessions
                     .filter(s => s.type === 'work')
@@ -734,7 +753,7 @@ export class PomodoroStatsView {
     private getTimelineData(): Array<{ date: string, sessions: Array<{ type: string, title: string, duration: number, startPercent: number, widthPercent: number }> }> {
         // 实现时间线数据获取
         const data = [];
-        const today = new Date();
+        const today = new Date(`${getLogicalDateString()}T00:00:00`);
 
         // 根据当前时间范围和偏移量计算数据
         switch (this.currentTimeRange) {
@@ -776,7 +795,7 @@ export class PomodoroStatsView {
     }
 
     private getTimelineDataForDate(date: Date): { date: string, sessions: Array<{ type: string, title: string, duration: number, startPercent: number, widthPercent: number }> } {
-        const dateStr = getLocalDateString(date);
+        const dateStr = getLogicalDateString(date);
         const sessions = this.recordManager.getDateSessions(dateStr);
 
         const timelineSessions = sessions.map(session => {
@@ -800,7 +819,7 @@ export class PomodoroStatsView {
     }
 
     private getAverageTimelineDataForMonth(): { date: string, sessions: Array<{ type: string, title: string, duration: number, startPercent: number, widthPercent: number }> } {
-        const today = new Date();
+        const today = new Date(`${getLogicalDateString()}T00:00:00`);
         const targetDate = new Date(today.getFullYear(), today.getMonth() + this.currentMonthOffset, 1);
         const daysInMonth = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0).getDate();
 
@@ -811,7 +830,7 @@ export class PomodoroStatsView {
         // 收集整个月的数据
         for (let day = 1; day <= daysInMonth; day++) {
             const date = new Date(targetDate.getFullYear(), targetDate.getMonth(), day);
-            const dateStr = getLocalDateString(date);
+            const dateStr = getLogicalDateString(date);
             const sessions = this.recordManager.getDateSessions(dateStr);
 
             let hasData = false;
@@ -874,7 +893,7 @@ export class PomodoroStatsView {
     }
 
     private getAverageTimelineDataForYear(): { date: string, sessions: Array<{ type: string, title: string, duration: number, startPercent: number, widthPercent: number }> } {
-        const today = new Date();
+        const today = new Date(`${getLogicalDateString()}T00:00:00`);
         const targetYear = today.getFullYear() + this.currentYearOffset;
 
         // 创建24小时的时间段统计数组，按小时统计
@@ -886,7 +905,7 @@ export class PomodoroStatsView {
             const daysInMonth = new Date(targetYear, month + 1, 0).getDate();
             for (let day = 1; day <= daysInMonth; day++) {
                 const date = new Date(targetYear, month, day);
-                const dateStr = getLocalDateString(date);
+                const dateStr = getLogicalDateString(date);
                 const sessions = this.recordManager.getDateSessions(dateStr);
 
                 let hasData = false;
@@ -954,7 +973,7 @@ export class PomodoroStatsView {
         const endDate = new Date(year, 11, 31);
 
         for (let date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
-            const dateStr = getLocalDateString(date);
+            const dateStr = getLogicalDateString(date);
             const sessions = this.recordManager.getDateSessions(dateStr);
             const time = sessions
                 .filter(s => s.type === 'work')
@@ -983,13 +1002,13 @@ export class PomodoroStatsView {
     }
 
     private getCurrentDateRangeText(): string {
-        const today = new Date();
+        const today = new Date(`${getLogicalDateString()}T00:00:00`);
 
         switch (this.currentTimeRange) {
             case 'today':
                 const targetDate = new Date(today);
                 targetDate.setDate(today.getDate() + this.currentWeekOffset); // 复用weekOffset作为日偏移
-                return targetDate.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
+                return `${targetDate.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}（逻辑日）`;
 
             case 'week':
                 const startOfWeek = new Date(today);
@@ -1000,11 +1019,11 @@ export class PomodoroStatsView {
                 const endOfWeek = new Date(startOfWeek);
                 endOfWeek.setDate(startOfWeek.getDate() + 6);
 
-                return `${startOfWeek.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })} - ${endOfWeek.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}`;
+                return `${startOfWeek.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })} - ${endOfWeek.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}（逻辑日）`;
 
             case 'month':
                 const targetMonth = new Date(today.getFullYear(), today.getMonth() + this.currentMonthOffset, 1);
-                return `${targetMonth.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long' })}`;
+                return `${targetMonth.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long' })}（逻辑日）`;
 
             case 'year':
                 const targetYear = today.getFullYear() + this.currentYearOffset;
@@ -1016,6 +1035,7 @@ export class PomodoroStatsView {
     }
 
     public show() {
+        setLastStatsMode('pomodoro');
         this.dialog.element.addEventListener('click', this.handleClick.bind(this));
         this.updateContent();
     }
@@ -1171,7 +1191,7 @@ export class PomodoroStatsView {
             const dataList = [];
 
             for (let date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
-                const localDateStr = getLocalDateString(date);
+                const localDateStr = getLogicalDateString(date);
 
                 // 查找对应的数据
                 const dayData = heatmapData.find(d => d.date === localDateStr);
@@ -1537,6 +1557,7 @@ export class PomodoroStatsView {
         if (target.classList.contains('stats-switch-btn')) {
             const mode = target.dataset.mode;
             if (mode === 'task') {
+                setLastStatsMode('task');
                 this.dialog.destroy();
                 import("./TaskStatsView").then(({ TaskStatsView }) => {
                     const statsView = new TaskStatsView();

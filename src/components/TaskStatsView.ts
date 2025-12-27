@@ -3,9 +3,10 @@ import { showMessage } from "siyuan";
 import { confirm } from "siyuan";
 import { PomodoroRecordManager } from "../utils/pomodoroRecord";
 import { t } from "../utils/i18n";
-import { compareDateStrings, getLocalDateString } from "../utils/dateUtils";
+import { compareDateStrings, getLogicalDateString } from "../utils/dateUtils";
 import { readReminderData, readProjectData, getFile } from "../api";
 import { generateRepeatInstances } from "../utils/repeatUtils";
+import { setLastStatsMode } from "./PomodoroStatsView";
 import { init, use, EChartsType } from 'echarts/core';
 import { PieChart, HeatmapChart, CustomChart } from 'echarts/charts';
 import { TooltipComponent, VisualMapComponent, GridComponent, TitleComponent, LegendComponent, CalendarComponent } from 'echarts/components';
@@ -44,7 +45,7 @@ export class TaskStatsView {
     private timeFormatter: PomodoroRecordManager;
     private currentView: 'overview' | 'details' | 'records' | 'trends' | 'timeline' | 'heatmap' = 'overview';
     private currentTimeRange: 'today' | 'week' | 'month' | 'year' = 'today';
-    private currentYear: number = new Date().getFullYear();
+    private currentYear: number = parseInt(getLogicalDateString().split('-')[0], 10);
     private currentWeekOffset: number = 0; // 周偏移量，0表示本周，-1表示上周，1表示下周
     private currentMonthOffset: number = 0; // 月偏移量，0表示本月，-1表示上月，1表示下月
     private currentYearOffset: number = 0; // 年偏移量，0表示今年，-1表示去年，1表示明年
@@ -404,11 +405,11 @@ export class TaskStatsView {
     }
 
     private renderSessionRecord(session: TaskSession): string {
-        const date = new Date(session.startTime || `${session.date}T00:00:00`);
-        const dateStr = date.toLocaleDateString('zh-CN');
+        const dateForDisplay = new Date(`${session.date}T00:00:00`);
+        const dateStr = dateForDisplay.toLocaleDateString('zh-CN');
         const timeStr = session.startTime
-            ? date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-            : t("allDayReminder") || "全天";
+            ? new Date(session.startTime).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+            : t("allDayReminder") || "\u5168\u5929";
 
         return `
             <div class="record-item task">
@@ -542,7 +543,7 @@ export class TaskStatsView {
     }
 
     private getTodayTaskTime(): number {
-        const dateStr = getLocalDateString(new Date());
+        const dateStr = getLogicalDateString();
         return this.getSessionsForRange(dateStr, dateStr).reduce((sum, s) => sum + s.duration, 0);
     }
 
@@ -552,7 +553,7 @@ export class TaskStatsView {
     }
 
     private getTodayTaskCount(): number {
-        const dateStr = getLocalDateString(new Date());
+        const dateStr = getLogicalDateString();
         return this.getSessionsForRange(dateStr, dateStr).length;
     }
 
@@ -567,12 +568,12 @@ export class TaskStatsView {
 
     private getLast7DaysData(): Array<{ label: string, value: number }> {
         const data = [];
-        const today = new Date();
+        const today = new Date(`${getLogicalDateString()}T00:00:00`);
 
         for (let i = 6; i >= 0; i--) {
             const date = new Date(today);
             date.setDate(today.getDate() - i);
-            const dateStr = getLocalDateString(date);
+            const dateStr = getLogicalDateString(date);
             const value = this.getSessionsForRange(dateStr, dateStr)
                 .reduce((sum, s) => sum + s.duration, 0);
 
@@ -607,7 +608,7 @@ export class TaskStatsView {
                 sessions = this.getYearSessionsWithOffset();
                 break;
             default:
-                sessions = this.getSessionsForRange(getLocalDateString(new Date()), getLocalDateString(new Date()));
+                sessions = this.getSessionsForRange(getLogicalDateString(), getLogicalDateString());
         }
 
         const stats: Record<string, { time: number, count: number }> = {};
@@ -627,10 +628,10 @@ export class TaskStatsView {
     }
 
     private getTodaySessionsWithOffset(): TaskSession[] {
-        const today = new Date();
+        const today = new Date(`${getLogicalDateString()}T00:00:00`);
         const targetDate = new Date(today);
         targetDate.setDate(today.getDate() + this.currentWeekOffset);
-        const dateStr = getLocalDateString(targetDate);
+        const dateStr = getLogicalDateString(targetDate);
         return this.getSessionsForRange(dateStr, dateStr);
     }
 
@@ -650,10 +651,10 @@ export class TaskStatsView {
     }
 
     private getRecentSessions(days: number): TaskSession[] {
-        const today = new Date();
+        const today = new Date(`${getLogicalDateString()}T00:00:00`);
         const startDate = new Date(today);
         startDate.setDate(today.getDate() - (days - 1));
-        const sessions = this.getSessionsForRange(getLocalDateString(startDate), getLocalDateString(today));
+        const sessions = this.getSessionsForRange(getLogicalDateString(startDate), getLogicalDateString(today));
 
         return sessions.sort((a, b) => {
             const aTime = a.startTime ? new Date(a.startTime).getTime() : new Date(`${a.date}T00:00:00`).getTime();
@@ -683,7 +684,7 @@ export class TaskStatsView {
         for (let i = 0; i < 7; i++) {
             const date = new Date(start);
             date.setDate(start.getDate() + i);
-            const dateStr = getLocalDateString(date);
+            const dateStr = getLogicalDateString(date);
             const value = this.getSessionsForRange(dateStr, dateStr)
                 .reduce((sum, s) => sum + s.duration, 0);
 
@@ -705,7 +706,7 @@ export class TaskStatsView {
 
         for (let day = 1; day <= daysInMonth; day++) {
             const date = new Date(startDate.getFullYear(), startDate.getMonth(), day);
-            const dateStr = getLocalDateString(date);
+            const dateStr = getLogicalDateString(date);
             const time = this.getSessionsForRange(dateStr, dateStr)
                 .reduce((sum, s) => sum + s.duration, 0);
 
@@ -730,7 +731,7 @@ export class TaskStatsView {
 
             for (let day = 1; day <= daysInMonth; day++) {
                 const date = new Date(year, index, day);
-                const dateStr = getLocalDateString(date);
+                const dateStr = getLogicalDateString(date);
                 monthlyTime += this.getSessionsForRange(dateStr, dateStr)
                     .reduce((sum, s) => sum + s.duration, 0);
             }
@@ -746,7 +747,7 @@ export class TaskStatsView {
 
     private getTimelineData(): Array<{ date: string, sessions: Array<{ type: string, title: string, duration: number, startPercent: number, widthPercent: number }> }> {
         const data = [];
-        const today = new Date();
+        const today = new Date(`${getLogicalDateString()}T00:00:00`);
 
         switch (this.currentTimeRange) {
             case 'week':
@@ -779,7 +780,7 @@ export class TaskStatsView {
     }
 
     private getTimelineDataForDate(date: Date): { date: string, sessions: Array<{ type: string, title: string, duration: number, startPercent: number, widthPercent: number }> } {
-        const dateStr = getLocalDateString(date);
+        const dateStr = getLogicalDateString(date);
         const sessions = this.getSessionsForRange(dateStr, dateStr).filter(s => s.startTime);
 
         const timelineSessions = sessions.map(session => {
@@ -812,7 +813,7 @@ export class TaskStatsView {
 
         for (let day = 1; day <= daysInMonth; day++) {
             const date = new Date(targetDate.getFullYear(), targetDate.getMonth(), day);
-            const dateStr = getLocalDateString(date);
+            const dateStr = getLogicalDateString(date);
             const sessions = this.getSessionsForRange(dateStr, dateStr).filter(s => s.startTime);
 
             let hasData = false;
@@ -881,7 +882,7 @@ export class TaskStatsView {
             const daysInMonth = new Date(year, month + 1, 0).getDate();
             for (let day = 1; day <= daysInMonth; day++) {
                 const date = new Date(year, month, day);
-                const dateStr = getLocalDateString(date);
+                const dateStr = getLogicalDateString(date);
                 const sessions = this.getSessionsForRange(dateStr, dateStr).filter(s => s.startTime);
 
                 let hasData = false;
@@ -945,7 +946,7 @@ export class TaskStatsView {
         const endDate = new Date(year, 11, 31);
 
         for (let date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
-            const dateStr = getLocalDateString(date);
+            const dateStr = getLogicalDateString(date);
             const time = this.getSessionsForRange(dateStr, dateStr)
                 .reduce((sum, s) => sum + s.duration, 0);
 
@@ -970,9 +971,10 @@ export class TaskStatsView {
             return null;
         }
         const timing = this.getTaskTiming(reminder);
+        const sessionDate = timing.startTime ? getLogicalDateString(timing.startTime) : reminder.date;
         return {
             id: sessionId,
-            date: reminder.date,
+            date: sessionDate,
             eventTitle: reminder.title || t("unnamedNote"),
             projectId: reminder.projectId || undefined,
             categoryId: reminder.categoryId || undefined,
@@ -1080,7 +1082,7 @@ export class TaskStatsView {
     }
 
     private getWeekRange(weekOffset: number): { start: string; end: string } {
-        const today = new Date();
+        const today = new Date(`${getLogicalDateString()}T00:00:00`);
         const startOfWeek = new Date(today);
         const dayOfWeek = today.getDay();
         const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
@@ -1089,24 +1091,24 @@ export class TaskStatsView {
         endOfWeek.setDate(startOfWeek.getDate() + 6);
 
         return {
-            start: getLocalDateString(startOfWeek),
-            end: getLocalDateString(endOfWeek)
+            start: getLogicalDateString(startOfWeek),
+            end: getLogicalDateString(endOfWeek)
         };
     }
 
     private getMonthRange(monthOffset: number): { start: string; end: string } {
-        const today = new Date();
+        const today = new Date(`${getLogicalDateString()}T00:00:00`);
         const targetDate = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
         const endDate = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0);
 
         return {
-            start: getLocalDateString(targetDate),
-            end: getLocalDateString(endDate)
+            start: getLogicalDateString(targetDate),
+            end: getLogicalDateString(endDate)
         };
     }
 
     private getYearRange(yearOffset: number): { start: string; end: string } {
-        const year = new Date().getFullYear() + yearOffset;
+        const year = parseInt(getLogicalDateString().split('-')[0], 10) + yearOffset;
         return {
             start: `${year}-01-01`,
             end: `${year}-12-31`
@@ -1118,13 +1120,13 @@ export class TaskStatsView {
     }
 
     private getCurrentDateRangeText(): string {
-        const today = new Date();
+        const today = new Date(`${getLogicalDateString()}T00:00:00`);
 
         switch (this.currentTimeRange) {
             case 'today':
                 const targetDate = new Date(today);
                 targetDate.setDate(today.getDate() + this.currentWeekOffset); // 复用weekOffset作为日偏移
-                return targetDate.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
+                return `${targetDate.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}（逻辑日）`;
 
             case 'week':
                 const startOfWeek = new Date(today);
@@ -1135,11 +1137,11 @@ export class TaskStatsView {
                 const endOfWeek = new Date(startOfWeek);
                 endOfWeek.setDate(startOfWeek.getDate() + 6);
 
-                return `${startOfWeek.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })} - ${endOfWeek.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}`;
+                return `${startOfWeek.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })} - ${endOfWeek.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}（逻辑日）`;
 
             case 'month':
                 const targetMonth = new Date(today.getFullYear(), today.getMonth() + this.currentMonthOffset, 1);
-                return `${targetMonth.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long' })}`;
+                return `${targetMonth.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long' })}（逻辑日）`;
 
             case 'year':
                 const targetYear = today.getFullYear() + this.currentYearOffset;
@@ -1151,6 +1153,7 @@ export class TaskStatsView {
     }
 
     public async show() {
+        setLastStatsMode('task');
         this.dialog.element.addEventListener('click', this.handleClick.bind(this));
         await this.ensureDataReady();
         this.updateContent();
@@ -1307,7 +1310,7 @@ export class TaskStatsView {
             const dataList = [];
 
             for (let date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
-                const localDateStr = getLocalDateString(date);
+                const localDateStr = getLogicalDateString(date);
 
                 // 查找对应的数据
                 const dayData = heatmapData.find(d => d.date === localDateStr);
@@ -1669,6 +1672,7 @@ export class TaskStatsView {
         if (target.classList.contains('stats-switch-btn')) {
             const mode = target.dataset.mode;
             if (mode === 'pomodoro') {
+                setLastStatsMode('pomodoro');
                 this.dialog.destroy();
                 import("./PomodoroStatsView").then(({ PomodoroStatsView }) => {
                     const statsView = new PomodoroStatsView();
