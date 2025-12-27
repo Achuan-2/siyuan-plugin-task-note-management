@@ -574,13 +574,6 @@
                         '将ICS文件上传到云端，实现多设备间的提醒同步。支持思源服务器或S3存储。',
                 },
                 {
-                    key: 'icsSyncEnabled',
-                    value: settings.icsSyncEnabled,
-                    type: 'checkbox',
-                    title: '启用 ICS 云端同步',
-                    description: '开启后按设置的间隔自动生成并上传 ICS 文件到云端',
-                },
-                {
                     key: 'icsFormat',
                     value: settings.icsFormat,
                     type: 'select',
@@ -610,6 +603,13 @@
                         siyuan: '思源订阅会员服务器',
                         s3: 'S3存储',
                     },
+                },
+                {
+                    key: 'icsSyncEnabled',
+                    value: settings.icsSyncEnabled,
+                    type: 'checkbox',
+                    title: '启用 ICS 定时云端同步',
+                    description: '开启后按设置的间隔自动生成并上传 ICS 文件到云端',
                 },
                 {
                     key: 'icsSyncInterval',
@@ -961,15 +961,7 @@
             const updated = { ...item } as any;
 
             // 通用同步设置，仅在同步启用时可用
-            if (
-                [
-                    'icsSyncInterval',
-                    'icsFormat',
-                    'icsFileName',
-                    'icsSyncMethod',
-                    'uploadIcsToCloud',
-                ].includes(item.key)
-            ) {
+            if (item.key === 'icsSyncInterval') {
                 updated.disabled = !settings.icsSyncEnabled;
             }
 
