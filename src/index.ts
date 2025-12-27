@@ -103,7 +103,7 @@ export const DEFAULT_SETTINGS = {
     calendarColorBy: 'project',
     calendarViewMode: 'timeGridWeek',
     dayStartTime: '08:00', // 日历视图一天的起始时间
-    todayStartTime: '00:00', // 日常任务/习惯的一天起始时间
+    todayStartTime: '03:00', // 日常任务/习惯的一天起始时间
     // 四象限设置
     eisenhowerImportanceThreshold: 'medium',
     eisenhowerUrgencyDays: 3,
@@ -3154,23 +3154,41 @@ export default class ReminderPlugin extends Plugin {
     private _cleanupOrphanedButtons(protyle: any, activeBlocks?: Map<string, any>) {
         const activeBlockIds = activeBlocks ? new Set(activeBlocks.keys()) : new Set();
 
-        // 清理项目按钮
-        const projectButtons = protyle.element.querySelectorAll('.block-project-btn');
-        projectButtons.forEach((btn: HTMLElement) => {
+        // 清理并去重项目按钮：对于同一 (blockId, projectId) 只保留第一个
+        const projectButtons = Array.from(protyle.element.querySelectorAll('.block-project-btn')) as HTMLElement[];
+        const seen = new Set<string>();
+        for (const btn of projectButtons) {
             const blockId = btn.dataset.blockId || btn.closest('[data-node-id]')?.getAttribute('data-node-id');
-            if (!blockId || !activeBlockIds.has(blockId)) {
-                btn.remove();
-            }
-        });
+            const projectId = btn.dataset.projectId || btn.getAttribute('data-project-id') || '';
+            const key = `${blockId || ''}|${projectId}`;
 
-        // 清理绑定按钮
-        const bindButtons = protyle.element.querySelectorAll('.block-bind-reminders-btn');
-        bindButtons.forEach((btn: HTMLElement) => {
+            if (!blockId || !activeBlockIds.has(blockId)) {
+                btn.remove();
+                continue;
+            }
+
+            if (seen.has(key)) {
+                btn.remove();
+                continue;
+            }
+            seen.add(key);
+        }
+
+        // 清理并去重绑定按钮：对于同一 blockId 只保留一个
+        const bindButtons = Array.from(protyle.element.querySelectorAll('.block-bind-reminders-btn')) as HTMLElement[];
+        const seenBind = new Set<string>();
+        for (const btn of bindButtons) {
             const blockId = btn.dataset.blockId || btn.closest('[data-node-id]')?.getAttribute('data-node-id');
             if (!blockId || !activeBlockIds.has(blockId)) {
                 btn.remove();
+                continue;
             }
-        });
+            if (seenBind.has(blockId)) {
+                btn.remove();
+                continue;
+            }
+            seenBind.add(blockId);
+        }
     }
 
     // 处理单个块的按钮
@@ -3191,6 +3209,16 @@ export default class ReminderPlugin extends Plugin {
         // 添加新按钮
         for (const pid of info.projectIds) {
             if (!existingProjectButtons.has(pid)) {
+                // 如果在当前 protyle 中已经存在相同的按钮（可能被添加到不同容器），则跳过
+                try {
+                    const selector = `.block-project-btn[data-project-id="${pid}"][data-block-id="${blockId}"]`;
+                    if (protyle.element && protyle.element.querySelector(selector)) {
+                        continue;
+                    }
+                } catch (e) {
+                    // ignore selector errors
+                }
+
                 const btn = this._createProjectButton(pid, blockId);
                 container.appendChild(btn);
             }
@@ -3260,6 +3288,7 @@ export default class ReminderPlugin extends Plugin {
         btn.innerHTML = `<svg class="b3-list-item__graphic" style="width:14px;height:14px"><use xlink:href="#iconProject"></use></svg>`;
         btn.dataset.projectId = projectId;
         btn.dataset.blockId = blockId;
+        btn.setAttribute('data-plugin-added', 'reminder-plugin');
         btn.title = t('openProjectKanban');
 
         btn.addEventListener('click', async (e) => {
@@ -3303,6 +3332,7 @@ export default class ReminderPlugin extends Plugin {
         `;
         btn.innerHTML = `<span style="font-size:14px;line-height:1">📋</span>`;
         btn.dataset.blockId = blockId;
+        btn.setAttribute('data-plugin-added', 'reminder-plugin');
         btn.title = '查看绑定任务';
 
         btn.addEventListener('click', async (e) => {
