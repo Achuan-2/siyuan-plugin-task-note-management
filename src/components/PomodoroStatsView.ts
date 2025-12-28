@@ -3,7 +3,7 @@ import { showMessage } from "siyuan";
 import { confirm } from "siyuan";
 import { PomodoroRecordManager, PomodoroSession } from "../utils/pomodoroRecord";
 import { t } from "../utils/i18n";
-import { getLogicalDateString } from "../utils/dateUtils";
+import { getLocalDateString, getLogicalDateString, getDayStartMinutes } from "../utils/dateUtils";
 import { init, use, EChartsType } from 'echarts/core';
 import { PieChart, HeatmapChart, CustomChart } from 'echarts/charts';
 import { TooltipComponent, VisualMapComponent, GridComponent, TitleComponent, LegendComponent, CalendarComponent } from 'echarts/components';
@@ -68,6 +68,24 @@ export class PomodoroStatsView {
                 // 清理资源
             }
         });
+    }
+
+    private getLogicalTimelineStartMinutes(): number {
+        return getDayStartMinutes();
+    }
+
+    private getTimelineStartPercent(startTime: Date): number {
+        const startMinutes = startTime.getHours() * 60 + startTime.getMinutes();
+        const dayStartMinutes = this.getLogicalTimelineStartMinutes();
+        const adjustedMinutes = (startMinutes - dayStartMinutes + 1440) % 1440;
+        return adjustedMinutes / (24 * 60) * 100;
+    }
+
+    private formatTimelineHour(valueHours: number): string {
+        const totalMinutes = Math.round(valueHours * 60 + this.getLogicalTimelineStartMinutes());
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
     }
 
     private createContent(): string {
@@ -521,7 +539,7 @@ export class PomodoroStatsView {
         for (let i = 6; i >= 0; i--) {
             const date = new Date(today);
             date.setDate(today.getDate() - i);
-            const dateStr = getLogicalDateString(date);
+            const dateStr = getLocalDateString(date);
             const sessions = this.recordManager.getDateSessions(dateStr);
             const value = sessions
                 .filter(s => s.type === 'work')
@@ -577,7 +595,7 @@ export class PomodoroStatsView {
         const today = new Date(`${getLogicalDateString()}T00:00:00`);
         const targetDate = new Date(today);
         targetDate.setDate(today.getDate() + this.currentWeekOffset); // 复用weekOffset作为日偏移
-        const dateStr = getLogicalDateString(targetDate);
+        const dateStr = getLocalDateString(targetDate);
         return this.recordManager.getDateSessions(dateStr);
     }
 
@@ -595,7 +613,7 @@ export class PomodoroStatsView {
         for (let i = 0; i < 7; i++) {
             const date = new Date(startOfWeek);
             date.setDate(startOfWeek.getDate() + i);
-            const dateStr = getLogicalDateString(date);
+            const dateStr = getLocalDateString(date);
             sessions.push(...this.recordManager.getDateSessions(dateStr));
         }
 
@@ -612,7 +630,7 @@ export class PomodoroStatsView {
 
         for (let day = 1; day <= daysInMonth; day++) {
             const date = new Date(targetDate.getFullYear(), targetDate.getMonth(), day);
-            const dateStr = getLogicalDateString(date);
+            const dateStr = getLocalDateString(date);
             sessions.push(...this.recordManager.getDateSessions(dateStr));
         }
 
@@ -629,7 +647,7 @@ export class PomodoroStatsView {
             const daysInMonth = new Date(targetYear, month + 1, 0).getDate();
             for (let day = 1; day <= daysInMonth; day++) {
                 const date = new Date(targetYear, month, day);
-                const dateStr = getLogicalDateString(date);
+                const dateStr = getLocalDateString(date);
                 sessions.push(...this.recordManager.getDateSessions(dateStr));
             }
         }
@@ -644,7 +662,7 @@ export class PomodoroStatsView {
         for (let i = 0; i < days; i++) {
             const date = new Date(today);
             date.setDate(today.getDate() - i);
-            const dateStr = getLogicalDateString(date);
+            const dateStr = getLocalDateString(date);
             sessions.push(...this.recordManager.getDateSessions(dateStr));
         }
 
@@ -679,7 +697,7 @@ export class PomodoroStatsView {
         for (let i = 0; i < 7; i++) {
             const date = new Date(startOfWeek);
             date.setDate(startOfWeek.getDate() + i);
-            const dateStr = getLogicalDateString(date);
+            const dateStr = getLocalDateString(date);
             const sessions = this.recordManager.getDateSessions(dateStr);
             const value = sessions
                 .filter(s => s.type === 'work')
@@ -705,7 +723,7 @@ export class PomodoroStatsView {
 
         for (let day = 1; day <= daysInMonth; day++) {
             const date = new Date(targetDate.getFullYear(), targetDate.getMonth(), day);
-            const dateStr = getLogicalDateString(date);
+            const dateStr = getLocalDateString(date);
             const sessions = this.recordManager.getDateSessions(dateStr);
             const time = sessions
                 .filter(s => s.type === 'work')
@@ -734,7 +752,7 @@ export class PomodoroStatsView {
             // 计算该月的总专注时间
             for (let day = 1; day <= daysInMonth; day++) {
                 const date = new Date(targetYear, index, day);
-                const dateStr = getLogicalDateString(date);
+                const dateStr = getLocalDateString(date);
                 const sessions = this.recordManager.getDateSessions(dateStr);
                 monthlyTime += sessions
                     .filter(s => s.type === 'work')
@@ -795,12 +813,12 @@ export class PomodoroStatsView {
     }
 
     private getTimelineDataForDate(date: Date): { date: string, sessions: Array<{ type: string, title: string, duration: number, startPercent: number, widthPercent: number }> } {
-        const dateStr = getLogicalDateString(date);
+        const dateStr = getLocalDateString(date);
         const sessions = this.recordManager.getDateSessions(dateStr);
 
         const timelineSessions = sessions.map(session => {
             const startTime = new Date(session.startTime);
-            const startPercent = (startTime.getHours() * 60 + startTime.getMinutes()) / (24 * 60) * 100;
+            const startPercent = this.getTimelineStartPercent(startTime);
             const widthPercent = session.duration / (24 * 60) * 100;
 
             return {
@@ -830,34 +848,37 @@ export class PomodoroStatsView {
         // 收集整个月的数据
         for (let day = 1; day <= daysInMonth; day++) {
             const date = new Date(targetDate.getFullYear(), targetDate.getMonth(), day);
-            const dateStr = getLogicalDateString(date);
+            const dateStr = getLocalDateString(date);
             const sessions = this.recordManager.getDateSessions(dateStr);
 
             let hasData = false;
             sessions.filter(s => s.type === 'work').forEach(session => {
                 hasData = true;
                 const startTime = new Date(session.startTime);
-                const startHour = startTime.getHours();
-                const startMinute = startTime.getMinutes();
-                const duration = session.duration;
+                  const startMinutes = startTime.getHours() * 60 + startTime.getMinutes();
+                  const dayStartMinutes = this.getLogicalTimelineStartMinutes();
+                  const adjustedStartMinutes = (startMinutes - dayStartMinutes + 1440) % 1440;
+                  const duration = session.duration;
 
-                // 将专注时间分布到对应的小时中
-                let remainingDuration = duration;
-                let currentHour = startHour;
-                let currentMinute = startMinute;
+                  // 将专注时间分布到对应的逻辑小时中
+                  let remainingDuration = duration;
+                  let currentHour = Math.floor(adjustedStartMinutes / 60);
+                  let currentMinute = adjustedStartMinutes % 60;
+                  let minutesCovered = 0;
 
-                while (remainingDuration > 0 && currentHour < 24) {
-                    // 计算当前小时内剩余的分钟数
-                    const minutesLeftInHour = 60 - currentMinute;
-                    const durationInThisHour = Math.min(remainingDuration, minutesLeftInHour);
+                  while (remainingDuration > 0 && minutesCovered < 24 * 60) {
+                      // 计算当前小时内剩余的分钟数
+                      const minutesLeftInHour = 60 - currentMinute;
+                      const durationInThisHour = Math.min(remainingDuration, minutesLeftInHour);
 
-                    hourlyStats[currentHour] += durationInThisHour;
-                    remainingDuration -= durationInThisHour;
+                      hourlyStats[currentHour] += durationInThisHour;
+                      remainingDuration -= durationInThisHour;
+                      minutesCovered += durationInThisHour;
 
-                    // 移动到下一个小时
-                    currentHour++;
-                    currentMinute = 0;
-                }
+                      // 移动到下一个逻辑小时
+                      currentHour = (currentHour + 1) % 24;
+                      currentMinute = 0;
+                  }
             });
 
             if (hasData) {
@@ -905,34 +926,37 @@ export class PomodoroStatsView {
             const daysInMonth = new Date(targetYear, month + 1, 0).getDate();
             for (let day = 1; day <= daysInMonth; day++) {
                 const date = new Date(targetYear, month, day);
-                const dateStr = getLogicalDateString(date);
+                const dateStr = getLocalDateString(date);
                 const sessions = this.recordManager.getDateSessions(dateStr);
 
                 let hasData = false;
                 sessions.filter(s => s.type === 'work').forEach(session => {
                     hasData = true;
                     const startTime = new Date(session.startTime);
-                    const startHour = startTime.getHours();
-                    const startMinute = startTime.getMinutes();
-                    const duration = session.duration;
+                  const startMinutes = startTime.getHours() * 60 + startTime.getMinutes();
+                  const dayStartMinutes = this.getLogicalTimelineStartMinutes();
+                  const adjustedStartMinutes = (startMinutes - dayStartMinutes + 1440) % 1440;
+                  const duration = session.duration;
 
-                    // 将专注时间分布到对应的小时中
-                    let remainingDuration = duration;
-                    let currentHour = startHour;
-                    let currentMinute = startMinute;
+                  // 将专注时间分布到对应的逻辑小时中
+                  let remainingDuration = duration;
+                  let currentHour = Math.floor(adjustedStartMinutes / 60);
+                  let currentMinute = adjustedStartMinutes % 60;
+                  let minutesCovered = 0;
 
-                    while (remainingDuration > 0 && currentHour < 24) {
-                        // 计算当前小时内剩余的分钟数
-                        const minutesLeftInHour = 60 - currentMinute;
-                        const durationInThisHour = Math.min(remainingDuration, minutesLeftInHour);
+                  while (remainingDuration > 0 && minutesCovered < 24 * 60) {
+                      // 计算当前小时内剩余的分钟数
+                      const minutesLeftInHour = 60 - currentMinute;
+                      const durationInThisHour = Math.min(remainingDuration, minutesLeftInHour);
 
-                        hourlyStats[currentHour] += durationInThisHour;
-                        remainingDuration -= durationInThisHour;
+                      hourlyStats[currentHour] += durationInThisHour;
+                      remainingDuration -= durationInThisHour;
+                      minutesCovered += durationInThisHour;
 
-                        // 移动到下一个小时
-                        currentHour++;
-                        currentMinute = 0;
-                    }
+                      // 移动到下一个逻辑小时
+                      currentHour = (currentHour + 1) % 24;
+                      currentMinute = 0;
+                  }
                 });
 
                 if (hasData) {
@@ -973,7 +997,7 @@ export class PomodoroStatsView {
         const endDate = new Date(year, 11, 31);
 
         for (let date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
-            const dateStr = getLogicalDateString(date);
+            const dateStr = getLocalDateString(date);
             const sessions = this.recordManager.getDateSessions(dateStr);
             const time = sessions
                 .filter(s => s.type === 'work')
@@ -1191,7 +1215,7 @@ export class PomodoroStatsView {
             const dataList = [];
 
             for (let date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
-                const localDateStr = getLogicalDateString(date);
+                const localDateStr = getLocalDateString(date);
 
                 // 查找对应的数据
                 const dayData = heatmapData.find(d => d.date === localDateStr);
@@ -1383,12 +1407,11 @@ export class PomodoroStatsView {
                         data: data,
                         tooltip: {
                             formatter: (params) => {
-                                const start = Math.floor(params.value[0]);
-                                const startMin = Math.round((params.value[0] - start) * 60);
                                 const duration = params.value[4];
                                 const title = params.value[3];
-                                const startTime = `${start.toString().padStart(2, '0')}:${startMin.toString().padStart(2, '0')}`;
-                                return `${title}<br/>时间段: ${startTime}<br/>平均时长: ${duration}分钟`;
+                                const startTime = this.formatTimelineHour(params.value[0]);
+
+return `${title}<br/>时间段: ${startTime}<br/>平均时长: ${duration}分钟`;
                             }
                         }
                     });
@@ -1457,12 +1480,11 @@ export class PomodoroStatsView {
                             data: data,
                             tooltip: {
                                 formatter: (params) => {
-                                    const start = Math.floor(params.value[0]);
-                                    const startMin = Math.round((params.value[0] - start) * 60);
                                     const duration = params.value[4];
                                     const title = params.value[3];
-                                    const startTime = `${start.toString().padStart(2, '0')}:${startMin.toString().padStart(2, '0')}`;
-                                    return `${title}<br/>开始时间: ${startTime}<br/>持续时间: ${duration}分钟`;
+                                    const startTime = this.formatTimelineHour(params.value[0]);
+
+return `${title}<br/>开始时间: ${startTime}<br/>持续时间: ${duration}分钟`;
                                 }
                             }
                         });
@@ -1501,10 +1523,10 @@ export class PomodoroStatsView {
                     max: 24,
                     interval: 2,
                     axisLabel: {
-                        formatter: (value) => {
-                            return `${value.toString().padStart(2, '0')}:00`;
-                        }
-                    },
+                          formatter: (value) => {
+                              return this.formatTimelineHour(value);
+                          }
+                      },
                     name: '时间',
                     nameLocation: 'middle',
                     nameGap: 30

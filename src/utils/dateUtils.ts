@@ -36,6 +36,10 @@ export function setDayStartTime(value?: string | number): void {
     dayStartMinutes = parseTimeToMinutes(value);
 }
 
+export function getDayStartMinutes(): number {
+    return dayStartMinutes;
+}
+
 export function getLocalDateString(date?: Date): string {
     const d = date || new Date();
     return formatDateString(d);

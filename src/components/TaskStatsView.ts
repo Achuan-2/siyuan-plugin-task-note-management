@@ -3,7 +3,7 @@ import { showMessage } from "siyuan";
 import { confirm } from "siyuan";
 import { PomodoroRecordManager } from "../utils/pomodoroRecord";
 import { t } from "../utils/i18n";
-import { compareDateStrings, getLogicalDateString } from "../utils/dateUtils";
+import { compareDateStrings, getLocalDateString, getLogicalDateString, getDayStartMinutes } from "../utils/dateUtils";
 import { readReminderData, readProjectData, getFile } from "../api";
 import { generateRepeatInstances } from "../utils/repeatUtils";
 import { setLastStatsMode } from "./PomodoroStatsView";
@@ -68,6 +68,24 @@ export class TaskStatsView {
                 // 清理资源
             }
         });
+    }
+
+    private getLogicalTimelineStartMinutes(): number {
+        return getDayStartMinutes();
+    }
+
+    private getTimelineStartPercent(startTime: Date): number {
+        const startMinutes = startTime.getHours() * 60 + startTime.getMinutes();
+        const dayStartMinutes = this.getLogicalTimelineStartMinutes();
+        const adjustedMinutes = (startMinutes - dayStartMinutes + 1440) % 1440;
+        return adjustedMinutes / (24 * 60) * 100;
+    }
+
+    private formatTimelineHour(valueHours: number): string {
+        const totalMinutes = Math.round(valueHours * 60 + this.getLogicalTimelineStartMinutes());
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
     }
 
     private createContent(): string {
@@ -573,7 +591,7 @@ export class TaskStatsView {
         for (let i = 6; i >= 0; i--) {
             const date = new Date(today);
             date.setDate(today.getDate() - i);
-            const dateStr = getLogicalDateString(date);
+            const dateStr = getLocalDateString(date);
             const value = this.getSessionsForRange(dateStr, dateStr)
                 .reduce((sum, s) => sum + s.duration, 0);
 
@@ -631,7 +649,7 @@ export class TaskStatsView {
         const today = new Date(`${getLogicalDateString()}T00:00:00`);
         const targetDate = new Date(today);
         targetDate.setDate(today.getDate() + this.currentWeekOffset);
-        const dateStr = getLogicalDateString(targetDate);
+        const dateStr = getLocalDateString(targetDate);
         return this.getSessionsForRange(dateStr, dateStr);
     }
 
@@ -654,7 +672,7 @@ export class TaskStatsView {
         const today = new Date(`${getLogicalDateString()}T00:00:00`);
         const startDate = new Date(today);
         startDate.setDate(today.getDate() - (days - 1));
-        const sessions = this.getSessionsForRange(getLogicalDateString(startDate), getLogicalDateString(today));
+        const sessions = this.getSessionsForRange(getLocalDateString(startDate), getLocalDateString(today));
 
         return sessions.sort((a, b) => {
             const aTime = a.startTime ? new Date(a.startTime).getTime() : new Date(`${a.date}T00:00:00`).getTime();
@@ -684,7 +702,7 @@ export class TaskStatsView {
         for (let i = 0; i < 7; i++) {
             const date = new Date(start);
             date.setDate(start.getDate() + i);
-            const dateStr = getLogicalDateString(date);
+            const dateStr = getLocalDateString(date);
             const value = this.getSessionsForRange(dateStr, dateStr)
                 .reduce((sum, s) => sum + s.duration, 0);
 
@@ -706,7 +724,7 @@ export class TaskStatsView {
 
         for (let day = 1; day <= daysInMonth; day++) {
             const date = new Date(startDate.getFullYear(), startDate.getMonth(), day);
-            const dateStr = getLogicalDateString(date);
+            const dateStr = getLocalDateString(date);
             const time = this.getSessionsForRange(dateStr, dateStr)
                 .reduce((sum, s) => sum + s.duration, 0);
 
@@ -731,7 +749,7 @@ export class TaskStatsView {
 
             for (let day = 1; day <= daysInMonth; day++) {
                 const date = new Date(year, index, day);
-                const dateStr = getLogicalDateString(date);
+                const dateStr = getLocalDateString(date);
                 monthlyTime += this.getSessionsForRange(dateStr, dateStr)
                     .reduce((sum, s) => sum + s.duration, 0);
             }
@@ -780,12 +798,12 @@ export class TaskStatsView {
     }
 
     private getTimelineDataForDate(date: Date): { date: string, sessions: Array<{ type: string, title: string, duration: number, startPercent: number, widthPercent: number }> } {
-        const dateStr = getLogicalDateString(date);
+        const dateStr = getLocalDateString(date);
         const sessions = this.getSessionsForRange(dateStr, dateStr).filter(s => s.startTime);
 
         const timelineSessions = sessions.map(session => {
             const startTime = new Date(session.startTime as string);
-            const startPercent = (startTime.getHours() * 60 + startTime.getMinutes()) / (24 * 60) * 100;
+            const startPercent = this.getTimelineStartPercent(startTime);
             const widthPercent = session.duration / (24 * 60) * 100;
 
             return {
@@ -813,29 +831,32 @@ export class TaskStatsView {
 
         for (let day = 1; day <= daysInMonth; day++) {
             const date = new Date(targetDate.getFullYear(), targetDate.getMonth(), day);
-            const dateStr = getLogicalDateString(date);
+            const dateStr = getLocalDateString(date);
             const sessions = this.getSessionsForRange(dateStr, dateStr).filter(s => s.startTime);
 
             let hasData = false;
             sessions.forEach(session => {
                 hasData = true;
                 const startTime = new Date(session.startTime as string);
-                const startHour = startTime.getHours();
-                const startMinute = startTime.getMinutes();
+                const startMinutes = startTime.getHours() * 60 + startTime.getMinutes();
+                const dayStartMinutes = this.getLogicalTimelineStartMinutes();
+                const adjustedStartMinutes = (startMinutes - dayStartMinutes + 1440) % 1440;
                 const duration = session.duration;
 
                 let remainingDuration = duration;
-                let currentHour = startHour;
-                let currentMinute = startMinute;
+                let currentHour = Math.floor(adjustedStartMinutes / 60);
+                let currentMinute = adjustedStartMinutes % 60;
+                let minutesCovered = 0;
 
-                while (remainingDuration > 0 && currentHour < 24) {
+                while (remainingDuration > 0 && minutesCovered < 24 * 60) {
                     const minutesLeftInHour = 60 - currentMinute;
                     const durationInThisHour = Math.min(remainingDuration, minutesLeftInHour);
 
                     hourlyStats[currentHour] += durationInThisHour;
                     remainingDuration -= durationInThisHour;
+                    minutesCovered += durationInThisHour;
 
-                    currentHour++;
+                    currentHour = (currentHour + 1) % 24;
                     currentMinute = 0;
                 }
             });
@@ -882,31 +903,34 @@ export class TaskStatsView {
             const daysInMonth = new Date(year, month + 1, 0).getDate();
             for (let day = 1; day <= daysInMonth; day++) {
                 const date = new Date(year, month, day);
-                const dateStr = getLogicalDateString(date);
+                const dateStr = getLocalDateString(date);
                 const sessions = this.getSessionsForRange(dateStr, dateStr).filter(s => s.startTime);
 
                 let hasData = false;
                 sessions.forEach(session => {
                     hasData = true;
                     const startTime = new Date(session.startTime as string);
-                    const startHour = startTime.getHours();
-                    const startMinute = startTime.getMinutes();
-                    const duration = session.duration;
+                const startMinutes = startTime.getHours() * 60 + startTime.getMinutes();
+                const dayStartMinutes = this.getLogicalTimelineStartMinutes();
+                const adjustedStartMinutes = (startMinutes - dayStartMinutes + 1440) % 1440;
+                const duration = session.duration;
 
-                    let remainingDuration = duration;
-                    let currentHour = startHour;
-                    let currentMinute = startMinute;
+                let remainingDuration = duration;
+                let currentHour = Math.floor(adjustedStartMinutes / 60);
+                let currentMinute = adjustedStartMinutes % 60;
+                let minutesCovered = 0;
 
-                    while (remainingDuration > 0 && currentHour < 24) {
-                        const minutesLeftInHour = 60 - currentMinute;
-                        const durationInThisHour = Math.min(remainingDuration, minutesLeftInHour);
+                while (remainingDuration > 0 && minutesCovered < 24 * 60) {
+                    const minutesLeftInHour = 60 - currentMinute;
+                    const durationInThisHour = Math.min(remainingDuration, minutesLeftInHour);
 
-                        hourlyStats[currentHour] += durationInThisHour;
-                        remainingDuration -= durationInThisHour;
+                    hourlyStats[currentHour] += durationInThisHour;
+                    remainingDuration -= durationInThisHour;
+                    minutesCovered += durationInThisHour;
 
-                        currentHour++;
-                        currentMinute = 0;
-                    }
+                    currentHour = (currentHour + 1) % 24;
+                    currentMinute = 0;
+                }
                 });
 
                 if (hasData) {
@@ -946,7 +970,7 @@ export class TaskStatsView {
         const endDate = new Date(year, 11, 31);
 
         for (let date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
-            const dateStr = getLogicalDateString(date);
+            const dateStr = getLocalDateString(date);
             const time = this.getSessionsForRange(dateStr, dateStr)
                 .reduce((sum, s) => sum + s.duration, 0);
 
@@ -1091,8 +1115,8 @@ export class TaskStatsView {
         endOfWeek.setDate(startOfWeek.getDate() + 6);
 
         return {
-            start: getLogicalDateString(startOfWeek),
-            end: getLogicalDateString(endOfWeek)
+            start: getLocalDateString(startOfWeek),
+            end: getLocalDateString(endOfWeek)
         };
     }
 
@@ -1102,8 +1126,8 @@ export class TaskStatsView {
         const endDate = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0);
 
         return {
-            start: getLogicalDateString(targetDate),
-            end: getLogicalDateString(endDate)
+            start: getLocalDateString(targetDate),
+            end: getLocalDateString(endDate)
         };
     }
 
@@ -1310,7 +1334,7 @@ export class TaskStatsView {
             const dataList = [];
 
             for (let date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
-                const localDateStr = getLogicalDateString(date);
+                const localDateStr = getLocalDateString(date);
 
                 // 查找对应的数据
                 const dayData = heatmapData.find(d => d.date === localDateStr);
@@ -1502,12 +1526,11 @@ export class TaskStatsView {
                         data: data,
                         tooltip: {
                             formatter: (params) => {
-                                const start = Math.floor(params.value[0]);
-                                const startMin = Math.round((params.value[0] - start) * 60);
                                 const duration = params.value[4];
                                 const title = params.value[3];
-                                const startTime = `${start.toString().padStart(2, '0')}:${startMin.toString().padStart(2, '0')}`;
-                                return `${title}<br/>时间段: ${startTime}<br/>平均时长: ${duration}分钟`;
+                                const startTime = this.formatTimelineHour(params.value[0]);
+
+return `${title}<br/>时间段: ${startTime}<br/>平均时长: ${duration}分钟`;
                             }
                         }
                     });
@@ -1572,12 +1595,11 @@ export class TaskStatsView {
                             data: data,
                             tooltip: {
                                 formatter: (params) => {
-                                    const start = Math.floor(params.value[0]);
-                                    const startMin = Math.round((params.value[0] - start) * 60);
                                     const duration = params.value[4];
                                     const title = params.value[3];
-                                    const startTime = `${start.toString().padStart(2, '0')}:${startMin.toString().padStart(2, '0')}`;
-                                    return `${title}<br/>开始时间: ${startTime}<br/>持续时间: ${duration}分钟`;
+                                    const startTime = this.formatTimelineHour(params.value[0]);
+
+return `${title}<br/>开始时间: ${startTime}<br/>持续时间: ${duration}分钟`;
                                 }
                             }
                         });
@@ -1616,10 +1638,10 @@ export class TaskStatsView {
                     max: 24,
                     interval: 2,
                     axisLabel: {
-                        formatter: (value) => {
-                            return `${value.toString().padStart(2, '0')}:00`;
-                        }
-                    },
+                          formatter: (value) => {
+                              return this.formatTimelineHour(value);
+                          }
+                      },
                     name: '时间',
                     nameLocation: 'middle',
                     nameGap: 30
