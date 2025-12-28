@@ -19,6 +19,7 @@
     "@fullcalendar/core": "^6.1.10",
     "@fullcalendar/daygrid": "^6.1.10",
     "@fullcalendar/interaction": "^6.1.10",
+    "@fullcalendar/list": "^6.1.10",
     "@fullcalendar/multimonth": "^6.1.20",
     "@fullcalendar/timegrid": "^6.1.10",
     "@sveltejs/vite-plugin-svelte": "^3.1.0",

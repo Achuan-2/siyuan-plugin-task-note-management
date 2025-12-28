@@ -23,18 +23,18 @@ export function t(key: string, params?: { [key: string]: string }): string {
         }
     }
 
-    // 如果仍然没有i18n数据，使用key作为后备
+    // 如果仍然没有i18n数据，返回空
     if (!i18nData || typeof i18nData !== 'object') {
         console.warn('i18n数据不可用，使用key作为后备:', key);
-        return key;
+        return '';
     }
 
     let text = i18nData[key];
 
-    // 如果没有找到对应的翻译文本，使用key作为后备
+    // 如果没有找到对应的翻译文本,返回为空
     if (typeof text !== 'string') {
-        console.warn('未找到i18n键:', key);
-        text = key;
+        // console.warn('未找到i18n键:', key);
+        text = '';
     }
 
     // 处理参数替换

@@ -6,8 +6,8 @@ const CALENDAR_CONFIG_FILE = 'data/storage/petal/siyuan-plugin-task-note-managem
 
 export interface CalendarConfig {
     colorBy: 'category' | 'priority' | 'project';
-    viewMode: 'dayGridMonth' | 'timeGridWeek' | 'timeGridDay' | 'dayGridWeek' | 'dayGridDay';
-    viewType: 'timeGrid' | 'dayGrid';
+    viewMode: 'multiMonthYear' | 'dayGridMonth' | 'timeGridWeek' | 'timeGridDay' | 'dayGridWeek' | 'dayGridDay' | 'listDay' | 'listWeek' | 'listMonth' | 'listYear';
+    viewType: 'timeline' | 'kanban' | 'list';
 }
 
 export class CalendarConfigManager {
@@ -20,7 +20,7 @@ export class CalendarConfigManager {
         this.config = {
             colorBy: 'project', // 默认按项目上色
             viewMode: 'timeGridWeek', // 默认周视图
-            viewType: 'timeGrid' // 默认视图类型
+            viewType: 'timeline' // 默认视图类型
         };
     }
 
@@ -75,14 +75,14 @@ export class CalendarConfigManager {
             this.config = {
                 colorBy: settings.calendarColorBy || 'project',
                 viewMode: settings.calendarViewMode || 'timeGridWeek',
-                viewType: settings.calendarViewType || 'timeGrid'
+                viewType: settings.calendarViewType || 'timeline'
             };
         } catch (error) {
             console.warn('Failed to load calendar config, using defaults:', error);
             this.config = {
                 colorBy: 'project',
                 viewMode: 'timeGridWeek',
-                viewType: 'timeGrid'
+                viewType: 'timeline'
             };
             try {
                 await this.saveConfig();
@@ -101,21 +101,21 @@ export class CalendarConfigManager {
         return this.config.colorBy;
     }
 
-    public async setViewMode(viewMode: 'dayGridMonth' | 'timeGridWeek' | 'timeGridDay' | 'dayGridWeek' | 'dayGridDay') {
+    public async setViewMode(viewMode: 'multiMonthYear' | 'dayGridMonth' | 'timeGridWeek' | 'timeGridDay' | 'dayGridWeek' | 'dayGridDay' | 'listDay' | 'listWeek' | 'listMonth' | 'listYear') {
         this.config.viewMode = viewMode;
         await this.saveConfig();
     }
 
-    public getViewMode(): 'dayGridMonth' | 'timeGridWeek' | 'timeGridDay' | 'dayGridWeek' | 'dayGridDay' {
+    public getViewMode(): 'multiMonthYear' | 'dayGridMonth' | 'timeGridWeek' | 'timeGridDay' | 'dayGridWeek' | 'dayGridDay' | 'listDay' | 'listWeek' | 'listMonth' | 'listYear' {
         return this.config.viewMode;
     }
 
-    public async setViewType(viewType: 'timeGrid' | 'dayGrid') {
+    public async setViewType(viewType: 'timeline' | 'kanban' | 'list') {
         this.config.viewType = viewType;
         await this.saveConfig();
     }
 
-    public getViewType(): 'timeGrid' | 'dayGrid' {
+    public getViewType(): 'timeline' | 'kanban' | 'list' {
         return this.config.viewType;
     }
 

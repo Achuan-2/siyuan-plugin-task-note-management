@@ -1015,7 +1015,7 @@ export class ProjectPanel {
             doingEl.textContent = `${t("doing") || '进行中'}: ${counts.doing}`;
             shortTermEl.textContent = `${t("shortTerm") || '短期'}: ${counts.short_term}`;
             longTermEl.textContent = `${t("longTerm") || '长期'}: ${counts.long_term}`;
-            doneEl.textContent = `${t("done") || '已完成'}: ${counts.done}`;
+            doneEl.textContent = `${t("done") || '已完成'}: ${counts.completed}`;
 
             // 更新番茄钟总数显示
             if (pomodoroEl) {
@@ -1032,8 +1032,8 @@ export class ProjectPanel {
 
             // 计算进度： done / (doing + short_term + long_term + done)
             if (progressBarInner && progressText) {
-                const total = counts.doing + counts.short_term + counts.long_term + counts.done;
-                const percent = total === 0 ? 0 : Math.round((counts.done / total) * 100);
+                const total = counts.doing + counts.short_term + counts.long_term + counts.completed;
+                const percent = total === 0 ? 0 : Math.round((counts.completed / total) * 100);
                 progressBarInner.style.width = `${percent}%`;
                 progressText.textContent = `${percent}%`;
             }

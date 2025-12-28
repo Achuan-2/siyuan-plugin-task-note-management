@@ -8931,8 +8931,9 @@ export class ProjectKanbanView {
         // 如果状态改变，智能移动任务卡片到新列
         if ('kanbanStatus' in updates || 'termType' in updates || 'completed' in updates || 'date' in updates) {
             const newStatus = this.getTaskStatus(task);
-            const currentColumn = taskEl.closest('.kanban-column');
-            const currentStatus = currentColumn?.getAttribute('data-status');
+            // 尝试从最近的带 data-status 的祖先元素获取当前状态，兼容自定义分组模式下的子状态容器
+            const statusAncestor = taskEl.closest('[data-status]') as HTMLElement | null;
+            const currentStatus = statusAncestor?.dataset.status || null;
 
             if (currentStatus !== newStatus) {
                 // 尝试智能移动任务卡片
@@ -9034,10 +9035,41 @@ export class ProjectKanbanView {
             }
 
             // 更新列的任务计数
-            if (fromStatus) {
-                this.updateColumnCount(fromStatus, -1);
+            if (this.kanbanMode === 'custom') {
+                try {
+                    // 在自定义分组模式下，更新具体分组下的子状态计数（如果存在）
+                    const sourceGroupColumn = (taskEl as HTMLElement).closest('.kanban-column') as HTMLElement | null;
+                    const targetGroupColumn = (targetContent as HTMLElement).closest('.kanban-column') as HTMLElement | null;
+
+                    const adjustCount = (col: HTMLElement | null, statusKey: string, delta: number) => {
+                        if (!col) return;
+                        const countEl = col.querySelector(`.custom-status-${statusKey} .custom-status-group-count`) as HTMLElement | null;
+                        if (countEl) {
+                            const cur = parseInt(countEl.textContent || '0', 10);
+                            countEl.textContent = Math.max(0, cur + delta).toString();
+                        } else {
+                            // fallback: 更新列顶部计数
+                            const topCountEl = col.querySelector('.kanban-column-count') as HTMLElement | null;
+                            if (topCountEl) {
+                                const cur = parseInt(topCountEl.textContent || '0', 10);
+                                topCountEl.textContent = Math.max(0, cur + delta).toString();
+                            }
+                        }
+                    };
+
+                    if (fromStatus) adjustCount(sourceGroupColumn, fromStatus, -1);
+                    adjustCount(targetGroupColumn, toStatus, 1);
+                } catch (e) {
+                    // 如果出错，回退到通用的列计数更新
+                    if (fromStatus) this.updateColumnCount(fromStatus, -1);
+                    this.updateColumnCount(toStatus, 1);
+                }
+            } else {
+                if (fromStatus) {
+                    this.updateColumnCount(fromStatus, -1);
+                }
+                this.updateColumnCount(toStatus, 1);
             }
-            this.updateColumnCount(toStatus, 1);
 
             return true;
         } catch (error) {
