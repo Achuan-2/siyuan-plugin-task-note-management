@@ -826,6 +826,7 @@
                 }
                 settings[detail.key] = v;
             } else if (detail.key === 'todayStartTime') {
+                const oldValue = settings[detail.key]; // 保存旧值用于比较
                 let v = detail.value;
                 if (typeof v === 'number') {
                     const h = Math.max(0, Math.min(23, Math.floor(v)));
@@ -846,6 +847,28 @@
                     }
                 }
                 settings[detail.key] = v;
+
+                // 如果一天起始时间发生了变化，需要重新生成番茄钟按天记录
+                if (oldValue !== v) {
+                    (async () => {
+                        try {
+                            // 先更新一天起始时间设置，这样getLogicalDateString会使用新的起始时间
+                            const { setDayStartTime } = await import('./utils/dateUtils');
+                            setDayStartTime(v);
+
+                            // 然后重新生成番茄钟记录
+                            const { PomodoroRecordManager } = await import(
+                                './utils/pomodoroRecord'
+                            );
+                            const recordManager = PomodoroRecordManager.getInstance(plugin);
+                            await recordManager.regenerateRecordsByDate();
+
+                        } catch (error) {
+                            console.error('重新生成番茄钟记录失败:', error);
+                            pushErrMsg('重新生成番茄钟记录失败');
+                        }
+                    })();
+                }
             } else {
                 settings[detail.key] = detail.value;
             }

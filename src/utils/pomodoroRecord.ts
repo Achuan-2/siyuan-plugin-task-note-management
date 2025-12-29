@@ -591,4 +591,70 @@ export class PomodoroRecordManager {
 
         return false; // 未找到会话
     }
+
+    /**
+     * 根据当前的一天起始时间设置，重新生成按天分组的番茄钟记录
+     * 当用户修改一天起始时间后，需要调用此方法重新计算所有会话的逻辑日期
+     */
+    async regenerateRecordsByDate(): Promise<void> {
+        // 确保已初始化
+        if (!this.isInitialized) {
+            await this.initialize();
+        }
+
+        // 收集所有会话
+        const allSessions: PomodoroSession[] = [];
+        for (const date in this.records) {
+            const record = this.records[date];
+            if (record && record.sessions) {
+                allSessions.push(...record.sessions);
+            }
+        }
+
+        if (allSessions.length === 0) {
+            return;
+        }
+
+
+        // 清空现有记录
+        this.records = {};
+
+        // 根据会话的开始时间重新分组
+        for (const session of allSessions) {
+            try {
+                // 使用会话的开始时间计算逻辑日期
+                const sessionStartTime = new Date(session.startTime);
+                const logicalDate = getLogicalDateString(sessionStartTime);
+
+                // 确保该日期的记录存在
+                if (!this.records[logicalDate]) {
+                    this.records[logicalDate] = {
+                        date: logicalDate,
+                        workSessions: 0,
+                        totalWorkTime: 0,
+                        totalBreakTime: 0,
+                        sessions: []
+                    };
+                }
+
+                // 添加会话到对应日期
+                this.records[logicalDate].sessions.push(session);
+
+                // 更新统计数据
+                if (session.type === 'work') {
+                    if (session.completed) {
+                        this.records[logicalDate].workSessions += 1;
+                    }
+                    this.records[logicalDate].totalWorkTime += session.duration;
+                } else {
+                    this.records[logicalDate].totalBreakTime += session.duration;
+                }
+            } catch (error) {
+                console.error('处理会话时出错:', session, error);
+            }
+        }
+
+        // 保存重新生成的记录
+        await this.saveRecords();
+    }
 }
