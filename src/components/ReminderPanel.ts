@@ -8,7 +8,7 @@ import { CategoryManageDialog } from "./CategoryManageDialog";
 import { BlockBindingDialog } from "./BlockBindingDialog";
 import { t } from "../utils/i18n";
 import { SETTINGS_FILE } from "../index";
-import { generateRepeatInstances, getRepeatDescription } from "../utils/repeatUtils";
+import { generateRepeatInstances, getRepeatDescription, getDaysDifference, addDaysToDate } from "../utils/repeatUtils";
 import { PomodoroTimer } from "./PomodoroTimer";
 import { PomodoroStatsView, getLastStatsMode } from "./PomodoroStatsView";
 import { TaskStatsView } from "./TaskStatsView";
@@ -4219,6 +4219,35 @@ export class ReminderPanel {
             menu.addSeparator();
         }
 
+        // Helper: quick date submenu items
+        const createQuickDateMenuItems = (targetReminder: any, onlyThisInstance: boolean = false) => {
+            const items: any[] = [];
+            const todayStr = getLogicalDateString();
+            const tomorrowStr = getRelativeDateString(1);
+            const dayAfterStr = getRelativeDateString(2);
+            const nextWeekStr = getRelativeDateString(7);
+
+            const apply = async (newDate: string) => {
+                try {
+                    if (targetReminder.isRepeatInstance && onlyThisInstance) {
+                        await this.setInstanceDate(targetReminder.originalId, targetReminder.date, newDate);
+                    } else {
+                        const targetId = targetReminder.isRepeatInstance ? targetReminder.originalId : targetReminder.id;
+                        await this.setReminderBaseDate(targetId, newDate);
+                    }
+                } catch (err) {
+                    console.error('快速调整日期失败:', err);
+                    showMessage(t("operationFailed"));
+                }
+            };
+
+            items.push({ iconHTML: "📅", label: t("moveToToday") || "移至今天", click: () => apply(todayStr) });
+            items.push({ iconHTML: "📅", label: t("moveToTomorrow") || "移至明天", click: () => apply(tomorrowStr) });
+            items.push({ iconHTML: "📅", label: t("moveToDayAfterTomorrow") || "移至后天", click: () => apply(dayAfterStr) });
+            items.push({ iconHTML: "📅", label: t("moveToNextWeek") || "移至下周", click: () => apply(nextWeekStr) });
+            return items;
+        };
+
         if (reminder.isRepeatInstance) {
             // --- Menu for a REPEAT INSTANCE ---
             // 只对已绑定块的事件显示复制块引用
@@ -4437,6 +4466,12 @@ export class ReminderPanel {
                 label: t("modify"),
                 click: () => this.showTimeEditDialog(reminder)
             });
+            // 快速调整日期（普通任务）
+            menu.addItem({
+                iconHTML: "📆",
+                label: t("quickReschedule") || "快速调整日期",
+                submenu: createQuickDateMenuItems(reminder, false)
+            });
             menu.addItem({
                 iconHTML: "🎯",
                 label: t("setPriority"),
@@ -4474,6 +4509,82 @@ export class ReminderPanel {
             x: event.clientX,
             y: event.clientY
         });
+    }
+
+    /**
+     * 将非实例任务或系列原始任务的基准日期设置为 newDate。
+     * 保持跨天跨度（若存在 endDate）。
+     */
+    private async setReminderBaseDate(reminderId: string, newDate: string) {
+        const reminderData = await getAllReminders(this.plugin);
+        const reminder = reminderData[reminderId];
+        if (!reminder) {
+            showMessage(t("reminderNotExist"));
+            return;
+        }
+
+        try {
+            const oldDate: string | undefined = reminder.date;
+            const oldEndDate: string | undefined = reminder.endDate;
+
+            reminder.date = newDate;
+            if (oldEndDate && oldDate) {
+                const span = getDaysDifference(oldDate, oldEndDate);
+                reminder.endDate = addDaysToDate(newDate, span);
+            }
+
+            await saveReminders(this.plugin, reminderData);
+
+            if (reminder.blockId) {
+                try { await updateBlockReminderBookmark(reminder.blockId); } catch (e) { /* ignore */ }
+            }
+
+            // 局部刷新
+            window.dispatchEvent(new CustomEvent('reminderUpdated'));
+            showMessage(t("eventTimeUpdated") || "事件时间已更新");
+        } catch (err) {
+            console.error('设置基准日期失败:', err);
+            showMessage(t("operationFailed"));
+        }
+    }
+
+    /**
+     * 设置重复事件的某个实例日期（通过 instanceModifications）。
+     * 同时根据原始事件的跨度设置实例的 endDate 修改。
+     */
+    private async setInstanceDate(originalId: string, instanceDate: string, newDate: string) {
+        const reminderData = await getAllReminders(this.plugin);
+        const originalReminder = reminderData[originalId];
+        if (!originalReminder || !originalReminder.repeat?.enabled) {
+            showMessage(t("reminderNotExist"));
+            return;
+        }
+
+        try {
+            if (!originalReminder.repeat.instanceModifications) {
+                originalReminder.repeat.instanceModifications = {};
+            }
+            if (!originalReminder.repeat.instanceModifications[instanceDate]) {
+                originalReminder.repeat.instanceModifications[instanceDate] = {};
+            }
+
+            // 设置新的日期
+            originalReminder.repeat.instanceModifications[instanceDate].date = newDate;
+
+            // 若原始为跨天，保持跨度
+            if (originalReminder.endDate && originalReminder.date) {
+                const span = getDaysDifference(originalReminder.date, originalReminder.endDate);
+                originalReminder.repeat.instanceModifications[instanceDate].endDate = addDaysToDate(newDate, span);
+            }
+
+            await saveReminders(this.plugin, reminderData);
+
+            window.dispatchEvent(new CustomEvent('reminderUpdated'));
+            showMessage(t("instanceTimeUpdated") || "实例时间已更新");
+        } catch (err) {
+            console.error('设置实例日期失败:', err);
+            showMessage(t("operationFailed"));
+        }
     }
 
     private startPomodoro(reminder: any) {
