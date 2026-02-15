@@ -172,6 +172,8 @@ export default class ReminderPlugin extends Plugin {
 
     // ICS 订阅同步相关
     private icsSubscriptionSyncTimer: number | null = null;
+    private reminderCheckTimer: number | null = null;
+    private currentLogicalDate: string = '';
 
     // 缓存上一次的番茄钟设置，用于比较变更
     private lastPomodoroSettings: any = null;
@@ -623,6 +625,9 @@ export default class ReminderPlugin extends Plugin {
 
         // 初始化ICS订阅同步
         this.initIcsSubscriptionSync();
+
+        // 初始化当前逻辑日期
+        this.currentLogicalDate = getLogicalDateString();
 
         // 执行数据迁移
         await this.performDataMigration();
@@ -2263,7 +2268,8 @@ export default class ReminderPlugin extends Plugin {
 
     private startReminderCheck() {
         // 每30秒检查一次提醒
-        setInterval(() => {
+        if (this.reminderCheckTimer) clearInterval(this.reminderCheckTimer);
+        this.reminderCheckTimer = window.setInterval(() => {
             this.checkReminders();
         }, 30000);
 
@@ -2288,6 +2294,15 @@ export default class ReminderPlugin extends Plugin {
             }
 
             const today = getLogicalDateString();
+
+            // 检查日期变更
+            if (this.currentLogicalDate && today !== this.currentLogicalDate) {
+                this.currentLogicalDate = today;
+                window.dispatchEvent(new CustomEvent('reminderUpdated'));
+            } else if (!this.currentLogicalDate) {
+                this.currentLogicalDate = today;
+            }
+
             const currentTime = getLocalTimeString();
             const currentTimeNumber = this.timeStringToNumber(currentTime);
 
@@ -4124,6 +4139,11 @@ export default class ReminderPlugin extends Plugin {
             }
         } catch (e) {
             console.warn('清理 ICS 同步定时器失败:', e);
+        }
+
+        if (this.reminderCheckTimer) {
+            clearInterval(this.reminderCheckTimer);
+            this.reminderCheckTimer = null;
         }
 
         // 执行所有注册的清理函数
