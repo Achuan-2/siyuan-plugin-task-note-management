@@ -3408,9 +3408,11 @@ export class QuickReminderDialog {
 
     private async renderMilestoneSelector(projectId: string, groupId?: string) {
         const milestoneGroup = this.dialog.element.querySelector('#quickMilestoneGroup') as HTMLElement;
-        const milestoneSelector = this.dialog.element.querySelector('#quickMilestoneSelector') as HTMLSelectElement;
+        const searchInputText = this.dialog.element.querySelector('#quickMilestoneSearchInput') as HTMLInputElement;
+        const hiddenInput = this.dialog.element.querySelector('#quickMilestoneSelector') as HTMLInputElement;
+        const dropdownEl = this.dialog.element.querySelector('#quickMilestoneDropdown') as HTMLElement;
 
-        if (!milestoneGroup || !milestoneSelector) return;
+        if (!milestoneGroup || !searchInputText || !hiddenInput || !dropdownEl) return;
 
         // 默认隐藏
         milestoneGroup.style.display = 'none';
@@ -3434,27 +3436,93 @@ export class QuickReminderDialog {
 
             // 只有当有里程碑时才显示选择器
             if (milestones.length > 0) {
-                milestoneSelector.innerHTML = `<option value="">${i18n("noMilestone") || "无里程碑"}</option>`;
+                let html = '';
+                // 添加无里程碑选项
+                html += `<div class="b3-menu__item" data-value="" data-label="${i18n("noMilestone") || "无里程碑"}"><span class="b3-menu__label">${i18n("noMilestone") || "无里程碑"}</span></div>`;
+
                 milestones.forEach(m => {
-                    const option = document.createElement('option');
-                    option.value = m.id;
-                    option.textContent = `${m.icon ? m.icon + ' ' : ''}${m.name}`;
-                    milestoneSelector.appendChild(option);
+                    const label = `${m.icon ? m.icon + ' ' : ''}${m.name}`.trim();
+                    html += `<div class="b3-menu__item" data-value="${m.id}" data-label="${label}"><span class="b3-menu__label">${label}</span></div>`;
                 });
+
+                // 为了防止重复绑定事件，克隆节点
+                const searchInput = searchInputText.cloneNode(true) as HTMLInputElement;
+                searchInputText.parentNode?.replaceChild(searchInput, searchInputText);
+
+                const dropdown = dropdownEl.cloneNode(true) as HTMLElement;
+                dropdownEl.parentNode?.replaceChild(dropdown, dropdownEl);
+
+                dropdown.innerHTML = html;
                 milestoneGroup.style.display = 'block';
 
-                // 尝试保留选中的值
-                // 优先使用 constructor 传入的 defaultMilestoneId，其次使用编辑模式下的 reminder.milestoneId
-                const targetMilestoneId = (this as any).defaultMilestoneId !== undefined ? (this as any).defaultMilestoneId : (this.reminder?.milestoneId || undefined);
-                if (targetMilestoneId) {
-                    const exists = Array.from(milestoneSelector.options).some(opt => opt.value === targetMilestoneId);
-                    if (exists) {
-                        milestoneSelector.value = targetMilestoneId;
+                // 事件绑定
+                const showAllOptions = () => {
+                    dropdown.style.display = 'block';
+                    const items = dropdown.querySelectorAll('.b3-menu__item[data-value]');
+                    items.forEach((item: HTMLElement) => {
+                        item.style.display = 'block';
+                    });
+                };
+
+                const hideDropdown = () => {
+                    setTimeout(() => {
+                        dropdown.style.display = 'none';
+                        const currentId = hiddenInput.value;
+                        const item = dropdown.querySelector(`.b3-menu__item[data-value="${currentId}"]`);
+                        if (item) {
+                            searchInput.value = item.getAttribute('data-label') || '';
+                        } else if (!currentId) {
+                            searchInput.value = '';
+                        }
+                    }, 200);
+                };
+
+                const filterOptions = (term: string) => {
+                    const terms = term.toLowerCase().split(/\s+/).filter(t => t);
+                    const items = dropdown.querySelectorAll('.b3-menu__item[data-value]');
+                    items.forEach((item: HTMLElement) => {
+                        const label = item.getAttribute('data-label')?.toLowerCase() || '';
+                        const match = terms.length === 0 || terms.every(t => label.includes(t));
+                        item.style.display = match ? 'block' : 'none';
+                    });
+                };
+
+                searchInput.addEventListener('focus', showAllOptions);
+                searchInput.addEventListener('click', showAllOptions);
+                searchInput.addEventListener('blur', hideDropdown);
+                searchInput.addEventListener('input', () => {
+                    dropdown.style.display = 'block';
+                    filterOptions(searchInput.value);
+                });
+
+                dropdown.addEventListener('click', (e) => {
+                    const target = (e.target as HTMLElement).closest('.b3-menu__item');
+                    if (target) {
+                        const val = target.getAttribute('data-value');
+                        const label = target.getAttribute('data-label');
+
+                        hiddenInput.value = val || '';
+                        searchInput.value = val ? (label || '') : '';
                     }
+                });
+
+                // 设置默认值
+                const targetMilestoneId = this.defaultMilestoneId !== undefined ? this.defaultMilestoneId : (this.reminder?.milestoneId || undefined);
+                if (targetMilestoneId) {
+                    hiddenInput.value = targetMilestoneId;
+                    const item = dropdown.querySelector(`.b3-menu__item[data-value="${targetMilestoneId}"]`);
+                    if (item) {
+                        searchInput.value = item.getAttribute('data-label') || '';
+                    }
+                } else {
+                    hiddenInput.value = '';
+                    searchInput.value = '';
                 }
+
             } else {
                 milestoneGroup.style.display = 'none';
-                milestoneSelector.value = '';
+                hiddenInput.value = '';
+                searchInputText.value = '';
             }
         } catch (e) {
             console.error('渲染里程碑选择器失败:', e);
