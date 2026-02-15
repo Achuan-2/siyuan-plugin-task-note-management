@@ -1204,7 +1204,6 @@ export class BlockBindingDialog {
                 response = await appendBlock('markdown', markdownContent, parentId);
             }
         }
-        console.log('创建标题响应:', response);
         if (response && response[0]?.doOperations?.[0]?.id) {
 
             return response[0].doOperations[0].id;

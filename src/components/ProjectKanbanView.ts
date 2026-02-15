@@ -12985,7 +12985,6 @@ export class ProjectKanbanView {
                 if (projectId) {
                     const { addBlockProjectId } = await import('../api');
                     await addBlockProjectId(blockId, projectId);
-                    console.debug('ProjectKanbanView: bindReminderToBlock - 已为块设置项目ID', blockId, projectId);
                 }
 
                 // 更新块的书签状态（添加⏰书签）
