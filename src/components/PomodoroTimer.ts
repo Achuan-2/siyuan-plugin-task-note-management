@@ -6089,11 +6089,28 @@ export class PomodoroTimer {
             if (this.isDocked) {
                 // Docked mode settings
                 const barWidth = 8;
-                winWidth = barWidth;
-                winHeight = screenHeight;
-                // User defined debug position
-                x = screenWidth - barWidth;
-                y = 0;
+                const position = this.settings.pomodoroDockPosition || 'right';
+
+                if (position === 'top') {
+                    winWidth = screenWidth;
+                    winHeight = barWidth;
+                    x = 0;
+                    y = 0;
+                } else if (position === 'left') {
+                    winWidth = barWidth;
+                    winHeight = screenHeight;
+                    x = 0;
+                    y = 0;
+                } else {
+                    // Default to right
+                    winWidth = barWidth;
+                    winHeight = screenHeight;
+                    x = screenWidth - barWidth;
+                    y = 0;
+                }
+
+                // User defined debug position - kept logic same as original but now flexible
+
                 transparent = true;
                 backgroundColor = '#00000000';
             } else if (this.isMiniMode) {
@@ -6273,6 +6290,50 @@ document.body.classList.remove('docked-mode');
 `).catch((e: any) => console.error('[PomodoroTimer] 应用迷你模式样式失败:', e));
                         }
                     }, 100);
+                } else if (this.isDocked) { // 吸附模式下的鼠标穿透处理
+                    const mouseEventsChannel = `pomodoro-mouse-${pomodoroWindow.id}`;
+                    const mouseHandler = (_event: any, ignore: boolean) => {
+                        if (pomodoroWindow && !pomodoroWindow.isDestroyed()) {
+                            try {
+                                // console.log('[PomodoroTimer] Mouse ignore:', ignore);
+                                if (ignore) {
+                                    pomodoroWindow.setIgnoreMouseEvents(true, { forward: true });
+                                } else {
+                                    pomodoroWindow.setIgnoreMouseEvents(false);
+                                }
+                            } catch (e) {
+                                console.warn('[PomodoroTimer] setIgnoreMouseEvents failed', e);
+                            }
+                        }
+                    };
+
+                    ipcMain?.removeAllListeners(mouseEventsChannel);
+                    ipcMain?.on(mouseEventsChannel, mouseHandler);
+
+                    // 默认设置为穿透，直到鼠标进入进度条
+                    pomodoroWindow.setIgnoreMouseEvents(true, { forward: true });
+
+                    // 注入鼠标事件监听脚本
+                    pomodoroWindow.webContents.executeJavaScript(`
+                        (function() {
+                            const ipc = window.require('electron').ipcRenderer;
+                            const channel = '${mouseEventsChannel}';
+                            const bar = document.querySelector('.progress-bar-container');
+                            if (bar) {
+                                bar.addEventListener('mouseenter', () => {
+                                    ipc.send(channel, false); 
+                                });
+                                bar.addEventListener('mouseleave', () => {
+                                    ipc.send(channel, true);
+                                });
+                            }
+                        })();
+                    `).catch((e: any) => console.error('[PomodoroTimer] Failed to inject mouse events script', e));
+
+                    // 确保清理
+                    pomodoroWindow.on('closed', () => {
+                        ipcMain?.removeListener(mouseEventsChannel, mouseHandler);
+                    });
                 }
 
                 // 渲染完毕后推送当前状态
@@ -6654,7 +6715,7 @@ document.body.classList.remove('docked-mode');
     ): string {
         // 设置默认值
         miniModeTitle = miniModeTitle || (i18n('miniMode') || '迷你模式');
-        dockModeTitle = dockModeTitle || (i18n('dockToRight') || '吸附到右侧');
+        dockModeTitle = dockModeTitle || (i18n('dockToRight') || '吸附到屏幕边缘');
         return `<!DOCTYPE html>
 <html>
 <head>
@@ -6926,21 +6987,33 @@ document.body.classList.remove('docked-mode');
         body.docked-mode .pomodoro-stats,
         body.docked-mode .pomodoro-main-container { display: none; }
         body.docked-mode .pomodoro-content { display: none; padding: 0; height: 100vh; display: flex; align-items: stretch; }
+        
         body.docked-mode .progress-bar-container {
             display: flex;
-            flex-direction: column;
-            justify-content: flex-end;
-            width: 8px;
-            height: 100%;
+            ${(this.settings.pomodoroDockPosition === 'top') ?
+                `flex-direction: row;
+             justify-content: flex-start;
+             width: 100%;
+             height: 8px;` :
+                `flex-direction: column;
+             justify-content: flex-end;
+             width: 8px;
+             height: 100%;`
+            }
             background: rgba(128, 128, 128, 0.3);
             cursor: pointer;
             position: relative;
         }
         body.docked-mode .progress-bar-fill {
-            width: 100%;
-            height: 0%;
+            ${(this.settings.pomodoroDockPosition === 'top') ?
+                `width: 0%;
+             height: 100%;
+             transition: width 0.5s ease, background-color 0.3s ease;` :
+                `width: 100%;
+             height: 0%;
+             transition: height 0.5s ease, background-color 0.3s ease;`
+            }
             background: #4CAF50;
-            transition: height 0.5s ease, background-color 0.3s ease;
         }
         body:not(.docked-mode) .progress-bar-container { display: none; }
     </style>
@@ -7053,11 +7126,11 @@ document.body.classList.remove('docked-mode');
         window.localState = localState;
         
         let settings = ${JSON.stringify({
-            workDuration: this.settings.workDuration,
-            breakDuration: this.settings.breakDuration,
-            longBreakDuration: this.settings.longBreakDuration,
-            dailyFocusGoal: dailyFocusGoal
-        })};
+                workDuration: this.settings.workDuration,
+                breakDuration: this.settings.breakDuration,
+                longBreakDuration: this.settings.longBreakDuration,
+                dailyFocusGoal: dailyFocusGoal
+            })};
 
         function callMethod(method) {
             ipcRenderer.send('${actionChannel}', method);
@@ -7168,9 +7241,18 @@ document.body.classList.remove('docked-mode');
             }
             
             // 4. Update Docked Mode Progress
+            const dockPos = '${this.settings.pomodoroDockPosition || "right"}';
             const dockedBar = document.getElementById('dockedProgressBar');
             if (dockedBar) {
-                dockedBar.style.height = (progress * 100) + '%';
+                if (dockPos === 'top') {
+                    dockedBar.style.width = (progress * 100) + '%';
+                    // Height is handled by CSS (100%) but ensuring it here doesn't hurt
+                    dockedBar.style.height = '100%'; 
+                } else {
+                    dockedBar.style.height = (progress * 100) + '%';
+                    // Width is handled by CSS (100%)
+                    dockedBar.style.width = '100%';
+                }
             }
 
             // 5. Update Status Text/Icon
@@ -7398,7 +7480,16 @@ document.body.classList.remove('docked-mode');
                             const primary = screen.getPrimaryDisplay();
                             const { width: sw, height: sh } = primary.workAreaSize;
                             const barWidth = 8;
-                            pomodoroWindow.setBounds({ x: sw - barWidth, y: 0, width: barWidth, height: sh });
+                            const position = this.settings.pomodoroDockPosition || 'right';
+
+                            if (position === 'top') {
+                                pomodoroWindow.setBounds({ x: 0, y: 0, width: sw, height: barWidth });
+                            } else if (position === 'left') {
+                                pomodoroWindow.setBounds({ x: 0, y: 0, width: barWidth, height: sh });
+                            } else {
+                                // Default right
+                                pomodoroWindow.setBounds({ x: sw - barWidth, y: 0, width: barWidth, height: sh });
+                            }
                             pomodoroWindow.setResizable(false);
                         }
                     } catch (e) { }
@@ -7492,6 +7583,54 @@ document.body.classList.remove('docked-mode');
 
                 ipcMain.on(actionChannel, actionHandler);
                 ipcMain.on(controlChannel, controlHandler);
+            }
+
+            // 在吸附模式下启用鼠标可以穿透透明区域（仅进度条响应鼠标）
+            if (this.isDocked && pomodoroWindow && !pomodoroWindow.isDestroyed()) {
+                const mouseEventsChannel = `pomodoro-mouse-${pomodoroWindow.id}`;
+                const mouseHandler = (_event: any, ignore: boolean) => {
+                    if (pomodoroWindow && !pomodoroWindow.isDestroyed()) {
+                        try {
+                            if (ignore) {
+                                pomodoroWindow.setIgnoreMouseEvents(true, { forward: true });
+                            } else {
+                                pomodoroWindow.setIgnoreMouseEvents(false);
+                            }
+                        } catch (e) {
+                            console.warn('[PomodoroTimer] setIgnoreMouseEvents failed', e);
+                        }
+                    }
+                };
+
+                ipcMain?.removeAllListeners(mouseEventsChannel); // 移除旧监听器
+                ipcMain?.on(mouseEventsChannel, mouseHandler);
+
+                // 默认设置为穿透，直到鼠标进入进度条
+                pomodoroWindow.setIgnoreMouseEvents(true, { forward: true });
+
+                // 注入鼠标事件监听脚本
+                pomodoroWindow.webContents.executeJavaScript(`
+                    (function() {
+                        const ipc = window.require('electron').ipcRenderer;
+                        const channel = '${mouseEventsChannel}';
+                        const bar = document.querySelector('.progress-bar-container');
+                        if (bar) {
+                            bar.addEventListener('mouseenter', () => {
+                                ipc.send(channel, false); // 不忽略鼠标（捕获点击）
+                            });
+                            bar.addEventListener('mouseleave', () => {
+                                ipc.send(channel, true); // 忽略鼠标（穿透）
+                            });
+                        }
+                    })();
+                `).catch((e: any) => console.error('[PomodoroTimer] Failed to inject mouse events script', e));
+
+                // 确保清理函数移除这个监听器
+                // 之前的 removeAllListeners 已经处理了重复添加的问题
+                // 这里只需要确保窗口关闭时清理
+                pomodoroWindow.on('closed', () => {
+                    ipcMain?.removeListener(mouseEventsChannel, mouseHandler);
+                });
             }
 
         } catch (error) {
@@ -7699,6 +7838,15 @@ document.body.classList.remove('mini-mode');
      * 并且音频会在 BrowserWindow 内播放，因此不需要在主窗口维护音频权限
      * 这个方法主要用于兼容性，实际上 initializeAudioPlayback 会在 BrowserWindow 模式下直接返回
      */
+    public updateSettings(settings: any) {
+        this.settings = settings;
+
+        // Update window content to reflect new settings (like dock position)
+        if (PomodoroTimer.browserWindowInstance && !PomodoroTimer.browserWindowInstance.isDestroyed()) {
+            this.updateBrowserWindowContent(PomodoroTimer.browserWindowInstance);
+        }
+    }
+
     private setupBrowserWindowAudioMaintenance() {
         // 每5分钟检查一次音频权限（在 BrowserWindow 模式下会被跳过）
         setInterval(async () => {

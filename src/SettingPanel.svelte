@@ -21,6 +21,7 @@
     import { exportIcsFile, uploadIcsToCloud } from './utils/icsUtils';
     import { importIcsFile } from './utils/icsImport';
     import { syncHolidays } from './utils/icsSubscription';
+    import { PomodoroManager } from './utils/pomodoroManager';
     import { resolveAudioPath } from './utils/audioUtils';
 
     export let plugin;
@@ -675,6 +676,19 @@
                         '番茄钟工作结束时会在屏幕中央显示弹窗提醒，10秒后自动关闭（仅电脑桌面端有效）',
                 },
                 {
+                    key: 'pomodoroDockPosition',
+                    value: settings.pomodoroDockPosition,
+                    type: 'select',
+                    title: i18n('pomodoroDockPosition') || '番茄钟吸附位置',
+                    description:
+                        i18n('pomodoroDockPositionDesc') || '设置番茄钟窗口吸附在屏幕的位置',
+                    options: {
+                        right: i18n('right') || '右侧',
+                        left: i18n('left') || '左侧',
+                        top: i18n('top') || '顶部',
+                    },
+                },
+                {
                     key: 'dailyFocusGoal',
                     value: settings.dailyFocusGoal,
                     type: 'number',
@@ -1224,6 +1238,24 @@
                     await recordManager.regenerateRecordsByDate();
                 } catch (error) {
                     console.error('重新生成番茄钟记录失败:', error);
+                }
+            })();
+        }
+
+        // 特殊逻辑：番茄钟设置变更
+        if (
+            key.startsWith('pomodoro') ||
+            key === 'backgroundVolume' ||
+            key === 'dailyFocusGoal' ||
+            key.startsWith('randomNotification')
+        ) {
+            (async () => {
+                try {
+                    // Must transform raw settings into simplified structure first
+                    const pomodoroSettings = await plugin.getPomodoroSettings(settings);
+                    PomodoroManager.getInstance().updateSettings(pomodoroSettings);
+                } catch (error) {
+                    console.error('更新番茄钟设置失败:', error);
                 }
             })();
         }
