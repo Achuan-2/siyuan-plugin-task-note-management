@@ -29,6 +29,7 @@ import { PomodoroManager } from "./utils/pomodoroManager";
 import SettingPanelComponent from "./SettingPanel.svelte";
 import { exportIcsFile, uploadIcsToCloud } from "./utils/icsUtils";
 import { getFileStat, getFile, hasNotifiedToday, markNotifiedToday } from "./api";
+import { resolveAudioPath } from "./utils/audioUtils";
 
 export const SETTINGS_FILE = "reminder-settings.json";
 export const PROJECT_DATA_FILE = "project.json";
@@ -40,6 +41,12 @@ export const POMODORO_RECORD_DATA_FILE = "pomodoro_record.json";
 export const HABIT_GROUP_DATA_FILE = "habitGroup.json";
 export const STATUSES_DATA_FILE = "statuses.json";
 export const HOLIDAY_DATA_FILE = "holiday.json";
+
+export interface AudioFileItem {
+    path: string;
+    removed?: boolean;
+    replaces?: string; // 记录此项替换了哪个原始路径（用于保持排序）
+}
 
 export { exportIcsFile, uploadIcsToCloud };
 
@@ -54,18 +61,12 @@ export const STORAGE_NAME = "siyuan-plugin-task-note-management";
 
 // 默认设置
 export const DEFAULT_SETTINGS = {
-    notificationSound: '/plugins/siyuan-plugin-task-note-management/audios/notify.mp3',
     backgroundVolume: 0.5,
     pomodoroWorkDuration: 45,
     pomodoroBreakDuration: 10,
     pomodoroLongBreakDuration: 30,
     pomodoroLongBreakInterval: 4,
     pomodoroAutoMode: false,
-    pomodoroWorkSound: '/plugins/siyuan-plugin-task-note-management/audios/background_music.mp3',
-    pomodoroBreakSound: '/plugins/siyuan-plugin-task-note-management/audios/relax_background.mp3',
-    pomodoroLongBreakSound: '/plugins/siyuan-plugin-task-note-management/audios/relax_background.mp3',
-    pomodoroWorkEndSound: '/plugins/siyuan-plugin-task-note-management/audios/work_end.mp3',
-    pomodoroBreakEndSound: '/plugins/siyuan-plugin-task-note-management/audios/end_music.mp3',
     pomodoroSystemNotification: true, // 新增：番茄结束后系统弹窗
     pomodoroEndPopupWindow: false, // 新增：番茄钟结束弹窗提醒，默认关闭
     reminderSystemNotification: true, // 新增：事件到期提醒系统弹窗
@@ -75,8 +76,6 @@ export const DEFAULT_SETTINGS = {
     randomNotificationMinInterval: 3,
     randomNotificationMaxInterval: 5,
     randomNotificationBreakDuration: 10,
-    randomNotificationSounds: '/plugins/siyuan-plugin-task-note-management/audios/random_start.mp3',
-    randomNotificationEndSound: '/plugins/siyuan-plugin-task-note-management/audios/random_end.mp3',
     randomNotificationSystemNotification: true, // 新增：随机微休息系统通知
     randomNotificationPopupWindow: false, // 新增：随机微休息弹窗提醒，默认关闭
     dailyFocusGoal: 6,
@@ -147,7 +146,44 @@ export const DEFAULT_SETTINGS = {
     datatransfer: {
         bindblockAddAttr: false, // 是否已迁移绑定块的 custom-bind-reminders 属性
         termTypeTransfer: false, // 是否已迁移 termType -> kanbanStatus 的转换
+        audioFileTransfer: false, // 是否已迁移音频文件列表
     },
+    // 每个声音设置项各自的音频文件列表 { settingKey: [{path: url, removed: false}, ...] }
+    audioFileLists: {
+        notificationSound: [{ path: '/plugins/siyuan-plugin-task-note-management/audios/notify.mp3' }],
+        pomodoroWorkSound: [
+            { path: '/plugins/siyuan-plugin-task-note-management/audios/background_music.mp3' },
+            { path: 'https://cdn.jsdelivr.net/gh/remvze/moodist@main/public/sounds/nature/campfire.mp3' },
+            { path: 'https://cdn.jsdelivr.net/gh/remvze/moodist@main/public/sounds/nature/river.mp3' },
+            { path: 'https://cdn.jsdelivr.net/gh/remvze/moodist@main/public/sounds/animals/crickets.mp3' },
+            { path: 'https://cdn.jsdelivr.net/gh/remvze/moodist@main/public/sounds/animals/birds.mp3' },
+            { path: 'https://cdn.jsdelivr.net/gh/remvze/moodist@main/public/sounds/places/library.mp3' },
+            { path: 'https://cdn.jsdelivr.net/gh/remvze/moodist@main/public/sounds/places/office.mp3' }
+
+        ],
+        pomodoroBreakSound: [
+            { path: '/plugins/siyuan-plugin-task-note-management/audios/relax_background.mp3' },
+            { path: 'https://cdn.jsdelivr.net/gh/remvze/moodist@main/public/sounds/nature/droplets.mp3' }
+        ],
+        pomodoroLongBreakSound: [
+            { path: '/plugins/siyuan-plugin-task-note-management/audios/relax_background.mp3' },
+            { path: 'https://cdn.jsdelivr.net/gh/remvze/moodist@main/public/sounds/nature/droplets.mp3' }
+        ],
+        pomodoroWorkEndSound: [{ path: '/plugins/siyuan-plugin-task-note-management/audios/work_end.mp3' }],
+        pomodoroBreakEndSound: [{ path: '/plugins/siyuan-plugin-task-note-management/audios/end_music.mp3' }],
+        randomNotificationSounds: [{ path: '/plugins/siyuan-plugin-task-note-management/audios/random_start.mp3' }],
+        randomNotificationEndSound: [{ path: '/plugins/siyuan-plugin-task-note-management/audios/random_end.mp3' }],
+    } as Record<string, AudioFileItem[]>,
+    // 每个声音设置项当前的选中项 { settingKey: url }
+    audioSelected: {
+        notificationSound: '/plugins/siyuan-plugin-task-note-management/audios/notify.mp3',
+        pomodoroWorkSound: '/plugins/siyuan-plugin-task-note-management/audios/background_music.mp3',
+        pomodoroBreakSound: '/plugins/siyuan-plugin-task-note-management/audios/relax_background.mp3',
+        pomodoroLongBreakSound: '/plugins/siyuan-plugin-task-note-management/audios/relax_background.mp3',
+        pomodoroWorkEndSound: '/plugins/siyuan-plugin-task-note-management/audios/work_end.mp3',
+        pomodoroBreakEndSound: '/plugins/siyuan-plugin-task-note-management/audios/end_music.mp3',
+        randomNotificationEndSound: '/plugins/siyuan-plugin-task-note-management/audios/random_end.mp3',
+    } as Record<string, string>,
 };
 
 export default class ReminderPlugin extends Plugin {
@@ -661,7 +697,8 @@ export default class ReminderPlugin extends Plugin {
                 // 预加载音频文件
                 const soundPath = await this.getNotificationSound();
                 if (soundPath) {
-                    this.preloadedAudio = new Audio(soundPath);
+                    const resolved = await resolveAudioPath(soundPath);
+                    this.preloadedAudio = new Audio(resolved);
                     this.preloadedAudio.volume = 0; // 很小的音量进行预加载
                     await this.preloadedAudio.play();
                     this.preloadedAudio.pause();
@@ -777,6 +814,43 @@ export default class ReminderPlugin extends Plugin {
         await this.saveData(SETTINGS_FILE, settings);
     }
 
+    /**
+     * 合并用户音频列表与默认内置声音，并过滤掉已删除项，同时保持内置声音的排序
+     */
+    private getMergedAudioFileList(settings: any, key: string): string[] {
+        const userList: AudioFileItem[] = settings.audioFileLists?.[key] ?? [];
+        const defaultList: AudioFileItem[] = (DEFAULT_SETTINGS.audioFileLists as any)[key] ?? [];
+
+        const result: AudioFileItem[] = [];
+        const processedPath = new Set<string>();
+
+        // 1. 遍历默认列表，保持其原有顺序
+        for (const defItem of defaultList) {
+            const userEntry = userList.find(i => i.path === defItem.path);
+            if (userEntry) {
+                result.push(userEntry);
+                processedPath.add(defItem.path);
+                // 查找是否有针对此项的替换项（下载到本地后的版本）
+                const replacement = userList.find(i => i.replaces === defItem.path);
+                if (replacement) {
+                    result.push(replacement);
+                    processedPath.add(replacement.path);
+                }
+            } else {
+                result.push({ ...defItem });
+            }
+        }
+
+        // 2. 追加用户完全自定义的项（上传的
+        for (const userItem of userList) {
+            if (!processedPath.has(userItem.path)) {
+                result.push(userItem);
+            }
+        }
+
+        return result.filter(i => !i.removed).map(i => i.path);
+    }
+
     // 获取番茄钟设置
     async getPomodoroSettings() {
         const settings = await this.loadSettings();
@@ -786,19 +860,21 @@ export default class ReminderPlugin extends Plugin {
             longBreakDuration: settings.pomodoroLongBreakDuration,
             longBreakInterval: Math.max(1, settings.pomodoroLongBreakInterval),
             autoMode: settings.pomodoroAutoMode,
-            workSound: settings.pomodoroWorkSound,
-            breakSound: settings.pomodoroBreakSound,
-            longBreakSound: settings.pomodoroLongBreakSound,
-            workEndSound: settings.pomodoroWorkEndSound,
-            breakEndSound: settings.pomodoroBreakEndSound,
+            workSound: settings.audioSelected?.pomodoroWorkSound || '',
+            breakSound: settings.audioSelected?.pomodoroBreakSound || '',
+            longBreakSound: settings.audioSelected?.pomodoroLongBreakSound || '',
+            workEndSound: settings.audioSelected?.pomodoroWorkEndSound || '',
+            breakEndSound: settings.audioSelected?.pomodoroBreakEndSound || '',
             backgroundVolume: Math.max(0, Math.min(1, settings.backgroundVolume)),
             systemNotification: settings.pomodoroSystemNotification, // 新增
             randomNotificationEnabled: settings.randomNotificationEnabled,
             randomNotificationMinInterval: Math.max(1, settings.randomNotificationMinInterval),
             randomNotificationMaxInterval: Math.max(1, settings.randomNotificationMaxInterval),
             randomNotificationBreakDuration: Math.max(1, settings.randomNotificationBreakDuration),
-            randomNotificationSounds: settings.randomNotificationSounds,
-            randomNotificationEndSound: settings.randomNotificationEndSound,
+            audioFileLists: {
+                ...settings.audioFileLists,
+                randomNotificationSounds: this.getMergedAudioFileList(settings, 'randomNotificationSounds')
+            },
             randomNotificationSystemNotification: settings.randomNotificationSystemNotification, // 新增
             dailyFocusGoal: settings.dailyFocusGoal,
             randomNotificationPopupWindow: settings.randomNotificationPopupWindow,
@@ -815,7 +891,7 @@ export default class ReminderPlugin extends Plugin {
     // 获取通知声音设置
     async getNotificationSound(): Promise<string> {
         const settings = await this.loadSettings();
-        return settings.notificationSound || DEFAULT_SETTINGS.notificationSound;
+        return settings.audioSelected?.notificationSound || '';
     }
 
     // 播放通知声音
@@ -4528,6 +4604,68 @@ export default class ReminderPlugin extends Plugin {
                 } catch (err) {
                     console.error('termType 到 kanbanStatus 的迁移失败:', err);
                 }
+            }
+
+            // 检查是否需要迁移音频文件列表
+            if (!settings.datatransfer?.audioFileTransfer) {
+                console.log('开始迁移音频文件列表...');
+                const audioKeys = [
+                    'notificationSound',
+                    'pomodoroWorkSound',
+                    'pomodoroBreakSound',
+                    'pomodoroLongBreakSound',
+                    'pomodoroWorkEndSound',
+                    'pomodoroBreakEndSound',
+                    'randomNotificationSounds',
+                    'randomNotificationEndSound',
+                ];
+                if (!settings.audioFileLists) settings.audioFileLists = {};
+                if (!settings.audioSelected) settings.audioSelected = {};
+
+                let migratedCount = 0;
+                for (const key of audioKeys) {
+                    const existing = (settings as any)[key] as string | undefined;
+                    if (existing) {
+                        const list: any[] = settings.audioFileLists[key] ?? [];
+                        // 确保 list 是 AudioFileItem[]
+                        const itemList: AudioFileItem[] = list.map(item =>
+                            typeof item === 'string' ? { path: item } : item
+                        );
+
+                        // 特殊处理随机微休息的多选字符串
+                        if (key === 'randomNotificationSounds') {
+                            const paths = existing.split(',').map(p => p.trim()).filter(p => p);
+                            for (const p of paths) {
+                                if (!itemList.some(i => i.path === p)) {
+                                    itemList.push({ path: p });
+                                    migratedCount++;
+                                }
+                            }
+                            settings.audioFileLists[key] = itemList;
+                        } else {
+                            if (!itemList.some(i => i.path === existing)) {
+                                itemList.push({ path: existing }); // 保持原有顺序，加到后面
+                                migratedCount++;
+                            }
+                            settings.audioFileLists[key] = itemList;
+                            // 记录当前选中
+                            settings.audioSelected[key] = existing;
+                        }
+                        // 迁移后从根部删除旧键
+                        delete (settings as any)[key];
+                    } else if (settings.audioFileLists[key]) {
+                        // 如果没有旧键，但存在旧的 string[] 列表，也需要转换
+                        const list = settings.audioFileLists[key];
+                        if (list.length > 0 && typeof list[0] === 'string') {
+                            settings.audioFileLists[key] = (list as any).map((p: string) => ({ path: p }));
+                        }
+                    }
+                }
+
+                settings.datatransfer = settings.datatransfer || {};
+                settings.datatransfer.audioFileTransfer = true;
+                await this.saveSettings(settings);
+                console.log(`音频文件列表迁移完成，更新了 ${migratedCount} 个项`);
             }
         } catch (error) {
             console.error('数据迁移失败:', error);

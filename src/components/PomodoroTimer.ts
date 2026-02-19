@@ -2,6 +2,7 @@ import { showMessage, confirm, getFrontend } from "siyuan";
 import { PomodoroRecordManager } from "../utils/pomodoroRecord";
 import { getBlockByID, openBlock } from "../api";
 import { i18n } from "../pluginInstance";
+import { resolveAudioPath } from "../utils/audioUtils";
 
 
 export class PomodoroTimer {
@@ -381,7 +382,7 @@ export class PomodoroTimer {
 
     private async initComponents(container?: HTMLElement, orphanedWindow?: any) {
         await this.recordManager.initialize();
-        this.initAudio();
+        await this.initAudio();
 
         if (orphanedWindow) {
             // If recovering, we already have the window (orphanedWindow).
@@ -394,11 +395,12 @@ export class PomodoroTimer {
         this.updateStatsDisplay();
     }
 
-    private initAudio() {
+    private async initAudio() {
         // 初始化工作背景音
         if (this.settings.workSound) {
             try {
-                this.workAudio = new Audio(this.settings.workSound);
+                const resolved = await resolveAudioPath(this.settings.workSound);
+                this.workAudio = new Audio(resolved);
                 this.workAudio.loop = true;
                 this.workAudio.volume = this.isBackgroundAudioMuted ? 0 : this.backgroundVolume;
                 this.workAudio.preload = 'auto';
@@ -410,7 +412,8 @@ export class PomodoroTimer {
         // 初始化短时休息背景音
         if (this.settings.breakSound) {
             try {
-                this.breakAudio = new Audio(this.settings.breakSound);
+                const resolved = await resolveAudioPath(this.settings.breakSound);
+                this.breakAudio = new Audio(resolved);
                 this.breakAudio.loop = true;
                 this.breakAudio.volume = this.isBackgroundAudioMuted ? 0 : this.backgroundVolume;
                 this.breakAudio.preload = 'auto';
@@ -422,7 +425,8 @@ export class PomodoroTimer {
         // 初始化长时休息背景音
         if (this.settings.longBreakSound) {
             try {
-                this.longBreakAudio = new Audio(this.settings.longBreakSound);
+                const resolved = await resolveAudioPath(this.settings.longBreakSound);
+                this.longBreakAudio = new Audio(resolved);
                 this.longBreakAudio.loop = true;
                 this.longBreakAudio.volume = this.isBackgroundAudioMuted ? 0 : this.backgroundVolume;
                 this.longBreakAudio.preload = 'auto';
@@ -434,7 +438,8 @@ export class PomodoroTimer {
         // 初始化工作结束提示音（音量不受静音影响）
         if (this.settings.workEndSound) {
             try {
-                this.workEndAudio = new Audio(this.settings.workEndSound);
+                const resolved = await resolveAudioPath(this.settings.workEndSound);
+                this.workEndAudio = new Audio(resolved);
                 this.workEndAudio.volume = 1;
                 this.workEndAudio.preload = 'auto';
             } catch (error) {
@@ -445,7 +450,8 @@ export class PomodoroTimer {
         // 初始化休息结束提示音（音量不受静音影响）
         if (this.settings.breakEndSound) {
             try {
-                this.breakEndAudio = new Audio(this.settings.breakEndSound);
+                const resolved = await resolveAudioPath(this.settings.breakEndSound);
+                this.breakEndAudio = new Audio(resolved);
                 this.breakEndAudio.volume = 1;
                 this.breakEndAudio.preload = 'auto';
             } catch (error) {
@@ -455,12 +461,12 @@ export class PomodoroTimer {
 
         // 初始化随机微休息
         if (this.randomNotificationEnabled && this.settings.randomNotificationSounds) {
-            this.initRandomNotificationSounds();
+            await this.initRandomNotificationSounds();
         }
 
         // 初始化随机微休息结束声音
         if (this.randomNotificationEnabled && this.settings.randomNotificationEndSound) {
-            this.initRandomNotificationEndSound();
+            await this.initRandomNotificationEndSound();
         }
     }
 
@@ -493,17 +499,16 @@ export class PomodoroTimer {
         this.audioUnlockHandler = null;
     }
 
-    private initRandomNotificationSounds() {
+    private async initRandomNotificationSounds() {
         try {
-            const soundPaths = this.settings.randomNotificationSounds
-                .split(',')
-                .map(path => path.trim())
-                .filter(path => path.length > 0);
+            const soundPaths = this.settings.audioFileLists?.randomNotificationSounds || [];
 
             this.randomNotificationSounds = [];
-            soundPaths.forEach((path, index) => {
+            for (let i = 0; i < soundPaths.length; i++) {
+                const path = soundPaths[i];
                 try {
-                    const audio = new Audio(path);
+                    const resolved = await resolveAudioPath(path);
+                    const audio = new Audio(resolved);
                     audio.volume = 1; // 随机微休息固定音量，不受背景音静音影响
                     audio.preload = 'auto';
 
@@ -514,25 +519,27 @@ export class PomodoroTimer {
 
 
                     audio.addEventListener('error', (e) => {
-                        console.error(`随机微休息 ${index + 1} 加载失败: ${path}`, e);
+                        console.error(`随机微休息 ${i + 1} 加载失败: ${path}`, e);
                     });
 
 
                     this.randomNotificationSounds.push(audio);
                 } catch (error) {
-                    console.warn(`无法创建随机微休息 ${index + 1}: ${path}`, error);
+                    console.warn(`无法创建随机微休息 ${i + 1}: ${path}`, error);
                 }
-            });
+            }
 
         } catch (error) {
             console.warn('初始化随机微休息失败:', error);
         }
     }
 
-    private initRandomNotificationEndSound() {
+    private async initRandomNotificationEndSound() {
         try {
-            if (this.settings.randomNotificationEndSound) {
-                this.randomNotificationEndSound = new Audio(this.settings.randomNotificationEndSound);
+            const path = this.settings.audioFileLists?.randomNotificationEndSound?.[0];
+            if (path) {
+                const resolved = await resolveAudioPath(path);
+                this.randomNotificationEndSound = new Audio(resolved);
                 this.randomNotificationEndSound.volume = 1; // 固定音量，不受背景音静音影响
                 this.randomNotificationEndSound.preload = 'auto';
 

@@ -1,7 +1,7 @@
-<script lang="ts">
+﻿<script lang="ts">
     import { onMount } from 'svelte';
     import { Dialog } from 'siyuan';
-    import SettingPanel from '@/libs/components/setting-panel.svelte';
+    import Form from '@/libs/components/Form';
     import { i18n } from './pluginInstance';
     import {
         DEFAULT_SETTINGS,
@@ -15,11 +15,13 @@
         HABIT_GROUP_DATA_FILE,
         STATUSES_DATA_FILE,
     } from './index';
-    import { lsNotebooks, pushErrMsg, pushMsg, removeFile } from './api';
+    import type { AudioFileItem } from './index';
+    import { lsNotebooks, pushErrMsg, pushMsg, removeFile, putFile } from './api';
     import { Constants } from 'siyuan';
     import { exportIcsFile, uploadIcsToCloud } from './utils/icsUtils';
     import { importIcsFile } from './utils/icsImport';
     import { syncHolidays } from './utils/icsSubscription';
+    import { resolveAudioPath } from './utils/audioUtils';
 
     export let plugin;
 
@@ -28,6 +30,266 @@
 
     // 笔记本列表
     let notebooks: Array<{ id: string; name: string }> = [];
+
+    // 音频文件管理（每个声音设置项各自独立维护文件列表）
+    let isUploadingAudio = false;
+    let isDownloadingAudio = false;
+    let audioPreviewEl: HTMLAudioElement | null = null;
+    let playingPath: string | null = null; // 当前播放中的音频路径
+    let isAudioPlaying = false; // 当前是否处于播放状态
+
+    const AUDIO_DIR = 'data/storage/petal/siyuan-plugin-task-note-management/audios';
+    const AUDIO_URL_PREFIX = '/data/storage/petal/siyuan-plugin-task-note-management/audios/';
+
+    /** 获取指定 key 的音频文件列表（合并内置声音并过滤已删除项） */
+    function getAudioFilesForKey(key: string): { name: string; path: string }[] {
+        const userList: AudioFileItem[] = (settings.audioFileLists ?? {})[key] ?? [];
+        const defaultList: AudioFileItem[] = (DEFAULT_SETTINGS.audioFileLists ?? {})[key] ?? [];
+
+        const result: AudioFileItem[] = [];
+        const processedPath = new Set<string>();
+
+        // 1. 遍历默认列表，保持顺序
+        for (const defItem of defaultList) {
+            const userEntry = userList.find(i => i.path === defItem.path);
+            if (userEntry) {
+                result.push(userEntry);
+                processedPath.add(defItem.path);
+                // 查找替换项（下载到本地的版本）
+                const replacement = userList.find(i => i.replaces === defItem.path);
+                if (replacement) {
+                    result.push(replacement);
+                    processedPath.add(replacement.path);
+                }
+            } else {
+                result.push({ ...defItem });
+            }
+        }
+
+        // 2. 追加完全自定义项
+        for (const userItem of userList) {
+            if (!processedPath.has(userItem.path)) {
+                result.push(userItem);
+            }
+        }
+
+        return result
+            .filter(i => !i.removed)
+            .map(item => ({
+                name: item.path.split('/').pop()?.split('?')[0] ?? item.path,
+                path: item.path,
+            }));
+    }
+
+    async function uploadAudioFile(file: File) {
+        const path = `${AUDIO_DIR}/${file.name}`;
+        await putFile(path, false, file);
+        await pushMsg(`音频 "${file.name}" 上传成功`);
+        return AUDIO_URL_PREFIX + file.name;
+    }
+
+    async function deleteAudioFileForKey(url: string, key: string) {
+        if (!settings.audioFileLists) settings.audioFileLists = {};
+        const currentList: AudioFileItem[] = [...(settings.audioFileLists[key] ?? [])];
+
+        // 查找是否已在列表中（含已删除的）
+        const index = currentList.findIndex(i => i.path === url);
+        if (index > -1) {
+            currentList[index].removed = true;
+        } else {
+            // 如果不在用户列表（说明是默认项），加入并设为 removed
+            currentList.push({ path: url, removed: true });
+        }
+
+        settings.audioFileLists[key] = currentList;
+        await saveSettings();
+        updateGroupItems();
+    }
+
+    async function downloadOnlineAudio(url: string, key: string) {
+        if (isDownloadingAudio) return null;
+        try {
+            isDownloadingAudio = true;
+            const fileName = url.split('/').pop()?.split('?')[0] || 'online_audio.mp3';
+            const localPath = `${AUDIO_DIR}/${fileName}`;
+            const localUrl = AUDIO_URL_PREFIX + fileName;
+
+            await pushMsg('正在下载并保存音频到本地...');
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('Download failed');
+            const blob = await response.blob();
+            const file = new File([blob], fileName, { type: blob.type });
+
+            await putFile(localPath, false, file);
+
+            // 核心改进：引入 replaces 字段，并确保本地版紧跟在在线版之后以保持排序
+            if (!settings.audioFileLists) settings.audioFileLists = {};
+            const list: AudioFileItem[] = [...(settings.audioFileLists[key] || [])];
+
+            const onlineIdx = list.findIndex(i => i.path === url);
+            if (onlineIdx > -1) {
+                list[onlineIdx].removed = true;
+                // 在线版之后插入本地版，保持相对顺序
+                const localItemIdx = list.findIndex(i => i.path === localUrl);
+                if (localItemIdx > -1) {
+                    list[localItemIdx].removed = false;
+                    list[localItemIdx].replaces = url;
+                } else {
+                    list.splice(onlineIdx + 1, 0, {
+                        path: localUrl,
+                        removed: false,
+                        replaces: url,
+                    });
+                }
+            } else {
+                // 如果是第一次操作此项，插入并标记替换
+                list.push({ path: url, removed: true });
+                list.push({ path: localUrl, removed: false, replaces: url });
+            }
+            settings.audioFileLists[key] = list;
+
+            // 3. 更新单选状态（如果当前正选着这个在线版）
+            if (settings.audioSelected && settings.audioSelected[key] === url) {
+                settings.audioSelected[key] = localUrl;
+            }
+
+            await pushMsg('下载成功，音频已转存至本地存储');
+            return localUrl;
+        } catch (e) {
+            console.error('下载音频失败:', e);
+            await pushErrMsg('下载音频失败，请检查网络连接');
+            return null;
+        } finally {
+            isDownloadingAudio = false;
+        }
+    }
+
+    async function toggleSettingValue(key: string, value: any) {
+        if (!settings.audioFileLists) settings.audioFileLists = {};
+        if (!settings.audioFileLists[key]) settings.audioFileLists[key] = [];
+        const list: AudioFileItem[] = settings.audioFileLists[key];
+
+        // 检查是否是在线链接，如果是则点击时自动下载
+        if (typeof value === 'string' && value.startsWith('http')) {
+            const localUrl = await downloadOnlineAudio(value, key);
+            if (!localUrl) return; // 下载失败则跳过后续操作
+
+            // 如果是单选模式，还需要确保选中态同步切换到本地路径
+            if (key !== 'randomNotificationSounds') {
+                if (!settings.audioSelected) settings.audioSelected = {};
+                settings.audioSelected[key] = localUrl;
+            }
+
+            saveSettings();
+            updateGroupItems();
+            return; // downloadOnlineAudio 已处理列表状态，此处直接返回
+        }
+
+        // 特殊处理随机微休息（多选/全选模式）
+        if (key === 'randomNotificationSounds') {
+            const index = list.findIndex(i => i.path === value);
+            if (index > -1) {
+                // 如果已在用户列表中，切换其 removed 状态
+                list[index].removed = !list[index].removed;
+            } else {
+                // 如果不在用户列表中，可能是在默认列表中。尝试查找
+                const defaultList = DEFAULT_SETTINGS.audioFileLists[key] || [];
+                const inDefault = defaultList.some(i => i.path === value);
+                if (inDefault) {
+                    // 加入用户列表并标记为选中（即 removed 为假）
+                    list.push({ path: value, removed: false });
+                } else {
+                    // 全新的项（如刚上传的），直接加入
+                    list.push({ path: value, removed: false });
+                }
+            }
+        } else {
+            // 单选模式
+            if (!settings.audioSelected) settings.audioSelected = {};
+            if (settings.audioSelected[key] === value) {
+                settings.audioSelected[key] = ''; // 取消选中
+            } else {
+                settings.audioSelected[key] = value; // 选中
+            }
+        }
+        saveSettings();
+        updateGroupItems();
+    }
+
+    async function toggleAudio(path: string) {
+        // 同一音频：切换暂停 / 继续
+        if (audioPreviewEl && playingPath === path) {
+            if (isAudioPlaying) {
+                audioPreviewEl.pause();
+                isAudioPlaying = false;
+            } else {
+                audioPreviewEl.play().catch(() => {});
+                isAudioPlaying = true;
+            }
+            return;
+        }
+        // 不同音频：停止当前，播放新的
+        if (audioPreviewEl) {
+            audioPreviewEl.pause();
+            audioPreviewEl = null;
+        }
+
+        const resolvedUrl = await resolveAudioPath(path);
+        const audio = new Audio(resolvedUrl);
+        audio.volume = 0.4;
+        audio.play().catch(() => {});
+        audio.addEventListener('ended', () => {
+            isAudioPlaying = false;
+            playingPath = null;
+        });
+        audioPreviewEl = audio;
+        playingPath = path;
+        isAudioPlaying = true;
+    }
+
+    function handleAudioUploadInput(event: Event, settingKey: string) {
+        const input = event.target as HTMLInputElement;
+        const files = Array.from(input.files || []);
+        if (files.length === 0) return;
+        isUploadingAudio = true;
+        Promise.all(
+            files.map(async f => {
+                try {
+                    return await uploadAudioFile(f);
+                } catch (e) {
+                    console.error('上传音频失败:', f.name, e);
+                    await pushErrMsg(`上传音频失败: ${f.name}`);
+                    return null;
+                }
+            })
+        )
+            .then(urls => {
+                const validUrls = urls.filter(Boolean) as string[];
+                if (!settings.audioFileLists) settings.audioFileLists = {};
+                const list: AudioFileItem[] = settings.audioFileLists[settingKey] || [];
+                for (const url of validUrls) {
+                    if (!list.some(i => i.path === url)) {
+                        list.push({ path: url, removed: false });
+                    }
+                }
+                // 自动选中第一个上传的文件
+                if (validUrls.length > 0) {
+                    const firstUrl = validUrls[0];
+                    if (settingKey !== 'randomNotificationSounds') {
+                        if (!settings.audioSelected) settings.audioSelected = {};
+                        settings.audioSelected[settingKey] = firstUrl;
+                    }
+                }
+                settings.audioFileLists[settingKey] = list;
+                saveSettings();
+                updateGroupItems();
+            })
+            .catch(() => {})
+            .finally(() => {
+                isUploadingAudio = false;
+            });
+        input.value = '';
+    }
 
     interface ISettingGroup {
         name: string;
@@ -107,8 +369,8 @@
             items: [
                 {
                     key: 'notificationSound',
-                    value: settings.notificationSound,
-                    type: 'textinput',
+                    value: settings.audioSelected?.notificationSound || '',
+                    type: 'custom-audio',
                     title: i18n('notificationSoundSetting'),
                     description: i18n('notificationSoundDesc'),
                 },
@@ -433,38 +695,38 @@
                 },
                 {
                     key: 'pomodoroWorkSound',
-                    value: settings.pomodoroWorkSound,
-                    type: 'textinput',
+                    value: settings.audioSelected?.pomodoroWorkSound || '',
+                    type: 'custom-audio',
                     title: i18n('pomodoroWorkSound'),
-                    description: i18n('pomodoroWorkSoundDesc'),
+                    description: i18n('pomodoroWorkSoundDesc') || '',
                 },
                 {
                     key: 'pomodoroBreakSound',
-                    value: settings.pomodoroBreakSound,
-                    type: 'textinput',
+                    value: settings.audioSelected?.pomodoroBreakSound || '',
+                    type: 'custom-audio',
                     title: i18n('pomodoroBreakSound'),
-                    description: i18n('pomodoroBreakSoundDesc'),
+                    description: i18n('pomodoroBreakSoundDesc') || '',
                 },
                 {
                     key: 'pomodoroLongBreakSound',
-                    value: settings.pomodoroLongBreakSound,
-                    type: 'textinput',
+                    value: settings.audioSelected?.pomodoroLongBreakSound || '',
+                    type: 'custom-audio',
                     title: i18n('pomodoroLongBreakSound'),
-                    description: i18n('pomodoroLongBreakSoundDesc'),
+                    description: i18n('pomodoroLongBreakSoundDesc') || '',
                 },
                 {
                     key: 'pomodoroWorkEndSound',
-                    value: settings.pomodoroWorkEndSound,
-                    type: 'textinput',
+                    value: settings.audioSelected?.pomodoroWorkEndSound || '',
+                    type: 'custom-audio',
                     title: i18n('pomodoroWorkEndSound'),
-                    description: i18n('pomodoroWorkEndSoundDesc'),
+                    description: i18n('pomodoroWorkEndSoundDesc') || '',
                 },
                 {
                     key: 'pomodoroBreakEndSound',
-                    value: settings.pomodoroBreakEndSound,
-                    type: 'textinput',
+                    value: settings.audioSelected?.pomodoroBreakEndSound || '',
+                    type: 'custom-audio',
                     title: i18n('pomodoroBreakEndSound'),
-                    description: i18n('pomodoroBreakEndSoundDesc'),
+                    description: i18n('pomodoroBreakEndSoundDesc') || '',
                 },
             ],
         },
@@ -516,17 +778,17 @@
                 },
                 {
                     key: 'randomNotificationSounds',
-                    value: settings.randomNotificationSounds,
-                    type: 'textinput',
+                    value: settings.audioFileLists?.randomNotificationSounds || [],
+                    type: 'custom-audio',
                     title: i18n('randomNotificationSounds'),
-                    description: i18n('randomNotificationSoundsDesc'),
+                    description: i18n('randomNotificationSoundsDesc') || '',
                 },
                 {
                     key: 'randomNotificationEndSound',
-                    value: settings.randomNotificationEndSound,
-                    type: 'textinput',
+                    value: settings.audioSelected?.randomNotificationEndSound || '',
+                    type: 'custom-audio',
                     title: i18n('randomNotificationEndSound'),
-                    description: i18n('randomNotificationEndSoundDesc'),
+                    description: i18n('randomNotificationEndSoundDesc') || '',
                 },
             ],
         },
@@ -611,7 +873,7 @@
                     button: {
                         label: '生成 ICS',
                         callback: async () => {
-                            await exportIcsFile(plugin, true, false, settings.icsTaskFilter);
+                            await exportIcsFile(plugin, true, false, settings.icsTaskFilter as any);
                         },
                     },
                 },
@@ -1020,6 +1282,10 @@
         (async () => {
             await loadNotebooks();
             await runload();
+            // 展开时如果 settings.audioFileLists 未存在（旧数据兼容），创建空对象
+            if (!settings.audioFileLists) {
+                settings.audioFileLists = {};
+            }
         })();
 
         // 监听外部设置变更事件，重新加载设置并刷新 UI
@@ -1038,6 +1304,10 @@
         // 在组件销毁时移除监听
         return () => {
             window.removeEventListener('reminderSettingsUpdated', settingsUpdateHandler);
+            if (audioPreviewEl) {
+                audioPreviewEl.pause();
+                audioPreviewEl = null;
+            }
         };
     });
 
@@ -1062,6 +1332,8 @@
             const parsed = parseInt(settings.weekStartDay, 10);
             settings.weekStartDay = isNaN(parsed) ? DEFAULT_SETTINGS.weekStartDay : parsed;
         }
+        // 确保 audioFileLists 存在
+        if (!settings.audioFileLists) settings.audioFileLists = {};
         updateGroupItems();
         // 确保设置已保存（可能包含新的默认值），但不发出更新事件
         await saveSettings(false);
@@ -1798,12 +2070,214 @@
         {/each}
     </ul>
     <div class="config__tab-wrap">
-        <SettingPanel
-            group={currentGroup?.name || ''}
-            settingItems={currentGroup?.items || []}
-            display={true}
-            on:changed={onChanged}
-        />
+        <!-- 手动按项目顺序渲染，保证 custom-audio 项在正确位置 -->
+        <div class="config__tab-container" data-name={currentGroup?.name || ''}>
+            {#each currentGroup?.items || [] as item (item.key)}
+                {#if !item.hidden}
+                    {#if item.type === 'custom-audio'}
+                        <!-- 自定义音频选择器 -->
+                        <div class="item-wrap b3-label config__item audio-picker-wrap">
+                            <!-- 顶部：标题 + 上传按钮 -->
+                            <div class="fn__flex-1">
+                                <span class="title">{item.title}</span>
+                                {#if item.description}
+                                    <div class="b3-label__text">{item.description}</div>
+                                {/if}
+                            </div>
+                            <!-- 当前选中的音频显示 + 文件列表 -->
+                            <div class="audio-inline-list" style="width:100%;margin-top:4px">
+                                {#each [getAudioFilesForKey(item.key)] as audioFilesForKey}
+                                    <!-- 文件列表 -->
+                                    {#if audioFilesForKey.length > 0}
+                                        {#each audioFilesForKey.filter(a => a.path) as audio}
+                                            {@const isSelected =
+                                                item.key === 'randomNotificationSounds'
+                                                    ? (
+                                                          settings.audioFileLists[item.key] || []
+                                                      ).some(
+                                                          i => i.path === audio.path && !i.removed
+                                                      )
+                                                    : settings.audioSelected?.[item.key] ===
+                                                      audio.path}
+                                            <div
+                                                class="audio-row {isSelected
+                                                    ? 'audio-row--selected'
+                                                    : ''}"
+                                                role="button"
+                                                tabindex="0"
+                                                on:click={() =>
+                                                    toggleSettingValue(item.key, audio.path)}
+                                                on:keydown={e => {
+                                                    if (e.key === 'Enter' || e.key === ' ') {
+                                                        e.preventDefault();
+                                                        toggleSettingValue(item.key, audio.path);
+                                                    }
+                                                }}
+                                            >
+                                                <div class="audio-row__name" title={audio.name}>
+                                                    <svg
+                                                        viewBox="0 0 24 24"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        stroke-width="2"
+                                                        width="12"
+                                                        height="12"
+                                                        style="flex-shrink:0;opacity:0.5"
+                                                    >
+                                                        <path d="M9 18V5l12-2v13" />
+                                                        <circle cx="6" cy="18" r="3" />
+                                                        <circle cx="18" cy="16" r="3" />
+                                                    </svg>
+                                                    <span>{audio.name}</span>
+                                                    {#if isSelected}
+                                                        <span class="audio-row__badge">当前</span>
+                                                    {/if}
+                                                </div>
+                                                <div class="audio-row__btns">
+                                                    <button
+                                                        class="audio-btn audio-btn--play"
+                                                        title={playingPath === audio.path &&
+                                                        isAudioPlaying
+                                                            ? '暂停'
+                                                            : '试听'}
+                                                        on:click|stopPropagation={() =>
+                                                            toggleAudio(audio.path)}
+                                                    >
+                                                        {#if playingPath === audio.path && isAudioPlaying}
+                                                            <svg
+                                                                viewBox="0 0 24 24"
+                                                                fill="currentColor"
+                                                                stroke="none"
+                                                                width="11"
+                                                                height="11"
+                                                            >
+                                                                <rect
+                                                                    x="5"
+                                                                    y="3"
+                                                                    width="4"
+                                                                    height="18"
+                                                                    rx="1"
+                                                                />
+                                                                <rect
+                                                                    x="15"
+                                                                    y="3"
+                                                                    width="4"
+                                                                    height="18"
+                                                                    rx="1"
+                                                                />
+                                                            </svg>
+                                                        {:else}
+                                                            <svg
+                                                                viewBox="0 0 24 24"
+                                                                fill="currentColor"
+                                                                stroke="none"
+                                                                width="11"
+                                                                height="11"
+                                                            >
+                                                                <polygon
+                                                                    points="5 3 19 12 5 21 5 3"
+                                                                />
+                                                            </svg>
+                                                        {/if}
+                                                    </button>
+                                                    <!-- 从列表移除 -->
+                                                    <button
+                                                        class="audio-btn audio-btn--delete"
+                                                        title="从列表移除"
+                                                        on:click|stopPropagation={() =>
+                                                            deleteAudioFileForKey(
+                                                                audio.path,
+                                                                item.key
+                                                            )}
+                                                    >
+                                                        <svg
+                                                            viewBox="0 0 24 24"
+                                                            fill="none"
+                                                            stroke="currentColor"
+                                                            stroke-width="2"
+                                                            width="11"
+                                                            height="11"
+                                                        >
+                                                            <polyline points="3 6 5 6 21 6" />
+                                                            <path
+                                                                d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"
+                                                            />
+                                                            <path d="M10 11v6M14 11v6" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        {/each}
+                                    {/if}
+                                    <!-- 上传按钮（始终在列表底部） -->
+                                    <label
+                                        class="audio-upload-btn audio-upload-btn--bottom {isUploadingAudio
+                                            ? 'audio-upload-btn--loading'
+                                            : ''}"
+                                        title="上传音频文件"
+                                    >
+                                        {#if isUploadingAudio}
+                                            <svg
+                                                class="fn__rotate"
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                stroke-width="2"
+                                                width="12"
+                                                height="12"
+                                            >
+                                                <path d="M21 12a9 9 0 11-6.219-8.56" />
+                                            </svg>
+                                        {:else}
+                                            <svg
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                stroke-width="2"
+                                                width="12"
+                                                height="12"
+                                            >
+                                                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                                                <polyline points="17 8 12 3 7 8" />
+                                                <line x1="12" y1="3" x2="12" y2="15" />
+                                            </svg>
+                                        {/if}
+                                        上传音频
+                                        <input
+                                            type="file"
+                                            accept="audio/*,.mp3,.wav,.ogg,.aac,.flac,.m4a"
+                                            multiple
+                                            style="display:none"
+                                            disabled={isUploadingAudio}
+                                            on:change={e => handleAudioUploadInput(e, item.key)}
+                                        />
+                                    </label>
+                                {/each}
+                            </div>
+                        </div>
+                    {:else}
+                        <!-- 普通设置项 -->
+                        <Form.Wrap
+                            title={item.title}
+                            description={item.description}
+                            direction={item?.direction}
+                        >
+                            <Form.Input
+                                type={item.type}
+                                key={item.key}
+                                bind:value={item.value}
+                                placeholder={item?.placeholder}
+                                options={item?.options}
+                                slider={item?.slider}
+                                button={item?.button}
+                                disabled={item?.disabled}
+                                on:changed={onChanged}
+                            />
+                        </Form.Wrap>
+                    {/if}
+                {/if}
+            {/each}
+        </div>
     </div>
 </div>
 
@@ -1823,5 +2297,172 @@
         height: 100%;
         overflow: auto;
         padding: 2px;
+    }
+
+    /* audio picker 内联于普通设置项同一行 */
+    .audio-picker-wrap {
+        flex-direction: row;
+        align-items: flex-start;
+        flex-wrap: wrap;
+        gap: 6px 0;
+
+        /* 和普通 form-wrap 一致：左侧标题占主要空间，右侧是操作区 */
+        .title {
+            font-weight: bold;
+            color: var(--b3-theme-primary);
+        }
+
+        /* 音频列表占满整行宽度 */
+        .audio-inline-list {
+            width: 100%;
+            margin-top: 4px;
+        }
+    }
+
+    /* 音频文件列表（内联，每个音频设置项内独立展示） */
+    .audio-inline-list {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        border-radius: 6px;
+        border: 1px solid var(--b3-border-color);
+        padding: 3px;
+        background: var(--b3-theme-background);
+    }
+
+    .audio-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 4px 7px;
+        border-radius: 4px;
+        border: 1px solid transparent;
+        background: transparent;
+        transition: all 0.12s;
+        gap: 6px;
+        cursor: pointer;
+
+        &:hover {
+            background: var(--b3-theme-background-light);
+        }
+
+        &--selected {
+            background: color-mix(in srgb, var(--b3-theme-primary) 8%, var(--b3-theme-background));
+            border-color: color-mix(in srgb, var(--b3-theme-primary) 30%, transparent);
+        }
+
+        &__name {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            flex: 1;
+            min-width: 0;
+            font-size: 12px;
+            color: var(--b3-theme-on-surface);
+
+            span {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+        }
+
+        &__badge {
+            font-size: 10px;
+            padding: 1px 4px;
+            border-radius: 3px;
+            background: var(--b3-theme-primary);
+            color: #fff;
+            flex-shrink: 0;
+            line-height: 1.4;
+        }
+
+        &__btns {
+            display: flex;
+            gap: 3px;
+            flex-shrink: 0;
+        }
+    }
+
+    /* 上传按钮 */
+    .audio-upload-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 3px 8px;
+        font-size: 12px;
+        border-radius: 4px;
+        background: var(--b3-theme-primary);
+        color: #fff;
+        cursor: pointer;
+        border: none;
+        transition: opacity 0.15s;
+        user-select: none;
+        line-height: 1.6;
+
+        &:hover {
+            opacity: 0.85;
+        }
+        &--loading {
+            opacity: 0.6;
+            cursor: default;
+        }
+
+        /* 列表底部全宽上传区域 */
+        &--bottom {
+            display: flex;
+            width: 100%;
+            justify-content: center;
+            background: transparent;
+            color: var(--b3-theme-on-surface-light);
+            border: 1px dashed var(--b3-border-color);
+            border-radius: 4px;
+            margin-top: 2px;
+            padding: 5px 8px;
+            font-size: 12px;
+            opacity: 0.75;
+
+            &:hover {
+                opacity: 1;
+                border-color: var(--b3-theme-primary);
+                color: var(--b3-theme-primary);
+                background: color-mix(in srgb, var(--b3-theme-primary) 6%, transparent);
+            }
+        }
+    }
+
+    /* 小按钮 (play/select/delete) */
+    .audio-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 22px;
+        height: 22px;
+        border-radius: 3px;
+        border: 1px solid var(--b3-border-color);
+        background: transparent;
+        cursor: pointer;
+        transition: all 0.12s;
+        color: var(--b3-theme-on-surface);
+        padding: 0;
+
+        &:hover {
+            background: var(--b3-theme-background-light);
+        }
+
+        &--play {
+            color: var(--b3-theme-primary);
+            &:hover {
+                background: color-mix(in srgb, var(--b3-theme-primary) 12%, transparent);
+                border-color: var(--b3-theme-primary);
+            }
+        }
+        &--delete {
+            color: var(--b3-theme-error, #ef4444);
+            &:hover {
+                background: color-mix(in srgb, var(--b3-theme-error, #ef4444) 12%, transparent);
+                border-color: var(--b3-theme-error, #ef4444);
+            }
+        }
     }
 </style>
