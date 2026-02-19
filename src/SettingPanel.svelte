@@ -1173,93 +1173,63 @@
     }
 
     const onChanged = ({ detail }: CustomEvent<ChangeEvent>) => {
-        console.log(detail.key, detail.value);
-        const setting = settings[detail.key];
-        if (setting !== undefined) {
-            // 如果是weekStartDay，将字符串转为数字
-            if (detail.key === 'weekStartDay' && typeof detail.value === 'string') {
-                const parsed = parseInt(detail.value, 10);
-                settings[detail.key] = isNaN(parsed) ? DEFAULT_SETTINGS.weekStartDay : parsed;
-            } else if (
-                (detail.key === 's3ForcePathStyle' || detail.key === 's3TlsVerify') &&
-                typeof detail.value === 'string'
-            ) {
-                // 将字符串 'true'/'false' 转换为布尔值
-                settings[detail.key] = detail.value === 'true';
-            } else if (detail.key === 'dailyNotificationTime') {
-                // 允许用户输入 HH:MM，也兼容数字（小时）或单个小时字符串
-                let v = detail.value;
-                if (typeof v === 'number') {
-                    const h = Math.max(0, Math.min(23, Math.floor(v)));
-                    v = (h < 10 ? '0' : '') + h.toString() + ':00';
-                } else if (typeof v === 'string') {
-                    const m = v.match(/^(\d{1,2})(?::(\d{1,2}))?$/);
-                    if (m) {
-                        const h = Math.max(0, Math.min(23, parseInt(m[1], 10) || 0));
-                        const min = Math.max(0, Math.min(59, parseInt(m[2] || '0', 10) || 0));
-                        v =
-                            (h < 10 ? '0' : '') +
-                            h.toString() +
-                            ':' +
-                            (min < 10 ? '0' : '') +
-                            min.toString();
-                    } else {
-                        // 如果无法解析，回退到默认
-                        v = DEFAULT_SETTINGS.dailyNotificationTime;
-                    }
-                }
-                settings[detail.key] = v;
-            } else if (detail.key === 'todayStartTime') {
-                const oldValue = settings[detail.key]; // 保存旧值用于比较
-                let v = detail.value;
-                if (typeof v === 'number') {
-                    const h = Math.max(0, Math.min(23, Math.floor(v)));
-                    v = (h < 10 ? '0' : '') + h.toString() + ':00';
-                } else if (typeof v === 'string') {
-                    const m = v.match(/^(\d{1,2})(?::(\d{1,2}))?$/);
-                    if (m) {
-                        const h = Math.max(0, Math.min(23, parseInt(m[1], 10) || 0));
-                        const min = Math.max(0, Math.min(59, parseInt(m[2] || '0', 10) || 0));
-                        v =
-                            (h < 10 ? '0' : '') +
-                            h.toString() +
-                            ':' +
-                            (min < 10 ? '0' : '') +
-                            min.toString();
-                    } else {
-                        v = DEFAULT_SETTINGS.todayStartTime;
-                    }
-                }
-                settings[detail.key] = v;
+        const { key, value } = detail;
+        console.log(`Setting change: ${key} = ${value}`);
 
-                // 如果一天起始时间发生了变化，需要重新生成番茄钟按天记录
-                if (oldValue !== v) {
-                    (async () => {
-                        try {
-                            // 先更新一天起始时间设置，这样getLogicalDateString会使用新的起始时间
-                            const { setDayStartTime } = await import('./utils/dateUtils');
-                            setDayStartTime(v);
-
-                            // 然后重新生成番茄钟记录
-                            const { PomodoroRecordManager } = await import(
-                                './utils/pomodoroRecord'
-                            );
-                            const recordManager = PomodoroRecordManager.getInstance(plugin);
-                            await recordManager.regenerateRecordsByDate();
-                        } catch (error) {
-                            console.error('重新生成番茄钟记录失败:', error);
-                            pushErrMsg('重新生成番茄钟记录失败');
-                        }
-                    })();
+        // 统一处理特殊类型的转换
+        let newValue = value;
+        if (key === 'weekStartDay' && typeof value === 'string') {
+            const parsed = parseInt(value, 10);
+            newValue = isNaN(parsed) ? DEFAULT_SETTINGS.weekStartDay : parsed;
+        } else if (
+            (key === 's3ForcePathStyle' || key === 's3TlsVerify') &&
+            typeof value === 'string'
+        ) {
+            newValue = value === 'true';
+        } else if (key === 'dailyNotificationTime' || key === 'todayStartTime') {
+            // 格式化时间 HH:MM
+            if (typeof value === 'number') {
+                const h = Math.max(0, Math.min(23, Math.floor(value)));
+                newValue = (h < 10 ? '0' : '') + h.toString() + ':00';
+            } else if (typeof value === 'string') {
+                const m = value.match(/^(\d{1,2})(?::(\d{1,2}))?$/);
+                if (m) {
+                    const h = Math.max(0, Math.min(23, parseInt(m[1], 10) || 0));
+                    const min = Math.max(0, Math.min(59, parseInt(m[2] || '0', 10) || 0));
+                    newValue =
+                        (h < 10 ? '0' : '') +
+                        h.toString() +
+                        ':' +
+                        (min < 10 ? '0' : '') +
+                        min.toString();
+                } else {
+                    newValue = DEFAULT_SETTINGS[key];
                 }
-            } else {
-                settings[detail.key] = detail.value;
             }
-
-            saveSettings();
-            // 确保 UI 中 select 等值显示被刷新
-            updateGroupItems();
         }
+
+        // 更新设置并保存
+        const oldValue = settings[key];
+        settings[key] = newValue;
+        settings = settings; // 触发布尔响应式（如果需要）
+
+        // 特殊逻辑：一天起始时间变更
+        if (key === 'todayStartTime' && oldValue !== newValue) {
+            (async () => {
+                try {
+                    const { setDayStartTime } = await import('./utils/dateUtils');
+                    setDayStartTime(newValue as string);
+                    const { PomodoroRecordManager } = await import('./utils/pomodoroRecord');
+                    const recordManager = PomodoroRecordManager.getInstance(plugin);
+                    await recordManager.regenerateRecordsByDate();
+                } catch (error) {
+                    console.error('重新生成番茄钟记录失败:', error);
+                }
+            })();
+        }
+
+        saveSettings();
+        updateGroupItems();
     };
 
     async function saveSettings(emitEvent = true) {
@@ -2265,7 +2235,7 @@
                             <Form.Input
                                 type={item.type}
                                 key={item.key}
-                                bind:value={item.value}
+                                value={item.value}
                                 placeholder={item?.placeholder}
                                 options={item?.options}
                                 slider={item?.slider}
