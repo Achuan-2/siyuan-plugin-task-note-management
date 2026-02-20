@@ -865,13 +865,20 @@ export class QuickReminderDialog {
                         const ghostId = `${child.id}_${instanceDate}`;
                         // 检查此 ghost 子任务在当前日期是否已完成
                         const isCompleted = child.repeat?.completedInstances?.includes(instanceDate) || false;
+
+                        // 将实例级的修改合并（如果存在 instanceModifications）
+                        const instanceMod = child.repeat?.instanceModifications?.[instanceDate] || {};
+
                         return {
                             ...child,
+                            ...instanceMod,
                             id: ghostId,
                             parentId: this.reminder.id,
                             isRepeatInstance: true,
                             originalId: child.id,
                             completed: isCompleted,
+                            // 确保标题优先使用实例级修改的 title
+                            title: instanceMod.title || child.title || '(无标题)',
                         };
                     });
             }
