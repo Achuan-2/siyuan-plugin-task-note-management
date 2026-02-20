@@ -67,9 +67,9 @@ export const DEFAULT_SETTINGS = {
     pomodoroLongBreakDuration: 30,
     pomodoroLongBreakInterval: 4,
     pomodoroAutoMode: false,
-    pomodoroSystemNotification: false, // 新增：番茄结束后系统弹窗
+    pomodoroSystemNotification: true, // 新增：番茄结束后系统弹窗
     pomodoroEndPopupWindow: true, // 新增：番茄钟结束弹窗提醒，默认关闭
-    pomodoroDockPosition: 'right', // 新增：番茄钟吸附位置 'right' | 'left' | 'top'
+    pomodoroDockPosition: 'top', // 新增：番茄钟吸附位置 'right' | 'left' | 'top'
     reminderSystemNotification: true, // 新增：事件到期提醒系统弹窗
     dailyNotificationTime: '08:00', // 新增：每日通知时间，默认08:00
     dailyNotificationEnabled: false, // 新增：是否启用每日统一通知
@@ -77,7 +77,7 @@ export const DEFAULT_SETTINGS = {
     randomNotificationMinInterval: 3,
     randomNotificationMaxInterval: 5,
     randomNotificationBreakDuration: 10,
-    randomNotificationSystemNotification: false, // 新增：随机微休息系统通知
+    randomNotificationSystemNotification: true, // 新增：随机微休息系统通知
     randomNotificationPopupWindow: true, // 新增：随机微休息弹窗提醒，默认关闭
     dailyFocusGoal: 6,
     autoDetectDateTime: false, // 新增：是否自动识别日期时间
@@ -713,7 +713,7 @@ export default class ReminderPlugin extends Plugin {
                     this.audioEnabled = true;
                 }
             } catch (error) {
-                console.warn('音频预加载失败，将使用静音模式:', error);
+                // console.warn('音频预加载失败，将使用静音模式:', error);
                 this.audioEnabled = false;
             }
         };

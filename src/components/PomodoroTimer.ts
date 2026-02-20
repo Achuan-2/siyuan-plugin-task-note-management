@@ -1,4 +1,4 @@
-import { showMessage, confirm, getFrontend } from "siyuan";
+import { showMessage, confirm, getFrontend, Dialog } from "siyuan";
 import { PomodoroRecordManager } from "../utils/pomodoroRecord";
 import { getBlockByID, openBlock } from "../api";
 import { i18n } from "../pluginInstance";
@@ -813,13 +813,17 @@ export class PomodoroTimer {
         const frontend = getFrontend();
         const isMobile = frontend.endsWith('mobile');
         const isBrowserDesktop = frontend === 'browser-desktop';
-        if (isMobile || isBrowserDesktop) return; // 仅在桌面端启用
+        
+        const title = i18n('pomodoroWorkEnd') || '工作结束';
+        const message = i18n('pomodoroWorkEndDesc') || '工作时间结束，起来走走喝喝水吧！';
+        
+        // 非电脑客户端使用思源内部 Dialog
+        if (isMobile || isBrowserDesktop) {
+            this.openSiyuanDialog(title, message, '🍅');
+            return;
+        }
 
-        this.openPomodoroEndWindowImpl(
-            i18n('pomodoroWorkEnd') || '工作结束',
-            i18n('pomodoroWorkEndDesc') || '工作时间结束，起来走走喝喝水吧！',
-            '🍅'
-        );
+        this.openPomodoroEndWindowImpl(title, message, '🍅');
     }
 
     private closePomodoroEndWindow() {
@@ -839,13 +843,51 @@ export class PomodoroTimer {
         const frontend = getFrontend();
         const isMobile = frontend.endsWith('mobile');
         const isBrowserDesktop = frontend === 'browser-desktop';
-        if (isMobile || isBrowserDesktop) return; // 仅在桌面端启用
-        this.openRandomNotificationWindowImpl(
-            '微休息',
-            i18n('randomRest', { duration: this.settings.randomNotificationBreakDuration }) || 'Time for a quick break!',
-            '🎲',
-            Number(this.settings.randomNotificationBreakDuration)
-        );
+        
+        const title = i18n('randomNotificationSettings') || '微休息';
+        const message = i18n('randomRest', { duration: this.settings.randomNotificationBreakDuration }) || 'Time for a quick break!';
+        const autoCloseDelay = Number(this.settings.randomNotificationBreakDuration) || 0;
+        
+        // 非电脑客户端使用思源内部 Dialog
+        if (isMobile || isBrowserDesktop) {
+            this.openSiyuanDialog(title, message, '🎲', autoCloseDelay);
+            return;
+        }
+        
+        this.openRandomNotificationWindowImpl(title, message, '🎲', autoCloseDelay);
+    }
+
+    /**
+     * 使用思源内部 Dialog 显示弹窗（用于非电脑客户端）
+     * @param title 标题
+     * @param message 消息内容
+     * @param icon 图标
+     * @param autoCloseDelay 自动关闭延迟（秒），0表示不自动关闭
+     */
+    private openSiyuanDialog(title: string, message: string, icon: string, autoCloseDelay: number = 0) {
+        try {
+            const dialog = new Dialog({
+                title: `${icon} ${title}`,
+                content: `<div style="padding: 20px; text-align: center; font-size: 16px;">${message}</div>`,
+                width: "360px",
+                height: "auto"
+            });
+
+            // 如果设置了自动关闭，延迟关闭弹窗
+            if (autoCloseDelay > 0) {
+                setTimeout(() => {
+                    try {
+                        dialog.destroy();
+                    } catch (e) {
+                        // ignore
+                    }
+                }, autoCloseDelay * 1000);
+            }
+        } catch (e) {
+            console.error('[PomodoroTimer] Failed to open siyuan dialog:', e);
+            // 降级使用 showMessage
+            showMessage(`${icon} ${title}: ${message}`, autoCloseDelay > 0 ? autoCloseDelay * 1000 : 3000);
+        }
     }
 
     /**
@@ -5768,7 +5810,7 @@ export class PomodoroTimer {
             this.systemNotificationEnabled = settings.pomodoroSystemNotification !== false;
             this.randomNotificationEnabled = settings.randomNotificationEnabled || false;
             this.randomNotificationSystemNotificationEnabled = settings.randomNotificationSystemNotification !== false;
-            this.randomNotificationAutoClose = false; // 新增
+            this.randomNotificationAutoClose = true; // 新增
             this.randomNotificationAutoCloseDelay = 5; // 新增
             this.autoMode = settings.autoMode || false;
             this.longBreakInterval = Math.max(1, settings.longBreakInterval || 4);
