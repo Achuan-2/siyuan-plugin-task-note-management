@@ -6462,10 +6462,17 @@ document.body.classList.remove('docked-mode');
                 if (recoveredState.reminderId) timer.reminder.id = recoveredState.reminderId;
                 if (recoveredState.blockId) timer.reminder.blockId = recoveredState.blockId;
 
+                // Restore random notification state
+                timer.randomNotificationEnabled = recoveredState.randomNotificationEnabled || false;
+                timer.randomNotificationCount = recoveredState.randomNotificationCount || 0;
 
                 // Resume logic loop if needed
                 if (timer.isRunning && !timer.isPaused) {
                     timer.startTickLoop();
+                    // FIX: 恢复随机微休息定时器（如果启用且在工作阶段）
+                    if (timer.randomNotificationEnabled && timer.isWorkPhase) {
+                        timer.startRandomNotificationTimer();
+                    }
                 } else {
                     // If paused or stopped, ensure UI reflects it
                 }
@@ -6559,6 +6566,10 @@ document.body.classList.remove('docked-mode');
                         this.pausedTime = recoveredState.pausedTime || 0;
                         this.currentPhaseOriginalDuration = recoveredState.currentPhaseOriginalDuration || this.settings.workDuration;
 
+                        // Restore random notification state
+                        this.randomNotificationEnabled = recoveredState.randomNotificationEnabled || false;
+                        this.randomNotificationCount = recoveredState.randomNotificationCount || 0;
+
                         if (recoveredState.reminderTitle) {
                             this.reminder.title = recoveredState.reminderTitle;
                         }
@@ -6583,6 +6594,10 @@ document.body.classList.remove('docked-mode');
 
                 if (this.isRunning && !this.isPaused) {
                     this.startTickLoop();
+                    // FIX: 恢复随机微休息定时器（如果启用且在工作阶段）
+                    if (this.randomNotificationEnabled && this.isWorkPhase) {
+                        this.startRandomNotificationTimer();
+                    }
                 }
             }
         } catch (e) {
@@ -7698,6 +7713,11 @@ document.body.classList.remove('docked-mode');
                         this.setupDockedMouseEvents(pomodoroWindow);
                     }
                 }, 500);
+            }
+
+            // FIX: 恢复随机微休息定时器（如果启用且在工作阶段且正在运行）
+            if (this.randomNotificationEnabled && this.isWorkPhase && this.isRunning && !this.isPaused) {
+                this.startRandomNotificationTimer();
             }
 
         } catch (error) {
