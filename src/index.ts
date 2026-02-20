@@ -183,6 +183,7 @@ export const DEFAULT_SETTINGS = {
         pomodoroLongBreakSound: '/plugins/siyuan-plugin-task-note-management/audios/relax_background.mp3',
         pomodoroWorkEndSound: '/plugins/siyuan-plugin-task-note-management/audios/work_end.mp3',
         pomodoroBreakEndSound: '/plugins/siyuan-plugin-task-note-management/audios/end_music.mp3',
+        randomNotificationSounds: '/plugins/siyuan-plugin-task-note-management/audios/random_start.mp3',
         randomNotificationEndSound: '/plugins/siyuan-plugin-task-note-management/audios/random_end.mp3',
     } as Record<string, string>,
 };

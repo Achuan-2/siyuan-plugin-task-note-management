@@ -175,43 +175,21 @@
             const localUrl = await downloadOnlineAudio(value, key);
             if (!localUrl) return; // 下载失败则跳过后续操作
 
-            // 如果是单选模式，还需要确保选中态同步切换到本地路径
-            if (key !== 'randomNotificationSounds') {
-                if (!settings.audioSelected) settings.audioSelected = {};
-                settings.audioSelected[key] = localUrl;
-            }
+
+            if (!settings.audioSelected) settings.audioSelected = {};
+            settings.audioSelected[key] = localUrl;
 
             saveSettings();
             updateGroupItems();
             return; // downloadOnlineAudio 已处理列表状态，此处直接返回
         }
 
-        // 特殊处理随机微休息（多选/全选模式）
-        if (key === 'randomNotificationSounds') {
-            const index = list.findIndex(i => i.path === value);
-            if (index > -1) {
-                // 如果已在用户列表中，切换其 removed 状态
-                list[index].removed = !list[index].removed;
-            } else {
-                // 如果不在用户列表中，可能是在默认列表中。尝试查找
-                const defaultList = DEFAULT_SETTINGS.audioFileLists[key] || [];
-                const inDefault = defaultList.some(i => i.path === value);
-                if (inDefault) {
-                    // 加入用户列表并标记为选中（即 removed 为假）
-                    list.push({ path: value, removed: false });
-                } else {
-                    // 全新的项（如刚上传的），直接加入
-                    list.push({ path: value, removed: false });
-                }
-            }
+        // 单选模式
+        if (!settings.audioSelected) settings.audioSelected = {};
+        if (settings.audioSelected[key] === value) {
+            settings.audioSelected[key] = ''; // 取消选中
         } else {
-            // 单选模式
-            if (!settings.audioSelected) settings.audioSelected = {};
-            if (settings.audioSelected[key] === value) {
-                settings.audioSelected[key] = ''; // 取消选中
-            } else {
-                settings.audioSelected[key] = value; // 选中
-            }
+            settings.audioSelected[key] = value; // 选中
         }
         saveSettings();
         updateGroupItems();
@@ -276,10 +254,8 @@
                 // 自动选中第一个上传的文件
                 if (validUrls.length > 0) {
                     const firstUrl = validUrls[0];
-                    if (settingKey !== 'randomNotificationSounds') {
-                        if (!settings.audioSelected) settings.audioSelected = {};
-                        settings.audioSelected[settingKey] = firstUrl;
-                    }
+                    if (!settings.audioSelected) settings.audioSelected = {};
+                    settings.audioSelected[settingKey] = firstUrl;
                 }
                 settings.audioFileLists[settingKey] = list;
                 saveSettings();
@@ -2093,14 +2069,8 @@
                                     {#if audioFilesForKey.length > 0}
                                         {#each audioFilesForKey.filter(a => a.path) as audio}
                                             {@const isSelected =
-                                                item.key === 'randomNotificationSounds'
-                                                    ? (
-                                                          settings.audioFileLists[item.key] || []
-                                                      ).some(
-                                                          i => i.path === audio.path && !i.removed
-                                                      )
-                                                    : settings.audioSelected?.[item.key] ===
-                                                      audio.path}
+                                                settings.audioSelected?.[item.key] ===
+                                                audio.path}
                                             <div
                                                 class="audio-row {isSelected
                                                     ? 'audio-row--selected'
