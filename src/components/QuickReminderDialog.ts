@@ -658,33 +658,32 @@ export class QuickReminderDialog {
         }
 
         // 填充日期和时间（使用独立的日期和时间输入框）
+        // 始终填充 time（支持只有 time 而无 date 的子任务/模板）
         if (this.reminder.date) {
             dateInput.value = this.reminder.date;
+        }
 
-            // 填充时间（独立输入框）
-            if (this.reminder.time && timeInput) {
-                timeInput.value = this.reminder.time;
-            }
+        // 如果 reminder 中包含 time，则无论是否有 date 都应显示（修复 ghost 子任务在编辑系列时不显示时间的问题）
+        if (this.reminder.time && timeInput) {
+            timeInput.value = this.reminder.time;
+        }
 
-            // 填充结束日期
-            if (this.reminder.endDate) {
-                endDateInput.value = this.reminder.endDate;
-            }
+        // 结束时间/日期也按存在与否分别填充
+        if (this.reminder.endDate && endDateInput) {
+            endDateInput.value = this.reminder.endDate;
+        }
+        if (this.reminder.endTime && endTimeInput) {
+            endTimeInput.value = this.reminder.endTime;
+        }
 
-            // 填充结束时间
-            if (this.reminder.endTime && endTimeInput) {
-                endTimeInput.value = this.reminder.endTime;
-            }
-
-            // 填充持续天数（如果有起止日期则计算）
-            const durationInput = this.dialog.element.querySelector('#quickDurationDays') as HTMLInputElement;
-            if (durationInput) {
-                if (dateInput.value && endDateInput.value) {
-                    const dur = this.getDurationInclusive(dateInput.value, endDateInput.value);
-                    durationInput.value = String(dur > 0 ? dur : 1);
-                } else {
-                    durationInput.value = '1';
-                }
+        // 填充持续天数（如果有起止日期则计算）
+        const durationInput = this.dialog.element.querySelector('#quickDurationDays') as HTMLInputElement;
+        if (durationInput) {
+            if (dateInput.value && endDateInput.value) {
+                const dur = this.getDurationInclusive(dateInput.value, endDateInput.value);
+                durationInput.value = String(dur > 0 ? dur : 1);
+            } else {
+                durationInput.value = '1';
             }
         }
 
@@ -3788,7 +3787,22 @@ export class QuickReminderDialog {
             optimisticReminder.tagIds = tagIds.length > 0 ? tagIds : undefined;
             optimisticReminder.customReminderPreset = customReminderPreset;
             optimisticReminder.reminderTimes = this.customTimes.length > 0 ? [...this.customTimes] : undefined;
-            optimisticReminder.repeat = this.repeatConfig.enabled ? this.repeatConfig : undefined;
+            // 保存 repeat 信息：如果用户开启了重复（repeatConfig.enabled），使用新的配置；
+            // 否则保留原对象中用于记录历史/实例状态的元数据（completedInstances/completedTimes/instanceModifications/excludeDates），
+            // 以避免编辑操作误删 ghost 子任务的已完成记录。
+            {
+                const existingRepeat = this.reminder?.repeat || {};
+                const preservedKeys = ['completedInstances', 'completedTimes', 'instanceModifications', 'excludeDates'];
+                const preserved: any = {};
+                if (this.repeatConfig && this.repeatConfig.enabled) {
+                    optimisticReminder.repeat = { ...existingRepeat, ...this.repeatConfig };
+                } else {
+                    for (const k of preservedKeys) {
+                        if (existingRepeat && existingRepeat[k] !== undefined) preserved[k] = existingRepeat[k];
+                    }
+                    optimisticReminder.repeat = Object.keys(preserved).length > 0 ? preserved : undefined;
+                }
+            }
             optimisticReminder.estimatedPomodoroDuration = estimatedPomodoroDuration;
             // 看板状态直接使用kanbanStatus
             optimisticReminder.kanbanStatus = kanbanStatus;
@@ -3932,7 +3946,24 @@ export class QuickReminderDialog {
                         // 不再使用旧的 `customReminderTime` 存储；所有自定义提醒统一保存到 `reminderTimes`
                         reminder.customReminderPreset = customReminderPreset;
                         reminder.reminderTimes = this.customTimes.length > 0 ? [...this.customTimes] : undefined;
-                        reminder.repeat = this.repeatConfig.enabled ? this.repeatConfig : undefined;
+                        // 在保存时，合并/保留可能存在的实例元数据（例如 ghost 子任务使用的 completedInstances/completedTimes 等），
+                        // 防止“编辑全部实例”误清空这些历史数据。
+                        {
+                            const existingRepeat = this.reminder?.repeat || {};
+                            const preservedKeys = ['completedInstances', 'completedTimes', 'instanceModifications', 'excludeDates'];
+                            const preserved: any = {};
+
+                            if (this.repeatConfig && this.repeatConfig.enabled) {
+                                // 用户启用了/修改了重复设置：以用户配置为主，但保留已有的元数据（不覆盖）
+                                reminder.repeat = { ...existingRepeat, ...this.repeatConfig };
+                            } else {
+                                // 用户未启用重复：仅在已有元数据时保留这些字段（否则不创建 repeat 对象）
+                                for (const k of preservedKeys) {
+                                    if (existingRepeat && existingRepeat[k] !== undefined) preserved[k] = existingRepeat[k];
+                                }
+                                reminder.repeat = Object.keys(preserved).length > 0 ? preserved : undefined;
+                            }
+                        }
                         reminder.estimatedPomodoroDuration = estimatedPomodoroDuration;
                         reminder.isAvailableToday = isAvailableToday;
                         reminder.availableStartDate = availableStartDate;
