@@ -1730,7 +1730,7 @@ export class PomodoroTimer {
             if (!src.startsWith('blob:') && !src.startsWith('file:')) {
                 resolvedSrc = await resolveAudioPath(src);
             }
-            
+
             if (!resolvedSrc) {
                 console.warn('[PomodoroTimer] 无法解析音频路径:', src);
                 return false;
@@ -6301,49 +6301,7 @@ document.body.classList.remove('docked-mode');
                         }
                     }, 100);
                 } else if (this.isDocked) { // 吸附模式下的鼠标穿透处理
-                    const mouseEventsChannel = `pomodoro-mouse-${pomodoroWindow.id}`;
-                    const mouseHandler = (_event: any, ignore: boolean) => {
-                        if (pomodoroWindow && !pomodoroWindow.isDestroyed()) {
-                            try {
-                                // console.log('[PomodoroTimer] Mouse ignore:', ignore);
-                                if (ignore) {
-                                    pomodoroWindow.setIgnoreMouseEvents(true, { forward: true });
-                                } else {
-                                    pomodoroWindow.setIgnoreMouseEvents(false);
-                                }
-                            } catch (e) {
-                                console.warn('[PomodoroTimer] setIgnoreMouseEvents failed', e);
-                            }
-                        }
-                    };
-
-                    ipcMain?.removeAllListeners(mouseEventsChannel);
-                    ipcMain?.on(mouseEventsChannel, mouseHandler);
-
-                    // 默认设置为穿透，直到鼠标进入进度条
-                    pomodoroWindow.setIgnoreMouseEvents(true, { forward: true });
-
-                    // 注入鼠标事件监听脚本
-                    pomodoroWindow.webContents.executeJavaScript(`
-                        (function() {
-                            const ipc = window.require('electron').ipcRenderer;
-                            const channel = '${mouseEventsChannel}';
-                            const bar = document.querySelector('.progress-bar-container');
-                            if (bar) {
-                                bar.addEventListener('mouseenter', () => {
-                                    ipc.send(channel, false); 
-                                });
-                                bar.addEventListener('mouseleave', () => {
-                                    ipc.send(channel, true);
-                                });
-                            }
-                        })();
-                    `).catch((e: any) => console.error('[PomodoroTimer] Failed to inject mouse events script', e));
-
-                    // 确保清理
-                    pomodoroWindow.on('closed', () => {
-                        ipcMain?.removeListener(mouseEventsChannel, mouseHandler);
-                    });
+                    this.setupDockedMouseEvents(pomodoroWindow);
                 }
 
                 // 渲染完毕后推送当前状态
@@ -6488,6 +6446,12 @@ document.body.classList.remove('docked-mode');
                     }
                 } catch (err) {
                     console.warn('[PomodoroTimer] Failed to detect window mode during recovery', err);
+                }
+
+                // FIX: 如果恢复为吸附模式，需要设置鼠标穿透
+                if (timer.isDocked) {
+                    console.log('[PomodoroTimer] 恢复吸附模式，设置鼠标穿透');
+                    timer.setupDockedMouseEvents(win);
                 }
 
                 // Force UI update to match the restored state immediately
@@ -6695,8 +6659,78 @@ document.body.classList.remove('docked-mode');
                 ipcMain.removeListener(controlChannel, controlHandler);
             });
 
+            // 在吸附模式下启用鼠标可以穿透透明区域（仅进度条响应鼠标）
+            // FIX: 恢复孤儿窗口时也需要设置鼠标穿透
+            if (this.isDocked && pomodoroWindow && !pomodoroWindow.isDestroyed()) {
+                this.setupDockedMouseEvents(pomodoroWindow);
+            }
+
         } catch (e) {
             console.error('Error registering IPC listeners:', e);
+        }
+    }
+
+    /**
+     * 设置吸附模式下的鼠标穿透事件
+     * 使窗口透明区域鼠标穿透，仅进度条响应鼠标
+     */
+    private setupDockedMouseEvents(pomodoroWindow: any) {
+        if (!pomodoroWindow || pomodoroWindow.isDestroyed()) return;
+
+        try {
+            const electronReq = (window as any).require;
+            const remote = electronReq?.('@electron/remote') || electronReq?.('electron')?.remote;
+            const ipcMain = remote?.ipcMain;
+
+            if (!ipcMain) return;
+
+            const mouseEventsChannel = `pomodoro-mouse-${pomodoroWindow.id}`;
+            const mouseHandler = (_event: any, ignore: boolean) => {
+                if (pomodoroWindow && !pomodoroWindow.isDestroyed()) {
+                    try {
+                        if (ignore) {
+                            pomodoroWindow.setIgnoreMouseEvents(true, { forward: true });
+                        } else {
+                            pomodoroWindow.setIgnoreMouseEvents(false);
+                        }
+                    } catch (e) {
+                        console.warn('[PomodoroTimer] setIgnoreMouseEvents failed', e);
+                    }
+                }
+            };
+
+            ipcMain?.removeAllListeners(mouseEventsChannel); // 移除旧监听器
+            ipcMain?.on(mouseEventsChannel, mouseHandler);
+
+            // 默认设置为穿透，直到鼠标进入进度条
+            pomodoroWindow.setIgnoreMouseEvents(true, { forward: true });
+
+            // 注入鼠标事件监听脚本
+            pomodoroWindow.webContents.executeJavaScript(`
+                (function() {
+                    const ipc = window.require('electron').ipcRenderer;
+                    const channel = '${mouseEventsChannel}';
+                    const bar = document.querySelector('.progress-bar-container');
+                    if (bar) {
+                        bar.addEventListener('mouseenter', () => {
+                            ipc.send(channel, false); // 不忽略鼠标（捕获点击）
+                        });
+                        bar.addEventListener('mouseleave', () => {
+                            ipc.send(channel, true); // 忽略鼠标（穿透）
+                        });
+                    }
+                })();
+            `).catch((e: any) => console.error('[PomodoroTimer] Failed to inject mouse events script', e));
+
+            // 确保清理函数移除这个监听器
+            pomodoroWindow.once('closed', () => {
+                ipcMain?.removeListener(mouseEventsChannel, mouseHandler);
+            });
+            pomodoroWindow.once('destroyed', () => {
+                ipcMain?.removeListener(mouseEventsChannel, mouseHandler);
+            });
+        } catch (e) {
+            console.error('[PomodoroTimer] setupDockedMouseEvents error:', e);
         }
     }
 
@@ -7596,50 +7630,7 @@ document.body.classList.remove('docked-mode');
 
             // 在吸附模式下启用鼠标可以穿透透明区域（仅进度条响应鼠标）
             if (this.isDocked && pomodoroWindow && !pomodoroWindow.isDestroyed()) {
-                const mouseEventsChannel = `pomodoro-mouse-${pomodoroWindow.id}`;
-                const mouseHandler = (_event: any, ignore: boolean) => {
-                    if (pomodoroWindow && !pomodoroWindow.isDestroyed()) {
-                        try {
-                            if (ignore) {
-                                pomodoroWindow.setIgnoreMouseEvents(true, { forward: true });
-                            } else {
-                                pomodoroWindow.setIgnoreMouseEvents(false);
-                            }
-                        } catch (e) {
-                            console.warn('[PomodoroTimer] setIgnoreMouseEvents failed', e);
-                        }
-                    }
-                };
-
-                ipcMain?.removeAllListeners(mouseEventsChannel); // 移除旧监听器
-                ipcMain?.on(mouseEventsChannel, mouseHandler);
-
-                // 默认设置为穿透，直到鼠标进入进度条
-                pomodoroWindow.setIgnoreMouseEvents(true, { forward: true });
-
-                // 注入鼠标事件监听脚本
-                pomodoroWindow.webContents.executeJavaScript(`
-                    (function() {
-                        const ipc = window.require('electron').ipcRenderer;
-                        const channel = '${mouseEventsChannel}';
-                        const bar = document.querySelector('.progress-bar-container');
-                        if (bar) {
-                            bar.addEventListener('mouseenter', () => {
-                                ipc.send(channel, false); // 不忽略鼠标（捕获点击）
-                            });
-                            bar.addEventListener('mouseleave', () => {
-                                ipc.send(channel, true); // 忽略鼠标（穿透）
-                            });
-                        }
-                    })();
-                `).catch((e: any) => console.error('[PomodoroTimer] Failed to inject mouse events script', e));
-
-                // 确保清理函数移除这个监听器
-                // 之前的 removeAllListeners 已经处理了重复添加的问题
-                // 这里只需要确保窗口关闭时清理
-                pomodoroWindow.on('closed', () => {
-                    ipcMain?.removeListener(mouseEventsChannel, mouseHandler);
-                });
+                this.setupDockedMouseEvents(pomodoroWindow);
             }
 
         } catch (error) {
