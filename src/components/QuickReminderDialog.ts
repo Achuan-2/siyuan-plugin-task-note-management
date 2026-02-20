@@ -668,6 +668,115 @@ export class QuickReminderDialog {
             timeInput.value = this.reminder.time;
         }
 
+        // 如果当前任务可能为 ghost 子任务（无论是否为实例），则判断并仅隐藏开始日期、持续天数和结束日期（保留时间输入）
+        let isGhostSubtask = false;
+        try {
+            if (this.reminder) {
+                // 情况1：存在 originalId（由模板生成的 ghost）
+                if (this.reminder.originalId) {
+                    isGhostSubtask = true;
+                }
+                // 情况2：ID 以 _YYYY-MM-DD 结尾
+                else if (typeof this.reminder.id === 'string' && /_\d{4}-\d{2}-\d{2}$/.test(this.reminder.id)) {
+                    isGhostSubtask = true;
+                }
+                // 情况3：有 parentId 且自身无 date ——进一步检查父任务是否为重复原始任务
+                else if (this.reminder.parentId && !this.reminder.date) {
+                    try {
+                        const reminderData = await this.plugin.loadReminderData();
+                        const parent = reminderData[this.reminder.parentId];
+                        if (parent && parent.repeat && parent.repeat.enabled) {
+                            isGhostSubtask = true;
+                        }
+                    } catch (e) {
+                        // 忽略加载错误，不阻塞界面判断
+                    }
+                }
+            }
+        } catch (e) {
+            isGhostSubtask = false;
+        }
+
+        if (isGhostSubtask) {
+            try {
+                if (dateInput) {
+                    dateInput.style.display = 'none';
+                }
+                const clearStartBtn = this.dialog.element.querySelector('#quickClearStartDateBtn') as HTMLElement;
+                if (clearStartBtn) clearStartBtn.style.display = 'none';
+
+                if (endDateInput) {
+                    endDateInput.style.display = 'none';
+                }
+                const clearEndBtn = this.dialog.element.querySelector('#quickClearEndDateBtn') as HTMLElement;
+                if (clearEndBtn) clearEndBtn.style.display = 'none';
+
+                const durationInputEl = this.dialog.element.querySelector('#quickDurationDays') as HTMLElement;
+                if (durationInputEl) {
+                    const durationRow = durationInputEl.closest('div');
+                    if (durationRow && durationRow.parentElement) {
+                        // 隐藏整行（包含“持续”标签和单位）
+                        durationRow.style.display = 'none';
+                    } else {
+                        durationInputEl.style.display = 'none';
+                    }
+                }
+
+                // 移除开始/结束日期容器的 min-width 限制并隐藏它们（如果存在），以便在隐藏日期后布局更紧凑
+                try {
+                    const startDateContainer = dateInput ? (dateInput.parentElement as HTMLElement) : null;
+                    if (startDateContainer && startDateContainer.style) {
+                        // 隐藏整个开始日期容器，并清除 min-width 限制
+                        startDateContainer.style.display = 'none';
+                        startDateContainer.style.minWidth = '';
+                        const s = startDateContainer.getAttribute('style');
+                        if (s && s.includes('min-width')) {
+                            startDateContainer.setAttribute('style', s.replace(/min-width:\s*[^;]+;?/g, ''));
+                        }
+                    }
+
+                    const endDateContainer = endDateInput ? (endDateInput.parentElement as HTMLElement) : null;
+                    if (endDateContainer && endDateContainer.style) {
+                        // 隐藏整个结束日期容器，并清除 min-width 限制
+                        endDateContainer.style.display = 'none';
+                        endDateContainer.style.minWidth = '';
+                        const s2 = endDateContainer.getAttribute('style');
+                        if (s2 && s2.includes('min-width')) {
+                            endDateContainer.setAttribute('style', s2.replace(/min-width:\s*[^;]+;?/g, ''));
+                        }
+                    }
+                } catch (e) {
+                    // ignore
+                }
+
+                // 移除时间组件父容器的 margin-left:auto（如果存在），避免在隐藏日期后时间被推到右侧
+                try {
+                    const timeInputContainer = timeInput ? (timeInput.closest('div') as HTMLElement) : null;
+                    if (timeInputContainer && timeInputContainer.style) {
+                        timeInputContainer.style.marginLeft = '';
+                        const s2 = timeInputContainer.getAttribute('style');
+                        if (s2 && s2.includes('margin-left')) {
+                            timeInputContainer.setAttribute('style', s2.replace(/margin-left:\s*[^;]+;?/g, ''));
+                        }
+                    }
+                    // 同样移除结束时间父容器的 margin-left:auto（如果存在）
+                    const endTimeInputContainer = endTimeInput ? (endTimeInput.closest('div') as HTMLElement) : null;
+                    if (endTimeInputContainer && endTimeInputContainer.style) {
+                        endTimeInputContainer.style.marginLeft = '';
+                        const s3 = endTimeInputContainer.getAttribute('style');
+                        if (s3 && s3.includes('margin-left')) {
+                            endTimeInputContainer.setAttribute('style', s3.replace(/margin-left:\s*[^;]+;?/g, ''));
+                        }
+                    }
+                } catch (e) {
+                    // ignore
+                }
+            } catch (e) {
+                // 忽略任何 DOM 查询异常，保持界面可用
+                console.warn('隐藏实例日期字段时出错:', e);
+            }
+        }
+
         // 结束时间/日期也按存在与否分别填充
         if (this.reminder.endDate && endDateInput) {
             endDateInput.value = this.reminder.endDate;
@@ -4373,7 +4482,10 @@ export class QuickReminderDialog {
                 throw new Error('原始事件不存在');
             }
 
-            // 初始化实例修改列表
+            // 确保 repeat 结构存在并初始化实例修改列表，避免访问未定义属性时报错
+            if (!reminderData[originalId].repeat) {
+                reminderData[originalId].repeat = {};
+            }
             if (!reminderData[originalId].repeat.instanceModifications) {
                 reminderData[originalId].repeat.instanceModifications = {};
             }
