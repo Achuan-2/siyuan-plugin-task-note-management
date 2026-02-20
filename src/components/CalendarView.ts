@@ -9,6 +9,7 @@ import { refreshSql, getBlockByID, sql, updateBlock, getBlockKramdown, updateBin
 import { getLocalDateString, getLocalDateTime, getLocalDateTimeString, compareDateStrings, getLogicalDateString, getRelativeDateString, getDayStartAdjustedDate } from "../utils/dateUtils";
 import { QuickReminderDialog } from "./QuickReminderDialog";
 import { CategoryManager, Category } from "../utils/categoryManager";
+import { confirmDialog } from "../libs/dialog";
 import { ProjectManager } from "../utils/projectManager";
 import { StatusManager } from "../utils/statusManager";
 import { CategoryManageDialog } from "./CategoryManageDialog";
@@ -1078,7 +1079,7 @@ export class CalendarView {
             },
             multiMonthMaxColumns: 1, // force a single column
             headerToolbar: {
-                left: 'prev,next myToday',
+                left: 'prev,next myToday jumpTo',
                 center: 'title',
                 right: ''
             },
@@ -1101,6 +1102,49 @@ export class CalendarView {
                                 todayEl.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
                             }
                         }, 100);
+                    }
+                },
+                jumpTo: {
+                    text: i18n("jumpToDate") || "跳转到",
+                    click: () => {
+                        const activeDate = getLocalDateString(this.calendar.getDate());
+                        const inputContainer = document.createElement('div');
+                        inputContainer.style.display = 'flex';
+                        inputContainer.style.gap = '8px';
+                        inputContainer.style.alignItems = 'center';
+                        inputContainer.innerHTML = `<input type="date" id="reminder-jump-to-date" class="b3-text-field" value="${activeDate}" max="9999-12-31" style="min-width:160px;">`;
+
+                        confirmDialog({
+                            title: i18n("jumpToDate") || "跳转到日期",
+                            content: inputContainer,
+                            confirm: (ele) => {
+                                const inputEl = (ele.querySelector('#reminder-jump-to-date') || document.getElementById('reminder-jump-to-date')) as HTMLInputElement;
+                                if (!inputEl || !inputEl.value) {
+                                    showMessage(i18n("pleaseEnterDate") || "请选择一个日期", 3000, "warning");
+                                    return;
+                                }
+                                const target = new Date(inputEl.value + 'T00:00:00');
+                                if (isNaN(target.getTime())) {
+                                    showMessage(i18n("invalidDate") || "无效的日期", 3000, "error");
+                                    return;
+                                }
+                                this.calendar.gotoDate(target);
+                            }
+                        });
+
+                        // 将焦点设置到输入框并支持回车提交
+                        setTimeout(() => {
+                            const el = document.getElementById('reminder-jump-to-date') as HTMLInputElement;
+                            if (el) {
+                                el.focus();
+                                el.addEventListener('keydown', (e) => {
+                                    if (e.key === 'Enter') {
+                                        const confirmBtn = document.querySelector('.b3-dialog__action .b3-button:last-child') as HTMLButtonElement;
+                                        if (confirmBtn) confirmBtn.click();
+                                    }
+                                }, { once: true });
+                            }
+                        }, 50);
                     }
                 }
             },
