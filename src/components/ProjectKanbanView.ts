@@ -13,6 +13,7 @@ import { getSolarDateLunarString } from "../utils/lunarUtils";
 import { QuickReminderDialog } from "./QuickReminderDialog";
 import { BlockBindingDialog } from "./BlockBindingDialog";
 import { getAllReminders, saveReminders } from '../utils/icsSubscription';
+import { VipManager } from "../utils/vip";
 
 import { PasteTaskDialog } from "./PasteTaskDialog";
 import { ProjectDialog } from "./ProjectDialog";
@@ -373,6 +374,8 @@ export class ProjectKanbanView {
                 this.toggleMultiSelectMode();
             }
         });
+
+        this.checkVip();
     }
 
     private async loadProject() {
@@ -425,6 +428,94 @@ export class ProjectKanbanView {
         } catch (error) {
             console.error('切换看板模式失败:', error);
             showMessage('切换看板模式失败');
+        }
+    }
+
+    private checkVip() {
+        const isVip = VipManager.isVip(this.plugin);
+        const overlay = this.container.querySelector('.vip-mask-overlay');
+        const prompt = this.container.querySelector('.vip-upgrade-prompt');
+
+        if (isVip) {
+            if (overlay) overlay.remove();
+            if (prompt) prompt.remove();
+            return;
+        }
+
+        // 显示遮罩层和升级提示
+        this.showVipUpgradePrompt();
+    }
+
+    private showVipUpgradePrompt() {
+        this.container.style.position = 'relative';
+
+        // 1. 透明遮罩层，阻断所有点击
+        let overlay = this.container.querySelector('.vip-mask-overlay') as HTMLElement;
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.className = 'vip-mask-overlay';
+            overlay.style.cssText = `
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(255, 255, 255, 0.01);
+                z-index: 10;
+                cursor: not-allowed;
+            `;
+            this.container.appendChild(overlay);
+        }
+
+        // 2. 居中的升级提示卡片
+        let prompt = this.container.querySelector('.vip-upgrade-prompt') as HTMLElement;
+        if (!prompt) {
+            prompt = document.createElement('div');
+            prompt.className = 'vip-upgrade-prompt';
+            prompt.style.cssText = `
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: var(--b3-theme-surface);
+                color: var(--b3-theme-on-surface);
+                padding: 24px 40px;
+                border-radius: 12px;
+                box-shadow: var(--b3-dialog-shadow);
+                border: 1px solid var(--b3-theme-primary-light);
+                z-index: 10;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 16px;
+                cursor: pointer;
+                transition: transform 0.2s ease;
+            `;
+            prompt.innerHTML = `
+                <div style="font-size: 40px;">👑</div>
+                <div style="font-weight: bold; font-size: 18px; color: var(--b3-theme-primary);">
+                    ${i18n('vipOnlyFeature') || '此功能仅限 VIP 用户使用'}
+                </div>
+                <div style="font-size: 14px; opacity: 0.8; text-align: center;">
+                    ${i18n('upgradeToVipTip') || '升级到 VIP 以解锁更多高级功能，让任务管理更高效'}
+                </div>
+                <button class="b3-button b3-button--text" style="padding: 8px 24px; font-weight: bold;">
+                    ${i18n('upgradeNow') || '立即升级'}
+                </button>
+            `;
+
+            prompt.addEventListener('mouseenter', () => {
+                prompt.style.transform = 'translate(-50%, -52%)';
+            });
+            prompt.addEventListener('mouseleave', () => {
+                prompt.style.transform = 'translate(-50%, -50%)';
+            });
+            prompt.addEventListener('click', () => {
+                if (this.plugin && typeof this.plugin.openVipDialog === 'function') {
+                    this.plugin.openVipDialog();
+                }
+            });
+            this.container.appendChild(prompt);
         }
     }
 
@@ -6174,6 +6265,7 @@ export class ProjectKanbanView {
 
         // 恢复滚动位置（如果有的话）
         this.restoreScrollState();
+        this.checkVip();
     }
 
     private async renderCustomGroupKanban() {

@@ -23,6 +23,7 @@
     import { syncHolidays } from './utils/icsSubscription';
     import { PomodoroManager } from './utils/pomodoroManager';
     import { resolveAudioPath } from './utils/audioUtils';
+    import VipPanel from './components/VipPanel.svelte';
 
     export let plugin;
 
@@ -168,7 +169,6 @@
     async function toggleSettingValue(key: string, value: any) {
         if (!settings.audioFileLists) settings.audioFileLists = {};
         if (!settings.audioFileLists[key]) settings.audioFileLists[key] = [];
-        const list: AudioFileItem[] = settings.audioFileLists[key];
 
         // 检查是否是在线链接，如果是则点击时自动下载
         if (typeof value === 'string' && value.startsWith('http')) {
@@ -286,6 +286,10 @@
 
     // 定义设置分组
     let groups: ISettingGroup[] = [
+        {
+            name: '👑 VIP',
+            items: [], // 使用 VipPanel 组件渲染
+        },
         {
             name: i18n('sidebarSettings'),
             items: [
@@ -1125,23 +1129,14 @@
             ],
         },
         {
-            name: '❤️用爱发电',
+            name: '❤️催更',
             items: [
                 {
                     key: 'donateInfo',
                     value: '',
                     type: 'hint',
-                    title: '用爱发电',
+                    title: '欢迎打赏催更',
                     description: `
-                        项目 GitHub 地址: <a href="https://github.com/achuan-2/siyuan-plugin-task-note-management">https://github.com/achuan-2/siyuan-plugin-task-note-management</a>
-                        <p style="margin-top:12px;">如果喜欢我的插件，欢迎给GitHub仓库点star和微信赞赏，这会激励我继续完善此插件和开发新插件。</p>
-
-                        <p style="margin-top:12px;">维护插件费时费力，个人时间和精力有限，开源只是分享，不等于我要浪费我的时间免费帮用户实现ta需要的功能，</p>
-
-                        <p style="margin-top:12px;">我需要的功能我会慢慢改进（打赏可以催更），有些我觉得可以改进、但是现阶段不必要的功能需要打赏才改进（会标注打赏标签和需要打赏金额），而不需要的功能、实现很麻烦的功能会直接关闭issue不考虑实现，我没实现的功能欢迎有大佬来pr</p>
-
-                        <p style="margin-top:12px;">累积赞赏50元的朋友如果想加我微信，可以在赞赏的时候备注微信号，或者发邮件到<a href="mailto:achuan-2@outlook.com">achuan-2@outlook.com</a>来进行好友申请</p>
-
                         <div style="margin-top:12px;">
                             <img src="plugins/siyuan-plugin-task-note-management/assets/donate.png" alt="donate" style="max-width:260px; height:auto; border:1px solid var(--b3-border-color);"/>
 
@@ -1200,6 +1195,11 @@
 
         // 更新设置并保存
         const oldValue = settings[key];
+        if (key === 'vipKey') {
+            // VIP 逻辑现在由 VipPanel 处理
+            return;
+        }
+
         settings[key] = newValue;
         settings = settings; // 触发布尔响应式（如果需要）
 
@@ -2050,6 +2050,9 @@
     <div class="config__tab-wrap">
         <!-- 手动按项目顺序渲染，保证 custom-audio 项在正确位置 -->
         <div class="config__tab-container" data-name={currentGroup?.name || ''}>
+            {#if currentGroup?.name === '👑 VIP'}
+                <VipPanel {plugin} />
+            {/if}
             {#each currentGroup?.items || [] as item (item.key)}
                 {#if !item.hidden}
                     {#if item.type === 'custom-audio'}

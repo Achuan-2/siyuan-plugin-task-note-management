@@ -4,9 +4,9 @@ import {
     showMessage,
     Dialog,
     openTab,
-    openWindow,
     getFrontend,
 } from "siyuan";
+import { VipManager } from "./utils/vip";
 import "./index.scss";
 
 import { QuickReminderDialog } from "./components/QuickReminderDialog";
@@ -30,6 +30,7 @@ import SettingPanelComponent from "./SettingPanel.svelte";
 import { exportIcsFile, uploadIcsToCloud } from "./utils/icsUtils";
 import { getFileStat, getFile, hasNotifiedToday, markNotifiedToday } from "./api";
 import { resolveAudioPath } from "./utils/audioUtils";
+import { showVipDialog } from "./components/VipDialog";
 
 export const SETTINGS_FILE = "reminder-settings.json";
 export const PROJECT_DATA_FILE = "project.json";
@@ -41,6 +42,7 @@ export const POMODORO_RECORD_DATA_FILE = "pomodoro_record.json";
 export const HABIT_GROUP_DATA_FILE = "habitGroup.json";
 export const STATUSES_DATA_FILE = "statuses.json";
 export const HOLIDAY_DATA_FILE = "holiday.json";
+export const LICENSE_DATA_FILE = "license.json";
 
 export interface AudioFileItem {
     path: string;
@@ -240,6 +242,7 @@ export default class ReminderPlugin extends Plugin {
     private notifiedHabits: Map<string, boolean> = new Map();
 
     public settings: any;
+    public vip: any = { vipKeys: [], isVip: false, expireDate: '', freeTrialUsed: false };
 
     /**
      * 加载提醒数据，支持缓存
@@ -515,6 +518,41 @@ export default class ReminderPlugin extends Plugin {
         return this.subscriptionTasksCache[id];
     }
 
+    /**
+     * 加载 VIP 授权数据，支持缓存
+     * @param update 是否强制更新
+     */
+    public async loadVipData(update: boolean = false): Promise<any> {
+        if (update || !this.vip || !this.vip.vipKeys || this.vip.vipKeys.length === 0) {
+            try {
+                const data = await this.loadData(LICENSE_DATA_FILE);
+                if (data && data.vipKeys && data.vipKeys.length > 0) {
+                    this.vip = data;
+                } else {
+                    this.vip = { vipKeys: [], isVip: false, expireDate: '', freeTrialUsed: data?.freeTrialUsed || false };
+                }
+
+                // 验证状态
+                const status = VipManager.checkAndUpdateVipStatus(this);
+                this.vip.isVip = status.isVip;
+                this.vip.expireDate = status.expireDate;
+            } catch (error) {
+                console.error('Failed to load VIP data:', error);
+                this.vip = { vipKeys: [], isVip: false, expireDate: '', freeTrialUsed: false };
+            }
+        }
+        return this.vip;
+    }
+
+    /**
+     * 保存 VIP 授权数据
+     * @param data VIP 数据
+     */
+    public async saveVipData(data: any): Promise<void> {
+        this.vip = data;
+        await this.saveData(LICENSE_DATA_FILE, data);
+    }
+
 
 
     async onload() {
@@ -755,6 +793,10 @@ export default class ReminderPlugin extends Plugin {
         });
     }
 
+    public openVipDialog() {
+        showVipDialog(this);
+    }
+
     // 加载设置的封装函数
     async loadSettings() {
         if (this.settings) {
@@ -764,6 +806,11 @@ export default class ReminderPlugin extends Plugin {
         const data = await this.loadData(SETTINGS_FILE) || {};
         // 合并默认设置和用户设置，确保所有设置项都有值
         const settings = { ...DEFAULT_SETTINGS, ...data };
+
+
+        // 验证 VIP 状态 (从独立文件加载)
+        await this.loadVipData();
+
         // 确保 weekStartDay 在加载后是数字（可能以字符串形式保存）
         if (typeof settings.weekStartDay === 'string') {
             const parsed = parseInt(settings.weekStartDay, 10);

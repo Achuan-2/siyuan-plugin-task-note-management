@@ -129,7 +129,7 @@ export const simpleDialog = (args: {
 }) => {
     const dialog = new Dialog({
         title: args.title,
-        content: `<div class="dialog-content" style="display: flex; height: 100%;"/>`,
+        content: `<div class="dialog-content" style="padding: 16px; height: 100%;"/>`,
         width: args.width,
         height: args.height,
         destroyCallback: args.callback
