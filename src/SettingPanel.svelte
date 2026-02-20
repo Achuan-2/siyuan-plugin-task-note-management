@@ -1228,7 +1228,7 @@
                 try {
                     // Must transform raw settings into simplified structure first
                     const pomodoroSettings = await plugin.getPomodoroSettings(settings);
-                    PomodoroManager.getInstance().updateSettings(pomodoroSettings);
+                    await PomodoroManager.getInstance().updateSettings(pomodoroSettings);
                 } catch (error) {
                     console.error('更新番茄钟设置失败:', error);
                 }

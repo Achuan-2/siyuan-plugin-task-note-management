@@ -1736,7 +1736,7 @@ export class PomodoroTimer {
 
             const script = `(async function(){
                 try {
-                    const id = 'pomodoro-audio-' + encodeURIComponent('${safeSrc}');
+                    const id = 'pomodoro-audio-' + encodeURIComponent('${safeSrc}').replace(/[^a-zA-Z0-9]/g, '_');
                     let a = document.getElementById(id);
                     if (!a) {
                         a = document.createElement('audio');
@@ -1747,11 +1747,50 @@ export class PomodoroTimer {
                     }
                     a.loop = ${loop};
                     a.volume = ${volume};
-                    if (a.src !== '${safeSrc}') a.src = '${safeSrc}';
-                    try { a.currentTime = 0; } catch(e) {}
-                    await a.play();
-                    return {ok:true};
-                } catch (e) { return {ok:false, err: (e && e.name) ? e.name : (e && e.message) ? e.message : String(e)}; }
+                    
+                    // 如果 src 相同且可以播放，直接播放
+                    if (a.src === '${safeSrc}' && a.readyState >= 2) {
+                        try { a.currentTime = 0; } catch(e) {}
+                        await a.play();
+                        return {ok:true};
+                    }
+                    
+                    // 否则等待加载完成
+                    return new Promise((resolve) => {
+                        const onCanPlay = async () => {
+                            a.removeEventListener('canplaythrough', onCanPlay);
+                            a.removeEventListener('error', onError);
+                            try {
+                                try { a.currentTime = 0; } catch(e) {}
+                                await a.play();
+                                resolve({ok:true});
+                            } catch (playErr) {
+                                resolve({ok:false, err: playErr.name || playErr.message || 'play failed'});
+                            }
+                        };
+                        const onError = (e) => {
+                            a.removeEventListener('canplaythrough', onCanPlay);
+                            a.removeEventListener('error', onError);
+                            const errMsg = a.error ? \`\${a.error.code}:\${a.error.message || 'unknown'}\` : 'load error';
+                            resolve({ok:false, err: errMsg});
+                        };
+                        
+                        a.addEventListener('canplaythrough', onCanPlay);
+                        a.addEventListener('error', onError);
+                        
+                        // 设置超时
+                        setTimeout(() => {
+                            a.removeEventListener('canplaythrough', onCanPlay);
+                            a.removeEventListener('error', onError);
+                            resolve({ok:false, err: 'timeout'});
+                        }, 5000);
+                        
+                        a.src = '${safeSrc}';
+                        a.load();
+                    });
+                } catch (e) { 
+                    return {ok:false, err: (e && e.name) ? e.name : (e && e.message) ? e.message : String(e)}; 
+                }
             })()`;
 
             const res = await win.webContents.executeJavaScript(script, true);
@@ -1760,7 +1799,7 @@ export class PomodoroTimer {
             }
             // 如果返回错误，记录详细信息
             if (res && res.err) {
-                console.warn('[PomodoroTimer] BrowserWindow 音频播放失败:', res.err);
+                console.warn('[PomodoroTimer] BrowserWindow 音频播放失败:', res.err, 'src:', src);
             }
             return false;
         } catch (e) {
@@ -6676,9 +6715,16 @@ document.body.classList.remove('docked-mode');
             const remote = electronReq?.('@electron/remote') || electronReq?.('electron')?.remote;
             const ipcMain = remote?.ipcMain;
 
-            if (!ipcMain) return;
+            if (!ipcMain) {
+                console.warn('[PomodoroTimer] ipcMain not available');
+                return;
+            }
 
             const mouseEventsChannel = `pomodoro-mouse-${pomodoroWindow.id}`;
+            
+            // 先移除旧监听器，避免重复
+            ipcMain.removeAllListeners(mouseEventsChannel);
+            
             const mouseHandler = (_event: any, ignore: boolean) => {
                 if (pomodoroWindow && !pomodoroWindow.isDestroyed()) {
                     try {
@@ -6693,36 +6739,58 @@ document.body.classList.remove('docked-mode');
                 }
             };
 
-            ipcMain?.removeAllListeners(mouseEventsChannel); // 移除旧监听器
-            ipcMain?.on(mouseEventsChannel, mouseHandler);
-
-            // 默认设置为穿透，直到鼠标进入进度条
-            pomodoroWindow.setIgnoreMouseEvents(true, { forward: true });
+            ipcMain.on(mouseEventsChannel, mouseHandler);
+            console.log('[PomodoroTimer] Mouse events listener registered');
 
             // 注入鼠标事件监听脚本
             pomodoroWindow.webContents.executeJavaScript(`
                 (function() {
-                    const ipc = window.require('electron').ipcRenderer;
-                    const channel = '${mouseEventsChannel}';
-                    const bar = document.querySelector('.progress-bar-container');
-                    if (bar) {
+                    try {
+                        const ipc = window.require('electron').ipcRenderer;
+                        const channel = '${mouseEventsChannel}';
+                        const bar = document.querySelector('.progress-bar-container');
+                        
+                        if (!bar) {
+                            console.error('[PomodoroTimer] Progress bar container not found');
+                            return;
+                        }
+                        
+                        // 移除旧的事件监听器（如果存在）
+                        bar.onmouseenter = null;
+                        bar.onmouseleave = null;
+                        
                         bar.addEventListener('mouseenter', () => {
+                            console.log('[PomodoroTimer] Mouse entered progress bar');
                             ipc.send(channel, false); // 不忽略鼠标（捕获点击）
                         });
                         bar.addEventListener('mouseleave', () => {
+                            console.log('[PomodoroTimer] Mouse left progress bar');
                             ipc.send(channel, true); // 忽略鼠标（穿透）
                         });
+                        
+                        // 检查鼠标是否已经在进度条上
+                        const rect = bar.getBoundingClientRect();
+                        const isMouseOver = document.elementFromPoint(rect.left + rect.width/2, rect.top + rect.height/2) === bar;
+                        
+                        if (isMouseOver) {
+                            console.log('[PomodoroTimer] Mouse already over progress bar');
+                            ipc.send(channel, false);
+                        } else {
+                            // 默认设置为穿透
+                            ipc.send(channel, true);
+                        }
+                    } catch (e) {
+                        console.error('[PomodoroTimer] Error in mouse events script:', e);
                     }
                 })();
             `).catch((e: any) => console.error('[PomodoroTimer] Failed to inject mouse events script', e));
 
             // 确保清理函数移除这个监听器
-            pomodoroWindow.once('closed', () => {
+            const cleanup = () => {
                 ipcMain?.removeListener(mouseEventsChannel, mouseHandler);
-            });
-            pomodoroWindow.once('destroyed', () => {
-                ipcMain?.removeListener(mouseEventsChannel, mouseHandler);
-            });
+            };
+            pomodoroWindow.once('closed', cleanup);
+            pomodoroWindow.once('destroyed', cleanup);
         } catch (e) {
             console.error('[PomodoroTimer] setupDockedMouseEvents error:', e);
         }
@@ -7623,8 +7691,13 @@ document.body.classList.remove('docked-mode');
             }
 
             // 在吸附模式下启用鼠标可以穿透透明区域（仅进度条响应鼠标）
+            // FIX: 延迟执行确保 DOM 完全加载并稳定
             if (this.isDocked && pomodoroWindow && !pomodoroWindow.isDestroyed()) {
-                this.setupDockedMouseEvents(pomodoroWindow);
+                setTimeout(() => {
+                    if (this.isDocked && !pomodoroWindow.isDestroyed()) {
+                        this.setupDockedMouseEvents(pomodoroWindow);
+                    }
+                }, 500);
             }
 
         } catch (error) {
@@ -7832,12 +7905,14 @@ document.body.classList.remove('mini-mode');
      * 并且音频会在 BrowserWindow 内播放，因此不需要在主窗口维护音频权限
      * 这个方法主要用于兼容性，实际上 initializeAudioPlayback 会在 BrowserWindow 模式下直接返回
      */
-    public updateSettings(settings: any) {
+    public async updateSettings(settings: any) {
         this.settings = settings;
 
-        // Update window content to reflect new settings (like dock position)
-        if (PomodoroTimer.browserWindowInstance && !PomodoroTimer.browserWindowInstance.isDestroyed()) {
-            this.updateBrowserWindowContent(PomodoroTimer.browserWindowInstance);
+        const pomodoroWindow = PomodoroTimer.browserWindowInstance;
+        if (pomodoroWindow && !pomodoroWindow.isDestroyed()) {
+            // Update window content to reflect new settings (like dock position)
+            // updateBrowserWindowContent 内部会根据 this.isDocked 状态设置鼠标穿透
+            await this.updateBrowserWindowContent(pomodoroWindow);
         }
     }
 

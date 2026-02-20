@@ -4,9 +4,21 @@ import { getFileBlob } from "../api";
 const audioCache: Record<string, string> = {};
 
 /**
+ * 获取思源服务端的基础 URL
+ */
+function getSiYuanBaseUrl(): string {
+    // 优先使用当前窗口的 location
+    if (typeof window !== 'undefined' && window.location) {
+        const { protocol, host } = window.location;
+        return `${protocol}//${host}`;
+    }
+    return '';
+}
+
+/**
  * 将 SiYuan 里面的文件路径转换为可播放的 URL
  * 如果是 /data/storage/ 路径，转换成 Blob URL
- * 如果是 /plugins/ 路径，保持不变
+ * 如果是 /plugins/ 路径，转换为完整 URL
  */
 export async function resolveAudioPath(path: string): Promise<string> {
     if (!path) return "";
@@ -32,7 +44,17 @@ export async function resolveAudioPath(path: string): Promise<string> {
         }
     }
 
-    // 其他路径（如插件自带音频 /plugins/...）SiYuan Web Server 通常能直接处理
+    // 插件路径需要转换为完整 URL，以便在 BrowserWindow (data:text/html) 中使用
+    if (path.startsWith("/plugins/")) {
+        const baseUrl = getSiYuanBaseUrl();
+        if (baseUrl) {
+            const fullUrl = baseUrl + path;
+            audioCache[path] = fullUrl;
+            return fullUrl;
+        }
+    }
+
+    // 其他路径保持不变
     return path;
 }
 
