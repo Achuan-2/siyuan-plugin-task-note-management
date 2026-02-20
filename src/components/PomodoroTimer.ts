@@ -1725,7 +1725,18 @@ export class PomodoroTimer {
                 return false;
             }
 
-            const safeSrc = src.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/`/g, '\\`');
+            // 使用 resolveAudioPath 解析路径，支持 petal 文件夹中的文件
+            let resolvedSrc = src;
+            if (!src.startsWith('blob:') && !src.startsWith('file:')) {
+                resolvedSrc = await resolveAudioPath(src);
+            }
+            
+            if (!resolvedSrc) {
+                console.warn('[PomodoroTimer] 无法解析音频路径:', src);
+                return false;
+            }
+
+            const safeSrc = resolvedSrc.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/`/g, '\\`');
             const loop = !!(opts && opts.loop);
             const volume = typeof (opts && opts.volume) === 'number' ? (opts!.volume) : 1;
 
@@ -6223,9 +6234,8 @@ export class PomodoroTimer {
                 else src = this.settings.breakSound;
 
                 if (src) {
-                    try { src = new URL(src, window.location.href).href; } catch (e) { }
-                    setTimeout(() => {
-                        this.playSoundInBrowserWindow(src, { loop: true, volume: this.backgroundVolume });
+                    setTimeout(async () => {
+                        await this.playSoundInBrowserWindow(src, { loop: true, volume: this.backgroundVolume });
                     }, 500);
                 }
             }
@@ -7523,10 +7533,9 @@ document.body.classList.remove('docked-mode');
                 else src = this.settings.breakSound;
 
                 if (src) {
-                    try { src = new URL(src, window.location.href).href; } catch (e) { }
-                    // Slight delay to ensure DOM is ready
-                    setTimeout(() => {
-                        this.playSoundInBrowserWindow(src, { loop: true, volume: this.backgroundVolume });
+                    // Slight delay to ensure DOM is ready, and resolve audio path before playing
+                    setTimeout(async () => {
+                        await this.playSoundInBrowserWindow(src, { loop: true, volume: this.backgroundVolume });
                     }, 500);
                 }
             }
