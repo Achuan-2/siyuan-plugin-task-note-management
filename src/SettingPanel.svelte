@@ -654,7 +654,7 @@
                     key: 'pomodoroDockPosition',
                     value: settings.pomodoroDockPosition,
                     type: 'select',
-                    title: i18n('pomodoroDockPosition') || '番茄钟吸附位置',
+                    title: i18n('pomodoroDockPosition') || '番茄钟吸附模式位置',
                     description:
                         i18n('pomodoroDockPositionDesc') || '设置番茄钟窗口吸附在屏幕的位置',
                     options: {

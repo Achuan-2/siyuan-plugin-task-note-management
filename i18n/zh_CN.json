@@ -514,7 +514,7 @@
     "openWindowFailed": "打开窗口失败",
     "pomodoroWindowUpdated": "已更新独立窗口中的番茄钟",
     "pomodoroSettingsApplied": "番茄钟设置已应用到打开的计时器",
-    "pomodoroDockPosition": "番茄钟吸附位置",
+    "pomodoroDockPosition": "番茄钟吸附模式位置",
     "pomodoroDockPositionDesc": "设置番茄钟窗口吸附在屏幕的位置",
     "top": "顶部",
     "left": "左侧",
