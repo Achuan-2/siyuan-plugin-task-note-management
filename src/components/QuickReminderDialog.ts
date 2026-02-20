@@ -672,16 +672,8 @@ export class QuickReminderDialog {
         let isGhostSubtask = false;
         try {
             if (this.reminder) {
-                // 情况1：存在 originalId（由模板生成的 ghost）
-                if (this.reminder.originalId) {
-                    isGhostSubtask = true;
-                }
-                // 情况2：ID 以 _YYYY-MM-DD 结尾
-                else if (typeof this.reminder.id === 'string' && /_\d{4}-\d{2}-\d{2}$/.test(this.reminder.id)) {
-                    isGhostSubtask = true;
-                }
-                // 情况3：有 parentId 且自身无 date ——进一步检查父任务是否为重复原始任务
-                else if (this.reminder.parentId && !this.reminder.date) {
+
+                if (this.reminder.parentId) {
                     try {
                         const reminderData = await this.plugin.loadReminderData();
                         const parent = reminderData[this.reminder.parentId];
