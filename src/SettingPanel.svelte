@@ -175,7 +175,6 @@
             const localUrl = await downloadOnlineAudio(value, key);
             if (!localUrl) return; // 下载失败则跳过后续操作
 
-
             if (!settings.audioSelected) settings.audioSelected = {};
             settings.audioSelected[key] = localUrl;
 
@@ -2069,8 +2068,7 @@
                                     {#if audioFilesForKey.length > 0}
                                         {#each audioFilesForKey.filter(a => a.path) as audio}
                                             {@const isSelected =
-                                                settings.audioSelected?.[item.key] ===
-                                                audio.path}
+                                                settings.audioSelected?.[item.key] === audio.path}
                                             <div
                                                 class="audio-row {isSelected
                                                     ? 'audio-row--selected'
