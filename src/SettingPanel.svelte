@@ -661,6 +661,7 @@
                         right: i18n('right') || '右侧',
                         left: i18n('left') || '左侧',
                         top: i18n('top') || '顶部',
+                        bottom: i18n('bottom') || '底部',
                     },
                 },
                 {
@@ -2267,6 +2268,7 @@
         height: 100%;
         overflow: auto;
         padding: 2px;
+        background-color: var(--b3-theme-background);
     }
 
     /* audio picker 内联于普通设置项同一行 */

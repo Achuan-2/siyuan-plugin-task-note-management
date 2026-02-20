@@ -844,7 +844,7 @@ export class PomodoroTimer {
         const isMobile = frontend.endsWith('mobile');
         const isBrowserDesktop = frontend === 'browser-desktop';
         
-        const title = i18n('randomNotificationSettings') || '微休息';
+        const title =  '微休息';
         const message = i18n('randomRest', { duration: this.settings.randomNotificationBreakDuration }) || 'Time for a quick break!';
         const autoCloseDelay = Number(this.settings.randomNotificationBreakDuration) || 0;
         
@@ -2101,8 +2101,8 @@ export class PomodoroTimer {
             align-items: center;
             justify-content: center;
         `;
-        this.minimizeBtn.innerHTML = '🔽';
-        this.minimizeBtn.title = i18n('minimize') || '最小化'; // i18n
+        this.minimizeBtn.innerHTML = '⭕';
+        this.minimizeBtn.title = i18n('miniMode'); 
         this.minimizeBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -2334,9 +2334,47 @@ export class PomodoroTimer {
             this.close();
         });
 
-        headerButtons.appendChild(switchContainer);
+        // 创建吸附模式按钮（DOM窗口专用）
+        const dockBtn = document.createElement('button');
+        dockBtn.className = 'pomodoro-dock-btn';
+        dockBtn.style.cssText = `
+            background: none;
+            border: none;
+            color: var(--b3-theme-on-surface);
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            font-size: 14px;
+            line-height: 1;
+            opacity: 0.7;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        `;
+        dockBtn.innerHTML = '🧲';
+        dockBtn.title = i18n('dockToRight') || '吸附到屏幕边缘';
+        dockBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.toggleDOMWindowDock();
+        });
+        dockBtn.addEventListener('mouseenter', () => {
+            dockBtn.style.opacity = '1';
+            dockBtn.style.transform = 'scale(1.1)';
+        });
+        dockBtn.addEventListener('mouseleave', () => {
+            dockBtn.style.opacity = '0.7';
+            dockBtn.style.transform = 'scale(1)';
+        });
+
+        // 左侧按钮：最小化 + 吸附 + 模式切换
+        title.appendChild(this.minimizeBtn);
+        title.appendChild(dockBtn);
+        title.appendChild(switchContainer);
+        
         headerButtons.appendChild(this.expandToggleBtn);
-        headerButtons.appendChild(this.fullscreenBtn); // 添加全屏按钮
+        headerButtons.appendChild(this.fullscreenBtn);
         headerButtons.appendChild(closeBtn);
         header.appendChild(title);
         header.appendChild(headerButtons);
@@ -4079,6 +4117,11 @@ export class PomodoroTimer {
             } catch (e) {
                 // 忽略DOM更新错误
             }
+        }
+
+        // 更新DOM窗口吸附模式的进度条
+        if (this.isDocked && !this.isTabMode && !(this.container as any)?.webContents) {
+            this.updateDockedProgressBar();
         }
 
         // 更新按钮状态和位置
@@ -5978,6 +6021,258 @@ export class PomodoroTimer {
         }
     }
 
+    /**
+     * DOM窗口吸附模式切换
+     */
+    private toggleDOMWindowDock() {
+        if (this.isDocked) {
+            this.exitDOMWindowDock();
+        } else {
+            this.enterDOMWindowDock();
+        }
+    }
+
+    /**
+     * 进入DOM窗口吸附模式
+     */
+    private enterDOMWindowDock() {
+        if (!this.container || this.isTabMode) return;
+        
+        this.isDocked = true;
+        this.container.classList.add('docked-mode');
+        
+        // 保存当前位置和大小
+        if (!this.normalWindowBounds) {
+            const rect = this.container.getBoundingClientRect();
+            this.normalWindowBounds = {
+                x: rect.left,
+                y: rect.top,
+                width: rect.width,
+                height: rect.height
+            };
+        }
+        
+        // 隐藏 header
+        const header = this.container.querySelector('.pomodoro-header') as HTMLElement;
+        if (header) {
+            header.style.display = 'none';
+        }
+        
+        // 隐藏 content
+        const content = this.container.querySelector('.pomodoro-content') as HTMLElement;
+        if (content) {
+            content.style.display = 'none';
+        }
+        
+        // 应用吸附样式
+        const position = this.settings.pomodoroDockPosition || 'right';
+        this.container.style.position = 'fixed';
+        this.container.style.zIndex = '10000';
+        
+        if (position === 'right') {
+            this.container.style.width = '8px';
+            this.container.style.height = '100vh';
+            this.container.style.right = '0';
+            this.container.style.left = 'auto';
+            this.container.style.top = '0';
+            this.container.style.bottom = '0';
+        } else if (position === 'left') {
+            this.container.style.width = '8px';
+            this.container.style.height = '100vh';
+            this.container.style.left = '0';
+            this.container.style.right = 'auto';
+            this.container.style.top = '0';
+            this.container.style.bottom = '0';
+        } else if (position === 'top') {
+            this.container.style.width = '100vw';
+            this.container.style.height = '8px';
+            this.container.style.top = '0';
+            this.container.style.left = '0';
+            this.container.style.right = '0';
+            this.container.style.bottom = 'auto';
+        } else if (position === 'bottom') {
+            this.container.style.width = '100vw';
+            this.container.style.height = '8px';
+            this.container.style.bottom = '0';
+            this.container.style.left = '0';
+            this.container.style.right = '0';
+            this.container.style.top = 'auto';
+        }
+        
+        this.container.style.borderRadius = '0';
+        this.container.style.boxShadow = 'none';
+        
+        // 创建进度条容器（如果不存在）
+        this.createDockedProgressBar(position);
+        
+        showMessage('已进入吸附模式，点击进度条恢复正常', 2000);
+    }
+
+    /**
+     * 退出DOM窗口吸附模式
+     */
+    private exitDOMWindowDock() {
+        if (!this.container) return;
+        
+        this.isDocked = false;
+        this.container.classList.remove('docked-mode');
+        
+        // 移除进度条容器
+        const progressContainer = this.container.querySelector('.dom-docked-progress-container') as HTMLElement;
+        if (progressContainer) {
+            progressContainer.remove();
+        }
+        
+        // 恢复 header 显示
+        const header = this.container.querySelector('.pomodoro-header') as HTMLElement;
+        if (header) {
+            header.style.display = 'flex';
+        }
+        
+        // 恢复 content 显示
+        const content = this.container.querySelector('.pomodoro-content') as HTMLElement;
+        if (content) {
+            content.style.display = 'block';
+            content.style.padding = '0px 16px 6px';
+        }
+        
+        // 恢复原始样式
+        this.container.style.position = 'fixed';
+        this.container.style.width = '240px';
+        this.container.style.height = 'auto';
+        this.container.style.borderRadius = '12px';
+        this.container.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.15)';
+        
+        // 恢复位置
+        if (this.normalWindowBounds) {
+            this.container.style.left = this.normalWindowBounds.x + 'px';
+            this.container.style.top = this.normalWindowBounds.y + 'px';
+            this.container.style.right = 'auto';
+            this.container.style.bottom = 'auto';
+        } else {
+            this.container.style.right = '20px';
+            this.container.style.bottom = '20px';
+            this.container.style.left = 'auto';
+            this.container.style.top = 'auto';
+        }
+        
+        showMessage('已退出吸附模式', 1500);
+    }
+
+    /**
+     * 创建DOM窗口吸附模式的进度条
+     */
+    private createDockedProgressBar(position: string) {
+        if (!this.container) return;
+        
+        // 移除旧的进度条
+        const oldProgress = this.container.querySelector('.dom-docked-progress-container');
+        if (oldProgress) oldProgress.remove();
+        
+        const isHorizontal = position === 'top' || position === 'bottom';
+        const isBottom = position === 'bottom';
+        
+        // 创建外层容器（全尺寸点击区域）
+        const container = document.createElement('div');
+        container.className = 'dom-docked-progress-container';
+        container.style.cssText = `
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+            pointer-events: auto;
+            z-index: 10001;
+        `;
+        
+        // 创建背景层（灰色轨道）
+        const track = document.createElement('div');
+        track.style.cssText = `
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(128, 128, 128, 0.3);
+        `;
+        
+        // 创建进度填充层
+        const fill = document.createElement('div');
+        fill.className = 'dom-docked-progress-fill';
+        fill.style.cssText = `
+            position: absolute;
+            ${isHorizontal 
+                ? (isBottom ? 'left: 0; bottom: 0; height: 100%; width: 0%;' : 'left: 0; top: 0; height: 100%; width: 0%;')
+                : 'bottom: 0; left: 0; width: 100%; height: 0%;'}
+            background: #4CAF50;
+            transition: ${isHorizontal ? 'width' : 'height'} 0.5s ease, background-color 0.3s ease;
+        `;
+        
+        container.appendChild(track);
+        container.appendChild(fill);
+        
+        // 点击整个区域恢复正常
+        container.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('[PomodoroTimer] Docked progress bar clicked, restoring window');
+            this.exitDOMWindowDock();
+        });
+        
+        // 悬停效果
+        container.addEventListener('mouseenter', () => {
+            fill.style.filter = 'brightness(1.2)';
+        });
+        container.addEventListener('mouseleave', () => {
+            fill.style.filter = 'brightness(1)';
+        });
+        
+        this.container.appendChild(container);
+        
+        // 更新进度
+        this.updateDockedProgressBar();
+    }
+
+    /**
+     * 更新DOM窗口吸附模式的进度条
+     */
+    private updateDockedProgressBar() {
+        if (!this.container || !this.isDocked) return;
+        
+        const progressFill = this.container.querySelector('.dom-docked-progress-fill') as HTMLElement;
+        if (!progressFill) return;
+        
+        const position = this.settings.pomodoroDockPosition || 'right';
+        const isHorizontal = position === 'top' || position === 'bottom';
+        
+        let progress = 0;
+        if (this.isCountUp) {
+            progress = 0;
+        } else if (this.totalTime > 0) {
+            progress = (this.totalTime - this.timeLeft) / this.totalTime;
+        }
+        
+        progress = Math.max(0, Math.min(1, progress));
+        
+        if (isHorizontal) {
+            progressFill.style.width = (progress * 100) + '%';
+        } else {
+            progressFill.style.height = (progress * 100) + '%';
+        }
+        
+        // 根据阶段改变颜色
+        let color = '#FF6B6B'; // 红色-工作
+        if (!this.isWorkPhase) {
+            if (this.isLongBreak) {
+                color = '#9C27B0'; // 紫色-长休息
+            } else {
+                color = '#4CAF50'; // 绿色-短休息
+            }
+        }
+        progressFill.style.background = color;
+    }
+
     private enterFullscreen() {
         this.isFullscreen = true;
         this.container.classList.add('fullscreen');
@@ -6187,6 +6482,11 @@ export class PomodoroTimer {
                     winHeight = screenHeight;
                     x = 0;
                     y = 0;
+                } else if (position === 'bottom') {
+                    winWidth = screenWidth;
+                    winHeight = barWidth;
+                    x = 0;
+                    y = screenHeight - barWidth;
                 } else {
                     // Default to right
                     winWidth = barWidth;
@@ -7153,7 +7453,7 @@ document.body.classList.remove('docked-mode');
         
         body.docked-mode .progress-bar-container {
             display: flex;
-            ${(this.settings.pomodoroDockPosition === 'top') ?
+            ${(this.settings.pomodoroDockPosition === 'top' || this.settings.pomodoroDockPosition === 'bottom') ?
                 `flex-direction: row;
              justify-content: flex-start;
              width: 100%;
@@ -7168,7 +7468,7 @@ document.body.classList.remove('docked-mode');
             position: relative;
         }
         body.docked-mode .progress-bar-fill {
-            ${(this.settings.pomodoroDockPosition === 'top') ?
+            ${(this.settings.pomodoroDockPosition === 'top' || this.settings.pomodoroDockPosition === 'bottom') ?
                 `width: 0%;
              height: 100%;
              transition: width 0.5s ease, background-color 0.3s ease;` :
@@ -7204,11 +7504,11 @@ document.body.classList.remove('docked-mode');
                     <button class="menu-item" onclick="callMethod('startLongBreak')">🧘 长时休息</button>
                 </div>
             </div>
+        </div>
+        <div class="titlebar-buttons">
             <button class="titlebar-btn" id="soundBtn" onclick="callMethod('toggleBackgroundAudio')">
                 ${isBackgroundAudioMuted ? '🔇' : '🔊'}
             </button>
-        </div>
-        <div class="titlebar-buttons">
             <button class="titlebar-btn pin-btn" onclick="togglePin()">📌</button>
             <button class="titlebar-btn" onclick="minimizeWindow()">─</button>
             <button class="titlebar-btn close-btn" onclick="closeWindow()">×</button>
@@ -7407,7 +7707,7 @@ document.body.classList.remove('docked-mode');
             const dockPos = '${this.settings.pomodoroDockPosition || "right"}';
             const dockedBar = document.getElementById('dockedProgressBar');
             if (dockedBar) {
-                if (dockPos === 'top') {
+                if (dockPos === 'top' || dockPos === 'bottom') {
                     dockedBar.style.width = (progress * 100) + '%';
                     // Height is handled by CSS (100%) but ensuring it here doesn't hurt
                     dockedBar.style.height = '100%'; 
@@ -7649,6 +7949,8 @@ document.body.classList.remove('docked-mode');
                                 pomodoroWindow.setBounds({ x: 0, y: 0, width: sw, height: barWidth });
                             } else if (position === 'left') {
                                 pomodoroWindow.setBounds({ x: 0, y: 0, width: barWidth, height: sh });
+                            } else if (position === 'bottom') {
+                                pomodoroWindow.setBounds({ x: 0, y: sh - barWidth, width: sw, height: barWidth });
                             } else {
                                 // Default right
                                 pomodoroWindow.setBounds({ x: sw - barWidth, y: 0, width: barWidth, height: sh });
@@ -7968,6 +8270,7 @@ document.body.classList.remove('mini-mode');
      * 这个方法主要用于兼容性，实际上 initializeAudioPlayback 会在 BrowserWindow 模式下直接返回
      */
     public async updateSettings(settings: any) {
+        const oldDockPosition = this.settings?.pomodoroDockPosition;
         this.settings = settings;
 
         const pomodoroWindow = PomodoroTimer.browserWindowInstance;
@@ -7975,6 +8278,14 @@ document.body.classList.remove('mini-mode');
             // Update window content to reflect new settings (like dock position)
             // updateBrowserWindowContent 内部会根据 this.isDocked 状态设置鼠标穿透
             await this.updateBrowserWindowContent(pomodoroWindow);
+        } else if (this.isDocked && !this.isTabMode) {
+            // DOM 窗口吸附模式：如果吸附位置改变，重新应用吸附样式
+            if (oldDockPosition !== settings.pomodoroDockPosition) {
+                console.log('[PomodoroTimer] Dock position changed, reapplying dock style');
+                // 先退出再重新进入吸附模式以应用新位置
+                this.exitDOMWindowDock();
+                this.enterDOMWindowDock();
+            }
         }
     }
 
