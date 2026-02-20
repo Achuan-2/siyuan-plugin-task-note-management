@@ -501,31 +501,27 @@ export class PomodoroTimer {
 
     private async initRandomNotificationSounds() {
         try {
-            const soundPaths = this.settings.audioFileLists?.randomNotificationSounds || [];
+            const soundPath = this.settings.randomNotificationSounds || '';
 
             this.randomNotificationSounds = [];
-            for (let i = 0; i < soundPaths.length; i++) {
-                const path = soundPaths[i];
+            if (soundPath) {
                 try {
-                    const resolved = await resolveAudioPath(path);
+                    const resolved = await resolveAudioPath(soundPath);
                     const audio = new Audio(resolved);
                     audio.volume = 1; // 随机微休息固定音量，不受背景音静音影响
                     audio.preload = 'auto';
-
 
                     // 监听加载事件
                     audio.addEventListener('canplaythrough', () => {
                     });
 
-
                     audio.addEventListener('error', (e) => {
-                        console.error(`随机微休息 ${i + 1} 加载失败: ${path}`, e);
+                        console.error(`随机微休息加载失败: ${soundPath}`, e);
                     });
-
 
                     this.randomNotificationSounds.push(audio);
                 } catch (error) {
-                    console.warn(`无法创建随机微休息 ${i + 1}: ${path}`, error);
+                    console.warn(`无法创建随机微休息: ${soundPath}`, error);
                 }
             }
 
@@ -536,7 +532,7 @@ export class PomodoroTimer {
 
     private async initRandomNotificationEndSound() {
         try {
-            const path = this.settings.audioFileLists?.randomNotificationEndSound?.[0];
+            const path = this.settings.randomNotificationEndSound || '';
             if (path) {
                 const resolved = await resolveAudioPath(path);
                 this.randomNotificationEndSound = new Audio(resolved);
@@ -561,7 +557,7 @@ export class PomodoroTimer {
     }
 
     private async playRandomNotificationSound() {
-        if (!this.randomNotificationEnabled || this.randomNotificationSounds.length === 0) {
+        if (!this.randomNotificationEnabled) {
             console.warn('随机微休息未启用或无可用音频文件');
             return;
         }
@@ -570,64 +566,62 @@ export class PomodoroTimer {
             if (!this.audioInitialized) {
                 await this.initializeAudioPlayback();
             }
-            // 随机选择一个提示音
-            const randomIndex = Math.floor(Math.random() * this.randomNotificationSounds.length);
-            const selectedAudio = this.randomNotificationSounds[randomIndex];
+            // 仅使用第一个配置的提示音（若存在）。不再做随机选择。
+            const selectedAudio = (this.randomNotificationSounds && this.randomNotificationSounds.length > 0) ? this.randomNotificationSounds[0] : null;
 
+            if (selectedAudio) {
+                // 等待音频加载完成
+                if (selectedAudio.readyState < 3) {
+                    await this.waitForAudioLoad(selectedAudio);
+                }
 
-
-            // 等待音频加载完成
-            if (selectedAudio.readyState < 3) {
-                await this.waitForAudioLoad(selectedAudio);
+                // 确保音量设置正确（不受背景音静音影响）
+                selectedAudio.volume = 1;
+            } else {
+                // 未配置提示音时，仍然要打开弹窗提示并显示系统通知（见要求2）
+                console.debug('[PomodoroTimer] 未配置随机微休息提示音，跳过音频播放，但会显示弹窗与系统通知');
             }
-
-            // 确保音量设置正确（不受背景音静音影响）
-            selectedAudio.volume = 1;
 
             // 与全局提示音播放机制对齐：避免与 index.ts 中的提示音冲突
             const pluginAny = this.plugin as any;
-            // 如果插件实例存在且正在播放通知，则等待短暂重试，最多几次
-            if (pluginAny && pluginAny.isPlayingNotificationSound) {
-                let retried = 0;
-                const maxRetries = 5;
-                while (pluginAny.isPlayingNotificationSound && retried < maxRetries) {
-                    await new Promise(res => setTimeout(res, 200));
-                    retried++;
+            // 如果存在可播放的音频，则尝试播放；若全局已有提示音在播放，则只跳过音频播放，不跳过弹窗与系统通知。
+            if (selectedAudio) {
+                if (pluginAny && pluginAny.isPlayingNotificationSound) {
+                    let retried = 0;
+                    const maxRetries = 5;
+                    while (pluginAny.isPlayingNotificationSound && retried < maxRetries) {
+                        await new Promise(res => setTimeout(res, 200));
+                        retried++;
+                    }
+                    if (pluginAny.isPlayingNotificationSound) {
+                        console.warn('[PomodoroTimer] 检测到已有全局提示音在播放，跳过本次音频播放以避免重叠');
+                        // 继续走弹窗与系统通知流程
+                    }
                 }
-                if (pluginAny.isPlayingNotificationSound) {
-                    console.warn('[PomodoroTimer] 检测到已有全局提示音在播放，跳过本次随机微休息以避免重叠');
-                    return;
-                }
-            }
 
-            // 标记全局为正在播放（与 index.ts 的行为一致）
-            let clearGlobalFlagTimer: any = null;
-            try {
-                if (pluginAny) {
-                    try { pluginAny.isPlayingNotificationSound = true; } catch { }
-                    // 作为保险，10s 后清理该标志，防止死锁
-                    clearGlobalFlagTimer = setTimeout(() => {
+                // 标记全局为正在播放（与 index.ts 的行为一致），并播放音频
+                let clearGlobalFlagTimer: any = null;
+                try {
+                    if (pluginAny) {
+                        try { pluginAny.isPlayingNotificationSound = true; } catch { }
+                        clearGlobalFlagTimer = setTimeout(() => {
+                            try { pluginAny.isPlayingNotificationSound = false; } catch { }
+                        }, 10000);
+                    }
+
+                    const played = await this.safePlayAudio(selectedAudio);
+                    if (!played) {
+                        console.warn('随机微休息播放失败或被阻止');
+                        this.audioInitialized = false;
+                        this.attachAudioUnlockListeners();
+                    }
+                } finally {
+                    if (pluginAny) {
                         try { pluginAny.isPlayingNotificationSound = false; } catch { }
-                    }, 10000);
-                }
-
-                // 直接使用已初始化的音频元素播放，避免 autoplay policy 问题
-                // 不使用 playOneShotAudio，因为它会创建新的 Audio 对象
-                // 使用 safePlayAudio 以在权限不足时先尝试初始化并优雅处理错误
-                const played = await this.safePlayAudio(selectedAudio);
-                if (!played) {
-                    console.warn('随机微休息播放失败或被阻止');
-                    // safePlayAudio 已经会在 NotAllowedError 时尝试初始化或附加解锁监听器
-                    this.audioInitialized = false;
-                    this.attachAudioUnlockListeners();
-                }
-            } finally {
-                // 清理全局播放标志
-                if (pluginAny) {
-                    try { pluginAny.isPlayingNotificationSound = false; } catch { }
-                }
-                if (clearGlobalFlagTimer) {
-                    clearTimeout(clearGlobalFlagTimer);
+                    }
+                    if (clearGlobalFlagTimer) {
+                        clearTimeout(clearGlobalFlagTimer);
+                    }
                 }
             }
 

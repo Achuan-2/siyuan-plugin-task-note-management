@@ -873,10 +873,8 @@ export default class ReminderPlugin extends Plugin {
             randomNotificationMinInterval: Math.max(1, settings.randomNotificationMinInterval),
             randomNotificationMaxInterval: Math.max(1, settings.randomNotificationMaxInterval),
             randomNotificationBreakDuration: Math.max(1, settings.randomNotificationBreakDuration),
-            audioFileLists: {
-                ...settings.audioFileLists,
-                randomNotificationSounds: this.getMergedAudioFileList(settings, 'randomNotificationSounds')
-            },
+            randomNotificationSounds: settings.audioSelected?.randomNotificationSounds || '',
+            randomNotificationEndSound: settings.audioSelected?.randomNotificationEndSound || '',
             randomNotificationSystemNotification: settings.randomNotificationSystemNotification, // 新增
             dailyFocusGoal: settings.dailyFocusGoal,
             randomNotificationPopupWindow: settings.randomNotificationPopupWindow,
@@ -4636,24 +4634,13 @@ export default class ReminderPlugin extends Plugin {
                         );
 
                         // 特殊处理随机微休息的多选字符串
-                        if (key === 'randomNotificationSounds') {
-                            const paths = existing.split(',').map(p => p.trim()).filter(p => p);
-                            for (const p of paths) {
-                                if (!itemList.some(i => i.path === p)) {
-                                    itemList.push({ path: p });
-                                    migratedCount++;
-                                }
-                            }
-                            settings.audioFileLists[key] = itemList;
-                        } else {
-                            if (!itemList.some(i => i.path === existing)) {
-                                itemList.push({ path: existing }); // 保持原有顺序，加到后面
-                                migratedCount++;
-                            }
-                            settings.audioFileLists[key] = itemList;
-                            // 记录当前选中
-                            settings.audioSelected[key] = existing;
+                        if (!itemList.some(i => i.path === existing)) {
+                            itemList.push({ path: existing }); // 保持原有顺序，加到后面
+                            migratedCount++;
                         }
+                        settings.audioFileLists[key] = itemList;
+                        // 记录当前选中
+                        settings.audioSelected[key] = existing;
                         // 迁移后从根部删除旧键
                         delete (settings as any)[key];
                     } else if (settings.audioFileLists[key]) {
