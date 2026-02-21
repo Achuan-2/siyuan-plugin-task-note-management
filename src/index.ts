@@ -695,25 +695,6 @@ export default class ReminderPlugin extends Plugin {
         // 监听文档树右键菜单事件
         this.eventBus.on('open-menu-doctree', this.handleDocumentTreeMenu.bind(this));
 
-        // 监听同步结束事件
-        this.eventBus.on('sync-end', async (e) => {
-            // console.log("同步结束", e)
-            try {
-                await this.loadSettings(true);
-                await this.loadReminderData(true);
-                await this.loadProjectData(true);
-                await this.loadProjectStatus(true);
-                await this.loadCategories(true);
-                await this.loadHabitData(true);
-                await this.loadHabitGroupData(true);
-                await this.loadPomodoroRecords(true);
-                window.dispatchEvent(new CustomEvent('reminderUpdated'));
-                window.dispatchEvent(new CustomEvent('habitUpdated'));
-            } catch (err) {
-                console.warn('处理 sync-end 事件失败:', err);
-            }
-        });
-
         // 初始化ICS云端同步
         this.initIcsSync();
 
@@ -788,7 +769,6 @@ export default class ReminderPlugin extends Plugin {
             document.addEventListener(event, handleUserInteraction, { once: true });
         });
     }
-
 
 
     // 重写 openSetting 方法
@@ -4298,7 +4278,27 @@ export default class ReminderPlugin extends Plugin {
         });
         this.cleanupFunctions = [];
     }
+    uninstall() {
+        // 卸载插件时删除插件数据
 
+    }
+    onDataChanged() {
+        console.log("onDataChanged");
+        try {
+            this.loadSettings(true);
+            this.loadReminderData(true);
+            this.loadProjectData(true);
+            this.loadProjectStatus(true);
+            this.loadCategories(true);
+            this.loadHabitData(true);
+            this.loadHabitGroupData(true);
+            this.loadPomodoroRecords(true);
+            window.dispatchEvent(new CustomEvent('reminderUpdated'));
+            window.dispatchEvent(new CustomEvent('habitUpdated'));
+        } catch (err) {
+            console.warn('处理onDataChanged事件失败:', err);
+        }
+    }
     private addCleanup(fn: () => void) {
         this.cleanupFunctions.push(fn);
     }
