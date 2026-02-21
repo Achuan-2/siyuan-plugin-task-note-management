@@ -117,6 +117,24 @@ async function handleRequest(request, env) {
         return new Response(null, { headers: corsHeaders });
     }
 
+    // 限流检查 (使用 Cloudflare Worker 官方提供的 Rate Limiter Binding)
+    const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';
+
+    // 限流检查 (全局限流)
+    if (env.RATE_LIMITER) {
+        // 使用固定的 key 实现全局限流，不再根据 IP 区分
+        const { success } = await env.RATE_LIMITER.limit({ key: 'global_rate_limit' });
+        if (!success) {
+            return new Response(JSON.stringify({
+                success: false,
+                message: '系统繁忙，请稍后再试 (Too Many Requests)'
+            }), {
+                status: 429,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
+        }
+    }
+
     try {
         // 1. 创建支付订单
         if (path === '/api/create-payment' && request.method === 'POST') {

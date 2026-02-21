@@ -1129,7 +1129,7 @@
             ],
         },
         {
-            name: '❤️催更',
+            name: '❤️打赏催更',
             items: [
                 {
                     key: 'donateInfo',

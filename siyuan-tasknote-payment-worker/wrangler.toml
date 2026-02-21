@@ -13,3 +13,11 @@ database_id = "a599b253-8bcc-4fd7-be5d-d9cc3cbcc112"  # 替换为第四步得到
 PID = "2026020416153010"  # 你的zpay商户ID
 ZPAY_API_BASE = "https://zpayz.cn"
 
+# Cloudflare 官方免费提供的请求限流 Binding
+[[ratelimits]]
+name = "RATE_LIMITER"
+namespace_id = "1001"
+
+  [ratelimits.simple]
+  limit = 60
+  period = 60
