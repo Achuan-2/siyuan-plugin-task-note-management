@@ -697,7 +697,7 @@ export default class ReminderPlugin extends Plugin {
 
         // 监听同步结束事件
         this.eventBus.on('sync-end', async (e) => {
-            console.log("同步结束", e)
+            // console.log("同步结束", e)
             try {
                 await this.loadSettings(true);
                 await this.loadReminderData(true);
