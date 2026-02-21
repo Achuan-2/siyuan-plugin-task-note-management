@@ -1303,7 +1303,7 @@
     }
 
     async function runload() {
-        const loadedSettings = await plugin.loadSettings();
+        const loadedSettings = await plugin.loadSettings(true);
         settings = { ...loadedSettings };
         // 确保 weekStartDay 在加载后是数字（可能以字符串形式保存）
         if (typeof settings.weekStartDay === 'string') {

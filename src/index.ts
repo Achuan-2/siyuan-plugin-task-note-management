@@ -606,7 +606,6 @@ export default class ReminderPlugin extends Plugin {
         // 监听设置变更，动态显示/隐藏侧边停靠栏
         window.addEventListener('reminderSettingsUpdated', async () => {
             try {
-                this.settings = null; // Force reload from disk
                 const settings = await this.loadSettings();
                 this.toggleDockVisibility('project_dock', settings.enableProjectDock !== false);
                 this.toggleDockVisibility('reminder_dock', settings.enableReminderDock !== false);
@@ -695,6 +694,25 @@ export default class ReminderPlugin extends Plugin {
 
         // 监听文档树右键菜单事件
         this.eventBus.on('open-menu-doctree', this.handleDocumentTreeMenu.bind(this));
+
+        // 监听同步结束事件
+        this.eventBus.on('sync-end', async (e) => {
+            console.log("同步结束", e)
+            try {
+                await this.loadSettings(true);
+                await this.loadReminderData(true);
+                await this.loadProjectData(true);
+                await this.loadProjectStatus(true);
+                await this.loadCategories(true);
+                await this.loadHabitData(true);
+                await this.loadHabitGroupData(true);
+                await this.loadPomodoroRecords(true);
+                window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                window.dispatchEvent(new CustomEvent('habitUpdated'));
+            } catch (err) {
+                console.warn('处理 sync-end 事件失败:', err);
+            }
+        });
 
         // 初始化ICS云端同步
         this.initIcsSync();
@@ -798,8 +816,8 @@ export default class ReminderPlugin extends Plugin {
     }
 
     // 加载设置的封装函数
-    async loadSettings() {
-        if (this.settings) {
+    async loadSettings(update: boolean = false) {
+        if (!update && this.settings) {
             return this.settings;
         }
 
