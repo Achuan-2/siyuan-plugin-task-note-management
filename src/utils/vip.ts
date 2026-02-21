@@ -11,7 +11,7 @@ const ec = new EC("secp256k1");
 const PUBLIC_KEY = "04d460cc7f5e41bf5aab87b18b38cb6b317e6beffd46942d6b4a6357530ea94e84c552ace2ade7f30df60060d99a8873f373a52d6d8ea129760aee0991bf3bfd30";
 
 export interface VIPStatus {
-    /** 授权码列表 */
+    /** 激活码列表 */
     vipKeys: string[];
     /** 是否是 VIP */
     isVip: boolean;
@@ -25,6 +25,8 @@ export interface VIPStatus {
     error?: string;
     /** 是否终身会员 */
     isLifetime?: boolean;
+    /** 终身会员开始时间 */
+    lifetimeStartDate?: string;
 }
 
 export type PurchaseTerm = '7d' | '1m' | '1y' | 'Lifetime';
@@ -32,7 +34,7 @@ export type PurchaseTerm = '7d' | '1m' | '1y' | 'Lifetime';
 export class VipManager {
 
     /**
-     * 单个授权码验证并解析
+     * 单个激活码验证并解析
      */
     static parseVIPKey(userId: string, vipKey: string): { purchaseTime: number, term: PurchaseTerm, valid: boolean } {
         if (!vipKey || !vipKey.includes('_')) {
@@ -73,6 +75,7 @@ export class VipManager {
 
         let currentExpire: number = 0;
         let isLifetime: boolean = false;
+        let lifetimeStartDate: string | undefined;
 
         for (const key of validKeys) {
             const termMs = this.getTermMs(key.term, key.purchaseTime);
@@ -81,6 +84,7 @@ export class VipManager {
                 // 终身版直接设置一个极远的时间
                 currentExpire = new Date(key.purchaseTime).setFullYear(new Date(key.purchaseTime).getFullYear() + 99);
                 isLifetime = true;
+                lifetimeStartDate = this.formatDate(new Date(key.purchaseTime));
                 break; // 终身之后不再累加
             }
 
@@ -104,7 +108,8 @@ export class VipManager {
             expireDate: this.formatDate(new Date(currentExpire)),
             remainingDays: isVip ? remainingDays : 0,
             freeTrialUsed,
-            isLifetime
+            isLifetime,
+            lifetimeStartDate
         };
     }
 

@@ -91,12 +91,12 @@ const result1 = verifyVIPKey(userIdA, key1y);
 console.log("   验证结果:", result1.valid ? "✅ 成功" : "❌ 失败", "| 购买时间:", result1.purchaseTime);
 
 // 3. 测试用户 ID 篡改 (用 A 的 Key 尝试激活 B 的账号)
-console.log("\n[3] 安全测试: 尝试用用户 A 的授权码，激活用户 B 的账号...");
+console.log("\n[3] 安全测试: 尝试用用户 A 的激活码，激活用户 B 的账号...");
 const result2 = verifyVIPKey(userIdB, key1y);
 console.log("   验证结果:", result2.valid ? "❌ 注入漏洞 (风险!)" : "✅ 拦截成功 (签名不匹配)");
 
-// 4. 测试授权码内容篡改 (尝试修改购买时间以试图重置到期日)
-console.log("\n[4] 安全测试: 尝试篡改授权码中的购买时间...");
+// 4. 测试激活码内容篡改 (尝试修改购买时间以试图重置到期日)
+console.log("\n[4] 安全测试: 尝试篡改激活码中的购买时间...");
 const parts = key1y.split('_');
 const encodedPart = parts[0];
 // 修改编码部分的一个字符
@@ -108,8 +108,8 @@ console.log("   原始 Key:", key1y.substring(0, 15) + "...");
 console.log("   篡改 Key:", tamperedKey.substring(0, 15) + "...");
 console.log("   验证结果:", result3.valid ? "❌ 篡改成功 (风险!)" : "✅ 拦截成功 (签名校验失败)");
 
-// 5. 测试随机授权码
-console.log("\n[5] 安全测试: 尝试使用伪造的随机授权码...");
+// 5. 测试随机激活码
+console.log("\n[5] 安全测试: 尝试使用伪造的随机激活码...");
 const fakeKey = "KZA2B3C4_1y_abcdef1234567890";
 const result4 = verifyVIPKey(userIdA, fakeKey);
 console.log("   验证结果:", result4.valid ? "❌ 伪造成功 (风险!)" : "✅ 拦截成功 (格式或签名错误)");

@@ -4,7 +4,7 @@ const { spawn } = require('child_process');
 const VALID_TERMS = ['7d', '1m', '1y', 'Lifetime'];
 
 /**
- * VIP 授权码生成工具 (Standalone)
+ * VIP 激活码生成工具 (Standalone)
  * 请妥善保管此文件和私钥，不要将其打包进插件。
  */
 
@@ -12,7 +12,7 @@ const VALID_TERMS = ['7d', '1m', '1y', 'Lifetime'];
 const PRIVATE_KEY = "c96db0f1bc5a7f98cc7bd4d689427eac06b2a22fae21c64f27518ad208575573";
 
 /**
- * 生成 VIP 授权码
+ * 生成 VIP 激活码
  * @param {string} userId 思源用户 ID
  * @param {string} term 购买时长 ('7d', '1m', '1y', 'Lifetime')
  * @param {number} purchaseTime 购买时间戳 (ms)，默认为现在

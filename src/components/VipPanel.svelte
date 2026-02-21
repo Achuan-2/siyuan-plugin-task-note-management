@@ -10,6 +10,7 @@
     let inputKey = '';
     let message = '';
     let isError = false;
+    let showUserId = false;
 
     let selectedTerm = '1y'; // 默认选中年付
 
@@ -138,13 +139,13 @@
 
         const result = VipManager.parseVIPKey(userId, inputKey);
         if (!result.valid) {
-            message = '授权码无效或不属于当前用户';
+            message = '激活码无效或不属于当前用户';
             isError = true;
             return;
         }
 
         if (plugin.vip.vipKeys.includes(inputKey)) {
-            message = '该授权码已添加';
+            message = '该激活码已添加';
             isError = false;
             return;
         }
@@ -177,7 +178,7 @@
         pushMsg('用户 ID 已复制');
     }
 
-    // 计算当前正在生效或待生效的授权码
+    // 计算当前正在生效或待生效的激活码
     $: activeKeys = (() => {
         const keys = plugin.vip.vipKeys || [];
         const validKeys = keys
@@ -211,6 +212,7 @@
                 results.push({
                     key: k.key,
                     term: k.term,
+                    start: VipManager.formatDate(new Date(start)),
                     end: VipManager.formatDate(new Date(end)),
                     isLifetime: k.term === 'Lifetime',
                 });
@@ -226,13 +228,18 @@
 
     function handleCopyKey(key: string) {
         navigator.clipboard.writeText(key);
-        pushMsg('授权码已复制');
+        pushMsg('激活码已复制');
     }
 </script>
 
 <div class="vip-container {isDialog ? 'in-dialog' : ''}">
     <div class="vip-header">
-        <div class="vip-card" class:is-vip={vipStatus.isVip} class:not-vip={!vipStatus.isVip}>
+        <div
+            class="vip-card"
+            class:is-lifetime={vipStatus.isLifetime}
+            class:is-vip={vipStatus.isVip && !vipStatus.isLifetime}
+            class:not-vip={!vipStatus.isVip}
+        >
             <div class="vip-card__title">
                 <span class="vip-icon">👑</span>
                 订阅信息
@@ -240,7 +247,12 @@
             <div class="vip-card__status">
                 {#if vipStatus.isVip}
                     {#if vipStatus.isLifetime}
-                        <div class="status-inactive">终身会员</div>
+                        <div class="status-active">
+                            <div class="status-label">终身会员</div>
+                            <div class="status-date">
+                                始于 {vipStatus.lifetimeStartDate || '购入之日'}
+                            </div>
+                        </div>
                     {:else}
                         <div class="status-active">
                             <div class="status-label">已激活</div>
@@ -263,7 +275,27 @@
         <h3>用户信息</h3>
         <div class="user-info">
             <div class="user-id">
-                <span>思源账号ID: {userId}</span>
+                <div class="user-id-text">
+                    <span>思源账号ID:</span>
+                    <span class="id-value" style="letter-spacing: {showUserId ? 'normal' : '2px'};">
+                        {showUserId ? userId : '••••••••'}
+                    </span>
+                    <div
+                        class="eye-icon"
+                        on:click={() => (showUserId = !showUserId)}
+                        role="button"
+                        tabindex="0"
+                        on:keydown={e =>
+                            (e.key === 'Enter' || e.key === ' ') && (showUserId = !showUserId)}
+                        title={showUserId ? '隐藏' : '显示'}
+                    >
+                        {#if showUserId}
+                            <svg><use xlink:href="#iconEyeoff"></use></svg>
+                        {:else}
+                            <svg><use xlink:href="#iconEye"></use></svg>
+                        {/if}
+                    </div>
+                </div>
                 {#if userId !== 'unknown' && userId}
                     <button
                         class="b3-button b3-button--outline fn__flex-center"
@@ -279,152 +311,164 @@
         </div>
     </div>
 
-    <div class="vip-section">
-        <h3>订阅方案</h3>
-
+    {#if !vipStatus.isLifetime}
         <div class="vip-section">
-            <details class="benefits-details">
-                <summary>查看会员专属权益</summary>
-                <table class="benefits-table">
-                    <thead>
-                        <tr>
-                            <th>功能</th>
-                            <th>非会员</th>
-                            <th>会员</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>任务管理侧栏</td>
-                            <td>✅</td>
-                            <td>✅</td>
-                        </tr>
-                        <tr>
-                            <td>番茄钟</td>
-                            <td>✅</td>
-                            <td>✅</td>
-                        </tr>
-                        <tr>
-                            <td>四象限</td>
-                            <td>✅</td>
-                            <td>✅</td>
-                        </tr>
-                        <tr>
-                            <td>习惯打卡</td>
-                            <td>✅</td>
-                            <td>✅</td>
-                        </tr>
-                        <tr>
-                            <td>日历视图</td>
-                            <td>❌</td>
-                            <td>✅</td>
-                        </tr>
-                        <tr>
-                            <td>项目看板</td>
-                            <td>❌</td>
-                            <td>✅</td>
-                        </tr>
-                        <tr>
-                            <td>微信交流群和使用答疑</td>
-                            <td>❌</td>
-                            <td>✅</td>
-                        </tr>
-                        <tr>
-                            <td>未来其他功能</td>
-                            <td>❓</td>
-                            <td>✅</td>
-                        </tr>
-                    </tbody>
-                </table>
-                <div class="benefits-info">
-                    <h4>❓如何加入会员专属微信交流群</h4>
-                    <p>
-                        将思源账号ID（通过上方的用户信息复制）、付款截图、微信号发邮件到
-                        achuan-2@outlook.com，我会加你好友拉你进群
-                    </p>
-                </div>
-            </details>
-        </div>
-        <div class="plans-grid">
-            {#each displayPrices as plan}
-                <div
-                    class="plan-item {selectedTerm === plan.term ? 'is-selected' : ''}"
-                    on:click={() => selectPlan(plan.term)}
-                    on:keydown={e => (e.key === 'Enter' || e.key === ' ') && selectPlan(plan.term)}
-                    role="button"
-                    tabindex="0"
-                >
-                    <div class="plan-label">{plan.label}</div>
-                    <div class="plan-price">{plan.price}</div>
-                    {#if selectedTerm === plan.term}
-                        <div class="plan-badge">已选中</div>
-                    {/if}
-                </div>
-            {/each}
-        </div>
-        <div class="pay-tips">
-            <p>⚠️ 付费后不支持退款</p>
-            <p>
-                ⚠️
-                2026年02月23日及之前赞赏的用户，可以凭赞赏截图抵消付费会员金额，2026年02月23日及之前赞赏超过50元的用户和代码PR贡献者，可申请为终身会员。发送赞赏支付截图、代码贡献截图以及思源账号ID到
-                achuan-2@outlook.com 进行申请
-            </p>
-            <button
-                class="b3-button b3-button--text pay-btn"
-                disabled={userId === 'unknown' || isPaying}
-                on:click={handlePay}
-            >
-                {selectedTerm === '7d' ? '获取试用授权码' : '付费获取授权码'}
-            </button>
-        </div>
+            <h3>订阅方案</h3>
 
-        {#if qrcodeImg}
-            <div class="payment-qrcode">
-                <img src={qrcodeImg} alt="支付二维码" />
-                <p class="payment-status">{paymentStatusMessage}</p>
-                <div class="payment-actions">
-                    <button
-                        class="b3-button b3-button--outline manual-check-btn"
-                        on:click={manualCheckStatus}
-                        disabled={isCheckingStatus}
-                    >
-                        {isCheckingStatus ? '查询中...' : '我已支付，获取授权码'}
-                    </button>
-                    <button class="b3-button b3-button--outline cancel-btn" on:click={handleCancel}>
-                        取消
-                    </button>
-                </div>
+            <div class="vip-section">
+                <details class="benefits-details">
+                    <summary>查看会员专属权益</summary>
+                    <table class="benefits-table">
+                        <thead>
+                            <tr>
+                                <th>功能</th>
+                                <th>非会员</th>
+                                <th>会员</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>任务管理侧栏</td>
+                                <td>✅</td>
+                                <td>✅</td>
+                            </tr>
+                            <tr>
+                                <td>番茄钟</td>
+                                <td>✅</td>
+                                <td>✅</td>
+                            </tr>
+                            <tr>
+                                <td>四象限</td>
+                                <td>✅</td>
+                                <td>✅</td>
+                            </tr>
+                            <tr>
+                                <td>习惯打卡</td>
+                                <td>✅</td>
+                                <td>✅</td>
+                            </tr>
+                            <tr>
+                                <td>日历视图</td>
+                                <td>❌</td>
+                                <td>✅</td>
+                            </tr>
+                            <tr>
+                                <td>项目看板</td>
+                                <td>❌</td>
+                                <td>✅</td>
+                            </tr>
+                            <tr>
+                                <td>微信交流群和使用答疑</td>
+                                <td>❌</td>
+                                <td>✅</td>
+                            </tr>
+                            <tr>
+                                <td>未来其他功能</td>
+                                <td>❓</td>
+                                <td>✅</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div class="benefits-info">
+                        <h4>❓如何加入会员专属微信交流群</h4>
+                        <p>
+                            将付款截图、微信号发邮件到
+                            achuan-2@outlook.com，我会加你好友拉你进群
+                        </p>
+                    </div>
+                </details>
             </div>
-        {:else if paymentStatusMessage}
-            <p class="payment-status">{paymentStatusMessage}</p>
-        {/if}
-    </div>
+            <div class="plans-grid">
+                {#each displayPrices as plan}
+                    <div
+                        class="plan-item {selectedTerm === plan.term ? 'is-selected' : ''}"
+                        on:click={() => selectPlan(plan.term)}
+                        on:keydown={e =>
+                            (e.key === 'Enter' || e.key === ' ') && selectPlan(plan.term)}
+                        role="button"
+                        tabindex="0"
+                    >
+                        <div class="plan-label">{plan.label}</div>
+                        <div class="plan-price">{plan.price}</div>
+                        {#if selectedTerm === plan.term}
+                            <div class="plan-badge">已选中</div>
+                        {/if}
+                    </div>
+                {/each}
+            </div>
+            <div class="pay-tips">
+                <p>⚠️ 付费后不支持退款</p>
+                <p>
+                    ⚠️
+                    2026年02月23日及之前赞赏的用户，可以凭赞赏截图抵消付费会员金额，2026年02月23日及之前赞赏超过50元的用户和代码PR贡献者，可申请为终身会员。发送赞赏支付截图、代码贡献截图以及思源账号ID（通过上方的用户信息复制）到
+                    achuan-2@outlook.com 进行申请减免和终身会员。
+                </p>
+                <button
+                    class="b3-button b3-button--text pay-btn"
+                    disabled={userId === 'unknown' || isPaying}
+                    on:click={handlePay}
+                >
+                    {selectedTerm === '7d' ? '获取试用激活码' : '付费获取激活码'}
+                </button>
+            </div>
 
-    <div class="vip-section">
-        <h3>授权码激活</h3>
-        <div class="activation-box">
-            <input class="b3-text-field fn__block" placeholder="输入授权码" bind:value={inputKey} />
-            <button class="b3-button b3-button--text activate-btn" on:click={handleAddKey}>
-                激活
-            </button>
+            {#if qrcodeImg}
+                <div class="payment-qrcode">
+                    <img src={qrcodeImg} alt="支付二维码" />
+                    <p class="payment-status">{paymentStatusMessage}</p>
+                    <div class="payment-actions">
+                        <button
+                            class="b3-button b3-button--outline manual-check-btn"
+                            on:click={manualCheckStatus}
+                            disabled={isCheckingStatus}
+                        >
+                            {isCheckingStatus ? '查询中...' : '我已支付，获取激活码'}
+                        </button>
+                        <button
+                            class="b3-button b3-button--outline cancel-btn"
+                            on:click={handleCancel}
+                        >
+                            取消
+                        </button>
+                    </div>
+                </div>
+            {:else if paymentStatusMessage}
+                <p class="payment-status">{paymentStatusMessage}</p>
+            {/if}
         </div>
-        {#if message}
-            <p class="msg {isError ? 'error' : 'success'}">{message}</p>
-        {/if}
-    </div>
+    {/if}
+
+    {#if !vipStatus.isLifetime}
+        <div class="vip-section">
+            <h3>激活码兑换</h3>
+            <div class="activation-box">
+                <input
+                    class="b3-text-field fn__block"
+                    placeholder="输入激活码"
+                    bind:value={inputKey}
+                />
+                <button class="b3-button b3-button--text activate-btn" on:click={handleAddKey}>
+                    激活
+                </button>
+            </div>
+            {#if message}
+                <p class="msg {isError ? 'error' : 'success'}">{message}</p>
+            {/if}
+        </div>
+    {/if}
 
     {#if activeKeys.length > 0}
         <div class="vip-section">
-            <h3>使用中的授权码</h3>
+            <h3>使用中的激活码</h3>
             <div class="active-keys-list">
                 {#each activeKeys as item}
                     <div class="active-key-item">
                         <div class="key-info">
-                            <div class="key-text">{item.key.split('_')[2].substring(0, 8)}...</div>
+                            <div class="key-text">{item.key}</div>
                             <div class="key-detail">
                                 {item.isLifetime
-                                    ? '终身版'
-                                    : `${item.term === '1y' ? '年付' : item.term === '1m' ? '月付' : '试用 7 天'} 到期: ${item.end}`}
+                                    ? `终身版 (始于: ${item.start})`
+                                    : `${item.term === '1y' ? '年付' : item.term === '1m' ? '月付' : '试用 7 天'} (${item.start} 至 ${item.end})`}
                             </div>
                         </div>
                         <button
@@ -497,8 +541,12 @@
 
     .key-text {
         font-family: monospace;
-        font-size: 14px;
+        font-size: 1em;
         color: var(--b3-theme-on-surface);
+        width: 30ch;
+        white-space: nowrap; /* 强制不换行 */
+        overflow: hidden; /* 超出部分隐藏 */
+        text-overflow: ellipsis; /* 超出部分显示省略号 */
     }
 
     .key-detail {
@@ -526,10 +574,16 @@
         overflow: hidden;
     }
 
-    .vip-card.is-vip {
+    .vip-card.is-lifetime {
         background: linear-gradient(135deg, #eab308, #de8d04);
         color: white;
         box-shadow: 0 10px 25px -5px rgba(234, 179, 8, 0.4);
+    }
+
+    .vip-card.is-vip {
+        background: linear-gradient(135deg, #a855f7, #7e22ce);
+        color: white;
+        box-shadow: 0 10px 25px -5px rgba(168, 85, 247, 0.4);
     }
 
     .vip-card.not-vip {
@@ -565,25 +619,25 @@
     }
 
     .status-label {
-        font-size: 14px;
+        font-size: 1.5em;
         opacity: 0.9;
         margin-bottom: 4px;
     }
 
     .status-date {
-        font-size: 18px;
+        font-size: 1em;
         font-weight: 500;
     }
 
     .status-days {
-        font-size: 12px;
+        font-size: 1em;
         opacity: 0.8;
         margin-top: 4px;
     }
 
     .status-inactive {
         text-align: center;
-        font-size: 18px;
+        font-size: 1.5em;
         font-weight: 500;
         padding: 10px;
     }
@@ -612,6 +666,36 @@
         font-family: monospace;
     }
 
+    .user-id-text {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .eye-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        border-radius: 4px;
+        cursor: pointer;
+        opacity: 0.6;
+        transition: all 0.2s;
+    }
+
+    .eye-icon:hover {
+        opacity: 1;
+        background: var(--b3-theme-background-shallow);
+    }
+
+    .eye-icon svg {
+        width: 14px;
+        height: 14px;
+        fill: currentColor;
+        color: var(--b3-theme-on-surface);
+    }
+
     .plans-grid {
         display: grid;
         grid-template-columns: repeat(2, 1fr);
@@ -620,8 +704,8 @@
     }
 
     .plan-item {
-        background: var(--b3-theme-surface);
-        border: 1px solid var(--b3-border-color);
+        background: linear-gradient(135deg, rgba(249, 115, 22, 0.05), rgba(249, 115, 22, 0.12));
+        border: 1px solid rgba(249, 115, 22, 0.2);
         border-radius: 12px;
         padding: 16px 12px;
         text-align: center;
@@ -632,26 +716,28 @@
     }
 
     .plan-item:hover {
-        border-color: var(--b3-theme-primary-light);
-        background: var(--b3-theme-background-shallow);
+        border-color: rgba(249, 115, 22, 0.5);
+        background: linear-gradient(135deg, rgba(249, 115, 22, 0.08), rgba(249, 115, 22, 0.16));
     }
 
     .plan-item.is-selected {
-        border-color: var(--b3-theme-primary);
-        background: var(--b3-theme-primary-light);
+        border-color: #f97316;
+        background: linear-gradient(135deg, rgba(249, 115, 22, 0.15), rgba(249, 115, 22, 0.25));
         transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
+        box-shadow: 0 4px 12px rgba(249, 115, 22, 0.2);
     }
 
     .plan-badge {
         position: absolute;
         top: 0;
         right: 0;
-        background: var(--b3-theme-primary);
+        background: linear-gradient(135deg, #f97316, #ea580c);
         color: white;
         font-size: 10px;
-        padding: 2px 6px;
+        padding: 4px 8px;
         border-bottom-left-radius: 8px;
+        font-weight: bold;
+        box-shadow: -2px 2px 4px rgba(249, 115, 22, 0.2);
     }
 
     .plan-label {
