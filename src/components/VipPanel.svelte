@@ -39,11 +39,14 @@
     let outTradeNo = '';
     let isPaying = false;
     let paymentStatusMessage = '';
+    let paymentErrorMessage = '';
     let isCheckingStatus = false;
+    let paymentAmountStr = '';
 
     async function manualCheckStatus() {
         if (!outTradeNo || isCheckingStatus) return;
         isCheckingStatus = true;
+        paymentErrorMessage = '';
         try {
             const response = await fetch(
                 `${API_PREFIX}/api/check-status?out_trade_no=${outTradeNo}`
@@ -58,11 +61,11 @@
                     handleAddKey();
                 }
             } else {
-                pushMsg('订单暂未支付或查询失败');
+                paymentErrorMessage = '订单暂未支付或查询失败';
             }
         } catch (error) {
             console.error('Manual check failed', error);
-            pushMsg('查询异常，请稍后重试');
+            paymentErrorMessage = '查询异常，请稍后重试';
         } finally {
             isCheckingStatus = false;
         }
@@ -72,7 +75,9 @@
         qrcodeImg = '';
         isPaying = false;
         paymentStatusMessage = '';
+        paymentErrorMessage = '';
         outTradeNo = '';
+        paymentAmountStr = '';
     }
 
     async function handlePay() {
@@ -83,6 +88,7 @@
 
         isPaying = true;
         paymentStatusMessage = '正在创建订单...';
+        paymentErrorMessage = '';
         qrcodeImg = '';
 
         try {
@@ -100,18 +106,24 @@
                 qrcodeImg = result.img;
                 outTradeNo = result.out_trade_no;
                 paymentStatusMessage = '二维码已生成，请使用支付宝扫描';
+                paymentAmountStr =
+                    currentPrices.find(p => p.term === selectedTerm)?.price.replace(' 元', '') ||
+                    '';
             } else {
-                paymentStatusMessage = result.message || '创建订单失败';
+                paymentStatusMessage = '';
+                paymentErrorMessage = result.message || '创建订单失败';
                 isPaying = false;
             }
         } catch (error) {
-            paymentStatusMessage = '发生异常，请稍后重试';
+            paymentStatusMessage = '';
+            paymentErrorMessage = '发生异常，请稍后重试';
             isPaying = false;
         }
     }
 
     async function handleFreeTrial() {
         paymentStatusMessage = '正在请求试用激活码...';
+        paymentErrorMessage = '';
         try {
             const response = await fetch(`${API_PREFIX}/api/create-payment`, {
                 method: 'POST',
@@ -127,10 +139,12 @@
                 handleAddKey();
                 paymentStatusMessage = '试用激活码已获取并自动填入';
             } else {
-                paymentStatusMessage = result.message || '获取试用激活码失败';
+                paymentStatusMessage = '';
+                paymentErrorMessage = result.message || '获取试用激活码失败';
             }
         } catch (error) {
-            paymentStatusMessage = '获取试用激活码失败';
+            paymentStatusMessage = '';
+            paymentErrorMessage = '获取试用激活码失败';
         }
     }
 
@@ -371,10 +385,7 @@
                     </table>
                     <div class="benefits-info">
                         <h4>❓如何加入会员专属微信交流群</h4>
-                        <p>
-                            将付款截图、微信号发邮件到
-                            achuan-2@outlook.com，我会加你好友拉你进群
-                        </p>
+                        <p>将付款截图、微信号发邮件到 achuan-2@outlook.com，我会加你好友拉你进群</p>
                     </div>
                 </details>
             </div>
@@ -414,8 +425,16 @@
 
             {#if qrcodeImg}
                 <div class="payment-qrcode">
+                    <div class="payment-amount">
+                        ￥{paymentAmountStr}
+                    </div>
                     <img src={qrcodeImg} alt="支付二维码" />
-                    <p class="payment-status">{paymentStatusMessage}</p>
+                    {#if paymentStatusMessage}
+                        <p class="payment-status">{paymentStatusMessage}</p>
+                    {/if}
+                    {#if paymentErrorMessage}
+                        <p class="payment-status error-text">{paymentErrorMessage}</p>
+                    {/if}
                     <div class="payment-actions">
                         <button
                             class="b3-button b3-button--outline manual-check-btn"
@@ -432,8 +451,13 @@
                         </button>
                     </div>
                 </div>
-            {:else if paymentStatusMessage}
-                <p class="payment-status">{paymentStatusMessage}</p>
+            {:else}
+                {#if paymentStatusMessage}
+                    <p class="payment-status">{paymentStatusMessage}</p>
+                {/if}
+                {#if paymentErrorMessage}
+                    <p class="payment-status error-text">{paymentErrorMessage}</p>
+                {/if}
             {/if}
         </div>
     {/if}
@@ -486,11 +510,16 @@
 
 <style>
     .payment-qrcode {
-        margin-top: 16px;
         text-align: center;
         background: white;
         padding: 16px;
         border-radius: 8px;
+    }
+    .payment-amount {
+        font-size: 28px;
+        font-weight: bold;
+        color: var(--b3-card-warning-color);
+        margin-bottom: 12px;
     }
     .payment-qrcode img {
         width: 160px;
