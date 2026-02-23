@@ -106,9 +106,7 @@
                 qrcodeImg = result.img;
                 outTradeNo = result.out_trade_no;
                 paymentStatusMessage = '二维码已生成，请使用支付宝扫描';
-                paymentAmountStr =
-                    currentPrices.find(p => p.term === selectedTerm)?.price.replace(' 元', '') ||
-                    '';
+                paymentAmountStr = result.money || '';
             } else {
                 paymentStatusMessage = '';
                 paymentErrorMessage = result.message || '创建订单失败';
