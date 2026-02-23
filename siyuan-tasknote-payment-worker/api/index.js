@@ -95,9 +95,27 @@ function getTermMs(term, purchaseTime) {
         case '1y':
             date.setFullYear(date.getFullYear() + 1);
             return date.getTime() - start;
-        case 'Lifetime': return 999 * 365 * 24 * 60 * 60 * 1000;
-        default: return 0;
+        case 'Lifetime': return new Date(start + 999 * 365 * 24 * 60 * 60 * 1000).toISOString();
+        default: return new Date(start).toISOString();
     }
+}
+
+// 获取东八区格式化时间字符串
+function getEast8Time(timestamp = Date.now()) {
+    const d = new Date(timestamp);
+    // 加上 8 小时的毫秒数得到东八区时间表示
+    const east8 = new Date(d.getTime() + 8 * 60 * 60 * 1000);
+    return east8.toISOString().replace('T', ' ').substring(0, 16);
+}
+
+// 将东八区格式化时间字符串（YYYY-MM-DD HH:mm）转回时间戳，用于计算
+function parseEast8Time(timeStr) {
+    if (!timeStr) return 0;
+    // 如果是 ISO timestamp (带 Z)，原样解析；否则认为是东八区字面量，补上 +08:00
+    if (timeStr.includes('Z') || timeStr.includes('+')) {
+        return new Date(timeStr).getTime();
+    }
+    return new Date(timeStr + '+08:00').getTime();
 }
 
 async function recalculateSubscription(userId) {
@@ -110,37 +128,39 @@ async function recalculateSubscription(userId) {
 
     if (!rows || rows.length === 0) return;
 
-    let currentExpire = 0;
+    let currentExpireMs = 0;
     let isLifetime = false;
 
     for (const code of rows) {
-        const purchaseTime = parseInt(code.purchaseTime, 10);
+        // code.purchaseTime 现在是类似 "2026-02-23 23:20" 的字符串或 ISO 时间串
+        const purchaseTime = parseEast8Time(code.purchaseTime);
         const termMs = getTermMs(code.term, purchaseTime);
 
         if (code.term === 'Lifetime') {
-            currentExpire = new Date(purchaseTime).setFullYear(new Date(purchaseTime).getFullYear() + 99);
+            currentExpireMs = new Date(purchaseTime).setFullYear(new Date(purchaseTime).getFullYear() + 99);
             isLifetime = true;
             break;
         }
 
-        if (currentExpire < purchaseTime) {
-            currentExpire = purchaseTime + termMs;
+        if (currentExpireMs < purchaseTime) {
+            currentExpireMs = purchaseTime + termMs;
         } else {
-            currentExpire += termMs;
+            currentExpireMs += termMs;
         }
     }
 
-    const now = Date.now();
+    const currentExpireFormatted = getEast8Time(currentExpireMs);
+    const nowFormatted = getEast8Time();
     await sql`
         INSERT INTO subscriptions (user_id, expire_date, is_lifetime, updated_at)
-        VALUES (${userId}, ${currentExpire}, ${isLifetime ? 1 : 0}, ${now})
+        VALUES (${userId}, ${currentExpireFormatted}, ${isLifetime ? 1 : 0}, ${nowFormatted})
         ON CONFLICT (user_id) DO UPDATE SET 
             expire_date = EXCLUDED.expire_date,
             is_lifetime = EXCLUDED.is_lifetime,
             updated_at = EXCLUDED.updated_at
     `;
 
-    return currentExpire;
+    return currentExpireFormatted;
 }
 
 // 1. 创建支付订单
@@ -184,19 +204,21 @@ app.post('/api/create-payment', async (req, res) => {
                     activation_code: existingTrial.code
                 });
             } else {
-                const now = Date.now();
-                const activationCode = generateVIPKey(userId, term, now, process.env.PRIVATE_KEY);
-                const expireDate = calculateExpireDate(now, term);
+                const nowMs = Date.now();
+                const nowFormatted = getEast8Time(nowMs);
+                const activationCode = generateVIPKey(userId, term, nowMs, process.env.PRIVATE_KEY);
+                const expireDateMs = calculateExpireDate(nowMs, term);
+                const expireDateFormatted = getEast8Time(expireDateMs);
 
                 await sql`
                     INSERT INTO free_trial_used (user_id, created_at)
-                    VALUES (${userId}, ${now})
+                    VALUES (${userId}, ${nowFormatted})
                     ON CONFLICT (user_id) DO NOTHING
                 `;
 
                 await sql`
                     INSERT INTO activation_codes (code, user_id, term, order_id, used, created_at, expires_at)
-                    VALUES (${activationCode}, ${userId}, ${term}, null, 0, ${now}, ${expireDate})
+                    VALUES (${activationCode}, ${userId}, ${term}, null, 0, ${nowFormatted}, ${expireDateFormatted})
                 `;
 
                 return res.json({
@@ -208,7 +230,9 @@ app.post('/api/create-payment', async (req, res) => {
             }
         }
 
-        const out_trade_no = `SY_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const nowMs = Date.now();
+        const nowFormatted = getEast8Time(nowMs);
+        const out_trade_no = `SY_${nowMs}_${Math.random().toString(36).substr(2, 9)}`;
 
         const params = {
             pid: process.env.PID,
@@ -235,7 +259,7 @@ app.post('/api/create-payment', async (req, res) => {
         if (Number(zpayResult.code) === 1) {
             await sql`
                 INSERT INTO orders (out_trade_no, user_id, product_name, amount, status, term, created_at)
-                VALUES (${out_trade_no}, ${userId}, ${name}, ${money}, 0, ${term}, ${Date.now()})
+                VALUES (${out_trade_no}, ${userId}, ${name}, ${money}, 0, ${term}, ${nowFormatted})
             `;
 
             return res.json({
@@ -286,25 +310,27 @@ app.get('/api/check-status', async (req, res) => {
             const status = Number(zpayResult.status);
 
             if (status === 1 && localOrder.status === 0) {
-                const now = Date.now();
+                const nowMs = Date.now();
+                const nowFormatted = getEast8Time(nowMs);
 
                 await sql`
-                    UPDATE orders SET status = 1, paid_at = ${now}, trade_no = ${zpayResult.trade_no} 
+                    UPDATE orders SET status = 1, paid_at = ${nowFormatted}, trade_no = ${zpayResult.trade_no} 
                     WHERE out_trade_no = ${out_trade_no}
                 `;
 
                 const activationCode = generateVIPKey(
                     localOrder.user_id,
                     localOrder.term,
-                    now,
+                    nowMs,
                     process.env.PRIVATE_KEY
                 );
 
-                const expireDate = calculateExpireDate(now, localOrder.term);
+                const expireDateMs = calculateExpireDate(nowMs, localOrder.term);
+                const expireDateFormatted = getEast8Time(expireDateMs);
 
                 await sql`
                     INSERT INTO activation_codes (code, user_id, term, order_id, used, created_at, expires_at)
-                    VALUES (${activationCode}, ${localOrder.user_id}, ${localOrder.term}, ${localOrder.id}, 0, ${now}, ${expireDate})
+                    VALUES (${activationCode}, ${localOrder.user_id}, ${localOrder.term}, ${localOrder.id}, 0, ${nowFormatted}, ${expireDateFormatted})
                 `;
 
                 await recalculateSubscription(localOrder.user_id);
@@ -354,25 +380,27 @@ app.post('/api/notify', async (req, res) => {
             const localOrder = orderResult[0];
 
             if (localOrder && localOrder.status === 0) {
-                const now = Date.now();
+                const nowMs = Date.now();
+                const nowFormatted = getEast8Time(nowMs);
 
                 await sql`
-                    UPDATE orders SET status = 1, paid_at = ${now}, trade_no = ${trade_no} 
+                    UPDATE orders SET status = 1, paid_at = ${nowFormatted}, trade_no = ${trade_no} 
                     WHERE out_trade_no = ${out_trade_no}
                 `;
 
                 const activationCode = generateVIPKey(
                     localOrder.user_id,
                     localOrder.term,
-                    now,
+                    nowMs,
                     process.env.PRIVATE_KEY
                 );
 
-                const expireDate = calculateExpireDate(now, localOrder.term);
+                const expireDateMs = calculateExpireDate(nowMs, localOrder.term);
+                const expireDateFormatted = getEast8Time(expireDateMs);
 
                 await sql`
                     INSERT INTO activation_codes (code, user_id, term, order_id, used, created_at, expires_at)
-                    VALUES (${activationCode}, ${localOrder.user_id}, ${localOrder.term}, ${localOrder.id}, 0, ${now}, ${expireDate})
+                    VALUES (${activationCode}, ${localOrder.user_id}, ${localOrder.term}, ${localOrder.id}, 0, ${nowFormatted}, ${expireDateFormatted})
                 `;
 
                 await recalculateSubscription(localOrder.user_id);
@@ -402,12 +430,13 @@ app.get('/api/subscription', async (req, res) => {
             return res.json({ success: true, subscribed: false, message: '未订阅' });
         }
 
-        const now = Date.now();
+        const nowMs = Date.now();
         const expireDateStr = subscription.expire_date;
         const isLifetime = subscription.is_lifetime === 1;
-        const expireDate = parseInt(expireDateStr, 10);
+        // 把数据库取出来的字符或者Date类型变成时间戳，进行计算比较
+        const expireDate = new Date(expireDateStr).getTime();
 
-        const isValid = isLifetime || expireDate > now;
+        const isValid = isLifetime || expireDate > nowMs;
 
         return res.json({
             success: true,
@@ -430,13 +459,15 @@ app.post('/api/admin/generate-code', async (req, res) => {
             return res.status(403).json({ success: false, message: '无权限' });
         }
 
-        const now = Date.now();
-        const activationCode = generateVIPKey(userId, term, now, process.env.PRIVATE_KEY);
-        const expireDate = calculateExpireDate(now, term);
+        const nowMs = Date.now();
+        const nowFormatted = getEast8Time(nowMs);
+        const activationCode = generateVIPKey(userId, term, nowMs, process.env.PRIVATE_KEY);
+        const expireDateMs = calculateExpireDate(nowMs, term);
+        const expireDateFormatted = getEast8Time(expireDateMs);
 
         await sql`
             INSERT INTO activation_codes (code, user_id, term, used, created_at, expires_at)
-            VALUES (${activationCode}, ${userId}, ${term}, 0, ${now}, ${expireDate})
+            VALUES (${activationCode}, ${userId}, ${term}, 0, ${nowFormatted}, ${expireDateFormatted})
         `;
 
         await recalculateSubscription(userId);
