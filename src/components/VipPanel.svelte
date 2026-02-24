@@ -463,6 +463,13 @@
     {#if !vipStatus.isLifetime}
         <div class="vip-section">
             <h3>激活码兑换</h3>
+            <div class="activation-notice">
+                <p class="notice-title">📋 激活码使用须知：</p>
+                <ol>
+                    <li>激活码只限绑定的单个思源账户使用，无法用于其他用户</li>
+                    <li>激活码不限激活次数，可离线激活VIP功能：其他设备只需要同步工作空间数据或登录激活码所绑定的思源账号即可使用VIP功能</li>
+                </ol>
+            </div>
             <div class="activation-box">
                 <input
                     class="b3-text-field fn__block"
@@ -789,6 +796,32 @@
         margin-top: 12px;
         height: 40px;
         font-weight: bold;
+    }
+
+    .activation-notice {
+        background: var(--b3-theme-surface);
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 12px;
+        font-size: 13px;
+        color: var(--b3-theme-on-surface);
+        border: 1px solid var(--b3-border-color);
+    }
+
+    .activation-notice .notice-title {
+        font-weight: bold;
+        margin-bottom: 8px;
+        color: var(--b3-theme-on-background);
+    }
+
+    .activation-notice ol {
+        margin: 0;
+        padding-left: 20px;
+        line-height: 1.8;
+    }
+
+    .activation-notice li {
+        color: var(--b3-theme-on-surface-light);
     }
 
     .activation-box {
