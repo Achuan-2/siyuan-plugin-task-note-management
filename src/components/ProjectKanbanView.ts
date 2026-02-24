@@ -532,6 +532,16 @@ export class ProjectKanbanView {
             content: `
                 <div class="manage-groups-dialog">
                     <div class="b3-dialog__content">
+                        <div class="groups-filter" style="display: flex; align-items: center; ">
+                            <label class="b3-label" style="display: flex; align-items: center; gap: 4px; cursor: pointer; flex: 1;">
+                                <input type="checkbox" id="hideNoDoingGroupCb" class="b3-switch b3-switch--small" ${this.project?.hideNoDoingGroups ? 'checked' : ''}>
+                                <span style="font-size: 13px;">${i18n('hideNoDoingGroups') || '隐藏没有进行中任务的分组'}</span>
+                            </label>
+                            <label class="b3-label" style="display: flex; align-items: center; gap: 4px; cursor: pointer; flex: 1;">
+                                <input type="checkbox" id="hideNoTodayGroupCb" class="b3-switch b3-switch--small" ${this.project?.hideNoTodayGroups ? 'checked' : ''}>
+                                <span style="font-size: 13px;">${i18n('hideNoTodayGroups') || '隐藏没有今日任务的分组'}</span>
+                            </label>
+                        </div>
                         <div class="groups-list" style="margin-bottom: 16px;">
                             <div class="groups-header" style="display: flex; justify-content: space-between; align-items: center;">
                                 <h4 style="margin: 0;">${i18n('existingGroups')}</h4>
@@ -575,6 +585,22 @@ export class ProjectKanbanView {
 
         // 获取DOM元素
         const groupsContainer = dialog.element.querySelector('#groupsContainer') as HTMLElement;
+        const hideNoDoingGroupCb = dialog.element.querySelector('#hideNoDoingGroupCb') as HTMLInputElement;
+        const hideNoTodayGroupCb = dialog.element.querySelector('#hideNoTodayGroupCb') as HTMLInputElement;
+
+        const updateFilters = async () => {
+            const projectData = await this.plugin.loadProjectData();
+            if (projectData[this.projectId]) {
+                projectData[this.projectId].hideNoDoingGroups = hideNoDoingGroupCb.checked;
+                projectData[this.projectId].hideNoTodayGroups = hideNoTodayGroupCb.checked;
+                await this.plugin.saveProjectData(projectData);
+                await this.loadProject();
+                this.queueLoadTasks(); // 刷新看板内容
+            }
+        };
+
+        hideNoDoingGroupCb.addEventListener('change', updateFilters);
+        hideNoTodayGroupCb.addEventListener('change', updateFilters);
         const addGroupBtn = dialog.element.querySelector('#addGroupBtn') as HTMLButtonElement;
         const groupForm = dialog.element.querySelector('#groupForm') as HTMLElement;
         const formTitle = dialog.element.querySelector('#formTitle') as HTMLElement;
@@ -6326,12 +6352,42 @@ export class ProjectKanbanView {
             }
         });
 
+        const todayStr = getLogicalDateString();
+
         // 为每个自定义分组创建状态子列（使用 kanbanStatuses 中定义的所有状态）
         activeGroups.forEach((group: any) => {
             const groupStatusTasks: { [status: string]: any[] } = {};
             this.kanbanStatuses.forEach(status => {
                 groupStatusTasks[status.id] = statusTasks[status.id].filter(task => task.customGroupId === group.id);
             });
+
+            if (this.project?.hideNoDoingGroups) {
+                const doingTasks = groupStatusTasks['doing'] || [];
+                if (doingTasks.length === 0) {
+                    const columnId = `custom-group-${group.id}`;
+                    const column = kanbanContainer.querySelector(`.kanban-column-${columnId}`);
+                    if (column) column.remove();
+                    return; // 隐藏没有进行中任务的分组
+                }
+            }
+
+            if (this.project?.hideNoTodayGroups) {
+                let hasToday = false;
+                for (const statusId in groupStatusTasks) {
+                    if (groupStatusTasks[statusId].some(task => {
+                        return task.date && compareDateStrings(this.getTaskLogicalDate(task.date, task.time), todayStr) === 0;
+                    })) {
+                        hasToday = true;
+                        break;
+                    }
+                }
+                if (!hasToday) {
+                    const columnId = `custom-group-${group.id}`;
+                    const column = kanbanContainer.querySelector(`.kanban-column-${columnId}`);
+                    if (column) column.remove();
+                    return; // 隐藏没有今日任务的分组
+                }
+            }
 
             // 即使没有任务也要显示分组列
             this.renderCustomGroupColumnWithStatuses(group, groupStatusTasks);
@@ -6354,6 +6410,28 @@ export class ProjectKanbanView {
                 hasUngrouped = true;
             }
         });
+
+        if (this.project?.hideNoDoingGroups) {
+            const doingTasks = ungroupedStatusTasks['doing'] || [];
+            if (doingTasks.length === 0) {
+                hasUngrouped = false;
+            }
+        }
+
+        if (this.project?.hideNoTodayGroups && hasUngrouped) {
+            let hasToday = false;
+            for (const statusId in ungroupedStatusTasks) {
+                if (ungroupedStatusTasks[statusId].some(task => {
+                    return task.date && compareDateStrings(this.getTaskLogicalDate(task.date, task.time), todayStr) === 0;
+                })) {
+                    hasToday = true;
+                    break;
+                }
+            }
+            if (!hasToday) {
+                hasUngrouped = false;
+            }
+        }
 
         if (hasUngrouped) {
             // 获取项目的所有未归档默认里程碑
