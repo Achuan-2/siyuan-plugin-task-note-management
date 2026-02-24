@@ -216,6 +216,19 @@ export class CalendarView {
         }
     }
 
+    private interactionBlocker = (e: Event) => {
+        if (VipManager.isVip(this.plugin)) return;
+
+        // 允许在升级提示框内的点击和交互
+        const target = e.target as HTMLElement;
+        if (target && typeof target.closest === 'function' && target.closest('.vip-upgrade-prompt')) {
+            return;
+        }
+
+        e.stopPropagation();
+        e.preventDefault();
+    };
+
     private checkVip() {
         const isVip = VipManager.isVip(this.plugin);
         const overlay = this.container.querySelector('.vip-mask-overlay');
@@ -224,6 +237,12 @@ export class CalendarView {
         if (isVip) {
             if (overlay) overlay.remove();
             if (prompt) prompt.remove();
+
+            // 移除事件拦截
+            const eventsToBlock = ['click', 'mousedown', 'mouseup', 'mousemove', 'dblclick', 'contextmenu', 'wheel', 'touchstart', 'touchmove', 'touchend', 'keydown', 'keyup'];
+            eventsToBlock.forEach(eventType => {
+                this.container.removeEventListener(eventType, this.interactionBlocker, true);
+            });
             return;
         }
 
@@ -302,6 +321,12 @@ export class CalendarView {
             });
             this.container.appendChild(prompt);
         }
+
+        // 添加事件拦截器，防止用户删除 DOM 后直接使用
+        const eventsToBlock = ['click', 'mousedown', 'mouseup', 'mousemove', 'dblclick', 'contextmenu', 'wheel', 'touchstart', 'touchmove', 'touchend', 'keydown', 'keyup'];
+        eventsToBlock.forEach(eventType => {
+            this.container.addEventListener(eventType, this.interactionBlocker, true);
+        });
     }
 
     private setupAllDayResizer(el: HTMLElement) {
@@ -5999,13 +6024,13 @@ export class CalendarView {
                 const endTimeDate = new Date(`${endDate}T${reminder.endTime}:00`);
                 const startTimeDate = new Date(endTimeDate);
                 startTimeDate.setMinutes(startTimeDate.getMinutes() - 30);
-                
+
                 // 如果开始时间到了前一天，则从当天00:00开始
                 if (startTimeDate.getDate() !== endTimeDate.getDate()) {
                     startTimeDate.setDate(endTimeDate.getDate());
                     startTimeDate.setHours(0, 0, 0, 0);
                 }
-                
+
                 const startTimeStr = startTimeDate.toTimeString().substring(0, 5);
                 eventObj.start = `${endDate}T${startTimeStr}:00`;
                 eventObj.end = `${endDate}T${reminder.endTime}:00`;
@@ -7540,11 +7565,11 @@ export class CalendarView {
     private async showCreateSubtaskDialog(calendarEvent: any) {
         // 获取父任务ID
         let parentId = calendarEvent.extendedProps?.originalId || calendarEvent.id;
-        
+
         // 获取父任务数据
         const reminderData = await getAllReminders(this.plugin);
         const parentReminder = reminderData[parentId];
-        
+
         if (!parentReminder) {
             showMessage(i18n("reminderNotExist") || "任务不存在");
             return;
@@ -7554,12 +7579,12 @@ export class CalendarView {
         const today = getLogicalDateString();
         const startDate = parentReminder.date;
         const endDate = parentReminder.endDate || parentReminder.date;
-        
+
         let defaultDate: string;
-        
+
         // 判断是否是跨日任务
         const isCrossDay = startDate !== endDate;
-        
+
         if (isCrossDay) {
             // 跨日任务：检查今天是否在时间段内
             if (today >= startDate && today <= endDate) {
@@ -7591,11 +7616,11 @@ export class CalendarView {
         // 处理时间段继承
         let defaultTime: string | undefined = undefined;
         let timeRangeOptions: { isTimeRange: boolean; endDate?: string; endTime?: string } | undefined = undefined;
-        
+
         // 如果父任务有时间设置
         if (parentReminder.time) {
             defaultTime = parentReminder.time;
-            
+
             // 如果是单日任务且有结束时间，则继承时间段设置
             if (!isCrossDay && parentReminder.endTime) {
                 timeRangeOptions = {

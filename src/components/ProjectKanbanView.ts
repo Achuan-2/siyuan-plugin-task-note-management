@@ -431,6 +431,19 @@ export class ProjectKanbanView {
         }
     }
 
+    private interactionBlocker = (e: Event) => {
+        if (VipManager.isVip(this.plugin)) return;
+
+        // 允许在升级提示框内的点击和交互
+        const target = e.target as HTMLElement;
+        if (target && typeof target.closest === 'function' && target.closest('.vip-upgrade-prompt')) {
+            return;
+        }
+
+        e.stopPropagation();
+        e.preventDefault();
+    };
+
     private checkVip() {
         const isVip = VipManager.isVip(this.plugin);
         const overlay = this.container.querySelector('.vip-mask-overlay');
@@ -439,6 +452,12 @@ export class ProjectKanbanView {
         if (isVip) {
             if (overlay) overlay.remove();
             if (prompt) prompt.remove();
+
+            // 移除事件拦截
+            const eventsToBlock = ['click', 'mousedown', 'mouseup', 'mousemove', 'dblclick', 'contextmenu', 'wheel', 'touchstart', 'touchmove', 'touchend', 'keydown', 'keyup'];
+            eventsToBlock.forEach(eventType => {
+                this.container.removeEventListener(eventType, this.interactionBlocker, true);
+            });
             return;
         }
 
@@ -517,6 +536,12 @@ export class ProjectKanbanView {
             });
             this.container.appendChild(prompt);
         }
+
+        // 添加事件拦截器，防止用户删除 DOM 后直接使用
+        const eventsToBlock = ['click', 'mousedown', 'mouseup', 'mousemove', 'dblclick', 'contextmenu', 'wheel', 'touchstart', 'touchmove', 'touchend', 'keydown', 'keyup'];
+        eventsToBlock.forEach(eventType => {
+            this.container.addEventListener(eventType, this.interactionBlocker, true);
+        });
     }
 
     private updateModeSelect() {
