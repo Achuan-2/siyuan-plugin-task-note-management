@@ -3324,6 +3324,11 @@ export class QuickReminderDialog {
                 filterOptions(searchInput.value);
             });
 
+            dropdown.addEventListener('mousedown', (e) => {
+                // 如果是左键点击，阻止默认行为防止searchInput失去焦点
+                if (e.button === 0) e.preventDefault();
+            });
+
             dropdown.addEventListener('click', async (e) => {
                 const target = (e.target as HTMLElement).closest('.b3-menu__item');
                 if (target && !target.classList.contains('b3-menu__item--readonly')) {
@@ -3332,6 +3337,8 @@ export class QuickReminderDialog {
 
                     hiddenInput.value = val || '';
                     searchInput.value = val ? (label || '') : '';
+
+                    dropdown.style.display = 'none';
 
                     // 触发变更
                     await this.onProjectChange(val || '');
@@ -3484,6 +3491,10 @@ export class QuickReminderDialog {
                 filterOptions(searchInput.value);
             });
 
+            dropdown.addEventListener('mousedown', (e) => {
+                if (e.button === 0) e.preventDefault();
+            });
+
             dropdown.addEventListener('click', async (e) => {
                 const target = (e.target as HTMLElement).closest('.b3-menu__item');
                 if (target) {
@@ -3492,6 +3503,8 @@ export class QuickReminderDialog {
 
                     hiddenInput.value = val || '';
                     searchInput.value = val ? (label || '') : '';
+
+                    dropdown.style.display = 'none';
 
                     // 触发变更：更新里程碑
                     await this.renderMilestoneSelector(projectId, val || '');
@@ -3602,6 +3615,10 @@ export class QuickReminderDialog {
                     filterOptions(searchInput.value);
                 });
 
+                dropdown.addEventListener('mousedown', (e) => {
+                    if (e.button === 0) e.preventDefault();
+                });
+
                 dropdown.addEventListener('click', (e) => {
                     const target = (e.target as HTMLElement).closest('.b3-menu__item');
                     if (target) {
@@ -3610,6 +3627,8 @@ export class QuickReminderDialog {
 
                         hiddenInput.value = val || '';
                         searchInput.value = val ? (label || '') : '';
+
+                        dropdown.style.display = 'none';
                     }
                 });
 
@@ -3725,7 +3744,7 @@ export class QuickReminderDialog {
         const endDateInput = this.dialog.element.querySelector('#quickReminderEndDate') as HTMLInputElement;
         const timeInput = this.dialog.element.querySelector('#quickReminderTime') as HTMLInputElement;
         const endTimeInput = this.dialog.element.querySelector('#quickReminderEndTime') as HTMLInputElement;
-        const projectSelector = this.dialog.element.querySelector('#quickProjectSelector') as HTMLSelectElement;
+        const projectSelector = this.dialog.element.querySelector('#quickProjectSelector') as HTMLInputElement;
         const selectedPriority = this.dialog.element.querySelector('#quickPrioritySelector .priority-option.selected') as HTMLElement;
         // const selectedCategory = this.dialog.element.querySelector('#quickCategorySelector .category-option.selected') as HTMLElement;
         const selectedStatus = this.dialog.element.querySelector('#quickStatusSelector .task-status-option.selected') as HTMLElement;
