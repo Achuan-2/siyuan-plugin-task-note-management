@@ -54,6 +54,7 @@ export class VipManager {
             const key = ec.keyFromPublic(PUBLIC_KEY, 'hex');
 
             const valid = key.verify(message, signature);
+            console.log({ purchaseTime, term: term as PurchaseTerm, valid });
             return { purchaseTime, term: term as PurchaseTerm, valid };
         } catch (e) {
             return { purchaseTime: 0, term: '7d', valid: false };
@@ -98,7 +99,11 @@ export class VipManager {
         }
 
         const now = Date.now();
-        const isVip = currentExpire > now;
+
+        // 防止用户修改系统时间到过去：如果当前时间早于激活码的购买时间，视为时间被篡改，暂不激活 VIP 功能
+        const isTimeTampered = validKeys.some(k => k.purchaseTime > now);
+        const isVip = !isTimeTampered && currentExpire > now;
+
         const remainingMs = Math.max(0, currentExpire - now);
         const remainingDays = Math.ceil(remainingMs / (1000 * 60 * 60 * 24));
 
