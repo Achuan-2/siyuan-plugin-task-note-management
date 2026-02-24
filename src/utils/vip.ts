@@ -54,7 +54,7 @@ export class VipManager {
             const key = ec.keyFromPublic(PUBLIC_KEY, 'hex');
 
             const valid = key.verify(message, signature);
-            console.log({ purchaseTime, term: term as PurchaseTerm, valid });
+            // console.log({ purchaseTime, term: term as PurchaseTerm, valid });
             return { purchaseTime, term: term as PurchaseTerm, valid };
         } catch (e) {
             return { purchaseTime: 0, term: '7d', valid: false };
