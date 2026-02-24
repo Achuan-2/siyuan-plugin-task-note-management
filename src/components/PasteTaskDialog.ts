@@ -23,6 +23,7 @@ export interface HierarchicalTask {
     time?: string;
     endDate?: string;
     endTime?: string;
+    reminderTimes?: any[];
     blockId?: string;
     level: number;
     children: HierarchicalTask[];
@@ -208,8 +209,8 @@ export class PasteTaskDialog {
             content: `
                 <div class="b3-dialog__content">
                     <p>${i18n("pasteInstructions") || "粘贴Markdown列表或多行文本，每行将创建一个任务。支持多层级列表自动创建父子任务。"}</p>
-                    <p style="font-size: 12px; color: var(--b3-theme-on-surface); opacity: 0.8; margin-bottom: 4px;">
-                        ${i18n("supportPrioritySyntax") || "支持语法："}<code>@priority=high&startDate=2025-08-12&endDate=2025-08-30</code>
+                    <p style="font-size: 12px; color: var(--b3-theme-on-surface); opacity: 0.8; margin-bottom: 4px; word-break: break-all;">
+                        ${i18n("supportPrioritySyntax") || "支持语法："}<code>@priority=high&startDate=2025-08-12&endDate=2025-08-30&reminderTimes=[{"time":"2026-02-24T12:33","note":"备注1"}]</code>
                     </p>
                     <p style="font-size: 12px; color: var(--b3-theme-on-surface); opacity: 0.8; margin-bottom: 4px;">
                         ${i18n("supportBlockLink") || "支持绑定块："}<code>[任务标题](siyuan://blocks/块ID)</code> 或 <code>((块ID '任务标题'))</code>
@@ -675,6 +676,7 @@ export class PasteTaskDialog {
         let time: string | undefined;
         let endDate: string | undefined;
         let endTime: string | undefined;
+        let reminderTimes: any[] | undefined;
         let blockId: string | undefined;
         let completed: boolean | undefined;
 
@@ -715,18 +717,50 @@ export class PasteTaskDialog {
 
         if (paramMatch) {
             title = title.replace(/@(.*)$/, '').trim();
-            const paramString = paramMatch[1];
+            // Handle markdown/HTML escaped ampersands, non-breaking spaces, and spaces around operators
+            const paramString = paramMatch[1]
+                .replace(/\\/g, '')
+                .replace(/&amp;/g, '&')
+                .replace(/&nbsp;/g, ' ')
+                .replace(/\s*&\s*/g, '&')
+                .replace(/\s*=\s*/g, '=')
+                .trim();
+
             const params = new URLSearchParams(paramString);
-            priority = params.get('priority') || undefined;
-            startDate = params.get('startDate') || startDate;
-            endDate = params.get('endDate') || endDate;
+
+            const parsedPriority = params.get('priority')?.trim();
+            if (parsedPriority) {
+                priority = parsedPriority;
+            }
+
+            const parsedStartDate = params.get('startDate')?.trim();
+            if (parsedStartDate) {
+                startDate = parsedStartDate;
+            }
+
+            const parsedEndDate = params.get('endDate')?.trim();
+            if (parsedEndDate) {
+                endDate = parsedEndDate;
+            }
+
+            const parsedReminderTimes = params.get('reminderTimes')?.trim();
+            if (parsedReminderTimes) {
+                try {
+                    reminderTimes = JSON.parse(parsedReminderTimes);
+                } catch (e) {
+                    console.error('Failed to parse reminderTimes:', e);
+                }
+            }
+
             if (priority && !['high', 'medium', 'low', 'none'].includes(priority)) priority = 'none';
             const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
             if (startDate && !dateRegex.test(startDate)) startDate = undefined;
             if (endDate && !dateRegex.test(endDate)) endDate = undefined;
         }
 
-        return { title: title.trim() || i18n('noContentHint') || '未命名任务', priority, startDate, time, endDate, endTime, blockId, completed };
+        let result = { title: title.trim() || i18n('noContentHint') || '未命名任务', priority, startDate, time, endDate, endTime, reminderTimes, blockId, completed };
+        console.log('Parsed task line:', { line, result });
+        return result
     }
 
     private async batchCreateTasksWithHierarchy(tasks: HierarchicalTask[], selectedStatus?: string, selectedGroupId?: string | null, selectedMilestoneId?: string): Promise<any[]> {
@@ -784,6 +818,7 @@ export class PasteTaskDialog {
                 time: task.time,
                 endDate: task.endDate,
                 endTime: task.endTime,
+                reminderTimes: task.reminderTimes,
                 sort: sortCounter,
             };
 
