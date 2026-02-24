@@ -2548,6 +2548,26 @@ export class CalendarView {
             });
         }
 
+        // 添加创建子任务选项
+        menu.addItem({
+            iconHTML: "➕",
+            label: i18n("createSubtask") || "创建子任务",
+            click: () => {
+                this.showCreateSubtaskDialog(calendarEvent);
+            }
+        });
+
+        // 如果是子任务，添加查看父任务选项
+        if (calendarEvent.extendedProps.parentId) {
+            menu.addItem({
+                iconHTML: "👁️‍🗨️",
+                label: i18n("viewParentTask") || "查看父任务",
+                click: () => {
+                    this.showParentTaskDialog(calendarEvent);
+                }
+            });
+        }
+
         menu.addItem({
             iconHTML: "✅",
             label: calendarEvent.extendedProps.completed ? i18n("markAsUncompleted") : i18n("markAsCompleted"),
@@ -3268,21 +3288,28 @@ export class CalendarView {
             mainFrame.appendChild(indicatorsRow);
         }
 
-        // 4. 显示标签：项目名、自定义分组名或文档名
+        // 4. 显示标签：项目名、自定义分组名、文档名或父任务名
         let labelText = '';
         let labelColor = '';
+
+        // 如果是子任务，优先显示父任务信息
+        if (props.parentId && props.parentTitle) {
+            labelText = `↪️ 父任务: ${props.parentTitle}`;
+        }
 
         if (this.showCategoryAndProject) {
             if (props.projectId) {
                 // 如果有项目，显示项目名（带📂图标）
                 const project = this.projectManager.getProjectById(props.projectId);
                 if (project) {
-                    labelText = `📂 ${project.name} `;
+                    const projectText = `📂 ${project.name} `;
                     labelColor = this.projectManager.getProjectColor(props.projectId);
 
                     // 如果有自定义分组，显示"项目/自定义分组"（使用预加载的名称）
                     if (props.customGroupId && props.customGroupName) {
                         labelText = `📂 ${project.name} / ${props.customGroupName}`;
+                    } else {
+                        labelText = projectText;
                     }
                 }
             } else if (props.docTitle && props.docId && props.blockId && props.docId !== props.blockId) {
@@ -7460,5 +7487,146 @@ export class CalendarView {
             .replace(/>/g, "&gt;")
             .replace(/"/g, "&quot;")
             .replace(/'/g, "&#039;");
+    }
+
+    private async showCreateSubtaskDialog(calendarEvent: any) {
+        // 获取父任务ID
+        let parentId = calendarEvent.extendedProps?.originalId || calendarEvent.id;
+        
+        // 获取父任务数据
+        const reminderData = await getAllReminders(this.plugin);
+        const parentReminder = reminderData[parentId];
+        
+        if (!parentReminder) {
+            showMessage(i18n("reminderNotExist") || "任务不存在");
+            return;
+        }
+
+        // 计算默认日期
+        const today = getLogicalDateString();
+        const startDate = parentReminder.date;
+        const endDate = parentReminder.endDate || parentReminder.date;
+        
+        let defaultDate: string;
+        
+        // 判断是否是跨日任务
+        const isCrossDay = startDate !== endDate;
+        
+        if (isCrossDay) {
+            // 跨日任务：检查今天是否在时间段内
+            if (today >= startDate && today <= endDate) {
+                // 今天日期在任务时间段内，自动填充今日日期
+                defaultDate = today;
+            } else if (startDate > today) {
+                // 任务开始时间晚于今天（未来任务），填充起始日期
+                defaultDate = startDate;
+            } else {
+                // 任务结束时间早于今天（过去任务），填充结束日期
+                defaultDate = endDate;
+            }
+        } else {
+            // 非跨日任务（单日任务）
+            if (startDate >= today) {
+                // 任务日期在今天或未来，使用任务日期
+                defaultDate = startDate;
+            } else {
+                // 任务日期在过去，使用今天日期
+                defaultDate = today;
+            }
+        }
+
+        // 计算最大排序值，以便将新任务放在末尾
+        const allReminders = Object.values(reminderData);
+        const maxSort = allReminders.reduce((max, r) => Math.max(max, r.sort || 0), 0);
+        const defaultSort = maxSort + 10000;
+
+        // 处理时间段继承
+        let defaultTime: string | undefined = undefined;
+        let timeRangeOptions: { isTimeRange: boolean; endDate?: string; endTime?: string } | undefined = undefined;
+        
+        // 如果父任务有时间设置
+        if (parentReminder.time) {
+            defaultTime = parentReminder.time;
+            
+            // 如果是单日任务且有结束时间，则继承时间段设置
+            if (!isCrossDay && parentReminder.endTime) {
+                timeRangeOptions = {
+                    isTimeRange: true,
+                    endDate: defaultDate,
+                    endTime: parentReminder.endTime
+                };
+            }
+        }
+
+        const dialog = new QuickReminderDialog(
+            defaultDate, // 计算后的默认日期
+            defaultTime, // 继承父任务时间
+            async () => { // onSaved - optimistic update
+                this.refreshEvents();
+                window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
+            },
+            timeRangeOptions, // 时间段选项（单日任务继承父任务时间段）
+            { // options
+                defaultParentId: parentReminder.id,
+                defaultProjectId: parentReminder.projectId,
+                defaultCategoryId: parentReminder.categoryId,
+                defaultPriority: parentReminder.priority || 'none',
+                // 自动填充父任务的自定义分组与状态
+                defaultCustomGroupId: parentReminder.customGroupId || undefined,
+                defaultStatus: parentReminder.kanbanStatus || undefined,
+                defaultMilestoneId: parentReminder.milestoneId || undefined,
+                plugin: this.plugin,
+                defaultTitle: '', // 子任务标题默认为空
+                defaultSort: defaultSort
+            }
+        );
+        // 保留默认回调行为（QuickReminderDialog 内部仍会在后台保存并触发 reminderUpdated）
+        dialog.show();
+    }
+
+    private async showParentTaskDialog(calendarEvent: any) {
+        const parentId = calendarEvent.extendedProps?.parentId;
+        if (!parentId) {
+            showMessage(i18n("noParentTask") || "没有父任务");
+            return;
+        }
+
+        // 获取父任务数据
+        const reminderData = await getAllReminders(this.plugin);
+        const parentTask = reminderData[parentId];
+
+        if (!parentTask) {
+            showMessage(i18n("parentTaskNotExist") || "父任务不存在");
+            return;
+        }
+
+        // 判断是否是重复任务实例
+        const isInstanceEdit = calendarEvent.extendedProps?.isRepeated || false;
+        const instanceDate = calendarEvent.extendedProps?.date;
+
+        const parentDialog = new QuickReminderDialog(
+            isInstanceEdit ? instanceDate : parentTask.date,
+            parentTask.time,
+            undefined,
+            parentTask.endDate ? {
+                isTimeRange: true,
+                endDate: parentTask.endDate,
+                endTime: parentTask.endTime
+            } : undefined,
+            {
+                reminder: parentTask,
+                mode: 'edit',
+                plugin: this.plugin,
+                isInstanceEdit: isInstanceEdit,
+                instanceDate: isInstanceEdit ? instanceDate : undefined,
+                onSaved: async () => {
+                    // 父任务保存后刷新日历
+                    await this.refreshEvents();
+                    // 触发全局刷新事件
+                    window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
+                }
+            }
+        );
+        parentDialog.show();
     }
 }
