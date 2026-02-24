@@ -432,7 +432,7 @@ export class ProjectKanbanView {
     }
 
     private interactionBlocker = (e: Event) => {
-        if (VipManager.isVip(this.plugin)) return;
+        if (this.plugin.vip.isVip) return;
 
         // 允许在升级提示框内的点击和交互
         const target = e.target as HTMLElement;
@@ -444,8 +444,12 @@ export class ProjectKanbanView {
         e.preventDefault();
     };
 
-    private checkVip() {
-        const isVip = VipManager.isVip(this.plugin);
+    private async checkVip() {
+        const status = await VipManager.checkAndUpdateVipStatus(this.plugin);
+        this.plugin.vip.isVip = status.isVip;
+        this.plugin.vip.expireDate = status.expireDate;
+
+        const isVip = this.plugin.vip.isVip;
         const overlay = this.container.querySelector('.vip-mask-overlay');
         const prompt = this.container.querySelector('.vip-upgrade-prompt');
 

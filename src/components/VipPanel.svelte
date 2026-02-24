@@ -2,11 +2,24 @@
     import { VipManager, type VIPStatus } from '../utils/vip';
     import { pushMsg } from '../api';
 
+    import { onMount } from 'svelte';
+
     export let plugin: any;
     export let isDialog: boolean = false;
 
-    let userId = VipManager.getUserId();
-    let vipStatus: VIPStatus = VipManager.checkAndUpdateVipStatus(plugin);
+    let userId = 'unknown';
+    let vipStatus: VIPStatus = {
+        vipKeys: plugin?.vip?.vipKeys || [],
+        isVip: plugin?.vip?.isVip || false,
+        expireDate: plugin?.vip?.expireDate || '',
+        remainingDays: 0,
+        freeTrialUsed: plugin?.vip?.freeTrialUsed || false,
+    };
+
+    onMount(async () => {
+        userId = await VipManager.getUserId();
+        vipStatus = await VipManager.checkAndUpdateVipStatus(plugin);
+    });
     let inputKey = '';
     let message = '';
     let isError = false;
@@ -146,7 +159,7 @@
         }
     }
 
-    function handleAddKey() {
+    async function handleAddKey() {
         if (!inputKey) return;
 
         const result = VipManager.parseVIPKey(userId, inputKey);
@@ -170,7 +183,7 @@
         plugin = plugin; // 触发 Svelte 响应式更新
 
         // 更新内存中的 VIP 状态，以便保存时数据一致
-        vipStatus = VipManager.checkAndUpdateVipStatus(plugin);
+        vipStatus = await VipManager.checkAndUpdateVipStatus(plugin);
         plugin.vip.isVip = vipStatus.isVip;
         plugin.vip.expireDate = vipStatus.expireDate;
 
@@ -289,24 +302,33 @@
             <div class="user-id">
                 <div class="user-id-text">
                     <span>思源账号ID:</span>
-                    <span class="id-value" style="letter-spacing: {showUserId ? 'normal' : '2px'};">
-                        {showUserId ? userId : '••••••••'}
-                    </span>
-                    <div
-                        class="eye-icon"
-                        on:click={() => (showUserId = !showUserId)}
-                        role="button"
-                        tabindex="0"
-                        on:keydown={e =>
-                            (e.key === 'Enter' || e.key === ' ') && (showUserId = !showUserId)}
-                        title={showUserId ? '隐藏' : '显示'}
-                    >
-                        {#if showUserId}
-                            <svg><use xlink:href="#iconEyeoff"></use></svg>
-                        {:else}
-                            <svg><use xlink:href="#iconEye"></use></svg>
-                        {/if}
-                    </div>
+                    {#if userId === 'unknown' || !userId}
+                        <span class="id-value" style="letter-spacing: normal;">
+                            {userId || 'unknown'}
+                        </span>
+                    {:else}
+                        <span
+                            class="id-value"
+                            style="letter-spacing: {showUserId ? 'normal' : '2px'};"
+                        >
+                            {showUserId ? userId : '••••••••'}
+                        </span>
+                        <div
+                            class="eye-icon"
+                            on:click={() => (showUserId = !showUserId)}
+                            role="button"
+                            tabindex="0"
+                            on:keydown={e =>
+                                (e.key === 'Enter' || e.key === ' ') && (showUserId = !showUserId)}
+                            title={showUserId ? '隐藏' : '显示'}
+                        >
+                            {#if showUserId}
+                                <svg><use xlink:href="#iconEyeoff"></use></svg>
+                            {:else}
+                                <svg><use xlink:href="#iconEye"></use></svg>
+                            {/if}
+                        </div>
+                    {/if}
                 </div>
                 {#if userId !== 'unknown' && userId}
                     <button
@@ -412,7 +434,10 @@
                     2026年02月23日及之前赞赏的用户，可以凭赞赏截图，以过去赞赏总额×2的优惠减免付费会员金额，2026年02月23日及之前赞赏超过50元的用户和代码PR贡献者，可申请为终身会员。发送赞赏支付截图/代码贡献截图以及思源账号ID（通过上方的用户信息复制）到
                     achuan-2@outlook.com 进行申请减免和终身会员。
                 </p>
-                <p>⚠️ 思源笔记开发者（在思源集市上架作品或为思源贡献PR被采纳）或在校学生，凭相关证明可享6折会员优惠。</p>
+                <p>
+                    ⚠️
+                    思源笔记开发者（在思源集市上架作品或为思源贡献PR被采纳）或在校学生，凭相关证明可享6折会员优惠。
+                </p>
                 <button
                     class="b3-button b3-button--text pay-btn"
                     disabled={userId === 'unknown' || isPaying}
@@ -468,7 +493,9 @@
                 <p class="notice-title">📋 激活码使用须知：</p>
                 <ol>
                     <li>激活码只限绑定的单个思源账户使用，无法用于其他用户</li>
-                    <li>激活码不限激活次数，可离线激活VIP功能：其他设备只需要同步工作空间数据或登录激活码所绑定的思源账号即可使用VIP功能</li>
+                    <li>
+                        激活码不限激活次数，可离线激活VIP功能：其他设备只需要同步工作空间数据或登录激活码所绑定的思源账号即可使用VIP功能
+                    </li>
                 </ol>
             </div>
             <div class="activation-box">

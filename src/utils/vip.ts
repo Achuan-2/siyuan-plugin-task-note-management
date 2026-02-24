@@ -1,4 +1,5 @@
 import { ec as EC } from "elliptic";
+import { fetchSyncPost } from "siyuan";
 
 const ec = new EC("secp256k1");
 
@@ -141,15 +142,42 @@ export class VipManager {
         return `${Y}-${M}-${D} ${h}:${m}`;
     }
 
-    static getUserId(): string {
-        return (window as any).siyuan?.user?.userId || 'unknown';
+    private static cachedUserId: string | null = null;
+    private static cachedCheckPromise: Promise<string> | null = null;
+
+    static async getUserId(): Promise<string> {
+        const userId = (window as any).siyuan?.user?.userId;
+        const userToken = (window as any).siyuan?.user?.userToken;
+
+        if (userId && userToken) {
+            if (this.cachedUserId === userId) return userId;
+            if (this.cachedCheckPromise) return this.cachedCheckPromise;
+
+            this.cachedCheckPromise = (async () => {
+                try {
+                    let res = await fetchSyncPost("/api/setting/getCloudUser", {
+                    });
+                    if (res && res.data && res.data.userId === userId) {
+                        this.cachedUserId = userId;
+                        return userId;
+                    }
+                } catch (e) {
+                    console.warn("Verify cloud user error", e);
+                } finally {
+                    this.cachedCheckPromise = null;
+                }
+                return 'unknown';
+            })();
+            return this.cachedCheckPromise;
+        }
+        return 'unknown';
     }
 
     /**
      * 检查设置中的 VIP 状态
      */
-    static checkAndUpdateVipStatus(target: any): VIPStatus {
-        const userId = this.getUserId();
+    static async checkAndUpdateVipStatus(target: any): Promise<VIPStatus> {
+        const userId = await this.getUserId();
         // target 可以是插件实例 (target.vip) 或者是直接的 VIP 数据对象 (target.vipKeys)
         const vipKeys = (target.vip?.vipKeys) || (target.vipKeys) || [];
         const freeTrialUsed = (target.vip?.freeTrialUsed) || (target.freeTrialUsed) || false;
@@ -160,8 +188,8 @@ export class VipManager {
     /**
      * 快速检查是否为 VIP
      */
-    static isVip(target: any): boolean {
-        const status = this.checkAndUpdateVipStatus(target);
+    static async isVip(target: any): Promise<boolean> {
+        const status = await this.checkAndUpdateVipStatus(target);
         return status.isVip;
     }
 }

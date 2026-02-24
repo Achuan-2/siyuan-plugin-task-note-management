@@ -533,7 +533,7 @@ export default class ReminderPlugin extends Plugin {
                 }
 
                 // 验证状态
-                const status = VipManager.checkAndUpdateVipStatus(this);
+                const status = await VipManager.checkAndUpdateVipStatus(this);
                 this.vip.isVip = status.isVip;
                 this.vip.expireDate = status.expireDate;
             } catch (error) {
