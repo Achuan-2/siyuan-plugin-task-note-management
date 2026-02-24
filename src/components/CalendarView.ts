@@ -5970,31 +5970,61 @@ export class CalendarView {
             }
         };
 
+        // 处理日期逻辑：优先使用 date 作为开始日期，如果没有 date 则使用 endDate
+        const startDate = reminder.date || reminder.endDate;
+        const endDate = reminder.endDate;
+
         // 处理跨天事件
-        if (reminder.endDate) {
+        if (endDate && startDate !== endDate) {
+            // 既有开始日期又有结束日期，且不相同，是跨天事件
             if (reminder.time && reminder.endTime) {
-                eventObj.start = `${reminder.date}T${reminder.time}:00`;
-                eventObj.end = `${reminder.endDate}T${reminder.endTime}:00`;
+                eventObj.start = `${startDate}T${reminder.time}:00`;
+                eventObj.end = `${endDate}T${reminder.endTime}:00`;
                 eventObj.allDay = false;
             } else {
-                eventObj.start = reminder.date;
-                const endDate = new Date(reminder.endDate);
-                endDate.setDate(endDate.getDate() + 1);
-                eventObj.end = getLocalDateString(endDate);
+                eventObj.start = startDate;
+                const endDateObj = new Date(endDate);
+                endDateObj.setDate(endDateObj.getDate() + 1);
+                eventObj.end = getLocalDateString(endDateObj);
                 eventObj.allDay = true;
 
                 if (reminder.time) {
                     eventObj.title = `${reminder.title || i18n("unnamedNote")} (${reminder.time})`;
                 }
             }
+        } else if (endDate && !reminder.date) {
+            // 只有结束日期，没有开始日期：在结束日期当天显示为单日事件
+            if (reminder.endTime) {
+                // 有结束时间，设置为定时事件（结束时间前30分钟开始）
+                const endTimeDate = new Date(`${endDate}T${reminder.endTime}:00`);
+                const startTimeDate = new Date(endTimeDate);
+                startTimeDate.setMinutes(startTimeDate.getMinutes() - 30);
+                
+                // 如果开始时间到了前一天，则从当天00:00开始
+                if (startTimeDate.getDate() !== endTimeDate.getDate()) {
+                    startTimeDate.setDate(endTimeDate.getDate());
+                    startTimeDate.setHours(0, 0, 0, 0);
+                }
+                
+                const startTimeStr = startTimeDate.toTimeString().substring(0, 5);
+                eventObj.start = `${endDate}T${startTimeStr}:00`;
+                eventObj.end = `${endDate}T${reminder.endTime}:00`;
+                eventObj.allDay = false;
+            } else {
+                // 没有结束时间，作为全天事件显示在结束日期
+                eventObj.start = endDate;
+                eventObj.allDay = true;
+                eventObj.display = 'block';
+            }
         } else {
+            // 只有开始日期（或开始和结束日期相同）
             if (reminder.time) {
-                eventObj.start = `${reminder.date}T${reminder.time}:00`;
+                eventObj.start = `${startDate}T${reminder.time}:00`;
                 if (reminder.endTime) {
-                    eventObj.end = `${reminder.date}T${reminder.endTime}:00`;
+                    eventObj.end = `${startDate}T${reminder.endTime}:00`;
                 } else {
                     // 对于只有开始时间的提醒，设置30分钟的默认持续时间，但确保不跨天
-                    const startTime = new Date(`${reminder.date}T${reminder.time}:00`);
+                    const startTime = new Date(`${startDate}T${reminder.time}:00`);
                     const endTime = new Date(startTime);
                     endTime.setMinutes(endTime.getMinutes() + 30);
 
@@ -6005,11 +6035,11 @@ export class CalendarView {
                     }
 
                     const endTimeStr = endTime.toTimeString().substring(0, 5);
-                    eventObj.end = `${reminder.date}T${endTimeStr}:00`;
+                    eventObj.end = `${startDate}T${endTimeStr}:00`;
                 }
                 eventObj.allDay = false;
             } else {
-                eventObj.start = reminder.date;
+                eventObj.start = startDate;
                 eventObj.allDay = true;
                 eventObj.display = 'block';
             }
@@ -6414,13 +6444,22 @@ export class CalendarView {
             const today = getLogicalDateString();
             const tomorrowStr = getRelativeDateString(1);
 
+            // 优先使用 date 作为开始日期，如果没有 date 则使用 endDate（处理只有结束日期的情况）
+            const startDate = reminder.date || reminder.endDate;
+            const endDate = reminder.endDate;
+
+            // 如果没有开始日期和结束日期，返回空字符串
+            if (!startDate && !endDate) {
+                return '';
+            }
+
             let dateStr = '';
-            if (reminder.date === today) {
+            if (startDate === today) {
                 dateStr = i18n("today");
-            } else if (reminder.date === tomorrowStr) {
+            } else if (startDate === tomorrowStr) {
                 dateStr = i18n("tomorrow");
             } else {
-                const reminderDate = new Date(reminder.date + 'T00:00:00');
+                const reminderDate = new Date(startDate + 'T00:00:00');
 
                 dateStr = reminderDate.toLocaleDateString('zh-CN', {
                     year: 'numeric',
@@ -6430,15 +6469,15 @@ export class CalendarView {
                 });
             }
 
-            // 处理跨天事件
-            if (reminder.endDate && reminder.endDate !== reminder.date) {
+            // 处理跨天事件（既有开始日期又有结束日期，且不相同）
+            if (endDate && endDate !== startDate && reminder.date) {
                 let endDateStr = '';
-                if (reminder.endDate === today) {
+                if (endDate === today) {
                     endDateStr = i18n("today");
-                } else if (reminder.endDate === tomorrowStr) {
+                } else if (endDate === tomorrowStr) {
                     endDateStr = i18n("tomorrow");
                 } else {
-                    const endReminderDate = new Date(reminder.endDate + 'T00:00:00');
+                    const endReminderDate = new Date(endDate + 'T00:00:00');
                     endDateStr = endReminderDate.toLocaleDateString('zh-CN', {
                         year: 'numeric',
                         month: 'short',
@@ -6456,6 +6495,15 @@ export class CalendarView {
                 }
             }
 
+            // 只有结束日期（没有开始日期）的情况，显示为 "截止: 日期"
+            if (endDate && !reminder.date) {
+                if (reminder.endTime) {
+                    return `${i18n("deadline") || '截止'}: ${dateStr} ${reminder.endTime}`;
+                } else {
+                    return `${i18n("deadline") || '截止'}: ${dateStr}`;
+                }
+            }
+
             // 单日事件
             if (reminder.time) {
                 if (reminder.endTime && reminder.endTime !== reminder.time) {
@@ -6469,7 +6517,7 @@ export class CalendarView {
 
         } catch (error) {
             console.error('格式化日期时间失败:', error);
-            return reminder.date || '';
+            return reminder.date || reminder.endDate || '';
         }
     }
 
