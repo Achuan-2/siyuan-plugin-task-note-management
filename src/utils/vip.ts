@@ -147,6 +147,11 @@ export class VipManager {
 
     static async getUserId(): Promise<string> {
         const userId = (window as any).siyuan?.user?.userId;
+
+        if (userId && !/^\d{13}$/.test(String(userId))) {
+            return 'unknown';
+        }
+
         const userToken = (window as any).siyuan?.user?.userToken;
 
         if (userId && userToken) {
