@@ -844,7 +844,7 @@ export class PomodoroTimer {
         const isMobile = frontend.endsWith('mobile');
         const isBrowserDesktop = frontend === 'browser-desktop';
 
-        const title = '微休息';
+        const title = i18n('randomRestTitle') || '随机微休息';
         const message = i18n('randomRest', { duration: this.settings.randomNotificationBreakDuration }) || 'Time for a quick break!';
         const autoCloseDelay = Number(this.settings.randomNotificationBreakDuration) || 0;
 
@@ -2714,7 +2714,7 @@ export class PomodoroTimer {
         const diceEl = document.createElement('span');
         diceEl.className = 'pomodoro-dice';
         diceEl.textContent = '🎲';
-        diceEl.title = (i18n('randomNotificationSettings') || '随机微休息');
+        diceEl.title = i18n('randomRestTitle') || '随机微休息';
         diceEl.style.cssText = `
             margin-left:8px;
             font-size:14px;

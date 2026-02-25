@@ -327,7 +327,7 @@
     "pomodoroBreakEndSoundDesc": "设置番茄钟休息阶段结束时的提示音文件路径，留空则静音",
     "randomNotificationSettings": "🎲随机微休息",
     "randomNotificationEnabled": "启用随机微休息",
-    "randomNotificationEnabledDesc": "在番茄钟运行时每隔一定时间随机提示进行微休息，利用神经重放和完形倾向，提高专注和工作效率。<a href=\"https://www.bilibili.com/video/BV1naLozQEBq\">视频介绍</a>",
+    "randomNotificationEnabledDesc": "在番茄钟运行时每隔一定时间随机提示进行微休息，利用神经重放和完形倾向，提高专注和工作效率。",
     "randomNotificationMinInterval": "随机微休息最小间隔（分钟）",
     "randomNotificationMinIntervalDesc": "设置随机微休息播放的最小间隔时间，默认3分钟",
     "randomNotificationMaxInterval": "随机微休息最大间隔（分钟）",
@@ -496,6 +496,7 @@
     "todayRemindersMessage": "您有 ${count} 个今日任务",
     "setTo": "已设置为",
     "moreItems": "还有 ${count} 个事项...",
+    "randomRestTitle": "随机微休息",
     "randomRest": "请闭眼休息${duration}s，然后继续工作。",
     "randomRestComplete": "微休息结束，请继续工作。",
     "pomodoroHintTitle": "番茄钟的使用介绍",
@@ -1273,5 +1274,9 @@
     "pomodoroEndPopupWindowDesc": "番茄钟工作结束时会在屏幕中央显示弹窗提醒（电脑桌面端为全局弹窗，其他端为思源内部弹窗）",
     "enableSubscription": "启用",
     "disableSubscription": "停用",
-    "copy": "复制"
+    "copy": "复制",
+    "category": "分类",
+    "thisWeekReminders": "本周任务",
+    "milestone": "里程碑",
+    "pluginSettings": "插件设置"
 }
