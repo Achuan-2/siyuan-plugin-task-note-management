@@ -12222,6 +12222,7 @@ export class ProjectKanbanView {
                 min-width: 280px; /* 固定最小宽度 */
                 flex: 1; /* 均匀分布宽度 */
                 max-height: 100%;
+                max-width: 500px;
             }
 
             .kanban-column-header {
