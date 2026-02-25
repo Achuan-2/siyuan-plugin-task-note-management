@@ -6991,9 +6991,23 @@ export class ProjectKanbanView {
         const projectManager = this.projectManager;
         const projectGroups = await projectManager.getProjectCustomGroups(this.projectId);
         // 过滤掉已归档的分组，并按 sort 字段排序
-        const activeGroups = projectGroups
+        const allActiveGroups = projectGroups
             .filter((g: any) => !g.archived)
             .sort((a: any, b: any) => (a.sort || 0) - (b.sort || 0));
+
+        let displayGroups = allActiveGroups;
+        const todayStr = getLogicalDateString();
+
+        if (this.project?.hideNoDoingGroups) {
+            displayGroups = displayGroups.filter((g: any) => {
+                return this.tasks.some(task => task.customGroupId === g.id && !task.completed && this.getTaskStatus(task) === 'doing');
+            });
+        }
+        if (this.project?.hideNoTodayGroups) {
+            displayGroups = displayGroups.filter((g: any) => {
+                return this.tasks.some(task => task.customGroupId === g.id && task.date && compareDateStrings(this.getTaskLogicalDate(task.date, task.time), todayStr) === 0);
+            });
+        }
 
         // 获取对应的状态分组容器
         const groupContainer = groupsContainer.querySelector(`.status-stable-group[data-status="${status}"]`) as HTMLElement;
@@ -7009,7 +7023,7 @@ export class ProjectKanbanView {
 
         groupTasksContainer.innerHTML = '';
 
-        if (activeGroups.length === 0) {
+        if (allActiveGroups.length === 0) {
             // 如果没有自定义分组，直接渲染任务
             this.renderTasksInColumn(groupTasksContainer, tasks);
         } else {
@@ -7024,9 +7038,9 @@ export class ProjectKanbanView {
 
             // 为每个自定义分组创建子容器
             const isCollapsedDefault = status === 'completed';
-            const validGroupIds = new Set(activeGroups.map((g: any) => g.id));
+            const validGroupIds = new Set(allActiveGroups.map((g: any) => g.id));
 
-            activeGroups.forEach((group: any) => {
+            displayGroups.forEach((group: any) => {
                 const groupTasks = tasks.filter(task => task.customGroupId === group.id);
                 if (groupTasks.length > 0) {
                     const groupSubContainer = this.createCustomGroupInStatusColumn(group, groupTasks, isCollapsedDefault, status);
@@ -7036,7 +7050,18 @@ export class ProjectKanbanView {
 
             // 添加未分组任务（包括指向不存在分组的任务）
             const ungroupedTasks = tasks.filter(task => !task.customGroupId || !validGroupIds.has(task.customGroupId));
-            if (ungroupedTasks.length > 0) {
+            let showUngrouped = ungroupedTasks.length > 0;
+
+            if (showUngrouped && this.project?.hideNoDoingGroups) {
+                const hasDoing = this.tasks.some(task => (!task.customGroupId || !validGroupIds.has(task.customGroupId)) && !task.completed && this.getTaskStatus(task) === 'doing');
+                if (!hasDoing) showUngrouped = false;
+            }
+            if (showUngrouped && this.project?.hideNoTodayGroups) {
+                const hasToday = this.tasks.some(task => (!task.customGroupId || !validGroupIds.has(task.customGroupId)) && task.date && compareDateStrings(this.getTaskLogicalDate(task.date, task.time), todayStr) === 0);
+                if (!hasToday) showUngrouped = false;
+            }
+
+            if (showUngrouped) {
                 const ungroupedGroup = {
                     id: 'ungrouped',
                     name: '未分组',
@@ -7212,20 +7237,42 @@ export class ProjectKanbanView {
         const validGroupIds = new Set(groups.map(g => g.id));
         const ungroupedTasks = this.tasks.filter(t => !t.customGroupId || !validGroupIds.has(t.customGroupId));
 
-        // Sort groups
-        const sortedGroups = [...groups].sort((a, b) => (a.sort || 0) - (b.sort || 0));
+        let displayGroups = [...groups].sort((a, b) => (a.sort || 0) - (b.sort || 0));
+        const todayStr = getLogicalDateString();
+
+        if (this.project?.hideNoDoingGroups) {
+            displayGroups = displayGroups.filter((g: any) => {
+                return this.tasks.some(task => task.customGroupId === g.id && !task.completed && this.getTaskStatus(task) === 'doing');
+            });
+        }
+        if (this.project?.hideNoTodayGroups) {
+            displayGroups = displayGroups.filter((g: any) => {
+                return this.tasks.some(task => task.customGroupId === g.id && task.date && compareDateStrings(this.getTaskLogicalDate(task.date, task.time), todayStr) === 0);
+            });
+        }
 
         // Use a set to track rendered group IDs to remove obsolete columns
         const renderedGroupIds = new Set<string>();
 
         // Render groups
-        for (const group of sortedGroups) {
+        for (const group of displayGroups) {
             const groupTasks = this.tasks.filter(t => t.customGroupId === group.id);
             await this.renderListModeGroupColumn(container, group, groupTasks);
             renderedGroupIds.add(`custom-group-${group.id}`);
         }
 
-        if (ungroupedTasks.length > 0) {
+        let showUngrouped = ungroupedTasks.length > 0;
+
+        if (showUngrouped && this.project?.hideNoDoingGroups) {
+            const hasDoing = this.tasks.some(task => (!task.customGroupId || !validGroupIds.has(task.customGroupId)) && !task.completed && this.getTaskStatus(task) === 'doing');
+            if (!hasDoing) showUngrouped = false;
+        }
+        if (showUngrouped && this.project?.hideNoTodayGroups) {
+            const hasToday = this.tasks.some(task => (!task.customGroupId || !validGroupIds.has(task.customGroupId)) && task.date && compareDateStrings(this.getTaskLogicalDate(task.date, task.time), todayStr) === 0);
+            if (!hasToday) showUngrouped = false;
+        }
+
+        if (showUngrouped) {
             const ungroupedGroup = { id: 'ungrouped', name: i18n('ungrouped') || '未分组', color: '#95a5a6', icon: '📋' };
             await this.renderListModeGroupColumn(container, ungroupedGroup, ungroupedTasks);
             renderedGroupIds.add('custom-group-ungrouped');
