@@ -1,6 +1,7 @@
 <script lang="ts">
     import { VipManager, type VIPStatus } from '../utils/vip';
     import { pushMsg } from '../api';
+    import { i18n } from '../pluginInstance';
 
     import { onMount } from 'svelte';
 
@@ -27,11 +28,13 @@
 
     let selectedTerm = '1y'; // 默认选中年付
 
-    const currentPrices = [
-        { term: '7d', label: '试用 7 天', price: '试用' },
-        { term: '1m', label: '月付', price: '5 元' },
-        { term: '1y', label: '年付', price: '30 元' },
-        { term: 'Lifetime', label: '终身', price: '99 元' },
+    $: isZhCN = window.siyuan.config.lang === 'zh_CN';
+
+    $: currentPrices = [
+        { term: '7d', label: i18n('vipTrial7Days'), price: i18n('vipTrial') },
+        { term: '1m', label: i18n('vipMonthlyPay'), price: isZhCN ? '5 元' : '$2' },
+        { term: '1y', label: i18n('vipAnnualPay'), price: isZhCN ? '30 元' : '$12' },
+        { term: 'Lifetime', label: i18n('vipLifetime'), price: isZhCN ? '99 元' : '$40' },
     ];
 
     function selectPlan(term: string) {
@@ -66,7 +69,7 @@
             );
             const result = await response.json();
             if (result.success && result.status === 1) {
-                paymentStatusMessage = '支付成功！';
+                paymentStatusMessage = i18n('vipPaymentSuccess');
                 isPaying = false;
                 qrcodeImg = '';
                 if (result.activation_code) {
@@ -74,11 +77,11 @@
                     handleAddKey();
                 }
             } else {
-                paymentErrorMessage = '订单暂未支付或查询失败';
+                paymentErrorMessage = i18n('vipOrderUnpaidOrFailed');
             }
         } catch (error) {
             console.error('Manual check failed', error);
-            paymentErrorMessage = '查询异常，请稍后重试';
+            paymentErrorMessage = i18n('vipQueryException');
         } finally {
             isCheckingStatus = false;
         }
@@ -100,7 +103,7 @@
         }
 
         isPaying = true;
-        paymentStatusMessage = '正在创建订单...';
+        paymentStatusMessage = i18n('vipCreatingOrder');
         paymentErrorMessage = '';
         qrcodeImg = '';
 
@@ -118,22 +121,22 @@
             if (result.success) {
                 qrcodeImg = result.img;
                 outTradeNo = result.out_trade_no;
-                paymentStatusMessage = '二维码已生成，请使用支付宝扫描';
+                paymentStatusMessage = i18n('vipQrcodeGenerated');
                 paymentAmountStr = result.money || '';
             } else {
                 paymentStatusMessage = '';
-                paymentErrorMessage = result.message || '创建订单失败';
+                paymentErrorMessage = result.message || i18n('vipCreateOrderFailed');
                 isPaying = false;
             }
         } catch (error) {
             paymentStatusMessage = '';
-            paymentErrorMessage = '发生异常，请稍后重试';
+            paymentErrorMessage = i18n('vipExceptionOccurred');
             isPaying = false;
         }
     }
 
     async function handleFreeTrial() {
-        paymentStatusMessage = '正在请求试用激活码...';
+        paymentStatusMessage = i18n('vipRequestingTrialKey');
         paymentErrorMessage = '';
         try {
             const response = await fetch(`${API_PREFIX}/api/create-payment`, {
@@ -148,14 +151,14 @@
             if (result.success && result.activation_code) {
                 inputKey = result.activation_code;
                 handleAddKey();
-                paymentStatusMessage = '试用激活码已获取并自动填入';
+                paymentStatusMessage = i18n('vipTrialKeyObtained');
             } else {
                 paymentStatusMessage = '';
-                paymentErrorMessage = result.message || '获取试用激活码失败';
+                paymentErrorMessage = result.message || i18n('vipGetTrialKeyFailed');
             }
         } catch (error) {
             paymentStatusMessage = '';
-            paymentErrorMessage = '获取试用激活码失败';
+            paymentErrorMessage = i18n('vipGetTrialKeyFailed');
         }
     }
 
@@ -164,13 +167,13 @@
 
         const result = VipManager.parseVIPKey(userId, inputKey);
         if (!result.valid) {
-            message = '激活码无效或不属于当前用户';
+            message = i18n('vipInvalidKeyOrNotBelong');
             isError = true;
             return;
         }
 
         if (plugin.vip.vipKeys.includes(inputKey)) {
-            message = '该激活码已添加';
+            message = i18n('vipKeyAlreadyAdded');
             isError = false;
             return;
         }
@@ -194,13 +197,13 @@
         })();
 
         inputKey = '';
-        message = '激活成功！';
+        message = i18n('vipActivationSuccess');
         isError = false;
     }
 
     function handleCopyUserId() {
         navigator.clipboard.writeText(userId);
-        pushMsg('用户 ID 已复制');
+        pushMsg(i18n('vipUserIdCopied'));
     }
 
     // 计算当前正在生效或待生效的激活码
@@ -253,7 +256,7 @@
 
     function handleCopyKey(key: string) {
         navigator.clipboard.writeText(key);
-        pushMsg('激活码已复制');
+        pushMsg(i18n('vipKeyCopied'));
     }
 </script>
 
@@ -267,44 +270,45 @@
         >
             <div class="vip-card__title">
                 <span class="vip-icon">👑</span>
-                订阅信息
+                {i18n('vipSubscriptionInfo')}
             </div>
             <div class="vip-card__status">
                 {#if vipStatus.isVip}
                     {#if vipStatus.isLifetime}
                         <div class="status-active">
-                            <div class="status-label">终身会员</div>
+                            <div class="status-label">{i18n('vipLifetimeMember')}</div>
                             <div class="status-date">
-                                始于 {vipStatus.lifetimeStartDate || '购入之日'}
+                                {i18n('vipStartedFrom')}{vipStatus.lifetimeStartDate ||
+                                    i18n('vipPurchaseDate')}
                             </div>
                         </div>
                     {:else}
                         <div class="status-active">
-                            <div class="status-label">已激活</div>
+                            <div class="status-label">{i18n('vipActivated')}</div>
                             <div class="status-date">
-                                {vipStatus.expireDate} 到期
+                                {vipStatus.expireDate}{i18n('vipExpireAt')}
                             </div>
                             <div class="status-days">
-                                剩余 {vipStatus.remainingDays} 天
+                                {i18n('vipRemaining')}{vipStatus.remainingDays}{i18n('vipDays')}
                             </div>
                         </div>
                     {/if}
                 {:else}
-                    <div class="status-inactive">未订阅</div>
+                    <div class="status-inactive">{i18n('vipNotSubscribed')}</div>
                 {/if}
             </div>
         </div>
     </div>
 
     <div class="vip-section">
-        <h3>用户信息</h3>
+        <h3>{i18n('vipUserInfo')}</h3>
         <div class="user-info">
             <div class="user-id">
                 <div class="user-id-text">
-                    <span>思源账号ID:</span>
+                    <span>{i18n('vipAccountId')}</span>
                     {#if userId === 'unknown' || !userId}
                         <span class="id-value" style="letter-spacing: normal;">
-                            {userId || 'unknown'}
+                            {userId || i18n('vipUnknown')}
                         </span>
                     {:else}
                         <span
@@ -320,7 +324,7 @@
                             tabindex="0"
                             on:keydown={e =>
                                 (e.key === 'Enter' || e.key === ' ') && (showUserId = !showUserId)}
-                            title={showUserId ? '隐藏' : '显示'}
+                            title={showUserId ? i18n('vipHide') : i18n('vipShow')}
                         >
                             {#if showUserId}
                                 <svg><use xlink:href="#iconEyeoff"></use></svg>
@@ -335,77 +339,77 @@
                         class="b3-button b3-button--outline fn__flex-center"
                         on:click={handleCopyUserId}
                     >
-                        复制
+                        {i18n('copy') || 'Copy'}
                     </button>
                 {/if}
             </div>
             {#if userId === 'unknown' || !userId}
-                <p class="error-text">⚠️ 请先登录思源账号以使用订阅功能</p>
+                <p class="error-text">{i18n('vipLoginToUse')}</p>
             {/if}
         </div>
     </div>
 
     {#if !vipStatus.isLifetime}
         <div class="vip-section">
-            <h3>订阅方案</h3>
+            <h3>{i18n('vipSubscriptionPlan')}</h3>
 
             <div class="vip-section">
                 <details class="benefits-details">
-                    <summary>查看会员专属权益</summary>
+                    <summary>{i18n('vipViewMemberBenefits')}</summary>
                     <table class="benefits-table">
                         <thead>
                             <tr>
-                                <th>功能</th>
-                                <th>非会员</th>
-                                <th>会员</th>
+                                <th>{i18n('vipFunction')}</th>
+                                <th>{i18n('vipNonMember')}</th>
+                                <th>{i18n('vipMember')}</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr>
-                                <td>任务管理侧栏</td>
+                                <td>{i18n('vipTaskPanel')}</td>
                                 <td>✅</td>
                                 <td>✅</td>
                             </tr>
                             <tr>
-                                <td>番茄钟</td>
+                                <td>{i18n('vipPomodoro')}</td>
                                 <td>✅</td>
                                 <td>✅</td>
                             </tr>
                             <tr>
-                                <td>四象限</td>
+                                <td>{i18n('vipFourQuadrants')}</td>
                                 <td>✅</td>
                                 <td>✅</td>
                             </tr>
                             <tr>
-                                <td>习惯打卡</td>
+                                <td>{i18n('vipHabitTracking')}</td>
                                 <td>✅</td>
                                 <td>✅</td>
                             </tr>
                             <tr>
-                                <td>日历视图</td>
+                                <td>{i18n('vipCalendarView')}</td>
                                 <td>❌</td>
                                 <td>✅</td>
                             </tr>
                             <tr>
-                                <td>项目看板</td>
+                                <td>{i18n('vipProjectKanban')}</td>
                                 <td>❌</td>
                                 <td>✅</td>
                             </tr>
                             <tr>
-                                <td>微信交流群和使用答疑</td>
+                                <td>{i18n('vipWechatGroup')}</td>
                                 <td>❌</td>
                                 <td>✅</td>
                             </tr>
                             <tr>
-                                <td>未来其他功能</td>
+                                <td>{i18n('vipFutureFeatures')}</td>
                                 <td>❓</td>
                                 <td>✅</td>
                             </tr>
                         </tbody>
                     </table>
                     <div class="benefits-info">
-                        <h4>❓如何加入会员专属微信交流群</h4>
-                        <p>将付款截图、微信号发邮件到 achuan-2@outlook.com，我会加你好友拉你进群</p>
+                        <h4>{i18n('vipHowToJoinWechat')}</h4>
+                        <p>{i18n('vipJoinWechatDesc')}</p>
                     </div>
                 </details>
             </div>
@@ -422,29 +426,40 @@
                         <div class="plan-label">{plan.label}</div>
                         <div class="plan-price">{plan.price}</div>
                         {#if selectedTerm === plan.term}
-                            <div class="plan-badge">已选中</div>
+                            <div class="plan-badge">{i18n('vipSelected')}</div>
                         {/if}
                     </div>
                 {/each}
             </div>
             <div class="pay-tips">
-                <p>⚠️ 付费后不支持退款</p>
+                <p>{i18n('vipRefundNotice')}</p>
                 <p>
-                    ⚠️
-                    2026年02月23日及之前赞赏的用户，可以凭赞赏截图，以过去赞赏总额×2的优惠减免付费会员金额，2026年02月23日及之前赞赏超过50元的用户和代码PR贡献者，可申请为终身会员。发送赞赏支付截图/代码贡献截图以及思源账号ID（通过上方的用户信息复制）到
-                    achuan-2@outlook.com 进行申请减免和终身会员。
+                    {i18n('vipDiscountNotice1')}
                 </p>
                 <p>
-                    ⚠️
-                    思源笔记开发者（在思源集市上架作品或为思源贡献PR被采纳）或在校学生，凭相关证明可享6折会员优惠。
+                    {i18n('vipDiscountNotice2')}
                 </p>
-                <button
-                    class="b3-button b3-button--text pay-btn"
-                    disabled={userId === 'unknown' || isPaying}
-                    on:click={handlePay}
-                >
-                    {selectedTerm === '7d' ? '获取试用激活码' : '付费获取激活码'}
-                </button>
+                {#if isZhCN || selectedTerm === '7d'}
+                    <button
+                        class="b3-button b3-button--text pay-btn"
+                        disabled={userId === 'unknown' || isPaying}
+                        on:click={handlePay}
+                    >
+                        {selectedTerm === '7d'
+                            ? i18n('vipGetTrialKeyBtn')
+                            : i18n('vipPayToGetKeyBtn')}
+                    </button>
+                {/if}
+                {#if !isZhCN && selectedTerm !== '7d'}
+                    <div class="overseas-notice">
+                        <p>{i18n('vipOverseasTransferNotice')}</p>
+                        <img
+                            src="https://fastly.jsdelivr.net/gh/Achuan-2/PicBed@pic/assets/17720316419781772031641273.png"
+                            alt="Payment QR"
+                            class="overseas-qr"
+                        />
+                    </div>
+                {/if}
             </div>
 
             {#if qrcodeImg}
@@ -452,7 +467,7 @@
                     <div class="payment-amount">
                         ￥{paymentAmountStr}
                     </div>
-                    <img src={qrcodeImg} alt="支付二维码" />
+                    <img src={qrcodeImg} alt={i18n('vipQRAlt')} />
                     {#if paymentStatusMessage}
                         <p class="payment-status">{paymentStatusMessage}</p>
                     {/if}
@@ -465,13 +480,13 @@
                             on:click={manualCheckStatus}
                             disabled={isCheckingStatus}
                         >
-                            {isCheckingStatus ? '查询中...' : '我已支付，获取激活码'}
+                            {isCheckingStatus ? i18n('vipChecking') : i18n('vipManualCheckBtn')}
                         </button>
                         <button
                             class="b3-button b3-button--outline cancel-btn"
                             on:click={handleCancel}
                         >
-                            取消
+                            {i18n('vipCancel')}
                         </button>
                     </div>
                 </div>
@@ -488,24 +503,24 @@
 
     {#if !vipStatus.isLifetime}
         <div class="vip-section">
-            <h3>激活码兑换</h3>
+            <h3>{i18n('vipActivationExchange')}</h3>
             <div class="activation-notice">
-                <p class="notice-title">📋 激活码使用须知：</p>
+                <p class="notice-title">{i18n('vipActivationNoticeTitle')}</p>
                 <ol>
-                    <li>激活码只限绑定的单个思源账户使用，无法用于其他用户</li>
+                    <li>{i18n('vipActivationNotice1')}</li>
                     <li>
-                        激活码不限激活次数，可离线激活VIP功能：其他设备只需要同步工作空间数据或登录激活码所绑定的思源账号即可使用VIP功能
+                        {i18n('vipActivationNotice2')}
                     </li>
                 </ol>
             </div>
             <div class="activation-box">
                 <input
                     class="b3-text-field fn__block"
-                    placeholder="输入激活码"
+                    placeholder={i18n('vipInputKeyPlaceholder')}
                     bind:value={inputKey}
                 />
                 <button class="b3-button b3-button--text activate-btn" on:click={handleAddKey}>
-                    激活
+                    {i18n('vipActivateBtn')}
                 </button>
             </div>
             {#if message}
@@ -516,7 +531,7 @@
 
     {#if activeKeys.length > 0}
         <div class="vip-section">
-            <h3>使用中的激活码</h3>
+            <h3>{i18n('vipActiveKeys')}</h3>
             <div class="active-keys-list">
                 {#each activeKeys as item}
                     <div class="active-key-item">
@@ -524,15 +539,15 @@
                             <div class="key-text">{item.key}</div>
                             <div class="key-detail">
                                 {item.isLifetime
-                                    ? `终身版 (始于: ${item.start})`
-                                    : `${item.term === '1y' ? '年付' : item.term === '1m' ? '月付' : '试用 7 天'} (${item.start} 至 ${item.end})`}
+                                    ? `${i18n('vipLifetimeVersion')}${item.start})`
+                                    : `${item.term === '1y' ? i18n('vipAnnualPay') : item.term === '1m' ? i18n('vipMonthlyPay') : i18n('vipTrial7Days')} (${item.start}${i18n('vipTo')}${item.end})`}
                             </div>
                         </div>
                         <button
                             class="b3-button b3-button--text copy-key-btn"
                             on:click={() => handleCopyKey(item.key)}
                         >
-                            复制
+                            {i18n('copy') || 'Copy'}
                         </button>
                     </div>
                 {/each}
@@ -547,6 +562,24 @@
         background: white;
         padding: 16px;
         border-radius: 8px;
+    }
+    .overseas-notice {
+        margin-top: 12px;
+        padding: 10px 12px;
+        background: var(--b3-theme-surface);
+        border-radius: 8px;
+        border: 1px solid var(--b3-border-color);
+        font-size: 12px;
+        color: var(--b3-theme-on-surface-light);
+        line-height: 1.6;
+    }
+    .overseas-notice p {
+        margin-bottom: 8px;
+    }
+    .overseas-qr {
+        display: block;
+        margin: 0 auto;
+        border-radius: 4px;
     }
     .payment-amount {
         font-size: 28px;

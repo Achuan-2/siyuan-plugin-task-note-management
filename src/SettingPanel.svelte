@@ -287,7 +287,7 @@
     // 定义设置分组
     let groups: ISettingGroup[] = [
         {
-            name: '👑 VIP',
+            name: '👑VIP',
             items: [], // 使用 VipPanel 组件渲染
         },
         {
@@ -2050,7 +2050,7 @@
     <div class="config__tab-wrap">
         <!-- 手动按项目顺序渲染，保证 custom-audio 项在正确位置 -->
         <div class="config__tab-container" data-name={currentGroup?.name || ''}>
-            {#if currentGroup?.name === '👑 VIP'}
+            {#if currentGroup?.name === '👑VIP'}
                 <VipPanel {plugin} />
             {/if}
             {#each currentGroup?.items || [] as item (item.key)}
