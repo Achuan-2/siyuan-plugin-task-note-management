@@ -1,0 +1,49 @@
+name: ✨ Feature Request
+description: "Request a new feature or improvement to an existing feature."
+title: "Please enter the feature request title"
+body:
+
+
+  - type: checkboxes
+    attributes:
+      label: Have you starred this repository?
+      description: Issues from users who have not starred the repository will be closed directly.
+      options:
+        - label: I have starred this repository
+          required: true
+  - type: checkboxes
+    attributes:
+      label: Have you searched existing Issues?
+      description: |
+        Please search existing Issues first to avoid submitting duplicates.
+      options:
+        - label: I have searched existing Issues
+          required: true
+  - type: textarea
+    attributes:
+      label: Use Case (Required)
+      description: |
+        Please describe in detail the use case, goal, and why existing features cannot meet your needs.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Ideal Solution (Required)
+      description: |
+        If you have an ideal implementation or reference software, please describe the specific behavior, interaction, and expected effect, which helps to evaluate the feasibility.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Acceptable Alternatives (Required)
+      description: |
+        If the ideal solution cannot be implemented, what are the alternative solutions you can accept? Please describe the acceptable scope and priority as much as possible.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Additional Context (Optional)
+      description: |
+        Please provide any screenshots, diagrams, or additional explanations here.
+    validations:
+      required: false

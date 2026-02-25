@@ -1,0 +1,73 @@
+name: 🐛 Bug Report
+description: "Report a bug or unexpected behavior in the software."
+title: "Please enter the bug title"
+body:
+  - type: checkboxes
+    attributes:
+      label: Have you starred this repository?
+      description: Issues from users who have not starred the repository will be closed directly.
+      options:
+        - label: I have starred this repository
+          required: true
+  - type: checkboxes
+    attributes:
+      label: Have you searched existing Issues?
+      description: |
+        Please search existing Issues first to avoid submitting duplicate problems.
+      options:
+        - label: I have searched existing Issues
+          required: true
+  - type: checkboxes
+    attributes:
+      label: Can this be reproduced in the default theme (light/dark)?
+      description: |
+        Please confirm if the issue can be reproduced under the default theme, which helps to troubleshoot theme-related issues.
+      options:
+        - label: I can reproduce this issue under the default theme
+          required: true
+  - type: checkboxes
+    attributes:
+      label: Have you ruled out the influence of extensions?
+      description: |
+        Extensions such as themes, snippets, and plugins may cause issues. Please try to rule out their influence before submitting.
+      options:
+        - label: I have ruled out the possibility that extensions caused the issue
+          required: true
+  - type: textarea
+    attributes:
+      label: Bug Description (Required)
+      description: |
+        Please describe the problem you encountered, its frequency, and when it occurs as clearly as possible.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Expected Behavior (Required)
+      description: |
+        Please clearly describe the correct behavior or expected result.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Screenshots or Screencasts (Optional)
+      description: |
+        Please attach screenshots or screen recordings if possible to help locate the problem faster.
+    validations:
+      required: false
+  - type: textarea
+    attributes:
+      label: Environment Info (Required)
+      value: |
+        - Version:
+        - OS:
+        - Browser (if applicable):
+      render: markdown
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Additional Context (Optional)
+      description: |
+        Please provide any other information that may help diagnosing the problem (network status, reproduction steps, special configuration, etc.).
+    validations:
+      required: false
