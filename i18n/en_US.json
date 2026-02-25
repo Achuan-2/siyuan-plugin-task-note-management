@@ -496,6 +496,7 @@
     "todayRemindersMessage": "You have ${count} items for today",
     "setTo": "Set to",
     "moreItems": "and ${count} more items...",
+    "randomRestTitle": "Random Rest",
     "randomRest": "Please take a ${duration}s break and then continue working.",
     "randomRestComplete": "Break complete, please continue working.",
     "pomodoroHintTitle": "Pomodoro Usage Introduction",

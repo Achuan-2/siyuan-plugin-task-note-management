@@ -330,7 +330,8 @@ export class PomodoroTimer {
             windowBounds: windowBounds, // 窗口位置信息
             isDocked: this.isDocked, // 新增：吸附模式状态
             isMiniMode: this.isMiniMode, // 新增：迷你模式状态
-            normalWindowBounds: this.normalWindowBounds // 新增：保存的正常窗口位置
+            normalWindowBounds: this.normalWindowBounds, // 新增：保存的正常窗口位置
+            randomRestNextTriggerTime: this.randomRestNextTriggerTime // 新增：记录下次随机休息时间
         };
     }
 
@@ -712,7 +713,7 @@ export class PomodoroTimer {
      * 启动随机微休息的定期检查机制（类似index.ts的定时任务提醒）
      * 每30秒检查一次是否需要播放随机微休息，确保不会遗漏
      */
-    private startRandomRestTimer() {
+    private startRandomRestTimer(preserveExistingNextTime: boolean = false) {
         if (!this.randomRestEnabled || !this.isWorkPhase) {
             this.stopRandomRestTimer();
             return;
@@ -722,7 +723,9 @@ export class PomodoroTimer {
         this.stopRandomRestTimer();
 
         // 初始化下次触发时间
-        this.randomRestNextTriggerTime = this.calculateNextRandomRestTime();
+        if (!preserveExistingNextTime || !this.randomRestNextTriggerTime || this.randomRestNextTriggerTime <= Date.now()) {
+            this.randomRestNextTriggerTime = this.calculateNextRandomRestTime();
+        }
 
         // 启动定期检查定时器（每5秒检查一次，防止错过）
         this.randomRestCheckTimer = window.setInterval(() => {
@@ -6804,13 +6807,16 @@ document.body.classList.remove('docked-mode');
                 // Restore random notification state
                 timer.randomRestEnabled = recoveredState.randomRestEnabled || false;
                 timer.randomRestCount = recoveredState.randomRestCount || 0;
+                if (recoveredState.randomRestNextTriggerTime) {
+                    timer.randomRestNextTriggerTime = recoveredState.randomRestNextTriggerTime;
+                }
 
                 // Resume logic loop if needed
                 if (timer.isRunning && !timer.isPaused) {
                     timer.startTickLoop();
                     // FIX: 恢复随机微休息定时器（如果启用且在工作阶段）
                     if (timer.randomRestEnabled && timer.isWorkPhase) {
-                        timer.startRandomRestTimer();
+                        timer.startRandomRestTimer(true);
                     }
                 } else {
                     // If paused or stopped, ensure UI reflects it
