@@ -86,7 +86,7 @@
     async function uploadAudioFile(file: File) {
         const path = `${AUDIO_DIR}/${file.name}`;
         await putFile(path, false, file);
-        await pushMsg(`音频 "${file.name}" 上传成功`);
+        await pushMsg(i18n('audioUploadSuccess').replace('${name}', file.name));
         return AUDIO_URL_PREFIX + file.name;
     }
 
@@ -116,7 +116,7 @@
             const localPath = `${AUDIO_DIR}/${fileName}`;
             const localUrl = AUDIO_URL_PREFIX + fileName;
 
-            await pushMsg('正在下载并保存音频到本地...');
+            await pushMsg(i18n('audioDownloading'));
             const response = await fetch(url);
             if (!response.ok) throw new Error('Download failed');
             const blob = await response.blob();
@@ -155,11 +155,11 @@
                 settings.audioSelected[key] = localUrl;
             }
 
-            await pushMsg('下载成功，音频已转存至本地存储');
+            await pushMsg(i18n('audioDownloadSuccess'));
             return localUrl;
         } catch (e) {
             console.error('下载音频失败:', e);
-            await pushErrMsg('下载音频失败，请检查网络连接');
+            await pushErrMsg(i18n('audioDownloadFailed'));
             return null;
         } finally {
             isDownloadingAudio = false;
@@ -280,7 +280,7 @@
                 filePath: filePath,
             });
         } catch (error) {
-            await pushErrMsg('当前客户端不支持打开插件数据文件夹');
+            await pushErrMsg(i18n('openFolderNotSupported'));
         }
     };
 
@@ -402,44 +402,43 @@
                     key: 'calendarShowLunar',
                     value: settings.calendarShowLunar, // Default true
                     type: 'checkbox',
-                    title: i18n('calendarShowLunar') || '显示农历',
-                    description: i18n('calendarShowLunarDesc') || '在日历视图中显示农历日期和节日',
+                    title: i18n('calendarShowLunar'),
+                    description: i18n('calendarShowLunarDesc'),
                 },
                 {
                     key: 'calendarShowHoliday',
                     value: settings.calendarShowHoliday,
                     type: 'checkbox',
-                    title: i18n('calendarShowHoliday') || '显示节假日',
-                    description:
-                        i18n('calendarShowHolidayDesc') || '在日历视图中显示法定节假日（休）',
+                    title: i18n('calendarShowHoliday'),
+                    description: i18n('calendarShowHolidayDesc'),
                 },
 
                 {
                     key: 'calendarHolidayIcsUrl',
                     value: settings.calendarHolidayIcsUrl,
                     type: 'textinput',
-                    title: i18n('calendarHolidayIcsUrl') || '节假日 ICS URL',
-                    description: i18n('calendarHolidayIcsUrlDesc') || '设置节假日订阅的 ICS 链接',
+                    title: i18n('calendarHolidayIcsUrl'),
+                    description: i18n('calendarHolidayIcsUrlDesc'),
                 },
                 {
                     key: 'updateHoliday',
                     value: '',
                     type: 'button',
-                    title: i18n('updateHoliday') || '更新节假日',
-                    description: i18n('updateHolidayDesc') || '点击立即更新节假日数据',
+                    title: i18n('updateHoliday'),
+                    description: i18n('updateHolidayDesc'),
                     button: {
-                        label: i18n('updateHoliday') || '更新节假日',
+                        label: i18n('updateHoliday'),
                         callback: async () => {
-                            await pushMsg(i18n('updatingHoliday') || '正在更新节假日...');
+                            await pushMsg(i18n('updatingHoliday'));
                             const success = await syncHolidays(
                                 plugin,
                                 settings.calendarHolidayIcsUrl
                             );
                             if (success) {
-                                await pushMsg(i18n('holidayUpdateSuccess') || '节假日更新成功');
+                                await pushMsg(i18n('holidayUpdateSuccess'));
                                 window.dispatchEvent(new CustomEvent('reminderUpdated'));
                             } else {
-                                await pushErrMsg(i18n('holidayUpdateFailed') || '节假日更新失败');
+                                await pushErrMsg(i18n('holidayUpdateFailed'));
                             }
                         },
                     },
@@ -471,23 +470,20 @@
                     key: 'showPomodoroInSummary',
                     value: settings.showPomodoroInSummary,
                     type: 'checkbox',
-                    title: i18n('showPomodoroInSummary') || '在摘要中显示番茄钟统计',
-                    description:
-                        i18n('showPomodoroInSummaryDesc') ||
-                        '开启后，任务摘要将包含番茄钟专注时长统计',
+                    title: i18n('showPomodoroInSummary'),
+                    description: i18n('showPomodoroInSummaryDesc'),
                 },
                 {
                     key: 'showHabitInSummary',
                     value: settings.showHabitInSummary,
                     type: 'checkbox',
-                    title: i18n('showHabitInSummary') || '在摘要中显示习惯打卡统计',
-                    description:
-                        i18n('showHabitInSummaryDesc') || '开启后，任务摘要将包含习惯打卡情况统计',
+                    title: i18n('showHabitInSummary'),
+                    description: i18n('showHabitInSummaryDesc'),
                 },
             ],
         },
         {
-            name: '✅任务笔记设置',
+            name: '✅' + i18n('taskNoteSettings'),
             items: [
                 {
                     key: 'autoDetectDateTime',
@@ -528,9 +524,8 @@
                     key: 'groupDefaultHeadingLevel',
                     value: settings.groupDefaultHeadingLevel,
                     type: 'select',
-                    title: i18n('groupDefaultHeadingLevel') || '绑定块新建标题默认层级（项目分组）',
-                    description:
-                        i18n('groupDefaultHeadingLevelDesc') || '设置添加分组绑定块的默认层级',
+                    title: i18n('groupDefaultHeadingLevel'),
+                    description: i18n('groupDefaultHeadingLevelDesc'),
                     options: {
                         1: '1',
                         2: '2',
@@ -544,11 +539,8 @@
                     key: 'milestoneDefaultHeadingLevel',
                     value: settings.milestoneDefaultHeadingLevel,
                     type: 'select',
-                    title:
-                        i18n('milestoneDefaultHeadingLevel') ||
-                        '绑定块新建标题默认层级（项目里程碑）',
-                    description:
-                        i18n('milestoneDefaultHeadingLevelDesc') || '设置添加标题里程碑的默认层级',
+                    title: i18n('milestoneDefaultHeadingLevel'),
+                    description: i18n('milestoneDefaultHeadingLevelDesc'),
                     options: {
                         1: '1',
                         2: '2',
@@ -649,23 +641,20 @@
                     key: 'pomodoroEndPopupWindow',
                     value: settings.pomodoroEndPopupWindow,
                     type: 'checkbox',
-                    title: i18n('pomodoroEndPopupWindow') || '番茄钟结束弹窗提醒',
-                    description:
-                        i18n('pomodoroEndPopupWindowDesc') ||
-                        '番茄钟工作结束时会在屏幕中央显示弹窗提醒（电脑桌面端为全局弹窗，其他端为思源内部弹窗）',
+                    title: i18n('pomodoroEndPopupWindow'),
+                    description: i18n('pomodoroEndPopupWindowDesc'),
                 },
                 {
                     key: 'pomodoroDockPosition',
                     value: settings.pomodoroDockPosition,
                     type: 'select',
-                    title: i18n('pomodoroDockPosition') || '番茄钟吸附模式位置',
-                    description:
-                        i18n('pomodoroDockPositionDesc') || '设置番茄钟窗口吸附在屏幕的位置',
+                    title: i18n('pomodoroDockPosition'),
+                    description: i18n('pomodoroDockPositionDesc'),
                     options: {
-                        right: i18n('right') || '右侧',
-                        left: i18n('left') || '左侧',
-                        top: i18n('top') || '顶部',
-                        bottom: i18n('bottom') || '底部',
+                        right: i18n('right'),
+                        left: i18n('left'),
+                        top: i18n('top'),
+                        bottom: i18n('bottom'),
                     },
                 },
                 {
@@ -745,9 +734,8 @@
                     key: 'randomNotificationPopupWindow',
                     value: settings.randomNotificationPopupWindow,
                     type: 'checkbox',
-                    title: '随机微休息弹窗提醒',
-                    description:
-                        '随机微休息开始时会在屏幕中央显示弹窗提醒，结束后自动关闭（电脑桌面端为全局弹窗，其他端为思源内部弹窗）',
+                    title: i18n('randomNotificationPopupWindow'),
+                    description: i18n('randomNotificationPopupWindowDesc'),
                 },
                 {
                     key: 'randomNotificationMinInterval',
@@ -801,10 +789,10 @@
                     key: 'openDataFolder',
                     value: '',
                     type: 'button',
-                    title: '打开数据文件夹',
-                    description: '',
+                    title: i18n('openDataFolder'),
+                    description: i18n('openDataFolderDesc'),
                     button: {
-                        label: '打开数据文件夹',
+                        label: i18n('openFolder'),
                         callback: async () => {
                             const path =
                                 window.siyuan.config.system.dataDir +
@@ -817,12 +805,12 @@
                     key: 'deletePluginData',
                     value: '',
                     type: 'button',
-                    title: '删除插件数据',
-                    description: '删除所有插件数据文件，此操作不可逆',
+                    title: i18n('deletePluginData'),
+                    description: i18n('deletePluginDataDesc'),
                     button: {
-                        label: '删除数据',
+                        label: i18n('deleteData'),
                         callback: async () => {
-                            const confirmed = confirm('确定要删除所有插件数据吗？此操作不可逆！');
+                            const confirmed = confirm(i18n('confirmDeletePluginData'));
                             if (confirmed) {
                                 const dataDir =
                                     'data/storage/petal/siyuan-plugin-task-note-management/';
@@ -846,7 +834,12 @@
                                         console.error('删除文件失败:', file, e);
                                     }
                                 }
-                                pushErrMsg(`数据删除完成，已删除 ${successCount} 个文件`);
+                                pushErrMsg(
+                                    i18n('dataDeletedCount').replace(
+                                        '${count}',
+                                        String(successCount)
+                                    )
+                                );
                                 window.dispatchEvent(new CustomEvent('reminderUpdated'));
                             }
                         },
@@ -855,17 +848,16 @@
             ],
         },
         {
-            name: '⬆️导出',
+            name: '⬆️' + i18n('exportSettings'),
             items: [
                 {
                     key: 'exportIcs',
                     value: '',
                     type: 'button',
-                    title: '导出 ICS 文件',
-                    description:
-                        '将提醒导出为标准 ICS 日历文件，可导入到 Outlook、Google Calendar、部分手机系统日历等日历应用',
+                    title: i18n('exportIcs'),
+                    description: i18n('exportIcsDesc'),
                     button: {
-                        label: '生成 ICS',
+                        label: i18n('generateIcs'),
                         callback: async () => {
                             await exportIcsFile(plugin, true, false, settings.icsTaskFilter as any);
                         },
@@ -874,16 +866,16 @@
             ],
         },
         {
-            name: '⬇️导入',
+            name: '⬇️' + i18n('importSettings'),
             items: [
                 {
                     key: 'importIcs',
                     value: '',
                     type: 'button',
-                    title: '导入 ICS 文件',
-                    description: '从 ICS 文件导入任务，支持批量设置所属项目、标签和优先级',
+                    title: i18n('importIcs'),
+                    description: i18n('importIcsDesc'),
                     button: {
-                        label: '选择文件导入',
+                        label: i18n('selectFileToImport'),
                         callback: async () => {
                             // 创建文件输入元素
                             const input = document.createElement('input');
@@ -901,7 +893,7 @@
                                     showImportDialog(content);
                                 } catch (error) {
                                     console.error('读取文件失败:', error);
-                                    await pushErrMsg('读取文件失败');
+                                    await pushErrMsg(i18n('readFileFailed'));
                                 }
                             };
                             input.click();
@@ -925,7 +917,7 @@
                     value: '',
                     type: 'button',
                     title: i18n('manageSubscriptions'),
-                    description: '管理ICS日历订阅，支持设置项目、分类、优先级和同步频率',
+                    description: i18n('manageSubscriptionsDesc'),
                     button: {
                         label: i18n('manageSubscriptions'),
                         callback: async () => {
@@ -936,85 +928,83 @@
             ],
         },
         {
-            name: '☁️日历上传',
+            name: '☁️' + i18n('calendarUpload'),
             items: [
                 {
                     key: 'icsSyncHint',
                     value: '',
                     type: 'hint',
-                    title: 'ICS 云端同步',
-                    description:
-                        '将ICS文件上传到云端，实现多设备间的提醒同步。支持思源服务器或S3存储。',
+                    title: i18n('icsSyncTitle'),
+                    description: i18n('icsSyncDesc'),
                 },
                 {
                     key: 'icsTaskFilter',
                     value: settings.icsTaskFilter || 'all',
                     type: 'select',
-                    title: '任务状态筛选',
-                    description: '选择导出哪些任务到 ICS 文件',
+                    title: i18n('icsTaskFilter'),
+                    description: i18n('icsTaskFilterDesc'),
                     options: {
-                        all: '全部任务',
-                        completed: '已完成任务',
-                        uncompleted: '未完成任务',
+                        all: i18n('allTasks'),
+                        completed: i18n('completedTasks'),
+                        uncompleted: i18n('uncompletedTasks'),
                     },
                 },
                 {
                     key: 'icsFileName',
                     value: settings.icsFileName,
                     type: 'textinput',
-                    title: 'ICS 文件名',
-                    description:
-                        '自定义ICS文件名（不含.ics后缀），留空则自动生成为 reminder-随机ID',
+                    title: i18n('icsFileName'),
+                    description: i18n('icsFileNameDesc'),
                     placeholder: 'reminder-' + (window.Lute?.NewNodeID?.() || 'auto'),
                 },
                 {
                     key: 'icsSyncMethod',
                     value: settings.icsSyncMethod,
                     type: 'select',
-                    title: '同步方式',
-                    description: '选择ICS文件的同步方式',
+                    title: i18n('icsSyncMethod'),
+                    description: i18n('icsSyncMethodDesc'),
                     options: {
-                        siyuan: '思源订阅会员服务器',
-                        s3: 'S3存储',
+                        siyuan: i18n('siyuanServer'),
+                        s3: i18n('s3Storage'),
                     },
                 },
                 {
                     key: 'icsSyncEnabled',
                     value: settings.icsSyncEnabled,
                     type: 'checkbox',
-                    title: '启用 ICS 定时云端同步',
-                    description: '开启后按设置的间隔自动生成并上传 ICS 文件到云端',
+                    title: i18n('icsSyncEnabled'),
+                    description: i18n('icsSyncEnabledDesc'),
                 },
                 {
                     key: 'icsSyncInterval',
                     value: settings.icsSyncInterval,
                     type: 'select',
-                    title: 'ICS 同步间隔',
-                    description: '设置自动同步ICS文件到云端的频率',
+                    title: i18n('icsSyncInterval'),
+                    description: i18n('icsSyncIntervalDesc'),
                     options: {
-                        manual: '手动',
-                        '15min': '每15分钟',
-                        hourly: '每1小时',
-                        '4hour': '每4小时',
-                        '12hour': '每12小时',
-                        daily: '每天',
+                        manual: i18n('manual'),
+                        '15min': i18n('every15Minutes'),
+                        hourly: i18n('everyHour'),
+                        '4hour': i18n('every4Hours'),
+                        '12hour': i18n('every12Hours'),
+                        daily: i18n('everyDay'),
                     },
                 },
                 {
                     key: 'icsSilentUpload',
                     value: settings.icsSilentUpload,
                     type: 'checkbox',
-                    title: '静默上传ICS文件',
-                    description: '启用后，定时上传ICS文件时不显示成功提示消息',
+                    title: i18n('icsSilentUpload'),
+                    description: i18n('icsSilentUploadDesc'),
                 },
                 {
                     key: 'uploadIcsToCloud',
                     value: '',
                     type: 'button',
-                    title: '生成并上传 ICS 到云端',
-                    description: '生成ICS文件并立即上传到云端',
+                    title: i18n('uploadIcsToCloud'),
+                    description: i18n('uploadIcsToCloudDesc'),
                     button: {
-                        label: '生成并上传',
+                        label: i18n('generateAndUpload'),
                         callback: async () => {
                             await uploadIcsToCloud(plugin, settings);
                         },
@@ -1025,8 +1015,8 @@
                     key: 'icsCloudUrl',
                     value: settings.icsCloudUrl,
                     type: 'textinput',
-                    title: 'ICS 云端链接',
-                    description: '上传成功后自动生成的云端链接',
+                    title: i18n('icsCloudUrl'),
+                    description: i18n('icsCloudUrlDesc'),
                     disabled: false,
                 },
                 {
@@ -1035,8 +1025,8 @@
                         ? new Date(settings.icsLastSyncAt).toLocaleString()
                         : '',
                     type: 'textinput',
-                    title: '上一次上传时间',
-                    description: '显示上次成功上传ICS文件的时间',
+                    title: i18n('icsLastSyncAt'),
+                    description: i18n('icsLastSyncAtDesc'),
                     disabled: true,
                 },
                 // 思源服务器同步配置
@@ -1046,15 +1036,15 @@
                     key: 's3UseSiyuanConfig',
                     value: settings.s3UseSiyuanConfig,
                     type: 'checkbox',
-                    title: '使用思源S3设置',
-                    description: '启用后将使用思源的S3配置，无需手动配置下方的S3参数',
+                    title: i18n('s3UseSiyuanConfig'),
+                    description: i18n('s3UseSiyuanConfigDesc'),
                 },
                 {
                     key: 's3Bucket',
                     value: settings.s3Bucket,
                     type: 'textinput',
                     title: 'S3 Bucket',
-                    description: 'S3存储桶名称',
+                    description: i18n('s3BucketDesc'),
                     placeholder: 'my-bucket',
                 },
                 {
@@ -1062,7 +1052,7 @@
                     value: settings.s3Endpoint,
                     type: 'textinput',
                     title: 'S3 Endpoint',
-                    description: 'S3服务端点地址，可省略协议前缀（自动添加https://）',
+                    description: i18n('s3EndpointDesc'),
                     placeholder: 'oss-cn-shanghai.aliyuncs.com',
                 },
                 {
@@ -1070,7 +1060,7 @@
                     value: settings.s3Region,
                     type: 'textinput',
                     title: 'S3 Region',
-                    description: 'S3区域，例如 oss-cn-shanghai',
+                    description: i18n('s3RegionDesc'),
                     placeholder: 'auto',
                 },
                 {
@@ -1078,30 +1068,29 @@
                     value: settings.s3AccessKeyId,
                     type: 'textinput',
                     title: 'S3 Access Key ID',
-                    description: 'S3访问密钥ID',
+                    description: i18n('s3AccessKeyIdDesc'),
                 },
                 {
                     key: 's3AccessKeySecret',
                     value: settings.s3AccessKeySecret,
                     type: 'textinput',
                     title: 'S3 Access Key Secret',
-                    description: 'S3访问密钥Secret',
+                    description: i18n('s3AccessKeySecretDesc'),
                 },
                 {
                     key: 's3StoragePath',
                     value: settings.s3StoragePath,
                     type: 'textinput',
-                    title: 'S3 存储路径',
-                    description: 'S3中的存储路径，例如: /calendar/ 或留空存储在根目录',
+                    title: i18n('s3StoragePath'),
+                    description: i18n('s3StoragePathDesc'),
                     placeholder: '/calendar/',
                 },
                 {
                     key: 's3ForcePathStyle',
                     value: settings.s3ForcePathStyle,
                     type: 'select',
-                    title: 'S3 Addressing 风格',
-                    description:
-                        '访问文件URL，Path-style: https://endpoint/bucket/key, Virtual hosted: https://bucket.endpoint/key',
+                    title: i18n('s3ForcePathStyle'),
+                    description: i18n('s3ForcePathStyleDesc'),
                     options: {
                         true: 'Path-style',
                         false: 'Virtual hosted style',
@@ -1111,36 +1100,36 @@
                     key: 's3TlsVerify',
                     value: settings.s3TlsVerify,
                     type: 'select',
-                    title: 'S3 TLS 证书验证',
-                    description: '是否验证TLS/SSL证书，关闭后可连接自签名证书的服务',
+                    title: i18n('s3TlsVerify'),
+                    description: i18n('s3TlsVerifyDesc'),
                     options: {
-                        true: '启用验证',
-                        false: '禁用验证',
+                        true: i18n('enableVerification'),
+                        false: i18n('disableVerification'),
                     },
                 },
                 {
                     key: 's3CustomDomain',
                     value: settings.s3CustomDomain,
                     type: 'textinput',
-                    title: 'S3 自定义域名',
-                    description: '用于生成外链的自定义域名，留空则使用标准S3 URL',
+                    title: i18n('s3CustomDomain'),
+                    description: i18n('s3CustomDomainDesc'),
                     placeholder: 'cdn.example.com',
                 },
             ],
         },
         {
-            name: '❤️打赏催更',
+            name: '❤️' + i18n('donate'),
             items: [
                 {
                     key: 'donateInfo',
                     value: '',
                     type: 'hint',
-                    title: '欢迎打赏催更',
+                    title: i18n('donateTitle'),
                     description: `
                         <div style="margin-top:12px;">
                             <img src="plugins/siyuan-plugin-task-note-management/assets/donate.png" alt="donate" style="max-width:260px; height:auto; border:1px solid var(--b3-border-color);"/>
 
-                            <p style="margin-top:12px;">Non-Chinese users can use Wise to donate to me</p>
+                            <p style="margin-top:12px;">Non-Chinese users can transfer money via Wise, Western Union, etc.</p>
                             <img src="plugins/siyuan-plugin-task-note-management/assets/Alipay.jpg"alt="donate" style="max-width:260px; height:auto; border:1px solid var(--b3-border-color);"/>
                         </div>
                     `,
@@ -1747,7 +1736,7 @@
                             </div>
                         </div>
                         <div style="display: flex; gap: 4px;">
-                            <button class="b3-button b3-button--outline" data-action="toggle" data-id="${sub.id}" title="${sub.enabled ? '停用' : '启用'}">
+                            <button class="b3-button b3-button--outline" data-action="toggle" data-id="${sub.id}" title="${sub.enabled ? i18n('disableSubscription') : i18n('enableSubscription')}">
                                 <svg class="b3-button__icon ${!sub.enabled ? 'fn__opacity' : ''}"><use xlink:href="${sub.enabled ? '#iconEye' : '#iconEyeoff'}"></use></svg>
                             </button>
                             <button class="b3-button b3-button--outline" data-action="sync" data-id="${sub.id}" title="${i18n('syncNow')}">
@@ -2037,13 +2026,14 @@
                 data-name="editor"
                 class:b3-list-item--focus={group.name === focusGroup}
                 class="b3-list-item"
+                title={group.name}
                 role="button"
                 on:click={() => {
                     focusGroup = group.name;
                 }}
                 on:keydown={() => {}}
             >
-                <span>{group.name}</span>
+                <span class="tab-item__text">{group.name}</span>
             </li>
         {/each}
     </ul>
@@ -2104,7 +2094,9 @@
                                                     </svg>
                                                     <span>{audio.name}</span>
                                                     {#if isSelected}
-                                                        <span class="audio-row__badge">当前</span>
+                                                        <span class="audio-row__badge">
+                                                            {i18n('currentAudio')}
+                                                        </span>
                                                     {/if}
                                                 </div>
                                                 <div class="audio-row__btns">
@@ -2112,8 +2104,8 @@
                                                         class="audio-btn audio-btn--play"
                                                         title={playingPath === audio.path &&
                                                         isAudioPlaying
-                                                            ? '暂停'
-                                                            : '试听'}
+                                                            ? i18n('audioPause')
+                                                            : i18n('audioPreview')}
                                                         on:click|stopPropagation={() =>
                                                             toggleAudio(audio.path)}
                                                     >
@@ -2157,7 +2149,7 @@
                                                     <!-- 从列表移除 -->
                                                     <button
                                                         class="audio-btn audio-btn--delete"
-                                                        title="从列表移除"
+                                                        title={i18n('removeFromList')}
                                                         on:click|stopPropagation={() =>
                                                             deleteAudioFileForKey(
                                                                 audio.path,
@@ -2188,7 +2180,7 @@
                                         class="audio-upload-btn audio-upload-btn--bottom {isUploadingAudio
                                             ? 'audio-upload-btn--loading'
                                             : ''}"
-                                        title="上传音频文件"
+                                        title={i18n('uploadAudioFile')}
                                     >
                                         {#if isUploadingAudio}
                                             <svg
@@ -2216,7 +2208,7 @@
                                                 <line x1="12" y1="3" x2="12" y2="15" />
                                             </svg>
                                         {/if}
-                                        上传音频
+                                        {i18n('uploadAudio')}
                                         <input
                                             type="file"
                                             accept="audio/*,.mp3,.wav,.ogg,.aac,.flac,.m4a"
@@ -2263,7 +2255,21 @@
         overflow: hidden;
     }
     .config__panel > .b3-tab-bar {
-        width: min(30%, 170px);
+        width: min(30%, 200px);
+
+        .b3-list-item {
+            display: flex;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        .tab-item__text {
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 0;
+        }
     }
 
     .config__tab-wrap {

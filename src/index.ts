@@ -776,8 +776,8 @@ export default class ReminderPlugin extends Plugin {
         let dialog = new Dialog({
             title: i18n("settingsPanel"),
             content: `<div id="SettingPanel" style="height: 100%;"></div>`,
-            width: "min(800px, 95%)",
-            height: "700px",
+            width: "min(900px, 95%)",
+            height: "80vh",
             destroyCallback: () => {
                 pannel.$destroy();
             }

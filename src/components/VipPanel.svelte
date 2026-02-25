@@ -454,7 +454,7 @@
                     <div class="overseas-notice">
                         <p>{i18n('vipOverseasTransferNotice')}</p>
                         <img
-                            src="https://fastly.jsdelivr.net/gh/Achuan-2/PicBed@pic/assets/17720316419781772031641273.png"
+                            src="plugins/siyuan-plugin-task-note-management/assets/Alipay.jpg"
                             alt="Payment QR"
                             class="overseas-qr"
                         />
