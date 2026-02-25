@@ -799,7 +799,7 @@ export class PomodoroTimer {
     private closeRandomNotificationWindow() {
         if (this.randomNotificationWindow) {
             try {
-                this.randomNotificationWindow.close();
+                this.randomNotificationWindow.destroy();
             } catch (e) {
                 // ignore
             }
@@ -813,10 +813,10 @@ export class PomodoroTimer {
         const frontend = getFrontend();
         const isMobile = frontend.endsWith('mobile');
         const isBrowserDesktop = frontend === 'browser-desktop';
-        
+
         const title = i18n('pomodoroWorkEnd') || '工作结束';
         const message = i18n('pomodoroWorkEndDesc') || '工作时间结束，起来走走喝喝水吧！';
-        
+
         // 非电脑客户端使用思源内部 Dialog
         if (isMobile || isBrowserDesktop) {
             this.openSiyuanDialog(title, message, '🍅');
@@ -829,7 +829,7 @@ export class PomodoroTimer {
     private closePomodoroEndWindow() {
         if (this.pomodoroEndWindow) {
             try {
-                this.pomodoroEndWindow.close();
+                this.pomodoroEndWindow.destroy();
             } catch (e) {
                 // ignore
             }
@@ -843,17 +843,17 @@ export class PomodoroTimer {
         const frontend = getFrontend();
         const isMobile = frontend.endsWith('mobile');
         const isBrowserDesktop = frontend === 'browser-desktop';
-        
-        const title =  '微休息';
+
+        const title = '微休息';
         const message = i18n('randomRest', { duration: this.settings.randomNotificationBreakDuration }) || 'Time for a quick break!';
         const autoCloseDelay = Number(this.settings.randomNotificationBreakDuration) || 0;
-        
+
         // 非电脑客户端使用思源内部 Dialog
         if (isMobile || isBrowserDesktop) {
             this.openSiyuanDialog(title, message, '🎲', autoCloseDelay);
             return;
         }
-        
+
         this.openRandomNotificationWindowImpl(title, message, '🎲', autoCloseDelay);
     }
 
@@ -1052,11 +1052,9 @@ export class PomodoroTimer {
                         const { ipcRenderer } = require('electron');
                         function handleConfirm() {
                             ipcRenderer.send('confirm-result', true);
-                            window.close();
                         }
                         function handleCancel() {
                             ipcRenderer.send('confirm-result', false);
-                            window.close();
                         }
                     </script>
                 </body>
@@ -1072,6 +1070,9 @@ export class PomodoroTimer {
                     onCancel();
                 }
                 ipcMain.removeListener('confirm-result', handleConfirmResult);
+                if (confirmWindow && !confirmWindow.isDestroyed()) {
+                    confirmWindow.destroy();
+                }
             };
             ipcMain.on('confirm-result', handleConfirmResult);
 
@@ -2102,7 +2103,7 @@ export class PomodoroTimer {
             justify-content: center;
         `;
         this.minimizeBtn.innerHTML = '⭕';
-        this.minimizeBtn.title = i18n('miniMode'); 
+        this.minimizeBtn.title = i18n('miniMode');
         this.minimizeBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -2372,7 +2373,7 @@ export class PomodoroTimer {
         title.appendChild(this.minimizeBtn);
         title.appendChild(dockBtn);
         title.appendChild(switchContainer);
-        
+
         headerButtons.appendChild(this.expandToggleBtn);
         headerButtons.appendChild(this.fullscreenBtn);
         headerButtons.appendChild(closeBtn);
@@ -5752,7 +5753,7 @@ export class PomodoroTimer {
             // 如果container是BrowserWindow
             try {
                 if (PomodoroTimer.browserWindowInstance === this.container) {
-                    (this.container as any).close();
+                    (this.container as any).destroy();
                 }
             } catch (e) {
                 console.error('[PomodoroTimer] Failed to close BrowserWindow:', e);
@@ -6037,10 +6038,10 @@ export class PomodoroTimer {
      */
     private enterDOMWindowDock() {
         if (!this.container || this.isTabMode) return;
-        
+
         this.isDocked = true;
         this.container.classList.add('docked-mode');
-        
+
         // 保存当前位置和大小
         if (!this.normalWindowBounds) {
             const rect = this.container.getBoundingClientRect();
@@ -6051,24 +6052,24 @@ export class PomodoroTimer {
                 height: rect.height
             };
         }
-        
+
         // 隐藏 header
         const header = this.container.querySelector('.pomodoro-header') as HTMLElement;
         if (header) {
             header.style.display = 'none';
         }
-        
+
         // 隐藏 content
         const content = this.container.querySelector('.pomodoro-content') as HTMLElement;
         if (content) {
             content.style.display = 'none';
         }
-        
+
         // 应用吸附样式
         const position = this.settings.pomodoroDockPosition || 'right';
         this.container.style.position = 'fixed';
         this.container.style.zIndex = '10000';
-        
+
         if (position === 'right') {
             this.container.style.width = '8px';
             this.container.style.height = '100vh';
@@ -6098,13 +6099,13 @@ export class PomodoroTimer {
             this.container.style.right = '0';
             this.container.style.top = 'auto';
         }
-        
+
         this.container.style.borderRadius = '0';
         this.container.style.boxShadow = 'none';
-        
+
         // 创建进度条容器（如果不存在）
         this.createDockedProgressBar(position);
-        
+
         showMessage('已进入吸附模式，点击进度条恢复正常', 2000);
     }
 
@@ -6113,36 +6114,36 @@ export class PomodoroTimer {
      */
     private exitDOMWindowDock() {
         if (!this.container) return;
-        
+
         this.isDocked = false;
         this.container.classList.remove('docked-mode');
-        
+
         // 移除进度条容器
         const progressContainer = this.container.querySelector('.dom-docked-progress-container') as HTMLElement;
         if (progressContainer) {
             progressContainer.remove();
         }
-        
+
         // 恢复 header 显示
         const header = this.container.querySelector('.pomodoro-header') as HTMLElement;
         if (header) {
             header.style.display = 'flex';
         }
-        
+
         // 恢复 content 显示
         const content = this.container.querySelector('.pomodoro-content') as HTMLElement;
         if (content) {
             content.style.display = 'block';
             content.style.padding = '0px 16px 6px';
         }
-        
+
         // 恢复原始样式
         this.container.style.position = 'fixed';
         this.container.style.width = '240px';
         this.container.style.height = 'auto';
         this.container.style.borderRadius = '12px';
         this.container.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.15)';
-        
+
         // 恢复位置
         if (this.normalWindowBounds) {
             this.container.style.left = this.normalWindowBounds.x + 'px';
@@ -6155,7 +6156,7 @@ export class PomodoroTimer {
             this.container.style.left = 'auto';
             this.container.style.top = 'auto';
         }
-        
+
         showMessage('已退出吸附模式', 1500);
     }
 
@@ -6164,14 +6165,14 @@ export class PomodoroTimer {
      */
     private createDockedProgressBar(position: string) {
         if (!this.container) return;
-        
+
         // 移除旧的进度条
         const oldProgress = this.container.querySelector('.dom-docked-progress-container');
         if (oldProgress) oldProgress.remove();
-        
+
         const isHorizontal = position === 'top' || position === 'bottom';
         const isBottom = position === 'bottom';
-        
+
         // 创建外层容器（全尺寸点击区域）
         const container = document.createElement('div');
         container.className = 'dom-docked-progress-container';
@@ -6185,7 +6186,7 @@ export class PomodoroTimer {
             pointer-events: auto;
             z-index: 10001;
         `;
-        
+
         // 创建背景层（灰色轨道）
         const track = document.createElement('div');
         track.style.cssText = `
@@ -6196,22 +6197,22 @@ export class PomodoroTimer {
             height: 100%;
             background: rgba(128, 128, 128, 0.3);
         `;
-        
+
         // 创建进度填充层
         const fill = document.createElement('div');
         fill.className = 'dom-docked-progress-fill';
         fill.style.cssText = `
             position: absolute;
-            ${isHorizontal 
+            ${isHorizontal
                 ? (isBottom ? 'left: 0; bottom: 0; height: 100%; width: 0%;' : 'left: 0; top: 0; height: 100%; width: 0%;')
                 : 'bottom: 0; left: 0; width: 100%; height: 0%;'}
             background: #4CAF50;
             transition: ${isHorizontal ? 'width' : 'height'} 0.5s ease, background-color 0.3s ease;
         `;
-        
+
         container.appendChild(track);
         container.appendChild(fill);
-        
+
         // 点击整个区域恢复正常
         container.addEventListener('click', (e) => {
             e.preventDefault();
@@ -6219,7 +6220,7 @@ export class PomodoroTimer {
             console.log('[PomodoroTimer] Docked progress bar clicked, restoring window');
             this.exitDOMWindowDock();
         });
-        
+
         // 悬停效果
         container.addEventListener('mouseenter', () => {
             fill.style.filter = 'brightness(1.2)';
@@ -6227,9 +6228,9 @@ export class PomodoroTimer {
         container.addEventListener('mouseleave', () => {
             fill.style.filter = 'brightness(1)';
         });
-        
+
         this.container.appendChild(container);
-        
+
         // 更新进度
         this.updateDockedProgressBar();
     }
@@ -6239,28 +6240,28 @@ export class PomodoroTimer {
      */
     private updateDockedProgressBar() {
         if (!this.container || !this.isDocked) return;
-        
+
         const progressFill = this.container.querySelector('.dom-docked-progress-fill') as HTMLElement;
         if (!progressFill) return;
-        
+
         const position = this.settings.pomodoroDockPosition || 'right';
         const isHorizontal = position === 'top' || position === 'bottom';
-        
+
         let progress = 0;
         if (this.isCountUp) {
             progress = 0;
         } else if (this.totalTime > 0) {
             progress = (this.totalTime - this.timeLeft) / this.totalTime;
         }
-        
+
         progress = Math.max(0, Math.min(1, progress));
-        
+
         if (isHorizontal) {
             progressFill.style.width = (progress * 100) + '%';
         } else {
             progressFill.style.height = (progress * 100) + '%';
         }
-        
+
         // 根据阶段改变颜色
         let color = '#FF6B6B'; // 红色-工作
         if (!this.isWorkPhase) {
@@ -6636,7 +6637,7 @@ export class PomodoroTimer {
                         pomodoroWindow.minimize();
                         break;
                     case 'close':
-                        pomodoroWindow.close();
+                        pomodoroWindow.destroy();
                         break;
                     // heartbeat 已移除以避免向已销毁对象发送 IPC
                     case 'toggleMiniMode':
@@ -7020,7 +7021,7 @@ document.body.classList.remove('docked-mode');
                         pomodoroWindow.minimize();
                         break;
                     case 'close':
-                        pomodoroWindow.close();
+                        pomodoroWindow.destroy();
                         break;
                     case 'toggleMiniMode':
                         this.toggleBrowserWindowMiniMode(pomodoroWindow);
@@ -7078,10 +7079,10 @@ document.body.classList.remove('docked-mode');
             }
 
             const mouseEventsChannel = `pomodoro-mouse-${pomodoroWindow.id}`;
-            
+
             // 先移除旧监听器，避免重复
             ipcMain.removeAllListeners(mouseEventsChannel);
-            
+
             const mouseHandler = (_event: any, ignore: boolean) => {
                 if (pomodoroWindow && !pomodoroWindow.isDestroyed()) {
                     try {
@@ -8028,7 +8029,7 @@ document.body.classList.remove('docked-mode');
                             pomodoroWindow.minimize();
                             break;
                         case 'close':
-                            pomodoroWindow.close();
+                            pomodoroWindow.destroy();
                             break;
                         // heartbeat 已移除以避免向已销毁对象发送 IPC
                         case 'toggleMiniMode':
@@ -8233,7 +8234,7 @@ document.body.classList.remove('mini-mode');
             }
 
             // Close and recreate window to apply transparent/non-transparent settings
-            pomodoroWindow.close();
+            pomodoroWindow.destroy();
 
             // Wait briefly for cleanup then recreate
             setTimeout(() => {
