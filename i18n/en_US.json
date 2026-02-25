@@ -372,7 +372,7 @@
     "minimize": "Minimize",
     "miniMode": "Mini Mode",
     "dockMode": "Dock Mode",
-    "dockToRight": "Dock to Right",
+    "dockToEdge": "Dock to Edge",
     "undock": "Undock",
     "switchToCountUp": "Switch to Count Up",
     "switchToCountdown": "Switch to Countdown",

@@ -2354,7 +2354,7 @@ export class PomodoroTimer {
             justify-content: center;
         `;
         dockBtn.innerHTML = '🧲';
-        dockBtn.title = i18n('dockToRight') || '吸附到屏幕边缘';
+        dockBtn.title = i18n('dockToEdge') || '吸附到屏幕边缘';
         dockBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -7179,7 +7179,7 @@ document.body.classList.remove('docked-mode');
     ): string {
         // 设置默认值
         miniModeTitle = miniModeTitle || (i18n('miniMode') || '迷你模式');
-        dockModeTitle = dockModeTitle || (i18n('dockToRight') || '吸附到屏幕边缘');
+        dockModeTitle = dockModeTitle || (i18n('dockToEdge') || '吸附到屏幕边缘');
         return `<!DOCTYPE html>
 <html>
 <head>
