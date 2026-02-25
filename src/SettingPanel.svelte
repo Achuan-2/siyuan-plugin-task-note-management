@@ -1,4 +1,4 @@
-﻿<script lang="ts">
+<script lang="ts">
     import { onMount } from 'svelte';
     import { Dialog } from 'siyuan';
     import Form from '@/libs/components/Form';
@@ -714,63 +714,63 @@
             ],
         },
         {
-            name: i18n('randomNotificationSettings'),
+            name: i18n('randomRestSettings'),
             items: [
                 {
-                    key: 'randomNotificationEnabled',
-                    value: settings.randomNotificationEnabled,
+                    key: 'randomRestEnabled',
+                    value: settings.randomRestEnabled,
                     type: 'checkbox',
-                    title: i18n('randomNotificationEnabled'),
-                    description: i18n('randomNotificationEnabledDesc'),
+                    title: i18n('randomRestEnabled'),
+                    description: i18n('randomRestEnabledDesc'),
                 },
                 {
-                    key: 'randomNotificationSystemNotification',
-                    value: settings.randomNotificationSystemNotification,
+                    key: 'randomRestSystemNotification',
+                    value: settings.randomRestSystemNotification,
                     type: 'checkbox',
-                    title: i18n('randomNotificationSystemNotification'),
-                    description: i18n('randomNotificationSystemNotificationDesc'),
+                    title: i18n('randomRestSystemNotification'),
+                    description: i18n('randomRestSystemNotificationDesc'),
                 },
                 {
-                    key: 'randomNotificationPopupWindow',
-                    value: settings.randomNotificationPopupWindow,
+                    key: 'randomRestPopupWindow',
+                    value: settings.randomRestPopupWindow,
                     type: 'checkbox',
-                    title: i18n('randomNotificationPopupWindow'),
-                    description: i18n('randomNotificationPopupWindowDesc'),
+                    title: i18n('randomRestPopupWindow'),
+                    description: i18n('randomRestPopupWindowDesc'),
                 },
                 {
-                    key: 'randomNotificationMinInterval',
-                    value: settings.randomNotificationMinInterval,
+                    key: 'randomRestMinInterval',
+                    value: settings.randomRestMinInterval,
                     type: 'number',
-                    title: i18n('randomNotificationMinInterval'),
-                    description: i18n('randomNotificationMinIntervalDesc'),
+                    title: i18n('randomRestMinInterval'),
+                    description: i18n('randomRestMinIntervalDesc'),
                 },
                 {
-                    key: 'randomNotificationMaxInterval',
-                    value: settings.randomNotificationMaxInterval,
+                    key: 'randomRestMaxInterval',
+                    value: settings.randomRestMaxInterval,
                     type: 'number',
-                    title: i18n('randomNotificationMaxInterval'),
-                    description: i18n('randomNotificationMaxIntervalDesc'),
+                    title: i18n('randomRestMaxInterval'),
+                    description: i18n('randomRestMaxIntervalDesc'),
                 },
                 {
-                    key: 'randomNotificationBreakDuration',
-                    value: settings.randomNotificationBreakDuration,
+                    key: 'randomRestBreakDuration',
+                    value: settings.randomRestBreakDuration,
                     type: 'number',
-                    title: i18n('randomNotificationBreakDuration'),
-                    description: i18n('randomNotificationBreakDurationDesc'),
+                    title: i18n('randomRestBreakDuration'),
+                    description: i18n('randomRestBreakDurationDesc'),
                 },
                 {
-                    key: 'randomNotificationSounds',
-                    value: settings.audioFileLists?.randomNotificationSounds || [],
+                    key: 'randomRestSounds',
+                    value: settings.audioFileLists?.randomRestSounds || [],
                     type: 'custom-audio',
-                    title: i18n('randomNotificationSounds'),
-                    description: i18n('randomNotificationSoundsDesc') || '',
+                    title: i18n('randomRestSounds'),
+                    description: i18n('randomRestSoundsDesc') || '',
                 },
                 {
-                    key: 'randomNotificationEndSound',
-                    value: settings.audioSelected?.randomNotificationEndSound || '',
+                    key: 'randomRestEndSound',
+                    value: settings.audioSelected?.randomRestEndSound || '',
                     type: 'custom-audio',
-                    title: i18n('randomNotificationEndSound'),
-                    description: i18n('randomNotificationEndSoundDesc') || '',
+                    title: i18n('randomRestEndSound'),
+                    description: i18n('randomRestEndSoundDesc') || '',
                 },
             ],
         },
@@ -1212,7 +1212,7 @@
             key.startsWith('pomodoro') ||
             key === 'backgroundVolume' ||
             key === 'dailyFocusGoal' ||
-            key.startsWith('randomNotification')
+            key.startsWith('randomRest')
         ) {
             (async () => {
                 try {

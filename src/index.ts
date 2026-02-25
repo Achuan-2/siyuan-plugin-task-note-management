@@ -75,12 +75,12 @@ export const DEFAULT_SETTINGS = {
     reminderSystemNotification: true, // 新增：事件到期提醒系统弹窗
     dailyNotificationTime: '08:00', // 新增：每日通知时间，默认08:00
     dailyNotificationEnabled: false, // 新增：是否启用每日统一通知
-    randomNotificationEnabled: false,
-    randomNotificationMinInterval: 3,
-    randomNotificationMaxInterval: 5,
-    randomNotificationBreakDuration: 10,
-    randomNotificationSystemNotification: true, // 新增：随机微休息系统通知
-    randomNotificationPopupWindow: true, // 新增：随机微休息弹窗提醒，默认关闭
+    randomRestEnabled: false,
+    randomRestMinInterval: 3,
+    randomRestMaxInterval: 5,
+    randomRestBreakDuration: 10,
+    randomRestSystemNotification: true, // 新增：随机微休息系统通知
+    randomRestPopupWindow: true, // 新增：随机微休息弹窗提醒，默认关闭
     dailyFocusGoal: 6,
     autoDetectDateTime: false, // 新增：是否自动识别日期时间
     removeDateAfterDetection: true, // 新增：识别日期后是否移除标题中的日期
@@ -174,8 +174,8 @@ export const DEFAULT_SETTINGS = {
         ],
         pomodoroWorkEndSound: [{ path: '/plugins/siyuan-plugin-task-note-management/audios/work_end.mp3' }],
         pomodoroBreakEndSound: [{ path: '/plugins/siyuan-plugin-task-note-management/audios/end_music.mp3' }],
-        randomNotificationSounds: [{ path: '/plugins/siyuan-plugin-task-note-management/audios/random_start.mp3' }],
-        randomNotificationEndSound: [{ path: '/plugins/siyuan-plugin-task-note-management/audios/random_end.mp3' }],
+        randomRestSounds: [{ path: '/plugins/siyuan-plugin-task-note-management/audios/random_start.mp3' }],
+        randomRestEndSound: [{ path: '/plugins/siyuan-plugin-task-note-management/audios/random_end.mp3' }],
     } as Record<string, AudioFileItem[]>,
     // 每个声音设置项当前的选中项 { settingKey: url }
     audioSelected: {
@@ -185,8 +185,8 @@ export const DEFAULT_SETTINGS = {
         pomodoroLongBreakSound: '/plugins/siyuan-plugin-task-note-management/audios/relax_background.mp3',
         pomodoroWorkEndSound: '/plugins/siyuan-plugin-task-note-management/audios/work_end.mp3',
         pomodoroBreakEndSound: '/plugins/siyuan-plugin-task-note-management/audios/end_music.mp3',
-        randomNotificationSounds: '/plugins/siyuan-plugin-task-note-management/audios/random_start.mp3',
-        randomNotificationEndSound: '/plugins/siyuan-plugin-task-note-management/audios/random_end.mp3',
+        randomRestSounds: '/plugins/siyuan-plugin-task-note-management/audios/random_start.mp3',
+        randomRestEndSound: '/plugins/siyuan-plugin-task-note-management/audios/random_end.mp3',
     } as Record<string, string>,
 };
 
@@ -628,8 +628,8 @@ export default class ReminderPlugin extends Plugin {
                     const next = pomodoroSettings || {};
                     const relevantFields = [
                         'workDuration', 'breakDuration', 'longBreakDuration', 'longBreakInterval', 'autoMode', 'backgroundVolume',
-                        'randomNotificationEnabled', 'randomNotificationMinInterval', 'randomNotificationMaxInterval', 'randomNotificationBreakDuration',
-                        'randomNotificationSounds', 'randomNotificationEndSound', 'dailyFocusGoal'
+                        'randomRestEnabled', 'randomRestMinInterval', 'randomRestMaxInterval', 'randomRestBreakDuration',
+                        'randomRestSounds', 'randomRestEndSound', 'dailyFocusGoal'
                     ]; let relevantChanged = false;
                     for (const f of relevantFields) {
                         const pv = prev[f];
@@ -914,15 +914,15 @@ export default class ReminderPlugin extends Plugin {
             breakEndSound: settings.audioSelected?.pomodoroBreakEndSound || '',
             backgroundVolume: Math.max(0, Math.min(1, settings.backgroundVolume)),
             systemNotification: settings.pomodoroSystemNotification, // 新增
-            randomNotificationEnabled: settings.randomNotificationEnabled,
-            randomNotificationMinInterval: Math.max(1, settings.randomNotificationMinInterval),
-            randomNotificationMaxInterval: Math.max(1, settings.randomNotificationMaxInterval),
-            randomNotificationBreakDuration: Math.max(1, settings.randomNotificationBreakDuration),
-            randomNotificationSounds: settings.audioSelected?.randomNotificationSounds || '',
-            randomNotificationEndSound: settings.audioSelected?.randomNotificationEndSound || '',
-            randomNotificationSystemNotification: settings.randomNotificationSystemNotification, // 新增
+            randomRestEnabled: settings.randomRestEnabled,
+            randomRestMinInterval: Math.max(1, settings.randomRestMinInterval),
+            randomRestMaxInterval: Math.max(1, settings.randomRestMaxInterval),
+            randomRestBreakDuration: Math.max(1, settings.randomRestBreakDuration),
+            randomRestSounds: settings.audioSelected?.randomRestSounds || '',
+            randomRestEndSound: settings.audioSelected?.randomRestEndSound || '',
+            randomRestSystemNotification: settings.randomRestSystemNotification, // 新增
             dailyFocusGoal: settings.dailyFocusGoal,
-            randomNotificationPopupWindow: settings.randomNotificationPopupWindow,
+            randomRestPopupWindow: settings.randomRestPopupWindow,
             pomodoroEndPopupWindow: settings.pomodoroEndPopupWindow,
             pomodoroDockPosition: settings.pomodoroDockPosition
         };
@@ -4672,6 +4672,61 @@ export default class ReminderPlugin extends Plugin {
                 }
             }
 
+            // 检查是否需要迁移随机休息相关的设置项名称 (randomNotification -> randomRest)
+            if (!settings.datatransfer?.randomRestTransfer) {
+                console.log('开始迁移随机休息设置项...');
+                let migratedCount = 0;
+                const mapping = {
+                    'randomNotificationEnabled': 'randomRestEnabled',
+                    'randomNotificationMinInterval': 'randomRestMinInterval',
+                    'randomNotificationMaxInterval': 'randomRestMaxInterval',
+                    'randomNotificationBreakDuration': 'randomRestBreakDuration',
+                    'randomNotificationSystemNotification': 'randomRestSystemNotification',
+                    'randomNotificationPopupWindow': 'randomRestPopupWindow',
+                    'randomNotificationSounds': 'randomRestSounds',
+                    'randomNotificationEndSound': 'randomRestEndSound'
+                };
+
+                for (const [oldKey, newKey] of Object.entries(mapping)) {
+                    if (oldKey in settings) {
+                        (settings as any)[newKey] = (settings as any)[oldKey];
+                        delete (settings as any)[oldKey];
+                        migratedCount++;
+                    }
+                }
+
+                // 迁移 audioFileLists 和 audioSelected 中的键名
+                const audioMapping = {
+                    'randomNotificationSounds': 'randomRestSounds',
+                    'randomNotificationEndSound': 'randomRestEndSound'
+                };
+
+                if (settings.audioFileLists) {
+                    for (const [oldKey, newKey] of Object.entries(audioMapping)) {
+                        if (settings.audioFileLists[oldKey]) {
+                            settings.audioFileLists[newKey] = settings.audioFileLists[oldKey];
+                            delete settings.audioFileLists[oldKey];
+                            migratedCount++;
+                        }
+                    }
+                }
+
+                if (settings.audioSelected) {
+                    for (const [oldKey, newKey] of Object.entries(audioMapping)) {
+                        if (settings.audioSelected[oldKey]) {
+                            settings.audioSelected[newKey] = settings.audioSelected[oldKey];
+                            delete settings.audioSelected[oldKey];
+                            migratedCount++;
+                        }
+                    }
+                }
+
+                settings.datatransfer = settings.datatransfer || {};
+                settings.datatransfer.randomRestTransfer = true;
+                await this.saveSettings(settings);
+                console.log(`随机休息设置项迁移完成，更新了 ${migratedCount} 个项`);
+            }
+
             // 检查是否需要迁移音频文件列表
             if (!settings.datatransfer?.audioFileTransfer) {
                 console.log('开始迁移音频文件列表...');
@@ -4682,8 +4737,8 @@ export default class ReminderPlugin extends Plugin {
                     'pomodoroLongBreakSound',
                     'pomodoroWorkEndSound',
                     'pomodoroBreakEndSound',
-                    'randomNotificationSounds',
-                    'randomNotificationEndSound',
+                    'randomRestSounds',
+                    'randomRestEndSound',
                 ];
                 if (!settings.audioFileLists) settings.audioFileLists = {};
                 if (!settings.audioSelected) settings.audioSelected = {};
