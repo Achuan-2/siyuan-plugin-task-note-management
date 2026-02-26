@@ -1,5 +1,6 @@
 import { pushErrMsg, pushMsg, putFile, getFile } from '../api';
 import { parseIcsFile, isEventPast } from './icsImport';
+import { i18n } from "../pluginInstance";
 
 export interface IcsSubscription {
     id: string;
@@ -473,7 +474,7 @@ export async function syncHolidays(plugin: any, url: string): Promise<boolean> {
                 } else if (title.includes('休') || title.toLowerCase().includes('holiday') || title.toLowerCase().includes('off')) {
                     type = 'holiday';
                 }
-                // 默认如果什么都没匹配到，也可以认为是假，因为这是节假日日历
+                // 默认如果什么都没匹配到，也可以认为是holiday，因为这是节假日日历
 
                 holidayData[event.date] = { title, type };
             }
@@ -497,7 +498,7 @@ export async function loadHolidays(plugin: any): Promise<{ [date: string]: { tit
             // 如果数据不存在，检查设置，如果开启了节假日显示且有 URL，则自动同步
             const settings = await plugin.loadSettings();
             if (settings.calendarShowHoliday && settings.calendarHolidayIcsUrl) {
-                pushMsg('开始下载中国节假日和调休数据...');
+                pushMsg(i18n('downloadingHolidays'));
                 const success = await syncHolidays(plugin, settings.calendarHolidayIcsUrl);
                 if (success) {
                     data = await plugin.loadHolidayData();

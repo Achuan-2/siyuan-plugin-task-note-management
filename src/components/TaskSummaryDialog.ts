@@ -38,9 +38,9 @@ export class TaskSummaryDialog {
     const h = Math.floor(minutes / 60);
     const m = Math.round(minutes % 60);
     if (h > 0) {
-      return `${h} h ${m} m`;
+      return `${h} ${i18n('hourSymbol')} ${m} ${i18n('minuteSymbol')}`;
     }
-    return `${m} m`;
+    return `${m} ${i18n('minuteSymbol')}`;
   }
 
   private getDisplayTimeForDate(task: any, date: string): string {
@@ -66,22 +66,24 @@ export class TaskSummaryDialog {
     // 跨天任务
     if (date === sd) {
       if (st) return wrap(`${st}-23:59`);
-      return wrap('全天');
+      return wrap(i18n('allDay'));
     }
 
     if (date === ed) {
       if (et) return wrap(`00:00-${et}`);
-      return wrap('全天');
+      return wrap(i18n('allDay'));
     }
 
     // 中间天
-    return wrap('00:00-23:59');
+    return wrap(`00:00-23:59`);
   }
 
   private formatMonthDay(dateStr: string): string {
     if (!dateStr) return '';
     const d = new Date(dateStr);
-    return `${d.getMonth() + 1}月${d.getDate()}日`;
+    const m = d.getMonth() + 1;
+    const day = d.getDate();
+    return i18n('monthDayTemplate').replace('${m}', m.toString()).replace('${d}', day.toString());
   }
 
   /**
@@ -110,12 +112,12 @@ export class TaskSummaryDialog {
     // taskDate 已经是任务的逻辑日期（从 reminder.date 获取）
     if (completedLogicalDate === taskDate) {
       // 同一天：只显示时间
-      return ` (完成于 ${timeStr})`;
+      return i18n('completedAtTemplate').replace('${time}', timeStr);
     } else {
       // 不同天：显示实际完成日期+时间
       // 注意：这里显示的是实际完成时间的日期（从原始字符串提取），而不是逻辑日期
       const dateStr = this.formatMonthDay(actualCompletedDateStr);
-      return ` (完成于 ${dateStr} ${timeStr})`;
+      return i18n('completedAtWithDateTemplate').replace('${date}', dateStr).replace('${time}', timeStr);
     }
   }
 
@@ -190,7 +192,7 @@ export class TaskSummaryDialog {
 
       // 创建弹窗
       this.currentDialog = new Dialog({
-        title: i18n("taskSummary") || "任务摘要",
+        title: i18n("taskSummary"),
         content: `<div id="task-summary-dialog-container" style="height: 100%; display: flex; flex-direction: column;"></div>`,
         width: "90vw",
         height: "85vh"
@@ -199,7 +201,7 @@ export class TaskSummaryDialog {
       this.renderSummary();
     } catch (error) {
       console.error('显示任务摘要失败:', error);
-      showMessage(i18n("showSummaryFailed") || "显示摘要失败");
+      showMessage(i18n("showSummaryFailed"));
     }
   }
 
@@ -1063,28 +1065,31 @@ export class TaskSummaryDialog {
       const viewType = currentView.type;
       const startDate = currentView.activeStart;
 
+      const locale = (window as any).siyuan?.config?.lang === 'zh_CN' ? 'zh-CN' : 'en-US';
       switch (viewType) {
         case 'dayGridMonth':
-          return `${startDate.getFullYear()}年${startDate.getMonth() + 1}月`;
+          return i18n('yearMonthTemplate')
+            .replace('${y}', startDate.getFullYear().toString())
+            .replace('${m}', (startDate.getMonth() + 1).toString());
         case 'timeGridWeek':
           // 周视图：计算实际的结束日期
           const actualWeekEnd = new Date(currentView.activeEnd.getTime() - 24 * 60 * 60 * 1000);
-          const weekStart = startDate.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
-          const weekEnd = actualWeekEnd.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+          const weekStart = startDate.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+          const weekEnd = actualWeekEnd.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
           return `${weekStart} - ${weekEnd}`;
         case 'timeGridDay':
           // 日视图：只显示当天
-          return startDate.toLocaleDateString('zh-CN', {
+          return startDate.toLocaleDateString(locale, {
             year: 'numeric',
             month: 'long',
             day: 'numeric',
             weekday: 'long'
           });
         default:
-          return i18n("currentView") || "当前视图";
+          return i18n("currentView");
       }
     }
-    return i18n("currentView") || "当前视图";
+    return i18n("currentView");
   }
 
   /**
@@ -1139,7 +1144,7 @@ export class TaskSummaryDialog {
 
       const projectId = taskItem.extendedProps?.projectId || 'no-project';
       const projectName = projectId === 'no-project' ?
-        (i18n("noProject") || "无项目") :
+        i18n("noProject") :
         this.projectManager.getProjectName(projectId) || projectId;
 
       // 添加到分组
@@ -1357,7 +1362,7 @@ export class TaskSummaryDialog {
    */
   public generateSummaryContent(groupedTasks: Map<string, Map<string, any[]>>, dateRange: { start: string, end: string, label: string }, stats: any): string {
     const filters = [
-      { id: 'current', label: i18n('currentView') || '当前视图' },
+      { id: 'current', label: i18n('currentView') },
       { id: 'today', label: i18n('today') },
       { id: 'tomorrow', label: i18n('tomorrow') },
       { id: 'yesterday', label: i18n('yesterday') },
@@ -1377,7 +1382,7 @@ export class TaskSummaryDialog {
         tasks.forEach((t: any) => { if (t.completed) completedTasks++; });
       });
     });
-    const completionText = `已完成 ${completedTasks}/${totalTasks} 任务`;
+    const completionText = i18n('completionStats').replace('${completed}', completedTasks.toString()).replace('${total}', totalTasks.toString());
 
     let html = `
         <div class="task-summary-wrapper" style="display: flex; flex-direction: column; height: 100%; padding: 16px;">
@@ -1394,41 +1399,41 @@ export class TaskSummaryDialog {
                 <div class="action-buttons" style="display: flex; gap: 8px;">
                     <button class="b3-button b3-button--outline" id="copy-rich-text-btn" style="display: flex; align-items: center; gap: 4px; padding: 4px 8px; font-size: 12px; height: 28px;">
                         <svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconCopy"></use></svg>
-                        ${i18n("copyRichText") || "复制富文本"}
+                        ${i18n("copyRichText")}
                     </button>
                     <button class="b3-button b3-button--outline" id="copy-markdown-btn" style="display: flex; align-items: center; gap: 4px; padding: 4px 8px; font-size: 12px; height: 28px;">
                         <svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconCopy"></use></svg>
-                        ${i18n("copyAll") || "Markdown"}
+                        ${i18n("copyAll")}
                     </button>
                     <button class="b3-button b3-button--outline" id="copy-plain-btn" style="display: flex; align-items: center; gap: 4px; padding: 4px 8px; font-size: 12px; height: 28px;">
                         <svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconCopy"></use></svg>
-                        ${i18n("copyPlainText") || "复制纯文本"}
+                        ${i18n("copyPlainText")}
                     </button>
                 </div>
             </div>
 
             <div class="task-summary-info-cards" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 16px;">
               <div class="info-card" style="padding: 12px; background: var(--b3-theme-surface); border-radius: 8px; border: 1px solid var(--b3-border-color);">
-                <div style="font-size: 12px; color: var(--b3-theme-on-surface-light);">${i18n('currentRange') || '当前范围'}</div>
+                <div style="font-size: 12px; color: var(--b3-theme-on-surface-light);">${i18n('currentRange')}</div>
                 <div style="font-size: 14px; font-weight: bold; margin-top: 4px;">${dateRange.label}</div>
               </div>
               <div class="info-card" id="task-completion-card" style="padding: 12px; background: var(--b3-theme-surface); border-radius: 8px; border: 1px solid var(--b3-border-color);">
-                <div style="font-size: 12px; color: var(--b3-theme-on-surface-light);">✅ 任务完成情况</div>
+                <div style="font-size: 12px; color: var(--b3-theme-on-surface-light);">${i18n('taskStatsCompletion')}</div>
                 <div style="font-size: 14px; font-weight: bold; margin-top: 4px;">${completionText}</div>
               </div>
                 ${stats.settings.showPomodoro ? `
                 <div class="info-card" style="padding: 12px; background: var(--b3-theme-surface); border-radius: 8px; border: 1px solid var(--b3-border-color);">
-                    <div style="font-size: 12px; color: var(--b3-theme-on-surface-light);">🍅 ${i18n('pomodoroFocus') || '番茄专注'}</div>
+                    <div style="font-size: 12px; color: var(--b3-theme-on-surface-light);">${i18n('pomodoroFocusCard')}</div>
                     <div style="font-size: 14px; font-weight: bold; margin-top: 4px;">
-                        ${stats.pomodoro.totalCount} 个番茄钟，共 ${this.formatDuration(stats.pomodoro.totalMinutes)}
+                        ${i18n('pomodoroStatsValue').replace('${count}', stats.pomodoro.totalCount.toString()).replace('${duration}', this.formatDuration(stats.pomodoro.totalMinutes))}
                     </div>
                 </div>
                 ` : ''}
                 ${stats.settings.showHabit ? `
                 <div class="info-card" style="padding: 12px; background: var(--b3-theme-surface); border-radius: 8px; border: 1px solid var(--b3-border-color);">
-                    <div style="font-size: 12px; color: var(--b3-theme-on-surface-light);">💪 ${i18n('habitCheckIn') || '习惯打卡'}</div>
+                    <div style="font-size: 12px; color: var(--b3-theme-on-surface-light);">${i18n('habitCheckInCard')}</div>
                     <div style="font-size: 14px; font-weight: bold; margin-top: 4px;">
-                        已完成 ${stats.habit.completed} / ${stats.habit.total} 次打卡
+                        ${i18n('habitStatsValue').replace('${completed}', stats.habit.completed.toString()).replace('${total}', stats.habit.total.toString())}
                     </div>
                 </div>
                 ` : ''}
@@ -1449,13 +1454,14 @@ export class TaskSummaryDialog {
 
 
     if (sortedDates.length === 0) {
-      html += `<div style="text-align: center; padding: 40px; color: var(--b3-theme-on-surface-light);">${i18n('noTasks') || '暂无任务'}</div>`;
+      html += `<div style="text-align: center; padding: 40px; color: var(--b3-theme-on-surface-light);">${i18n('noTasks')}</div>`;
     }
 
     sortedDates.forEach(date => {
       const dateProjects = groupedTasks.get(date);
       const dateObj = new Date(date);
-      const formattedDate = dateObj.toLocaleDateString('zh-CN', {
+      const locale = (window as any).siyuan?.config?.lang === 'zh_CN' ? 'zh-CN' : 'en-US';
+      const formattedDate = dateObj.toLocaleDateString(locale, {
         year: 'numeric',
         month: 'long',
         day: 'numeric',
@@ -1470,7 +1476,7 @@ export class TaskSummaryDialog {
         const pRecord = stats.pomodoro.byDate[date];
         html += `
           <div class="summary-stat-row" style="margin-bottom: 8px; font-size: 13px; color: var(--b3-theme-on-surface-light); padding-left: 16px;">
-            🍅 专注：${pRecord.count} 个番茄钟 (${this.formatDuration(pRecord.minutes)})
+            ${i18n('focusStatLine').replace('${count}', pRecord.count.toString()).replace('${duration}', this.formatDuration(pRecord.minutes))}
           </div>
         `;
       }
@@ -1479,24 +1485,24 @@ export class TaskSummaryDialog {
       if (stats.settings.showHabit && stats.habit.byDate[date]) {
         const hList = stats.habit.byDate[date];
         html += `<div class="task-project-group">`;
-        html += `<h4 class="task-project-title">💪 习惯打卡</h4>`;
+        html += `<h4 class="task-project-title">${i18n('habitCheckInTitle')}</h4>`;
         html += `<ul class="task-list">`;
         hList.forEach(habit => {
           // 只需要显示一个✅和⬜，代表打卡完成和打卡未完成
           const progress = habit.completed ? '✅' : '⬜';
 
           // 习惯打卡名称后改为：名称（频率：xxx，目标次数，今天打卡： emoji），如果今日没打卡，今日打卡改为无
-          const emojiStr = habit.emojis.length > 0 ? habit.emojis.join('') : (i18n('noneVal') || '无');
+          const emojiStr = habit.emojis.length > 0 ? habit.emojis.join('') : i18n('noneVal');
           const completedClass = habit.completed ? 'completed' : '';
 
-          const freqText = i18n('frequency') || '频率';
-          const targetText = i18n('targetTimes') || '目标次数';
-          const todayCheckInText = i18n('todayCheckIn') || '今天打卡';
+          const freqText = i18n('frequency');
+          const targetText = i18n('targetTimes');
+          const todayCheckInText = i18n('todayCheckIn');
 
           html += `
             <li class="task-item habit-item ${completedClass}">
               <span class="task-checkbox">${progress}</span>
-              <span class="task-title">${habit.title} (${freqText}：${habit.frequencyLabel}，${targetText}：${habit.target}，${todayCheckInText}：${emojiStr})</span>
+              <span class="task-title">${habit.title} (${freqText}: ${habit.frequencyLabel}, ${targetText}: ${habit.target}, ${todayCheckInText}: ${emojiStr})</span>
             </li>
           `;
         });
@@ -1550,11 +1556,11 @@ export class TaskSummaryDialog {
 
                 // 重复任务（无论是实例还是原始头任务）：总是显示系列总计
                 if (isRecurring || isRepeated) {
-                  pomodoroStr += ` / 系列: 🍅 ${allStat.count} | 🕒 ${this.formatDuration(allStat.minutes)}`;
+                  pomodoroStr += ` / ${i18n('series')}: 🍅 ${allStat.count} | 🕒 ${this.formatDuration(allStat.minutes)}`;
                 }
                 // 普通任务：只有当总计大于今日时显示
                 else if (allStat.minutes > dailyMinutes + 1) {
-                  pomodoroStr += ` / 总: 🍅 ${allStat.count} | 🕒 ${this.formatDuration(allStat.minutes)}`;
+                  pomodoroStr += ` / ${i18n('totalStats')}: 🍅 ${allStat.count} | 🕒 ${this.formatDuration(allStat.minutes)}`;
                 }
               }
               pomodoroStr += `)`;
@@ -1568,7 +1574,7 @@ export class TaskSummaryDialog {
               if (stats.pomodoro.allTimeTaskStats && stats.pomodoro.allTimeTaskStats[statsId]) {
                 const allStat = stats.pomodoro.allTimeTaskStats[statsId];
                 if (allStat.minutes > 0) {
-                  const label = (isRecurring || isRepeated) ? '系列' : '总';
+                  const label = (isRecurring || isRepeated) ? i18n('series') : i18n('totalStats');
                   pomodoroStr = ` (${label}: 🍅 ${allStat.count} | 🕒 ${this.formatDuration(allStat.minutes)})`;
                 }
               }
@@ -1577,7 +1583,7 @@ export class TaskSummaryDialog {
             // 预计番茄时长
             let estStr = '';
             if (task.estimatedPomodoroDuration) {
-              estStr = ` <span style="color:#888; font-size:12px;">(⏲️ 预计${task.estimatedPomodoroDuration})</span>`;
+              estStr = ` <span style="color:#888; font-size:12px;">(${i18n('estimatedTime').replace('${duration}', task.estimatedPomodoroDuration)})</span>`;
             }
 
             // 完成时间
@@ -1759,10 +1765,10 @@ export class TaskSummaryDialog {
   /**
    * 从当前视图的 HTML 提取内容并转换为指定格式
    */
-  private copyFromCurrentView(format: 'html' | 'markdown' | 'plain') {
+  private async copyFromCurrentView(format: 'html' | 'markdown' | 'plain') {
     const container = this.currentDialog.element.querySelector('#task-summary-dialog-container');
     if (!container) {
-      showMessage(i18n("copyFailed") || "复制失败");
+      showMessage(i18n("copyFailed"));
       return;
     }
 
@@ -1781,13 +1787,12 @@ export class TaskSummaryDialog {
       if (format === 'html') {
         this.copyHTMLToClipboard(content);
       } else {
-        navigator.clipboard.writeText(content).then(() => {
-          showMessage(i18n("copied") || "已复制");
-        });
+        await navigator.clipboard.writeText(content);
+        showMessage(i18n("copiedToClipboard"));
       }
     } catch (error) {
       console.error('复制失败:', error);
-      showMessage(i18n("copyFailed") || "复制失败");
+      showMessage(i18n("copyFailed"));
     }
   }
 
@@ -1985,10 +1990,10 @@ export class TaskSummaryDialog {
     const blob = new Blob([html], { type: 'text/html' });
     const clipboardItem = new ClipboardItem({ 'text/html': blob });
     navigator.clipboard.write([clipboardItem]).then(() => {
-      showMessage(i18n("copied") || "已复制");
+      showMessage(i18n("copiedToClipboard"));
     }).catch(error => {
       console.error('复制富文本失败:', error);
-      showMessage(i18n("copyFailed") || "复制失败");
+      showMessage(i18n("copyFailed"));
     });
   }
 

@@ -113,7 +113,7 @@ export const DEFAULT_SETTINGS = {
     calendarViewMode: 'timeGridWeek',
     dayStartTime: '08:00', // 日历视图一天的起始时间
     todayStartTime: '03:00', // 日常任务/习惯的一天起始时间
-    calendarShowLunar: true, // 日历显示农历
+    calendarShowLunar: (window as any).siyuan?.config?.lang === 'zh_CN' ? true : false, // 日历显示农历
     // 四象限设置
     eisenhowerImportanceThreshold: 'medium',
     eisenhowerUrgencyDays: 3,

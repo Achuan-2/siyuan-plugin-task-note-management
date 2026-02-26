@@ -1356,7 +1356,7 @@ export class CalendarView {
                             const isWorkday = typeof holidayName === 'object' && holidayName.type === 'workday';
                             const holidaySpan = document.createElement('span');
                             holidaySpan.className = 'day-holiday';
-                            holidaySpan.textContent = isWorkday ? '(班)' : '(休)';
+                            holidaySpan.textContent = isWorkday ? i18n('workdayMarker') : i18n('holidayMarker');
                             holidaySpan.title = typeof holidayName === 'object' ? holidayName.title : holidayName;
                             holidaySpan.style.cssText = `color: ${isWorkday ? 'var(--b3-theme-error)' : 'var(--b3-card-success-color)'}; font-size: 0.8em; cursor: help; font-weight: bold;`;
                             extraInfoWrapper.appendChild(holidaySpan);
@@ -1414,7 +1414,7 @@ export class CalendarView {
                             const isWorkday = typeof holidayName === 'object' && holidayName.type === 'workday';
                             const holidaySpan = document.createElement('span');
                             holidaySpan.className = 'day-header-holiday';
-                            holidaySpan.textContent = isWorkday ? '(班)' : '(休)';
+                            holidaySpan.textContent = isWorkday ? i18n('workdayMarker') : i18n('holidayMarker');
                             holidaySpan.title = typeof holidayName === 'object' ? holidayName.title : holidayName;
                             holidaySpan.style.cssText = `font-size: 0.75em; color: ${isWorkday ? 'var(--b3-theme-error)' : 'var(--b3-card-success-color)'}; cursor: help; font-weight: bold;`;
                             extraInfoWrapper.appendChild(holidaySpan);
@@ -1526,7 +1526,7 @@ export class CalendarView {
                                     const isWorkday = typeof holidayName === 'object' && holidayName.type === 'workday';
                                     const holidaySpan = document.createElement('span');
                                     holidaySpan.className = 'day-holiday';
-                                    holidaySpan.textContent = isWorkday ? '(班)' : '(休)';
+                                    holidaySpan.textContent = isWorkday ? i18n('workdayMarker') : i18n('holidayMarker');
                                     holidaySpan.title = typeof holidayName === 'object' ? holidayName.title : holidayName;
                                     holidaySpan.style.cssText = `color: ${isWorkday ? 'var(--b3-theme-error)' : 'var(--b3-card-success-color)'}; font-size: 0.8em; margin-left: 8px; cursor: help; font-weight: bold;`;
                                     textContainer.appendChild(holidaySpan);
