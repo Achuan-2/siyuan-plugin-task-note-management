@@ -1233,13 +1233,7 @@
 
 
 
-.fc-event.completed .reminder-calendar-event-content {
-    text-decoration: line-through;
-}
-
-.fc-event.completed .reminder-calendar-event-content .fc-event-title {
-    text-decoration: line-through;
-}
+/* 已完成任务：使用降低透明度替代删除线，复选框已提供足够的完成状态指示 */
 
 .reminder-calendar-event-note {
     font-size: 0.85em;

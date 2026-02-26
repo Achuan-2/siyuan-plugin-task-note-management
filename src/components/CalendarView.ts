@@ -3178,7 +3178,12 @@ export class CalendarView {
         if (props.type === 'pomodoro') {
             const mainFrame = document.createElement('div');
             mainFrame.className = 'fc-event-main-frame';
-            mainFrame.style.padding = '2px 4px';
+            mainFrame.style.cssText = 'padding: 2px 4px; flex-direction: row; align-items: center; gap: 4px;';
+
+            const titleEl = document.createElement('div');
+            titleEl.className = 'fc-event-title';
+            titleEl.textContent = event.title;
+            mainFrame.appendChild(titleEl);
 
             if (timeText) {
                 const timeEl = document.createElement('div');
@@ -3186,11 +3191,6 @@ export class CalendarView {
                 timeEl.textContent = timeText;
                 mainFrame.appendChild(timeEl);
             }
-
-            const titleEl = document.createElement('div');
-            titleEl.className = 'fc-event-title';
-            titleEl.textContent = event.title;
-            mainFrame.appendChild(titleEl);
 
             return { domNodes: [mainFrame] };
         }
@@ -3203,6 +3203,88 @@ export class CalendarView {
         // 顶部行：放置复选框和任务标题（同一行）
         const topRow = document.createElement('div');
         topRow.className = 'reminder-event-top-row';
+
+        // 0. 图标徽章（分类图标 或 项目名首字）
+        if (this.showCategoryAndProject) {
+            let badgeContent = '';
+            let badgeColor = '';
+            let badgeTitle = '';
+            let isEmoji = false;
+
+            // 优先：分类图标
+            if (props.categoryId) {
+                const firstCatId = props.categoryId.split(',')[0];
+                const category = this.categoryManager.getCategoryById(firstCatId);
+                if (category && category.icon) {
+                    badgeContent = category.icon;
+                    badgeTitle = category.name;
+                    isEmoji = true;
+                }
+            }
+
+            // 兜底：项目名首字（英文大写）
+            if (!badgeContent && props.projectId) {
+                const project = this.projectManager.getProjectById(props.projectId);
+                if (project) {
+                    badgeColor = this.projectManager.getProjectColor(props.projectId);
+                    const firstChar = project.name.trim().charAt(0);
+                    badgeContent = /[a-zA-Z]/.test(firstChar) ? firstChar.toUpperCase() : firstChar;
+                    badgeTitle = project.name;
+                }
+            }
+
+            if (badgeContent) {
+                // 构建 tooltip：基础信息 + 项目 + 文档名 + 父任务
+                const tooltipParts: string[] = [];
+                tooltipParts.push(badgeTitle);
+
+                // 如果 badge 显示分类图标，补充项目信息
+                if (isEmoji && props.projectId) {
+                    const project = this.projectManager.getProjectById(props.projectId);
+                    if (project) {
+                        let projectInfo = `📂 ${project.name}`;
+                        if (props.customGroupName) projectInfo += ` / ${props.customGroupName}`;
+                        tooltipParts.push(projectInfo);
+                    }
+                } else if (!isEmoji && props.customGroupName) {
+                    // badge 显示项目首字时，补充分组信息
+                    tooltipParts.push(`📁 ${props.customGroupName}`);
+                }
+
+                // 文档名
+                if (props.docTitle && props.docId && props.blockId && props.docId !== props.blockId) {
+                    tooltipParts.push(`📄 ${props.docTitle}`);
+                }
+
+                // 父任务
+                if (props.parentId && props.parentTitle) {
+                    tooltipParts.push(`↪️ 父任务: ${props.parentTitle}`);
+                }
+
+                const badge = document.createElement('span');
+                badge.className = 'reminder-event-badge';
+                badge.textContent = badgeContent;
+                badge.title = tooltipParts.join('\n');
+
+                if (isEmoji) {
+                    badge.style.cssText = `
+                        font-size: 12px; line-height: 1; flex-shrink: 0;
+                        width: 16px; height: 16px;
+                        display: flex; align-items: center; justify-content: center;
+                    `;
+                } else {
+                    badge.style.cssText = `
+                        font-size: 10px; font-weight: bold; line-height: 1; flex-shrink: 0;
+                        width: 16px; height: 16px;
+                        display: flex; align-items: center; justify-content: center;
+                        border-radius: 3px; color: white;
+                        background-color: ${badgeColor};
+                    `;
+                }
+
+                topRow.appendChild(badge);
+            }
+        }
 
         // 1. 复选框 or 订阅图标
         if (props.isSubscribed) {
@@ -3277,27 +3359,19 @@ export class CalendarView {
 
         topRow.appendChild(titleEl);
 
+        // 时间 - 放在 topRow 内，标题之后（单行布局：☑ 标题… 时间）
+        if (!event.allDay && timeText) {
+            const timeEl = document.createElement('div');
+            timeEl.className = 'fc-event-time';
+            timeEl.textContent = timeText;
+            topRow.appendChild(timeEl);
+        }
+
         mainFrame.appendChild(topRow);
 
         // 3. 指标行：放置状态图标
         const indicatorsRow = document.createElement('div');
         indicatorsRow.className = 'reminder-event-indicators-row';
-
-        // 分类图标 (订阅图标已移至顶部复选框位置)
-        // 分类图标 (订阅图标已移至顶部复选框位置)
-        if (this.showCategoryAndProject && !props.isSubscribed && props.categoryId) {
-            const categoryIds = props.categoryId.split(',');
-            categoryIds.forEach(id => {
-                const category = this.categoryManager.getCategoryById(id);
-                if (category && category.icon) {
-                    const catIcon = document.createElement('span');
-                    catIcon.className = 'reminder-event-icon';
-                    catIcon.innerHTML = category.icon;
-                    catIcon.title = category.name;
-                    indicatorsRow.appendChild(catIcon);
-                }
-            });
-        }
 
         // 重复图标
         if (props.isRepeated || props.repeat?.enabled) {
@@ -3318,76 +3392,9 @@ export class CalendarView {
             mainFrame.appendChild(indicatorsRow);
         }
 
-        // 4. 显示标签：项目名、自定义分组名、文档名或父任务名
-        let labelText = '';
-        let labelColor = '';
-
-        // 如果是子任务，优先显示父任务信息
-        if (props.parentId && props.parentTitle) {
-            labelText = `↪️ 父任务: ${props.parentTitle}`;
-        }
-
-        if (this.showCategoryAndProject) {
-            if (props.projectId) {
-                // 如果有项目，显示项目名（带📂图标）
-                const project = this.projectManager.getProjectById(props.projectId);
-                if (project) {
-                    const projectText = `📂 ${project.name} `;
-                    labelColor = this.projectManager.getProjectColor(props.projectId);
-
-                    // 如果有自定义分组，显示"项目/自定义分组"（使用预加载的名称）
-                    if (props.customGroupId && props.customGroupName) {
-                        labelText = `📂 ${project.name} / ${props.customGroupName}`;
-                    } else {
-                        labelText = projectText;
-                    }
-                }
-            } else if (props.docTitle && props.docId && props.blockId && props.docId !== props.blockId) {
-                // 如果没有项目，且绑定块是块而不是文档，显示文档名（带📄图标）
-                labelText = `📄 ${props.docTitle}`;
-            }
-        }
-
-        if (labelText) {
-            const labelEl = document.createElement('div');
-            labelEl.className = 'reminder-event-label';
-            labelEl.textContent = labelText;
-
-            // 如果有项目颜色，应用颜色样式
-            if (labelColor) {
-                labelEl.style.cssText = `
-                    background-color: rgba(from ${labelColor} r g b / .3);
-                    color: white;
-                    padding: 2px 6px;
-                    border-radius: 3px;
-                    display: -webkit-box;
-                    -webkit-line-clamp: 3;
-                    -webkit-box-orient: vertical;
-                    overflow: hidden;
-                    word-break: break-all;
-                    font-size: 11px;
-                    margin-top: 2px;
-                    line-height: 1.2;
-                `;
-            }
-
-            mainFrame.appendChild(labelEl);
-        }
-
-        // 5. 时间 (使用内置类名和 timeText) - 放在标题之后，空间不足时自动隐藏
-        if (!event.allDay && timeText) {
-            const timeEl = document.createElement('div');
-            timeEl.className = 'fc-event-time';
-            timeEl.textContent = timeText;
-            mainFrame.appendChild(timeEl);
-        }
-
-        // 6. 备注
+        // 5. 备注（hover 展示）
         if (props.note) {
-            const noteEl = document.createElement('div');
-            noteEl.className = 'reminder-event-note';
-            noteEl.innerHTML = this.lute ? this.lute.Md2HTML(props.note) : props.note;
-            mainFrame.appendChild(noteEl);
+            mainFrame.title = props.note;
         }
 
         return { domNodes: [mainFrame] };
@@ -4755,8 +4762,7 @@ export class CalendarView {
                 flex-shrink: 0;
             }
 
-            .reminder-event-doc-title,
-            .reminder-event-note {
+            .reminder-event-doc-title {
                 font-size: 10px;
                 opacity: 0.7;
                 line-height: 1.2;
@@ -4769,35 +4775,13 @@ export class CalendarView {
                 word-break: break-word;
             }
 
-            /* Markdown content styling in notes */
-            .reminder-event-note p,
-            .reminder-event-note ul,
-            .reminder-event-note ol {
-                margin: 0px 2px;
-                padding: 0;
-            }
-
-            .reminder-event-note li {
-                margin-left: 1em;
-            }
-
-            .reminder-event-note strong {
-                font-weight: 600;
-            }
-
-            .reminder-event-note code {
-                font-size: 0.9em;
-                padding: 0 2px;
-                background: var(--b3-theme-background);
-                border-radius: 2px;
-            }
-
             .fc-event-time {
                 font-size: 10px;
-                opacity: 0.8;
+                opacity: 0.7;
                 white-space: nowrap;
                 overflow: hidden;
                 flex-shrink: 0;
+                margin-left: auto; /* 时间推到行尾 */
             }
 
             .fc-event-title-container {
@@ -4811,29 +4795,16 @@ export class CalendarView {
                 line-height: 1.3;
                 overflow: hidden;
                 text-overflow: ellipsis;
-                display: -webkit-box;
-                -webkit-line-clamp: 2;
-                -webkit-box-orient: vertical;
+                white-space: nowrap;
                 flex: 1; /* 占据剩余空间 */
                 min-width: 0; /* 允许收缩 */
             }
 
-            .fc-event-time {
-                font-size: 10px;
-                opacity: 0.8;
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                flex-shrink: 999; /* 时间优先收缩隐藏 */
-                max-height: 1.2em;
-            }
-
-            .reminder-event-doc-title,
-            .reminder-event-note {
+            .reminder-event-doc-title {
                 font-size: 10px;
                 opacity: 0.7;
                 line-height: 1.2;
-                flex-shrink: 999; /* 文档名和备注优先收缩 */
+                flex-shrink: 999; /* 文档名优先收缩 */
                 display: -webkit-box;
                 -webkit-box-orient: vertical;
                 -webkit-line-clamp: 2;
@@ -4871,8 +4842,7 @@ export class CalendarView {
             }
 
             .fc-timegrid-event-short .fc-event-time,
-            .fc-timegrid-event-short .reminder-event-doc-title,
-            .fc-timegrid-event-short .reminder-event-note {
+            .fc-timegrid-event-short .reminder-event-doc-title {
                 display: none;
             }
 
@@ -4892,14 +4862,17 @@ export class CalendarView {
                 border-right-color: var(--b3-theme-primary-light) !important;
             }
             
-            /* 已完成任务的样式优化 */
+            /* 已完成任务的样式优化 - 使用降低透明度替代删除线 */
             .fc-event.completed {
-                opacity: 0.8 !important;
+                opacity: 0.65 !important;
             }
-            
-            .fc-event.completed .fc-event-title,
-            .fc-event.completed .fc-event-title span{
-                text-decoration: line-through;
+            .fc-event.completed:hover {
+                opacity: 1 !important;
+            };
+
+            /* 月视图/年视图中隐藏额外信息行，保持单行紧凑布局 */
+            .fc-daygrid-event .reminder-event-indicators-row {
+                display: none;
             }
 
             /* Pomodoro Event Styles */
