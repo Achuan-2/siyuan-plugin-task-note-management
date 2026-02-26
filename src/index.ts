@@ -924,7 +924,7 @@ export default class ReminderPlugin extends Plugin {
             dailyFocusGoal: settings.dailyFocusGoal,
             randomRestPopupWindow: settings.randomRestPopupWindow,
             pomodoroEndPopupWindow: settings.pomodoroEndPopupWindow,
-            pomodoroDockPosition: settings.pomodoroDockPosition
+            pomodoroDockPosition: settings.pomodoroDockPosition || 'top'
         };
     }
 
