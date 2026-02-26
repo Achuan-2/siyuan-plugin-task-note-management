@@ -537,19 +537,20 @@ export class CalendarView {
         });
         viewGroup.appendChild(this.weekBtn);
 
-        // 多天视图按钮（默认最近7天，今日为第二天）
+        // 多天视图按钮（默认最近3天，今日为第二天）
         this.multiDaysBtn = document.createElement('button');
         this.multiDaysBtn.className = 'b3-button b3-button--outline';
         this.multiDaysBtn.textContent = i18n("multiDays") || "多天";
         this.multiDaysBtn.addEventListener('click', async () => {
             const viewType = this.calendarConfigManager.getViewType();
+            const multiDaysCount = this.calendarConfigManager.getMultiDaysCount();
             let viewMode: string;
             if (viewType === 'timeline') {
-                viewMode = 'timeGridMultiDays7';
+                viewMode = 'timeGridMultiDays';
             } else if (viewType === 'kanban') {
-                viewMode = 'dayGridMultiDays7';
+                viewMode = 'dayGridMultiDays';
             } else { // list
-                viewMode = 'listMultiDays7';
+                viewMode = 'listMultiDays';
             }
 
             // 计算多天视图的起始日期（今天的前一天），使今天显示为第二天
@@ -664,13 +665,13 @@ export class CalendarView {
                         newViewMode = 'listWeek';
                     }
                 } else if (currentViewMode.includes('MultiDays')) {
-                    // Multi-days (7) view
+                    // Multi-days view
                     if (selectedViewType === 'timeline') {
-                        newViewMode = 'timeGridMultiDays7';
+                        newViewMode = 'timeGridMultiDays';
                     } else if (selectedViewType === 'kanban') {
-                        newViewMode = 'dayGridMultiDays7';
+                        newViewMode = 'dayGridMultiDays';
                     } else { // list
-                        newViewMode = 'listMultiDays7';
+                        newViewMode = 'listMultiDays';
                     }
                 } else if (currentViewMode.includes('Day')) {
                     // Day view
@@ -1216,15 +1217,16 @@ export class CalendarView {
 
         // 初始化日历 - 使用用户设置的周开始日
         const initialViewMode = this.calendarConfigManager.getViewMode();
+        const multiDaysCount = this.calendarConfigManager.getMultiDaysCount();
         const multiDaysStartDate = getRelativeDateString(-1);
         this.calendar = new Calendar(calendarEl, {
             plugins: [dayGridPlugin, timeGridPlugin, multiMonthPlugin, listPlugin, interactionPlugin],
             initialView: initialViewMode,
             initialDate: (initialViewMode && initialViewMode.includes('MultiDays')) ? multiDaysStartDate : getLogicalDateString(),
             views: {
-                timeGridMultiDays7: { type: 'timeGrid', duration: { days: 7 } },
-                dayGridMultiDays7: { type: 'dayGrid', duration: { days: 7 } },
-                listMultiDays7: { type: 'list', duration: { days: 7 }, listDayFormat: { weekday: 'short', month: 'numeric', day: 'numeric', omitCommas: true }, listDaySideFormat: false },
+                timeGridMultiDays: { type: 'timeGrid', duration: { days: multiDaysCount } },
+                dayGridMultiDays: { type: 'dayGrid', duration: { days: multiDaysCount } },
+                listMultiDays: { type: 'list', duration: { days: multiDaysCount }, listDayFormat: { weekday: 'short', month: 'numeric', day: 'numeric', omitCommas: true }, listDaySideFormat: false },
                 listDay: { listDayFormat: { weekday: 'short', month: 'numeric', day: 'numeric', omitCommas: true }, listDaySideFormat: false },
                 listWeek: { listDayFormat: { weekday: 'short', month: 'numeric', day: 'numeric', omitCommas: true }, listDaySideFormat: false },
                 listMonth: { listDayFormat: { weekday: 'short', month: 'numeric', day: 'numeric', omitCommas: true }, listDaySideFormat: false },
@@ -4191,7 +4193,7 @@ export class CalendarView {
         const view = this.calendar.view;
 
         // 只在周视图和日视图中启用当前时间吸附
-        if (view.type !== 'timeGridWeek' && view.type !== 'timeGridDay' && view.type !== 'timeGridMultiDays7') {
+        if (view.type !== 'timeGridWeek' && view.type !== 'timeGridDay' && view.type !== 'timeGridMultiDays') {
             return true;
         }
 
@@ -4242,7 +4244,7 @@ export class CalendarView {
             const view = this.calendar.view;
 
             // 只在周视图和日视图中启用缩放
-            if (view.type !== 'timeGridWeek' && view.type !== 'timeGridDay' && view.type !== 'timeGridMultiDays7') {
+            if (view.type !== 'timeGridWeek' && view.type !== 'timeGridDay' && view.type !== 'timeGridMultiDays') {
                 return;
             }
 
@@ -5740,7 +5742,7 @@ export class CalendarView {
             // Add Pomodoro records if enabled and in Day/Week view
             if (this.showPomodoro && this.calendar && this.calendar.view) {
                 const viewType = this.calendar.view.type;
-                if (viewType === 'timeGridDay' || viewType === 'timeGridWeek' || viewType === 'timeGridMultiDays7') {
+                if (viewType === 'timeGridDay' || viewType === 'timeGridWeek' || viewType === 'timeGridMultiDays') {
                     const pomodoroManager = this.pomodoroRecordManager;
                     const sessions = await pomodoroManager.getDateRangeSessions(startDate, endDate);
 
@@ -5813,7 +5815,7 @@ export class CalendarView {
             // Add completed task times if enabled and in Day/Week view
             if (this.showCompletedTaskTime && this.calendar && this.calendar.view) {
                 const viewType = this.calendar.view.type;
-                if (viewType === 'timeGridDay' || viewType === 'timeGridWeek' || viewType === 'timeGridMultiDays7') {
+                if (viewType === 'timeGridDay' || viewType === 'timeGridWeek' || viewType === 'timeGridMultiDays') {
                     const completedTaskEvents = await this.getCompletedTaskTimeEvents(startDate, endDate, reminderData, projectData);
                     events.push(...completedTaskEvents);
                 }
@@ -7720,7 +7722,7 @@ export class CalendarView {
         const isTimeGridView = currentViewType && (
             currentViewType === 'timeGridDay' ||
             currentViewType === 'timeGridWeek' ||
-            currentViewType === 'timeGridMultiDays7'
+            currentViewType === 'timeGridMultiDays'
         );
 
         if (isTimeGridView) {
@@ -7782,9 +7784,9 @@ export class CalendarView {
             case 'multiMonthYear':
                 this.yearBtn.classList.add('b3-button--primary');
                 break;
-            case 'timeGridMultiDays7':
-            case 'dayGridMultiDays7':
-            case 'listMultiDays7':
+            case 'timeGridMultiDays':
+            case 'dayGridMultiDays':
+            case 'listMultiDays':
                 if (this.multiDaysBtn) this.multiDaysBtn.classList.add('b3-button--primary');
                 break;
             case 'listMonth':

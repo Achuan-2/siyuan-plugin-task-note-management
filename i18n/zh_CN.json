@@ -1114,6 +1114,8 @@
   "showPomodoroInSummaryDesc": "开启后，任务摘要将包含番茄钟专注时长统计",
   "showHabitInSummary": "在摘要中显示习惯打卡统计",
   "showHabitInSummaryDesc": "开启后，任务摘要将包含习惯打卡情况统计",
+  "calendarMultiDaysCount": "多天视图天数",
+  "calendarMultiDaysCountDesc": "设置多天视图显示的天数，默认为3天",
   "frequency": "频率",
   "targetTimes": "目标次数",
   "todayCheckIn": "今天打卡",

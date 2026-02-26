@@ -397,6 +397,13 @@
                         5: i18n('friday'),
                         6: i18n('saturday'),
                     },
+                },                
+                {
+                    key: 'calendarMultiDaysCount',
+                    value: settings.calendarMultiDaysCount ?? 3,
+                    type: 'number',
+                    title: i18n('calendarMultiDaysCount') || '多天视图天数',
+                    description: i18n('calendarMultiDaysCountDesc') || '设置多天视图显示的天数，默认为3天',
                 },
                 {
                     key: 'calendarShowLunar',
@@ -1155,6 +1162,10 @@
         if (key === 'weekStartDay' && typeof value === 'string') {
             const parsed = parseInt(value, 10);
             newValue = isNaN(parsed) ? DEFAULT_SETTINGS.weekStartDay : parsed;
+        } else if (key === 'calendarMultiDaysCount') {
+            // 确保多天视图天数是数字，且范围在 1-14 之间
+            const parsed = parseInt(value, 10);
+            newValue = isNaN(parsed) ? 3 : Math.max(1, Math.min(14, parsed));
         } else if (
             (key === 's3ForcePathStyle' || key === 's3TlsVerify') &&
             typeof value === 'string'
