@@ -3797,7 +3797,7 @@ export class ProjectKanbanView {
             if (!milestoneFilterBtn) {
                 milestoneFilterBtn = document.createElement('button');
                 milestoneFilterBtn.className = 'b3-button b3-button--outline milestone-filter-btn b3-button--small';
-                milestoneFilterBtn.title = i18n('filterMilestone') || '筛选里程碑';
+                milestoneFilterBtn.title = i18n('filterMilestone');
                 milestoneFilterBtn.innerHTML = '🚩';
                 milestoneFilterBtn.dataset.groupId = groupId;
                 milestoneFilterBtn.addEventListener('click', (e) => {
@@ -7377,7 +7377,7 @@ export class ProjectKanbanView {
 
         const btn = document.createElement('button');
         btn.className = 'b3-button b3-button--text';
-        btn.textContent = i18n('loadMore') || '加载更多';
+        btn.textContent = i18n('loadMore');
         btn.style.fontSize = '12px';
         btn.style.padding = '4px 8px';
         btn.style.height = '24px';
@@ -7729,7 +7729,7 @@ export class ProjectKanbanView {
                 if (hasMilestonesInThisStatus) {
                     const milestoneFilterBtn = document.createElement('button');
                     milestoneFilterBtn.className = 'b3-button b3-button--outline milestone-filter-btn b3-button--small';
-                    milestoneFilterBtn.title = i18n('filterMilestone') || '筛选里程碑';
+                    milestoneFilterBtn.title = i18n('filterMilestone');
                     milestoneFilterBtn.innerHTML = '🚩';
                     milestoneFilterBtn.dataset.groupId = status;
                     milestoneFilterBtn.addEventListener('click', (e) => {
@@ -10291,7 +10291,7 @@ export class ProjectKanbanView {
 
                         this.dispatchReminderUpdate(true);
                         this.queueLoadTasks();
-                        showMessage(i18n("operationSuccessful") || "操作成功");
+                        showMessage(i18n("operationSuccessful"));
                     }
                 } catch (err) {
                     console.error('快速调整日期失败:', err);

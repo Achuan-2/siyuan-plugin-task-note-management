@@ -1439,7 +1439,7 @@ class BlockEditDialog {
                         <label class="b3-form__label">${i18n("eventTitle")}</label>
                         <div class="title-input-container" style="display: flex; gap: 8px;">
                             <input type="text" id="editReminderTitle" class="b3-text-field" value="${this.setting.cleanTitle}" placeholder="${i18n("enterReminderTitle")}" style="flex: 1;">
-                            <button type="button" id="editNlBtn" class="b3-button b3-button--outline" title="✨ 智能日期识别">
+                            <button type="button" id="editNlBtn" class="b3-button b3-button--outline" title="${i18n("smartDateRecognition")}">
                                 ✨
                             </button>
                         </div>
@@ -1606,23 +1606,23 @@ class BlockEditDialog {
     // 显示自然语言输入对话框
     private showNaturalLanguageDialog(parentDialog: Dialog) {
         const nlDialog = new Dialog({
-            title: "✨ 智能日期识别",
+            title: i18n("smartDateRecognition"),
             content: `
                 <div class="nl-dialog">
                     <div class="b3-dialog__content">
                         <div class="b3-form__group">
-                            <label class="b3-form__label">输入自然语言描述</label>
-                            <input type="text" id="editNlInput" class="b3-text-field" placeholder="例如：明天下午3点、下周五、3天后等" style="width: 100%;" autofocus>
-                            <div class="b3-form__desc">支持中文自然语言，如：今天、明天、下周一、3月15日、下午2点、农历八月廿一等</div>
+                            <label class="b3-form__label">${i18n("nlInputLabel")}</label>
+                            <input type="text" id="editNlInput" class="b3-text-field" placeholder="${i18n("nlInputPlaceholder")}" style="width: 100%;" autofocus>
+                            <div class="b3-form__desc">${i18n("nlInputDesc")}</div>
                         </div>
                         <div class="b3-form__group">
-                            <label class="b3-form__label">识别结果预览</label>
-                            <div id="editNlPreview" class="nl-preview">请输入日期时间描述</div>
+                            <label class="b3-form__label">${i18n("recognitionResultPreview")}</label>
+                            <div id="editNlPreview" class="nl-preview">${i18n("pleaseEnterDateTimeDesc")}</div>
                         </div>
                     </div>
                     <div class="b3-dialog__action">
-                        <button class="b3-button b3-button--cancel" id="editNlCancelBtn">取消</button>
-                        <button class="b3-button b3-button--primary" id="editNlConfirmBtn" disabled>应用</button>
+                        <button class="b3-button b3-button--cancel" id="editNlCancelBtn">${i18n("cancel")}</button>
+                        <button class="b3-button b3-button--primary" id="editNlConfirmBtn" disabled>${i18n("apply")}</button>
                     </div>
                 </div>
             `,

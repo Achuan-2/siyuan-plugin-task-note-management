@@ -973,7 +973,7 @@ export class PasteTaskDialog {
 
         return `
             <div style="display: flex; align-items: center; gap: 6px; flex: 1;">
-                <label style="font-size: 12px; color: var(--b3-theme-on-surface); white-space: nowrap;">${i18n('taskStatus') || '任务状态'}:</label>
+                <label style="font-size: 12px; color: var(--b3-theme-on-surface); white-space: nowrap;">${i18n('taskStatus')}:</label>
                 <select id="pasteTaskStatus" class="b3-select" style="flex: 1; min-width: 100px;">
                     ${statusOptionsHtml}
                 </select>

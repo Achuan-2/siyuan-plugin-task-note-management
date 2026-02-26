@@ -4545,7 +4545,7 @@ export class EisenhowerMatrixView {
                 </div>
             `,
             width: "400px",
-            height: "300px"
+            height: "auto"
         });
 
         const cancelBtn = dialog.element.querySelector('#settingsCancelBtn') as HTMLButtonElement;

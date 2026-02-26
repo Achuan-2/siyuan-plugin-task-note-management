@@ -111,8 +111,8 @@ export class QuickReminderDialog {
                         <textarea id="linkUrl" class="b3-text-field" style="width: 100%; resize: vertical;" rows="2" placeholder="https://...">${mark.attrs.href}</textarea>
                     </div>
                     <div style="margin-bottom: 12px;">
-                        <label style="display: block; margin-bottom: 4px; font-size: 12px; color: var(--b3-theme-on-surface); opacity: 0.8;">${i18n('linkTitle') || '显示文本'}:</label>
-                        <textarea id="linkTitle" class="b3-text-field" style="width: 100%; resize: vertical;" rows="2" placeholder="${i18n('linkTitlePlaceholder') || '输入链接文本'}">${currentText}</textarea>
+                        <label style="display: block; margin-bottom: 4px; font-size: 12px; color: var(--b3-theme-on-surface); opacity: 0.8;">${i18n('linkTitle')}:</label>
+                        <textarea id="linkTitle" class="b3-text-field" style="width: 100%; resize: vertical;" rows="2" placeholder="${i18n('linkTitlePlaceholder')}">${currentText}</textarea>
                     </div>
                 </div>
                 <div class="b3-dialog__action">
@@ -1002,8 +1002,8 @@ export class QuickReminderDialog {
 
         if (subtasksCountText) {
             const label = this.mode === 'edit'
-                ? (i18n("viewSubtasks") || "查看子任务")
-                : (i18n("newSubtasks") || "新建子任务");
+                ? i18n("viewSubtasks")
+                : i18n("newSubtasks");
             // 显示格式：查看子任务 (已完成数/总数) 或 查看子任务 (总数)
             if (count > 0) {
                 if (completedCount > 0) {
@@ -1054,9 +1054,9 @@ export class QuickReminderDialog {
                 const seriesTimeStr = seriesMinutes > 0 ? `(${Math.floor(seriesMinutes / 60)}h${seriesMinutes % 60}m)` : '';
 
                 if (instanceCount > 0 || seriesCount > 0) {
-                    pomodorosCountText.textContent = `${i18n("viewPomodoros") || "查看番茄钟"} ${instanceCount}🍅${instanceTimeStr} / 系列: ${seriesCount}🍅${seriesTimeStr}`;
+                    pomodorosCountText.textContent = `${i18n("viewPomodoros")} ${instanceCount}🍅${instanceTimeStr} / 系列: ${seriesCount}🍅${seriesTimeStr}`;
                 } else {
-                    pomodorosCountText.textContent = `${i18n("viewPomodoros") || "查看番茄钟"}`;
+                    pomodorosCountText.textContent = `${i18n("viewPomodoros")}`;
                 }
             } else if (isModifyAllInstances) {
                 // 修改全部实例模式，显示系列总数
@@ -1065,9 +1065,9 @@ export class QuickReminderDialog {
                 const seriesTimeStr = seriesMinutes > 0 ? ` (${Math.floor(seriesMinutes / 60)}h${seriesMinutes % 60}m)` : '';
 
                 if (seriesCount > 0 || seriesMinutes > 0) {
-                    pomodorosCountText.textContent = `${i18n("viewPomodoros") || "查看番茄钟"} ${seriesCount}🍅${seriesTimeStr}`;
+                    pomodorosCountText.textContent = `${i18n("viewPomodoros")} ${seriesCount}🍅${seriesTimeStr}`;
                 } else {
-                    pomodorosCountText.textContent = `${i18n("viewPomodoros") || "查看番茄钟"}`;
+                    pomodorosCountText.textContent = `${i18n("viewPomodoros")}`;
                 }
             } else {
                 // 普通任务，只显示当前任务的番茄钟
@@ -1076,9 +1076,9 @@ export class QuickReminderDialog {
                 const timeStr = totalMinutes > 0 ? ` (${Math.floor(totalMinutes / 60)}h${totalMinutes % 60}m)` : '';
 
                 if (count > 0 || totalMinutes > 0) {
-                    pomodorosCountText.textContent = `${i18n("viewPomodoros") || "查看番茄钟"} ${count}🍅${timeStr}`;
+                    pomodorosCountText.textContent = `${i18n("viewPomodoros")} ${count}🍅${timeStr}`;
                 } else {
-                    pomodorosCountText.textContent = `${i18n("viewPomodoros") || "查看番茄钟"}`;
+                    pomodorosCountText.textContent = `${i18n("viewPomodoros")}`;
                 }
             }
         }
@@ -1167,23 +1167,23 @@ export class QuickReminderDialog {
         const defaultValue = titleInput?.value?.trim() || '';
 
         const nlDialog = new Dialog({
-            title: "✨ 智能日期识别",
+            title: i18n("smartDateRecognition"),
             content: `
                 <div class="nl-dialog">
                     <div class="b3-dialog__content">
                         <div class="b3-form__group">
-                            <label class="b3-form__label">输入自然语言描述</label>
-                            <input type="text" id="quickNlInput" class="b3-text-field" value="${defaultValue}" placeholder="例如：明天下午3点、下周五、3天后等" style="width: 100%;" autofocus>
-                            <div class="b3-form__desc">支持中文自然语言，如：今天、明天、下周一、3月15日、下午2点、农历八月廿一等</div>
+                            <label class="b3-form__label">${i18n("nlInputLabel")}</label>
+                            <input type="text" id="quickNlInput" class="b3-text-field" value="${defaultValue}" placeholder="${i18n("nlInputPlaceholder")}" style="width: 100%;" autofocus>
+                            <div class="b3-form__desc">${i18n("nlInputDesc")}</div>
                         </div>
                         <div class="b3-form__group">
-                            <label class="b3-form__label">识别结果预览</label>
-                            <div id="quickNlPreview" class="nl-preview">请输入日期时间描述</div>
+                            <label class="b3-form__label">${i18n("recognitionResultPreview")}</label>
+                            <div id="quickNlPreview" class="nl-preview">${i18n("pleaseEnterDateTimeDesc")}</div>
                         </div>
                     </div>
                     <div class="b3-dialog__action">
-                        <button class="b3-button b3-button--cancel" id="quickNlCancelBtn">取消</button>
-                        <button class="b3-button b3-button--primary" id="quickNlConfirmBtn" disabled>应用</button>
+                        <button class="b3-button b3-button--cancel" id="quickNlCancelBtn">${i18n("cancel")}</button>
+                        <button class="b3-button b3-button--primary" id="quickNlConfirmBtn" disabled>${i18n("apply")}</button>
                     </div>
                 </div>
             `,
@@ -1374,8 +1374,10 @@ export class QuickReminderDialog {
             }
         }
 
+        const langTag = (window as any).siyuan?.config?.lang?.replace('_', '-') || 'en-US';
+
         this.dialog = new Dialog({
-            title: this.mode === 'edit' ? i18n("editReminder") : (this.mode === 'note' ? (i18n("editNote") || "编辑备注") : i18n("createQuickReminder")),
+            title: this.mode === 'edit' ? i18n("editReminder") : (this.mode === 'note' ? i18n("editNote") : i18n("createQuickReminder")),
             content: this.mode === 'note' ? `
                 <div class="quick-reminder-dialog">
                     <div class="b3-dialog__content">
@@ -1396,7 +1398,7 @@ export class QuickReminderDialog {
                             <label class="b3-form__label">${i18n("eventTitle")}</label>
                             <div class="title-input-container" style="display: flex; gap: 8px; align-items: flex-start;">
                                 <textarea id="quickReminderTitle" class="b3-text-field" rows="1" placeholder="${i18n("enterReminderTitle")}" spellcheck="false" style="flex: 1; max-height: 200px; resize: vertical; overflow-y: auto; padding: 4px 8px; line-height: 1.5;" required autofocus></textarea>
-                                <button type="button" id="quickNlBtn" class="b3-button b3-button--outline" title="✨ 智能日期识别">
+                                <button type="button" id="quickNlBtn" class="b3-button b3-button--outline" title="${i18n("smartDateRecognition")}">
                                     ✨
                                 </button>
                             </div>
@@ -1405,102 +1407,100 @@ export class QuickReminderDialog {
                             <label class="b3-checkbox" style="display: flex; align-items: center;">
                                 <input type="checkbox" class="b3-switch" id="quickPasteAutoDetect" ${this.autoDetectDateTime ? 'checked' : ''}>
                                 <span class="b3-checkbox__graphic"></span>
-                                <span class="b3-checkbox__label">${i18n("pasteAutoDetectDate") || "粘贴自动识别日期"}</span>
+                                <span class="b3-checkbox__label">${i18n("pasteAutoDetectDate")}</span>
                             </label>
                             <div id="quickSyncBlockTitleContainer" style="display: none;">
                                 <button type="button" id="quickSyncBlockTitleBtn" class="b3-button b3-button--outline b3-button--small" style="display: flex; align-items: center; gap: 4px; font-size: 12px; padding: 2px 8px;">
                                     <svg style="width: 12px; height: 12px;"><use xlink:href="#iconRefresh"></use></svg>
-                                    <span>${i18n("syncBlockTitle") || '更新标题为绑定块内容'}</span>
+                                    <span>${i18n("syncBlockTitle")}</span>
                                 </button>
                             </div>
                         </div>
                         <div class="b3-form__group">
-                            <label class="b3-form__label">${i18n("reminderDate") || "日期时间"}</label>
+                            <label class="b3-form__label">${i18n("reminderDate")}</label>
                             <div style="display: flex; flex-direction: column; gap: 8px;">
                                 <!-- 开始行: responsive, keep date flexible but ensure time + clear button never wrap -->
                                 <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                                    <span style="font-size: 13px; color: var(--b3-theme-on-surface); white-space: nowrap; flex: 0 0 auto;">开始：</span>
+                                    <span style="font-size: 13px; color: var(--b3-theme-on-surface); white-space: nowrap; flex: 0 0 auto;">${i18n("startLabel")}</span>
                                     <div style="display: flex; align-items: center; gap: 8px; flex: 1 1 140px; min-width: 120px;">
-                                        <input type="date" id="quickReminderDate" class="b3-text-field" value="${this.initialDate || ''}" max="9999-12-31" style="flex: 1; min-width: 0;">
-                                        <button type="button" id="quickClearStartDateBtn" class="b3-button b3-button--outline" title="${i18n("clearDate") || "清除日期"}" style="padding: 4px 8px; font-size: 12px; flex: 0 0 auto;">
+                                        <input type="date" id="quickReminderDate" class="b3-text-field" value="${this.initialDate || ''}" max="9999-12-31" style="flex: 1; min-width: 0;" lang="${langTag}">
+                                        <button type="button" id="quickClearStartDateBtn" class="b3-button b3-button--outline" title="${i18n("clearDate")}" style="padding: 4px 8px; font-size: 12px; flex: 0 0 auto;">
                                             <svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
                                         </button>
                                     </div>
                                     <div style="display: flex; align-items: center; gap: 8px; flex: 0 0 auto; white-space: nowrap; min-width: 110px;margin-left: auto;">
-                                        <input type="time" id="quickReminderTime" class="b3-text-field" value="${this.initialTime || ''}" style="flex: 0 0 auto; min-width: 100px;">
-                                        <button type="button" id="quickClearStartTimeBtn" class="b3-button b3-button--outline" title="${i18n("clearTime") || "清除时间"}" style="padding: 4px 8px; font-size: 12px;">
+                                        <input type="time" id="quickReminderTime" class="b3-text-field" value="${this.initialTime || ''}" style="flex: 0 0 auto; min-width: 100px;" lang="${langTag}">
+                                        <button type="button" id="quickClearStartTimeBtn" class="b3-button b3-button--outline" title="${i18n("clearTime")}" style="padding: 4px 8px; font-size: 12px;">
                                             <svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
                                         </button>
                                     </div>
                                 </div>
                                 <!-- 持续天数行: allow wrap when narrow -->
                                 <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                                    <span style="font-size: 13px; color: var(--b3-theme-on-surface); white-space: nowrap; flex: 0 0 auto;">持续：</span>
-                                    <input type="number" id="quickDurationDays" min="1" step="1" class="b3-text-field" value="1" style="width: 100px; min-width: 80px;">
-                                    <span style="font-size: 13px; color: var(--b3-theme-on-surface-light);">天</span>
+                                    <span style="font-size: 13px; color: var(--b3-theme-on-surface-light);">${i18n("daysUnit")}</span>
                                 </div>
                                 <!-- 结束行: responsive, keep end time + clear button together -->
                                 <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                                    <span style="font-size: 13px; color: var(--b3-theme-on-surface); white-space: nowrap; flex: 0 0 auto;">结束：</span>
+                                    <span style="font-size: 13px; color: var(--b3-theme-on-surface); white-space: nowrap; flex: 0 0 auto;">${i18n("endLabel")}</span>
                                     <div style="display: flex; align-items: center; gap: 8px; flex: 1 1 140px; min-width: 120px;">
-                                        <input type="date" id="quickReminderEndDate" class="b3-text-field" placeholder="${i18n("endDateOptional")}" title="${i18n("spanningEventDesc")}" max="9999-12-31" style="flex: 1; min-width: 0;">
-                                        <button type="button" id="quickClearEndDateBtn" class="b3-button b3-button--outline" title="${i18n("clearDate") || "清除日期"}" style="padding: 4px 8px; font-size: 12px; flex: 0 0 auto;">
+                                        <input type="date" id="quickReminderEndDate" class="b3-text-field" placeholder="${i18n("endDateOptional")}" title="${i18n("spanningEventDesc")}" max="9999-12-31" style="flex: 1; min-width: 0;" lang="${langTag}">
+                                        <button type="button" id="quickClearEndDateBtn" class="b3-button b3-button--outline" title="${i18n("clearDate")}" style="padding: 4px 8px; font-size: 12px; flex: 0 0 auto;">
                                             <svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
                                         </button>
                                     </div>
                                     <div style="display: flex; align-items: center; gap: 8px; flex: 0 0 auto; white-space: nowrap; min-width: 110px;margin-left: auto;">
-                                        <input type="time" id="quickReminderEndTime" class="b3-text-field" placeholder="${i18n("endTimeOptional") || "结束时间"}" style="flex: 0 0 auto; min-width: 100px;">
-                                        <button type="button" id="quickClearEndTimeBtn" class="b3-button b3-button--outline" title="${i18n("clearTime") || "清除时间"}" style="padding: 4px 8px; font-size: 12px;">
+                                        <input type="time" id="quickReminderEndTime" class="b3-text-field" placeholder="${i18n("endTimeOptional")}" style="flex: 0 0 auto; min-width: 100px;" lang="${langTag}">
+                                        <button type="button" id="quickClearEndTimeBtn" class="b3-button b3-button--outline" title="${i18n("clearTime")}" style="padding: 4px 8px; font-size: 12px;">
                                             <svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
                                         </button>
                                     </div>
                                 </div>
                             </div>
-                            <div class="b3-form__desc">${i18n("dateTimeOptionalDesc") || "不设置时间则创建为全天任务"}</div>
+                            <div class="b3-form__desc">${i18n("dateTimeOptionalDesc")}</div>
                         </div>
                         <!-- 完成时间显示和编辑 -->
                         <div class="b3-form__group" id="quickCompletedTimeGroup" style="display: none;">
-                            <label class="b3-form__label">${i18n("completedAt") || "完成时间"}</label>
+                            <label class="b3-form__label">${i18n("completedAt")}</label>
                             <div style="display: flex; gap: 8px; align-items: center;">
-                                <input type="datetime-local" id="quickCompletedTime" class="b3-text-field" style="flex: 1;">
-                                <button type="button" id="quickSetCompletedNowBtn" class="b3-button b3-button--outline" title="${i18n("setToNow") || "设为当前时间"}">
+                                <input type="datetime-local" id="quickCompletedTime" class="b3-text-field" style="flex: 1;" lang="${langTag}">
+                                <button type="button" id="quickSetCompletedNowBtn" class="b3-button b3-button--outline" title="${i18n("setToNow")}">
                                     <svg class="b3-button__icon"><use xlink:href="#iconClock"></use></svg>
                                 </button>
-                                <button type="button" id="quickClearCompletedBtn" class="b3-button b3-button--outline" title="${i18n("clearCompletedTime") || "清除完成时间"}">
+                                <button type="button" id="quickClearCompletedBtn" class="b3-button b3-button--outline" title="${i18n("clearCompletedTime")}">
                                     <svg class="b3-button__icon"><use xlink:href="#iconTrashcan"></use></svg>
                                 </button>
                             </div>
                         </div>
                         <div class="b3-form__group">
-                            <label class="b3-form__label">${i18n("customReminderTimes") || "自定义提醒时间"}</label>
+                            <label class="b3-form__label">${i18n("customReminderTimes")}</label>
                             <div id="quickCustomTimeList" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
                                 <!-- Added times will be shown here -->
                             </div>
                             <button type="button" id="quickShowCustomTimeBtn" class="b3-button b3-button--outline" style="width: 100%; margin-bottom: 8px;">
                                 <svg class="b3-button__icon" style="margin-right: 4px;"><use xlink:href="#iconAdd"></use></svg>
-                                <span>${i18n("addReminderTime") || "添加提醒时间"}</span>
+                                <span>${i18n("addReminderTime")}</span>
                             </button>
                             <div id="quickCustomTimeInputArea" style="display: none; padding: 12px; background: var(--b3-theme-background-light); border-radius: 6px; border: 1px solid var(--b3-theme-surface-lighter);">
                                 <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
-                                    <input type="datetime-local" id="quickCustomReminderTime" class="b3-text-field" style="flex: 1;">
-                                    <input type="text" id="quickCustomReminderNote" class="b3-text-field" placeholder="${i18n("note") || "备注"}" style="width: 120px;">
-                                    <button type="button" id="quickConfirmCustomTimeBtn" class="b3-button b3-button--primary" title="${i18n("confirm") || "确认"}">
+                                    <input type="datetime-local" id="quickCustomReminderTime" class="b3-text-field" style="flex: 1;" lang="${langTag}">
+                                    <input type="text" id="quickCustomReminderNote" class="b3-text-field" placeholder="${i18n("note")}" style="width: 120px;">
+                                    <button type="button" id="quickConfirmCustomTimeBtn" class="b3-button b3-button--primary" title="${i18n("confirm")}">
                                         <svg class="b3-button__icon"><use xlink:href="#iconCheck"></use></svg>
                                     </button>
-                                    <button type="button" id="quickCancelCustomTimeBtn" class="b3-button b3-button--outline" title="${i18n("cancel") || "取消"}">
+                                    <button type="button" id="quickCancelCustomTimeBtn" class="b3-button b3-button--outline" title="${i18n("cancel")}">
                                         <svg class="b3-button__icon"><use xlink:href="#iconClose"></use></svg>
                                     </button>
                                 </div>
                                 <div id="quickPresetContainer" style="width: 100%; display: ${this.initialTime ? 'block' : 'none'};">
-                                    <label class="b3-form__label" style="font-size: 12px;">${i18n("reminderPreset") || "提醒时间预设"}</label>
+                                    <label class="b3-form__label" style="font-size: 12px;">${i18n("reminderPreset")}</label>
                                     <select id="quickCustomReminderPreset" class="b3-select" style="width: 100%;">
-                                        <option value="">${i18n("selectPreset") || "选择预设..."}</option>
-                                        <option value="5m">${i18n("before5m") || "提前 5 分钟"}</option>
-                                        <option value="10m">${i18n("before10m") || "提前 10 分钟"}</option>
-                                        <option value="30m">${i18n("before30m") || "提前 30 分钟"}</option>
-                                        <option value="1h">${i18n("before1h") || "提前 1 小时"}</option>
-                                        <option value="2h">${i18n("before2h") || "提前 2 小时"}</option>
-                                        <option value="1d">${i18n("before1d") || "提前 1 天"}</option>
+                                        <option value="">${i18n("selectPreset")}</option>
+                                        <option value="5m">${i18n("before5m")}</option>
+                                        <option value="10m">${i18n("before10m")}</option>
+                                        <option value="30m">${i18n("before30m")}</option>
+                                        <option value="1h">${i18n("before1h")}</option>
+                                        <option value="2h">${i18n("before2h")}</option>
+                                        <option value="1d">${i18n("before1d")}</option>
                                     </select>
                                 </div>
                             </div>
@@ -1520,11 +1520,11 @@ export class QuickReminderDialog {
                         <div class="b3-form__group">
                             <label class="b3-form__label">${i18n("bindToBlock") || '块或文档 ID'}</label>
                             <div style="display: flex; gap: 8px; flex-wrap: wrap; ">
-                                <input type="text" id="quickBlockInput" class="b3-text-field" value="${this.defaultBlockId || ''}" placeholder="${i18n("enterBlockId") || '请输入块或文档 ID'}" style="flex: 1;">
+                                <input type="text" id="quickBlockInput" class="b3-text-field" value="${this.defaultBlockId || ''}" placeholder="${i18n("enterBlockId")}" style="flex: 1;">
                                 <button type="button" id="quickPasteBlockRefBtn" class="b3-button b3-button--outline" title="${i18n("pasteBlockRef")}">
                                     <svg class="b3-button__icon"><use xlink:href="#iconPaste"></use></svg>
                                 </button>
-                                <button type="button" id="quickCreateDocBtn" class="b3-button b3-button--outline" title="${i18n("createNewDocument") || '新建文档'}">
+                                <button type="button" id="quickCreateDocBtn" class="b3-button b3-button--outline" title="${i18n("createNewDocument")}">
                                     <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
                                 </button>
                             </div>
@@ -1535,7 +1535,7 @@ export class QuickReminderDialog {
                             <div id="quickSyncTitleToBlockContainer" style="margin-top: 8px;">
                                 <button type="button" id="quickSyncTitleToBlockBtn" class="b3-button b3-button--outline b3-button--small" style="display: flex; align-items: center; gap: 4px; font-size: 12px; padding: 2px 8px;">
                                     <svg style="width: 12px; height: 12px;"><use xlink:href="#iconRefresh"></use></svg>
-                                    <span>${i18n("syncTitleToBlock") || '更新绑定块内容为当前标题'}</span>
+                                    <span>${i18n("syncTitleToBlock")}</span>
                                 </button>
                             </div>
                         </div>
@@ -1556,32 +1556,32 @@ export class QuickReminderDialog {
                         </div>
 
                         <div class="b3-form__group" id="quickParentTaskGroup" style="display: none;">
-                            <label class="b3-form__label">${i18n("parentTask") || "父任务"}</label>
+                            <label class="b3-form__label">${i18n("parentTask")}</label>
                             <div style="display: flex; gap: 8px; align-items: center;">
-                                <input type="text" id="quickParentTaskDisplay" class="b3-text-field" readonly style="flex: 1; background: var(--b3-theme-background-light); cursor: default;" placeholder="无父任务">
-                                <button type="button" id="quickViewParentBtn" class="b3-button b3-button--outline" title="${i18n("viewParentTask") || "查看父任务"}" style="display: none;">
+                                <input type="text" id="quickParentTaskDisplay" class="b3-text-field" readonly style="flex: 1; background: var(--b3-theme-background-light); cursor: default;" placeholder="${i18n("noParentTask")}">
+                                <button type="button" id="quickViewParentBtn" class="b3-button b3-button--outline" title="${i18n("viewParentTask")}" style="display: none;">
                                     <svg class="b3-button__icon"><use xlink:href="#iconEye"></use></svg>
                                 </button>
                             </div>
                             <div class="b3-form__desc" style="font-size: 11px; color: var(--b3-theme-on-surface-light);">
-                                父任务 ID: <span id="quickParentTaskId" style="font-family: monospace;">-</span>
+                                ${i18n("parentTaskIdLabel")}<span id="quickParentTaskId" style="font-family: monospace;">-</span>
                             </div>
                         </div>
                         <div class="b3-form__group" id="quickEditAllInstancesGroup" style="display: none;">
-                            <label class="b3-form__label">${i18n("recurringTask") || "重复任务"}</label>
+                            <label class="b3-form__label">${i18n("recurringTask")}</label>
                             <div style="display: flex; gap: 8px; align-items: center;">
                                 <button type="button" id="quickEditAllInstancesBtn" class="b3-button b3-button--outline" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;">
                                     <svg class="b3-button__icon"><use xlink:href="#iconEdit"></use></svg>
-                                    <span>${i18n("editAllInstances") || "编辑所有实例"}</span>
+                                    <span>${i18n("editAllInstances")}</span>
                                 </button>
                             </div>
                         </div>
                         <div class="b3-form__group" id="quickSubtasksGroup" style="display: none; margin-top: 8px;">
-                            <label class="b3-form__label">${i18n("subtasks") || "子任务"}</label>
+                            <label class="b3-form__label">${i18n("subtasks")}</label>
                             <div style="display: flex; gap: 8px; align-items: center;">
                                 <button type="button" id="quickViewSubtasksBtn" class="b3-button b3-button--outline" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;">
                                     <svg class="b3-button__icon"><use xlink:href="#iconBulletedList"></use></svg>
-                                    <span id="quickSubtasksCountText">${i18n("viewSubtasks") || "查看子任务"}</span>
+                                    <span id="quickSubtasksCountText">${i18n("viewSubtasks")}</span>
                                 </button>
                             </div>
                         </div>
@@ -1590,17 +1590,17 @@ export class QuickReminderDialog {
                             <input type="text" id="quickEstimatedPomodoroDuration" class="b3-text-field" placeholder="${i18n("estimatedPomodoroDurationPlaceholder")}" style="width: 100%;">
                         </div>
                         <div class="b3-form__group" id="quickPomodorosGroup" style="display: none;">
-                            <label class="b3-form__label">${i18n("pomodoros") || "番茄钟"}</label>
+                            <label class="b3-form__label">${i18n("pomodoros")}</label>
                             <div style="display: flex; gap: 8px; align-items: center;">
                                 <button type="button" id="quickViewPomodorosBtn" class="b3-button b3-button--outline" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;">
-                                    <span id="quickPomodorosCountText">${i18n("viewPomodoros") || "查看番茄钟"}</span>
+                                    <span id="quickPomodorosCountText">${i18n("viewPomodoros")}</span>
                                 </button>
                             </div>
                         </div>
 
                         <div class="b3-form__group">
                             <label class="b3-form__label">${i18n("eventCategory")}
-                                <button type="button" id="quickManageCategoriesBtn" class="b3-button b3-button--outline" title="管理分类">
+                                <button type="button" id="quickManageCategoriesBtn" class="b3-button b3-button--outline" title="${i18n("manageCategories")}">
                                     <svg class="b3-button__icon"><use xlink:href="#iconSettings"></use></svg>
                                 </button>
                             </label>
@@ -1609,10 +1609,10 @@ export class QuickReminderDialog {
                             </div>
                         </div>
                         <div class="b3-form__group" id="quickProjectGroup" style="${this.hideProjectSelector ? 'display: none;' : ''}">
-                            <label class="b3-form__label">设置所属项目</label>
+                            <label class="b3-form__label">${i18n("setProject")}</label>
                             <div class="custom-select" id="quickProjectSelectCustom" style="position: relative;">
                                 <div style="position: relative;">
-                                    <input type="text" id="quickProjectSearchInput" class="b3-text-field" placeholder="${i18n("searchProject") || "搜索项目"}" autocomplete="off" style="width: 100%; padding-right: 30px;  background: var(--b3-select-background);">
+                                    <input type="text" id="quickProjectSearchInput" class="b3-text-field" placeholder="${i18n("searchProject")}" autocomplete="off" style="width: 100%; padding-right: 30px;  background: var(--b3-select-background);">
                                     <input type="hidden" id="quickProjectSelector">
                                 </div>
                                 <div id="quickProjectDropdown" class="b3-menu" style="display: none; position: absolute; width: 100%; max-height: 200px; overflow-y: auto; z-index: 10; margin-top: 4px; box-shadow: var(--b3-menu-shadow); background: var(--b3-menu-background); border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius);">
@@ -1621,10 +1621,10 @@ export class QuickReminderDialog {
                             </div>
                         </div>
                         <div class="b3-form__group" id="quickCustomGroup" style="display: none;">
-                            <label class="b3-form__label">设置任务分组</label>
+                            <label class="b3-form__label">${i18n("setTaskGroup")}</label>
                             <div class="custom-select" id="quickCustomGroupSelectCustom" style="position: relative;">
                                 <div style="position: relative;">
-                                    <input type="text" id="quickCustomGroupSearchInput" class="b3-text-field" placeholder="${i18n("searchGroup") || "搜索分组"}" autocomplete="off" style="width: 100%; padding-right: 30px; background: var(--b3-select-background);">
+                                    <input type="text" id="quickCustomGroupSearchInput" class="b3-text-field" placeholder="${i18n("searchGroup")}" autocomplete="off" style="width: 100%; padding-right: 30px; background: var(--b3-select-background);">
                                     <input type="hidden" id="quickCustomGroupSelector">
                                 </div>
                                 <div id="quickCustomGroupDropdown" class="b3-menu" style="display: none; position: absolute; width: 100%; max-height: 200px; overflow-y: auto; z-index: 10; margin-top: 4px; box-shadow: var(--b3-menu-shadow); background: var(--b3-menu-background); border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius);">
@@ -1633,10 +1633,10 @@ export class QuickReminderDialog {
                             </div>
                         </div>
                         <div class="b3-form__group" id="quickMilestoneGroup" style="display: none;">
-                            <label class="b3-form__label">${i18n("milestone") || "里程碑"}</label>
+                            <label class="b3-form__label">${i18n("milestone")}</label>
                             <div class="custom-select" id="quickMilestoneSelectCustom" style="position: relative;">
                                 <div style="position: relative;">
-                                    <input type="text" id="quickMilestoneSearchInput" class="b3-text-field" placeholder="${i18n("searchMilestone") || "搜索里程碑"}" autocomplete="off" style="width: 100%; padding-right: 30px; background: var(--b3-select-background);">
+                                    <input type="text" id="quickMilestoneSearchInput" class="b3-text-field" placeholder="${i18n("searchMilestone")}" autocomplete="off" style="width: 100%; padding-right: 30px; background: var(--b3-select-background);">
                                     <input type="hidden" id="quickMilestoneSelector">
                                 </div>
                                 <div id="quickMilestoneDropdown" class="b3-menu" style="display: none; position: absolute; width: 100%; max-height: 200px; overflow-y: auto; z-index: 10; margin-top: 4px; box-shadow: var(--b3-menu-shadow); background: var(--b3-menu-background); border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius);">
@@ -1647,7 +1647,7 @@ export class QuickReminderDialog {
                         <!-- 任务状态渲染 -->
                         ${this.renderStatusSelector()}
                         <div class="b3-form__group" id="quickTagsGroup" style="display: none;">
-                            <label class="b3-form__label">设置标签</label>
+                            <label class="b3-form__label">${i18n("setTags")}</label>
                             <div id="quickTagsSelector" class="tags-selector" style="display: flex; flex-wrap: wrap; gap: 6px;">
                                 <!-- 标签选择器将在这里渲染 -->
                             </div>
@@ -1674,21 +1674,21 @@ export class QuickReminderDialog {
                             </div>
                         </div>
                         <div class="b3-form__group">
-                            <label class="b3-form__label">显示设置</label>
+                            <label class="b3-form__label">${i18n("displaySettings")}</label>
                             <div style="display: flex; flex-direction: column; gap: 8px;">
                                 <label class="b3-checkbox">
                                     <input type="checkbox" class="b3-switch" id="quickIsAvailableToday">
                                     <span class="b3-checkbox__graphic"></span>
-                                    <span class="b3-checkbox__label">🍰 每日可做（在任务管理侧栏的「今日任务」每天显示，适合用于推进长期任务）</span>
+                                    <span class="b3-checkbox__label">${i18n("availableTodayDesc")}</span>
                                 </label>
                                 <div id="quickAvailableDateGroup" style="display: none; margin-left: 28px;">
-                                    <label class="b3-form__label" style="font-size: 12px;">起始日期</label>
-                                    <input type="date" id="quickAvailableStartDate" class="b3-text-field" style="width: 100%;">
+                                    <label class="b3-form__label" style="font-size: 12px;">${i18n("startDate")}</label>
+                                    <input type="date" id="quickAvailableStartDate" class="b3-text-field" style="width: 100%;" lang="${langTag}">
                                 </div>
                                 <label class="b3-checkbox">
                                     <input type="checkbox" class="b3-switch" id="quickHideInCalendar">
                                     <span class="b3-checkbox__graphic"></span>
-                                    <span class="b3-checkbox__label">📅 不在日历视图显示</span>
+                                    <span class="b3-checkbox__label">${i18n("hideInCalendar")}</span>
                                 </label>
                             </div>
                         </div>
@@ -2077,7 +2077,7 @@ export class QuickReminderDialog {
         // 返回一个占位符，稍后通过updateKanbanStatusSelector填充
         return `
             <div class="b3-form__group">
-                <label class="b3-form__label">任务状态</label>
+                <label class="b3-form__label">${i18n("taskStatus")}</label>
                 <div class="task-status-selector" id="quickStatusSelector" style="display: flex; gap: 3px; flex-wrap: wrap;">
                     <!-- 动态内容将通过updateKanbanStatusSelector填充 -->
                 </div>
@@ -2217,7 +2217,7 @@ export class QuickReminderDialog {
 
         } catch (error) {
             console.error('渲染分类选择器失败:', error);
-            categorySelector.innerHTML = '<div class="category-error">加载分类失败</div>';
+            categorySelector.innerHTML = `<div class="category-error">${i18n("loadCategoryFailed")}</div>`;
         }
     }
 
@@ -2358,14 +2358,14 @@ export class QuickReminderDialog {
             const noteInput = document.createElement('input');
             noteInput.type = 'text';
             noteInput.className = 'b3-text-field';
-            noteInput.placeholder = '备注';
+            noteInput.placeholder = i18n("note");
             noteInput.style.cssText = 'width: 160px;';
             noteInput.value = item.note || '';
 
             const removeBtn = document.createElement('button');
             removeBtn.type = 'button';
             removeBtn.className = 'b3-button b3-button--outline';
-            removeBtn.textContent = '移除';
+            removeBtn.textContent = i18n("remove");
 
             // 绑定事件：更新模型并避免空时间项
             timeInput.addEventListener('change', () => {
@@ -2404,7 +2404,7 @@ export class QuickReminderDialog {
         if (this.customTimes.length === 0) {
             const hint = document.createElement('div');
             hint.style.cssText = 'color: var(--b3-theme-on-surface-light); font-size: 12px; width:100%;';
-            hint.textContent = '尚未添加自定义提醒时间；使用上方输入框或快速设置添加。';
+            hint.textContent = i18n("noCustomReminderTimes");
             container.appendChild(hint);
         }
     }
@@ -2735,7 +2735,7 @@ export class QuickReminderDialog {
                     showCustomTimeBtn.style.display = 'flex';
                 }
             } else {
-                showMessage(i18n("pleaseEnterReminderTime") || "请输入提醒时间", 3000, "error");
+                showMessage(i18n("pleaseEnterReminderTime"), 3000, "error");
             }
         });
 
@@ -3044,7 +3044,7 @@ export class QuickReminderDialog {
 
                 // 仅在任务已设置日期和时间时可用
                 if (!dateInput || !dateInput.value || !timeInput || !timeInput.value) {
-                    showMessage('请先为任务设置日期和时间，然后使用快速设置。');
+                    showMessage(i18n("setDateTimeFirst"));
                     presetSelect.value = '';
                     return;
                 }
@@ -3161,7 +3161,7 @@ export class QuickReminderDialog {
                     window.open(url, '_blank');
                 }
             } else {
-                showMessage(i18n("pleaseEnterUrl") || "请输入链接地址");
+                showMessage(i18n("pleaseEnterUrl"));
             }
         });
     }
@@ -3558,7 +3558,7 @@ export class QuickReminderDialog {
             if (milestones.length > 0) {
                 let html = '';
                 // 添加无里程碑选项
-                html += `<div class="b3-menu__item" data-value="" data-label="${i18n("noMilestone") || "无里程碑"}"><span class="b3-menu__label">${i18n("noMilestone") || "无里程碑"}</span></div>`;
+                html += `<div class="b3-menu__item" data-value="" data-label="${i18n("noMilestone")}"><span class="b3-menu__label">${i18n("noMilestone")}</span></div>`;
 
                 milestones.forEach(m => {
                     const label = `${m.icon ? m.icon + ' ' : ''}${m.name}`.trim();
@@ -3668,7 +3668,7 @@ export class QuickReminderDialog {
                 // 触发块预览
                 this.updateBlockPreview(blockId);
             }
-            showMessage('✓ 已选择块');
+            showMessage(i18n("blockSelected"));
         }, {
             defaultTab: 'heading',
             defaultParentId: this.defaultParentId || this.reminder?.parentId,
@@ -3727,7 +3727,7 @@ export class QuickReminderDialog {
             }
         } catch (error) {
             console.error('保存备注失败:', error);
-            showMessage(i18n("saveFailed") || "保存失败", 3000, 'error');
+            showMessage(i18n("saveFailed"), 3000, 'error');
         }
     }
 
@@ -3824,7 +3824,7 @@ export class QuickReminderDialog {
 
         // 如果启用了重复设置，则必须提供起始日期（重复任务需要基准日期）
         if (this.repeatConfig && this.repeatConfig.enabled && !date) {
-            showMessage(i18n('pleaseSetStartDateForRepeat') || '请为重复任务设置起始日期');
+            showMessage(i18n('pleaseSetStartDateForRepeat'));
             return;
         }
 
@@ -4036,7 +4036,7 @@ export class QuickReminderDialog {
                             ...instanceModification
                         });
 
-                        showMessage("实例编辑成功");
+                        showMessage(i18n("editInstanceSuccess"));
 
                         // 触发更新事件
                         window.dispatchEvent(new CustomEvent('reminderUpdated', {
@@ -4683,7 +4683,7 @@ export class QuickReminderDialog {
 
             await this.plugin.saveReminderData(reminderData);
             console.log(`已保存 ${this.tempSubtasks.length} 个子任务`);
-            showMessage(i18n("subtasksSaved") || `已保存 ${this.tempSubtasks.length} 个子任务`);
+            showMessage(i18n("subtasksSaved"));
 
             // 保存成功后清空临时子任务数组
             this.tempSubtasks = [];
@@ -4801,7 +4801,7 @@ export class QuickReminderDialog {
             const originalTask = reminderData[this.reminder.originalId];
 
             if (!originalTask) {
-                showMessage(i18n("originalTaskNotExist") || "原始任务不存在");
+                showMessage(i18n("originalTaskNotExist"));
                 return;
             }
 
@@ -4832,7 +4832,7 @@ export class QuickReminderDialog {
             allInstancesDialog.show();
         } catch (error) {
             console.error('编辑所有实例失败:', error);
-            showMessage(i18n("operationFailed") || "操作失败");
+            showMessage(i18n("operationFailed"));
         }
     }
 
@@ -4854,7 +4854,7 @@ export class QuickReminderDialog {
         const parentId = this.reminder?.parentId || this.defaultParentId;
 
         if (!parentId) {
-            showMessage(i18n("parentTaskNotExist") || "父任务不存在");
+            showMessage(i18n("parentTaskNotExist"));
             return;
         }
 
@@ -4893,7 +4893,7 @@ export class QuickReminderDialog {
             }
 
             if (!parentTask) {
-                showMessage(i18n("parentTaskNotExist") || "父任务不存在");
+                showMessage(i18n("parentTaskNotExist"));
                 return;
             }
 
@@ -4926,7 +4926,7 @@ export class QuickReminderDialog {
             parentDialog.show();
         } catch (error) {
             console.error('查看父任务失败:', error);
-            showMessage(i18n("operationFailed") || "操作失败");
+            showMessage(i18n("operationFailed"));
         }
     }
 

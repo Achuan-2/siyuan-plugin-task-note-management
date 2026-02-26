@@ -139,10 +139,10 @@ export class RepeatSettingsDialog {
 
                         <!-- 每年选项（日期输入框 MM-DD） -->
                         <div id="yearlyOptions" class="b3-form__group" style="display: none;">
-                            <label class="b3-form__label">${i18n("repeatDate") || '日期'}</label>
+                            <label class="b3-form__label">${i18n("repeatDate")}</label>
                             <div style="display: flex; align-items: center; gap: 8px;">
                                 <input type="text" id="yearlyDateInput" class="b3-text-field" placeholder="例如: 01-01 或 06-15" style="width: 120px;" value="${this.getYearlyDateValue()}">
-                                <span style="font-size: 12px; color: var(--b3-theme-on-surface-light);">(格式：MM-DD)</span>
+                                <span style="font-size: 12px; color: var(--b3-theme-on-surface-light);">${i18n("dateFormatDesc")}</span>
                             </div>
                         </div>
 
@@ -479,7 +479,7 @@ export class RepeatSettingsDialog {
                 const weekDayInputs = this.dialog.element.querySelectorAll('#weeklyOptions input[type="checkbox"]:checked') as NodeListOf<HTMLInputElement>;
                 this.repeatConfig.weekDays = Array.from(weekDayInputs).map(input => parseInt(input.value));
                 if (this.repeatConfig.weekDays.length === 0) {
-                    showMessage('请至少选择一个星期', 3000, 'error');
+                    showMessage(i18n("pleaseSelectAtLeastOneWeekday"), 3000, 'error');
                     return;
                 }
             }
@@ -489,7 +489,7 @@ export class RepeatSettingsDialog {
                 const monthDayInputs = this.dialog.element.querySelectorAll('#monthlyOptions input[type="checkbox"]:checked') as NodeListOf<HTMLInputElement>;
                 this.repeatConfig.monthDays = Array.from(monthDayInputs).map(input => parseInt(input.value));
                 if (this.repeatConfig.monthDays.length === 0) {
-                    showMessage('请至少选择一个日期', 3000, 'error');
+                    showMessage(i18n("pleaseSelectAtLeastOneDay"), 3000, 'error');
                     return;
                 }
             }
@@ -507,15 +507,15 @@ export class RepeatSettingsDialog {
                             this.repeatConfig.months = [month];
                             this.repeatConfig.monthDays = [day];
                         } else {
-                            showMessage('日期格式错误：月份应为1-12，日期应为1-31', 3000, 'error');
+                            showMessage(i18n("invalidDateRange"), 3000, 'error');
                             return;
                         }
                     } else {
-                        showMessage('日期格式错误，请使用 MM-DD 格式（例如：01-01）', 3000, 'error');
+                        showMessage(i18n("invalidDateFormatMMDD"), 3000, 'error');
                         return;
                     }
                 } else {
-                    showMessage('请输入日期', 3000, 'error');
+                    showMessage(i18n("pleaseEnterDate"), 3000, 'error');
                     return;
                 }
             }
