@@ -91,7 +91,7 @@
     "deleteFailed": "Delete Failed",
     "confirmDeleteSession": "Are you sure you want to delete this Pomodoro record?",
     "confirm": "Confirm",
-    "deleteReminder": "Delete Reminder",
+    "deleteReminder": "Delete Task",
     "confirmDelete": "Are you sure to delete? This action cannot be undone.",
     "batchSetReminder": "Batch Set Time Reminders",
     "batchSetReminderBlocks": "Batch Set Time Reminders (${count} blocks)",

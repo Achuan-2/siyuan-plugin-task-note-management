@@ -3199,8 +3199,8 @@ export class EisenhowerMatrixView {
         } else {
             // 普通任务
             menu.addItem({
-                label: i18n('delete'),
-                icon: 'iconTrashcan',
+                label: i18n('deleteTask'),
+                iconHTML: "🗑️",
                 click: async () => {
                     await this.deleteTask(task);
                 }
