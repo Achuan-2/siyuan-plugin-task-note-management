@@ -1240,7 +1240,7 @@ export class CalendarView {
                             confirm: (ele) => {
                                 const inputEl = (ele.querySelector('#reminder-jump-to-date') || document.getElementById('reminder-jump-to-date')) as HTMLInputElement;
                                 if (!inputEl || !inputEl.value) {
-                                    showMessage(i18n("pleaseEnterDate") || "请选择一个日期", 3000, "warning");
+                                    showMessage(i18n("pleaseEnterDate") || "请选择一个日期", 3000, "info");
                                     return;
                                 }
                                 const target = new Date(inputEl.value + 'T00:00:00');
