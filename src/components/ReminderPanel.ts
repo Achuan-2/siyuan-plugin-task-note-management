@@ -8049,7 +8049,7 @@ export class ReminderPanel {
                 font-weight: bold;
             }
             .category-selector .category-option[data-category=""] {
-                background-color: var(--b3-theme-surface-lighter);
+                background-color: var(--b3-theme-background-light);
                 color: var(--b3-theme-on-surface);
             }
 
