@@ -105,29 +105,29 @@ export class EisenhowerMatrixView {
         this.quadrants = [
             {
                 key: 'important-urgent',
-                title: '🔥重要且紧急',
-                description: '立即处理的任务',
+                title: i18n('quadrantImportantUrgent'),
+                description: i18n('quadrantImportantUrgentDesc'),
                 color: '#e74c3c',
                 tasks: []
             },
             {
                 key: 'important-not-urgent',
-                title: '📅重要不紧急',
-                description: '计划处理的任务',
-                color: '#3498db',
-                tasks: []
-            },
-            {
-                key: 'not-important-urgent',
-                title: '⏰不重要但紧急',
-                description: '可以委托的任务',
+                title: i18n('quadrantImportantNotUrgent'),
+                description: i18n('quadrantImportantNotUrgentDesc'),
                 color: '#f39c12',
                 tasks: []
             },
             {
+                key: 'not-important-urgent',
+                title: i18n('quadrantNotImportantUrgent'),
+                description: i18n('quadrantNotImportantUrgentDesc'),
+                color: '#3498db',
+                tasks: []
+            },
+            {
                 key: 'not-important-not-urgent',
-                title: '🌱不重要不紧急',
-                description: '可以删除的任务',
+                title: i18n('quadrantNotImportantNotUrgent'),
+                description: i18n('quadrantNotImportantNotUrgentDesc'),
                 color: '#95a5a6',
                 tasks: []
             }
@@ -158,26 +158,23 @@ export class EisenhowerMatrixView {
                     <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
                     ${i18n("newTask")}
                 </button>
-                <button class="b3-button b3-button--primary kanban-status-filter-btn" title="状态筛选" data-filter="all">
+                <button class="b3-button b3-button--primary kanban-status-filter-btn" title="${i18n("statusFilter")}">
                     <svg class="b3-button__icon"><use xlink:href="#iconList"></use></svg>
-                    进行中任务
+                    ${i18n("eisenhowerDoingTasks")}
                     <svg class="dropdown-arrow" style="margin-left: 4px; width: 12px; height: 12px;"><use xlink:href="#iconDown"></use></svg>
                 </button>
-                <button class="b3-button b3-button--outline sort-projects-btn" title="项目排序">
+                <div class="header-v-separator"></div>
+                <button class="b3-button b3-button--outline project-sort-btn" title="${i18n("projectSorting")}">
                     <svg class="b3-button__icon"><use xlink:href="#iconSort"></use></svg>
-                    项目排序
                 </button>
-                <button class="b3-button b3-button--outline filter-btn" title="筛选">
+                <button class="b3-button b3-button--outline filter-btn" title="${i18n("eisenhowerFilter")}">
                     <svg class="b3-button__icon"><use xlink:href="#iconFilter"></use></svg>
-                    筛选
                 </button>
-                <button class="b3-button b3-button--outline settings-btn" title="设置">
+                <button class="b3-button b3-button--outline settings-btn" title="${i18n("eisenhowerSettingsBtn")}">
                     <svg class="b3-button__icon"><use xlink:href="#iconSettings"></use></svg>
-                    设置
                 </button>
                 <button class="b3-button b3-button--outline refresh-btn" title="${i18n("refresh")}">
                     <svg class="b3-button__icon"><use xlink:href="#iconRefresh"></use></svg>
-                    ${i18n("refresh")}
                 </button>
             </div>
         `;
@@ -1779,7 +1776,7 @@ export class EisenhowerMatrixView {
                 await saveReminders(this.plugin, reminderData);
 
                 await this.refresh();
-                showMessage(`任务及其子任务已移动到${this.getQuadrantDisplayName(newQuadrant)}`);
+                showMessage(i18n('taskMovedToQuadrant').replace('${quadrant}', this.getQuadrantDisplayName(newQuadrant)));
             }
         } catch (error) {
             console.error('移动任务失败:', error);
@@ -1861,7 +1858,7 @@ export class EisenhowerMatrixView {
             const originalReminder = reminderData[task.originalId!];
 
             if (!originalReminder) {
-                showMessage("原始重复事件不存在");
+                showMessage(i18n('originalRepeatEventNotExist'));
                 return;
             }
 
@@ -1918,7 +1915,7 @@ export class EisenhowerMatrixView {
             window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.viewId } }));
         } catch (error) {
             console.error('切换重复实例完成状态失败:', error);
-            showMessage('操作失败，请重试');
+            showMessage(i18n('operationFailed'));
         }
     }
 
@@ -2035,7 +2032,7 @@ export class EisenhowerMatrixView {
 
             if (completedCount > 0) {
                 console.log(`父任务 ${parentId} 完成时，自动完成了 ${completedCount} 个子任务`);
-                showMessage(`已自动完成 ${completedCount} 个子任务`, 2000);
+                showMessage(i18n('autoCompleteSubtasks').replace('${count}', completedCount.toString()), 2000);
             }
         } catch (error) {
             console.error('自动完成子任务失败:', error);
@@ -2111,7 +2108,7 @@ export class EisenhowerMatrixView {
                     await this.deleteTaskByBlockId(blockId);
                 },
                 () => {
-                    showMessage('打开笔记失败');
+                    showMessage(i18n('openNoteFailed'));
                 }
             );
         }
@@ -2132,14 +2129,14 @@ export class EisenhowerMatrixView {
             if (taskFound) {
                 await saveReminders(this.plugin, reminderData);
                 window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.viewId } }));
-                showMessage('相关任务记录已删除');
+                showMessage(i18n('reminderDeleted'));
                 await this.refresh();
             } else {
-                showMessage('任务记录不存在');
+                showMessage(i18n('reminderNotExist'));
             }
         } catch (error) {
             console.error('删除任务记录失败:', error);
-            showMessage('删除任务记录失败');
+            showMessage(i18n('deleteReminderFailed'));
         }
     }
 
@@ -2159,8 +2156,8 @@ export class EisenhowerMatrixView {
         const menu = new Menu();
 
         menu.addItem({
-            label: i18n('edit'),
-            icon: 'iconEdit',
+            label: i18n('editTask'),
+            iconHTML: '📝',
             click: () => {
                 this.showTaskEditDialog(task);
             }
@@ -2202,12 +2199,16 @@ export class EisenhowerMatrixView {
                 if (originalReminder) {
                     taskData = originalReminder;
                 } else {
-                    showMessage("原始周期事件不存在");
+                    showMessage(i18n('originalRepeatTaskNotFound'));
+                    return;
+                }
+                if (task.isSubscribed) {
+                    showMessage(i18n('subscribedTaskReadonly'));
                     return;
                 }
             } catch (error) {
                 console.error('加载原始任务失败:', error);
-                showMessage("加载任务数据失败");
+                showMessage(i18n('loadTaskDataFailed'));
                 return;
             }
         }
@@ -2250,7 +2251,7 @@ export class EisenhowerMatrixView {
         if (task.projectId) {
             const currentProject = this.projectManager.getProjectById(task.projectId);
             menu.addItem({
-                label: `当前: ${currentProject?.name || i18n('noProject')}`,
+                label: `${i18n('current')}: ${currentProject?.name || i18n('noProject')}`,
                 disabled: true
             });
             menu.addSeparator();
@@ -2262,7 +2263,7 @@ export class EisenhowerMatrixView {
             icon: task.projectId ? 'iconRemove' : 'iconCheck',
             click: async () => {
                 await this.updateTaskProject(task.id, null);
-                showMessage('项目已更新');
+                showMessage(i18n('projectUpdated'));
             }
         });
 
@@ -2278,7 +2279,7 @@ export class EisenhowerMatrixView {
                 click: async () => {
                     if (!isCurrent) {
                         await this.updateTaskProject(task.id, project.id);
-                        showMessage('项目已更新');
+                        showMessage(i18n('projectUpdated'));
                     }
                 }
             });
@@ -2294,7 +2295,7 @@ export class EisenhowerMatrixView {
                 if (projectName) {
                     // 注意：这里需要根据实际的 ProjectManager API 调整
                     // const project = await this.projectManager.createProject(projectName);
-                    showMessage('创建项目功能需要实现');
+                    showMessage(i18n('featureNotImplemented'));
                     return;
                 }
             }
@@ -2308,14 +2309,14 @@ export class EisenhowerMatrixView {
             // 使用openProjectKanbanTab打开项目看板
             const project = this.projectManager.getProjectById(projectId);
             if (!project) {
-                showMessage("项目不存在");
+                showMessage(i18n('projectNotExist'));
                 return;
             }
 
             this.plugin.openProjectKanbanTab(project.id, project.name);
         } catch (error) {
             console.error('打开项目看板失败:', error);
-            showMessage("打开项目看板失败");
+            showMessage(i18n('openProjectKanbanFailed'));
         }
     }
 
@@ -2440,7 +2441,7 @@ export class EisenhowerMatrixView {
             }
 
             .quadrant-header {
-                padding: 8px 12px;
+                padding: 0px 12px;
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
@@ -2630,7 +2631,7 @@ export class EisenhowerMatrixView {
             }
             
             .filter-checkboxes {
-                max-height: 150px;
+                max-height: 300px;
                 overflow-y: auto;
                 border: 1px solid var(--b3-theme-border);
                 border-radius: 4px;
@@ -3020,13 +3021,13 @@ export class EisenhowerMatrixView {
             if (task.blockId) {
                 menu.addItem({
                     iconHTML: "🔗",
-                    label: "打开绑定块",
+                    label: i18n("openBoundBlock"),
                     click: () => this.openTaskBlock(task.blockId!)
                 });
 
                 menu.addItem({
                     iconHTML: "📋",
-                    label: "复制块引用",
+                    label: i18n("copyBlockRef"),
                     click: () => this.copyBlockRef(task)
                 });
             }
@@ -3034,13 +3035,13 @@ export class EisenhowerMatrixView {
             // 番茄钟功能对订阅任务仍然可用
             menu.addItem({
                 iconHTML: "🍅",
-                label: "开始番茄钟",
+                label: i18n("startPomodoro"),
                 click: () => this.startPomodoro(task)
             });
 
             menu.addItem({
                 iconHTML: "⏱️",
-                label: "开始正计时",
+                label: i18n("startCountUp"),
                 click: () => this.startPomodoroCountUp(task)
             });
 
@@ -3052,26 +3053,26 @@ export class EisenhowerMatrixView {
             // 周期事件（包括实例和原始事件） - 显示修改此实例和修改所有实例
             menu.addItem({
                 iconHTML: "📝",
-                label: "修改此实例",
+                label: i18n("modifyThisInstance"),
                 click: () => this.editInstanceReminder(task)
             });
             menu.addItem({
                 iconHTML: "🔄",
-                label: "修改所有实例",
+                label: i18n("modifyAllInstances"),
                 click: () => this.showTaskEditDialog(task)
             });
         } else {
             // 普通任务
             menu.addItem({
-                label: i18n('edit'),
-                icon: 'iconEdit',
+                label: i18n('editTask'),
+                iconHTML: "📝",
                 click: () => this.showTaskEditDialog(task)
             });
         }
         // 创建子任务选项
         menu.addItem({
             iconHTML: "➕",
-            label: "创建子任务",
+            label: i18n("createSubtask"),
             click: () => this.showCreateTaskDialog(task.quadrant, task)
         });
         menu.addSeparator();
@@ -3080,25 +3081,20 @@ export class EisenhowerMatrixView {
         if (task.blockId) {
             menu.addItem({
                 iconHTML: "🔗",
-                label: "打开绑定块",
+                label: i18n("openBoundBlock"),
                 click: () => this.openTaskBlock(task.blockId!)
             });
 
             menu.addItem({
                 iconHTML: "📋",
-                label: "复制块引用",
+                label: i18n("copyBlockRef"),
                 click: () => this.copyBlockRef(task)
             });
 
-            menu.addItem({
-                iconHTML: "🔓",
-                label: "解除绑定",
-                click: () => this.unbindTaskFromBlock(task.blockId!)
-            });
         } else {
             menu.addItem({
                 iconHTML: "🔗",
-                label: "绑定到块",
+                label: i18n("bindToBlock"),
                 click: () => this.showBindToBlockDialog(task)
             });
         }
@@ -3108,10 +3104,10 @@ export class EisenhowerMatrixView {
         // 设置优先级子菜单
         const createPriorityMenuItems = () => {
             const priorities = [
-                { key: 'high', label: i18n("highPriority") || '高', icon: '🔴' },
-                { key: 'medium', label: i18n("mediumPriority") || '中', icon: '🟡' },
-                { key: 'low', label: i18n("lowPriority") || '低', icon: '🔵' },
-                { key: 'none', label: i18n("noPriority") || '无', icon: '⚫' }
+                { key: 'high', label: i18n("highPriority"), icon: '🔴' },
+                { key: 'medium', label: i18n("mediumPriority"), icon: '🟡' },
+                { key: 'low', label: i18n("lowPriority"), icon: '🔵' },
+                { key: 'none', label: i18n("noPriority"), icon: '⚫' }
             ];
 
             const currentPriority = task.priority || 'none';
@@ -3128,7 +3124,7 @@ export class EisenhowerMatrixView {
 
         menu.addItem({
             iconHTML: "🎯",
-            label: i18n("setPriority") || "设置优先级",
+            label: i18n("setPriority"),
             submenu: createPriorityMenuItems()
         });
 
@@ -3141,9 +3137,9 @@ export class EisenhowerMatrixView {
                 icon: string;
                 kanbanStatus: string;
             }> = [
-                    { key: 'doing', label: '进行中', icon: '⏳', kanbanStatus: 'doing' },
-                    { key: 'short_term', label: '短期', icon: '📋', kanbanStatus: 'short_term' },
-                    { key: 'long_term', label: '长期', icon: '🤔', kanbanStatus: 'long_term' }
+                    { key: 'doing', label: i18n('doing'), icon: '⏳', kanbanStatus: 'doing' },
+                    { key: 'short_term', label: i18n('shortTerm'), icon: '📋', kanbanStatus: 'short_term' },
+                    { key: 'long_term', label: i18n('longTerm'), icon: '🤔', kanbanStatus: 'long_term' }
                 ];
 
             const currentKanbanStatus = task.extendedProps?.kanbanStatus || 'short_term';
@@ -3164,22 +3160,21 @@ export class EisenhowerMatrixView {
 
         menu.addItem({
             iconHTML: "📊",
-            label: "设置状态",
+            label: i18n("setStatus"),
             submenu: createKanbanStatusMenuItems()
         });
 
         menu.addSeparator();
 
-        // 番茄钟功能
         menu.addItem({
             iconHTML: "🍅",
-            label: "开始番茄钟",
+            label: i18n("startPomodoro"),
             click: () => this.startPomodoro(task)
         });
 
         menu.addItem({
             iconHTML: "⏱️",
-            label: "开始正计时",
+            label: i18n("startStopwatch"),
             click: () => this.startPomodoroCountUp(task)
         });
 
@@ -3193,12 +3188,12 @@ export class EisenhowerMatrixView {
             // 周期事件（包括实例和原始事件） - 显示删除此实例和删除所有实例
             menu.addItem({
                 iconHTML: "🗑️",
-                label: "删除此实例",
+                label: i18n("deleteThisInstance"),
                 click: () => this.deleteInstanceOnly(task)
             });
             menu.addItem({
                 iconHTML: "🗑️",
-                label: "删除所有实例",
+                label: i18n('deleteAllInstances'),
                 click: async () => await this.deleteTask(task)
             });
         } else {
@@ -3292,10 +3287,10 @@ export class EisenhowerMatrixView {
     private async removeTaskFromProject(task: QuadrantTask) {
         try {
             await this.updateTaskProject(task.id, null);
-            showMessage('已从项目中移除');
+            showMessage(i18n('removedFromProject'));
         } catch (error) {
             console.error('移除项目失败:', error);
-            showMessage('操作失败，请重试');
+            showMessage(i18n('operationFailedRetry'));
         }
     }
 
@@ -3330,13 +3325,13 @@ export class EisenhowerMatrixView {
 
                 await this.refresh();
                 window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.viewId } }));
-                showMessage(i18n("priorityUpdated") || "优先级更新成功");
+                showMessage(i18n("priorityUpdated"));
             } else {
-                showMessage(i18n("taskNotExist") || "任务不存在");
+                showMessage(i18n("taskNotExist"));
             }
         } catch (error) {
             console.error('设置任务优先级失败:', error);
-            showMessage(i18n("setPriorityFailed") || "操作失败");
+            showMessage(i18n("setPriorityFailed"));
         }
     }
 
@@ -3352,13 +3347,13 @@ export class EisenhowerMatrixView {
 
                 await this.refresh();
                 window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.viewId } }));
-                showMessage(i18n("statusUpdated") || "状态更新成功");
+                showMessage(i18n('statusUpdated'));
             } else {
-                showMessage(i18n("taskNotExist") || "任务不存在");
+                showMessage(i18n('taskNotExist'));
             }
         } catch (error) {
             console.error('设置任务看板状态失败:', error);
-            showMessage(i18n("setStatusFailed") || "操作失败");
+            showMessage(i18n('statusSwitchFailed'));
         }
     }
 
@@ -3374,11 +3369,11 @@ export class EisenhowerMatrixView {
 
             // 注意：这里需要根据实际的 ProjectManager API 调整
             // const project = await this.projectManager.createProject(projectName);
-            showMessage('创建项目功能需要实现');
+                    showMessage(i18n('featureNotImplemented'));
             return;
         } catch (error) {
             console.error('创建项目并分配失败:', error);
-            showMessage('操作失败，请重试');
+            showMessage(i18n('operationFailed'));
         }
     }
 
@@ -3391,14 +3386,15 @@ export class EisenhowerMatrixView {
         const childTasks = this.allTasks.filter(t => t.parentId === taskToDelete.id);
         const hasChildren = childTasks.length > 0;
 
-        let title = '删除提醒';
-        let content = task.isRepeatInstance ?
-            '确定要删除周期任务 "${title}" 的所有实例吗？\n\n此操作不可撤销。' :
-            '确定要删除任务 "${title}" 吗？\n\n此操作不可撤销。';
+        let title;
+        let content;
 
-        if (hasChildren) {
-            title = '删除任务及子任务';
-            content = '确定要删除任务 "${title}" 及其 ${count} 个子任务吗？\n\n此操作不可撤销。';
+        if (childTasks.length === 0) {
+            title = i18n('delete');
+            content = i18n('confirmDeleteTask');
+        } else {
+            title = i18n('deleteTaskAndSubtasks');
+            content = i18n('confirmDeleteTaskWithSubtasks');
         }
 
         content = content
@@ -3413,7 +3409,7 @@ export class EisenhowerMatrixView {
                     const reminderData = await getAllReminders(this.plugin);
                     if (!reminderData) {
                         console.warn('No reminder data found');
-                        showMessage('任务数据不存在');
+                        showMessage(i18n('reminderDataNotExist'));
                         return;
                     }
 
@@ -3449,13 +3445,13 @@ export class EisenhowerMatrixView {
                         window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.viewId } }));
 
                         if (deletedCount > 1) {
-                            showMessage(`已删除 ${deletedCount} 个任务（包括子任务）`);
+                            showMessage(i18n('deletedTasksWithSubtasks').replace('${count}', deletedCount.toString()));
                         } else {
                             showMessage(i18n('reminderDeleted'));
                         }
                     } else {
                         console.warn('No tasks found to delete');
-                        showMessage('任务不存在或已被删除');
+                        showMessage(i18n('taskNotExistOrDeleted'));
                     }
                 } catch (error) {
                     console.error('删除任务失败:', error);
@@ -3583,7 +3579,7 @@ export class EisenhowerMatrixView {
             }
         } catch (error) {
             console.error('重新排序任务失败:', error);
-            showMessage('排序更新失败');
+            showMessage(i18n('sortUpdateFailed'));
         }
     }
 
@@ -3987,7 +3983,7 @@ export class EisenhowerMatrixView {
 
         await saveReminders(this.plugin, reminderData);
         window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.viewId } }));
-        showMessage(`优先级已自动调整为: ${this.getPriorityLabel(newPriority)}`);
+        showMessage(i18n('priorityAutoAdjusted').replace('${priority}', this.getPriorityLabel(newPriority)));
         await this.refresh();
     }
 
@@ -4073,7 +4069,7 @@ export class EisenhowerMatrixView {
 
         await saveReminders(this.plugin, reminderData);
         window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.viewId } }));
-        showMessage(`优先级已自动调整为: ${this.getPriorityLabel(newPriority)}`);
+        showMessage(i18n('priorityAutoAdjusted').replace('${priority}', this.getPriorityLabel(newPriority)));
         await this.refresh();
     }
 
@@ -4490,7 +4486,7 @@ export class EisenhowerMatrixView {
             await this.saveProjectSortOrder();
             dialog.destroy();
             await this.refresh();
-            showMessage('项目排序已更新');
+            showMessage(i18n('projectSortUpdated'));
         });
     }
 
@@ -4511,36 +4507,36 @@ export class EisenhowerMatrixView {
 
     private showSettingsDialog() {
         const dialog = new Dialog({
-            title: "四象限条件设置",
+            title: i18n('eisenhowerSettings'),
             content: `
                 <div class="settings-dialog">
                     <div class="b3-dialog__content">
                         <div class="b3-form__group">
-                            <label class="b3-form__label">重要性阈值</label>
+                            <label class="b3-form__label">${i18n('importanceThreshold')}</label>
                             <div class="importance-selector">
                                 <label class="b3-form__radio">
                                     <input type="radio" name="importanceThreshold" value="high" ${this.criteriaSettings.importanceThreshold === 'high' ? 'checked' : ''}>
-                                    <span>高优先级</span>
+                                    <span>${i18n('priorityHigh')}</span>
                                 </label>
                                 <label class="b3-form__radio">
                                     <input type="radio" name="importanceThreshold" value="medium" ${this.criteriaSettings.importanceThreshold === 'medium' ? 'checked' : ''}>
-                                    <span>中优先级</span>
+                                    <span>${i18n('priorityMedium')}</span>
                                 </label>
                                 <label class="b3-form__radio">
                                     <input type="radio" name="importanceThreshold" value="low" ${this.criteriaSettings.importanceThreshold === 'low' ? 'checked' : ''}>
-                                    <span>低优先级</span>
+                                    <span>${i18n('priorityLow')}</span>
                                 </label>
                             </div>
                         </div>
                         <div class="b3-form__group">
-                            <label class="b3-form__label">紧急性阈值（天数）</label>
+                            <label class="b3-form__label">${i18n('urgencyThreshold')}</label>
                             <input type="number" id="urgencyDays" class="b3-text-field" value="${this.criteriaSettings.urgencyDays}" min="1" max="30">
-                            <div class="b3-form__help">任务截止日期在多少天内视为紧急</div>
+                            <div class="b3-form__help">${i18n('urgencyThresholdDesc')}</div>
                         </div>
                     </div>
                     <div class="b3-dialog__action">
-                        <button class="b3-button b3-button--cancel" id="settingsCancelBtn">取消</button>
-                        <button class="b3-button b3-button--primary" id="settingsSaveBtn">保存</button>
+                        <button class="b3-button b3-button--cancel" id="settingsCancelBtn">${i18n('cancel')}</button>
+                        <button class="b3-button b3-button--primary" id="settingsSaveBtn">${i18n('save')}</button>
                     </div>
                 </div>
             `,
@@ -4560,7 +4556,7 @@ export class EisenhowerMatrixView {
         saveBtn.addEventListener('click', async () => {
             const urgencyDays = parseInt(urgencyDaysInput.value);
             if (isNaN(urgencyDays) || urgencyDays < 1 || urgencyDays > 30) {
-                showMessage('请输入有效的天数（1-30）');
+                showMessage(i18n('invalidUrgencyDays'));
                 return;
             }
 
@@ -4575,7 +4571,7 @@ export class EisenhowerMatrixView {
             dialog.destroy();
 
             await this.refresh();
-            showMessage('设置已保存');
+            showMessage(i18n('settingsSaved'));
         });
     }
 
@@ -4595,9 +4591,9 @@ export class EisenhowerMatrixView {
                         </div>
                     </div>
                     <div class="b3-dialog__action">
-                        <button class="b3-button b3-button--cancel" id="filterCancelBtn">取消</button>
-                        <button class="b3-button" id="filterResetBtn">重置</button>
-                        <button class="b3-button b3-button--primary" id="filterApplyBtn">应用</button>
+                        <button class="b3-button b3-button--cancel" id="filterCancelBtn">${i18n('cancel')}</button>
+                        <button class="b3-button" id="filterResetBtn">${i18n('eisenhowerResetBtn')}</button>
+                        <button class="b3-button b3-button--primary" id="filterApplyBtn">${i18n('eisenhowerApplyBtn')}</button>
                     </div>
                 </div>
             `,
@@ -4619,7 +4615,7 @@ export class EisenhowerMatrixView {
             const allStatuses = statusManager.getStatuses();
 
             // 添加"无项目"选项
-            const noProjectCheckbox = this.createCheckbox('no-project', '无项目', this.statusFilter.has('no-project'));
+            const noProjectCheckbox = this.createCheckbox('no-project', i18n('noProject'), this.statusFilter.has('no-project'));
             statusFiltersEl.appendChild(noProjectCheckbox);
 
             // 添加项目状态选项
@@ -4638,7 +4634,7 @@ export class EisenhowerMatrixView {
             });
 
             // 添加"无项目"选项
-            const noProjectCheckbox = this.createCheckbox('no-project', '无项目', this.projectFilter.has('no-project'));
+            const noProjectCheckbox = this.createCheckbox('no-project', i18n('noProject'), this.projectFilter.has('no-project'));
             projectFiltersEl.appendChild(noProjectCheckbox);
 
             // 按状态分组显示项目
@@ -4715,7 +4711,7 @@ export class EisenhowerMatrixView {
             this.renderMatrix();
 
             dialog.destroy();
-            showMessage("筛选已应用");
+            showMessage(i18n('eisenhowerFilterApplied'));
         });
     }
 
@@ -4845,7 +4841,7 @@ export class EisenhowerMatrixView {
 
     private startPomodoro(task: QuadrantTask) {
         if (!this.plugin) {
-            showMessage('插件实例不可用');
+            showMessage(i18n('pluginInstanceUnavailable'));
             return;
         }
 
@@ -4868,7 +4864,7 @@ export class EisenhowerMatrixView {
 
     private startPomodoroCountUp(task: QuadrantTask) {
         if (!this.plugin) {
-            showMessage('插件实例不可用');
+            showMessage(i18n('pluginInstanceUnavailable'));
             return;
         }
 
@@ -4912,8 +4908,8 @@ export class EisenhowerMatrixView {
 
                 // 如果继承了状态且原来正在运行，显示继承信息
                 if (inheritState && inheritState.isRunning && !inheritState.isPaused) {
-                    const phaseText = inheritState.isWorkPhase ? '工作时间' : '休息时间';
-                    showMessage(`已切换任务并继承${phaseText}进度`, 2000);
+                    const phaseText = inheritState.isWorkPhase ? i18n('workTime') : i18n('breakTime');
+                    showMessage(i18n('taskSwitchedInherit').replace('${phase}', phaseText), 2000);
                 }
             }
         } else {
@@ -4936,8 +4932,8 @@ export class EisenhowerMatrixView {
 
             // 如果继承了状态且原来正在运行，显示继承信息
             if (inheritState && inheritState.isRunning && !inheritState.isPaused) {
-                const phaseText = inheritState.isWorkPhase ? '工作时间' : '休息时间';
-                showMessage(`已切换任务并继承${phaseText}进度`, 2000);
+                const phaseText = inheritState.isWorkPhase ? i18n('workTime') : i18n('breakTime');
+                showMessage(i18n('taskSwitchedInherit').replace('${phase}', phaseText), 2000);
             }
         }
     }
@@ -4965,10 +4961,10 @@ export class EisenhowerMatrixView {
 
                 // 如果继承了状态且原来正在运行，显示继承信息
                 if (inheritState && inheritState.isRunning && !inheritState.isPaused) {
-                    const phaseText = inheritState.isWorkPhase ? '工作时间' : '休息时间';
-                    showMessage(`已切换到正计时模式并继承${phaseText}进度`, 2000);
+                    const phaseText = inheritState.isWorkPhase ? i18n('workTime') : i18n('breakTime');
+                    showMessage(i18n('stopwatchSwitchedInherit').replace('${phase}', phaseText), 2000);
                 } else {
-                    showMessage("已启动正计时番茄钟", 2000);
+                    showMessage(i18n('stopwatchStarted'), 2000);
                 }
             }
         } else {
@@ -4991,10 +4987,10 @@ export class EisenhowerMatrixView {
 
             // 如果继承了状态且原来正在运行，显示继承信息
             if (inheritState && inheritState.isRunning && !inheritState.isPaused) {
-                const phaseText = inheritState.isWorkPhase ? '工作时间' : '休息时间';
-                showMessage(`已切换到正计时模式并继承${phaseText}进度`, 2000);
+                const phaseText = inheritState.isWorkPhase ? i18n('workTime') : i18n('breakTime');
+                showMessage(i18n('stopwatchSwitchedInherit').replace('${phase}', phaseText), 2000);
             } else {
-                showMessage("已启动正计时番茄钟", 2000);
+                showMessage(i18n('stopwatchStarted'), 2000);
             }
         }
     }
@@ -5003,16 +4999,16 @@ export class EisenhowerMatrixView {
     private async copyBlockRef(task: QuadrantTask) {
         try {
             if (!task.blockId) {
-                showMessage('任务未绑定到块');
+                showMessage(i18n('taskNotBoundToBlock'));
                 return;
             }
 
             const blockRef = `((${task.blockId} '${task.title}'))`;
             await navigator.clipboard.writeText(blockRef);
-            showMessage('已复制块引用到剪贴板');
+            showMessage(i18n('copiedBlockRef'));
         } catch (error) {
             console.error('复制块引用失败:', error);
-            showMessage('复制失败，请重试');
+            showMessage(i18n('copyFailed'));
         }
     }
 
@@ -5021,10 +5017,10 @@ export class EisenhowerMatrixView {
         const blockBindingDialog = new BlockBindingDialog(this.plugin, async (blockId: string) => {
             try {
                 await this.bindTaskToBlock(task, blockId);
-                showMessage('绑定成功');
+                showMessage(i18n('bindSuccess'));
             } catch (error) {
                 console.error('绑定失败:', error);
-                showMessage('绑定失败，请重试');
+                showMessage(i18n('bindToBlockFailed'));
             }
         }, {
             defaultTab: 'bind',
@@ -5063,34 +5059,6 @@ export class EisenhowerMatrixView {
         }
     }
 
-    /**
-     * 解除任务与块的绑定
-     * @param blockId 块ID
-     */
-    private async unbindTaskFromBlock(blockId: string) {
-        try {
-            const reminderData = await getAllReminders(this.plugin);
-            let taskFound = false;
-
-            for (const [, reminder] of Object.entries(reminderData as any)) {
-                if (reminder && typeof reminder === 'object' && (reminder as any).blockId === blockId) {
-                    delete (reminder as any).blockId;
-                    taskFound = true;
-                    break;
-                }
-            }
-
-            if (taskFound) {
-                await saveReminders(this.plugin, reminderData);
-                await this.refresh();
-                window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.viewId } }));
-                showMessage('已解除绑定');
-            }
-        } catch (error) {
-            console.error('解除绑定失败:', error);
-            showMessage('操作失败，请重试');
-        }
-    }
 
     /**
      * 编辑周期任务的单个实例
@@ -5101,7 +5069,7 @@ export class EisenhowerMatrixView {
             const originalReminder = reminderData[task.originalId!];
 
             if (!originalReminder) {
-                showMessage("原始周期事件不存在");
+                showMessage(i18n('originalRepeatEventNotExist'));
                 return;
             }
 
@@ -5146,7 +5114,7 @@ export class EisenhowerMatrixView {
             editDialog.show();
         } catch (error) {
             console.error('打开实例编辑对话框失败:', error);
-            showMessage("打开编辑对话框失败");
+            showMessage(i18n('openModifyDialogFailed'));
         }
     }
 
@@ -5155,8 +5123,8 @@ export class EisenhowerMatrixView {
      */
     private async deleteInstanceOnly(task: QuadrantTask) {
         confirm(
-            "删除此实例",
-            `确定要删除周期任务 "${task.title}" 在 ${task.date} 的实例吗？`,
+            i18n('deleteThisInstance'),
+            i18n('confirmDeleteInstanceOnDateMsg').replace('${title}', task.title).replace('${date}', task.date),
             async () => {
                 try {
                     const originalId = task.originalId!;
@@ -5164,12 +5132,12 @@ export class EisenhowerMatrixView {
 
                     await this.addExcludedDate(originalId, instanceDate);
 
-                    showMessage("实例已删除");
+                    showMessage(i18n('instanceDeleted'));
                     await this.loadTasks();
                     window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.viewId } }));
                 } catch (error) {
                     console.error('删除周期实例失败:', error);
-                    showMessage("删除实例失败");
+                    showMessage(i18n('deleteInstanceFailed'));
                 }
             }
         );
