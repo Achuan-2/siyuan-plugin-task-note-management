@@ -163,7 +163,7 @@ export class TaskStatsView {
                         <div class="card-content">
                             <div class="card-title">${i18n("todayTask")}</div>
                             <div class="card-value">${this.formatTime(todayTime)}</div>
-                            <div class="card-subtitle">${this.getTodayTaskCount()}个任务</div>
+                            <div class="card-subtitle">${this.getTodayTaskCount()}${i18n("taskCountUnit")}</div>
                         </div>
                     </div>
                     
@@ -172,7 +172,7 @@ export class TaskStatsView {
                         <div class="card-content">
                             <div class="card-title">${i18n("weekTask")}</div>
                             <div class="card-value">${this.formatTime(weekTime)}</div>
-                            <div class="card-subtitle">${this.getWeekTaskCount()}个任务</div>
+                            <div class="card-subtitle">${this.getWeekTaskCount()}${i18n("taskCountUnit")}</div>
                         </div>
                     </div>
                     
@@ -181,7 +181,7 @@ export class TaskStatsView {
                         <div class="card-content">
                             <div class="card-title">${i18n("totalTask")}</div>
                             <div class="card-value">${this.formatTime(totalTime)}</div>
-                            <div class="card-subtitle">${this.getTotalTaskCount()}个任务</div>
+                            <div class="card-subtitle">${this.getTotalTaskCount()}${i18n("taskCountUnit")}</div>
                         </div>
                     </div>
                 </div>
@@ -747,9 +747,11 @@ export class TaskStatsView {
 
     private getYearlyTrendsData(): Array<{ label: string, value: number }> {
         const data = [];
-        const months = ['1\u6708', '2\u6708', '3\u6708', '4\u6708', '5\u6708', '6\u6708', '7\u6708', '8\u6708', '9\u6708', '10\u6708', '11\u6708', '12\u6708'];
         const range = this.getYearRange(this.currentYearOffset);
         const year = parseInt(range.start.split('-')[0], 10);
+        const months = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m =>
+            new Date(year, m - 1, 1).toLocaleDateString(getLocaleTag(), { month: 'short' })
+        );
 
         months.forEach((month, index) => {
             let monthlyTime = 0;
@@ -884,7 +886,7 @@ export class TaskStatsView {
 
                     sessions.push({
                         type: 'task',
-                        title: `${hour}:00-${hour + 1}:00 平均任务 ${avgDuration.toFixed(1)}分钟`,
+                        title: `${hour}:00-${hour + 1}:00 ${i18n("avgTaskHourTitle", { hour: `${hour}:00-${hour + 1}:00`, duration: avgDuration.toFixed(1) })}`,
                         duration: Math.round(avgDuration),
                         startPercent,
                         widthPercent
@@ -895,7 +897,7 @@ export class TaskStatsView {
 
         const monthName = targetDate.toLocaleDateString(getLocaleTag(), { year: 'numeric', month: 'long' });
         return {
-            date: `${monthName}平均分布`,
+            date: `${monthName}${i18n("avgDistribution")}`,
             sessions
         };
     }
@@ -957,7 +959,7 @@ export class TaskStatsView {
 
                     sessions.push({
                         type: 'task',
-                        title: `${hour}:00-${hour + 1}:00 平均任务 ${avgDuration.toFixed(1)}分钟`,
+                        title: `${hour}:00-${hour + 1}:00 ${i18n("avgTaskHourTitle", { hour: `${hour}:00-${hour + 1}:00`, duration: avgDuration.toFixed(1) })}`,
                         duration: Math.round(avgDuration),
                         startPercent,
                         widthPercent
@@ -967,7 +969,7 @@ export class TaskStatsView {
         }
 
         return {
-            date: `${year}年平均分布`,
+            date: `${i18n("yearText", { year: year.toString() })}${i18n("avgDistribution")}`,
             sessions
         };
     }
@@ -1163,7 +1165,7 @@ export class TaskStatsView {
             case 'today':
                 const targetDate = new Date(today);
                 targetDate.setDate(today.getDate() + this.currentWeekOffset); // 复用weekOffset作为日偏移
-                return `${targetDate.toLocaleDateString(getLocaleTag(), { year: 'numeric', month: 'long', day: 'numeric' })}（逻辑日）`;
+                return targetDate.toLocaleDateString(getLocaleTag(), { year: 'numeric', month: 'long', day: 'numeric' });
 
             case 'week':
                 const startOfWeek = new Date(today);
@@ -1174,15 +1176,15 @@ export class TaskStatsView {
                 const endOfWeek = new Date(startOfWeek);
                 endOfWeek.setDate(startOfWeek.getDate() + 6);
 
-                return `${startOfWeek.toLocaleDateString(getLocaleTag(), { month: 'short', day: 'numeric' })} - ${endOfWeek.toLocaleDateString(getLocaleTag(), { month: 'short', day: 'numeric' })}（逻辑日）`;
+                return `${startOfWeek.toLocaleDateString(getLocaleTag(), { month: 'short', day: 'numeric' })} - ${endOfWeek.toLocaleDateString(getLocaleTag(), { month: 'short', day: 'numeric' })}`;
 
             case 'month':
                 const targetMonth = new Date(today.getFullYear(), today.getMonth() + this.currentMonthOffset, 1);
-                return `${targetMonth.toLocaleDateString(getLocaleTag(), { year: 'numeric', month: 'long' })}（逻辑日）`;
+                return targetMonth.toLocaleDateString(getLocaleTag(), { year: 'numeric', month: 'long' });
 
             case 'year':
                 const targetYear = today.getFullYear() + this.currentYearOffset;
-                return `${targetYear}年`;
+                return i18n("yearText", { year: targetYear.toString() });
 
             default:
                 return '';
@@ -1246,9 +1248,9 @@ export class TaskStatsView {
                                     <span style="display: inline-block; width: 10px; height: 10px; background-color: ${params.color}; border-radius: 50%; margin-right: 8px;"></span>
                                     <strong>${params.name}</strong>
                                 </div>
-                                <div style="margin-bottom: 2px;">任务时间: ${timeStr}</div>
-                                <div style="margin-bottom: 2px;">完成任务: ${countStr}个</div>
-                                <div>占比: ${percentage}%</div>
+                                <div style="margin-bottom: 2px;">${i18n("taskTimeColon")}${timeStr}</div>
+                                <div style="margin-bottom: 2px;">${i18n("completedTaskCountColon")}${countStr}${i18n("taskCountUnit")}</div>
+                                <div>${i18n("proportionOf")}${percentage}%</div>
                             </div>
                         `;
                     }
@@ -1363,7 +1365,7 @@ export class TaskStatsView {
             // 配置选项 - GitHub风格热力图
             const option = {
                 title: {
-                    text: `${this.currentYear}年任务时间热力图`,
+                    text: `${this.currentYear}${i18n("year")}${i18n("taskTime")}${i18n("yearlyHeatmap")}`,
                     left: 'center',
                     top: 10,
                     textStyle: {
@@ -1382,10 +1384,10 @@ export class TaskStatsView {
                         });
                         const time = params.data[1];
                         if (time === 0) {
-                            return `${dateStr}<br/>无任务记录`;
+                            return `${dateStr}<br/>${i18n("noTaskRecord")}`;
                         }
                         const timeStr = this.formatTime(time);
-                        return `${dateStr}<br/>任务时间: ${timeStr}`;
+                        return `${dateStr}<br/>${i18n("taskTimeColon")}${timeStr}`;
                     }
                 },
                 visualMap: {
@@ -1483,7 +1485,7 @@ export class TaskStatsView {
             const series = [];
 
             // 检查是否是平均分布数据（只有一行数据且包含"平均分布"）
-            const isAverageData = timelineData.length === 1 && timelineData[0].date.includes('平均分布');
+            const isAverageData = timelineData.length === 1 && timelineData[0].date.includes(i18n("avgDistribution"));
 
             if (isAverageData) {
                 // 平均分布数据的处理
@@ -1506,7 +1508,7 @@ export class TaskStatsView {
 
                 if (data.length > 0) {
                     series.push({
-                        name: '平均任务时间',
+                        name: i18n("avgTaskLabel"),
                         type: 'custom',
                         renderItem: (params, api) => {
                             const start = api.value(0);
@@ -1543,7 +1545,7 @@ export class TaskStatsView {
                                 const title = params.value[3];
                                 const startTime = this.formatTimelineHour(params.value[0]);
 
-                                return `${title}<br/>时间段: ${startTime}<br/>平均时长: ${duration}分钟`;
+                                return `${title}<br/>${i18n("timeSegmentColon")}${startTime}<br/>${i18n("avgDurationColon")}${duration}${i18n("minutes")}`;
                             }
                         }
                     });
@@ -1552,7 +1554,7 @@ export class TaskStatsView {
                 // 原有的多天数据处理逻辑
                 const sessionTypes = ['task'];
                 const typeNames = {
-                    'task': '\u4efb\u52a1\u65f6\u95f4'
+                    'task': i18n("taskTime")
                 };
                 const typeColors = {
                     'task': '#4CAF50'
@@ -1612,7 +1614,7 @@ export class TaskStatsView {
                                     const title = params.value[3];
                                     const startTime = this.formatTimelineHour(params.value[0]);
 
-                                    return `${title}<br/>开始时间: ${startTime}<br/>持续时间: ${duration}分钟`;
+                                    return `${title}<br/>${i18n("startTimeColon")}${startTime}<br/>${i18n("durationColon")}${duration}${i18n("minutes")}`;
                                 }
                             }
                         });
@@ -1622,8 +1624,8 @@ export class TaskStatsView {
 
             // 配置选项
             const chartTitle = isAverageData ?
-                (timelineData[0].date.includes('\u6708') ? '\u6708\u5ea6\u5e73\u5747\u4efb\u52a1\u65f6\u95f4\u5206\u5e03' : '\u5e74\u5ea6\u5e73\u5747\u4efb\u52a1\u65f6\u95f4\u5206\u5e03') :
-                '任务时间线';
+                (timelineData[0].date.includes(i18n("months")) ? i18n("monthAvgTaskDistrib") : i18n("yearAvgTaskDistrib")) :
+                i18n("taskTimeline");
 
             const option = {
                 title: {
@@ -1655,13 +1657,13 @@ export class TaskStatsView {
                             return this.formatTimelineHour(value);
                         }
                     },
-                    name: '时间',
+                    name: i18n("xAxisTimeLabel"),
                     nameLocation: 'middle',
                     nameGap: 30
                 },
                 yAxis: {
                     type: 'category',
-                    data: isAverageData ? [timelineData[0].date.replace('平均分布', '')] : dates,
+                    data: isAverageData ? [timelineData[0].date.replace(i18n("avgDistribution"), '')] : dates,
                     name: '',
                     nameLocation: 'middle',
                     nameGap: 50,

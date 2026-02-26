@@ -162,7 +162,7 @@ export class PomodoroStatsView {
                         <div class="card-content">
                             <div class="card-title">${i18n("todayFocus")}</div>
                             <div class="card-value">${this.recordManager.formatTime(todayTime)}</div>
-                            <div class="card-subtitle">${this.getTodayPomodoroCount()}个番茄钟</div>
+                            <div class="card-subtitle">${this.getTodayPomodoroCount()}${i18n("pomodoroCountUnit")}</div>
                         </div>
                     </div>
                     
@@ -171,7 +171,7 @@ export class PomodoroStatsView {
                         <div class="card-content">
                             <div class="card-title">${i18n("weekFocus")}</div>
                             <div class="card-value">${this.recordManager.formatTime(weekTime)}</div>
-                            <div class="card-subtitle">${this.getWeekPomodoroCount()}个番茄钟</div>
+                            <div class="card-subtitle">${this.getWeekPomodoroCount()}${i18n("pomodoroCountUnit")}</div>
                         </div>
                     </div>
                     
@@ -180,7 +180,7 @@ export class PomodoroStatsView {
                         <div class="card-content">
                             <div class="card-title">${i18n("totalFocus")}</div>
                             <div class="card-value">${this.recordManager.formatTime(totalTime)}</div>
-                            <div class="card-subtitle">${this.getTotalPomodoroCount()}个番茄钟</div>
+                            <div class="card-subtitle">${this.getTotalPomodoroCount()}${i18n("pomodoroCountUnit")}</div>
                         </div>
                     </div>
                 </div>
@@ -746,9 +746,11 @@ export class PomodoroStatsView {
     private getYearlyTrendsData(): Array<{ label: string, value: number }> {
         // 实现年度趋势数据获取
         const data = [];
-        const months = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
         const today = new Date(`${getLogicalDateString()}T00:00:00`);
         const targetYear = today.getFullYear() + this.currentYearOffset;
+        const months = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m =>
+            new Date(targetYear, m - 1, 1).toLocaleDateString(getLocaleTag(), { month: 'short' })
+        );
 
         months.forEach((month, index) => {
             let monthlyTime = 0;
@@ -902,7 +904,7 @@ export class PomodoroStatsView {
 
                     sessions.push({
                         type: 'work',
-                        title: `${hour}:00-${hour + 1}:00 平均专注 ${avgDuration.toFixed(1)}分钟`,
+                        title: `${hour}:00-${hour + 1}:00 ${i18n("avgFocusHourTitle", { hour: `${hour}:00-${hour + 1}:00`, duration: avgDuration.toFixed(1) })}`,
                         duration: Math.round(avgDuration),
                         startPercent,
                         widthPercent
@@ -913,7 +915,7 @@ export class PomodoroStatsView {
 
         const monthName = targetDate.toLocaleDateString(getLocaleTag(), { year: 'numeric', month: 'long' });
         return {
-            date: `${monthName}平均分布`,
+            date: `${monthName}${i18n("avgDistribution")}`,
             sessions
         };
     }
@@ -981,7 +983,7 @@ export class PomodoroStatsView {
 
                     sessions.push({
                         type: 'work',
-                        title: `${hour}:00-${hour + 1}:00 平均专注 ${avgDuration.toFixed(1)}分钟`,
+                        title: `${hour}:00-${hour + 1}:00 ${i18n("avgFocusHourTitle", { hour: `${hour}:00-${hour + 1}:00`, duration: avgDuration.toFixed(1) })}`,
                         duration: Math.round(avgDuration),
                         startPercent,
                         widthPercent
@@ -991,7 +993,7 @@ export class PomodoroStatsView {
         }
 
         return {
-            date: `${targetYear}年平均分布`,
+            date: `${i18n("yearText", { year: targetYear.toString() })}${i18n("avgDistribution")}`,
             sessions
         };
     }
@@ -1037,7 +1039,7 @@ export class PomodoroStatsView {
             case 'today':
                 const targetDate = new Date(today);
                 targetDate.setDate(today.getDate() + this.currentWeekOffset); // 复用weekOffset作为日偏移
-                return `${targetDate.toLocaleDateString(getLocaleTag(), { year: 'numeric', month: 'long', day: 'numeric' })}（逻辑日）`;
+                return targetDate.toLocaleDateString(getLocaleTag(), { year: 'numeric', month: 'long', day: 'numeric' });
 
             case 'week':
                 const startOfWeek = new Date(today);
@@ -1048,15 +1050,15 @@ export class PomodoroStatsView {
                 const endOfWeek = new Date(startOfWeek);
                 endOfWeek.setDate(startOfWeek.getDate() + 6);
 
-                return `${startOfWeek.toLocaleDateString(getLocaleTag(), { month: 'short', day: 'numeric' })} - ${endOfWeek.toLocaleDateString(getLocaleTag(), { month: 'short', day: 'numeric' })}（逻辑日）`;
+                return `${startOfWeek.toLocaleDateString(getLocaleTag(), { month: 'short', day: 'numeric' })} - ${endOfWeek.toLocaleDateString(getLocaleTag(), { month: 'short', day: 'numeric' })}`;
 
             case 'month':
                 const targetMonth = new Date(today.getFullYear(), today.getMonth() + this.currentMonthOffset, 1);
-                return `${targetMonth.toLocaleDateString(getLocaleTag(), { year: 'numeric', month: 'long' })}（逻辑日）`;
+                return targetMonth.toLocaleDateString(getLocaleTag(), { year: 'numeric', month: 'long' });
 
             case 'year':
                 const targetYear = today.getFullYear() + this.currentYearOffset;
-                return `${targetYear}年`;
+                return i18n("yearText", { year: targetYear.toString() });
 
             default:
                 return '';
@@ -1119,9 +1121,9 @@ export class PomodoroStatsView {
                                     <span style="display: inline-block; width: 10px; height: 10px; background-color: ${params.color}; border-radius: 50%; margin-right: 8px;"></span>
                                     <strong>${params.name}</strong>
                                 </div>
-                                <div style="margin-bottom: 2px;">专注时间: ${timeStr}</div>
-                                <div style="margin-bottom: 2px;">完成番茄钟: ${countStr}个</div>
-                                <div>占比: ${percentage}%</div>
+                                <div style="margin-bottom: 2px;">${i18n("focusTimeColon")}${timeStr}</div>
+                                <div style="margin-bottom: 2px;">${i18n("completedPomodoroCountColon")}${countStr}${i18n("pomodoroCountUnit")}</div>
+                                <div>${i18n("proportionOf")}${percentage}%</div>
                             </div>
                         `;
                     }
@@ -1236,7 +1238,7 @@ export class PomodoroStatsView {
             // 配置选项 - GitHub风格热力图
             const option = {
                 title: {
-                    text: `${this.currentYear}年专注时间热力图`,
+                    text: `${this.currentYear}${i18n("year")}${i18n("focusTime")}${i18n("yearlyHeatmap")}`,
                     left: 'center',
                     top: 10,
                     textStyle: {
@@ -1255,10 +1257,10 @@ export class PomodoroStatsView {
                         });
                         const time = params.data[1];
                         if (time === 0) {
-                            return `${dateStr}<br/>无专注记录`;
+                            return `${dateStr}<br/>${i18n("noFocusRecord")}`;
                         }
                         const timeStr = this.recordManager.formatTime(time);
-                        return `${dateStr}<br/>专注时间: ${timeStr}`;
+                        return `${dateStr}<br/>${i18n("focusTimeColon")}${timeStr}`;
                     }
                 },
                 visualMap: {
@@ -1356,7 +1358,7 @@ export class PomodoroStatsView {
             const series = [];
 
             // 检查是否是平均分布数据（只有一行数据且包含"平均分布"）
-            const isAverageData = timelineData.length === 1 && timelineData[0].date.includes('平均分布');
+            const isAverageData = timelineData.length === 1 && timelineData[0].date.includes(i18n("avgDistribution"));
 
             if (isAverageData) {
                 // 平均分布数据的处理
@@ -1379,7 +1381,7 @@ export class PomodoroStatsView {
 
                 if (data.length > 0) {
                     series.push({
-                        name: '平均专注时间',
+                        name: i18n("avgFocusLabel"),
                         type: 'custom',
                         renderItem: (params, api) => {
                             const start = api.value(0);
@@ -1416,7 +1418,7 @@ export class PomodoroStatsView {
                                 const title = params.value[3];
                                 const startTime = this.formatTimelineHour(params.value[0]);
 
-                                return `${title}<br/>时间段: ${startTime}<br/>平均时长: ${duration}分钟`;
+                                return `${title}<br/>${i18n("timeSegmentColon")}${startTime}<br/>${i18n("avgDurationColon")}${duration}${i18n("minutes")}`;
                             }
                         }
                     });
@@ -1425,9 +1427,9 @@ export class PomodoroStatsView {
                 // 原有的多天数据处理逻辑
                 const sessionTypes = ['work', 'shortBreak', 'longBreak'];
                 const typeNames = {
-                    'work': '专注时间',
-                    'shortBreak': '短休息',
-                    'longBreak': '长休息'
+                    'work': i18n("pomodoroWork"),
+                    'shortBreak': i18n("pomodoroBreak"),
+                    'longBreak': i18n("pomodoroLongBreak")
                 };
                 const typeColors = {
                     'work': '#FF6B6B',
@@ -1489,7 +1491,7 @@ export class PomodoroStatsView {
                                     const title = params.value[3];
                                     const startTime = this.formatTimelineHour(params.value[0]);
 
-                                    return `${title}<br/>开始时间: ${startTime}<br/>持续时间: ${duration}分钟`;
+                                    return `${title}<br/>${i18n("startTimeColon")}${startTime}<br/>${i18n("durationColon")}${duration}${i18n("minutes")}`;
                                 }
                             }
                         });
@@ -1499,8 +1501,8 @@ export class PomodoroStatsView {
 
             // 配置选项
             const chartTitle = isAverageData ?
-                (timelineData[0].date.includes('月') ? '月度平均专注时间分布' : '年度平均专注时间分布') :
-                '专注时间线';
+                (timelineData[0].date.includes(i18n("months")) ? i18n("monthAvgFocusDistrib") : i18n("yearAvgFocusDistrib")) :
+                i18n("focusTimeline");
 
             const option = {
                 title: {
@@ -1532,13 +1534,13 @@ export class PomodoroStatsView {
                             return this.formatTimelineHour(value);
                         }
                     },
-                    name: '时间',
+                    name: i18n("xAxisTimeLabel"),
                     nameLocation: 'middle',
                     nameGap: 30
                 },
                 yAxis: {
                     type: 'category',
-                    data: isAverageData ? [timelineData[0].date.replace('平均分布', '')] : dates,
+                    data: isAverageData ? [timelineData[0].date.replace(i18n("avgDistribution"), '')] : dates,
                     name: '',
                     nameLocation: 'middle',
                     nameGap: 50,
@@ -1660,8 +1662,8 @@ export class PomodoroStatsView {
     private showDeleteConfirmation(): Promise<boolean> {
         return new Promise((resolve) => {
             confirm(
-                "删除番茄记录",
-                "确定要删除此记录吗？此操作无法撤销",
+                i18n("deleteRecordTitle"),
+                i18n("deleteRecordConfirm"),
                 () => {
                     resolve(true);
                 },
