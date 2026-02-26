@@ -6,7 +6,7 @@ import { TaskStatsView } from "./TaskStatsView";
 import { getBlockByID, openBlock } from "../api";
 import { PROJECT_KANBAN_TAB_TYPE } from "../index";
 import { ProjectManager } from "../utils/projectManager";
-import { compareDateStrings, getLogicalDateString } from "../utils/dateUtils";
+import { compareDateStrings, getLogicalDateString, getLocaleTag } from "../utils/dateUtils";
 import { CategoryManager } from "../utils/categoryManager";
 import { StatusManager } from "../utils/statusManager";
 import { ProjectDialog } from "./ProjectDialog";
@@ -645,7 +645,7 @@ export class ProjectPanel {
     private compareByTitle(a: any, b: any): number {
         const titleA = (a.title || '').toLowerCase();
         const titleB = (b.title || '').toLowerCase();
-        return titleA.localeCompare(titleB, 'zh-CN');
+        return titleA.localeCompare(titleB, getLocaleTag());
     }
 
     private renderProjects(projects: any[]) {
@@ -1519,7 +1519,7 @@ export class ProjectPanel {
 
         if (startDate) {
             const start = new Date(startDate + 'T00:00:00');
-            const startStr = start.toLocaleDateString('zh-CN', {
+            const startStr = start.toLocaleDateString(getLocaleTag(), {
                 month: 'short',
                 day: 'numeric'
             });
@@ -1528,7 +1528,7 @@ export class ProjectPanel {
 
         if (endDate) {
             const end = new Date(endDate + 'T00:00:00');
-            const endStr = end.toLocaleDateString('zh-CN', {
+            const endStr = end.toLocaleDateString(getLocaleTag(), {
                 month: 'short',
                 day: 'numeric'
             });
@@ -1820,11 +1820,11 @@ export class ProjectPanel {
                                 const sa = (projectData[a.id] && typeof projectData[a.id].sort === 'number') ? projectData[a.id].sort : 0;
                                 const sb = (projectData[b.id] && typeof projectData[b.id].sort === 'number') ? projectData[b.id].sort : 0;
                                 if (sa !== sb) return sa - sb;
-                                return (a.name || '').localeCompare(b.name || '', 'zh-CN');
+                                return (a.name || '').localeCompare(b.name || '', getLocaleTag());
                             });
                         } catch (e) {
                             // fallback to name sort
-                            nonArchivedProjects.sort((a: any, b: any) => (a.name || '').localeCompare(b.name || '', 'zh-CN'));
+                            nonArchivedProjects.sort((a: any, b: any) => (a.name || '').localeCompare(b.name || '', getLocaleTag()));
                         }
 
                         const statusInfo = this.statusManager.getStatusById(statusKey);

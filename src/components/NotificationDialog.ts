@@ -1,6 +1,6 @@
 import { i18n } from "../pluginInstance";
 import { openTab } from "siyuan";
-import { getLogicalDateString } from "../utils/dateUtils";
+import { getLogicalDateString, getLocaleTag } from "../utils/dateUtils";
 import { openBlock } from "../api"
 
 interface ReminderInfo {
@@ -200,7 +200,7 @@ export class NotificationDialog {
                     </div>
                     <div class="notification-title-container">
                         <div class="notification-title">今日事件 (${reminders.length})</div>
-                        <div class="notification-time">${new Date().toLocaleDateString('zh-CN')}</div>
+                        <div class="notification-time">${new Date().toLocaleDateString(getLocaleTag())}</div>
                     </div>
                     <button class="notification-close" aria-label="${i18n('close')}">
                         <svg><use xlink:href="#iconClose"></use></svg>

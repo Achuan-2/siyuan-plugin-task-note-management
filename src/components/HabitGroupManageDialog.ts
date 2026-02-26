@@ -1,6 +1,7 @@
 import { Dialog, showMessage } from "siyuan";
 import { HabitGroupManager, HabitGroup } from "../utils/habitGroupManager";
 import { confirm } from "siyuan";
+import { getLocaleTag } from "../utils/dateUtils";
 export class HabitGroupManageDialog {
     private dialog: Dialog;
     private groupManager: HabitGroupManager;
@@ -146,7 +147,7 @@ export class HabitGroupManageDialog {
         name.style.cssText = 'font-weight: bold; margin-bottom: 4px;';
 
         const meta = document.createElement('div');
-        meta.textContent = `创建于: ${new Date(group.createdAt).toLocaleDateString()}`;
+        meta.textContent = `创建于: ${new Date(group.createdAt).toLocaleDateString(getLocaleTag())}`;
         meta.style.cssText = 'font-size: 12px; color: var(--b3-theme-on-surface-light);';
 
         info.appendChild(name);

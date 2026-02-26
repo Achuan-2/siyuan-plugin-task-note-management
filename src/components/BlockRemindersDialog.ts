@@ -1,6 +1,7 @@
 import { Dialog, showMessage, confirm } from "siyuan";
 import { getBlockByID, updateBindBlockAtrrs, getBlockReminderIds } from "../api";
 // import { getLocalDateTimeString, getRelativeDateString } from "../utils/dateUtils";
+import { getLocaleTag } from "../utils/dateUtils";
 import { CategoryManager } from "../utils/categoryManager";
 import { ProjectManager } from "../utils/projectManager";
 
@@ -576,13 +577,13 @@ export class BlockRemindersDialog {
         const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
 
         if (diffDays === 0) {
-            return `今天 ${completed.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`;
+            return `今天 ${completed.toLocaleTimeString(getLocaleTag(), { hour: '2-digit', minute: '2-digit' })}`;
         } else if (diffDays === 1) {
-            return `昨天 ${completed.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`;
+            return `昨天 ${completed.toLocaleTimeString(getLocaleTag(), { hour: '2-digit', minute: '2-digit' })}`;
         } else if (diffDays <= 7) {
-            return `${diffDays}天前 ${completed.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`;
+            return `${diffDays}天前 ${completed.toLocaleTimeString(getLocaleTag(), { hour: '2-digit', minute: '2-digit' })}`;
         } else {
-            return completed.toLocaleDateString('zh-CN');
+            return completed.toLocaleDateString(getLocaleTag());
         }
     }
 

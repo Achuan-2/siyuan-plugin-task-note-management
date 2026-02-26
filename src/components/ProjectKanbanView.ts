@@ -2,7 +2,7 @@ import { showMessage, confirm, Menu, Dialog, Constants } from "siyuan";
 
 import { refreshSql, getBlockByID, updateBindBlockAtrrs, openBlock, addBlockProjectId } from "../api";
 import { i18n } from "../pluginInstance";
-import { getLocalDateString, getLocalDateTimeString, compareDateStrings, getLogicalDateString, getRelativeDateString } from "../utils/dateUtils";
+import { getLocalDateString, getLocalDateTimeString, compareDateStrings, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../utils/dateUtils";
 import { CategoryManager } from "../utils/categoryManager";
 import { ProjectManager } from "../utils/projectManager";
 import { PomodoroTimer } from "./PomodoroTimer";
@@ -9720,8 +9720,8 @@ export class ProjectKanbanView {
         const formatDateWithYear = (date: Date): string => {
             const year = date.getFullYear();
             return year !== currentYear
-                ? date.toLocaleDateString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric' })
-                : date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+                ? date.toLocaleDateString(getLocaleTag(), { year: 'numeric', month: 'short', day: 'numeric' })
+                : date.toLocaleDateString(getLocaleTag(), { month: 'short', day: 'numeric' });
         };
 
         // 辅助函数：计算过期天数

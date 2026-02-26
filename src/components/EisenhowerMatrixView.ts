@@ -8,7 +8,7 @@ import { PomodoroTimer } from "./PomodoroTimer";
 import { PomodoroManager } from "../utils/pomodoroManager";
 import { showMessage, confirm, Menu, Dialog } from "siyuan";
 import { i18n } from "../pluginInstance";
-import { getLocalDateTimeString, getLocalDateString, compareDateStrings, getLogicalDateString } from "../utils/dateUtils";
+import { getLocalDateTimeString, getLocalDateString, compareDateStrings, getLogicalDateString, getLocaleTag } from "../utils/dateUtils";
 import { getSolarDateLunarString } from "../utils/lunarUtils";
 import { generateRepeatInstances, getRepeatDescription, generateSubtreeInstances } from "../utils/repeatUtils";
 interface QuadrantTask {
@@ -1229,8 +1229,8 @@ export class EisenhowerMatrixView {
                 const date = new Date(dateStr);
                 const year = date.getFullYear();
                 return year !== currentYear
-                    ? date.toLocaleDateString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric' })
-                    : date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+                    ? date.toLocaleDateString(getLocaleTag(), { year: 'numeric', month: 'short', day: 'numeric' })
+                    : date.toLocaleDateString(getLocaleTag(), { month: 'short', day: 'numeric' });
             };
 
             // 辅助函数：计算过期天数

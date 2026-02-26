@@ -6,7 +6,7 @@ import listPlugin from '@fullcalendar/list';
 import interactionPlugin from '@fullcalendar/interaction';
 import { showMessage, confirm, openTab, Menu, Dialog, Constants } from "siyuan";
 import { refreshSql, getBlockByID, sql, updateBlock, getBlockKramdown, updateBindBlockAtrrs, openBlock } from "../api";
-import { getLocalDateString, getLocalDateTime, getLocalDateTimeString, compareDateStrings, getLogicalDateString, getRelativeDateString, getDayStartAdjustedDate } from "../utils/dateUtils";
+import { getLocalDateString, getLocalDateTime, getLocalDateTimeString, compareDateStrings, getLogicalDateString, getRelativeDateString, getDayStartAdjustedDate, getLocaleTag } from "../utils/dateUtils";
 import { QuickReminderDialog } from "./QuickReminderDialog";
 import { CategoryManager, Category } from "../utils/categoryManager";
 import { confirmDialog } from "../libs/dialog";
@@ -6208,8 +6208,8 @@ export class CalendarView {
 
             // Time & Duration
             if (calendarEvent.start && calendarEvent.end) {
-                const startTime = calendarEvent.start.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-                const endTime = calendarEvent.end.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+                const startTime = calendarEvent.start.toLocaleTimeString(getLocaleTag(), { hour: '2-digit', minute: '2-digit' });
+                const endTime = calendarEvent.end.toLocaleTimeString(getLocaleTag(), { hour: '2-digit', minute: '2-digit' });
                 htmlParts.push(
                     `<div style="color: var(--b3-theme-on-surface); margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">`,
                     `<span style="opacity: 0.7;">🕐</span>`,
@@ -6445,7 +6445,7 @@ export class CalendarView {
             const completedDate = new Date(completedTime);
             const completedDateStr = getLocalDateString(completedDate);
 
-            const timeStr = completedDate.toLocaleTimeString('zh-CN', {
+            const timeStr = completedDate.toLocaleTimeString(getLocaleTag(), {
                 hour: '2-digit',
                 minute: '2-digit'
             });
@@ -6455,7 +6455,7 @@ export class CalendarView {
             } else if (completedDateStr === yesterdayStr) {
                 return `${i18n("completedYesterday")} ${timeStr}`;
             } else {
-                const dateStr = completedDate.toLocaleDateString('zh-CN', {
+                const dateStr = completedDate.toLocaleDateString(getLocaleTag(), {
                     month: 'short',
                     day: 'numeric'
                 });
@@ -6491,7 +6491,7 @@ export class CalendarView {
             } else {
                 const reminderDate = new Date(startDate + 'T00:00:00');
 
-                dateStr = reminderDate.toLocaleDateString('zh-CN', {
+                dateStr = reminderDate.toLocaleDateString(getLocaleTag(), {
                     year: 'numeric',
                     month: 'short',
                     day: 'numeric',
@@ -6508,7 +6508,7 @@ export class CalendarView {
                     endDateStr = i18n("tomorrow");
                 } else {
                     const endReminderDate = new Date(endDate + 'T00:00:00');
-                    endDateStr = endReminderDate.toLocaleDateString('zh-CN', {
+                    endDateStr = endReminderDate.toLocaleDateString(getLocaleTag(), {
                         year: 'numeric',
                         month: 'short',
                         day: 'numeric',
@@ -6528,9 +6528,9 @@ export class CalendarView {
             // 只有结束日期（没有开始日期）的情况，显示为 "截止: 日期"
             if (endDate && !reminder.date) {
                 if (reminder.endTime) {
-                    return `${i18n("deadline") || '截止'}: ${dateStr} ${reminder.endTime}`;
+                    return `${i18n("deadline")}: ${dateStr} ${reminder.endTime}`;
                 } else {
-                    return `${i18n("deadline") || '截止'}: ${dateStr}`;
+                    return `${i18n("deadline")}: ${dateStr}`;
                 }
             }
 
@@ -7531,7 +7531,7 @@ export class CalendarView {
 
             const reminderData = await getAllReminders(this.plugin);
             const dateStr = getLocalDateString(startDate);
-            const timeStr = isAllDay ? "" : startDate.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+            const timeStr = isAllDay ? "" : startDate.toLocaleTimeString(getLocaleTag(), { hour: '2-digit', minute: '2-digit', hour12: false });
 
             const reminderId = window.Lute?.NewNodeID?.() || `reminder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
             let title = block.content || i18n('unnamedNote') || '未命名任务';

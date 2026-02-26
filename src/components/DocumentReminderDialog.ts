@@ -1,6 +1,6 @@
 import { Dialog, showMessage, confirm } from "siyuan";
 import { updateBindBlockAtrrs, sql, getBlockByID, openBlock } from "../api";
-import { getLocalDateString, compareDateStrings, getLocalDateTimeString, getLogicalDateString, getRelativeDateString } from "../utils/dateUtils";
+import { getLocalDateString, compareDateStrings, getLocalDateTimeString, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../utils/dateUtils";
 import { CategoryManager } from "../utils/categoryManager";
 import { QuickReminderDialog } from "./QuickReminderDialog";
 import { generateRepeatInstances, getRepeatDescription } from "../utils/repeatUtils";
@@ -844,7 +844,7 @@ export class DocumentReminderDialog {
             dateStr = i18n("tomorrow");
         } else {
             const reminderDate = new Date(date + 'T00:00:00');
-            dateStr = reminderDate.toLocaleDateString('zh-CN', {
+            dateStr = reminderDate.toLocaleDateString(getLocaleTag(), {
                 month: 'short',
                 day: 'numeric'
             });
@@ -859,7 +859,7 @@ export class DocumentReminderDialog {
                 endDateStr = i18n("tomorrow");
             } else {
                 const endReminderDate = new Date(endDate + 'T00:00:00');
-                endDateStr = endReminderDate.toLocaleDateString('zh-CN', {
+                endDateStr = endReminderDate.toLocaleDateString(getLocaleTag(), {
                     month: 'short',
                     day: 'numeric'
                 });
@@ -880,7 +880,7 @@ export class DocumentReminderDialog {
             const completedDate = new Date(completedTime);
             const completedDateStr = getLocalDateString(completedDate);
 
-            const timeStr = completedDate.toLocaleTimeString('zh-CN', {
+            const timeStr = completedDate.toLocaleTimeString(getLocaleTag(), {
                 hour: '2-digit',
                 minute: '2-digit'
             });
@@ -890,7 +890,7 @@ export class DocumentReminderDialog {
             } else if (completedDateStr === yesterdayStr) {
                 return `${i18n("completedYesterday")} ${timeStr}`;
             } else {
-                const dateStr = completedDate.toLocaleDateString('zh-CN', {
+                const dateStr = completedDate.toLocaleDateString(getLocaleTag(), {
                     month: 'short',
                     day: 'numeric'
                 });

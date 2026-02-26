@@ -3,7 +3,7 @@ import { showMessage } from "siyuan";
 import { confirm } from "siyuan";
 import { PomodoroRecordManager } from "../utils/pomodoroRecord";
 import { i18n } from "../pluginInstance";
-import { compareDateStrings, getLocalDateString, getLogicalDateString, getDayStartMinutes } from "../utils/dateUtils";
+import { compareDateStrings, getLocalDateString, getLogicalDateString, getDayStartMinutes, getLocaleTag } from "../utils/dateUtils";
 import { getFile } from "../api";
 import { generateRepeatInstances } from "../utils/repeatUtils";
 import { setLastStatsMode } from "./PomodoroStatsView";
@@ -423,9 +423,9 @@ export class TaskStatsView {
 
     private renderSessionRecord(session: TaskSession): string {
         const dateForDisplay = new Date(`${session.date}T00:00:00`);
-        const dateStr = dateForDisplay.toLocaleDateString('zh-CN');
+        const dateStr = dateForDisplay.toLocaleDateString(getLocaleTag());
         const timeStr = session.startTime
-            ? new Date(session.startTime).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+            ? new Date(session.startTime).toLocaleTimeString(getLocaleTag(), { hour: '2-digit', minute: '2-digit' })
             : i18n("allDayReminder") || "\u5168\u5929";
 
         return `
@@ -602,7 +602,7 @@ export class TaskStatsView {
                 .reduce((sum, s) => sum + s.duration, 0);
 
             data.push({
-                label: i === 0 ? i18n("today") : date.toLocaleDateString('zh-CN', { weekday: 'short' }),
+                label: i === 0 ? i18n("today") : date.toLocaleDateString(getLocaleTag(), { weekday: 'short' }),
                 value
             });
         }
@@ -715,7 +715,7 @@ export class TaskStatsView {
                 .reduce((sum, s) => sum + s.duration, 0);
 
             data.push({
-                label: date.toLocaleDateString('zh-CN', { weekday: 'short' }),
+                label: date.toLocaleDateString(getLocaleTag(), { weekday: 'short' }),
                 value
             });
         }
@@ -824,7 +824,7 @@ export class TaskStatsView {
         });
 
         return {
-            date: date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }),
+            date: date.toLocaleDateString(getLocaleTag(), { month: 'short', day: 'numeric' }),
             sessions: timelineSessions
         };
     }
@@ -893,7 +893,7 @@ export class TaskStatsView {
             }
         }
 
-        const monthName = targetDate.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long' });
+        const monthName = targetDate.toLocaleDateString(getLocaleTag(), { year: 'numeric', month: 'long' });
         return {
             date: `${monthName}平均分布`,
             sessions
@@ -1163,7 +1163,7 @@ export class TaskStatsView {
             case 'today':
                 const targetDate = new Date(today);
                 targetDate.setDate(today.getDate() + this.currentWeekOffset); // 复用weekOffset作为日偏移
-                return `${targetDate.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}（逻辑日）`;
+                return `${targetDate.toLocaleDateString(getLocaleTag(), { year: 'numeric', month: 'long', day: 'numeric' })}（逻辑日）`;
 
             case 'week':
                 const startOfWeek = new Date(today);
@@ -1174,11 +1174,11 @@ export class TaskStatsView {
                 const endOfWeek = new Date(startOfWeek);
                 endOfWeek.setDate(startOfWeek.getDate() + 6);
 
-                return `${startOfWeek.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })} - ${endOfWeek.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}（逻辑日）`;
+                return `${startOfWeek.toLocaleDateString(getLocaleTag(), { month: 'short', day: 'numeric' })} - ${endOfWeek.toLocaleDateString(getLocaleTag(), { month: 'short', day: 'numeric' })}（逻辑日）`;
 
             case 'month':
                 const targetMonth = new Date(today.getFullYear(), today.getMonth() + this.currentMonthOffset, 1);
-                return `${targetMonth.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long' })}（逻辑日）`;
+                return `${targetMonth.toLocaleDateString(getLocaleTag(), { year: 'numeric', month: 'long' })}（逻辑日）`;
 
             case 'year':
                 const targetYear = today.getFullYear() + this.currentYearOffset;
@@ -1375,7 +1375,7 @@ export class TaskStatsView {
                     trigger: 'item',
                     formatter: (params: any) => {
                         const date = new Date(params.data[0]);
-                        const dateStr = date.toLocaleDateString('zh-CN', {
+                        const dateStr = date.toLocaleDateString(getLocaleTag(), {
                             year: 'numeric',
                             month: 'long',
                             day: 'numeric'
