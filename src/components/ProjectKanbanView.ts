@@ -5363,13 +5363,37 @@ export class ProjectKanbanView {
                     // 'tomorrow': logical date is tomorrow.
 
                     const logicalDate = this.getTaskLogicalDate(t.date, t.time);
+                    // 获取任务的结束日期（逻辑日期，考虑时间因素）
+                    const logicalEndDate = t.endDate ? this.getTaskLogicalDate(t.endDate, t.endTime) : null;
 
                     if (this.selectedDateFilters.has('today')) {
-                        if (t.date && compareDateStrings(logicalDate, today) === 0) return true;
+                        // 检查今天是否在任务的日期范围内
+                        if (t.date) {
+                            // 有结束日期：检查今天是否在 [开始日期, 结束日期] 范围内
+                            if (logicalEndDate) {
+                                if (compareDateStrings(today, logicalDate) >= 0 && compareDateStrings(today, logicalEndDate) <= 0) {
+                                    return true;
+                                }
+                            } else {
+                                // 无结束日期：只匹配开始日期为今天的任务
+                                if (compareDateStrings(logicalDate, today) === 0) return true;
+                            }
+                        }
                     }
 
                     if (this.selectedDateFilters.has('tomorrow')) {
-                        if (t.date && compareDateStrings(logicalDate, tomorrow) === 0) return true;
+                        // 检查明天是否在任务的日期范围内
+                        if (t.date) {
+                            // 有结束日期：检查明天是否在 [开始日期, 结束日期] 范围内
+                            if (logicalEndDate) {
+                                if (compareDateStrings(tomorrow, logicalDate) >= 0 && compareDateStrings(tomorrow, logicalEndDate) <= 0) {
+                                    return true;
+                                }
+                            } else {
+                                // 无结束日期：只匹配开始日期为明天的任务
+                                if (compareDateStrings(logicalDate, tomorrow) === 0) return true;
+                            }
+                        }
                     }
 
 
