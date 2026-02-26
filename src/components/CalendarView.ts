@@ -1005,7 +1005,7 @@ export class CalendarView {
         statusLabel.style.padding = '4px 12px';
         statusLabel.style.fontSize = '0.9em';
         statusLabel.style.color = 'var(--b3-theme-on-surface-light)';
-        statusLabel.innerText = "任务状态过滤";
+        statusLabel.innerText = i18n("taskStatusFilter");
         displaySettingsDropdown.appendChild(statusLabel);
 
         const statusGroup = document.createElement('div');
@@ -1284,7 +1284,7 @@ export class CalendarView {
             nowIndicator: true, // 显示当前时间指示线
             snapDuration: '00:05:00', // 设置吸附间隔为5分钟
             slotDuration: '00:15:00', // 设置默认时间间隔为15分钟
-            allDayText: '全天', // 设置全天事件的文本
+            allDayText: i18n("allDay"), // 置全天事件的文本
             slotLabelFormat: {
                 hour: '2-digit',
                 minute: '2-digit',
@@ -1756,7 +1756,7 @@ export class CalendarView {
                     var dateStr = dateEl.getAttribute('data-date') || '';
                 }
                 if (!dateStr) {
-                    showMessage('无法识别放置位置，请放到日历的日期或时间格上。');
+                    showMessage(i18n("dropToCalendarFailed"));
                     return;
                 }
 
@@ -2037,13 +2037,13 @@ export class CalendarView {
                         container.appendChild(statusHeader);
 
                         statusProjects.forEach(project => {
-                            container.appendChild(createCheckboxItem(project.id, project.title || '未命名项目'));
+                            container.appendChild(createCheckboxItem(project.id, project.title || i18n("unnamedProject")));
                         });
                     }
                 });
             }
         } catch (error) {
-            console.error('渲染项目筛选器失败:', error);
+            console.error(i18n("renderProjectFilterFailed"), error);
         }
     }
 
@@ -2140,7 +2140,7 @@ export class CalendarView {
                 });
             }
         } catch (error) {
-            console.error('渲染分类筛选器失败:', error);
+            console.error(i18n("renderCategoryFilterFailed"), error);
         }
     }
 
@@ -2151,7 +2151,7 @@ export class CalendarView {
         if (this.currentProjectFilter.has('all')) {
             textSpan.textContent = i18n("allProjects") || "全部项目";
         } else if (this.currentProjectFilter.size === 0) {
-            textSpan.textContent = i18n("noProjectSelected") || "未选择项目";
+            textSpan.textContent = i18n("noProjectSelected");
         } else if (this.currentProjectFilter.size === 1) {
             const projectId = Array.from(this.currentProjectFilter)[0];
             if (projectId === 'none') {
@@ -2173,7 +2173,7 @@ export class CalendarView {
         if (this.currentCategoryFilter.has('all')) {
             textSpan.textContent = i18n("allCategories") || "全部分类";
         } else if (this.currentCategoryFilter.size === 0) {
-            textSpan.textContent = i18n("noCategorySelected") || "未选择分类";
+            textSpan.textContent = i18n("noCategorySelected");
         } else if (this.currentCategoryFilter.size === 1) {
             const categoryId = Array.from(this.currentCategoryFilter)[0];
             if (categoryId === 'none') {
@@ -2385,7 +2385,7 @@ export class CalendarView {
         if (calendarEvent.extendedProps.type === 'pomodoro') {
             menu.addItem({
                 iconHTML: "📝",
-                label: i18n("viewPomodoroTask") || "查看所属任务",
+                label: i18n("viewPomodoroTask"),
                 click: async () => {
                     try {
                         let eventId = calendarEvent.extendedProps.eventId;
@@ -2450,7 +2450,7 @@ export class CalendarView {
 
             menu.addItem({
                 iconHTML: "🗑️",
-                label: i18n("deletePomodoroRecord") || "删除记录",
+                label: i18n("deletePomodoroRecord"),
                 click: async () => {
                     confirm(i18n("deletePomodoroRecord"), i18n("confirmDelete"), async () => {
                         const pomodoroManager = this.pomodoroRecordManager;
@@ -2473,7 +2473,7 @@ export class CalendarView {
         if (calendarEvent.extendedProps.isSubscribed) {
             menu.addItem({
                 iconHTML: "ℹ️",
-                label: i18n("subscribedTaskReadOnly") || "订阅任务（只读）",
+                label: i18n("subscribedTaskReadOnly"),
                 disabled: true
             });
 
@@ -2581,7 +2581,7 @@ export class CalendarView {
         // 添加创建子任务选项
         menu.addItem({
             iconHTML: "➕",
-            label: i18n("createSubtask") || "创建子任务",
+            label: i18n("createSubtask"),
             click: () => {
                 this.showCreateSubtaskDialog(calendarEvent);
             }
@@ -2591,7 +2591,7 @@ export class CalendarView {
         if (calendarEvent.extendedProps.parentId) {
             menu.addItem({
                 iconHTML: "👁️‍🗨️",
-                label: i18n("viewParentTask") || "查看父任务",
+                label: i18n("viewParentTask"),
                 click: () => {
                     this.showParentTaskDialog(calendarEvent);
                 }

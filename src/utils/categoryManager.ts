@@ -1,4 +1,4 @@
-
+import { i18n } from '../pluginInstance';
 
 export interface Category {
     id: string;
@@ -10,8 +10,31 @@ export interface Category {
 const DEFAULT_CATEGORIES: Category[] = [
     { id: 'work', name: '工作', color: '#e74c3c', icon: '🎯' },
     { id: 'study', name: '学习', color: '#3498db', icon: '📖' },
-    { id: 'life', name: '娱乐', color: '#27ae60', icon: '☘️' }
+    { id: 'life', name: '生活', color: '#27ae60', icon: '☘️' }
 ];
+
+/**
+ * 获取本地化默认分类
+ */
+function getLocalizedDefaultCategories(): Category[] {
+    return [
+        { id: 'work', name: i18n('work'), color: '#e74c3c', icon: '🎯' },
+        { id: 'study', name: i18n('study'), color: '#3498db', icon: '📖' },
+        { id: 'life', name: i18n('life'), color: '#27ae60', icon: '☘️' }
+    ];
+}
+
+/**
+ * 检查分类名称是否为默认名称
+ */
+function isDefaultCategoryName(id: string, name: string): boolean {
+    const defaultNames: { [key: string]: string[] } = {
+        'work': ['工作', 'Work'],
+        'study': ['学习', 'Study'],
+        'life': ['娱乐', '生活', 'Life']
+    };
+    return defaultNames[id]?.includes(name) || false;
+}
 
 export class CategoryManager {
     private static instance: CategoryManager;
@@ -38,7 +61,7 @@ export class CategoryManager {
         } catch (error) {
             console.error('初始化分类失败:', error);
             // 如果加载失败，使用默认分类
-            this.categories = [...DEFAULT_CATEGORIES];
+            this.categories = getLocalizedDefaultCategories();
             await this.saveCategories();
         }
     }
@@ -51,7 +74,7 @@ export class CategoryManager {
             const content = await this.plugin.loadCategories();
             if (!content) {
                 console.log('分类文件不存在，创建默认分类');
-                this.categories = [...DEFAULT_CATEGORIES];
+                this.categories = getLocalizedDefaultCategories();
                 await this.saveCategories();
                 return this.categories;
             }
@@ -60,15 +83,25 @@ export class CategoryManager {
 
             // 验证加载的数据是否为有效的分类数组
             if (Array.isArray(categoriesData)) {
-                this.categories = categoriesData;
+                const localizedDefaults = getLocalizedDefaultCategories();
+                this.categories = categoriesData.map(category => {
+                    // 如果名称是默认名称，自动更换为 i18n 文本
+                    if (isDefaultCategoryName(category.id, category.name)) {
+                        const defaultCategory = localizedDefaults.find(d => d.id === category.id);
+                        if (defaultCategory) {
+                            return { ...category, name: defaultCategory.name };
+                        }
+                    }
+                    return category;
+                });
             } else {
                 console.log('分类数据无效，使用默认分类');
-                this.categories = [...DEFAULT_CATEGORIES];
+                this.categories = getLocalizedDefaultCategories();
                 await this.saveCategories();
             }
         } catch (error) {
             console.warn('加载分类文件失败，使用默认分类:', error);
-            this.categories = [...DEFAULT_CATEGORIES];
+            this.categories = getLocalizedDefaultCategories();
             await this.saveCategories();
         }
 
@@ -147,7 +180,7 @@ export class CategoryManager {
      * 重置为默认分类
      */
     public async resetToDefault(): Promise<void> {
-        this.categories = [...DEFAULT_CATEGORIES];
+        this.categories = getLocalizedDefaultCategories();
         await this.saveCategories();
     }
 
