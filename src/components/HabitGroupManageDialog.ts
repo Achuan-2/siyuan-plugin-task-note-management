@@ -2,6 +2,7 @@ import { Dialog, showMessage } from "siyuan";
 import { HabitGroupManager, HabitGroup } from "../utils/habitGroupManager";
 import { confirm } from "siyuan";
 import { getLocaleTag } from "../utils/dateUtils";
+import { i18n } from "../pluginInstance";
 export class HabitGroupManageDialog {
     private dialog: Dialog;
     private groupManager: HabitGroupManager;
@@ -14,7 +15,7 @@ export class HabitGroupManageDialog {
 
     show() {
         this.dialog = new Dialog({
-            title: "分组管理",
+            title: i18n("groupManageTitle"),
             content: '<div id="habitGroupManageContainer"></div>',
             width: "600px",
             height: "500px"
@@ -33,7 +34,7 @@ export class HabitGroupManageDialog {
         // 添加新分组按钮
         const addButton = document.createElement('button');
         addButton.className = 'b3-button b3-button--primary';
-        addButton.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg> 新建分组';
+        addButton.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg> ${i18n("habitNewGroup")}`;
         addButton.style.marginBottom = '16px';
         addButton.addEventListener('click', () => this.showAddGroupDialog());
         container.appendChild(addButton);
@@ -45,7 +46,7 @@ export class HabitGroupManageDialog {
         const groups = this.groupManager.getAllGroups();
 
         if (groups.length === 0) {
-            listContainer.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--b3-theme-on-surface-light);">暂无分组</div>';
+            listContainer.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--b3-theme-on-surface-light);">${i18n("noGroups")}</div>`;
         } else {
             groups.forEach(group => {
                 const groupItem = this.createGroupItem(group);
@@ -147,7 +148,7 @@ export class HabitGroupManageDialog {
         name.style.cssText = 'font-weight: bold; margin-bottom: 4px;';
 
         const meta = document.createElement('div');
-        meta.textContent = `创建于: ${new Date(group.createdAt).toLocaleDateString(getLocaleTag())}`;
+        meta.textContent = `${i18n("createdAt")}${new Date(group.createdAt).toLocaleDateString(getLocaleTag())}`;
         meta.style.cssText = 'font-size: 12px; color: var(--b3-theme-on-surface-light);';
 
         info.appendChild(name);
@@ -159,7 +160,7 @@ export class HabitGroupManageDialog {
         const editBtn = document.createElement('button');
         editBtn.className = 'b3-button b3-button--outline';
         editBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconEdit"></use></svg>';
-        editBtn.title = '编辑';
+        editBtn.title = i18n("edit");
         editBtn.addEventListener('click', (e) => {
             e.stopPropagation(); // Prevent drag start
             this.showEditGroupDialog(group);
@@ -168,7 +169,7 @@ export class HabitGroupManageDialog {
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'b3-button b3-button--outline';
         deleteBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconTrashcan"></use></svg>';
-        deleteBtn.title = '删除';
+        deleteBtn.title = i18n("delete");
         deleteBtn.addEventListener('click', (e) => {
             e.stopPropagation(); // Prevent drag start
             this.deleteGroup(group);
@@ -185,16 +186,16 @@ export class HabitGroupManageDialog {
 
     private showAddGroupDialog() {
         const dialog = new Dialog({
-            title: "新建分组",
+            title: i18n("newGroupTitle"),
             content: `
                 <div style="padding: 20px;">
                     <div style="margin-bottom: 16px;">
-                        <label style="display: block; margin-bottom: 8px; font-weight: bold;">分组名称</label>
-                        <input type="text" id="groupNameInput" class="b3-text-field" placeholder="请输入分组名称" style="width: 100%;">
+                        <label style="display: block; margin-bottom: 8px; font-weight: bold;">${i18n("groupNameLabel")}</label>
+                        <input type="text" id="groupNameInput" class="b3-text-field" placeholder="${i18n("groupNamePlaceholder")}" style="width: 100%;">
                     </div>
                     <div style="display: flex; gap: 8px; justify-content: flex-end;">
-                        <button id="cancelBtn" class="b3-button">取消</button>
-                        <button id="confirmBtn" class="b3-button b3-button--primary">确定</button>
+                        <button id="cancelBtn" class="b3-button">${i18n("cancel")}</button>
+                        <button id="confirmBtn" class="b3-button b3-button--primary">${i18n("confirm")}</button>
                     </div>
                 </div>
             `,
@@ -210,24 +211,24 @@ export class HabitGroupManageDialog {
         confirmBtn.addEventListener('click', async () => {
             const name = nameInput.value.trim();
             if (!name) {
-                showMessage('请输入分组名称', 3000, 'error');
+                showMessage(i18n("inputGroupName"), 3000, 'error');
                 return;
             }
 
             if (this.groupManager.groupExists(name)) {
-                showMessage('分组名称已存在', 3000, 'error');
+                showMessage(i18n("groupExists"), 3000, 'error');
                 return;
             }
 
             try {
                 await this.groupManager.addGroup({ name });
-                showMessage('创建成功');
+                showMessage(i18n("groupCreateSuccess"));
                 dialog.destroy();
                 this.renderGroupList(this.dialog.element.querySelector('#habitGroupManageContainer') as HTMLElement);
                 this.onUpdate();
             } catch (error) {
                 console.error('创建分组失败:', error);
-                showMessage('创建失败', 3000, 'error');
+                showMessage(i18n("groupCreateFailed"), 3000, 'error');
             }
         });
 
@@ -236,16 +237,16 @@ export class HabitGroupManageDialog {
 
     private showEditGroupDialog(group: HabitGroup) {
         const dialog = new Dialog({
-            title: "编辑分组",
+            title: i18n("editGroupTitle"),
             content: `
                 <div style="padding: 20px;">
                     <div style="margin-bottom: 16px;">
-                        <label style="display: block; margin-bottom: 8px; font-weight: bold;">分组名称</label>
+                        <label style="display: block; margin-bottom: 8px; font-weight: bold;">${i18n("groupNameLabel")}</label>
                         <input type="text" id="groupNameInput" class="b3-text-field" value="${group.name}" style="width: 100%;">
                     </div>
                     <div style="display: flex; gap: 8px; justify-content: flex-end;">
-                        <button id="cancelBtn" class="b3-button">取消</button>
-                        <button id="confirmBtn" class="b3-button b3-button--primary">保存</button>
+                        <button id="cancelBtn" class="b3-button">${i18n("cancel")}</button>
+                        <button id="confirmBtn" class="b3-button b3-button--primary">${i18n("save")}</button>
                     </div>
                 </div>
             `,
@@ -261,24 +262,24 @@ export class HabitGroupManageDialog {
         confirmBtn.addEventListener('click', async () => {
             const name = nameInput.value.trim();
             if (!name) {
-                showMessage('请输入分组名称', 3000, 'error');
+                showMessage(i18n("inputGroupName"), 3000, 'error');
                 return;
             }
 
             if (name !== group.name && this.groupManager.groupExists(name)) {
-                showMessage('分组名称已存在', 3000, 'error');
+                showMessage(i18n("groupExists"), 3000, 'error');
                 return;
             }
 
             try {
                 await this.groupManager.updateGroup(group.id, { name });
-                showMessage('保存成功');
+                showMessage(i18n("groupSaveSuccess"));
                 dialog.destroy();
                 this.renderGroupList(this.dialog.element.querySelector('#habitGroupManageContainer') as HTMLElement);
                 this.onUpdate();
             } catch (error) {
                 console.error('保存分组失败:', error);
-                showMessage('保存失败', 3000, 'error');
+                showMessage(i18n("groupSaveFailed"), 3000, 'error');
             }
         });
 
@@ -287,17 +288,17 @@ export class HabitGroupManageDialog {
 
     private deleteGroup(group: HabitGroup) {
         confirm(
-            "确认删除",
-            `确定要删除分组"${group.name}"吗？`,
+            i18n("habitConfirmDeleteGroup"),
+            i18n("confirmDeleteGroupMsg", { name: group.name }),
             async () => {
                 try {
                     await this.groupManager.deleteGroup(group.id);
-                    showMessage('删除成功');
+                    showMessage(i18n("deleteSuccess"));
                     this.renderGroupList(this.dialog.element.querySelector('#habitGroupManageContainer') as HTMLElement);
                     this.onUpdate();
                 } catch (error) {
                     console.error('删除分组失败:', error);
-                    showMessage('删除失败', 3000, 'error');
+                    showMessage(i18n("deleteFailed"), 3000, 'error');
                 }
             }
         );

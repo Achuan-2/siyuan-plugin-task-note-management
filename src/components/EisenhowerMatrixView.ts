@@ -4602,7 +4602,7 @@ export class EisenhowerMatrixView {
                 </div>
             `,
             width: "500px",
-            height: "600px"
+            height: "auto"
         });
 
         this.renderFilterOptions(dialog);

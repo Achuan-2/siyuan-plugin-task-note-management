@@ -129,19 +129,19 @@ export class HabitStatsDialog {
         ).length;
 
         summary.innerHTML = `
-            <h3 style="margin-bottom: 12px;">打卡统计</h3>
+            <h3 style="margin-bottom: 12px;">${i18n("historyCheckInTitle")}</h3>
             <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
                 <div style="padding: 16px; background: var(--b3-theme-surface); border-radius: 8px; text-align: center;">
                     <div style="font-size: 24px; font-weight: bold; color: var(--b3-theme-primary);">${totalCheckIns}</div>
-                    <div style="font-size: 12px; color: var(--b3-theme-on-surface-light); margin-top: 4px;">总打卡次数</div>
+                    <div style="font-size: 12px; color: var(--b3-theme-on-surface-light); margin-top: 4px;">${i18n("statsTotalCheckIns")}</div>
                 </div>
                 <div style="padding: 16px; background: var(--b3-theme-surface); border-radius: 8px; text-align: center;">
                     <div style="font-size: 24px; font-weight: bold; color: var(--b3-theme-primary);">${checkInDays}</div>
-                    <div style="font-size: 12px; color: var(--b3-theme-on-surface-light); margin-top: 4px;">打卡天数</div>
+                    <div style="font-size: 12px; color: var(--b3-theme-on-surface-light); margin-top: 4px;">${i18n("statsCheckInDays")}</div>
                 </div>
                 <div style="padding: 16px; background: var(--b3-theme-surface); border-radius: 8px; text-align: center;">
                     <div style="font-size: 24px; font-weight: bold; color: var(--b3-theme-primary);">${this.calculateStreak()}</div>
-                    <div style="font-size: 12px; color: var(--b3-theme-on-surface-light); margin-top: 4px;">连续打卡天数</div>
+                    <div style="font-size: 12px; color: var(--b3-theme-on-surface-light); margin-top: 4px;">${i18n("statsStreak")}</div>
                 </div>
             </div>
         `;
@@ -155,7 +155,7 @@ export class HabitStatsDialog {
             emojiSection.style.cssText = 'margin-bottom: 24px;';
 
             const emojiTitle = document.createElement('h3');
-            emojiTitle.textContent = '打卡状态分布';
+            emojiTitle.textContent = i18n("statsCheckInDistrib");
             emojiTitle.style.marginBottom = '12px';
             emojiSection.appendChild(emojiTitle);
 
@@ -301,7 +301,7 @@ export class HabitStatsDialog {
 
         const todayBtn = document.createElement('button');
         todayBtn.className = 'b3-button';
-        todayBtn.textContent = '今天';
+        todayBtn.textContent = i18n("today");
         todayBtn.addEventListener('click', () => {
             this.currentMonthDate = new Date();
             this.renderMonthlyView(container);
@@ -325,7 +325,7 @@ export class HabitStatsDialog {
         toolbar.appendChild(dateLabel);
 
         const title = document.createElement('h3');
-        title.textContent = '月度打卡视图';
+        title.textContent = i18n("statsMonthlyView");
         title.style.cssText = 'margin:0;';
 
         const titleRow = document.createElement('div');
@@ -413,7 +413,7 @@ export class HabitStatsDialog {
                     const statusText = isComplete ? i18n("habitComplete") : `${checkInCount}/${target}`;
                     // 将每条 entry 的 emoji 与备注合并到 title 中，便于鼠标悬停查看
                     const entrySummary = entries.map(e => e.note ? `${e.emoji} (${e.note})` : e.emoji).join(' ');
-                    dayCell.title = `${day}日: ${entrySummary}\n${statusText}`;
+                    dayCell.title = `${day}: ${entrySummary}\n${statusText}`;
                 } else if (statuses.length > 0) {
                     statuses.forEach(s => {
                         const span = document.createElement('span');
@@ -427,7 +427,7 @@ export class HabitStatsDialog {
                     const checkInCount = checkIn.count || 0;
                     const target = this.habit.target || 1;
                     const statusText = isComplete ? i18n("habitComplete") : `${checkInCount}/${target}`;
-                    dayCell.title = `${day}日: ${statuses.join(' ')}\n${statusText}`;
+                    dayCell.title = `${day}: ${statuses.join(' ')}\n${statusText}`;
                 } else {
                     const emptyPlaceholder = document.createElement('div');
                     emptyPlaceholder.style.cssText = 'width:12px; height:12px; border-radius:50%; background:var(--b3-theme-surface); margin-top:4px;';
@@ -464,7 +464,9 @@ export class HabitStatsDialog {
 
     private getMonthLabel(): string {
         const now = this.currentMonthDate || new Date();
-        return `${now.getFullYear()}年${now.getMonth() + 1}月`;
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1);
+        return i18n("monthLabelFormat", { year: String(year), month });
     }
 
     private renderYearlyView(container: HTMLElement) {
@@ -504,7 +506,7 @@ export class HabitStatsDialog {
 
         const dateLabel = document.createElement('span');
         dateLabel.style.cssText = 'font-weight:bold; margin-left:8px;';
-        dateLabel.textContent = `${year}${i18n("year")}`;
+        dateLabel.textContent = i18n("yearLabelFormat", { year: String(year) });
 
         toolbar.appendChild(prevBtn);
         toolbar.appendChild(todayBtn);
@@ -529,7 +531,7 @@ export class HabitStatsDialog {
             monthCard.style.cssText = 'padding: 8px; background: var(--b3-theme-surface); border-radius: 4px;';
 
             const monthName = document.createElement('div');
-            monthName.textContent = `${month + 1}${i18n("month")}`;
+            monthName.textContent = i18n("monthNames").split(',')[month];
             monthName.style.cssText = 'font-size: 12px; font-weight: bold; margin-bottom: 4px; text-align: center;';
             monthCard.appendChild(monthName);
 
@@ -653,11 +655,11 @@ export class HabitStatsDialog {
                 yearLabel: { show: false },
                 dayLabel: {
                     firstDay: 1,
-                    nameMap: 'ZH',
+                    nameMap: i18n("calendarWeekNames").split(','),
                     fontSize: 10
                 },
                 monthLabel: {
-                    nameMap: 'ZH',
+                    nameMap: i18n("monthNames").split(','),
                     fontSize: 11
                 },
                 splitLine: {
@@ -791,11 +793,11 @@ export class HabitStatsDialog {
             }
             case 'month': {
                 const targetMonth = new Date(now.getFullYear(), now.getMonth() + this.timeViewOffset, 1);
-                return `${targetMonth.getFullYear()}年${targetMonth.getMonth() + 1}月`;
+                return i18n("monthLabelFormat", { year: String(targetMonth.getFullYear()), month: String(targetMonth.getMonth() + 1) });
             }
             case 'year': {
                 const targetYear = now.getFullYear() + this.timeViewOffset;
-                return `${targetYear}年`;
+                return i18n("yearLabelFormat", { year: String(targetYear) });
             }
         }
     }
@@ -867,7 +869,11 @@ export class HabitStatsDialog {
         // 获取本周日期
         const weekDates: string[] = [];
         const weekLabels: string[] = [];
-        const dayNames = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+        const weekdayNamesArr = i18n("weekdayNames").split(',');
+        const dayNames = [
+            weekdayNamesArr[1], weekdayNamesArr[2], weekdayNamesArr[3],
+            weekdayNamesArr[4], weekdayNamesArr[5], weekdayNamesArr[6], weekdayNamesArr[0]
+        ];
 
         for (let i = 0; i < 7; i++) {
             const d = new Date(weekStart);
