@@ -2365,3 +2365,10 @@
         height: 0.8em;
     }
 }
+
+
+.reminder-panel,.project-panel,.habit-panel{
+    .b3-button svg.b3-button__icon {
+            margin-right: 0;
+        }
+}

@@ -13,6 +13,7 @@ import { getSolarDateLunarString } from "../utils/lunarUtils";
 import { QuickReminderDialog } from "./QuickReminderDialog";
 import { BlockBindingDialog } from "./BlockBindingDialog";
 import { getAllReminders, saveReminders } from '../utils/icsSubscription';
+import { VipManager } from "../utils/vip";
 
 import { PasteTaskDialog } from "./PasteTaskDialog";
 import { ProjectDialog } from "./ProjectDialog";
@@ -373,6 +374,8 @@ export class ProjectKanbanView {
                 this.toggleMultiSelectMode();
             }
         });
+
+        this.checkVip();
     }
 
     private async loadProject() {
@@ -428,6 +431,123 @@ export class ProjectKanbanView {
         }
     }
 
+    private interactionBlocker = (e: Event) => {
+        if (this.plugin.vip.isVip) return;
+
+        // 允许在升级提示框内的点击和交互
+        const target = e.target as HTMLElement;
+        if (target && typeof target.closest === 'function' && target.closest('.vip-upgrade-prompt')) {
+            return;
+        }
+
+        e.stopPropagation();
+        e.preventDefault();
+    };
+
+    private async checkVip() {
+        const status = await VipManager.checkAndUpdateVipStatus(this.plugin);
+        this.plugin.vip.isVip = status.isVip;
+        this.plugin.vip.expireDate = status.expireDate;
+
+        const isVip = this.plugin.vip.isVip;
+        const overlay = this.container.querySelector('.vip-mask-overlay');
+        const prompt = this.container.querySelector('.vip-upgrade-prompt');
+
+        if (isVip) {
+            if (overlay) overlay.remove();
+            if (prompt) prompt.remove();
+
+            // 移除事件拦截
+            const eventsToBlock = ['click', 'mousedown', 'mouseup', 'mousemove', 'dblclick', 'contextmenu', 'wheel', 'touchstart', 'touchmove', 'touchend', 'keydown', 'keyup'];
+            eventsToBlock.forEach(eventType => {
+                this.container.removeEventListener(eventType, this.interactionBlocker, true);
+            });
+            return;
+        }
+
+        // 显示遮罩层和升级提示
+        this.showVipUpgradePrompt();
+    }
+
+    private showVipUpgradePrompt() {
+        this.container.style.position = 'relative';
+
+        // 1. 透明遮罩层，阻断所有点击
+        let overlay = this.container.querySelector('.vip-mask-overlay') as HTMLElement;
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.className = 'vip-mask-overlay';
+            overlay.style.cssText = `
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(255, 255, 255, 0.01);
+                z-index: 10;
+                cursor: not-allowed;
+            `;
+            this.container.appendChild(overlay);
+        }
+
+        // 2. 居中的升级提示卡片
+        let prompt = this.container.querySelector('.vip-upgrade-prompt') as HTMLElement;
+        if (!prompt) {
+            prompt = document.createElement('div');
+            prompt.className = 'vip-upgrade-prompt';
+            prompt.style.cssText = `
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: var(--b3-theme-surface);
+                color: var(--b3-theme-on-surface);
+                padding: 24px 40px;
+                border-radius: 12px;
+                box-shadow: var(--b3-dialog-shadow);
+                border: 1px solid var(--b3-theme-primary-light);
+                z-index: 10;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 16px;
+                cursor: pointer;
+                transition: transform 0.2s ease;
+            `;
+            prompt.innerHTML = `
+                <div style="font-size: 40px;">👑</div>
+                <div style="font-weight: bold; font-size: 18px; color: var(--b3-theme-primary);">
+                    ${i18n('vipOnlyFeature') || '此功能仅限 VIP 用户使用'}
+                </div>
+                <div style="font-size: 14px; opacity: 0.8; text-align: center;">
+                    ${i18n('upgradeToVipTip') || '升级到 VIP 以解锁更多高级功能，让任务管理更高效'}
+                </div>
+                <button class="b3-button b3-button--text" style="padding: 8px 24px; font-weight: bold;">
+                    ${i18n('upgradeNow') || '立即升级'}
+                </button>
+            `;
+
+            prompt.addEventListener('mouseenter', () => {
+                prompt.style.transform = 'translate(-50%, -52%)';
+            });
+            prompt.addEventListener('mouseleave', () => {
+                prompt.style.transform = 'translate(-50%, -50%)';
+            });
+            prompt.addEventListener('click', () => {
+                if (this.plugin && typeof this.plugin.openVipDialog === 'function') {
+                    this.plugin.openVipDialog();
+                }
+            });
+            this.container.appendChild(prompt);
+        }
+
+        // 添加事件拦截器，防止用户删除 DOM 后直接使用
+        const eventsToBlock = ['click', 'mousedown', 'mouseup', 'mousemove', 'dblclick', 'contextmenu', 'wheel', 'touchstart', 'touchmove', 'touchend', 'keydown', 'keyup'];
+        eventsToBlock.forEach(eventType => {
+            this.container.addEventListener(eventType, this.interactionBlocker, true);
+        });
+    }
+
     private updateModeSelect() {
         const modeSelect = this.container.querySelector('.kanban-mode-select') as HTMLSelectElement;
         if (modeSelect) {
@@ -441,6 +561,16 @@ export class ProjectKanbanView {
             content: `
                 <div class="manage-groups-dialog">
                     <div class="b3-dialog__content">
+                        <div class="groups-filter" style="display: flex; align-items: center; ">
+                            <label class="b3-label" style="display: flex; align-items: center; gap: 4px; cursor: pointer; flex: 1;">
+                                <input type="checkbox" id="hideNoDoingGroupCb" class="b3-switch b3-switch--small" ${this.project?.hideNoDoingGroups ? 'checked' : ''}>
+                                <span style="font-size: 13px;">${i18n('hideNoDoingGroups') || '隐藏没有进行中任务的分组'}</span>
+                            </label>
+                            <label class="b3-label" style="display: flex; align-items: center; gap: 4px; cursor: pointer; flex: 1;">
+                                <input type="checkbox" id="hideNoTodayGroupCb" class="b3-switch b3-switch--small" ${this.project?.hideNoTodayGroups ? 'checked' : ''}>
+                                <span style="font-size: 13px;">${i18n('hideNoTodayGroups') || '隐藏没有今日任务的分组'}</span>
+                            </label>
+                        </div>
                         <div class="groups-list" style="margin-bottom: 16px;">
                             <div class="groups-header" style="display: flex; justify-content: space-between; align-items: center;">
                                 <h4 style="margin: 0;">${i18n('existingGroups')}</h4>
@@ -484,6 +614,22 @@ export class ProjectKanbanView {
 
         // 获取DOM元素
         const groupsContainer = dialog.element.querySelector('#groupsContainer') as HTMLElement;
+        const hideNoDoingGroupCb = dialog.element.querySelector('#hideNoDoingGroupCb') as HTMLInputElement;
+        const hideNoTodayGroupCb = dialog.element.querySelector('#hideNoTodayGroupCb') as HTMLInputElement;
+
+        const updateFilters = async () => {
+            const projectData = await this.plugin.loadProjectData();
+            if (projectData[this.projectId]) {
+                projectData[this.projectId].hideNoDoingGroups = hideNoDoingGroupCb.checked;
+                projectData[this.projectId].hideNoTodayGroups = hideNoTodayGroupCb.checked;
+                await this.plugin.saveProjectData(projectData);
+                await this.loadProject();
+                this.queueLoadTasks(); // 刷新看板内容
+            }
+        };
+
+        hideNoDoingGroupCb.addEventListener('change', updateFilters);
+        hideNoTodayGroupCb.addEventListener('change', updateFilters);
         const addGroupBtn = dialog.element.querySelector('#addGroupBtn') as HTMLButtonElement;
         const groupForm = dialog.element.querySelector('#groupForm') as HTMLElement;
         const formTitle = dialog.element.querySelector('#formTitle') as HTMLElement;
@@ -3651,7 +3797,7 @@ export class ProjectKanbanView {
             if (!milestoneFilterBtn) {
                 milestoneFilterBtn = document.createElement('button');
                 milestoneFilterBtn.className = 'b3-button b3-button--outline milestone-filter-btn b3-button--small';
-                milestoneFilterBtn.title = i18n('filterMilestone') || '筛选里程碑';
+                milestoneFilterBtn.title = i18n('filterMilestone');
                 milestoneFilterBtn.innerHTML = '🚩';
                 milestoneFilterBtn.dataset.groupId = groupId;
                 milestoneFilterBtn.addEventListener('click', (e) => {
@@ -6174,6 +6320,7 @@ export class ProjectKanbanView {
 
         // 恢复滚动位置（如果有的话）
         this.restoreScrollState();
+        this.checkVip();
     }
 
     private async renderCustomGroupKanban() {
@@ -6234,12 +6381,42 @@ export class ProjectKanbanView {
             }
         });
 
+        const todayStr = getLogicalDateString();
+
         // 为每个自定义分组创建状态子列（使用 kanbanStatuses 中定义的所有状态）
         activeGroups.forEach((group: any) => {
             const groupStatusTasks: { [status: string]: any[] } = {};
             this.kanbanStatuses.forEach(status => {
                 groupStatusTasks[status.id] = statusTasks[status.id].filter(task => task.customGroupId === group.id);
             });
+
+            if (this.project?.hideNoDoingGroups) {
+                const doingTasks = groupStatusTasks['doing'] || [];
+                if (doingTasks.length === 0) {
+                    const columnId = `custom-group-${group.id}`;
+                    const column = kanbanContainer.querySelector(`.kanban-column-${columnId}`);
+                    if (column) column.remove();
+                    return; // 隐藏没有进行中任务的分组
+                }
+            }
+
+            if (this.project?.hideNoTodayGroups) {
+                let hasToday = false;
+                for (const statusId in groupStatusTasks) {
+                    if (groupStatusTasks[statusId].some(task => {
+                        return task.date && compareDateStrings(this.getTaskLogicalDate(task.date, task.time), todayStr) === 0;
+                    })) {
+                        hasToday = true;
+                        break;
+                    }
+                }
+                if (!hasToday) {
+                    const columnId = `custom-group-${group.id}`;
+                    const column = kanbanContainer.querySelector(`.kanban-column-${columnId}`);
+                    if (column) column.remove();
+                    return; // 隐藏没有今日任务的分组
+                }
+            }
 
             // 即使没有任务也要显示分组列
             this.renderCustomGroupColumnWithStatuses(group, groupStatusTasks);
@@ -6262,6 +6439,28 @@ export class ProjectKanbanView {
                 hasUngrouped = true;
             }
         });
+
+        if (this.project?.hideNoDoingGroups) {
+            const doingTasks = ungroupedStatusTasks['doing'] || [];
+            if (doingTasks.length === 0) {
+                hasUngrouped = false;
+            }
+        }
+
+        if (this.project?.hideNoTodayGroups && hasUngrouped) {
+            let hasToday = false;
+            for (const statusId in ungroupedStatusTasks) {
+                if (ungroupedStatusTasks[statusId].some(task => {
+                    return task.date && compareDateStrings(this.getTaskLogicalDate(task.date, task.time), todayStr) === 0;
+                })) {
+                    hasToday = true;
+                    break;
+                }
+            }
+            if (!hasToday) {
+                hasUngrouped = false;
+            }
+        }
 
         if (hasUngrouped) {
             // 获取项目的所有未归档默认里程碑
@@ -6792,9 +6991,23 @@ export class ProjectKanbanView {
         const projectManager = this.projectManager;
         const projectGroups = await projectManager.getProjectCustomGroups(this.projectId);
         // 过滤掉已归档的分组，并按 sort 字段排序
-        const activeGroups = projectGroups
+        const allActiveGroups = projectGroups
             .filter((g: any) => !g.archived)
             .sort((a: any, b: any) => (a.sort || 0) - (b.sort || 0));
+
+        let displayGroups = allActiveGroups;
+        const todayStr = getLogicalDateString();
+
+        if (this.project?.hideNoDoingGroups) {
+            displayGroups = displayGroups.filter((g: any) => {
+                return this.tasks.some(task => task.customGroupId === g.id && !task.completed && this.getTaskStatus(task) === 'doing');
+            });
+        }
+        if (this.project?.hideNoTodayGroups) {
+            displayGroups = displayGroups.filter((g: any) => {
+                return this.tasks.some(task => task.customGroupId === g.id && task.date && compareDateStrings(this.getTaskLogicalDate(task.date, task.time), todayStr) === 0);
+            });
+        }
 
         // 获取对应的状态分组容器
         const groupContainer = groupsContainer.querySelector(`.status-stable-group[data-status="${status}"]`) as HTMLElement;
@@ -6810,7 +7023,7 @@ export class ProjectKanbanView {
 
         groupTasksContainer.innerHTML = '';
 
-        if (activeGroups.length === 0) {
+        if (allActiveGroups.length === 0) {
             // 如果没有自定义分组，直接渲染任务
             this.renderTasksInColumn(groupTasksContainer, tasks);
         } else {
@@ -6825,9 +7038,9 @@ export class ProjectKanbanView {
 
             // 为每个自定义分组创建子容器
             const isCollapsedDefault = status === 'completed';
-            const validGroupIds = new Set(activeGroups.map((g: any) => g.id));
+            const validGroupIds = new Set(allActiveGroups.map((g: any) => g.id));
 
-            activeGroups.forEach((group: any) => {
+            displayGroups.forEach((group: any) => {
                 const groupTasks = tasks.filter(task => task.customGroupId === group.id);
                 if (groupTasks.length > 0) {
                     const groupSubContainer = this.createCustomGroupInStatusColumn(group, groupTasks, isCollapsedDefault, status);
@@ -6837,7 +7050,18 @@ export class ProjectKanbanView {
 
             // 添加未分组任务（包括指向不存在分组的任务）
             const ungroupedTasks = tasks.filter(task => !task.customGroupId || !validGroupIds.has(task.customGroupId));
-            if (ungroupedTasks.length > 0) {
+            let showUngrouped = ungroupedTasks.length > 0;
+
+            if (showUngrouped && this.project?.hideNoDoingGroups) {
+                const hasDoing = this.tasks.some(task => (!task.customGroupId || !validGroupIds.has(task.customGroupId)) && !task.completed && this.getTaskStatus(task) === 'doing');
+                if (!hasDoing) showUngrouped = false;
+            }
+            if (showUngrouped && this.project?.hideNoTodayGroups) {
+                const hasToday = this.tasks.some(task => (!task.customGroupId || !validGroupIds.has(task.customGroupId)) && task.date && compareDateStrings(this.getTaskLogicalDate(task.date, task.time), todayStr) === 0);
+                if (!hasToday) showUngrouped = false;
+            }
+
+            if (showUngrouped) {
                 const ungroupedGroup = {
                     id: 'ungrouped',
                     name: '未分组',
@@ -7013,20 +7237,42 @@ export class ProjectKanbanView {
         const validGroupIds = new Set(groups.map(g => g.id));
         const ungroupedTasks = this.tasks.filter(t => !t.customGroupId || !validGroupIds.has(t.customGroupId));
 
-        // Sort groups
-        const sortedGroups = [...groups].sort((a, b) => (a.sort || 0) - (b.sort || 0));
+        let displayGroups = [...groups].sort((a, b) => (a.sort || 0) - (b.sort || 0));
+        const todayStr = getLogicalDateString();
+
+        if (this.project?.hideNoDoingGroups) {
+            displayGroups = displayGroups.filter((g: any) => {
+                return this.tasks.some(task => task.customGroupId === g.id && !task.completed && this.getTaskStatus(task) === 'doing');
+            });
+        }
+        if (this.project?.hideNoTodayGroups) {
+            displayGroups = displayGroups.filter((g: any) => {
+                return this.tasks.some(task => task.customGroupId === g.id && task.date && compareDateStrings(this.getTaskLogicalDate(task.date, task.time), todayStr) === 0);
+            });
+        }
 
         // Use a set to track rendered group IDs to remove obsolete columns
         const renderedGroupIds = new Set<string>();
 
         // Render groups
-        for (const group of sortedGroups) {
+        for (const group of displayGroups) {
             const groupTasks = this.tasks.filter(t => t.customGroupId === group.id);
             await this.renderListModeGroupColumn(container, group, groupTasks);
             renderedGroupIds.add(`custom-group-${group.id}`);
         }
 
-        if (ungroupedTasks.length > 0) {
+        let showUngrouped = ungroupedTasks.length > 0;
+
+        if (showUngrouped && this.project?.hideNoDoingGroups) {
+            const hasDoing = this.tasks.some(task => (!task.customGroupId || !validGroupIds.has(task.customGroupId)) && !task.completed && this.getTaskStatus(task) === 'doing');
+            if (!hasDoing) showUngrouped = false;
+        }
+        if (showUngrouped && this.project?.hideNoTodayGroups) {
+            const hasToday = this.tasks.some(task => (!task.customGroupId || !validGroupIds.has(task.customGroupId)) && task.date && compareDateStrings(this.getTaskLogicalDate(task.date, task.time), todayStr) === 0);
+            if (!hasToday) showUngrouped = false;
+        }
+
+        if (showUngrouped) {
             const ungroupedGroup = { id: 'ungrouped', name: i18n('ungrouped') || '未分组', color: '#95a5a6', icon: '📋' };
             await this.renderListModeGroupColumn(container, ungroupedGroup, ungroupedTasks);
             renderedGroupIds.add('custom-group-ungrouped');
@@ -7131,7 +7377,7 @@ export class ProjectKanbanView {
 
         const btn = document.createElement('button');
         btn.className = 'b3-button b3-button--text';
-        btn.textContent = i18n('loadMore') || '加载更多';
+        btn.textContent = i18n('loadMore');
         btn.style.fontSize = '12px';
         btn.style.padding = '4px 8px';
         btn.style.height = '24px';
@@ -7483,7 +7729,7 @@ export class ProjectKanbanView {
                 if (hasMilestonesInThisStatus) {
                     const milestoneFilterBtn = document.createElement('button');
                     milestoneFilterBtn.className = 'b3-button b3-button--outline milestone-filter-btn b3-button--small';
-                    milestoneFilterBtn.title = i18n('filterMilestone') || '筛选里程碑';
+                    milestoneFilterBtn.title = i18n('filterMilestone');
                     milestoneFilterBtn.innerHTML = '🚩';
                     milestoneFilterBtn.dataset.groupId = status;
                     milestoneFilterBtn.addEventListener('click', (e) => {
@@ -10045,7 +10291,7 @@ export class ProjectKanbanView {
 
                         this.dispatchReminderUpdate(true);
                         this.queueLoadTasks();
-                        showMessage(i18n("operationSuccessful") || "操作成功");
+                        showMessage(i18n("operationSuccessful"));
                     }
                 } catch (err) {
                     console.error('快速调整日期失败:', err);
@@ -11976,6 +12222,7 @@ export class ProjectKanbanView {
                 min-width: 280px; /* 固定最小宽度 */
                 flex: 1; /* 均匀分布宽度 */
                 max-height: 100%;
+                max-width: 500px;
             }
 
             .kanban-column-header {
@@ -12985,7 +13232,6 @@ export class ProjectKanbanView {
                 if (projectId) {
                     const { addBlockProjectId } = await import('../api');
                     await addBlockProjectId(blockId, projectId);
-                    console.debug('ProjectKanbanView: bindReminderToBlock - 已为块设置项目ID', blockId, projectId);
                 }
 
                 // 更新块的书签状态（添加⏰书签）

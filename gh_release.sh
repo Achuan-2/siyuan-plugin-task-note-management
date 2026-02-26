@@ -31,9 +31,16 @@ echo "Creating release for version: $version"
 release_notes=$(awk "/^## $version/ {flag=1; next} /^## / {flag=0} flag" CHANGELOG.md | sed '/^$/d')
 
 if [ -z "$release_notes" ]; then
-    echo "Warning: No changelog entry found for version $version"
-    echo "Please make sure CHANGELOG.md contains a section starting with '## $version'"
-    exit 1
+    if ! grep -q "^## $version" CHANGELOG.md; then
+        echo "Warning: No section starting with '## $version' found in CHANGELOG.md"
+    else
+        echo "Warning: Changelog entry for version $version is empty."
+    fi
+    read -p "Proceed with release anyway? (y/n) " confirm
+    if [ "$confirm" != "y" ]; then
+        echo "Release aborted."
+        exit 1
+    fi
 fi
 
 echo "Release notes:"

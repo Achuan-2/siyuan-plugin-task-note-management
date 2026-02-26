@@ -38,6 +38,7 @@ export function i18n(key: string, params?: { [key: string]: string }): string {
 
     // 如果没有找到对应的翻译文本,返回为空
     if (typeof text !== 'string') {
+        console.warn('未找到翻译文本:', key);
         text = '';
     }
 

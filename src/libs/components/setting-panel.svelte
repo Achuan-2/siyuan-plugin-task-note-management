@@ -29,7 +29,7 @@
 <div class="config__tab-container {fn__none}" data-name={group}>
     <slot />
     {#each settingItems as item (item.key)}
-        {#if !item.hidden}
+        {#if !item.hidden && item.type !== 'custom-audio'}
             <Form.Wrap
                 title={item.title}
                 description={item.description}

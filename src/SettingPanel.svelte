@@ -1,7 +1,7 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import { Dialog } from 'siyuan';
-    import SettingPanel from '@/libs/components/setting-panel.svelte';
+    import Form from '@/libs/components/Form';
     import { i18n } from './pluginInstance';
     import {
         DEFAULT_SETTINGS,
@@ -15,11 +15,15 @@
         HABIT_GROUP_DATA_FILE,
         STATUSES_DATA_FILE,
     } from './index';
-    import { lsNotebooks, pushErrMsg, pushMsg, removeFile } from './api';
+    import type { AudioFileItem } from './index';
+    import { lsNotebooks, pushErrMsg, pushMsg, removeFile, putFile } from './api';
     import { Constants } from 'siyuan';
     import { exportIcsFile, uploadIcsToCloud } from './utils/icsUtils';
     import { importIcsFile } from './utils/icsImport';
     import { syncHolidays } from './utils/icsSubscription';
+    import { PomodoroManager } from './utils/pomodoroManager';
+    import { resolveAudioPath } from './utils/audioUtils';
+    import VipPanel from './components/VipPanel.svelte';
 
     export let plugin;
 
@@ -28,6 +32,240 @@
 
     // 笔记本列表
     let notebooks: Array<{ id: string; name: string }> = [];
+
+    // 音频文件管理（每个声音设置项各自独立维护文件列表）
+    let isUploadingAudio = false;
+    let isDownloadingAudio = false;
+    let audioPreviewEl: HTMLAudioElement | null = null;
+    let playingPath: string | null = null; // 当前播放中的音频路径
+    let isAudioPlaying = false; // 当前是否处于播放状态
+
+    const AUDIO_DIR = 'data/storage/petal/siyuan-plugin-task-note-management/audios';
+    const AUDIO_URL_PREFIX = '/data/storage/petal/siyuan-plugin-task-note-management/audios/';
+
+    /** 获取指定 key 的音频文件列表（合并内置声音并过滤已删除项） */
+    function getAudioFilesForKey(key: string): { name: string; path: string }[] {
+        const userList: AudioFileItem[] = (settings.audioFileLists ?? {})[key] ?? [];
+        const defaultList: AudioFileItem[] = (DEFAULT_SETTINGS.audioFileLists ?? {})[key] ?? [];
+
+        const result: AudioFileItem[] = [];
+        const processedPath = new Set<string>();
+
+        // 1. 遍历默认列表，保持顺序
+        for (const defItem of defaultList) {
+            const userEntry = userList.find(i => i.path === defItem.path);
+            if (userEntry) {
+                result.push(userEntry);
+                processedPath.add(defItem.path);
+                // 查找替换项（下载到本地的版本）
+                const replacement = userList.find(i => i.replaces === defItem.path);
+                if (replacement) {
+                    result.push(replacement);
+                    processedPath.add(replacement.path);
+                }
+            } else {
+                result.push({ ...defItem });
+            }
+        }
+
+        // 2. 追加完全自定义项
+        for (const userItem of userList) {
+            if (!processedPath.has(userItem.path)) {
+                result.push(userItem);
+            }
+        }
+
+        return result
+            .filter(i => !i.removed)
+            .map(item => ({
+                name: item.path.split('/').pop()?.split('?')[0] ?? item.path,
+                path: item.path,
+            }));
+    }
+
+    async function uploadAudioFile(file: File) {
+        const path = `${AUDIO_DIR}/${file.name}`;
+        await putFile(path, false, file);
+        await pushMsg(i18n('audioUploadSuccess').replace('${name}', file.name));
+        return AUDIO_URL_PREFIX + file.name;
+    }
+
+    async function deleteAudioFileForKey(url: string, key: string) {
+        if (!settings.audioFileLists) settings.audioFileLists = {};
+        const currentList: AudioFileItem[] = [...(settings.audioFileLists[key] ?? [])];
+
+        // 查找是否已在列表中（含已删除的）
+        const index = currentList.findIndex(i => i.path === url);
+        if (index > -1) {
+            currentList[index].removed = true;
+        } else {
+            // 如果不在用户列表（说明是默认项），加入并设为 removed
+            currentList.push({ path: url, removed: true });
+        }
+
+        settings.audioFileLists[key] = currentList;
+        await saveSettings();
+        updateGroupItems();
+    }
+
+    async function downloadOnlineAudio(url: string, key: string) {
+        if (isDownloadingAudio) return null;
+        try {
+            isDownloadingAudio = true;
+            const fileName = url.split('/').pop()?.split('?')[0] || 'online_audio.mp3';
+            const localPath = `${AUDIO_DIR}/${fileName}`;
+            const localUrl = AUDIO_URL_PREFIX + fileName;
+
+            await pushMsg(i18n('audioDownloading'));
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('Download failed');
+            const blob = await response.blob();
+            const file = new File([blob], fileName, { type: blob.type });
+
+            await putFile(localPath, false, file);
+
+            // 核心改进：引入 replaces 字段，并确保本地版紧跟在在线版之后以保持排序
+            if (!settings.audioFileLists) settings.audioFileLists = {};
+            const list: AudioFileItem[] = [...(settings.audioFileLists[key] || [])];
+
+            const onlineIdx = list.findIndex(i => i.path === url);
+            if (onlineIdx > -1) {
+                list[onlineIdx].removed = true;
+                // 在线版之后插入本地版，保持相对顺序
+                const localItemIdx = list.findIndex(i => i.path === localUrl);
+                if (localItemIdx > -1) {
+                    list[localItemIdx].removed = false;
+                    list[localItemIdx].replaces = url;
+                } else {
+                    list.splice(onlineIdx + 1, 0, {
+                        path: localUrl,
+                        removed: false,
+                        replaces: url,
+                    });
+                }
+            } else {
+                // 如果是第一次操作此项，插入并标记替换
+                list.push({ path: url, removed: true });
+                list.push({ path: localUrl, removed: false, replaces: url });
+            }
+            settings.audioFileLists[key] = list;
+
+            // 3. 更新单选状态（如果当前正选着这个在线版）
+            if (settings.audioSelected && settings.audioSelected[key] === url) {
+                settings.audioSelected[key] = localUrl;
+            }
+
+            await pushMsg(i18n('audioDownloadSuccess'));
+            return localUrl;
+        } catch (e) {
+            console.error('下载音频失败:', e);
+            await pushErrMsg(i18n('audioDownloadFailed'));
+            return null;
+        } finally {
+            isDownloadingAudio = false;
+        }
+    }
+
+    async function toggleSettingValue(key: string, value: any) {
+        if (!settings.audioFileLists) settings.audioFileLists = {};
+        if (!settings.audioFileLists[key]) settings.audioFileLists[key] = [];
+
+        // 检查是否是在线链接，如果是则点击时自动下载
+        if (typeof value === 'string' && value.startsWith('http')) {
+            const localUrl = await downloadOnlineAudio(value, key);
+            if (!localUrl) return; // 下载失败则跳过后续操作
+
+            if (!settings.audioSelected) settings.audioSelected = {};
+            settings.audioSelected[key] = localUrl;
+
+            saveSettings();
+            updateGroupItems();
+            return; // downloadOnlineAudio 已处理列表状态，此处直接返回
+        }
+
+        // 单选模式
+        if (!settings.audioSelected) settings.audioSelected = {};
+        if (settings.audioSelected[key] === value) {
+            settings.audioSelected[key] = ''; // 取消选中
+        } else {
+            settings.audioSelected[key] = value; // 选中
+        }
+        saveSettings();
+        updateGroupItems();
+    }
+
+    async function toggleAudio(path: string) {
+        // 同一音频：切换暂停 / 继续
+        if (audioPreviewEl && playingPath === path) {
+            if (isAudioPlaying) {
+                audioPreviewEl.pause();
+                isAudioPlaying = false;
+            } else {
+                audioPreviewEl.play().catch(() => {});
+                isAudioPlaying = true;
+            }
+            return;
+        }
+        // 不同音频：停止当前，播放新的
+        if (audioPreviewEl) {
+            audioPreviewEl.pause();
+            audioPreviewEl = null;
+        }
+
+        const resolvedUrl = await resolveAudioPath(path);
+        const audio = new Audio(resolvedUrl);
+        audio.volume = 0.4;
+        audio.play().catch(() => {});
+        audio.addEventListener('ended', () => {
+            isAudioPlaying = false;
+            playingPath = null;
+        });
+        audioPreviewEl = audio;
+        playingPath = path;
+        isAudioPlaying = true;
+    }
+
+    function handleAudioUploadInput(event: Event, settingKey: string) {
+        const input = event.target as HTMLInputElement;
+        const files = Array.from(input.files || []);
+        if (files.length === 0) return;
+        isUploadingAudio = true;
+        Promise.all(
+            files.map(async f => {
+                try {
+                    return await uploadAudioFile(f);
+                } catch (e) {
+                    console.error('上传音频失败:', f.name, e);
+                    await pushErrMsg(`上传音频失败: ${f.name}`);
+                    return null;
+                }
+            })
+        )
+            .then(urls => {
+                const validUrls = urls.filter(Boolean) as string[];
+                if (!settings.audioFileLists) settings.audioFileLists = {};
+                const list: AudioFileItem[] = settings.audioFileLists[settingKey] || [];
+                for (const url of validUrls) {
+                    if (!list.some(i => i.path === url)) {
+                        list.push({ path: url, removed: false });
+                    }
+                }
+                // 自动选中第一个上传的文件
+                if (validUrls.length > 0) {
+                    const firstUrl = validUrls[0];
+                    if (!settings.audioSelected) settings.audioSelected = {};
+                    settings.audioSelected[settingKey] = firstUrl;
+                }
+                settings.audioFileLists[settingKey] = list;
+                saveSettings();
+                updateGroupItems();
+            })
+            .catch(() => {})
+            .finally(() => {
+                isUploadingAudio = false;
+            });
+        input.value = '';
+    }
 
     interface ISettingGroup {
         name: string;
@@ -42,12 +280,16 @@
                 filePath: filePath,
             });
         } catch (error) {
-            await pushErrMsg('当前客户端不支持打开插件数据文件夹');
+            await pushErrMsg(i18n('openFolderNotSupported'));
         }
     };
 
     // 定义设置分组
     let groups: ISettingGroup[] = [
+        {
+            name: '👑VIP',
+            items: [], // 使用 VipPanel 组件渲染
+        },
         {
             name: i18n('sidebarSettings'),
             items: [
@@ -107,8 +349,8 @@
             items: [
                 {
                     key: 'notificationSound',
-                    value: settings.notificationSound,
-                    type: 'textinput',
+                    value: settings.audioSelected?.notificationSound || '',
+                    type: 'custom-audio',
                     title: i18n('notificationSoundSetting'),
                     description: i18n('notificationSoundDesc'),
                 },
@@ -160,44 +402,43 @@
                     key: 'calendarShowLunar',
                     value: settings.calendarShowLunar, // Default true
                     type: 'checkbox',
-                    title: i18n('calendarShowLunar') || '显示农历',
-                    description: i18n('calendarShowLunarDesc') || '在日历视图中显示农历日期和节日',
+                    title: i18n('calendarShowLunar'),
+                    description: i18n('calendarShowLunarDesc'),
                 },
                 {
                     key: 'calendarShowHoliday',
                     value: settings.calendarShowHoliday,
                     type: 'checkbox',
-                    title: i18n('calendarShowHoliday') || '显示节假日',
-                    description:
-                        i18n('calendarShowHolidayDesc') || '在日历视图中显示法定节假日（休）',
+                    title: i18n('calendarShowHoliday'),
+                    description: i18n('calendarShowHolidayDesc'),
                 },
 
                 {
                     key: 'calendarHolidayIcsUrl',
                     value: settings.calendarHolidayIcsUrl,
                     type: 'textinput',
-                    title: i18n('calendarHolidayIcsUrl') || '节假日 ICS URL',
-                    description: i18n('calendarHolidayIcsUrlDesc') || '设置节假日订阅的 ICS 链接',
+                    title: i18n('calendarHolidayIcsUrl'),
+                    description: i18n('calendarHolidayIcsUrlDesc'),
                 },
                 {
                     key: 'updateHoliday',
                     value: '',
                     type: 'button',
-                    title: i18n('updateHoliday') || '更新节假日',
-                    description: i18n('updateHolidayDesc') || '点击立即更新节假日数据',
+                    title: i18n('updateHoliday'),
+                    description: i18n('updateHolidayDesc'),
                     button: {
-                        label: i18n('updateHoliday') || '更新节假日',
+                        label: i18n('updateHoliday'),
                         callback: async () => {
-                            await pushMsg(i18n('updatingHoliday') || '正在更新节假日...');
+                            await pushMsg(i18n('updatingHoliday'));
                             const success = await syncHolidays(
                                 plugin,
                                 settings.calendarHolidayIcsUrl
                             );
                             if (success) {
-                                await pushMsg(i18n('holidayUpdateSuccess') || '节假日更新成功');
+                                await pushMsg(i18n('holidayUpdateSuccess'));
                                 window.dispatchEvent(new CustomEvent('reminderUpdated'));
                             } else {
-                                await pushErrMsg(i18n('holidayUpdateFailed') || '节假日更新失败');
+                                await pushErrMsg(i18n('holidayUpdateFailed'));
                             }
                         },
                     },
@@ -229,23 +470,20 @@
                     key: 'showPomodoroInSummary',
                     value: settings.showPomodoroInSummary,
                     type: 'checkbox',
-                    title: i18n('showPomodoroInSummary') || '在摘要中显示番茄钟统计',
-                    description:
-                        i18n('showPomodoroInSummaryDesc') ||
-                        '开启后，任务摘要将包含番茄钟专注时长统计',
+                    title: i18n('showPomodoroInSummary'),
+                    description: i18n('showPomodoroInSummaryDesc'),
                 },
                 {
                     key: 'showHabitInSummary',
                     value: settings.showHabitInSummary,
                     type: 'checkbox',
-                    title: i18n('showHabitInSummary') || '在摘要中显示习惯打卡统计',
-                    description:
-                        i18n('showHabitInSummaryDesc') || '开启后，任务摘要将包含习惯打卡情况统计',
+                    title: i18n('showHabitInSummary'),
+                    description: i18n('showHabitInSummaryDesc'),
                 },
             ],
         },
         {
-            name: '✅任务笔记设置',
+            name: '✅' + i18n('taskNoteSettings'),
             items: [
                 {
                     key: 'autoDetectDateTime',
@@ -286,9 +524,8 @@
                     key: 'groupDefaultHeadingLevel',
                     value: settings.groupDefaultHeadingLevel,
                     type: 'select',
-                    title: i18n('groupDefaultHeadingLevel') || '绑定块新建标题默认层级（项目分组）',
-                    description:
-                        i18n('groupDefaultHeadingLevelDesc') || '设置添加分组绑定块的默认层级',
+                    title: i18n('groupDefaultHeadingLevel'),
+                    description: i18n('groupDefaultHeadingLevelDesc'),
                     options: {
                         1: '1',
                         2: '2',
@@ -302,11 +539,8 @@
                     key: 'milestoneDefaultHeadingLevel',
                     value: settings.milestoneDefaultHeadingLevel,
                     type: 'select',
-                    title:
-                        i18n('milestoneDefaultHeadingLevel') ||
-                        '绑定块新建标题默认层级（项目里程碑）',
-                    description:
-                        i18n('milestoneDefaultHeadingLevelDesc') || '设置添加标题里程碑的默认层级',
+                    title: i18n('milestoneDefaultHeadingLevel'),
+                    description: i18n('milestoneDefaultHeadingLevelDesc'),
                     options: {
                         1: '1',
                         2: '2',
@@ -407,10 +641,21 @@
                     key: 'pomodoroEndPopupWindow',
                     value: settings.pomodoroEndPopupWindow,
                     type: 'checkbox',
-                    title: i18n('pomodoroEndPopupWindow') || '番茄钟结束全局弹窗提醒',
-                    description:
-                        i18n('pomodoroEndPopupWindowDesc') ||
-                        '番茄钟工作结束时会在屏幕中央显示弹窗提醒，10秒后自动关闭（仅电脑桌面端有效）',
+                    title: i18n('pomodoroEndPopupWindow'),
+                    description: i18n('pomodoroEndPopupWindowDesc'),
+                },
+                {
+                    key: 'pomodoroDockPosition',
+                    value: settings.pomodoroDockPosition,
+                    type: 'select',
+                    title: i18n('pomodoroDockPosition'),
+                    description: i18n('pomodoroDockPositionDesc'),
+                    options: {
+                        right: i18n('right'),
+                        left: i18n('left'),
+                        top: i18n('top'),
+                        bottom: i18n('bottom'),
+                    },
                 },
                 {
                     key: 'dailyFocusGoal',
@@ -433,100 +678,99 @@
                 },
                 {
                     key: 'pomodoroWorkSound',
-                    value: settings.pomodoroWorkSound,
-                    type: 'textinput',
+                    value: settings.audioSelected?.pomodoroWorkSound || '',
+                    type: 'custom-audio',
                     title: i18n('pomodoroWorkSound'),
-                    description: i18n('pomodoroWorkSoundDesc'),
+                    description: i18n('pomodoroWorkSoundDesc') || '',
                 },
                 {
                     key: 'pomodoroBreakSound',
-                    value: settings.pomodoroBreakSound,
-                    type: 'textinput',
+                    value: settings.audioSelected?.pomodoroBreakSound || '',
+                    type: 'custom-audio',
                     title: i18n('pomodoroBreakSound'),
-                    description: i18n('pomodoroBreakSoundDesc'),
+                    description: i18n('pomodoroBreakSoundDesc') || '',
                 },
                 {
                     key: 'pomodoroLongBreakSound',
-                    value: settings.pomodoroLongBreakSound,
-                    type: 'textinput',
+                    value: settings.audioSelected?.pomodoroLongBreakSound || '',
+                    type: 'custom-audio',
                     title: i18n('pomodoroLongBreakSound'),
-                    description: i18n('pomodoroLongBreakSoundDesc'),
+                    description: i18n('pomodoroLongBreakSoundDesc') || '',
                 },
                 {
                     key: 'pomodoroWorkEndSound',
-                    value: settings.pomodoroWorkEndSound,
-                    type: 'textinput',
+                    value: settings.audioSelected?.pomodoroWorkEndSound || '',
+                    type: 'custom-audio',
                     title: i18n('pomodoroWorkEndSound'),
-                    description: i18n('pomodoroWorkEndSoundDesc'),
+                    description: i18n('pomodoroWorkEndSoundDesc') || '',
                 },
                 {
                     key: 'pomodoroBreakEndSound',
-                    value: settings.pomodoroBreakEndSound,
-                    type: 'textinput',
+                    value: settings.audioSelected?.pomodoroBreakEndSound || '',
+                    type: 'custom-audio',
                     title: i18n('pomodoroBreakEndSound'),
-                    description: i18n('pomodoroBreakEndSoundDesc'),
+                    description: i18n('pomodoroBreakEndSoundDesc') || '',
                 },
             ],
         },
         {
-            name: i18n('randomNotificationSettings'),
+            name: i18n('randomRestSettings'),
             items: [
                 {
-                    key: 'randomNotificationEnabled',
-                    value: settings.randomNotificationEnabled,
+                    key: 'randomRestEnabled',
+                    value: settings.randomRestEnabled,
                     type: 'checkbox',
-                    title: i18n('randomNotificationEnabled'),
-                    description: i18n('randomNotificationEnabledDesc'),
+                    title: i18n('randomRestEnabled'),
+                    description: i18n('randomRestEnabledDesc'),
                 },
                 {
-                    key: 'randomNotificationSystemNotification',
-                    value: settings.randomNotificationSystemNotification,
+                    key: 'randomRestSystemNotification',
+                    value: settings.randomRestSystemNotification,
                     type: 'checkbox',
-                    title: i18n('randomNotificationSystemNotification'),
-                    description: i18n('randomNotificationSystemNotificationDesc'),
+                    title: i18n('randomRestSystemNotification'),
+                    description: i18n('randomRestSystemNotificationDesc'),
                 },
                 {
-                    key: 'randomNotificationPopupWindow',
-                    value: settings.randomNotificationPopupWindow,
+                    key: 'randomRestPopupWindow',
+                    value: settings.randomRestPopupWindow,
                     type: 'checkbox',
-                    title: '随机微休息全局弹窗提醒',
-                    description:
-                        '随机微休息开始时会在屏幕中央显示弹窗提醒，结束后自动关闭（仅电脑桌面端有效）',
+                    title: i18n('randomRestPopupWindow'),
+                    description: i18n('randomRestPopupWindowDesc'),
                 },
                 {
-                    key: 'randomNotificationMinInterval',
-                    value: settings.randomNotificationMinInterval,
+                    key: 'randomRestMinInterval',
+                    value: settings.randomRestMinInterval,
                     type: 'number',
-                    title: i18n('randomNotificationMinInterval'),
-                    description: i18n('randomNotificationMinIntervalDesc'),
+                    title: i18n('randomRestMinInterval'),
+                    description: i18n('randomRestMinIntervalDesc'),
                 },
                 {
-                    key: 'randomNotificationMaxInterval',
-                    value: settings.randomNotificationMaxInterval,
+                    key: 'randomRestMaxInterval',
+                    value: settings.randomRestMaxInterval,
                     type: 'number',
-                    title: i18n('randomNotificationMaxInterval'),
-                    description: i18n('randomNotificationMaxIntervalDesc'),
+                    title: i18n('randomRestMaxInterval'),
+                    description: i18n('randomRestMaxIntervalDesc'),
                 },
                 {
-                    key: 'randomNotificationBreakDuration',
-                    value: settings.randomNotificationBreakDuration,
+                    key: 'randomRestBreakDuration',
+                    value: settings.randomRestBreakDuration,
                     type: 'number',
-                    title: i18n('randomNotificationBreakDuration'),
-                    description: i18n('randomNotificationBreakDurationDesc'),
+                    title: i18n('randomRestBreakDuration'),
+                    description: i18n('randomRestBreakDurationDesc'),
                 },
                 {
-                    key: 'randomNotificationSounds',
-                    value: settings.randomNotificationSounds,
-                    type: 'textinput',
-                    title: i18n('randomNotificationSounds'),
-                    description: i18n('randomNotificationSoundsDesc'),
+                    key: 'randomRestSounds',
+                    value: settings.audioFileLists?.randomRestSounds || [],
+                    type: 'custom-audio',
+                    title: i18n('randomRestSounds'),
+                    description: i18n('randomRestSoundsDesc') || '',
                 },
                 {
-                    key: 'randomNotificationEndSound',
-                    value: settings.randomNotificationEndSound,
-                    type: 'textinput',
-                    title: i18n('randomNotificationEndSound'),
-                    description: i18n('randomNotificationEndSoundDesc'),
+                    key: 'randomRestEndSound',
+                    value: settings.audioSelected?.randomRestEndSound || '',
+                    type: 'custom-audio',
+                    title: i18n('randomRestEndSound'),
+                    description: i18n('randomRestEndSoundDesc') || '',
                 },
             ],
         },
@@ -545,10 +789,10 @@
                     key: 'openDataFolder',
                     value: '',
                     type: 'button',
-                    title: '打开数据文件夹',
-                    description: '',
+                    title: i18n('openDataFolder'),
+                    description: i18n('openDataFolderDesc'),
                     button: {
-                        label: '打开数据文件夹',
+                        label: i18n('openFolder'),
                         callback: async () => {
                             const path =
                                 window.siyuan.config.system.dataDir +
@@ -561,12 +805,12 @@
                     key: 'deletePluginData',
                     value: '',
                     type: 'button',
-                    title: '删除插件数据',
-                    description: '删除所有插件数据文件，此操作不可逆',
+                    title: i18n('deletePluginData'),
+                    description: i18n('deletePluginDataDesc'),
                     button: {
-                        label: '删除数据',
+                        label: i18n('deleteData'),
                         callback: async () => {
-                            const confirmed = confirm('确定要删除所有插件数据吗？此操作不可逆！');
+                            const confirmed = confirm(i18n('confirmDeletePluginData'));
                             if (confirmed) {
                                 const dataDir =
                                     'data/storage/petal/siyuan-plugin-task-note-management/';
@@ -590,7 +834,12 @@
                                         console.error('删除文件失败:', file, e);
                                     }
                                 }
-                                pushErrMsg(`数据删除完成，已删除 ${successCount} 个文件`);
+                                pushErrMsg(
+                                    i18n('dataDeletedCount').replace(
+                                        '${count}',
+                                        String(successCount)
+                                    )
+                                );
                                 window.dispatchEvent(new CustomEvent('reminderUpdated'));
                             }
                         },
@@ -599,35 +848,34 @@
             ],
         },
         {
-            name: '⬆️导出',
+            name: '⬆️' + i18n('exportSettings'),
             items: [
                 {
                     key: 'exportIcs',
                     value: '',
                     type: 'button',
-                    title: '导出 ICS 文件',
-                    description:
-                        '将提醒导出为标准 ICS 日历文件，可导入到 Outlook、Google Calendar、部分手机系统日历等日历应用',
+                    title: i18n('exportIcs'),
+                    description: i18n('exportIcsDesc'),
                     button: {
-                        label: '生成 ICS',
+                        label: i18n('generateIcs'),
                         callback: async () => {
-                            await exportIcsFile(plugin, true, false, settings.icsTaskFilter);
+                            await exportIcsFile(plugin, true, false, settings.icsTaskFilter as any);
                         },
                     },
                 },
             ],
         },
         {
-            name: '⬇️导入',
+            name: '⬇️' + i18n('importSettings'),
             items: [
                 {
                     key: 'importIcs',
                     value: '',
                     type: 'button',
-                    title: '导入 ICS 文件',
-                    description: '从 ICS 文件导入任务，支持批量设置所属项目、标签和优先级',
+                    title: i18n('importIcs'),
+                    description: i18n('importIcsDesc'),
                     button: {
-                        label: '选择文件导入',
+                        label: i18n('selectFileToImport'),
                         callback: async () => {
                             // 创建文件输入元素
                             const input = document.createElement('input');
@@ -645,7 +893,7 @@
                                     showImportDialog(content);
                                 } catch (error) {
                                     console.error('读取文件失败:', error);
-                                    await pushErrMsg('读取文件失败');
+                                    await pushErrMsg(i18n('readFileFailed'));
                                 }
                             };
                             input.click();
@@ -669,7 +917,7 @@
                     value: '',
                     type: 'button',
                     title: i18n('manageSubscriptions'),
-                    description: '管理ICS日历订阅，支持设置项目、分类、优先级和同步频率',
+                    description: i18n('manageSubscriptionsDesc'),
                     button: {
                         label: i18n('manageSubscriptions'),
                         callback: async () => {
@@ -680,85 +928,83 @@
             ],
         },
         {
-            name: '☁️日历上传',
+            name: '☁️' + i18n('calendarUpload'),
             items: [
                 {
                     key: 'icsSyncHint',
                     value: '',
                     type: 'hint',
-                    title: 'ICS 云端同步',
-                    description:
-                        '将ICS文件上传到云端，实现多设备间的提醒同步。支持思源服务器或S3存储。',
+                    title: i18n('icsSyncTitle'),
+                    description: i18n('icsSyncDesc'),
                 },
                 {
                     key: 'icsTaskFilter',
                     value: settings.icsTaskFilter || 'all',
                     type: 'select',
-                    title: '任务状态筛选',
-                    description: '选择导出哪些任务到 ICS 文件',
+                    title: i18n('icsTaskFilter'),
+                    description: i18n('icsTaskFilterDesc'),
                     options: {
-                        all: '全部任务',
-                        completed: '已完成任务',
-                        uncompleted: '未完成任务',
+                        all: i18n('allTasks'),
+                        completed: i18n('completedTasks'),
+                        uncompleted: i18n('uncompletedTasks'),
                     },
                 },
                 {
                     key: 'icsFileName',
                     value: settings.icsFileName,
                     type: 'textinput',
-                    title: 'ICS 文件名',
-                    description:
-                        '自定义ICS文件名（不含.ics后缀），留空则自动生成为 reminder-随机ID',
+                    title: i18n('icsFileName'),
+                    description: i18n('icsFileNameDesc'),
                     placeholder: 'reminder-' + (window.Lute?.NewNodeID?.() || 'auto'),
                 },
                 {
                     key: 'icsSyncMethod',
                     value: settings.icsSyncMethod,
                     type: 'select',
-                    title: '同步方式',
-                    description: '选择ICS文件的同步方式',
+                    title: i18n('icsSyncMethod'),
+                    description: i18n('icsSyncMethodDesc'),
                     options: {
-                        siyuan: '思源订阅会员服务器',
-                        s3: 'S3存储',
+                        siyuan: i18n('siyuanServer'),
+                        s3: i18n('s3Storage'),
                     },
                 },
                 {
                     key: 'icsSyncEnabled',
                     value: settings.icsSyncEnabled,
                     type: 'checkbox',
-                    title: '启用 ICS 定时云端同步',
-                    description: '开启后按设置的间隔自动生成并上传 ICS 文件到云端',
+                    title: i18n('icsSyncEnabled'),
+                    description: i18n('icsSyncEnabledDesc'),
                 },
                 {
                     key: 'icsSyncInterval',
                     value: settings.icsSyncInterval,
                     type: 'select',
-                    title: 'ICS 同步间隔',
-                    description: '设置自动同步ICS文件到云端的频率',
+                    title: i18n('icsSyncInterval'),
+                    description: i18n('icsSyncIntervalDesc'),
                     options: {
-                        manual: '手动',
-                        '15min': '每15分钟',
-                        hourly: '每1小时',
-                        '4hour': '每4小时',
-                        '12hour': '每12小时',
-                        daily: '每天',
+                        manual: i18n('manual'),
+                        '15min': i18n('every15Minutes'),
+                        hourly: i18n('everyHour'),
+                        '4hour': i18n('every4Hours'),
+                        '12hour': i18n('every12Hours'),
+                        daily: i18n('everyDay'),
                     },
                 },
                 {
                     key: 'icsSilentUpload',
                     value: settings.icsSilentUpload,
                     type: 'checkbox',
-                    title: '静默上传ICS文件',
-                    description: '启用后，定时上传ICS文件时不显示成功提示消息',
+                    title: i18n('icsSilentUpload'),
+                    description: i18n('icsSilentUploadDesc'),
                 },
                 {
                     key: 'uploadIcsToCloud',
                     value: '',
                     type: 'button',
-                    title: '生成并上传 ICS 到云端',
-                    description: '生成ICS文件并立即上传到云端',
+                    title: i18n('uploadIcsToCloud'),
+                    description: i18n('uploadIcsToCloudDesc'),
                     button: {
-                        label: '生成并上传',
+                        label: i18n('generateAndUpload'),
                         callback: async () => {
                             await uploadIcsToCloud(plugin, settings);
                         },
@@ -769,8 +1015,8 @@
                     key: 'icsCloudUrl',
                     value: settings.icsCloudUrl,
                     type: 'textinput',
-                    title: 'ICS 云端链接',
-                    description: '上传成功后自动生成的云端链接',
+                    title: i18n('icsCloudUrl'),
+                    description: i18n('icsCloudUrlDesc'),
                     disabled: false,
                 },
                 {
@@ -779,8 +1025,8 @@
                         ? new Date(settings.icsLastSyncAt).toLocaleString()
                         : '',
                     type: 'textinput',
-                    title: '上一次上传时间',
-                    description: '显示上次成功上传ICS文件的时间',
+                    title: i18n('icsLastSyncAt'),
+                    description: i18n('icsLastSyncAtDesc'),
                     disabled: true,
                 },
                 // 思源服务器同步配置
@@ -790,15 +1036,15 @@
                     key: 's3UseSiyuanConfig',
                     value: settings.s3UseSiyuanConfig,
                     type: 'checkbox',
-                    title: '使用思源S3设置',
-                    description: '启用后将使用思源的S3配置，无需手动配置下方的S3参数',
+                    title: i18n('s3UseSiyuanConfig'),
+                    description: i18n('s3UseSiyuanConfigDesc'),
                 },
                 {
                     key: 's3Bucket',
                     value: settings.s3Bucket,
                     type: 'textinput',
                     title: 'S3 Bucket',
-                    description: 'S3存储桶名称',
+                    description: i18n('s3BucketDesc'),
                     placeholder: 'my-bucket',
                 },
                 {
@@ -806,7 +1052,7 @@
                     value: settings.s3Endpoint,
                     type: 'textinput',
                     title: 'S3 Endpoint',
-                    description: 'S3服务端点地址，可省略协议前缀（自动添加https://）',
+                    description: i18n('s3EndpointDesc'),
                     placeholder: 'oss-cn-shanghai.aliyuncs.com',
                 },
                 {
@@ -814,7 +1060,7 @@
                     value: settings.s3Region,
                     type: 'textinput',
                     title: 'S3 Region',
-                    description: 'S3区域，例如 oss-cn-shanghai',
+                    description: i18n('s3RegionDesc'),
                     placeholder: 'auto',
                 },
                 {
@@ -822,30 +1068,29 @@
                     value: settings.s3AccessKeyId,
                     type: 'textinput',
                     title: 'S3 Access Key ID',
-                    description: 'S3访问密钥ID',
+                    description: i18n('s3AccessKeyIdDesc'),
                 },
                 {
                     key: 's3AccessKeySecret',
                     value: settings.s3AccessKeySecret,
                     type: 'textinput',
                     title: 'S3 Access Key Secret',
-                    description: 'S3访问密钥Secret',
+                    description: i18n('s3AccessKeySecretDesc'),
                 },
                 {
                     key: 's3StoragePath',
                     value: settings.s3StoragePath,
                     type: 'textinput',
-                    title: 'S3 存储路径',
-                    description: 'S3中的存储路径，例如: /calendar/ 或留空存储在根目录',
+                    title: i18n('s3StoragePath'),
+                    description: i18n('s3StoragePathDesc'),
                     placeholder: '/calendar/',
                 },
                 {
                     key: 's3ForcePathStyle',
                     value: settings.s3ForcePathStyle,
                     type: 'select',
-                    title: 'S3 Addressing 风格',
-                    description:
-                        '访问文件URL，Path-style: https://endpoint/bucket/key, Virtual hosted: https://bucket.endpoint/key',
+                    title: i18n('s3ForcePathStyle'),
+                    description: i18n('s3ForcePathStyleDesc'),
                     options: {
                         true: 'Path-style',
                         false: 'Virtual hosted style',
@@ -855,45 +1100,36 @@
                     key: 's3TlsVerify',
                     value: settings.s3TlsVerify,
                     type: 'select',
-                    title: 'S3 TLS 证书验证',
-                    description: '是否验证TLS/SSL证书，关闭后可连接自签名证书的服务',
+                    title: i18n('s3TlsVerify'),
+                    description: i18n('s3TlsVerifyDesc'),
                     options: {
-                        true: '启用验证',
-                        false: '禁用验证',
+                        true: i18n('enableVerification'),
+                        false: i18n('disableVerification'),
                     },
                 },
                 {
                     key: 's3CustomDomain',
                     value: settings.s3CustomDomain,
                     type: 'textinput',
-                    title: 'S3 自定义域名',
-                    description: '用于生成外链的自定义域名，留空则使用标准S3 URL',
+                    title: i18n('s3CustomDomain'),
+                    description: i18n('s3CustomDomainDesc'),
                     placeholder: 'cdn.example.com',
                 },
             ],
         },
         {
-            name: '❤️用爱发电',
+            name: '❤️' + i18n('donate'),
             items: [
                 {
                     key: 'donateInfo',
                     value: '',
                     type: 'hint',
-                    title: '用爱发电',
+                    title: i18n('donateTitle'),
                     description: `
-                        项目 GitHub 地址: <a href="https://github.com/achuan-2/siyuan-plugin-task-note-management">https://github.com/achuan-2/siyuan-plugin-task-note-management</a>
-                        <p style="margin-top:12px;">如果喜欢我的插件，欢迎给GitHub仓库点star和微信赞赏，这会激励我继续完善此插件和开发新插件。</p>
-
-                        <p style="margin-top:12px;">维护插件费时费力，个人时间和精力有限，开源只是分享，不等于我要浪费我的时间免费帮用户实现ta需要的功能，</p>
-
-                        <p style="margin-top:12px;">我需要的功能我会慢慢改进（打赏可以催更），有些我觉得可以改进、但是现阶段不必要的功能需要打赏才改进（会标注打赏标签和需要打赏金额），而不需要的功能、实现很麻烦的功能会直接关闭issue不考虑实现，我没实现的功能欢迎有大佬来pr</p>
-
-                        <p style="margin-top:12px;">累积赞赏50元的朋友如果想加我微信，可以在赞赏的时候备注微信号，或者发邮件到<a href="mailto:achuan-2@outlook.com">achuan-2@outlook.com</a>来进行好友申请</p>
-
                         <div style="margin-top:12px;">
                             <img src="plugins/siyuan-plugin-task-note-management/assets/donate.png" alt="donate" style="max-width:260px; height:auto; border:1px solid var(--b3-border-color);"/>
 
-                            <p style="margin-top:12px;">Non-Chinese users can use Wise to donate to me</p>
+                            <p style="margin-top:12px;">Non-Chinese users can transfer money via Wise, Western Union, etc.</p>
                             <img src="plugins/siyuan-plugin-task-note-management/assets/Alipay.jpg"alt="donate" style="max-width:260px; height:auto; border:1px solid var(--b3-border-color);"/>
                         </div>
                     `,
@@ -911,93 +1147,86 @@
     }
 
     const onChanged = ({ detail }: CustomEvent<ChangeEvent>) => {
-        console.log(detail.key, detail.value);
-        const setting = settings[detail.key];
-        if (setting !== undefined) {
-            // 如果是weekStartDay，将字符串转为数字
-            if (detail.key === 'weekStartDay' && typeof detail.value === 'string') {
-                const parsed = parseInt(detail.value, 10);
-                settings[detail.key] = isNaN(parsed) ? DEFAULT_SETTINGS.weekStartDay : parsed;
-            } else if (
-                (detail.key === 's3ForcePathStyle' || detail.key === 's3TlsVerify') &&
-                typeof detail.value === 'string'
-            ) {
-                // 将字符串 'true'/'false' 转换为布尔值
-                settings[detail.key] = detail.value === 'true';
-            } else if (detail.key === 'dailyNotificationTime') {
-                // 允许用户输入 HH:MM，也兼容数字（小时）或单个小时字符串
-                let v = detail.value;
-                if (typeof v === 'number') {
-                    const h = Math.max(0, Math.min(23, Math.floor(v)));
-                    v = (h < 10 ? '0' : '') + h.toString() + ':00';
-                } else if (typeof v === 'string') {
-                    const m = v.match(/^(\d{1,2})(?::(\d{1,2}))?$/);
-                    if (m) {
-                        const h = Math.max(0, Math.min(23, parseInt(m[1], 10) || 0));
-                        const min = Math.max(0, Math.min(59, parseInt(m[2] || '0', 10) || 0));
-                        v =
-                            (h < 10 ? '0' : '') +
-                            h.toString() +
-                            ':' +
-                            (min < 10 ? '0' : '') +
-                            min.toString();
-                    } else {
-                        // 如果无法解析，回退到默认
-                        v = DEFAULT_SETTINGS.dailyNotificationTime;
-                    }
-                }
-                settings[detail.key] = v;
-            } else if (detail.key === 'todayStartTime') {
-                const oldValue = settings[detail.key]; // 保存旧值用于比较
-                let v = detail.value;
-                if (typeof v === 'number') {
-                    const h = Math.max(0, Math.min(23, Math.floor(v)));
-                    v = (h < 10 ? '0' : '') + h.toString() + ':00';
-                } else if (typeof v === 'string') {
-                    const m = v.match(/^(\d{1,2})(?::(\d{1,2}))?$/);
-                    if (m) {
-                        const h = Math.max(0, Math.min(23, parseInt(m[1], 10) || 0));
-                        const min = Math.max(0, Math.min(59, parseInt(m[2] || '0', 10) || 0));
-                        v =
-                            (h < 10 ? '0' : '') +
-                            h.toString() +
-                            ':' +
-                            (min < 10 ? '0' : '') +
-                            min.toString();
-                    } else {
-                        v = DEFAULT_SETTINGS.todayStartTime;
-                    }
-                }
-                settings[detail.key] = v;
+        const { key, value } = detail;
+        console.log(`Setting change: ${key} = ${value}`);
 
-                // 如果一天起始时间发生了变化，需要重新生成番茄钟按天记录
-                if (oldValue !== v) {
-                    (async () => {
-                        try {
-                            // 先更新一天起始时间设置，这样getLogicalDateString会使用新的起始时间
-                            const { setDayStartTime } = await import('./utils/dateUtils');
-                            setDayStartTime(v);
-
-                            // 然后重新生成番茄钟记录
-                            const { PomodoroRecordManager } = await import(
-                                './utils/pomodoroRecord'
-                            );
-                            const recordManager = PomodoroRecordManager.getInstance(plugin);
-                            await recordManager.regenerateRecordsByDate();
-                        } catch (error) {
-                            console.error('重新生成番茄钟记录失败:', error);
-                            pushErrMsg('重新生成番茄钟记录失败');
-                        }
-                    })();
+        // 统一处理特殊类型的转换
+        let newValue = value;
+        if (key === 'weekStartDay' && typeof value === 'string') {
+            const parsed = parseInt(value, 10);
+            newValue = isNaN(parsed) ? DEFAULT_SETTINGS.weekStartDay : parsed;
+        } else if (
+            (key === 's3ForcePathStyle' || key === 's3TlsVerify') &&
+            typeof value === 'string'
+        ) {
+            newValue = value === 'true';
+        } else if (key === 'dailyNotificationTime' || key === 'todayStartTime') {
+            // 格式化时间 HH:MM
+            if (typeof value === 'number') {
+                const h = Math.max(0, Math.min(23, Math.floor(value)));
+                newValue = (h < 10 ? '0' : '') + h.toString() + ':00';
+            } else if (typeof value === 'string') {
+                const m = value.match(/^(\d{1,2})(?::(\d{1,2}))?$/);
+                if (m) {
+                    const h = Math.max(0, Math.min(23, parseInt(m[1], 10) || 0));
+                    const min = Math.max(0, Math.min(59, parseInt(m[2] || '0', 10) || 0));
+                    newValue =
+                        (h < 10 ? '0' : '') +
+                        h.toString() +
+                        ':' +
+                        (min < 10 ? '0' : '') +
+                        min.toString();
+                } else {
+                    newValue = DEFAULT_SETTINGS[key];
                 }
-            } else {
-                settings[detail.key] = detail.value;
             }
-
-            saveSettings();
-            // 确保 UI 中 select 等值显示被刷新
-            updateGroupItems();
         }
+
+        // 更新设置并保存
+        const oldValue = settings[key];
+        if (key === 'vipKey') {
+            // VIP 逻辑现在由 VipPanel 处理
+            return;
+        }
+
+        settings[key] = newValue;
+        settings = settings; // 触发布尔响应式（如果需要）
+
+        // 特殊逻辑：一天起始时间变更
+        if (key === 'todayStartTime' && oldValue !== newValue) {
+            (async () => {
+                try {
+                    const { setDayStartTime } = await import('./utils/dateUtils');
+                    setDayStartTime(newValue as string);
+                    const { PomodoroRecordManager } = await import('./utils/pomodoroRecord');
+                    const recordManager = PomodoroRecordManager.getInstance(plugin);
+                    await recordManager.regenerateRecordsByDate();
+                } catch (error) {
+                    console.error('重新生成番茄钟记录失败:', error);
+                }
+            })();
+        }
+
+        // 特殊逻辑：番茄钟设置变更
+        if (
+            key.startsWith('pomodoro') ||
+            key === 'backgroundVolume' ||
+            key === 'dailyFocusGoal' ||
+            key.startsWith('randomRest')
+        ) {
+            (async () => {
+                try {
+                    // Must transform raw settings into simplified structure first
+                    const pomodoroSettings = await plugin.getPomodoroSettings(settings);
+                    await PomodoroManager.getInstance().updateSettings(pomodoroSettings);
+                } catch (error) {
+                    console.error('更新番茄钟设置失败:', error);
+                }
+            })();
+        }
+
+        saveSettings();
+        updateGroupItems();
     };
 
     async function saveSettings(emitEvent = true) {
@@ -1020,6 +1249,10 @@
         (async () => {
             await loadNotebooks();
             await runload();
+            // 展开时如果 settings.audioFileLists 未存在（旧数据兼容），创建空对象
+            if (!settings.audioFileLists) {
+                settings.audioFileLists = {};
+            }
         })();
 
         // 监听外部设置变更事件，重新加载设置并刷新 UI
@@ -1038,6 +1271,10 @@
         // 在组件销毁时移除监听
         return () => {
             window.removeEventListener('reminderSettingsUpdated', settingsUpdateHandler);
+            if (audioPreviewEl) {
+                audioPreviewEl.pause();
+                audioPreviewEl = null;
+            }
         };
     });
 
@@ -1055,13 +1292,15 @@
     }
 
     async function runload() {
-        const loadedSettings = await plugin.loadSettings();
+        const loadedSettings = await plugin.loadSettings(true);
         settings = { ...loadedSettings };
         // 确保 weekStartDay 在加载后是数字（可能以字符串形式保存）
         if (typeof settings.weekStartDay === 'string') {
             const parsed = parseInt(settings.weekStartDay, 10);
             settings.weekStartDay = isNaN(parsed) ? DEFAULT_SETTINGS.weekStartDay : parsed;
         }
+        // 确保 audioFileLists 存在
+        if (!settings.audioFileLists) settings.audioFileLists = {};
         updateGroupItems();
         // 确保设置已保存（可能包含新的默认值），但不发出更新事件
         await saveSettings(false);
@@ -1497,7 +1736,7 @@
                             </div>
                         </div>
                         <div style="display: flex; gap: 4px;">
-                            <button class="b3-button b3-button--outline" data-action="toggle" data-id="${sub.id}" title="${sub.enabled ? '停用' : '启用'}">
+                            <button class="b3-button b3-button--outline" data-action="toggle" data-id="${sub.id}" title="${sub.enabled ? i18n('disableSubscription') : i18n('enableSubscription')}">
                                 <svg class="b3-button__icon ${!sub.enabled ? 'fn__opacity' : ''}"><use xlink:href="${sub.enabled ? '#iconEye' : '#iconEyeoff'}"></use></svg>
                             </button>
                             <button class="b3-button b3-button--outline" data-action="sync" data-id="${sub.id}" title="${i18n('syncNow')}">
@@ -1787,23 +2026,224 @@
                 data-name="editor"
                 class:b3-list-item--focus={group.name === focusGroup}
                 class="b3-list-item"
+                title={group.name}
                 role="button"
                 on:click={() => {
                     focusGroup = group.name;
                 }}
                 on:keydown={() => {}}
             >
-                <span>{group.name}</span>
+                <span class="tab-item__text">{group.name}</span>
             </li>
         {/each}
     </ul>
     <div class="config__tab-wrap">
-        <SettingPanel
-            group={currentGroup?.name || ''}
-            settingItems={currentGroup?.items || []}
-            display={true}
-            on:changed={onChanged}
-        />
+        <!-- 手动按项目顺序渲染，保证 custom-audio 项在正确位置 -->
+        <div class="config__tab-container" data-name={currentGroup?.name || ''}>
+            {#if currentGroup?.name === '👑VIP'}
+                <VipPanel {plugin} />
+            {/if}
+            {#each currentGroup?.items || [] as item (item.key)}
+                {#if !item.hidden}
+                    {#if item.type === 'custom-audio'}
+                        <!-- 自定义音频选择器 -->
+                        <div class="item-wrap b3-label config__item audio-picker-wrap">
+                            <!-- 顶部：标题 + 上传按钮 -->
+                            <div class="fn__flex-1">
+                                <span class="title">{item.title}</span>
+                                {#if item.description}
+                                    <div class="b3-label__text">{item.description}</div>
+                                {/if}
+                            </div>
+                            <!-- 当前选中的音频显示 + 文件列表 -->
+                            <div class="audio-inline-list" style="width:100%;margin-top:4px">
+                                {#each [getAudioFilesForKey(item.key)] as audioFilesForKey}
+                                    <!-- 文件列表 -->
+                                    {#if audioFilesForKey.length > 0}
+                                        {#each audioFilesForKey.filter(a => a.path) as audio}
+                                            {@const isSelected =
+                                                settings.audioSelected?.[item.key] === audio.path}
+                                            <div
+                                                class="audio-row {isSelected
+                                                    ? 'audio-row--selected'
+                                                    : ''}"
+                                                role="button"
+                                                tabindex="0"
+                                                on:click={() =>
+                                                    toggleSettingValue(item.key, audio.path)}
+                                                on:keydown={e => {
+                                                    if (e.key === 'Enter' || e.key === ' ') {
+                                                        e.preventDefault();
+                                                        toggleSettingValue(item.key, audio.path);
+                                                    }
+                                                }}
+                                            >
+                                                <div class="audio-row__name" title={audio.name}>
+                                                    <svg
+                                                        viewBox="0 0 24 24"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        stroke-width="2"
+                                                        width="12"
+                                                        height="12"
+                                                        style="flex-shrink:0;opacity:0.5"
+                                                    >
+                                                        <path d="M9 18V5l12-2v13" />
+                                                        <circle cx="6" cy="18" r="3" />
+                                                        <circle cx="18" cy="16" r="3" />
+                                                    </svg>
+                                                    <span>{audio.name}</span>
+                                                    {#if isSelected}
+                                                        <span class="audio-row__badge">
+                                                            {i18n('currentAudio')}
+                                                        </span>
+                                                    {/if}
+                                                </div>
+                                                <div class="audio-row__btns">
+                                                    <button
+                                                        class="audio-btn audio-btn--play"
+                                                        title={playingPath === audio.path &&
+                                                        isAudioPlaying
+                                                            ? i18n('audioPause')
+                                                            : i18n('audioPreview')}
+                                                        on:click|stopPropagation={() =>
+                                                            toggleAudio(audio.path)}
+                                                    >
+                                                        {#if playingPath === audio.path && isAudioPlaying}
+                                                            <svg
+                                                                viewBox="0 0 24 24"
+                                                                fill="currentColor"
+                                                                stroke="none"
+                                                                width="11"
+                                                                height="11"
+                                                            >
+                                                                <rect
+                                                                    x="5"
+                                                                    y="3"
+                                                                    width="4"
+                                                                    height="18"
+                                                                    rx="1"
+                                                                />
+                                                                <rect
+                                                                    x="15"
+                                                                    y="3"
+                                                                    width="4"
+                                                                    height="18"
+                                                                    rx="1"
+                                                                />
+                                                            </svg>
+                                                        {:else}
+                                                            <svg
+                                                                viewBox="0 0 24 24"
+                                                                fill="currentColor"
+                                                                stroke="none"
+                                                                width="11"
+                                                                height="11"
+                                                            >
+                                                                <polygon
+                                                                    points="5 3 19 12 5 21 5 3"
+                                                                />
+                                                            </svg>
+                                                        {/if}
+                                                    </button>
+                                                    <!-- 从列表移除 -->
+                                                    <button
+                                                        class="audio-btn audio-btn--delete"
+                                                        title={i18n('removeFromList')}
+                                                        on:click|stopPropagation={() =>
+                                                            deleteAudioFileForKey(
+                                                                audio.path,
+                                                                item.key
+                                                            )}
+                                                    >
+                                                        <svg
+                                                            viewBox="0 0 24 24"
+                                                            fill="none"
+                                                            stroke="currentColor"
+                                                            stroke-width="2"
+                                                            width="11"
+                                                            height="11"
+                                                        >
+                                                            <polyline points="3 6 5 6 21 6" />
+                                                            <path
+                                                                d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"
+                                                            />
+                                                            <path d="M10 11v6M14 11v6" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        {/each}
+                                    {/if}
+                                    <!-- 上传按钮（始终在列表底部） -->
+                                    <label
+                                        class="audio-upload-btn audio-upload-btn--bottom {isUploadingAudio
+                                            ? 'audio-upload-btn--loading'
+                                            : ''}"
+                                        title={i18n('uploadAudioFile')}
+                                    >
+                                        {#if isUploadingAudio}
+                                            <svg
+                                                class="fn__rotate"
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                stroke-width="2"
+                                                width="12"
+                                                height="12"
+                                            >
+                                                <path d="M21 12a9 9 0 11-6.219-8.56" />
+                                            </svg>
+                                        {:else}
+                                            <svg
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                stroke-width="2"
+                                                width="12"
+                                                height="12"
+                                            >
+                                                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                                                <polyline points="17 8 12 3 7 8" />
+                                                <line x1="12" y1="3" x2="12" y2="15" />
+                                            </svg>
+                                        {/if}
+                                        {i18n('uploadAudio')}
+                                        <input
+                                            type="file"
+                                            accept="audio/*,.mp3,.wav,.ogg,.aac,.flac,.m4a"
+                                            multiple
+                                            style="display:none"
+                                            disabled={isUploadingAudio}
+                                            on:change={e => handleAudioUploadInput(e, item.key)}
+                                        />
+                                    </label>
+                                {/each}
+                            </div>
+                        </div>
+                    {:else}
+                        <!-- 普通设置项 -->
+                        <Form.Wrap
+                            title={item.title}
+                            description={item.description}
+                            direction={item?.direction}
+                        >
+                            <Form.Input
+                                type={item.type}
+                                key={item.key}
+                                value={item.value}
+                                placeholder={item?.placeholder}
+                                options={item?.options}
+                                slider={item?.slider}
+                                button={item?.button}
+                                disabled={item?.disabled}
+                                on:changed={onChanged}
+                            />
+                        </Form.Wrap>
+                    {/if}
+                {/if}
+            {/each}
+        </div>
     </div>
 </div>
 
@@ -1815,7 +2255,21 @@
         overflow: hidden;
     }
     .config__panel > .b3-tab-bar {
-        width: 170px;
+        width: min(30%, 200px);
+
+        .b3-list-item {
+            display: flex;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        .tab-item__text {
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 0;
+        }
     }
 
     .config__tab-wrap {
@@ -1823,5 +2277,173 @@
         height: 100%;
         overflow: auto;
         padding: 2px;
+        background-color: var(--b3-theme-background);
+    }
+
+    /* audio picker 内联于普通设置项同一行 */
+    .audio-picker-wrap {
+        flex-direction: row;
+        align-items: flex-start;
+        flex-wrap: wrap;
+        gap: 6px 0;
+
+        /* 和普通 form-wrap 一致：左侧标题占主要空间，右侧是操作区 */
+        .title {
+            font-weight: bold;
+            color: var(--b3-theme-primary);
+        }
+
+        /* 音频列表占满整行宽度 */
+        .audio-inline-list {
+            width: 100%;
+            margin-top: 4px;
+        }
+    }
+
+    /* 音频文件列表（内联，每个音频设置项内独立展示） */
+    .audio-inline-list {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        border-radius: 6px;
+        border: 1px solid var(--b3-border-color);
+        padding: 3px;
+        background: var(--b3-theme-background);
+    }
+
+    .audio-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 4px 7px;
+        border-radius: 4px;
+        border: 1px solid transparent;
+        background: transparent;
+        transition: all 0.12s;
+        gap: 6px;
+        cursor: pointer;
+
+        &:hover {
+            background: var(--b3-theme-background-light);
+        }
+
+        &--selected {
+            background: color-mix(in srgb, var(--b3-theme-primary) 8%, var(--b3-theme-background));
+            border-color: color-mix(in srgb, var(--b3-theme-primary) 30%, transparent);
+        }
+
+        &__name {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            flex: 1;
+            min-width: 0;
+            font-size: 12px;
+            color: var(--b3-theme-on-surface);
+
+            span {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+        }
+
+        &__badge {
+            font-size: 10px;
+            padding: 1px 4px;
+            border-radius: 3px;
+            background: var(--b3-theme-primary);
+            color: #fff;
+            flex-shrink: 0;
+            line-height: 1.4;
+        }
+
+        &__btns {
+            display: flex;
+            gap: 3px;
+            flex-shrink: 0;
+        }
+    }
+
+    /* 上传按钮 */
+    .audio-upload-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 3px 8px;
+        font-size: 12px;
+        border-radius: 4px;
+        background: var(--b3-theme-primary);
+        color: #fff;
+        cursor: pointer;
+        border: none;
+        transition: opacity 0.15s;
+        user-select: none;
+        line-height: 1.6;
+
+        &:hover {
+            opacity: 0.85;
+        }
+        &--loading {
+            opacity: 0.6;
+            cursor: default;
+        }
+
+        /* 列表底部全宽上传区域 */
+        &--bottom {
+            display: flex;
+            width: 100%;
+            justify-content: center;
+            background: transparent;
+            color: var(--b3-theme-on-surface-light);
+            border: 1px dashed var(--b3-border-color);
+            border-radius: 4px;
+            margin-top: 2px;
+            padding: 5px 8px;
+            font-size: 12px;
+            opacity: 0.75;
+
+            &:hover {
+                opacity: 1;
+                border-color: var(--b3-theme-primary);
+                color: var(--b3-theme-primary);
+                background: color-mix(in srgb, var(--b3-theme-primary) 6%, transparent);
+            }
+        }
+    }
+
+    /* 小按钮 (play/select/delete) */
+    .audio-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 22px;
+        height: 22px;
+        border-radius: 3px;
+        border: 1px solid var(--b3-border-color);
+        background: transparent;
+        cursor: pointer;
+        transition: all 0.12s;
+        color: var(--b3-theme-on-surface);
+        padding: 0;
+
+        &:hover {
+            background: var(--b3-theme-background-light);
+        }
+
+        &--play {
+            color: var(--b3-theme-primary);
+            &:hover {
+                background: color-mix(in srgb, var(--b3-theme-primary) 12%, transparent);
+                border-color: var(--b3-theme-primary);
+            }
+        }
+        &--delete {
+            color: var(--b3-theme-error, #ef4444);
+            &:hover {
+                background: color-mix(in srgb, var(--b3-theme-error, #ef4444) 12%, transparent);
+                border-color: var(--b3-theme-error, #ef4444);
+            }
+        }
     }
 </style>

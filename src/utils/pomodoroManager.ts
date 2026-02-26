@@ -137,4 +137,17 @@ export class PomodoroManager {
             this.currentPomodoroTimer = null;
         }
     }
+
+    /**
+     * 更新当前番茄钟的设置
+     */
+    public async updateSettings(settings: any): Promise<void> {
+        if (this.currentPomodoroTimer && this.currentPomodoroTimer.isWindowActive()) {
+            try {
+                await this.currentPomodoroTimer.updateSettings(settings);
+            } catch (error) {
+                console.error('更新番茄钟设置失败:', error);
+            }
+        }
+    }
 }

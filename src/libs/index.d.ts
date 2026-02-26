@@ -6,7 +6,7 @@
  * @LastEditTime : 2024-04-30 16:39:54
  * @Description  : 
  */
-type TSettingItemType = "checkbox" | "select" | "textinput" | "textarea" | "number" | "slider" | "button" | "hint" | "custom";
+type TSettingItemType = "checkbox" | "select" | "textinput" | "textarea" | "number" | "slider" | "button" | "hint" | "custom" | "custom-audio";
 
 interface ISettingItemCore {
     type: TSettingItemType;

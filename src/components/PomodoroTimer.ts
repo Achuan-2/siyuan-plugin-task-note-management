@@ -1,7 +1,8 @@
-import { showMessage, confirm, getFrontend } from "siyuan";
+import { showMessage, confirm, getFrontend, Dialog } from "siyuan";
 import { PomodoroRecordManager } from "../utils/pomodoroRecord";
 import { getBlockByID, openBlock } from "../api";
 import { i18n } from "../pluginInstance";
+import { resolveAudioPath } from "../utils/audioUtils";
 
 
 export class PomodoroTimer {
@@ -80,21 +81,20 @@ export class PomodoroTimer {
     private pendingSettings: any = null; // pending settings when update skipped due to running
 
     // 随机微休息相关（改为定期检查机制，类似index.ts）
-    private randomNotificationSounds: HTMLAudioElement[] = [];
-    private randomNotificationEnabled: boolean = false;
-    private randomNotificationEndSound: HTMLAudioElement = null;
-    private randomNotificationEndSoundTimer: number = null; // 结束声音定时器
-    private randomNotificationCount: number = 0; // 随机微休息完成计数
-    private randomNotificationCheckTimer: number = null; // 定期检查定时器
-    private randomNotificationLastCheckTime: number = 0; // 上次检查时间
-    private randomNotificationNextTriggerTime: number = 0; // 下次触发时间
-    private randomNotificationWindow: any = null; // 新增：随机微休息弹窗
+    private randomRestSounds: HTMLAudioElement[] = [];
+    private randomRestEnabled: boolean = false;
+    private randomRestEndSound: HTMLAudioElement = null;
+    private randomRestEndSoundTimer: number = null; // 结束声音定时器
+    private randomRestCount: number = 0; // 随机微休息完成计数
+    private randomRestCheckTimer: number = null; // 定期检查定时器
+    private randomRestNextTriggerTime: number = 0; // 下次触发时间
+    private randomRestWindow: any = null; // 新增：随机微休息弹窗
     private pomodoroEndWindow: any = null; // 新增：番茄钟结束弹窗
 
     private systemNotificationEnabled: boolean = true; // 新增：系统弹窗开关
-    private randomNotificationSystemNotificationEnabled: boolean = true; // 新增：随机微休息系统通知开关
-    private randomNotificationAutoClose: boolean = true // 新增：随机微休息系统通知自动关闭
-    private randomNotificationAutoCloseDelay: number = 5; // 新增：随机微休息系统通知自动关闭延迟
+    private randomRestSystemNotificationEnabled: boolean = true; // 新增：随机微休息系统通知开关
+    private randomRestAutoClose: boolean = true // 新增：随机微休息系统通知自动关闭
+    private randomRestAutoCloseDelay: number = 5; // 新增：随机微休息系统通知自动关闭延迟
 
     private isFullscreen: boolean = false; // 新增：全屏模式状态
     private escapeKeyHandler: ((e: KeyboardEvent) => void) | null = null; // 新增：ESC键监听器
@@ -127,10 +127,10 @@ export class PomodoroTimer {
         this.systemNotificationEnabled = settings.systemNotification !== false;
 
         // 初始化随机微休息设置
-        this.randomNotificationEnabled = settings.randomNotificationEnabled || false;
-        this.randomNotificationSystemNotificationEnabled = settings.randomNotificationSystemNotification !== false; // 新增
-        this.randomNotificationAutoClose = true;
-        this.randomNotificationAutoCloseDelay = 5;
+        this.randomRestEnabled = settings.randomRestEnabled || false;
+        this.randomRestSystemNotificationEnabled = settings.randomRestSystemNotification !== false; // 新增
+        this.randomRestAutoClose = true;
+        this.randomRestAutoCloseDelay = 5;
 
         // 初始化自动模式设置
         this.autoMode = settings.autoMode || false;
@@ -323,14 +323,15 @@ export class PomodoroTimer {
             reminderId: this.reminder.id,
             currentPhaseOriginalDuration: this.currentPhaseOriginalDuration,
             startTime: this.startTime,
-            randomNotificationCount: this.randomNotificationCount,
-            randomNotificationEnabled: this.randomNotificationEnabled,
+            randomRestCount: this.randomRestCount,
+            randomRestEnabled: this.randomRestEnabled,
             todayFocusMinutes: this.recordManager.getTodayFocusTime(),
             weekFocusMinutes: this.recordManager.getWeekFocusTime(),
             windowBounds: windowBounds, // 窗口位置信息
             isDocked: this.isDocked, // 新增：吸附模式状态
             isMiniMode: this.isMiniMode, // 新增：迷你模式状态
-            normalWindowBounds: this.normalWindowBounds // 新增：保存的正常窗口位置
+            normalWindowBounds: this.normalWindowBounds, // 新增：保存的正常窗口位置
+            randomRestNextTriggerTime: this.randomRestNextTriggerTime // 新增：记录下次随机休息时间
         };
     }
 
@@ -381,7 +382,7 @@ export class PomodoroTimer {
 
     private async initComponents(container?: HTMLElement, orphanedWindow?: any) {
         await this.recordManager.initialize();
-        this.initAudio();
+        await this.initAudio();
 
         if (orphanedWindow) {
             // If recovering, we already have the window (orphanedWindow).
@@ -394,11 +395,12 @@ export class PomodoroTimer {
         this.updateStatsDisplay();
     }
 
-    private initAudio() {
+    private async initAudio() {
         // 初始化工作背景音
         if (this.settings.workSound) {
             try {
-                this.workAudio = new Audio(this.settings.workSound);
+                const resolved = await resolveAudioPath(this.settings.workSound);
+                this.workAudio = new Audio(resolved);
                 this.workAudio.loop = true;
                 this.workAudio.volume = this.isBackgroundAudioMuted ? 0 : this.backgroundVolume;
                 this.workAudio.preload = 'auto';
@@ -410,7 +412,8 @@ export class PomodoroTimer {
         // 初始化短时休息背景音
         if (this.settings.breakSound) {
             try {
-                this.breakAudio = new Audio(this.settings.breakSound);
+                const resolved = await resolveAudioPath(this.settings.breakSound);
+                this.breakAudio = new Audio(resolved);
                 this.breakAudio.loop = true;
                 this.breakAudio.volume = this.isBackgroundAudioMuted ? 0 : this.backgroundVolume;
                 this.breakAudio.preload = 'auto';
@@ -422,7 +425,8 @@ export class PomodoroTimer {
         // 初始化长时休息背景音
         if (this.settings.longBreakSound) {
             try {
-                this.longBreakAudio = new Audio(this.settings.longBreakSound);
+                const resolved = await resolveAudioPath(this.settings.longBreakSound);
+                this.longBreakAudio = new Audio(resolved);
                 this.longBreakAudio.loop = true;
                 this.longBreakAudio.volume = this.isBackgroundAudioMuted ? 0 : this.backgroundVolume;
                 this.longBreakAudio.preload = 'auto';
@@ -434,7 +438,8 @@ export class PomodoroTimer {
         // 初始化工作结束提示音（音量不受静音影响）
         if (this.settings.workEndSound) {
             try {
-                this.workEndAudio = new Audio(this.settings.workEndSound);
+                const resolved = await resolveAudioPath(this.settings.workEndSound);
+                this.workEndAudio = new Audio(resolved);
                 this.workEndAudio.volume = 1;
                 this.workEndAudio.preload = 'auto';
             } catch (error) {
@@ -445,7 +450,8 @@ export class PomodoroTimer {
         // 初始化休息结束提示音（音量不受静音影响）
         if (this.settings.breakEndSound) {
             try {
-                this.breakEndAudio = new Audio(this.settings.breakEndSound);
+                const resolved = await resolveAudioPath(this.settings.breakEndSound);
+                this.breakEndAudio = new Audio(resolved);
                 this.breakEndAudio.volume = 1;
                 this.breakEndAudio.preload = 'auto';
             } catch (error) {
@@ -454,13 +460,13 @@ export class PomodoroTimer {
         }
 
         // 初始化随机微休息
-        if (this.randomNotificationEnabled && this.settings.randomNotificationSounds) {
-            this.initRandomNotificationSounds();
+        if (this.randomRestEnabled && this.settings.randomRestSounds) {
+            await this.initRandomRestSounds();
         }
 
         // 初始化随机微休息结束声音
-        if (this.randomNotificationEnabled && this.settings.randomNotificationEndSound) {
-            this.initRandomNotificationEndSound();
+        if (this.randomRestEnabled && this.settings.randomRestEndSound) {
+            await this.initRandomRestEndSound();
         }
     }
 
@@ -493,56 +499,53 @@ export class PomodoroTimer {
         this.audioUnlockHandler = null;
     }
 
-    private initRandomNotificationSounds() {
+    private async initRandomRestSounds() {
         try {
-            const soundPaths = this.settings.randomNotificationSounds
-                .split(',')
-                .map(path => path.trim())
-                .filter(path => path.length > 0);
+            const soundPath = this.settings.randomRestSounds || '';
 
-            this.randomNotificationSounds = [];
-            soundPaths.forEach((path, index) => {
+            this.randomRestSounds = [];
+            if (soundPath) {
                 try {
-                    const audio = new Audio(path);
+                    const resolved = await resolveAudioPath(soundPath);
+                    const audio = new Audio(resolved);
                     audio.volume = 1; // 随机微休息固定音量，不受背景音静音影响
                     audio.preload = 'auto';
-
 
                     // 监听加载事件
                     audio.addEventListener('canplaythrough', () => {
                     });
 
-
                     audio.addEventListener('error', (e) => {
-                        console.error(`随机微休息 ${index + 1} 加载失败: ${path}`, e);
+                        console.error(`随机微休息加载失败: ${soundPath}`, e);
                     });
 
-
-                    this.randomNotificationSounds.push(audio);
+                    this.randomRestSounds.push(audio);
                 } catch (error) {
-                    console.warn(`无法创建随机微休息 ${index + 1}: ${path}`, error);
+                    console.warn(`无法创建随机微休息: ${soundPath}`, error);
                 }
-            });
+            }
 
         } catch (error) {
             console.warn('初始化随机微休息失败:', error);
         }
     }
 
-    private initRandomNotificationEndSound() {
+    private async initRandomRestEndSound() {
         try {
-            if (this.settings.randomNotificationEndSound) {
-                this.randomNotificationEndSound = new Audio(this.settings.randomNotificationEndSound);
-                this.randomNotificationEndSound.volume = 1; // 固定音量，不受背景音静音影响
-                this.randomNotificationEndSound.preload = 'auto';
+            const path = this.settings.randomRestEndSound || '';
+            if (path) {
+                const resolved = await resolveAudioPath(path);
+                this.randomRestEndSound = new Audio(resolved);
+                this.randomRestEndSound.volume = 1; // 固定音量，不受背景音静音影响
+                this.randomRestEndSound.preload = 'auto';
 
 
                 // 监听加载事件
-                this.randomNotificationEndSound.addEventListener('canplaythrough', () => {
+                this.randomRestEndSound.addEventListener('canplaythrough', () => {
                 });
 
 
-                this.randomNotificationEndSound.addEventListener('error', (e) => {
+                this.randomRestEndSound.addEventListener('error', (e) => {
                     console.error('随机微休息结束声音加载失败:', e);
                 });
 
@@ -553,8 +556,8 @@ export class PomodoroTimer {
         }
     }
 
-    private async playRandomNotificationSound() {
-        if (!this.randomNotificationEnabled || this.randomNotificationSounds.length === 0) {
+    private async playRandomRestSound() {
+        if (!this.randomRestEnabled) {
             console.warn('随机微休息未启用或无可用音频文件');
             return;
         }
@@ -563,94 +566,92 @@ export class PomodoroTimer {
             if (!this.audioInitialized) {
                 await this.initializeAudioPlayback();
             }
-            // 随机选择一个提示音
-            const randomIndex = Math.floor(Math.random() * this.randomNotificationSounds.length);
-            const selectedAudio = this.randomNotificationSounds[randomIndex];
+            // 仅使用第一个配置的提示音（若存在）。不再做随机选择。
+            const selectedAudio = (this.randomRestSounds && this.randomRestSounds.length > 0) ? this.randomRestSounds[0] : null;
 
+            if (selectedAudio) {
+                // 等待音频加载完成
+                if (selectedAudio.readyState < 3) {
+                    await this.waitForAudioLoad(selectedAudio);
+                }
 
-
-            // 等待音频加载完成
-            if (selectedAudio.readyState < 3) {
-                await this.waitForAudioLoad(selectedAudio);
+                // 确保音量设置正确（不受背景音静音影响）
+                selectedAudio.volume = 1;
+            } else {
+                // 未配置提示音时，仍然要打开弹窗提示并显示系统通知（见要求2）
+                console.debug('[PomodoroTimer] 未配置随机微休息提示音，跳过音频播放，但会显示弹窗与系统通知');
             }
-
-            // 确保音量设置正确（不受背景音静音影响）
-            selectedAudio.volume = 1;
 
             // 与全局提示音播放机制对齐：避免与 index.ts 中的提示音冲突
             const pluginAny = this.plugin as any;
-            // 如果插件实例存在且正在播放通知，则等待短暂重试，最多几次
-            if (pluginAny && pluginAny.isPlayingNotificationSound) {
-                let retried = 0;
-                const maxRetries = 5;
-                while (pluginAny.isPlayingNotificationSound && retried < maxRetries) {
-                    await new Promise(res => setTimeout(res, 200));
-                    retried++;
+            // 如果存在可播放的音频，则尝试播放；若全局已有提示音在播放，则只跳过音频播放，不跳过弹窗与系统通知。
+            if (selectedAudio) {
+                if (pluginAny && pluginAny.isPlayingNotificationSound) {
+                    let retried = 0;
+                    const maxRetries = 5;
+                    while (pluginAny.isPlayingNotificationSound && retried < maxRetries) {
+                        await new Promise(res => setTimeout(res, 200));
+                        retried++;
+                    }
+                    if (pluginAny.isPlayingNotificationSound) {
+                        console.warn('[PomodoroTimer] 检测到已有全局提示音在播放，跳过本次音频播放以避免重叠');
+                        // 继续走弹窗与系统通知流程
+                    }
                 }
-                if (pluginAny.isPlayingNotificationSound) {
-                    console.warn('[PomodoroTimer] 检测到已有全局提示音在播放，跳过本次随机微休息以避免重叠');
-                    return;
-                }
-            }
 
-            // 标记全局为正在播放（与 index.ts 的行为一致）
-            let clearGlobalFlagTimer: any = null;
-            try {
-                if (pluginAny) {
-                    try { pluginAny.isPlayingNotificationSound = true; } catch { }
-                    // 作为保险，10s 后清理该标志，防止死锁
-                    clearGlobalFlagTimer = setTimeout(() => {
+                // 标记全局为正在播放（与 index.ts 的行为一致），并播放音频
+                let clearGlobalFlagTimer: any = null;
+                try {
+                    if (pluginAny) {
+                        try { pluginAny.isPlayingNotificationSound = true; } catch { }
+                        clearGlobalFlagTimer = setTimeout(() => {
+                            try { pluginAny.isPlayingNotificationSound = false; } catch { }
+                        }, 10000);
+                    }
+
+                    const played = await this.safePlayAudio(selectedAudio);
+                    if (!played) {
+                        console.warn('随机微休息播放失败或被阻止');
+                        this.audioInitialized = false;
+                        this.attachAudioUnlockListeners();
+                    }
+                } finally {
+                    if (pluginAny) {
                         try { pluginAny.isPlayingNotificationSound = false; } catch { }
-                    }, 10000);
-                }
-
-                // 直接使用已初始化的音频元素播放，避免 autoplay policy 问题
-                // 不使用 playOneShotAudio，因为它会创建新的 Audio 对象
-                // 使用 safePlayAudio 以在权限不足时先尝试初始化并优雅处理错误
-                const played = await this.safePlayAudio(selectedAudio);
-                if (!played) {
-                    console.warn('随机微休息播放失败或被阻止');
-                    // safePlayAudio 已经会在 NotAllowedError 时尝试初始化或附加解锁监听器
-                    this.audioInitialized = false;
-                    this.attachAudioUnlockListeners();
-                }
-            } finally {
-                // 清理全局播放标志
-                if (pluginAny) {
-                    try { pluginAny.isPlayingNotificationSound = false; } catch { }
-                }
-                if (clearGlobalFlagTimer) {
-                    clearTimeout(clearGlobalFlagTimer);
+                    }
+                    if (clearGlobalFlagTimer) {
+                        clearTimeout(clearGlobalFlagTimer);
+                    }
                 }
             }
 
             // 打开弹窗提示
-            this.openRandomNotificationWindow();
+            this.openRandomRestWindow();
 
             // 显示系统通知
-            if (this.randomNotificationSystemNotificationEnabled) {
+            if (this.randomRestSystemNotificationEnabled) {
                 this.showSystemNotification(
-                    i18n('randomNotificationSettings'),
-                    i18n('randomRest', { duration: this.settings.randomNotificationBreakDuration }),
-                    this.randomNotificationAutoClose ? this.randomNotificationAutoCloseDelay : undefined
+                    i18n('randomRestSettings'),
+                    i18n('randomRest', { duration: this.settings.randomRestBreakDuration }),
+                    this.randomRestAutoClose ? this.randomRestAutoCloseDelay : undefined
                 );
             }
 
             // 清理之前的结束声音定时器（如果存在）
-            if (this.randomNotificationEndSoundTimer) {
-                clearTimeout(this.randomNotificationEndSoundTimer);
-                this.randomNotificationEndSoundTimer = null;
+            if (this.randomRestEndSoundTimer) {
+                clearTimeout(this.randomRestEndSoundTimer);
+                this.randomRestEndSoundTimer = null;
             }
 
             // 使用设置中的微休息时间播放结束声音
-            if (this.randomNotificationEndSound) {
-                const breakDurationSeconds = Number(this.settings.randomNotificationBreakDuration) || 0;
+            if (this.randomRestEndSound) {
+                const breakDurationSeconds = Number(this.settings.randomRestBreakDuration) || 0;
                 const breakDuration = Math.max(0, breakDurationSeconds * 1000);
 
-                this.randomNotificationEndSoundTimer = window.setTimeout(async () => {
+                this.randomRestEndSoundTimer = window.setTimeout(async () => {
                     try {
                         // 使用 safePlayAudio 播放结束声音，保证在权限允许时能播放
-                        const playedEnd = await this.safePlayAudio(this.randomNotificationEndSound);
+                        const playedEnd = await this.safePlayAudio(this.randomRestEndSound);
                         if (playedEnd) {
                         } else {
                             console.warn('随机微休息结束声音被阻止或播放失败（等待用户交互以解锁）');
@@ -659,47 +660,47 @@ export class PomodoroTimer {
                         // safePlayAudio 应不会抛出，但以防万一记录警告
                         console.warn('播放随机微休息结束声音时发生异常:', error);
                     } finally {
-                        this.closeRandomNotificationWindow();
+                        this.closeRandomRestWindow();
                         // 随机微休息微休息结束，增加计数并持久化
                         try {
                             // 随机微休息计数仅在内存中维护
-                            this.randomNotificationCount++;
+                            this.randomRestCount++;
                             this.updateDisplay();
                         } catch (err) {
                             console.warn('更新随机微休息计数失败:', err);
                         }
                         // 无论音频是否播放成功，都显示系统通知
-                        if (this.randomNotificationSystemNotificationEnabled) {
+                        if (this.randomRestSystemNotificationEnabled) {
                             this.showSystemNotification(
-                                i18n('randomNotificationSettings'),
+                                i18n('randomRestSettings'),
                                 i18n('randomRestComplete') || '微休息时间结束，可以继续专注工作了！',
-                                this.randomNotificationAutoClose ? this.randomNotificationAutoCloseDelay : undefined
+                                this.randomRestAutoClose ? this.randomRestAutoCloseDelay : undefined
                             );
                         }
-                        this.randomNotificationEndSoundTimer = null;
+                        this.randomRestEndSoundTimer = null;
                     }
                 }, breakDuration);
             } else {
-                const breakDurationSeconds = Number(this.settings.randomNotificationBreakDuration) || 0;
+                const breakDurationSeconds = Number(this.settings.randomRestBreakDuration) || 0;
                 const breakDuration = Math.max(0, breakDurationSeconds * 1000);
 
-                this.randomNotificationEndSoundTimer = window.setTimeout(() => {
-                    this.closeRandomNotificationWindow();
+                this.randomRestEndSoundTimer = window.setTimeout(() => {
+                    this.closeRandomRestWindow();
                     // 随机微休息微休息结束，增加计数并持久化
                     try {
                         // 随机微休息计数仅在内存中维护
-                        this.randomNotificationCount++;
+                        this.randomRestCount++;
                         this.updateDisplay();
                     } catch (err) {
                         console.warn('更新随机微休息计数失败:', err);
                     }
-                    if (this.randomNotificationSystemNotificationEnabled) {
+                    if (this.randomRestSystemNotificationEnabled) {
                         this.showSystemNotification(
-                            i18n('randomNotificationSettings'),
+                            i18n('randomRestSettings'),
                             i18n('randomRestComplete') || '微休息时间结束，可以继续专注工作了！'
                         );
                     }
-                    this.randomNotificationEndSoundTimer = null;
+                    this.randomRestEndSoundTimer = null;
                 }, breakDuration);
             }
 
@@ -712,34 +713,35 @@ export class PomodoroTimer {
      * 启动随机微休息的定期检查机制（类似index.ts的定时任务提醒）
      * 每30秒检查一次是否需要播放随机微休息，确保不会遗漏
      */
-    private startRandomNotificationTimer() {
-        if (!this.randomNotificationEnabled || !this.isWorkPhase) {
-            this.stopRandomNotificationTimer();
+    private startRandomRestTimer(preserveExistingNextTime: boolean = false) {
+        if (!this.randomRestEnabled || !this.isWorkPhase) {
+            this.stopRandomRestTimer();
             return;
         }
 
         // 如果已经在运行，先停止
-        this.stopRandomNotificationTimer();
+        this.stopRandomRestTimer();
 
         // 初始化下次触发时间
-        this.randomNotificationLastCheckTime = Date.now();
-        this.randomNotificationNextTriggerTime = this.calculateNextRandomNotificationTime();
+        if (!preserveExistingNextTime || !this.randomRestNextTriggerTime || this.randomRestNextTriggerTime <= Date.now()) {
+            this.randomRestNextTriggerTime = this.calculateNextRandomRestTime();
+        }
 
         // 启动定期检查定时器（每5秒检查一次，防止错过）
-        this.randomNotificationCheckTimer = window.setInterval(() => {
-            this.checkRandomNotificationTrigger();
+        this.randomRestCheckTimer = window.setInterval(() => {
+            this.checkRandomRestTrigger();
         }, 5000);
 
         // 立即执行一次检查
-        this.checkRandomNotificationTrigger();
+        this.checkRandomRestTrigger();
     }
 
     /**
      * 计算下次随机微休息的触发时间
      */
-    private calculateNextRandomNotificationTime(): number {
-        const minInterval = (Number(this.settings.randomNotificationMinInterval) || 1) * 60 * 1000;
-        const maxInterval = (Number(this.settings.randomNotificationMaxInterval) || 1) * 60 * 1000;
+    private calculateNextRandomRestTime(): number {
+        const minInterval = (Number(this.settings.randomRestMinInterval) || 1) * 60 * 1000;
+        const maxInterval = (Number(this.settings.randomRestMaxInterval) || 1) * 60 * 1000;
         const actualMaxInterval = Math.max(minInterval, maxInterval);
 
         // 在最小和最大间隔之间随机选择
@@ -755,54 +757,52 @@ export class PomodoroTimer {
     /**
      * 检查是否需要触发随机微休息（定期检查机制）
      */
-    private checkRandomNotificationTrigger() {
-        if (!this.randomNotificationEnabled || !this.isWorkPhase || !this.isRunning || this.isPaused) {
+    private checkRandomRestTrigger() {
+        if (!this.randomRestEnabled || !this.isWorkPhase || !this.isRunning || this.isPaused) {
             return;
         }
 
         const now = Date.now();
 
         // 如果当前时间已达到或超过下次触发时间，则播放提示音
-        if (now >= this.randomNotificationNextTriggerTime) {
+        if (now >= this.randomRestNextTriggerTime) {
             // 播放随机微休息
-            this.playRandomNotificationSound().catch(error => {
+            this.playRandomRestSound().catch(error => {
                 console.warn('播放随机微休息失败:', error);
             });
 
             // 计算下次触发时间
-            this.randomNotificationNextTriggerTime = this.calculateNextRandomNotificationTime();
+            this.randomRestNextTriggerTime = this.calculateNextRandomRestTime();
         }
 
-        // 更新最后检查时间
-        this.randomNotificationLastCheckTime = now;
     }
 
     /**
      * 停止随机微休息的定期检查机制
      */
-    private stopRandomNotificationTimer() {
-        if (this.randomNotificationCheckTimer) {
-            clearInterval(this.randomNotificationCheckTimer);
-            this.randomNotificationCheckTimer = null;
+    private stopRandomRestTimer() {
+        if (this.randomRestCheckTimer) {
+            clearInterval(this.randomRestCheckTimer);
+            this.randomRestCheckTimer = null;
         }
         // 清理结束声音定时器
-        if (this.randomNotificationEndSoundTimer) {
-            clearTimeout(this.randomNotificationEndSoundTimer);
-            this.randomNotificationEndSoundTimer = null;
+        if (this.randomRestEndSoundTimer) {
+            clearTimeout(this.randomRestEndSoundTimer);
+            this.randomRestEndSoundTimer = null;
         }
-        this.closeRandomNotificationWindow();
+        this.closeRandomRestWindow();
     }
 
 
 
-    private closeRandomNotificationWindow() {
-        if (this.randomNotificationWindow) {
+    private closeRandomRestWindow() {
+        if (this.randomRestWindow) {
             try {
-                this.randomNotificationWindow.close();
+                this.randomRestWindow.destroy();
             } catch (e) {
                 // ignore
             }
-            this.randomNotificationWindow = null;
+            this.randomRestWindow = null;
         }
     }
 
@@ -812,19 +812,23 @@ export class PomodoroTimer {
         const frontend = getFrontend();
         const isMobile = frontend.endsWith('mobile');
         const isBrowserDesktop = frontend === 'browser-desktop';
-        if (isMobile || isBrowserDesktop) return; // 仅在桌面端启用
 
-        this.openPomodoroEndWindowImpl(
-            i18n('pomodoroWorkEnd') || '工作结束',
-            i18n('pomodoroWorkEndDesc') || '工作时间结束，起来走走喝喝水吧！',
-            '🍅'
-        );
+        const title = i18n('pomodoroWorkEnd') || '工作结束';
+        const message = i18n('pomodoroWorkEndDesc') || '工作时间结束，起来走走喝喝水吧！';
+
+        // 非电脑客户端使用思源内部 Dialog
+        if (isMobile || isBrowserDesktop) {
+            this.openSiyuanDialog(title, message, '🍅');
+            return;
+        }
+
+        this.openPomodoroEndWindowImpl(title, message, '🍅');
     }
 
     private closePomodoroEndWindow() {
         if (this.pomodoroEndWindow) {
             try {
-                this.pomodoroEndWindow.close();
+                this.pomodoroEndWindow.destroy();
             } catch (e) {
                 // ignore
             }
@@ -832,19 +836,57 @@ export class PomodoroTimer {
         }
     }
 
-    private openRandomNotificationWindow() {
-        if (!this.settings.randomNotificationPopupWindow) return;
+    private openRandomRestWindow() {
+        if (!this.settings.randomRestPopupWindow) return;
 
         const frontend = getFrontend();
         const isMobile = frontend.endsWith('mobile');
         const isBrowserDesktop = frontend === 'browser-desktop';
-        if (isMobile || isBrowserDesktop) return; // 仅在桌面端启用
-        this.openRandomNotificationWindowImpl(
-            '微休息',
-            i18n('randomRest', { duration: this.settings.randomNotificationBreakDuration }) || 'Time for a quick break!',
-            '🎲',
-            Number(this.settings.randomNotificationBreakDuration)
-        );
+
+        const title = i18n('randomRestTitle') || '随机微休息';
+        const message = i18n('randomRest', { duration: this.settings.randomRestBreakDuration }) || 'Time for a quick break!';
+        const autoCloseDelay = Number(this.settings.randomRestBreakDuration) || 0;
+
+        // 非电脑客户端使用思源内部 Dialog
+        if (isMobile || isBrowserDesktop) {
+            this.openSiyuanDialog(title, message, '🎲', autoCloseDelay);
+            return;
+        }
+
+        this.openRandomRestWindowImpl(title, message, '🎲', autoCloseDelay);
+    }
+
+    /**
+     * 使用思源内部 Dialog 显示弹窗（用于非电脑客户端）
+     * @param title 标题
+     * @param message 消息内容
+     * @param icon 图标
+     * @param autoCloseDelay 自动关闭延迟（秒），0表示不自动关闭
+     */
+    private openSiyuanDialog(title: string, message: string, icon: string, autoCloseDelay: number = 0) {
+        try {
+            const dialog = new Dialog({
+                title: `${icon} ${title}`,
+                content: `<div style="padding: 20px; text-align: center; font-size: 16px;">${message}</div>`,
+                width: "360px",
+                height: "auto"
+            });
+
+            // 如果设置了自动关闭，延迟关闭弹窗
+            if (autoCloseDelay > 0) {
+                setTimeout(() => {
+                    try {
+                        dialog.destroy();
+                    } catch (e) {
+                        // ignore
+                    }
+                }, autoCloseDelay * 1000);
+            }
+        } catch (e) {
+            console.error('[PomodoroTimer] Failed to open siyuan dialog:', e);
+            // 降级使用 showMessage
+            showMessage(`${icon} ${title}: ${message}`, autoCloseDelay > 0 ? autoCloseDelay * 1000 : 3000);
+        }
     }
 
     /**
@@ -1009,11 +1051,9 @@ export class PomodoroTimer {
                         const { ipcRenderer } = require('electron');
                         function handleConfirm() {
                             ipcRenderer.send('confirm-result', true);
-                            window.close();
                         }
                         function handleCancel() {
                             ipcRenderer.send('confirm-result', false);
-                            window.close();
                         }
                     </script>
                 </body>
@@ -1029,6 +1069,9 @@ export class PomodoroTimer {
                     onCancel();
                 }
                 ipcMain.removeListener('confirm-result', handleConfirmResult);
+                if (confirmWindow && !confirmWindow.isDestroyed()) {
+                    confirmWindow.destroy();
+                }
             };
             ipcMain.on('confirm-result', handleConfirmResult);
 
@@ -1227,10 +1270,10 @@ export class PomodoroTimer {
         }
     }
 
-    private openRandomNotificationWindowImpl(title: string, message: string, icon: string, autoCloseDelay?: number) {
+    private openRandomRestWindowImpl(title: string, message: string, icon: string, autoCloseDelay?: number) {
         try {
             // 只关闭之前的随机微休息弹窗，不关闭番茄钟弹窗
-            this.closeRandomNotificationWindow();
+            this.closeRandomRestWindow();
 
             let electron: any;
             try {
@@ -1274,7 +1317,7 @@ export class PomodoroTimer {
             const winWidth = screenWidth;
             const winHeight = screenHeight;
 
-            this.randomNotificationWindow = new BrowserWindowConstructor({
+            this.randomRestWindow = new BrowserWindowConstructor({
                 width: winWidth,
                 height: winHeight,
                 frame: true,
@@ -1298,7 +1341,7 @@ export class PomodoroTimer {
             });
 
             // 移除默认菜单
-            this.randomNotificationWindow.setMenu(null);
+            this.randomRestWindow.setMenu(null);
 
             const bgColor = this.getCssVariable('--b3-theme-background');
             const textColor = this.getCssVariable('--b3-theme-on-background');
@@ -1402,12 +1445,12 @@ export class PomodoroTimer {
             `;
 
             // 监听 ready-to-show 事件后再显示窗口，防止闪烁
-            this.randomNotificationWindow.once('ready-to-show', () => {
-                if (this.randomNotificationWindow) {
-                    this.randomNotificationWindow.show();
-                    this.randomNotificationWindow.focus();
+            this.randomRestWindow.once('ready-to-show', () => {
+                if (this.randomRestWindow) {
+                    this.randomRestWindow.show();
+                    this.randomRestWindow.focus();
                     // 强制置顶
-                    this.randomNotificationWindow.setAlwaysOnTop(true, "screen-saver");
+                    this.randomRestWindow.setAlwaysOnTop(true, "screen-saver");
 
                     // 延迟将番茄钟BrowserWindow也置顶，确保在弹窗之上
                     setTimeout(() => {
@@ -1424,20 +1467,20 @@ export class PomodoroTimer {
                 }
             });
 
-            this.randomNotificationWindow.on('closed', () => {
-                this.randomNotificationWindow = null;
+            this.randomRestWindow.on('closed', () => {
+                this.randomRestWindow = null;
             });
 
             // 防止窗口被意外导航
-            this.randomNotificationWindow.webContents.on('will-navigate', (e: any) => {
+            this.randomRestWindow.webContents.on('will-navigate', (e: any) => {
                 e.preventDefault();
             });
 
-            this.randomNotificationWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(htmlContent));
+            this.randomRestWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(htmlContent));
 
             if (autoCloseDelay) {
                 setTimeout(() => {
-                    this.closeRandomNotificationWindow();
+                    this.closeRandomRestWindow();
                 }, (autoCloseDelay + 1) * 1000); // 增加1秒延迟，让倒计时显示为0
             }
 
@@ -1534,14 +1577,14 @@ export class PomodoroTimer {
                     audioLoadPromises.push(this.waitForAudioLoad(this.breakEndAudio));
                 }
 
-                if (this.randomNotificationSounds.length > 0) {
-                    this.randomNotificationSounds.forEach((audio) => {
+                if (this.randomRestSounds.length > 0) {
+                    this.randomRestSounds.forEach((audio) => {
                         audioLoadPromises.push(this.waitForAudioLoad(audio));
                     });
                 }
 
-                if (this.randomNotificationEndSound) {
-                    audioLoadPromises.push(this.waitForAudioLoad(this.randomNotificationEndSound));
+                if (this.randomRestEndSound) {
+                    audioLoadPromises.push(this.waitForAudioLoad(this.randomRestEndSound));
                 }
 
                 await Promise.allSettled(audioLoadPromises);
@@ -1575,13 +1618,13 @@ export class PomodoroTimer {
                     };
 
                     // 对随机微休息数组尝试解锁
-                    if (this.randomNotificationSounds && this.randomNotificationSounds.length > 0) {
-                        this.randomNotificationSounds.forEach((a) => unlockAttempts.push(tryUnlockAudio(a)));
+                    if (this.randomRestSounds && this.randomRestSounds.length > 0) {
+                        this.randomRestSounds.forEach((a) => unlockAttempts.push(tryUnlockAudio(a)));
                     }
 
                     // 对随机微休息结束声音尝试解锁
-                    if (this.randomNotificationEndSound) {
-                        unlockAttempts.push(tryUnlockAudio(this.randomNotificationEndSound));
+                    if (this.randomRestEndSound) {
+                        unlockAttempts.push(tryUnlockAudio(this.randomRestEndSound));
                     }
 
                     // 对工作/休息结束提示音也尝试解锁（以防用户选择这些作为随机微休息）
@@ -1718,13 +1761,24 @@ export class PomodoroTimer {
                 return false;
             }
 
-            const safeSrc = src.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/`/g, '\\`');
+            // 使用 resolveAudioPath 解析路径，支持 petal 文件夹中的文件
+            let resolvedSrc = src;
+            if (!src.startsWith('blob:') && !src.startsWith('file:')) {
+                resolvedSrc = await resolveAudioPath(src);
+            }
+
+            if (!resolvedSrc) {
+                console.warn('[PomodoroTimer] 无法解析音频路径:', src);
+                return false;
+            }
+
+            const safeSrc = resolvedSrc.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/`/g, '\\`');
             const loop = !!(opts && opts.loop);
             const volume = typeof (opts && opts.volume) === 'number' ? (opts!.volume) : 1;
 
             const script = `(async function(){
                 try {
-                    const id = 'pomodoro-audio-' + encodeURIComponent('${safeSrc}');
+                    const id = 'pomodoro-audio-' + encodeURIComponent('${safeSrc}').replace(/[^a-zA-Z0-9]/g, '_');
                     let a = document.getElementById(id);
                     if (!a) {
                         a = document.createElement('audio');
@@ -1735,11 +1789,50 @@ export class PomodoroTimer {
                     }
                     a.loop = ${loop};
                     a.volume = ${volume};
-                    if (a.src !== '${safeSrc}') a.src = '${safeSrc}';
-                    try { a.currentTime = 0; } catch(e) {}
-                    await a.play();
-                    return {ok:true};
-                } catch (e) { return {ok:false, err: (e && e.name) ? e.name : (e && e.message) ? e.message : String(e)}; }
+                    
+                    // 如果 src 相同且可以播放，直接播放
+                    if (a.src === '${safeSrc}' && a.readyState >= 2) {
+                        try { a.currentTime = 0; } catch(e) {}
+                        await a.play();
+                        return {ok:true};
+                    }
+                    
+                    // 否则等待加载完成
+                    return new Promise((resolve) => {
+                        const onCanPlay = async () => {
+                            a.removeEventListener('canplaythrough', onCanPlay);
+                            a.removeEventListener('error', onError);
+                            try {
+                                try { a.currentTime = 0; } catch(e) {}
+                                await a.play();
+                                resolve({ok:true});
+                            } catch (playErr) {
+                                resolve({ok:false, err: playErr.name || playErr.message || 'play failed'});
+                            }
+                        };
+                        const onError = (e) => {
+                            a.removeEventListener('canplaythrough', onCanPlay);
+                            a.removeEventListener('error', onError);
+                            const errMsg = a.error ? \`\${a.error.code}:\${a.error.message || 'unknown'}\` : 'load error';
+                            resolve({ok:false, err: errMsg});
+                        };
+                        
+                        a.addEventListener('canplaythrough', onCanPlay);
+                        a.addEventListener('error', onError);
+                        
+                        // 设置超时
+                        setTimeout(() => {
+                            a.removeEventListener('canplaythrough', onCanPlay);
+                            a.removeEventListener('error', onError);
+                            resolve({ok:false, err: 'timeout'});
+                        }, 5000);
+                        
+                        a.src = '${safeSrc}';
+                        a.load();
+                    });
+                } catch (e) { 
+                    return {ok:false, err: (e && e.name) ? e.name : (e && e.message) ? e.message : String(e)}; 
+                }
             })()`;
 
             const res = await win.webContents.executeJavaScript(script, true);
@@ -1748,7 +1841,7 @@ export class PomodoroTimer {
             }
             // 如果返回错误，记录详细信息
             if (res && res.err) {
-                console.warn('[PomodoroTimer] BrowserWindow 音频播放失败:', res.err);
+                console.warn('[PomodoroTimer] BrowserWindow 音频播放失败:', res.err, 'src:', src);
             }
             return false;
         } catch (e) {
@@ -2008,8 +2101,8 @@ export class PomodoroTimer {
             align-items: center;
             justify-content: center;
         `;
-        this.minimizeBtn.innerHTML = '🔽';
-        this.minimizeBtn.title = i18n('minimize') || '最小化'; // i18n
+        this.minimizeBtn.innerHTML = '⭕';
+        this.minimizeBtn.title = i18n('miniMode');
         this.minimizeBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -2241,9 +2334,47 @@ export class PomodoroTimer {
             this.close();
         });
 
-        headerButtons.appendChild(switchContainer);
+        // 创建吸附模式按钮（DOM窗口专用）
+        const dockBtn = document.createElement('button');
+        dockBtn.className = 'pomodoro-dock-btn';
+        dockBtn.style.cssText = `
+            background: none;
+            border: none;
+            color: var(--b3-theme-on-surface);
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            font-size: 14px;
+            line-height: 1;
+            opacity: 0.7;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        `;
+        dockBtn.innerHTML = '🧲';
+        dockBtn.title = i18n('dockToEdge') || '吸附到屏幕边缘';
+        dockBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.toggleDOMWindowDock();
+        });
+        dockBtn.addEventListener('mouseenter', () => {
+            dockBtn.style.opacity = '1';
+            dockBtn.style.transform = 'scale(1.1)';
+        });
+        dockBtn.addEventListener('mouseleave', () => {
+            dockBtn.style.opacity = '0.7';
+            dockBtn.style.transform = 'scale(1)';
+        });
+
+        // 左侧按钮：最小化 + 吸附 + 模式切换
+        title.appendChild(this.minimizeBtn);
+        title.appendChild(dockBtn);
+        title.appendChild(switchContainer);
+
         headerButtons.appendChild(this.expandToggleBtn);
-        headerButtons.appendChild(this.fullscreenBtn); // 添加全屏按钮
+        headerButtons.appendChild(this.fullscreenBtn);
         headerButtons.appendChild(closeBtn);
         header.appendChild(title);
         header.appendChild(headerButtons);
@@ -2582,25 +2713,25 @@ export class PomodoroTimer {
         const diceEl = document.createElement('span');
         diceEl.className = 'pomodoro-dice';
         diceEl.textContent = '🎲';
-        diceEl.title = (i18n('randomNotificationSettings') || '随机微休息');
+        diceEl.title = i18n('randomRestTitle') || '随机微休息';
         diceEl.style.cssText = `
             margin-left:8px;
             font-size:14px;
             cursor:default;
             opacity:0.9;
-            display: ${this.randomNotificationEnabled ? 'inline' : 'none'};
+            display: ${this.randomRestEnabled ? 'inline' : 'none'};
         `;
         pomodoroCountLeft.appendChild(diceEl);
 
         // 随机微休息计数显示（紧邻骰子）
         const randomCountEl = document.createElement('span');
-        randomCountEl.id = 'randomNotificationCount';
-        randomCountEl.textContent = this.randomNotificationCount.toString();
+        randomCountEl.id = 'randomRestCount';
+        randomCountEl.textContent = this.randomRestCount.toString();
         randomCountEl.style.cssText = `
             margin-left:4px;
             font-size:12px;
             color: var(--b3-theme-on-surface-variant);
-            display: ${this.randomNotificationEnabled ? 'inline' : 'none'};
+            display: ${this.randomRestEnabled ? 'inline' : 'none'};
         `;
         pomodoroCountLeft.appendChild(randomCountEl);
 
@@ -3248,7 +3379,7 @@ export class PomodoroTimer {
             z-index: 10;
         `;
         this.restoreBtn.innerHTML = '↗';
-        this.restoreBtn.title = '恢复窗口';
+        this.restoreBtn.title = i18n('restoreWindow') || '恢复窗口';
         this.restoreBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -3740,12 +3871,12 @@ export class PomodoroTimer {
         if (this.isExpanded) {
             this.statsContainer.style.display = 'flex';
             this.expandToggleBtn.innerHTML = '📉';
-            this.expandToggleBtn.title = '折叠';
+            this.expandToggleBtn.title = i18n('collapse') || '折叠';
             this.container.style.height = 'auto';
         } else {
             this.statsContainer.style.display = 'none';
             this.expandToggleBtn.innerHTML = '📈';
-            this.expandToggleBtn.title = '展开';
+            this.expandToggleBtn.title = i18n('expand') || '展开';
             this.container.style.height = 'auto';
         }
 
@@ -3972,20 +4103,25 @@ export class PomodoroTimer {
         const diceEl = this.container?.querySelector('.pomodoro-dice') as HTMLElement | null;
         if (diceEl) {
             try {
-                diceEl.style.display = this.randomNotificationEnabled ? 'inline' : 'none';
+                diceEl.style.display = this.randomRestEnabled ? 'inline' : 'none';
             } catch (e) {
                 // 忽略DOM更新错误
             }
         }
         // 更新随机微休息计数显示
-        const randomCountEl = this.container?.querySelector('#randomNotificationCount') as HTMLElement | null;
+        const randomCountEl = this.container?.querySelector('#randomRestCount') as HTMLElement | null;
         if (randomCountEl) {
             try {
-                randomCountEl.textContent = this.randomNotificationCount.toString();
-                randomCountEl.style.display = this.randomNotificationEnabled ? 'inline' : 'none';
+                randomCountEl.textContent = this.randomRestCount.toString();
+                randomCountEl.style.display = this.randomRestEnabled ? 'inline' : 'none';
             } catch (e) {
                 // 忽略DOM更新错误
             }
+        }
+
+        // 更新DOM窗口吸附模式的进度条
+        if (this.isDocked && !this.isTabMode && !(this.container as any)?.webContents) {
+            this.updateDockedProgressBar();
         }
 
         // 更新按钮状态和位置
@@ -4122,7 +4258,7 @@ export class PomodoroTimer {
 
         // 启动随机微休息定时器（仅在工作时间）
         if (this.isWorkPhase) {
-            this.startRandomNotificationTimer();
+            this.startRandomRestTimer();
         }
 
         if (this.timer) {
@@ -4202,7 +4338,7 @@ export class PomodoroTimer {
         this.pausedTime = Math.floor((currentTime - this.startTime) / 1000);
 
         // 停止随机微休息定时器
-        this.stopRandomNotificationTimer();
+        this.stopRandomRestTimer();
 
         // 暂停所有背景音
         this.stopAllAudio();
@@ -4236,7 +4372,7 @@ export class PomodoroTimer {
 
         // 重新启动随机微休息定时器（仅在工作时间）
         if (this.isWorkPhase) {
-            this.startRandomNotificationTimer();
+            this.startRandomRestTimer();
         }
 
         this.timer = window.setInterval(() => {
@@ -4297,7 +4433,7 @@ export class PomodoroTimer {
         }
 
         this.stopAllAudio();
-        this.stopRandomNotificationTimer(); // 停止随机微休息
+        this.stopRandomRestTimer(); // 停止随机微休息
 
         this.isWorkPhase = true;
         this.isLongBreak = false;
@@ -4335,7 +4471,7 @@ export class PomodoroTimer {
         }
 
         this.stopAllAudio();
-        this.stopRandomNotificationTimer(); // 停止随机微休息
+        this.stopRandomRestTimer(); // 停止随机微休息
 
         this.isWorkPhase = false;
         this.isLongBreak = false;
@@ -4372,7 +4508,7 @@ export class PomodoroTimer {
         }
 
         this.stopAllAudio();
-        this.stopRandomNotificationTimer(); // 停止随机微休息
+        this.stopRandomRestTimer(); // 停止随机微休息
 
         this.isWorkPhase = false;
         this.isLongBreak = true;
@@ -4478,7 +4614,7 @@ export class PomodoroTimer {
 
         // BrowserWindow 模式下没有 statusDisplay DOM 元素
         if (this.statusDisplay) {
-            this.statusDisplay.textContent = '工作时间';
+            this.statusDisplay.textContent = i18n('pomodoroWork') || '工作时间';
         }
 
         // 重置当前阶段的原始时长为工作时长
@@ -4490,7 +4626,7 @@ export class PomodoroTimer {
         }
 
         this.stopAllAudio();
-        this.stopRandomNotificationTimer(); // 停止随机微休息
+        this.stopRandomRestTimer(); // 停止随机微休息
 
         if (this.isCountUp) {
             this.timeElapsed = 0;
@@ -4597,7 +4733,7 @@ export class PomodoroTimer {
             }
 
             this.stopAllAudio();
-            this.stopRandomNotificationTimer(); // 添加停止随机微休息
+            this.stopRandomRestTimer(); // 添加停止随机微休息
 
             // 播放工作结束提示音
             if (this.workEndAudio) {
@@ -4609,14 +4745,14 @@ export class PomodoroTimer {
 
             // 显示系统弹窗通知
             if (this.systemNotificationEnabled) {
-                const eventTitle = this.reminder.title || '番茄专注';
+                const eventTitle = this.reminder.title || (i18n('pomodoroFocusDefault') || '番茄专注');
                 this.showSystemNotification(
-                    '🍅 工作番茄完成！',
-                    `「${eventTitle}」的工作时间已结束，是时候休息一下了！`
+                    `🍅 ${i18n('pomodoroWorkEnd') || '工作番茄完成！'}`,
+                    `「${eventTitle}」${i18n('pomodoroWorkEndDesc') || '的工作时间已结束，是时候休息一下了！'}`
                 );
             } else {
                 // 只有在系统弹窗关闭时才显示思源笔记弹窗
-                showMessage('🍅 工作番茄完成！开始休息吧～', 3000);
+                showMessage(`🍅 ${i18n('pomodoroWorkCompleted') || '工作番茄完成！开始休息吧～'}`, 3000);
             }
 
             // 切换到休息阶段
@@ -4654,7 +4790,7 @@ export class PomodoroTimer {
             window.dispatchEvent(new CustomEvent('reminderUpdated'));
         } else {
             // 正计时模式完成番茄后也要停止随机微休息
-            this.stopRandomNotificationTimer();
+            this.stopRandomRestTimer();
         }
 
         // 更新番茄数量（正计时和倒计时都需要）
@@ -4679,7 +4815,7 @@ export class PomodoroTimer {
             this.timer = null;
         }
         this.stopAllAudio();
-        this.stopRandomNotificationTimer(); // 添加停止随机微休息
+        this.stopRandomRestTimer(); // 添加停止随机微休息
 
         // 休息结束，关闭番茄钟结束弹窗
         this.closePomodoroEndWindow();
@@ -4690,10 +4826,10 @@ export class PomodoroTimer {
         }
 
         // 显示系统弹窗通知
-        const breakType = this.isLongBreak ? '长时休息' : '短时休息';
+        const breakType = this.isLongBreak ? (i18n('pomodoroLongBreak') || '长时休息') : (i18n('pomodoroBreak') || '短时休息');
 
         if (this.systemNotificationEnabled) {
-            const eventTitle = this.reminder.title || '番茄专注';
+            const eventTitle = this.reminder.title || (i18n('pomodoroFocusDefault') || '番茄专注');
             this.showSystemNotification(
                 `☕ ${breakType}结束！`,
                 `「${eventTitle}」的${breakType}已结束，准备开始下一个工作阶段吧！`
@@ -4702,7 +4838,7 @@ export class PomodoroTimer {
 
         // 记录完成的休息时间（每个实例独立记录）
         const eventId = this.reminder.id;
-        const eventTitle = this.reminder.title || '番茄专注';
+        const eventTitle = this.reminder.title || (i18n('pomodoroFocusDefault') || '番茄专注');
 
         await this.recordManager.recordBreakSession(
             this.currentPhaseOriginalDuration,
@@ -4715,14 +4851,14 @@ export class PomodoroTimer {
 
         // 检查是否启用自动模式并进入下一阶段
         if (this.autoMode) {
-            showMessage(`☕ ${breakType}结束！自动开始下一个工作阶段`, 3000);
+            showMessage(`☕ ${breakType}${i18n('pomodoroBreakEndAutoWork') || '结束！自动开始下一个工作阶段'}`, 3000);
 
             // 自动切换到工作阶段
             setTimeout(() => {
                 this.autoSwitchToWork();
             }, 1000); // 延迟1秒切换
         } else {
-            showMessage(`☕ ${breakType}结束！自动开始下一个工作阶段`, 3000);
+            showMessage(`☕ ${breakType}${i18n('pomodoroBreakEndAutoWork') || '结束！自动开始下一个工作阶段'}`, 3000);
 
             this.isWorkPhase = true;
             this.isLongBreak = false;
@@ -4731,7 +4867,7 @@ export class PomodoroTimer {
             this.breakTimeLeft = 0;
 
             // 更新 DOM 显示（如果存在）
-            if (this.statusDisplay) this.statusDisplay.textContent = '工作时间';
+            if (this.statusDisplay) this.statusDisplay.textContent = i18n('pomodoroWork') || '工作时间';
             this.timeLeft = this.settings.workDuration * 60;
             this.totalTime = this.timeLeft;
             // 设置当前阶段的原始时长
@@ -4761,7 +4897,7 @@ export class PomodoroTimer {
         }
 
         this.stopAllAudio();
-        this.stopRandomNotificationTimer(); // 添加停止随机微休息
+        this.stopRandomRestTimer(); // 添加停止随机微休息
 
         if (this.isWorkPhase) {
             // 工作阶段结束，停止随机微休息
@@ -4771,10 +4907,10 @@ export class PomodoroTimer {
 
             // 显示系统弹窗通知
             if (this.systemNotificationEnabled) {
-                const eventTitle = this.reminder.title || '番茄专注';
+                const eventTitle = this.reminder.title || (i18n('pomodoroFocusDefault') || '番茄专注');
                 this.showSystemNotification(
-                    '🍅 工作时间结束！',
-                    `「${eventTitle}」的工作时间已结束，是时候休息一下了！`
+                    `🍅 ${i18n('pomodoroWorkEnd') || '工作时间结束！'}`,
+                    `「${eventTitle}」${i18n('pomodoroWorkEndDesc') || '的工作时间已结束，是时候休息一下了！'}`
                 );
             }
 
@@ -4784,7 +4920,7 @@ export class PomodoroTimer {
                 await this.safePlayAudio(this.workEndAudio);
             }            // 记录完成的工作番茄（每个实例独立记录）
             const eventId = this.reminder.id;
-            const eventTitle = this.reminder.title || '番茄专注';
+            const eventTitle = this.reminder.title || (i18n('pomodoroFocusDefault') || '番茄专注');
 
             // 计算实际完成的时间（分钟）
             // 在倒计时模式下，实际完成时间 = totalTime（设定的总时间）
@@ -4811,7 +4947,7 @@ export class PomodoroTimer {
             if (this.autoMode) {
                 // 只有在系统弹窗关闭时才显示思源笔记弹窗
                 if (!this.systemNotificationEnabled) {
-                    showMessage('🍅 工作时间结束！自动开始休息', 3000);
+                    showMessage(`🍅 ${i18n('pomodoroWorkEndAutoBreak') || '工作时间结束！自动开始休息'}`, 3000);
                 }
 
                 // 自动切换到休息阶段
@@ -4822,13 +4958,13 @@ export class PomodoroTimer {
                 if (shouldTakeLongBreak) {
                     // 只有在系统弹窗关闭时才显示思源笔记弹窗
                     if (!this.systemNotificationEnabled) {
-                        showMessage(`🍅 工作时间结束！已完成${this.completedPomodoros}个番茄，开始长时休息`, 3000);
+                        showMessage(`🍅 ${(i18n('pomodoroCompletedLongBreak') || '工作时间结束！已完成${count}个番茄，开始长时休息').replace('${count}', String(this.completedPomodoros))}`, 3000);
                     }
                     this.isWorkPhase = false;
                     this.isLongBreak = true;
                     // 只在 DOM 模式下更新 statusDisplay
                     if (this.statusDisplay) {
-                        this.statusDisplay.textContent = '长时休息';
+                        this.statusDisplay.textContent = i18n('pomodoroLongBreak') || '长时休息';
                     }
                     this.timeLeft = this.settings.longBreakDuration * 60;
                     this.totalTime = this.timeLeft;
@@ -4837,13 +4973,13 @@ export class PomodoroTimer {
                 } else {
                     // 只有在系统弹窗关闭时才显示思源笔记弹窗
                     if (!this.systemNotificationEnabled) {
-                        showMessage('🍅 工作时间结束！开始短时休息', 3000);
+                        showMessage(`🍅 ${i18n('pomodoroWorkEndAutoBreak') || '工作时间结束！开始短时休息'}`, 3000);
                     }
                     this.isWorkPhase = false;
                     this.isLongBreak = false;
                     // 只在 DOM 模式下更新 statusDisplay
                     if (this.statusDisplay) {
-                        this.statusDisplay.textContent = '短时休息';
+                        this.statusDisplay.textContent = i18n('pomodoroBreak') || '短时休息';
                     }
                     this.timeLeft = this.settings.breakDuration * 60;
                     this.totalTime = this.timeLeft;
@@ -4865,7 +5001,7 @@ export class PomodoroTimer {
 
             // 记录完成的休息时间（每个实例独立记录）
             const eventId = this.reminder.id;
-            const eventTitle = this.reminder.title || '番茄专注';
+            const eventTitle = this.reminder.title || (i18n('pomodoroFocusDefault') || '番茄专注');
 
             await this.recordManager.recordBreakSession(
                 this.currentPhaseOriginalDuration,
@@ -4876,11 +5012,11 @@ export class PomodoroTimer {
                 true
             );
 
-            const breakType = this.isLongBreak ? '长时休息' : '短时休息';
+            const breakType = this.isLongBreak ? (i18n('pomodoroLongBreak') || '长时休息') : (i18n('pomodoroBreak') || '短时休息');
 
             // 显示系统弹窗通知
             if (this.systemNotificationEnabled) {
-                const eventTitle = this.reminder.title || '番茄专注';
+                const eventTitle = this.reminder.title || (i18n('pomodoroFocusDefault') || '番茄专注');
                 this.showSystemNotification(
                     `☕ ${breakType}结束！`,
                     `「${eventTitle}」的${breakType}已结束，准备开始下一个番茄钟吧！`
@@ -4890,7 +5026,7 @@ export class PomodoroTimer {
             // 检查是否启用自动模式
             if (this.autoMode) {
                 // 只有在系统弹窗关闭时才显示思源笔记弹窗
-                showMessage(`☕ ${breakType}结束！自动开始下一个番茄钟`, 3000);
+                showMessage(`☕ ${breakType}${i18n('pomodoroBreakEndAutoWork') || '结束！自动开始下一个番茄钟'}`, 3000);
 
                 // 自动切换到工作阶段
                 setTimeout(() => {
@@ -4899,11 +5035,11 @@ export class PomodoroTimer {
             } else {
                 // 非自动模式：切换到工作阶段（不自动开始）
                 if (!this.systemNotificationEnabled) {
-                    showMessage(`☕ ${breakType}结束！切换到工作时间（不自动开始）`, 3000);
+                    showMessage(`☕ ${breakType}${i18n('pomodoroBreakEndSwitchWork') || '结束！切换到工作时间（不自动开始）'}`, 3000);
                 }
                 this.isWorkPhase = true;
                 this.isLongBreak = false;
-                if (this.statusDisplay) this.statusDisplay.textContent = '工作时间';
+                if (this.statusDisplay) this.statusDisplay.textContent = i18n('pomodoroWork') || '工作时间';
                 this.timeLeft = this.settings.workDuration * 60;
                 this.totalTime = this.timeLeft;
                 // 设置当前阶段的原始时长
@@ -4950,7 +5086,7 @@ export class PomodoroTimer {
 
         // 停止所有音频和定时器
         this.stopAllAudio();
-        this.stopRandomNotificationTimer();
+        this.stopRandomRestTimer();
         if (this.autoTransitionTimer) {
             clearTimeout(this.autoTransitionTimer);
             this.autoTransitionTimer = null;
@@ -5008,7 +5144,7 @@ export class PomodoroTimer {
         this.updateDisplay();
         this.updateStatsDisplay();
 
-        const breakType = isLongBreak ? '长时休息' : '短时休息';
+        const breakType = isLongBreak ? (i18n('pomodoroLongBreak') || '长时休息') : (i18n('pomodoroBreak') || '短时休息');
     }
 
     /**
@@ -5021,7 +5157,7 @@ export class PomodoroTimer {
 
         // 停止所有音频和定时器
         this.stopAllAudio();
-        this.stopRandomNotificationTimer();
+        this.stopRandomRestTimer();
         if (this.autoTransitionTimer) {
             clearTimeout(this.autoTransitionTimer);
             this.autoTransitionTimer = null;
@@ -5052,7 +5188,7 @@ export class PomodoroTimer {
 
         // 启动随机微休息定时器
         if (this.isWorkPhase) {
-            this.startRandomNotificationTimer();
+            this.startRandomRestTimer();
         }
 
         // 开始计时
@@ -5176,7 +5312,7 @@ export class PomodoroTimer {
         // 如果正在运行且未暂停，则不允许编辑
         if (this.isRunning && !this.isPaused) {
 
-            showMessage('请先暂停计时器再编辑时间', 2000);
+            showMessage(i18n('editTimeNotAllowed') || '请先暂停计时器再编辑时间', 2000);
             return;
         }
 
@@ -5379,7 +5515,7 @@ export class PomodoroTimer {
 
         // 如果正在运行且未暂停，则不允许编辑
         if (this.isRunning && !this.isPaused) {
-            showMessage('请先暂停计时器再编辑时间', 2000);
+            showMessage(i18n('editTimeNotAllowed') || '请先暂停计时器再编辑时间', 2000);
             return;
         }
 
@@ -5510,13 +5646,13 @@ export class PomodoroTimer {
                 const newTimeInSeconds = this.parseTimeStringToSeconds(inputValue);
 
                 if (newTimeInSeconds === null) {
-                    showMessage('时间格式不正确，请使用 MM:SS 格式', 2000);
+                    showMessage(i18n('invalidTimeFormat') || '时间格式不正确，请使用 MM:SS 格式', 2000);
                     this.updateBrowserWindowDisplay(window);
                     return;
                 }
 
                 if (newTimeInSeconds < 1 || newTimeInSeconds > 59999) {
-                    showMessage('时间范围应在 00:01 到 999:59 之间', 2000);
+                    showMessage(i18n('timeRangeLimit') || '时间范围应在 00:01 到 999:59 之间', 2000);
                     this.updateBrowserWindowDisplay(window);
                     return;
                 }
@@ -5574,7 +5710,7 @@ export class PomodoroTimer {
 
         if (!isBrowserWindow && this.modeToggleBtn) {
             // 更新模式切换按钮标题
-            this.modeToggleBtn.title = this.isCountUp ? '切换到倒计时' : '切换到正计时';
+            this.modeToggleBtn.title = this.isCountUp ? (i18n('switchToCountdown') || '切换到倒计时') : (i18n('switchToCountUp') || '切换到正计时');
         }
 
         // 更新标题图标（仅在非 BrowserWindow 模式）
@@ -5601,7 +5737,7 @@ export class PomodoroTimer {
         }
 
         this.stopAllAudio();
-        this.stopRandomNotificationTimer(); // 停止随机微休息
+        this.stopRandomRestTimer(); // 停止随机微休息
         this.detachAudioUnlockListeners();
 
         if (this.isFullscreen) {
@@ -5616,7 +5752,7 @@ export class PomodoroTimer {
             // 如果container是BrowserWindow
             try {
                 if (PomodoroTimer.browserWindowInstance === this.container) {
-                    (this.container as any).close();
+                    (this.container as any).destroy();
                 }
             } catch (e) {
                 console.error('[PomodoroTimer] Failed to close BrowserWindow:', e);
@@ -5715,10 +5851,10 @@ export class PomodoroTimer {
             this.isBackgroundAudioMuted = (settings.backgroundAudioMuted || false);
             this.backgroundVolume = Math.max(0, Math.min(1, settings.backgroundVolume || 0.5));
             this.systemNotificationEnabled = settings.pomodoroSystemNotification !== false;
-            this.randomNotificationEnabled = settings.randomNotificationEnabled || false;
-            this.randomNotificationSystemNotificationEnabled = settings.randomNotificationSystemNotification !== false;
-            this.randomNotificationAutoClose = false; // 新增
-            this.randomNotificationAutoCloseDelay = 5; // 新增
+            this.randomRestEnabled = settings.randomRestEnabled || false;
+            this.randomRestSystemNotificationEnabled = settings.randomRestSystemNotification !== false;
+            this.randomRestAutoClose = true; // 新增
+            this.randomRestAutoCloseDelay = 5; // 新增
             this.autoMode = settings.autoMode || false;
             this.longBreakInterval = Math.max(1, settings.longBreakInterval || 4);
         } catch (e) {
@@ -5794,8 +5930,8 @@ export class PomodoroTimer {
         if (!isBrowserWindow) {
             const eventTitle = this.container.querySelector('.pomodoro-event-title') as HTMLElement;
             if (eventTitle) {
-                eventTitle.textContent = reminder.title || "未命名笔记";
-                eventTitle.title = "打开笔记: " + (reminder.title || "未命名笔记");
+                eventTitle.textContent = reminder.title || (i18n('unnamedNote') || '未命名笔记');
+                eventTitle.title = (i18n('openNote') || '打开笔记') + ': ' + (reminder.title || (i18n('unnamedNote') || '未命名笔记'));
             } else {
                 console.warn('PomodoroTimer: 未找到标题元素');
             }
@@ -5811,12 +5947,12 @@ export class PomodoroTimer {
         }
 
         // 根据随机微休息开关，重新启动或停止随机微休息定时器
-        if (this.randomNotificationEnabled) {
+        if (this.randomRestEnabled) {
             if (this.isWorkPhase && this.isRunning && !this.isPaused) {
-                this.startRandomNotificationTimer();
+                this.startRandomRestTimer();
             }
         } else {
-            this.stopRandomNotificationTimer();
+            this.stopRandomRestTimer();
         }
 
         // 同步更新音量滑块UI（如果存在）
@@ -5834,7 +5970,7 @@ export class PomodoroTimer {
 
         // 当 updateState 被动触发（如广播、跨窗口同步）或在 caller 需要禁止提示时，传入 suppressNotification=true
         if (!suppressNotification) {
-            showMessage('番茄钟已更新', 1500);
+            showMessage(i18n('pomodoroUpdated') || '番茄钟已更新', 1500);
         }
     }
 
@@ -5856,24 +5992,24 @@ export class PomodoroTimer {
             }
 
             if (!blockId) {
-                showMessage("无法获取笔记ID", 2000);
+                showMessage(i18n('cannotGetNoteId') || '无法获取笔记ID', 2000);
                 return;
             }
 
             // 检查块是否存在
             const block = await getBlockByID(blockId);
             if (!block) {
-                showMessage("笔记不存在或已被删除", 3000);
+                showMessage(i18n('noteNotExist') || '笔记不存在或已被删除', 3000);
                 return;
             }
 
             openBlock(blockId)
 
-            showMessage("正在打开笔记...", 1000);
+            showMessage(i18n('openingNote') || '正在打开笔记...', 1000);
 
         } catch (error) {
             console.error('打开笔记失败:', error);
-            showMessage("打开笔记失败", 2000);
+            showMessage(i18n('openNoteFailed') || '打开笔记失败', 2000);
         }
     }
 
@@ -5885,6 +6021,258 @@ export class PomodoroTimer {
         }
     }
 
+    /**
+     * DOM窗口吸附模式切换
+     */
+    private toggleDOMWindowDock() {
+        if (this.isDocked) {
+            this.exitDOMWindowDock();
+        } else {
+            this.enterDOMWindowDock();
+        }
+    }
+
+    /**
+     * 进入DOM窗口吸附模式
+     */
+    private enterDOMWindowDock() {
+        if (!this.container || this.isTabMode) return;
+
+        this.isDocked = true;
+        this.container.classList.add('docked-mode');
+
+        // 保存当前位置和大小
+        if (!this.normalWindowBounds) {
+            const rect = this.container.getBoundingClientRect();
+            this.normalWindowBounds = {
+                x: rect.left,
+                y: rect.top,
+                width: rect.width,
+                height: rect.height
+            };
+        }
+
+        // 隐藏 header
+        const header = this.container.querySelector('.pomodoro-header') as HTMLElement;
+        if (header) {
+            header.style.display = 'none';
+        }
+
+        // 隐藏 content
+        const content = this.container.querySelector('.pomodoro-content') as HTMLElement;
+        if (content) {
+            content.style.display = 'none';
+        }
+
+        // 应用吸附样式
+        const position = this.settings.pomodoroDockPosition || 'right';
+        this.container.style.position = 'fixed';
+        this.container.style.zIndex = '10000';
+
+        if (position === 'right') {
+            this.container.style.width = '8px';
+            this.container.style.height = '100vh';
+            this.container.style.right = '0';
+            this.container.style.left = 'auto';
+            this.container.style.top = '0';
+            this.container.style.bottom = '0';
+        } else if (position === 'left') {
+            this.container.style.width = '8px';
+            this.container.style.height = '100vh';
+            this.container.style.left = '0';
+            this.container.style.right = 'auto';
+            this.container.style.top = '0';
+            this.container.style.bottom = '0';
+        } else if (position === 'top') {
+            this.container.style.width = '100vw';
+            this.container.style.height = '8px';
+            this.container.style.top = '0';
+            this.container.style.left = '0';
+            this.container.style.right = '0';
+            this.container.style.bottom = 'auto';
+        } else if (position === 'bottom') {
+            this.container.style.width = '100vw';
+            this.container.style.height = '8px';
+            this.container.style.bottom = '0';
+            this.container.style.left = '0';
+            this.container.style.right = '0';
+            this.container.style.top = 'auto';
+        }
+
+        this.container.style.borderRadius = '0';
+        this.container.style.boxShadow = 'none';
+
+        // 创建进度条容器（如果不存在）
+        this.createDockedProgressBar(position);
+
+        showMessage(i18n('enterDockMode') || '已进入吸附模式，点击进度条恢复正常', 2000);
+    }
+
+    /**
+     * 退出DOM窗口吸附模式
+     */
+    private exitDOMWindowDock() {
+        if (!this.container) return;
+
+        this.isDocked = false;
+        this.container.classList.remove('docked-mode');
+
+        // 移除进度条容器
+        const progressContainer = this.container.querySelector('.dom-docked-progress-container') as HTMLElement;
+        if (progressContainer) {
+            progressContainer.remove();
+        }
+
+        // 恢复 header 显示
+        const header = this.container.querySelector('.pomodoro-header') as HTMLElement;
+        if (header) {
+            header.style.display = 'flex';
+        }
+
+        // 恢复 content 显示
+        const content = this.container.querySelector('.pomodoro-content') as HTMLElement;
+        if (content) {
+            content.style.display = 'block';
+            content.style.padding = '0px 16px 6px';
+        }
+
+        // 恢复原始样式
+        this.container.style.position = 'fixed';
+        this.container.style.width = '240px';
+        this.container.style.height = 'auto';
+        this.container.style.borderRadius = '12px';
+        this.container.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.15)';
+
+        // 恢复位置
+        if (this.normalWindowBounds) {
+            this.container.style.left = this.normalWindowBounds.x + 'px';
+            this.container.style.top = this.normalWindowBounds.y + 'px';
+            this.container.style.right = 'auto';
+            this.container.style.bottom = 'auto';
+        } else {
+            this.container.style.right = '20px';
+            this.container.style.bottom = '20px';
+            this.container.style.left = 'auto';
+            this.container.style.top = 'auto';
+        }
+
+        showMessage(i18n('exitDockMode') || '已退出吸附模式', 1500);
+    }
+
+    /**
+     * 创建DOM窗口吸附模式的进度条
+     */
+    private createDockedProgressBar(position: string) {
+        if (!this.container) return;
+
+        // 移除旧的进度条
+        const oldProgress = this.container.querySelector('.dom-docked-progress-container');
+        if (oldProgress) oldProgress.remove();
+
+        const isHorizontal = position === 'top' || position === 'bottom';
+        const isBottom = position === 'bottom';
+
+        // 创建外层容器（全尺寸点击区域）
+        const container = document.createElement('div');
+        container.className = 'dom-docked-progress-container';
+        container.style.cssText = `
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+            pointer-events: auto;
+            z-index: 10001;
+        `;
+
+        // 创建背景层（灰色轨道）
+        const track = document.createElement('div');
+        track.style.cssText = `
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(128, 128, 128, 0.3);
+        `;
+
+        // 创建进度填充层
+        const fill = document.createElement('div');
+        fill.className = 'dom-docked-progress-fill';
+        fill.style.cssText = `
+            position: absolute;
+            ${isHorizontal
+                ? (isBottom ? 'left: 0; bottom: 0; height: 100%; width: 0%;' : 'left: 0; top: 0; height: 100%; width: 0%;')
+                : 'bottom: 0; left: 0; width: 100%; height: 0%;'}
+            background: #4CAF50;
+            transition: ${isHorizontal ? 'width' : 'height'} 0.5s ease, background-color 0.3s ease;
+        `;
+
+        container.appendChild(track);
+        container.appendChild(fill);
+
+        // 点击整个区域恢复正常
+        container.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('[PomodoroTimer] Docked progress bar clicked, restoring window');
+            this.exitDOMWindowDock();
+        });
+
+        // 悬停效果
+        container.addEventListener('mouseenter', () => {
+            fill.style.filter = 'brightness(1.2)';
+        });
+        container.addEventListener('mouseleave', () => {
+            fill.style.filter = 'brightness(1)';
+        });
+
+        this.container.appendChild(container);
+
+        // 更新进度
+        this.updateDockedProgressBar();
+    }
+
+    /**
+     * 更新DOM窗口吸附模式的进度条
+     */
+    private updateDockedProgressBar() {
+        if (!this.container || !this.isDocked) return;
+
+        const progressFill = this.container.querySelector('.dom-docked-progress-fill') as HTMLElement;
+        if (!progressFill) return;
+
+        const position = this.settings.pomodoroDockPosition || 'right';
+        const isHorizontal = position === 'top' || position === 'bottom';
+
+        let progress = 0;
+        if (this.isCountUp) {
+            progress = 0;
+        } else if (this.totalTime > 0) {
+            progress = (this.totalTime - this.timeLeft) / this.totalTime;
+        }
+
+        progress = Math.max(0, Math.min(1, progress));
+
+        if (isHorizontal) {
+            progressFill.style.width = (progress * 100) + '%';
+        } else {
+            progressFill.style.height = (progress * 100) + '%';
+        }
+
+        // 根据阶段改变颜色
+        let color = '#FF6B6B'; // 红色-工作
+        if (!this.isWorkPhase) {
+            if (this.isLongBreak) {
+                color = '#9C27B0'; // 紫色-长休息
+            } else {
+                color = '#4CAF50'; // 绿色-短休息
+            }
+        }
+        progressFill.style.background = color;
+    }
+
     private enterFullscreen() {
         this.isFullscreen = true;
         this.container.classList.add('fullscreen');
@@ -5892,7 +6280,7 @@ export class PomodoroTimer {
         // 创建退出全屏按钮
         this.exitFullscreenBtn = document.createElement('button');
         this.exitFullscreenBtn.className = 'pomodoro-exit-fullscreen';
-        this.exitFullscreenBtn.textContent = '退出全屏';
+        this.exitFullscreenBtn.textContent = i18n('exitFullscreenMode') || '退出全屏';
         this.exitFullscreenBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -5901,7 +6289,7 @@ export class PomodoroTimer {
         document.body.appendChild(this.exitFullscreenBtn);
 
         this.addEscapeKeyListener();
-        showMessage('已进入全屏模式，按ESC或点击右上角按钮退出', 2000);
+        showMessage(i18n('enterFullscreenMode') || '已进入全屏模式，按ESC或点击右上角按钮退出', 2000);
     }
 
     private exitFullscreen() {
@@ -5914,7 +6302,7 @@ export class PomodoroTimer {
         }
 
         this.removeEscapeKeyListener();
-        showMessage('已退出全屏模式', 1500);
+        showMessage(i18n('exitFullscreenMode') || '已退出全屏模式', 1500);
     }
 
     private addEscapeKeyListener() {
@@ -5953,7 +6341,7 @@ export class PomodoroTimer {
         if (elapsedSecs < 10) return;
 
         const eventId = forceId || this.reminder.id;
-        const eventTitle = forceTitle || this.reminder.title || '番茄专注';
+        const eventTitle = forceTitle || this.reminder.title || (i18n('pomodoroFocusDefault') || '番茄专注');
         const minutes = elapsedSecs / 60;
         const originalDuration = state ? state.currentPhaseOriginalDuration : this.currentPhaseOriginalDuration;
 
@@ -6082,11 +6470,33 @@ export class PomodoroTimer {
             if (this.isDocked) {
                 // Docked mode settings
                 const barWidth = 8;
-                winWidth = barWidth;
-                winHeight = screenHeight;
-                // User defined debug position
-                x = screenWidth - barWidth;
-                y = 0;
+                const position = this.settings.pomodoroDockPosition || 'right';
+
+                if (position === 'top') {
+                    winWidth = screenWidth;
+                    winHeight = barWidth;
+                    x = 0;
+                    y = 0;
+                } else if (position === 'left') {
+                    winWidth = barWidth;
+                    winHeight = screenHeight;
+                    x = 0;
+                    y = 0;
+                } else if (position === 'bottom') {
+                    winWidth = screenWidth;
+                    winHeight = barWidth;
+                    x = 0;
+                    y = screenHeight - barWidth;
+                } else {
+                    // Default to right
+                    winWidth = barWidth;
+                    winHeight = screenHeight;
+                    x = screenWidth - barWidth;
+                    y = 0;
+                }
+
+                // User defined debug position - kept logic same as original but now flexible
+
                 transparent = true;
                 backgroundColor = '#00000000';
             } else if (this.isMiniMode) {
@@ -6181,7 +6591,7 @@ export class PomodoroTimer {
             const controlChannel = `pomodoro-control-${pomodoroWindow.id}`;
             const ipcMain = (remote as any).ipcMain;
 
-            const htmlContent = this.generateBrowserWindowHTML(actionChannel, controlChannel, currentState, timeStr, statusText, todayTimeStr, weekTimeStr, bgColor, textColor, surfaceColor, borderColor, hoverColor, this.getCssVariable('--b3-theme-background-light'), this.reminder.title || '未命名笔记', this.isBackgroundAudioMuted, this.randomNotificationEnabled, this.randomNotificationCount, successColor, dailyFocusGoal);
+            const htmlContent = this.generateBrowserWindowHTML(actionChannel, controlChannel, currentState, timeStr, statusText, todayTimeStr, weekTimeStr, bgColor, textColor, surfaceColor, borderColor, hoverColor, this.getCssVariable('--b3-theme-background-light'), this.reminder.title || (i18n('unnamedNote') || '未命名笔记'), this.isBackgroundAudioMuted, this.randomRestEnabled, this.randomRestCount, successColor, dailyFocusGoal);
 
             this.container = pomodoroWindow as any;
 
@@ -6199,9 +6609,8 @@ export class PomodoroTimer {
                 else src = this.settings.breakSound;
 
                 if (src) {
-                    try { src = new URL(src, window.location.href).href; } catch (e) { }
-                    setTimeout(() => {
-                        this.playSoundInBrowserWindow(src, { loop: true, volume: this.backgroundVolume });
+                    setTimeout(async () => {
+                        await this.playSoundInBrowserWindow(src, { loop: true, volume: this.backgroundVolume });
                     }, 500);
                 }
             }
@@ -6209,8 +6618,8 @@ export class PomodoroTimer {
             // 恢复逻辑计时循环（修复切换吸附模式/窗口重建后丢失计时功能和数据记录的问题）
             if (this.isRunning && !this.isPaused) {
                 this.startTickLoop();
-                if (this.isWorkPhase && this.randomNotificationEnabled) {
-                    this.startRandomNotificationTimer();
+                if (this.isWorkPhase && this.randomRestEnabled) {
+                    this.startRandomRestTimer();
                 }
             }
 
@@ -6227,7 +6636,7 @@ export class PomodoroTimer {
                         pomodoroWindow.minimize();
                         break;
                     case 'close':
-                        pomodoroWindow.close();
+                        pomodoroWindow.destroy();
                         break;
                     // heartbeat 已移除以避免向已销毁对象发送 IPC
                     case 'toggleMiniMode':
@@ -6266,6 +6675,8 @@ document.body.classList.remove('docked-mode');
 `).catch((e: any) => console.error('[PomodoroTimer] 应用迷你模式样式失败:', e));
                         }
                     }, 100);
+                } else if (this.isDocked) { // 吸附模式下的鼠标穿透处理
+                    this.setupDockedMouseEvents(pomodoroWindow);
                 }
 
                 // 渲染完毕后推送当前状态
@@ -6281,7 +6692,7 @@ document.body.classList.remove('docked-mode');
             pomodoroWindow.on('closed', () => {
                 this.isWindowClosed = true;
                 this.stopAllAudio();
-                this.stopRandomNotificationTimer();
+                this.stopRandomRestTimer();
 
                 // 清理静态变量引用
                 if (PomodoroTimer.browserWindowInstance === pomodoroWindow) {
@@ -6313,7 +6724,7 @@ document.body.classList.remove('docked-mode');
                 console.warn('[PomodoroTimer] BrowserWindow was destroyed unexpectedly');
                 this.isWindowClosed = true;
                 this.stopAllAudio();
-                this.stopRandomNotificationTimer();
+                this.stopRandomRestTimer();
 
                 // 清理静态变量引用
                 if (PomodoroTimer.browserWindowInstance === pomodoroWindow) {
@@ -6393,10 +6804,20 @@ document.body.classList.remove('docked-mode');
                 if (recoveredState.reminderId) timer.reminder.id = recoveredState.reminderId;
                 if (recoveredState.blockId) timer.reminder.blockId = recoveredState.blockId;
 
+                // Restore random notification state
+                timer.randomRestEnabled = recoveredState.randomRestEnabled || false;
+                timer.randomRestCount = recoveredState.randomRestCount || 0;
+                if (recoveredState.randomRestNextTriggerTime) {
+                    timer.randomRestNextTriggerTime = recoveredState.randomRestNextTriggerTime;
+                }
 
                 // Resume logic loop if needed
                 if (timer.isRunning && !timer.isPaused) {
                     timer.startTickLoop();
+                    // FIX: 恢复随机微休息定时器（如果启用且在工作阶段）
+                    if (timer.randomRestEnabled && timer.isWorkPhase) {
+                        timer.startRandomRestTimer(true);
+                    }
                 } else {
                     // If paused or stopped, ensure UI reflects it
                 }
@@ -6410,6 +6831,12 @@ document.body.classList.remove('docked-mode');
                     }
                 } catch (err) {
                     console.warn('[PomodoroTimer] Failed to detect window mode during recovery', err);
+                }
+
+                // FIX: 如果恢复为吸附模式，需要设置鼠标穿透
+                if (timer.isDocked) {
+                    console.log('[PomodoroTimer] 恢复吸附模式，设置鼠标穿透');
+                    timer.setupDockedMouseEvents(win);
                 }
 
                 // Force UI update to match the restored state immediately
@@ -6484,6 +6911,10 @@ document.body.classList.remove('docked-mode');
                         this.pausedTime = recoveredState.pausedTime || 0;
                         this.currentPhaseOriginalDuration = recoveredState.currentPhaseOriginalDuration || this.settings.workDuration;
 
+                        // Restore random notification state
+                        this.randomRestEnabled = recoveredState.randomRestEnabled || false;
+                        this.randomRestCount = recoveredState.randomRestCount || 0;
+
                         if (recoveredState.reminderTitle) {
                             this.reminder.title = recoveredState.reminderTitle;
                         }
@@ -6508,6 +6939,10 @@ document.body.classList.remove('docked-mode');
 
                 if (this.isRunning && !this.isPaused) {
                     this.startTickLoop();
+                    // FIX: 恢复随机微休息定时器（如果启用且在工作阶段）
+                    if (this.randomRestEnabled && this.isWorkPhase) {
+                        this.startRandomRestTimer();
+                    }
                 }
             }
         } catch (e) {
@@ -6588,7 +7023,7 @@ document.body.classList.remove('docked-mode');
                         pomodoroWindow.minimize();
                         break;
                     case 'close':
-                        pomodoroWindow.close();
+                        pomodoroWindow.destroy();
                         break;
                     case 'toggleMiniMode':
                         this.toggleBrowserWindowMiniMode(pomodoroWindow);
@@ -6617,8 +7052,107 @@ document.body.classList.remove('docked-mode');
                 ipcMain.removeListener(controlChannel, controlHandler);
             });
 
+            // 在吸附模式下启用鼠标可以穿透透明区域（仅进度条响应鼠标）
+            // FIX: 恢复孤儿窗口时也需要设置鼠标穿透
+            if (this.isDocked && pomodoroWindow && !pomodoroWindow.isDestroyed()) {
+                this.setupDockedMouseEvents(pomodoroWindow);
+            }
+
         } catch (e) {
             console.error('Error registering IPC listeners:', e);
+        }
+    }
+
+    /**
+     * 设置吸附模式下的鼠标穿透事件
+     * 使窗口透明区域鼠标穿透，仅进度条响应鼠标
+     */
+    private setupDockedMouseEvents(pomodoroWindow: any) {
+        if (!pomodoroWindow || pomodoroWindow.isDestroyed()) return;
+
+        try {
+            const electronReq = (window as any).require;
+            const remote = electronReq?.('@electron/remote') || electronReq?.('electron')?.remote;
+            const ipcMain = remote?.ipcMain;
+
+            if (!ipcMain) {
+                console.warn('[PomodoroTimer] ipcMain not available');
+                return;
+            }
+
+            const mouseEventsChannel = `pomodoro-mouse-${pomodoroWindow.id}`;
+
+            // 先移除旧监听器，避免重复
+            ipcMain.removeAllListeners(mouseEventsChannel);
+
+            const mouseHandler = (_event: any, ignore: boolean) => {
+                if (pomodoroWindow && !pomodoroWindow.isDestroyed()) {
+                    try {
+                        if (ignore) {
+                            pomodoroWindow.setIgnoreMouseEvents(true, { forward: true });
+                        } else {
+                            pomodoroWindow.setIgnoreMouseEvents(false);
+                        }
+                    } catch (e) {
+                        console.warn('[PomodoroTimer] setIgnoreMouseEvents failed', e);
+                    }
+                }
+            };
+
+            ipcMain.on(mouseEventsChannel, mouseHandler);
+            console.log('[PomodoroTimer] Mouse events listener registered');
+
+            // 注入鼠标事件监听脚本
+            pomodoroWindow.webContents.executeJavaScript(`
+                (function() {
+                    try {
+                        const ipc = window.require('electron').ipcRenderer;
+                        const channel = '${mouseEventsChannel}';
+                        const bar = document.querySelector('.progress-bar-container');
+                        
+                        if (!bar) {
+                            console.error('[PomodoroTimer] Progress bar container not found');
+                            return;
+                        }
+                        
+                        // 移除旧的事件监听器（如果存在）
+                        bar.onmouseenter = null;
+                        bar.onmouseleave = null;
+                        
+                        bar.addEventListener('mouseenter', () => {
+                            console.log('[PomodoroTimer] Mouse entered progress bar');
+                            ipc.send(channel, false); // 不忽略鼠标（捕获点击）
+                        });
+                        bar.addEventListener('mouseleave', () => {
+                            console.log('[PomodoroTimer] Mouse left progress bar');
+                            ipc.send(channel, true); // 忽略鼠标（穿透）
+                        });
+                        
+                        // 检查鼠标是否已经在进度条上
+                        const rect = bar.getBoundingClientRect();
+                        const isMouseOver = document.elementFromPoint(rect.left + rect.width/2, rect.top + rect.height/2) === bar;
+                        
+                        if (isMouseOver) {
+                            console.log('[PomodoroTimer] Mouse already over progress bar');
+                            ipc.send(channel, false);
+                        } else {
+                            // 默认设置为穿透
+                            ipc.send(channel, true);
+                        }
+                    } catch (e) {
+                        console.error('[PomodoroTimer] Error in mouse events script:', e);
+                    }
+                })();
+            `).catch((e: any) => console.error('[PomodoroTimer] Failed to inject mouse events script', e));
+
+            // 确保清理函数移除这个监听器
+            const cleanup = () => {
+                ipcMain?.removeListener(mouseEventsChannel, mouseHandler);
+            };
+            pomodoroWindow.once('closed', cleanup);
+            pomodoroWindow.once('destroyed', cleanup);
+        } catch (e) {
+            console.error('[PomodoroTimer] setupDockedMouseEvents error:', e);
         }
     }
 
@@ -6638,8 +7172,8 @@ document.body.classList.remove('docked-mode');
         backgroundLightColor: string,
         reminderTitle: string,
         isBackgroundAudioMuted: boolean,
-        randomNotificationEnabled: boolean,
-        randomNotificationCount: number,
+        randomRestEnabled: boolean,
+        randomRestCount: number,
         successColor: string,
         dailyFocusGoal: number,
         miniModeTitle?: string,
@@ -6647,7 +7181,7 @@ document.body.classList.remove('docked-mode');
     ): string {
         // 设置默认值
         miniModeTitle = miniModeTitle || (i18n('miniMode') || '迷你模式');
-        dockModeTitle = dockModeTitle || (i18n('dockToRight') || '吸附到右侧');
+        dockModeTitle = dockModeTitle || (i18n('dockToEdge') || '吸附到屏幕边缘');
         return `<!DOCTYPE html>
 <html>
 <head>
@@ -6690,6 +7224,7 @@ document.body.classList.remove('docked-mode');
         }
         .titlebar-btn:hover { opacity: 1; background: ${hoverColor}; }
         .titlebar-btn.close-btn:hover { background: #e81123; color: white; }
+        .pin-btn.active { opacity: 1 !important; background: ${hoverColor} !important;  }
         .switch-container { position: relative; }
         .switch-menu {
             position: absolute;
@@ -6919,21 +7454,33 @@ document.body.classList.remove('docked-mode');
         body.docked-mode .pomodoro-stats,
         body.docked-mode .pomodoro-main-container { display: none; }
         body.docked-mode .pomodoro-content { display: none; padding: 0; height: 100vh; display: flex; align-items: stretch; }
+        
         body.docked-mode .progress-bar-container {
             display: flex;
-            flex-direction: column;
-            justify-content: flex-end;
-            width: 8px;
-            height: 100%;
+            ${(this.settings.pomodoroDockPosition === 'top' || this.settings.pomodoroDockPosition === 'bottom') ?
+                `flex-direction: row;
+             justify-content: flex-start;
+             width: 100%;
+             height: 8px;` :
+                `flex-direction: column;
+             justify-content: flex-end;
+             width: 8px;
+             height: 100%;`
+            }
             background: rgba(128, 128, 128, 0.3);
             cursor: pointer;
             position: relative;
         }
         body.docked-mode .progress-bar-fill {
-            width: 100%;
-            height: 0%;
+            ${(this.settings.pomodoroDockPosition === 'top' || this.settings.pomodoroDockPosition === 'bottom') ?
+                `width: 0%;
+             height: 100%;
+             transition: width 0.5s ease, background-color 0.3s ease;` :
+                `width: 100%;
+             height: 0%;
+             transition: height 0.5s ease, background-color 0.3s ease;`
+            }
             background: #4CAF50;
-            transition: height 0.5s ease, background-color 0.3s ease;
         }
         body:not(.docked-mode) .progress-bar-container { display: none; }
     </style>
@@ -6954,19 +7501,19 @@ document.body.classList.remove('docked-mode');
                 </button>
                 <div class="switch-menu" id="switchMenu">
                     <button class="menu-item" onclick="callMethod('toggleMode')">
-                        ${currentState.isCountUp ? '🍅' : '⏱'} ${currentState.isCountUp ? '切换到倒计时' : '切换到正计时'}
+                        ${currentState.isCountUp ? '🍅' : '⏱'} ${currentState.isCountUp ? (i18n('switchToCountdown') || '切换到倒计时') : (i18n('switchToCountUp') || '切换到正计时')}
                     </button>
-                    <button class="menu-item" onclick="callMethod('startWorkTime')">💪 工作时间</button>
-                    <button class="menu-item" onclick="callMethod('startShortBreak')">🍵 短时休息</button>
-                    <button class="menu-item" onclick="callMethod('startLongBreak')">🧘 长时休息</button>
+                    <button class="menu-item" onclick="callMethod('startWorkTime')">💪 ${i18n('pomodoroWork') || '工作时间'}</button>
+                    <button class="menu-item" onclick="callMethod('startShortBreak')">🍵 ${i18n('pomodoroBreak') || '短时休息'}</button>
+                    <button class="menu-item" onclick="callMethod('startLongBreak')">🧘 ${i18n('pomodoroLongBreak') || '长时休息'}</button>
                 </div>
             </div>
+        </div>
+        <div class="titlebar-buttons">
             <button class="titlebar-btn" id="soundBtn" onclick="callMethod('toggleBackgroundAudio')">
                 ${isBackgroundAudioMuted ? '🔇' : '🔊'}
             </button>
-        </div>
-        <div class="titlebar-buttons">
-            <button class="titlebar-btn pin-btn" onclick="togglePin()">📌</button>
+            <button class="titlebar-btn pin-btn active" id="pinBtn" onclick="togglePin()" title="${i18n('cancelPin') || '取消置顶'}">📌</button>
             <button class="titlebar-btn" onclick="minimizeWindow()">─</button>
             <button class="titlebar-btn close-btn" onclick="closeWindow()">×</button>
         </div>
@@ -6991,7 +7538,7 @@ document.body.classList.remove('docked-mode');
                         <button class="circle-control-btn" id="stopBtn" onclick="callMethod('resetTimer')" style="display:none">⏹</button>
                     </div>
                 </div>
-                <button class="mini-restore-btn" onclick="toggleMiniMode()" title="恢复窗口">↗</button>
+                <button class="mini-restore-btn" onclick="toggleMiniMode()" title="${i18n('restoreWindow') || '恢复窗口'}">↗</button>
             </div>
             <div class="time-info">
                 <div class="pomodoro-status" id="statusDisplay">${statusText}</div>
@@ -6999,18 +7546,18 @@ document.body.classList.remove('docked-mode');
                 <div class="pomodoro-count">
                     <span>🍅</span>
                     <span id="pomodoroCount">${currentState.completedPomodoros}</span>
-                    <span class="pomodoro-dice" id="diceIcon" style="display:${randomNotificationEnabled ? 'inline' : 'none'}">🎲</span>
-                    <span id="randomCount" style="display:${randomNotificationEnabled ? 'inline' : 'none'}">${randomNotificationCount}</span>
+                    <span class="pomodoro-dice" id="diceIcon" style="display:${randomRestEnabled ? 'inline' : 'none'}">🎲</span>
+                    <span id="randomCount" style="display:${randomRestEnabled ? 'inline' : 'none'}">${randomRestCount}</span>
                 </div>
             </div>
         </div>
         <div class="pomodoro-stats">
             <div class="stat-item">
-                <div class="stat-label">今日专注</div>
+                <div class="stat-label">${i18n('todayFocus') || '今日专注'}</div>
                 <div class="stat-value" id="todayFocusTime">${todayTimeStr}</div>
             </div>
             <div class="stat-item">
-                <div class="stat-label">本周专注</div>
+                <div class="stat-label">${i18n('weekFocus') || '本周专注'}</div>
                 <div class="stat-value" id="weekFocusTime">${weekTimeStr}</div>
             </div>
         </div>
@@ -7046,11 +7593,11 @@ document.body.classList.remove('docked-mode');
         window.localState = localState;
         
         let settings = ${JSON.stringify({
-            workDuration: this.settings.workDuration,
-            breakDuration: this.settings.breakDuration,
-            longBreakDuration: this.settings.longBreakDuration,
-            dailyFocusGoal: dailyFocusGoal
-        })};
+                workDuration: this.settings.workDuration,
+                breakDuration: this.settings.breakDuration,
+                longBreakDuration: this.settings.longBreakDuration,
+                dailyFocusGoal: dailyFocusGoal
+            })};
 
         function callMethod(method) {
             ipcRenderer.send('${actionChannel}', method);
@@ -7075,10 +7622,15 @@ document.body.classList.remove('docked-mode');
         function togglePin() {
             isPinned = !isPinned;
             ipcRenderer.send('${controlChannel}', 'pin', isPinned);
-            const btn = document.querySelector('.pin-btn');
+            const btn = document.getElementById('pinBtn');
             if (btn) {
-                btn.style.opacity = isPinned ? '1' : '0.5';
-                btn.title = isPinned ? '取消置顶' : '置顶窗口';
+                if (isPinned) {
+                    btn.classList.add('active');
+                    btn.title = '${i18n('cancelPin') || '取消置顶'}';
+                } else {
+                    btn.classList.remove('active');
+                    btn.title = '${i18n('pinWindow') || '置顶窗口'}';
+                }
             }
         }
         
@@ -7161,29 +7713,38 @@ document.body.classList.remove('docked-mode');
             }
             
             // 4. Update Docked Mode Progress
+            const dockPos = '${this.settings.pomodoroDockPosition || "right"}';
             const dockedBar = document.getElementById('dockedProgressBar');
             if (dockedBar) {
-                dockedBar.style.height = (progress * 100) + '%';
+                if (dockPos === 'top' || dockPos === 'bottom') {
+                    dockedBar.style.width = (progress * 100) + '%';
+                    // Height is handled by CSS (100%) but ensuring it here doesn't hurt
+                    dockedBar.style.height = '100%'; 
+                } else {
+                    dockedBar.style.height = (progress * 100) + '%';
+                    // Width is handled by CSS (100%)
+                    dockedBar.style.width = '100%';
+                }
             }
 
             // 5. Update Status Text/Icon
-             let statusText = '工作时间';
+             let statusText = '${i18n('pomodoroWork') || '工作时间'}';
             let statusIcon = '🍅';
             let color = '#FF6B6B'; // Default red
 
             if (!localState.isWorkPhase) {
                 if (localState.isLongBreak) {
-                    statusText = '长时休息';
+                    statusText = '${i18n('pomodoroLongBreak') || '长时休息'}';
                     statusIcon = '🧘';
                     color = '#9C27B0';
                 } else {
-                    statusText = '短时休息';
+                    statusText = '${i18n('pomodoroBreak') || '短时休息'}';
                     statusIcon = '🍵';
                     color = '#4CAF50';
                 }
             } else {
                 // Work phase
-                 statusText = '工作时间';
+                 statusText = '${i18n('pomodoroWork') || '工作时间'}';
                  statusIcon = '🍅';
                  color = '#FF6B6B';
             }
@@ -7231,7 +7792,7 @@ document.body.classList.remove('docked-mode');
                  const el = document.querySelector('.pomodoro-event-title');
                  if (el) {
                      el.textContent = localState.reminderTitle;
-                     el.title = "打开笔记: " + localState.reminderTitle;
+                     el.title = '${i18n('openNote') || '打开笔记'}' + ': ' + localState.reminderTitle;
                  }
             }
 
@@ -7262,9 +7823,9 @@ document.body.classList.remove('docked-mode');
             const randomCountDisp = document.getElementById('randomCount');
             const diceIcon = document.getElementById('diceIcon');
             
-            if (localState.randomNotificationEnabled) {
+            if (localState.randomRestEnabled) {
                  if (randomCountDisp) {
-                     randomCountDisp.textContent = localState.randomNotificationCount;
+                     randomCountDisp.textContent = localState.randomRestCount;
                      randomCountDisp.style.display = 'inline';
                  }
                  if (diceIcon) diceIcon.style.display = 'inline';
@@ -7277,7 +7838,7 @@ document.body.classList.remove('docked-mode');
             const soundBtn = document.getElementById('soundBtn');
             if (soundBtn) {
                 soundBtn.textContent = localState.isBackgroundAudioMuted ? '🔇' : '🔊';
-                soundBtn.title = localState.isBackgroundAudioMuted ? '开启背景音' : '静音背景音';
+                soundBtn.title = localState.isBackgroundAudioMuted ? '${i18n('enableBackgroundAudio') || '开启背景音'}' : '${i18n('muteBackgroundAudio') || '静音背景音'}';
             }
         }
 
@@ -7355,10 +7916,10 @@ document.body.classList.remove('docked-mode');
                 borderColor,
                 hoverColor,
                 colors.backgroundLight,
-                this.reminder.title || '未命名笔记',
+                this.reminder.title || (i18n('unnamedNote') || '未命名笔记'),
                 this.isBackgroundAudioMuted,
-                this.randomNotificationEnabled,
-                this.randomNotificationCount,
+                this.randomRestEnabled,
+                this.randomRestCount,
                 colors.successBackground,
                 (this.settings.dailyFocusGoal || 0)
             );
@@ -7391,7 +7952,18 @@ document.body.classList.remove('docked-mode');
                             const primary = screen.getPrimaryDisplay();
                             const { width: sw, height: sh } = primary.workAreaSize;
                             const barWidth = 8;
-                            pomodoroWindow.setBounds({ x: sw - barWidth, y: 0, width: barWidth, height: sh });
+                            const position = this.settings.pomodoroDockPosition || 'right';
+
+                            if (position === 'top') {
+                                pomodoroWindow.setBounds({ x: 0, y: 0, width: sw, height: barWidth });
+                            } else if (position === 'left') {
+                                pomodoroWindow.setBounds({ x: 0, y: 0, width: barWidth, height: sh });
+                            } else if (position === 'bottom') {
+                                pomodoroWindow.setBounds({ x: 0, y: sh - barWidth, width: sw, height: barWidth });
+                            } else {
+                                // Default right
+                                pomodoroWindow.setBounds({ x: sw - barWidth, y: 0, width: barWidth, height: sh });
+                            }
                             pomodoroWindow.setResizable(false);
                         }
                     } catch (e) { }
@@ -7425,10 +7997,9 @@ document.body.classList.remove('docked-mode');
                 else src = this.settings.breakSound;
 
                 if (src) {
-                    try { src = new URL(src, window.location.href).href; } catch (e) { }
-                    // Slight delay to ensure DOM is ready
-                    setTimeout(() => {
-                        this.playSoundInBrowserWindow(src, { loop: true, volume: this.backgroundVolume });
+                    // Slight delay to ensure DOM is ready, and resolve audio path before playing
+                    setTimeout(async () => {
+                        await this.playSoundInBrowserWindow(src, { loop: true, volume: this.backgroundVolume });
                     }, 500);
                 }
             }
@@ -7466,7 +8037,7 @@ document.body.classList.remove('docked-mode');
                             pomodoroWindow.minimize();
                             break;
                         case 'close':
-                            pomodoroWindow.close();
+                            pomodoroWindow.destroy();
                             break;
                         // heartbeat 已移除以避免向已销毁对象发送 IPC
                         case 'toggleMiniMode':
@@ -7485,6 +8056,21 @@ document.body.classList.remove('docked-mode');
 
                 ipcMain.on(actionChannel, actionHandler);
                 ipcMain.on(controlChannel, controlHandler);
+            }
+
+            // 在吸附模式下启用鼠标可以穿透透明区域（仅进度条响应鼠标）
+            // FIX: 延迟执行确保 DOM 完全加载并稳定
+            if (this.isDocked && pomodoroWindow && !pomodoroWindow.isDestroyed()) {
+                setTimeout(() => {
+                    if (this.isDocked && !pomodoroWindow.isDestroyed()) {
+                        this.setupDockedMouseEvents(pomodoroWindow);
+                    }
+                }, 500);
+            }
+
+            // FIX: 恢复随机微休息定时器（如果启用且在工作阶段且正在运行）
+            if (this.randomRestEnabled && this.isWorkPhase && this.isRunning && !this.isPaused) {
+                this.startRandomRestTimer();
             }
 
         } catch (error) {
@@ -7656,7 +8242,7 @@ document.body.classList.remove('mini-mode');
             }
 
             // Close and recreate window to apply transparent/non-transparent settings
-            pomodoroWindow.close();
+            pomodoroWindow.destroy();
 
             // Wait briefly for cleanup then recreate
             setTimeout(() => {
@@ -7692,6 +8278,26 @@ document.body.classList.remove('mini-mode');
      * 并且音频会在 BrowserWindow 内播放，因此不需要在主窗口维护音频权限
      * 这个方法主要用于兼容性，实际上 initializeAudioPlayback 会在 BrowserWindow 模式下直接返回
      */
+    public async updateSettings(settings: any) {
+        const oldDockPosition = this.settings?.pomodoroDockPosition;
+        this.settings = settings;
+
+        const pomodoroWindow = PomodoroTimer.browserWindowInstance;
+        if (pomodoroWindow && !pomodoroWindow.isDestroyed()) {
+            // Update window content to reflect new settings (like dock position)
+            // updateBrowserWindowContent 内部会根据 this.isDocked 状态设置鼠标穿透
+            await this.updateBrowserWindowContent(pomodoroWindow);
+        } else if (this.isDocked && !this.isTabMode) {
+            // DOM 窗口吸附模式：如果吸附位置改变，重新应用吸附样式
+            if (oldDockPosition !== settings.pomodoroDockPosition) {
+                console.log('[PomodoroTimer] Dock position changed, reapplying dock style');
+                // 先退出再重新进入吸附模式以应用新位置
+                this.exitDOMWindowDock();
+                this.enterDOMWindowDock();
+            }
+        }
+    }
+
     private setupBrowserWindowAudioMaintenance() {
         // 每5分钟检查一次音频权限（在 BrowserWindow 模式下会被跳过）
         setInterval(async () => {

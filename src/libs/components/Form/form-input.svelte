@@ -92,7 +92,7 @@
         class:b3-select={true}
         class:fn__flex-center={true}
         class:fn__size200={fnSize}
-        id="iconPosition"
+        id={key}
         {disabled}
         bind:value
         on:change={changed}
@@ -108,7 +108,7 @@
         <input
             class:b3-slider={true}
             class:fn__size200={fnSize}
-            id="fontSize"
+            id={key}
             min={slider.min}
             max={slider.max}
             step={slider.step}

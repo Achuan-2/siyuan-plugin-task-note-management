@@ -9,3 +9,4 @@ dev
 dist
 build
 tmp
+.wrangler

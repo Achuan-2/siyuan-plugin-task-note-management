@@ -470,6 +470,8 @@ export function generateSubtreeInstances(
             endDate: instanceMod?.endDate || (child.endDate && child.date ? addDaysToDate(instanceDate, getDaysDifference(child.date, child.endDate)) : undefined),
             time: instanceMod?.time || child.time,
             endTime: instanceMod?.endTime || child.endTime,
+            // 确保实例级 title 会覆盖模板 title（修复 ghost 子任务实例标题未更新的问题）
+            title: instanceMod?.title !== undefined ? instanceMod.title : child.title,
             isRepeatInstance: true,
             originalId: child.id,
             completed: isInstanceCompleted,

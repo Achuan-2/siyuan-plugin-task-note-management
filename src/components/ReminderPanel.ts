@@ -538,8 +538,8 @@ export class ReminderPanel {
 
             // 特殊处理：按时间排序时，无日期任务始终排在最后（不受升降序影响）
             if (sortType === 'time') {
-                const hasDateA = !!a.date;
-                const hasDateB = !!b.date;
+                const hasDateA = !!(a.date || a.endDate);
+                const hasDateB = !!(b.date || b.endDate);
 
                 if (!hasDateA && !hasDateB) {
                     // 两个都没有日期，按优先级排序
@@ -585,8 +585,9 @@ export class ReminderPanel {
             // "日历视图那些真正有明确截止日期的事项...重要性...稀释"
             // Let's force desserts to bottom effectively.
             if (this.currentTab === 'today') {
-                const aIsDessert = a.isAvailableToday && (!a.date || a.date !== getLogicalDateString());
-                const bIsDessert = b.isAvailableToday && (!b.date || b.date !== getLogicalDateString());
+                const todayStr = getLogicalDateString();
+                const aIsDessert = a.isAvailableToday && (!a.date && !a.endDate || (a.date || a.endDate) !== todayStr);
+                const bIsDessert = b.isAvailableToday && (!b.date && !b.endDate || (b.date || b.endDate) !== todayStr);
 
                 if (aIsDessert && !bIsDessert) return 1;
                 if (!aIsDessert && bIsDessert) return -1;
@@ -2145,10 +2146,12 @@ export class ReminderPanel {
         }
 
         // 只显示有日期的任务的时间信息
-        if (reminder.date) {
+        const displayDate = reminder.date || reminder.endDate;
+        if (displayDate) {
             const timeEl = document.createElement('div');
             timeEl.className = 'reminder-item__time';
-            const timeText = this.formatReminderTime(reminder.date, reminder.time, today, reminder.endDate, reminder.endTime, reminder);
+            const displayTime = reminder.date ? reminder.time : (reminder.endTime || reminder.time);
+            const timeText = this.formatReminderTime(displayDate, displayTime, today, reminder.endDate, reminder.endTime, reminder);
             timeEl.textContent = '🗓' + timeText;
             timeEl.style.cursor = 'pointer';
             timeEl.title = i18n("clickToModifyTime");
@@ -3069,8 +3072,8 @@ export class ReminderPanel {
 
             // 如果是跨天事件且今天在范围内，检查是否今天已完成（使用逻辑日期判断范围）
             if (reminder.endDate) {
-                const startLogical = this.getReminderLogicalDate(reminder.date, reminder.time);
-                const endLogical = this.getReminderLogicalDate(reminder.endDate || reminder.date, reminder.endTime || reminder.time);
+                const startLogical = this.getReminderLogicalDate(reminder.date || reminder.endDate, reminder.time || reminder.endTime);
+                const endLogical = this.getReminderLogicalDate(reminder.endDate, reminder.endTime || reminder.time);
                 if (compareDateStrings(startLogical, today) <= 0 && compareDateStrings(today, endLogical) <= 0) {
                     return this.isSpanningEventTodayCompleted(reminder);
                 }
@@ -3118,7 +3121,8 @@ export class ReminderPanel {
         switch (targetTab) {
             case 'overdue':
                 return reminders.filter(r => {
-                    if (!r.date || isEffectivelyCompleted(r)) return false;
+                    const hasDate = r.date || r.endDate;
+                    if (!hasDate || isEffectivelyCompleted(r)) return false;
                     const endLogical = this.getReminderLogicalDate(r.endDate || r.date, r.endTime || r.time);
                     return compareDateStrings(endLogical, today) < 0;
                 });
@@ -3128,10 +3132,11 @@ export class ReminderPanel {
                     if (isCompleted) return false;
 
                     // 1. 常规今日任务：有日期且 (在日期范围内 或 已逾期)
-                    const startLogical = r.date ? this.getReminderLogicalDate(r.date, r.time) : null;
-                    const endLogical = r.date ? this.getReminderLogicalDate(r.endDate || r.date, r.endTime || r.time) : null;
+                    const hasDate = r.date || r.endDate;
+                    const startLogical = hasDate ? this.getReminderLogicalDate(r.date || r.endDate, r.time || r.endTime) : null;
+                    const endLogical = hasDate ? this.getReminderLogicalDate(r.endDate || r.date, r.endTime || r.time) : null;
 
-                    if (r.date && startLogical && endLogical) {
+                    if (hasDate && startLogical && endLogical) {
                         const inRange = compareDateStrings(startLogical, today) <= 0 && compareDateStrings(today, endLogical) <= 0;
                         const isOverdue = compareDateStrings(endLogical, today) < 0;
                         if (inRange || isOverdue) return true;
@@ -3144,10 +3149,12 @@ export class ReminderPanel {
                         const availDate = r.availableStartDate || today;
                         if (compareDateStrings(availDate, today) <= 0) {
                             // 排除已有未来日期的任务
-                            if (r.date && r.time) {
-                                const s = this.getReminderLogicalDate(r.date, r.time);
+                            const checkDate = r.date || r.endDate;
+                            const checkTime = r.time || r.endTime;
+                            if (checkDate && checkTime) {
+                                const s = this.getReminderLogicalDate(checkDate, checkTime);
                                 if (compareDateStrings(s, today) > 0) return false;
-                            } else if (r.date && compareDateStrings(r.date, today) > 0) {
+                            } else if (checkDate && compareDateStrings(checkDate, today) > 0) {
                                 return false;
                             }
 
@@ -3168,22 +3175,25 @@ export class ReminderPanel {
             case 'tomorrow':
 
                 return reminders.filter(r => {
-                    if (isEffectivelyCompleted(r) || !r.date) return false;
-                    const startLogical = this.getReminderLogicalDate(r.date, r.time);
+                    const hasDate = r.date || r.endDate;
+                    if (isEffectivelyCompleted(r) || !hasDate) return false;
+                    const startLogical = this.getReminderLogicalDate(r.date || r.endDate, r.time || r.endTime);
                     const endLogical = this.getReminderLogicalDate(r.endDate || r.date, r.endTime || r.time);
                     return compareDateStrings(startLogical, tomorrow) <= 0 && compareDateStrings(tomorrow, endLogical) <= 0;
                 });
             case 'future7':
                 return reminders.filter(r => {
-                    if (isEffectivelyCompleted(r) || !r.date) return false;
-                    const startLogical = this.getReminderLogicalDate(r.date, r.time);
+                    const hasDate = r.date || r.endDate;
+                    if (isEffectivelyCompleted(r) || !hasDate) return false;
+                    const startLogical = this.getReminderLogicalDate(r.date || r.endDate, r.time || r.endTime);
                     const endLogical = this.getReminderLogicalDate(r.endDate || r.date, r.endTime || r.time);
                     return compareDateStrings(tomorrow, endLogical) <= 0 && compareDateStrings(startLogical, future7Days) <= 0;
                 });
             case 'futureAll':
                 return reminders.filter(r => {
-                    if (isEffectivelyCompleted(r) || !r.date) return false;
-                    const startLogical = this.getReminderLogicalDate(r.date, r.time);
+                    const hasDate = r.date || r.endDate;
+                    if (isEffectivelyCompleted(r) || !hasDate) return false;
+                    const startLogical = this.getReminderLogicalDate(r.date || r.endDate, r.time || r.endTime);
                     return compareDateStrings(tomorrow, startLogical) <= 0;
                 });
             case 'completed':
@@ -3225,12 +3235,13 @@ export class ReminderPanel {
                     }
 
                     // 未直接标记为完成的（可能为跨天事件的昨日已完成标记）
-                    return r.endDate && this.isSpanningEventYesterdayCompleted(r) && compareDateStrings(this.getReminderLogicalDate(r.date, r.time), yesterdayStr) <= 0 && compareDateStrings(yesterdayStr, this.getReminderLogicalDate(r.endDate || r.date, r.endTime || r.time)) <= 0;
+                    return r.endDate && this.isSpanningEventYesterdayCompleted(r) && compareDateStrings(this.getReminderLogicalDate(r.date || r.endDate, r.time || r.endTime), yesterdayStr) <= 0 && compareDateStrings(yesterdayStr, this.getReminderLogicalDate(r.endDate || r.date, r.endTime || r.time)) <= 0;
                 });
             case 'all': // Past 7 days
                 return reminders.filter(r => {
-                    if (!r.date) return false;
-                    const startLogical = this.getReminderLogicalDate(r.date, r.time);
+                    const hasDate = r.date || r.endDate;
+                    if (!hasDate) return false;
+                    const startLogical = this.getReminderLogicalDate(r.date || r.endDate, r.time || r.endTime);
                     const endLogical = this.getReminderLogicalDate(r.endDate || r.date, r.endTime || r.time);
                     return compareDateStrings(sevenDaysAgo, startLogical) <= 0 && compareDateStrings(endLogical, today) < 0;
                 });
@@ -3249,13 +3260,14 @@ export class ReminderPanel {
                     // 1. 没有父任务且没有子任务的独立任务（如果没有日期）
                     // 2. 没有父任务但有子任务的顶级父任务（如果没有日期）及其所有子孙
                     // 3. 属于无日期顶级父任务的所有子任务（无论子任务本身是否有日期）
-                    return !topLevelParent.date;
+                    return !(topLevelParent.date || topLevelParent.endDate);
                 });
             case 'thisWeek':
                 return reminders.filter(r => {
-                    if (isEffectivelyCompleted(r) || !r.date) return false;
+                    const hasDate = r.date || r.endDate;
+                    if (isEffectivelyCompleted(r) || !hasDate) return false;
 
-                    const startLogical = this.getReminderLogicalDate(r.date, r.time);
+                    const startLogical = this.getReminderLogicalDate(r.date || r.endDate, r.time || r.endTime);
                     const endLogical = this.getReminderLogicalDate(r.endDate || r.date, r.endTime || r.time);
 
                     // 计算本周的起止（周一为一周起点）
@@ -3378,25 +3390,32 @@ export class ReminderPanel {
             return dateFilters.some(df => {
                 switch (df.type) {
                     case 'none':
-                        return !r.date;
-                    case 'yesterday':
-                        if (!r.date) return false;
-                        const startLogical = this.getReminderLogicalDate(r.date, r.time);
+                        return !r.date && !r.endDate;
+                    case 'yesterday': {
+                        const hasDate = r.date || r.endDate;
+                        if (!hasDate) return false;
+                        const startLogical = this.getReminderLogicalDate(r.date || r.endDate, r.time || r.endTime);
                         const endLogical = this.getReminderLogicalDate(r.endDate || r.date, r.endTime || r.time);
                         return compareDateStrings(startLogical, yesterdayStr) <= 0 && compareDateStrings(yesterdayStr, endLogical) <= 0;
-                    case 'today':
-                        if (!r.date) return false;
-                        const todayStart = this.getReminderLogicalDate(r.date, r.time);
+                    }
+                    case 'today': {
+                        const hasDate = r.date || r.endDate;
+                        if (!hasDate) return false;
+                        const todayStart = this.getReminderLogicalDate(r.date || r.endDate, r.time || r.endTime);
                         const todayEnd = this.getReminderLogicalDate(r.endDate || r.date, r.endTime || r.time);
                         return compareDateStrings(todayStart, today) <= 0 && compareDateStrings(today, todayEnd) <= 0;
-                    case 'tomorrow':
-                        if (!r.date) return false;
-                        const tomorrowStart = this.getReminderLogicalDate(r.date, r.time);
+                    }
+                    case 'tomorrow': {
+                        const hasDate = r.date || r.endDate;
+                        if (!hasDate) return false;
+                        const tomorrowStart = this.getReminderLogicalDate(r.date || r.endDate, r.time || r.endTime);
                         const tomorrowEnd = this.getReminderLogicalDate(r.endDate || r.date, r.endTime || r.time);
                         return compareDateStrings(tomorrowStart, tomorrow) <= 0 && compareDateStrings(tomorrow, tomorrowEnd) <= 0;
-                    case 'this_week':
-                        if (!r.date) return false;
-                        const weekStartLogical = this.getReminderLogicalDate(r.date, r.time);
+                    }
+                    case 'this_week': {
+                        const hasDate = r.date || r.endDate;
+                        if (!hasDate) return false;
+                        const weekStartLogical = this.getReminderLogicalDate(r.date || r.endDate, r.time || r.endTime);
                         const weekEndLogical = this.getReminderLogicalDate(r.endDate || r.date, r.endTime || r.time);
                         const todayDateObj = new Date(today + 'T00:00:00');
                         const day = todayDateObj.getDay();
@@ -3408,23 +3427,32 @@ export class ReminderPanel {
                         const weekStartStr = getLocalDateString(weekStartDate);
                         const weekEndStr = getLocalDateString(weekEndDate);
                         return compareDateStrings(weekStartLogical, weekEndStr) <= 0 && compareDateStrings(weekEndLogical, weekStartStr) >= 0;
-                    case 'next_7_days':
-                        if (!r.date) return false;
-                        const next7Start = this.getReminderLogicalDate(r.date, r.time);
+                    }
+                    case 'next_7_days': {
+                        const hasDate = r.date || r.endDate;
+                        if (!hasDate) return false;
+                        const next7Start = this.getReminderLogicalDate(r.date || r.endDate, r.time || r.endTime);
                         return compareDateStrings(next7Start, today) >= 0 && compareDateStrings(next7Start, future7Days) <= 0;
-                    case 'future':
-                        if (!r.date) return false;
-                        const futureStart = this.getReminderLogicalDate(r.date, r.time);
+                    }
+                    case 'future': {
+                        const hasDate = r.date || r.endDate;
+                        if (!hasDate) return false;
+                        const futureStart = this.getReminderLogicalDate(r.date || r.endDate, r.time || r.endTime);
                         return compareDateStrings(futureStart, today) > 0;
-                    case 'past_7_days':
-                        if (!r.date) return false;
+                    }
+                    case 'past_7_days': {
+                        const hasDate = r.date || r.endDate;
+                        if (!hasDate) return false;
                         const past7End = this.getReminderLogicalDate(r.endDate || r.date, r.endTime || r.time);
                         return compareDateStrings(past7End, sevenDaysAgo) >= 0 && compareDateStrings(past7End, today) <= 0;
-                    case 'custom_range':
-                        if (!r.date || !df.startDate || !df.endDate) return false;
-                        const rangeStart = this.getReminderLogicalDate(r.date, r.time);
+                    }
+                    case 'custom_range': {
+                        const hasDate = r.date || r.endDate;
+                        if (!hasDate || !df.startDate || !df.endDate) return false;
+                        const rangeStart = this.getReminderLogicalDate(r.date || r.endDate, r.time || r.endTime);
                         const rangeEnd = this.getReminderLogicalDate(r.endDate || r.date, r.endTime || r.time);
                         return compareDateStrings(rangeStart, df.endDate) <= 0 && compareDateStrings(rangeEnd, df.startDate) >= 0;
+                    }
                     default:
                         return false;
                 }
@@ -4867,10 +4895,11 @@ export class ReminderPanel {
         let targetDate: string;
         let isOverdueEvent = false;
 
-        const startLogical = this.getReminderLogicalDate(reminder.date, reminder.time);
+        const startLogical = this.getReminderLogicalDate(reminder.date || reminder.endDate, reminder.time || reminder.endTime);
         const endLogical = this.getReminderLogicalDate(reminder.endDate || reminder.date, reminder.endTime || reminder.time);
+        const isSpanningRealEvent = !!(reminder.date && reminder.endDate && reminder.endDate !== reminder.date);
 
-        if (reminder.endDate && reminder.endDate !== reminder.date) {
+        if (isSpanningRealEvent) {
             // 跨天事件：检查今天是否在事件范围内（使用逻辑日期）
             const isInRange = compareDateStrings(startLogical, today) <= 0 && compareDateStrings(today, endLogical) <= 0;
 
@@ -4912,11 +4941,10 @@ export class ReminderPanel {
 
         // 对于未来事件，daysDiff > 0；对于过期事件，daysDiff < 0
         // 特殊情况：跨天事件且目标日期为结束日期，且结束日期为今天时，应显示"还剩0天"
-        const isSpanningEvent = !!(reminder.endDate && reminder.endDate !== reminder.date);
-        const isTargetEndForSpanning = isSpanningEvent && targetDate === endLogical;
-        const isInRange = isSpanningEvent && compareDateStrings(startLogical, today) <= 0 && compareDateStrings(today, endLogical) <= 0;
+        const isTargetEndForSpanning = isSpanningRealEvent && targetDate === endLogical;
+        const isInRangeForSpanning = isSpanningRealEvent && compareDateStrings(startLogical, today) <= 0 && compareDateStrings(today, endLogical) <= 0;
 
-        if (daysDiff === 0 && !(isTargetEndForSpanning && isInRange)) {
+        if (daysDiff === 0 && !(isTargetEndForSpanning && isInRangeForSpanning)) {
             // 对于非跨天结束日的 0 天，仍然不显示倒计时（今天事件）
             return null;
         }
@@ -4956,7 +4984,7 @@ export class ReminderPanel {
             `;
 
             // 根据是否为跨天事件显示不同的文案
-            if (reminder.endDate && reminder.endDate !== reminder.date) {
+            if (isSpanningRealEvent) {
                 const isInRange = compareDateStrings(startLogical, today) <= 0 && compareDateStrings(today, endLogical) <= 0;
 
                 if (isInRange) {
