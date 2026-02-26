@@ -50,6 +50,8 @@ export class CalendarView {
     private showRepeatTasks: boolean = true; // 是否显示重复任务
     private repeatInstanceLimit: number = -1; // 重复任务显示实例数量限制
     private showHiddenTasks: boolean = false; // 是否显示不在日历视图显示的任务
+    private showCompletedTaskTime: boolean = true; // 是否显示已完成任务时间
+    private showCompletedTaskTimeOnlyWithoutDate: boolean = false; // 是否只显示没有日期的任务的完成时间
     private pomodoroToggleBtn: HTMLElement | null = null; // Pomodoro toggle button
     private holidays: { [date: string]: { title: string, type: 'holiday' | 'workday' } } = {}; // 节假日数据
     private colorBy: 'category' | 'priority' | 'project' = 'priority'; // 按分类或优先级上色
@@ -115,6 +117,8 @@ export class CalendarView {
             this.repeatInstanceLimit = this.calendarConfigManager.getRepeatInstanceLimit();
             this.showHiddenTasks = this.calendarConfigManager.getShowHiddenTasks();
             this.showPomodoro = this.calendarConfigManager.getShowPomodoro();
+            this.showCompletedTaskTime = this.calendarConfigManager.getShowCompletedTaskTime();
+            this.showCompletedTaskTimeOnlyWithoutDate = this.calendarConfigManager.getShowCompletedTaskTimeOnlyWithoutDate();
 
             try {
                 this.currentCompletionFilter = this.calendarConfigManager.getCompletionFilter();
@@ -432,6 +436,8 @@ export class CalendarView {
         this.showRepeatTasks = this.calendarConfigManager.getShowRepeatTasks();
         this.repeatInstanceLimit = this.calendarConfigManager.getRepeatInstanceLimit();
         this.showHiddenTasks = this.calendarConfigManager.getShowHiddenTasks();
+        this.showCompletedTaskTime = this.calendarConfigManager.getShowCompletedTaskTime();
+        this.showCompletedTaskTimeOnlyWithoutDate = this.calendarConfigManager.getShowCompletedTaskTimeOnlyWithoutDate();
         this.holidays = await loadHolidays(this.plugin);
 
         // 获取周开始日设置
@@ -891,7 +897,7 @@ export class CalendarView {
                 <input class="b3-text-field fn__flex-1" type="number" value="${this.crossDayThreshold}" min="-1" style="width: 50px;">
                 <div>${i18n("crossDayThreshold") || "天及以下显示"}</div>
             </div>
-            <div style="font-size: 0.8em; color: var(--b3-theme-on-surface-light); margin-top: 4px;">(-1${i18n("noLimit") || "表示不限制"})</div>
+            <div style="font-size: 0.8em; color: var(--b3-theme-on-surface-light); margin-top: 4px;">(-1 ${i18n("noLimit") || "表示不限制"})</div>
         `;
         const thresholdInput = thresholdItem.querySelector('input') as HTMLInputElement;
         thresholdInput.addEventListener('change', async () => {
@@ -926,7 +932,7 @@ export class CalendarView {
                 <input class="b3-text-field fn__flex-1" type="number" value="${this.repeatInstanceLimit}" min="-1" style="width: 50px;">
                 <div>${i18n("instances") || "个实例"}</div>
             </div>
-            <div style="font-size: 0.8em; color: var(--b3-theme-on-surface-light); margin-top: 4px;">(-1${i18n("noLimit") || "表示不限制"})</div>
+            <div style="font-size: 0.8em; color: var(--b3-theme-on-surface-light); margin-top: 4px;">(-1 ${i18n("noLimit") || "表示不限制"})</div>
         `;
         const repeatLimitInput = repeatLimitItem.querySelector('input') as HTMLInputElement;
         repeatLimitInput.addEventListener('change', async () => {
@@ -944,6 +950,33 @@ export class CalendarView {
             this.updatePomodoroButtonState();
             await this.refreshEvents();
         }));
+
+        // 完成任务时间设置
+        displaySettingsDropdown.appendChild(createSwitchItem(i18n("showCompletedTaskTime") || "单独显示任务完成时间", this.showCompletedTaskTime, async (checked) => {
+            this.showCompletedTaskTime = checked;
+            await this.calendarConfigManager.setShowCompletedTaskTime(checked);
+            // 显示/隐藏子选项
+            onlyWithoutDateCheckbox.style.display = checked ? 'flex' : 'none';
+            await this.refreshEvents();
+        }));
+
+        // 子选项：只显示没有日期的任务
+        const onlyWithoutDateCheckbox = document.createElement('div');
+        onlyWithoutDateCheckbox.className = 'fn__flex fn__flex-center';
+        onlyWithoutDateCheckbox.style.padding = '4px 12px 4px 32px';
+        onlyWithoutDateCheckbox.style.gap = '8px';
+        onlyWithoutDateCheckbox.style.display = this.showCompletedTaskTime ? 'flex' : 'none';
+        onlyWithoutDateCheckbox.innerHTML = `
+            <input class="b3-switch" type="checkbox" ${this.showCompletedTaskTimeOnlyWithoutDate ? 'checked' : ''}>
+            <span style="font-size: 0.9em; color: var(--b3-theme-on-surface-light);">${i18n("onlyShowWithoutDate") || "只显示没有日期的任务"}</span>
+        `;
+        const checkbox = onlyWithoutDateCheckbox.querySelector('input') as HTMLInputElement;
+        checkbox.addEventListener('change', async () => {
+            this.showCompletedTaskTimeOnlyWithoutDate = checkbox.checked;
+            await this.calendarConfigManager.setShowCompletedTaskTimeOnlyWithoutDate(checkbox.checked);
+            await this.refreshEvents();
+        });
+        displaySettingsDropdown.appendChild(onlyWithoutDateCheckbox);
 
         // 隐藏任务设置（强制显示标记为不在日历显示的任务）
         displaySettingsDropdown.appendChild(createSwitchItem(i18n("showHiddenTasks") || "显示不在日历视图显示的任务", this.showHiddenTasks, async (checked) => {
@@ -1285,6 +1318,7 @@ export class CalendarView {
             snapDuration: '00:05:00', // 设置吸附间隔为5分钟
             slotDuration: '00:15:00', // 设置默认时间间隔为15分钟
             allDayText: i18n("allDay"), // 置全天事件的文本
+            slotEventOverlap: false, // 不允许事件重叠
             slotLabelFormat: {
                 hour: '2-digit',
                 minute: '2-digit',
@@ -2470,6 +2504,29 @@ export class CalendarView {
             return;
         }
 
+        // Handle completed task time events - convert to normal task event and continue with normal menu
+        if (calendarEvent.extendedProps.type === 'completedTaskTime') {
+            // 构造一个与普通任务类似的事件对象，复用普通任务的右键菜单逻辑
+            const originalEventId = calendarEvent.extendedProps.originalId || calendarEvent.extendedProps.eventId;
+            const isRepeated = calendarEvent.extendedProps.isRepeated || false;
+            
+            // 修改 calendarEvent 以模拟普通任务
+            calendarEvent = {
+                ...calendarEvent,
+                id: originalEventId,
+                title: calendarEvent.extendedProps.eventTitle || calendarEvent.title,
+                extendedProps: {
+                    ...calendarEvent.extendedProps,
+                    type: undefined, // 清除类型以走普通任务逻辑
+                    completed: true,
+                    isRepeated: isRepeated,
+                    originalId: calendarEvent.extendedProps.originalId,
+                    date: calendarEvent.extendedProps.completedInstanceDate || calendarEvent.extendedProps.date
+                }
+            };
+            // 继续执行后续普通任务的菜单逻辑，不 return
+        }
+
         if (calendarEvent.extendedProps.isSubscribed) {
             menu.addItem({
                 iconHTML: "ℹ️",
@@ -2826,10 +2883,24 @@ export class CalendarView {
                     const instanceIdStr = calendarEvent.id || '';
                     const instanceDate = instanceIdStr.split('_').pop() || calendarEvent.extendedProps.date;
 
+                    // 立即从 UI 中移除原事件和关联的已完成任务时间事件
+                    const targetId = calendarEvent.id;
+                    this.calendar.getEvents().forEach(event => {
+                        if (event.id === targetId) {
+                            event.remove();
+                        }
+                        // 同时移除关联的已完成任务时间事件
+                        if (event.extendedProps.type === 'completedTaskTime') {
+                            const completedEventId = event.extendedProps.eventId;
+                            if (completedEventId === targetId || completedEventId === `${originalId}_${instanceDate}`) {
+                                event.remove();
+                            }
+                        }
+                    });
+
                     await this.addExcludedDate(originalId, instanceDate);
 
                     showMessage(i18n("instanceDeleted"));
-                    await this.refreshEvents();
                     window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
                 } catch (error) {
                     console.error('删除重复实例失败:', error);
@@ -3134,6 +3205,15 @@ export class CalendarView {
             if (event.id === reminderId || event.extendedProps.originalId === reminderId) {
                 event.remove();
             }
+            // 同时移除关联的已完成任务时间事件
+            if (event.extendedProps.type === 'completedTaskTime') {
+                const completedEventId = event.extendedProps.eventId;
+                const completedOriginalId = event.extendedProps.originalId;
+                if (completedEventId === reminderId || completedOriginalId === reminderId ||
+                    (completedEventId && completedEventId.startsWith(`${reminderId}_`))) {
+                    event.remove();
+                }
+            }
         });
 
         // 2. 后台处理数据保存和同步
@@ -3190,6 +3270,31 @@ export class CalendarView {
             const titleEl = document.createElement('div');
             titleEl.className = 'fc-event-title';
             titleEl.textContent = event.title;
+            mainFrame.appendChild(titleEl);
+
+            return { domNodes: [mainFrame] };
+        }
+
+        // Special rendering for completed task time events
+        if (props.type === 'completedTaskTime') {
+            const mainFrame = document.createElement('div');
+            mainFrame.className = 'fc-event-main-frame';
+            mainFrame.style.padding = '2px 4px';
+
+            // 只显示完成时间（结束时间），不显示时间段
+            if (props.completedTime) {
+                const completedDate = new Date(props.completedTime);
+                const formattedTime = completedDate.toLocaleTimeString(getLocaleTag(), { hour: '2-digit', minute: '2-digit', hour12: false });
+                const timeEl = document.createElement('div');
+                timeEl.className = 'fc-event-time';
+                timeEl.textContent = formattedTime;
+                mainFrame.appendChild(timeEl);
+            }
+
+            const titleEl = document.createElement('div');
+            titleEl.className = 'fc-event-title';
+            titleEl.textContent = event.title;
+            titleEl.style.textDecoration = 'line-through';
             mainFrame.appendChild(titleEl);
 
             return { domNodes: [mainFrame] };
@@ -3922,6 +4027,25 @@ export class CalendarView {
         // Pomodoro events should act as read-only in click handler
         // Right-click context menu is available for them
         if (info.event.extendedProps.type === 'pomodoro') {
+            return;
+        }
+
+        // Handle completed task time events - open the original task
+        if (info.event.extendedProps.type === 'completedTaskTime') {
+            const originalEventId = info.event.extendedProps.originalId || info.event.extendedProps.eventId;
+            const reminderData = await getAllReminders(this.plugin);
+            const originalReminder = reminderData[originalEventId];
+            
+            if (originalReminder?.blockId) {
+                try {
+                    openBlock(originalReminder.blockId);
+                } catch (error) {
+                    console.error('打开笔记失败:', error);
+                    showMessage(i18n("openNoteFailed"));
+                }
+            } else {
+                showMessage(i18n("unboundReminder") + "，请右键选择\"绑定到块\"");
+            }
             return;
         }
 
@@ -4894,13 +5018,12 @@ export class CalendarView {
             
             /* 已完成任务的样式优化 */
             .fc-event.completed {
-                opacity: 0.8 !important;
+                opacity: 0.6 !important;
             }
-            
-            .fc-event.completed .fc-event-title,
-            .fc-event.completed .fc-event-title span{
-                text-decoration: line-through;
+            .fc-event.completed:hover {
+                opacity: 1 !important;
             }
+
 
             /* Pomodoro Event Styles */
             .pomodoro-event {
@@ -4908,6 +5031,18 @@ export class CalendarView {
                 border-left: none !important;
                 box-shadow: none !important;
                 opacity: 0.7 !important;
+            }
+
+            /* Completed Task Time Event Styles */
+            .completed-task-time-event {
+                border: none !important;
+                border-left: 3px solid #27ae60 !important;
+                box-shadow: none !important;
+                opacity: 0.75 !important;
+            }
+
+            .completed-task-time-event .fc-event-title {
+                font-style: italic;
             }
 
             .all-day-reorder-indicator {
@@ -5675,12 +5810,210 @@ export class CalendarView {
                 }
             }
 
+            // Add completed task times if enabled and in Day/Week view
+            if (this.showCompletedTaskTime && this.calendar && this.calendar.view) {
+                const viewType = this.calendar.view.type;
+                if (viewType === 'timeGridDay' || viewType === 'timeGridWeek' || viewType === 'timeGridMultiDays7') {
+                    const completedTaskEvents = await this.getCompletedTaskTimeEvents(startDate, endDate, reminderData, projectData);
+                    events.push(...completedTaskEvents);
+                }
+            }
+
             return events;
         } catch (error) {
             console.error('获取事件数据失败:', error);
             showMessage(i18n("loadReminderDataFailed"));
             return [];
         }
+    }
+
+    /**
+     * 获取已完成任务时间事件列表
+     */
+    private async getCompletedTaskTimeEvents(startDate: string, endDate: string, reminderData: any, projectData: any): Promise<any[]> {
+        const completedTaskEvents: any[] = [];
+        const allReminders = Object.values(reminderData) as any[];
+
+        for (const reminder of allReminders) {
+            if (!reminder || typeof reminder !== 'object') continue;
+
+            // 处理普通已完成任务
+            if (reminder.completed && reminder.completedTime) {
+                const completedDateStr = reminder.completedTime.substring(0, 10); // YYYY-MM-DD
+                
+                // 检查完成时间是否在视图范围内
+                if (compareDateStrings(completedDateStr, startDate) < 0 || 
+                    compareDateStrings(completedDateStr, endDate) > 0) {
+                    continue;
+                }
+
+                // 如果启用"只显示没有日期的任务"，过滤掉有日期（有开始日期或结束日期）的任务
+                if (this.showCompletedTaskTimeOnlyWithoutDate && (reminder.date || reminder.endDate)) {
+                    continue;
+                }
+
+                // 筛选项目和分类
+                if (!this.passesProjectFilter(reminder)) continue;
+                if (!this.passesCategoryFilter(reminder, projectData)) continue;
+
+                // 解析完成时间
+                const completedDate = new Date(reminder.completedTime);
+                // 默认显示30分钟，向前推（从完成时间往前推30分钟作为开始时间）
+                const startTimeDate = new Date(completedDate.getTime() - 30 * 60000);
+                const startTime = startTimeDate.toISOString();
+                const endTime = completedDate.toISOString();
+
+                // 获取任务颜色
+                let backgroundColor = '#27ae60'; // 默认绿色表示完成
+                if (this.colorBy === 'priority') {
+                    switch (reminder.priority) {
+                        case 'high': backgroundColor = '#27ae60'; break;
+                        case 'medium': backgroundColor = '#2ecc71'; break;
+                        case 'low': backgroundColor = '#58d68d'; break;
+                        default: backgroundColor = '#27ae60';
+                    }
+                } else if (this.colorBy === 'category' && reminder.categoryId) {
+                    const firstCategoryId = reminder.categoryId.split(',')[0];
+                    const categoryStyle = this.categoryManager.getCategoryStyle(firstCategoryId);
+                    backgroundColor = categoryStyle.backgroundColor || '#27ae60';
+                } else if (this.colorBy === 'project' && reminder.projectId) {
+                    backgroundColor = this.projectManager.getProjectColor(reminder.projectId) || '#27ae60';
+                }
+
+                const eventObj = {
+                    id: `completed-${reminder.id}`,
+                    title: `✅ ${reminder.title || i18n('unnamedTask')}`,
+                    start: startTime,
+                    end: endTime,
+                    backgroundColor: backgroundColor,
+                    borderColor: 'transparent',
+                    textColor: 'var(--b3-theme-on-background)',
+                    className: 'completed-task-time-event',
+                    editable: false,
+                    startEditable: false,
+                    durationEditable: false,
+                    allDay: false,
+                    extendedProps: {
+                        type: 'completedTaskTime',
+                        eventId: reminder.id,
+                        eventTitle: reminder.title,
+                        completedTime: reminder.completedTime,
+                        priority: reminder.priority,
+                        categoryId: reminder.categoryId,
+                        projectId: reminder.projectId,
+                        blockId: reminder.blockId,
+                        note: reminder.note,
+                        // 复制普通任务的所有属性以便右键菜单正常工作
+                        completed: true,
+                        endDate: reminder.endDate,
+                        time: reminder.time,
+                        endTime: reminder.endTime,
+                        date: reminder.date,
+                        sort: reminder.sort || 0,
+                        isSubscribed: reminder.isSubscribed || false,
+                        subscriptionId: reminder.subscriptionId,
+                        repeat: reminder.repeat,
+                        parentId: reminder.parentId || null,
+                        parentTitle: reminder.parentTitle || null
+                    }
+                };
+                completedTaskEvents.push(eventObj);
+            }
+
+            // 处理重复任务的已完成实例
+            if (reminder.repeat?.enabled && reminder.repeat.completedInstances) {
+                const completedInstances = reminder.repeat.completedInstances;
+                const completedTimes = reminder.repeat.completedTimes || {};
+
+                for (const instanceDate of completedInstances) {
+                    const completedTimeStr = completedTimes[instanceDate];
+                    if (!completedTimeStr) continue;
+
+                    const completedDateStr = completedTimeStr.substring(0, 10); // YYYY-MM-DD
+                    
+                    // 检查完成时间是否在视图范围内
+                    if (compareDateStrings(completedDateStr, startDate) < 0 || 
+                        compareDateStrings(completedDateStr, endDate) > 0) {
+                        continue;
+                    }
+
+                    // 筛选项目和分类（使用原始任务的设置）
+                    if (!this.passesProjectFilter(reminder)) continue;
+                    if (!this.passesCategoryFilter(reminder, projectData)) continue;
+
+                    // 如果启用"只显示没有日期的任务"，过滤掉有日期（有开始日期或结束日期）的任务
+                    if (this.showCompletedTaskTimeOnlyWithoutDate && (reminder.date || reminder.endDate)) {
+                        continue;
+                    }
+
+                    // 解析完成时间
+                    const completedDate = new Date(completedTimeStr);
+                    // 默认显示30分钟，向前推
+                    const startTimeDate = new Date(completedDate.getTime() - 30 * 60000);
+                    const startTime = startTimeDate.toISOString();
+                    const endTime = completedDate.toISOString();
+
+                    // 获取任务颜色
+                    let backgroundColor = '#27ae60';
+                    if (this.colorBy === 'priority') {
+                        switch (reminder.priority) {
+                            case 'high': backgroundColor = '#27ae60'; break;
+                            case 'medium': backgroundColor = '#2ecc71'; break;
+                            case 'low': backgroundColor = '#58d68d'; break;
+                            default: backgroundColor = '#27ae60';
+                        }
+                    } else if (this.colorBy === 'category' && reminder.categoryId) {
+                        const firstCategoryId = reminder.categoryId.split(',')[0];
+                        const categoryStyle = this.categoryManager.getCategoryStyle(firstCategoryId);
+                        backgroundColor = categoryStyle.backgroundColor || '#27ae60';
+                    } else if (this.colorBy === 'project' && reminder.projectId) {
+                        backgroundColor = this.projectManager.getProjectColor(reminder.projectId) || '#27ae60';
+                    }
+
+                    const uniqueInstanceId = `${reminder.id}_${instanceDate}`;
+                    const eventObj = {
+                        id: `completed-${uniqueInstanceId}`,
+                        title: `✅ ${reminder.title || i18n('unnamedTask')}`,
+                        start: startTime,
+                        end: endTime,
+                        backgroundColor: backgroundColor,
+                        borderColor: 'transparent',
+                        textColor: 'var(--b3-theme-on-background)',
+                        className: 'completed-task-time-event',
+                        editable: false,
+                        startEditable: false,
+                        durationEditable: false,
+                        allDay: false,
+                        extendedProps: {
+                            type: 'completedTaskTime',
+                            eventId: uniqueInstanceId,
+                            originalId: reminder.id,
+                            eventTitle: reminder.title,
+                            completedTime: completedTimeStr,
+                            completedInstanceDate: instanceDate,
+                            priority: reminder.priority,
+                            categoryId: reminder.categoryId,
+                            projectId: reminder.projectId,
+                            blockId: reminder.blockId,
+                            note: reminder.note,
+                            // 复制普通任务的所有属性以便右键菜单正常工作
+                            completed: true,
+                            date: instanceDate,
+                            isRepeated: true,
+                            sort: reminder.sort || 0,
+                            isSubscribed: reminder.isSubscribed || false,
+                            subscriptionId: reminder.subscriptionId,
+                            repeat: reminder.repeat,
+                            parentId: reminder.parentId || null,
+                            parentTitle: reminder.parentTitle || null
+                        }
+                    };
+                    completedTaskEvents.push(eventObj);
+                }
+            }
+        }
+
+        return completedTaskEvents;
     }
 
     /**
@@ -6226,6 +6559,51 @@ export class CalendarView {
                     `</div>`
                 );
             }
+
+            return htmlParts.join('');
+        }
+
+        // Special tooltip for completed task time events
+        if (reminder.type === 'completedTaskTime') {
+            const htmlParts: string[] = [];
+            const title = reminder.eventTitle || i18n("unnamedTask");
+
+            // Title
+            htmlParts.push(
+                `<div style="font-weight: 600; color: var(--b3-theme-success); margin-bottom: 8px; font-size: 14px; text-align: left; width: 100%;">`,
+                `✅ ${this.escapeHtml(title)}`,
+                `</div>`
+            );
+
+            // Parent task info (if subtask)
+            if (reminder.parentId && reminder.parentTitle) {
+                htmlParts.push(
+                    `<div style="color: var(--b3-theme-on-surface); margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">`,
+                    `<span style="opacity: 0.7;">↪️</span>`,
+                    `<span style="font-size: 13px;">${i18n("parentTask") || '父任务'}: ${this.escapeHtml(reminder.parentTitle)}</span>`,
+                    `</div>`
+                );
+            }
+
+            // Completed time info - only show completion time, not duration
+            if (reminder.completedTime) {
+                const completedDate = new Date(reminder.completedTime);
+                const formattedTime = completedDate.toLocaleTimeString(getLocaleTag(), { hour: '2-digit', minute: '2-digit', hour12: false });
+                const formattedDate = completedDate.toLocaleDateString(getLocaleTag(), { month: 'short', day: 'numeric' });
+                htmlParts.push(
+                    `<div style="color: var(--b3-theme-on-surface); margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">`,
+                    `<span style="opacity: 0.7;">✓</span>`,
+                    `<span>${i18n("completedAt") || "完成于"} ${formattedDate} ${formattedTime}</span>`,
+                    `</div>`
+                );
+            }
+
+            // Hint
+            htmlParts.push(
+                `<div style="color: var(--b3-theme-on-surface-light); margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--b3-theme-border); font-size: 12px; font-style: italic;">`,
+                `${i18n("rightClickToEdit") || "右键编辑任务"}`,
+                `</div>`
+            );
 
             return htmlParts.join('');
         }

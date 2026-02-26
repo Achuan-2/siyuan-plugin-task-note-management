@@ -16,6 +16,8 @@ export interface CalendarConfig {
     showRepeatTasks: boolean;
     repeatInstanceLimit: number;
     showHiddenTasks: boolean; // 显示不在日历视图显示的任务
+    showCompletedTaskTime: boolean; // 显示已完成任务时间
+    showCompletedTaskTimeOnlyWithoutDate: boolean; // 只显示没有日期的任务的完成时间
 }
 
 export class CalendarConfigManager {
@@ -37,7 +39,9 @@ export class CalendarConfigManager {
             showSubtasks: true, // 默认显示子任务
             showRepeatTasks: true, // 默认显示重复任务
             repeatInstanceLimit: -1, // 默认显示全部实例 (-1表示不限制)
-            showHiddenTasks: false // 默认不显示隐藏任务
+            showHiddenTasks: false, // 默认不显示隐藏任务
+            showCompletedTaskTime: true, // 默认显示已完成任务时间
+            showCompletedTaskTimeOnlyWithoutDate: false // 默认显示所有已完成任务的时间
         };
     }
 
@@ -67,6 +71,8 @@ export class CalendarConfigManager {
             settings.calendarShowRepeatTasks = this.config.showRepeatTasks;
             settings.calendarRepeatInstanceLimit = this.config.repeatInstanceLimit;
             settings.calendarShowHiddenTasks = this.config.showHiddenTasks;
+            settings.calendarShowCompletedTaskTime = this.config.showCompletedTaskTime;
+            settings.calendarShowCompletedTaskTimeOnlyWithoutDate = this.config.showCompletedTaskTimeOnlyWithoutDate;
             await (this.plugin as any).saveSettings(settings);
         } catch (error) {
             console.error('Failed to save calendar config:', error);
@@ -242,6 +248,24 @@ export class CalendarConfigManager {
 
     public getShowHiddenTasks(): boolean {
         return this.config.showHiddenTasks !== undefined ? this.config.showHiddenTasks : false;
+    }
+
+    public async setShowCompletedTaskTime(show: boolean) {
+        this.config.showCompletedTaskTime = show;
+        await this.saveConfig();
+    }
+
+    public getShowCompletedTaskTime(): boolean {
+        return this.config.showCompletedTaskTime !== undefined ? this.config.showCompletedTaskTime : true;
+    }
+
+    public async setShowCompletedTaskTimeOnlyWithoutDate(show: boolean) {
+        this.config.showCompletedTaskTimeOnlyWithoutDate = show;
+        await this.saveConfig();
+    }
+
+    public getShowCompletedTaskTimeOnlyWithoutDate(): boolean {
+        return this.config.showCompletedTaskTimeOnlyWithoutDate !== undefined ? this.config.showCompletedTaskTimeOnlyWithoutDate : false;
     }
 
     public getConfig(): CalendarConfig {

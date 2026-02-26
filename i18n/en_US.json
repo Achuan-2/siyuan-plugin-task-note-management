@@ -1123,7 +1123,7 @@
   "showRepeatTasks": "Show Repeat Tasks",
   "showPomodoroRecords": "Show Pomodoro Records",
   "showCompletedTaskTime": "Show Task Completion Time",
-  "onlyShowWithDate": "Only show tasks with date",
+  "onlyShowWithoutDate": "Only show tasks without date",
   "completedAt": "Completed at",
   "show": "Show",
   "instances": "incomplete instances",
