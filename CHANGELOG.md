@@ -7,6 +7,15 @@
 - 🎨 项目看板：筛选日期优化，筛选今日和明日，应该是根据任务起始日期是否属于任务范围进行筛选，而不是仅靠起始日期
 -  🐛 milkdown 粘贴内容，会错误添加换行
 
+---
+
+- 🌐 Improve i18n
+- 🎨 Pomodoro: Change the "snap to screen edge" emoji 🧲 to ⬅️ ➡️ ⬆️ ⬇️
+- 🎨 Calendar view: Support displaying task completion time separately
+- 🎨 Calendar view: Multi-day view supports configurable number of days
+- 🎨 Project board: Optimize date filtering; filtering for today and tomorrow should be based on whether the task's start date falls within the task range, not solely on the start date
+- 🐛 milkdown: Pasting content incorrectly adds line breaks
+
 ## v6.0.4 / 20260225
 - 🎨 项目看板：任务状态看板和任务列表分组看板支持隐藏没有进行中、没有今日任务的分组
 - 🎨 项目看板：限制分组最大宽度
