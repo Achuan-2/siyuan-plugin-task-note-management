@@ -210,10 +210,10 @@ export class PasteTaskDialog {
                 <div class="b3-dialog__content">
                     <p>${i18n("pasteInstructions") || "粘贴Markdown列表或多行文本，每行将创建一个任务。支持多层级列表自动创建父子任务。"}</p>
                     <p style="font-size: 12px; color: var(--b3-theme-on-surface); opacity: 0.8; margin-bottom: 4px; word-break: break-all;">
-                        ${i18n("supportPrioritySyntax") || "支持语法："}<code>@priority=high&startDate=2025-08-12&endDate=2025-08-30&reminderTimes=[{"time":"2026-02-24T12:33","note":"备注1"}]</code>
+                        ${i18n("supportPrioritySyntaxDemo") || "支持语法：<code>@priority=high&startDate=2025-08-12&endDate=2025-08-30&reminderTimes=[{\"time\":\"2026-02-24T12:33\",\"note\":\"备注1\"}]</code>"}
                     </p>
                     <p style="font-size: 12px; color: var(--b3-theme-on-surface); opacity: 0.8; margin-bottom: 4px;">
-                        ${i18n("supportBlockLink") || "支持绑定块："}<code>[任务标题](siyuan://blocks/块ID)</code> 或 <code>((块ID '任务标题'))</code>
+                        ${i18n("supportBlockLinkDemo") || "支持绑定块：<code>[任务标题](siyuan://blocks/块ID)</code> 或 <code>((块ID '任务标题'))</code>"}
                     </p>
                     <p style="font-size: 12px; color: var(--b3-theme-on-surface); opacity: 0.8; margin-bottom: 8px;">
                         ${i18n("supportHierarchy") || "支持多层级：使用缩进或多个<code>-</code>符号创建父子任务关系"}
@@ -491,7 +491,7 @@ export class PasteTaskDialog {
             createBtn.innerHTML = i18n('creating') || '创建中...';
 
             // 显示加载对话框
-            this.showLoadingDialog("创建任务中...");
+            this.showLoadingDialog(i18n('creatingTask') || "创建任务中...");
 
             const autoDetect = autoDetectCheckbox.checked;
             const removeDate = removeDateCheckbox.checked;
@@ -573,7 +573,7 @@ export class PasteTaskDialog {
             this.loadingDialog.destroy();
         }
         this.loadingDialog = new Dialog({
-            title: "Processing",
+            title: i18n("processing") || "Processing",
             content: `<div id="loadingDialogContent"></div>`,
             width: "350px",
             height: "230px",
@@ -946,10 +946,10 @@ export class PasteTaskDialog {
 
         // 状态名称映射
         const statusNameMap: { [key: string]: string } = {
-            'doing': '进行中',
-            'long_term': '长期',
-            'short_term': '短期',
-            'completed': '已完成'
+            'doing': i18n('doingTasks') || '进行中',
+            'long_term': i18n('longTerm') || '长期',
+            'short_term': i18n('shortTerm') || '短期',
+            'completed': i18n('completed') || '已完成'
         };
 
         // 构建状态选项（排除已完成状态）
@@ -965,9 +965,9 @@ export class PasteTaskDialog {
         // 如果没有配置状态，使用默认选项
         if (kanbanStatuses.length === 0) {
             statusOptionsHtml = `
-                <option value="short_term" ${defaultStatus === 'short_term' ? 'selected' : ''}>短期</option>
-                <option value="long_term" ${defaultStatus === 'long_term' ? 'selected' : ''}>长期</option>
-                <option value="doing" ${defaultStatus === 'doing' ? 'selected' : ''}>进行中</option>
+                <option value="short_term" ${defaultStatus === 'short_term' ? 'selected' : ''}>${i18n('shortTerm') || '短期'}</option>
+                <option value="long_term" ${defaultStatus === 'long_term' ? 'selected' : ''}>${i18n('longTerm') || '长期'}</option>
+                <option value="doing" ${defaultStatus === 'doing' ? 'selected' : ''}>${i18n('doingTasks') || '进行中'}</option>
             `;
         }
 
