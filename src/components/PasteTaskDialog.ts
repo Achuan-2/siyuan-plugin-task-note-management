@@ -52,6 +52,10 @@ export interface PasteTaskDialogConfig {
     isTempMode?: boolean;
     // 临时模式回调，参数为创建的任务数组
     onTasksCreated?: (tasks: any[]) => void;
+    // 默认统一设置日期（默认不勾选，除非提供为true）
+    defaultSetDate?: boolean;
+    // 统一设置日期的默认值（例如当前筛选的日期）
+    defaultDateStr?: string;
 }
 
 export class PasteTaskDialog {
@@ -231,6 +235,14 @@ export class PasteTaskDialog {
                             <span class="b3-checkbox__graphic"></span>
                             <span class="b3-checkbox__label">${i18n("removeDateAfterDetection")}</span>
                         </label>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <label class="b3-checkbox" style="display: flex; align-items: center;">
+                                <input id="unifiedDateCheckbox" type="checkbox" class="b3-switch" ${this.config.defaultSetDate ? 'checked' : ''}>
+                                <span class="b3-checkbox__graphic"></span>
+                                <span class="b3-checkbox__label">${i18n("unifiedSetDate") || "统一设置日期"}</span>
+                            </label>
+                            <input id="unifiedDateInput" type="date" class="b3-text-field" value="${this.config.defaultDateStr || ''}" style="${this.config.defaultSetDate ? '' : 'display: none;'} margin-left: 8px;">
+                        </div>
                     </div>
                 </div>
                 <div class="b3-dialog__action">
@@ -255,6 +267,14 @@ export class PasteTaskDialog {
         const groupSelect = dialog.element.querySelector('#pasteTaskGroup') as HTMLSelectElement;
         const milestoneSelect = dialog.element.querySelector('#pasteTaskMilestone') as HTMLSelectElement;
         const milestoneContainer = dialog.element.querySelector('#pasteTaskMilestoneContainer') as HTMLElement;
+        const unifiedDateCheckbox = dialog.element.querySelector('#unifiedDateCheckbox') as HTMLInputElement;
+        const unifiedDateInput = dialog.element.querySelector('#unifiedDateInput') as HTMLInputElement;
+
+        if (unifiedDateCheckbox && unifiedDateInput) {
+            unifiedDateCheckbox.addEventListener('change', () => {
+                unifiedDateInput.style.display = unifiedDateCheckbox.checked ? '' : 'none';
+            });
+        }
 
         // 监听分组变更，更新里程碑选项
         if (groupSelect && milestoneSelect) {
@@ -496,6 +516,21 @@ export class PasteTaskDialog {
             const autoDetect = autoDetectCheckbox.checked;
             const removeDate = removeDateCheckbox.checked;
             const hierarchicalTasks = this.parseHierarchicalTaskList(text, autoDetect, removeDate);
+
+            const useUnifiedDate = unifiedDateCheckbox?.checked;
+            const unifiedDateVal = unifiedDateInput?.value;
+
+            const applyUnifiedDate = (tasks: HierarchicalTask[]) => {
+                for (const task of tasks) {
+                    if (useUnifiedDate && unifiedDateVal) {
+                        if (!task.startDate && !task.endDate) {
+                            task.startDate = unifiedDateVal;
+                        }
+                    }
+                    if (task.children) applyUnifiedDate(task.children);
+                }
+            };
+            applyUnifiedDate(hierarchicalTasks);
 
             // 获取用户选择的状态和分组
             let selectedStatus = this.config.defaultStatus;

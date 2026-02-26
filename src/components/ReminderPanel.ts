@@ -8474,6 +8474,23 @@ export class ReminderPanel {
         try {
             const menu = new Menu("reminderMoreMenu");
 
+            // 添加粘贴新建任务
+            menu.addItem({
+                icon: 'iconPaste',
+                label: i18n("pasteCreateTask") || "粘贴新建任务",
+                click: () => {
+                    const dialog = new PasteTaskDialog({
+                        plugin: this.plugin,
+                        defaultSetDate: true,
+                        defaultDateStr: getLogicalDateString(),
+                        onSuccess: () => {
+                            this.loadReminders(true);
+                        }
+                    });
+                    dialog.show();
+                }
+            });
+
             // 添加分类管理
             menu.addItem({
                 icon: 'iconTags',
