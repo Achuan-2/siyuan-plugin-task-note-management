@@ -191,7 +191,7 @@ export class HabitGroupManageDialog {
                 <div style="padding: 20px;">
                     <div style="margin-bottom: 16px;">
                         <label style="display: block; margin-bottom: 8px; font-weight: bold;">${i18n("groupNameLabel")}</label>
-                        <input type="text" id="groupNameInput" class="b3-text-field" placeholder="${i18n("groupNamePlaceholder")}" style="width: 100%;">
+                        <input type="text" id="groupNameInput" class="b3-text-field" placeholder="${i18n("groupNamePlaceholder")}" style="width: 100%;" spellcheck="false">
                     </div>
                     <div style="display: flex; gap: 8px; justify-content: flex-end;">
                         <button id="cancelBtn" class="b3-button">${i18n("cancel")}</button>
@@ -242,7 +242,7 @@ export class HabitGroupManageDialog {
                 <div style="padding: 20px;">
                     <div style="margin-bottom: 16px;">
                         <label style="display: block; margin-bottom: 8px; font-weight: bold;">${i18n("groupNameLabel")}</label>
-                        <input type="text" id="groupNameInput" class="b3-text-field" value="${group.name}" style="width: 100%;">
+                        <input type="text" id="groupNameInput" class="b3-text-field" value="${group.name}" style="width: 100%;" spellcheck="false">
                     </div>
                     <div style="display: flex; gap: 8px; justify-content: flex-end;">
                         <button id="cancelBtn" class="b3-button">${i18n("cancel")}</button>

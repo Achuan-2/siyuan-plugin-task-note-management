@@ -11,7 +11,7 @@ import { BlockBindingDialog } from "./BlockBindingDialog";
 import { SubtasksDialog } from "./SubtasksDialog";
 import { PomodoroRecordManager } from "../utils/pomodoroRecord";
 import { PomodoroSessionsDialog } from "./PomodoroSessionsDialog";
-import { Editor, rootCtx, defaultValueCtx, editorViewCtx, prosePluginsCtx, parserCtx } from "@milkdown/kit/core";
+import { Editor, rootCtx, defaultValueCtx, editorViewCtx, editorViewOptionsCtx, prosePluginsCtx, parserCtx } from "@milkdown/kit/core";
 import { Plugin } from "@milkdown/prose/state";
 import { commonmark } from "@milkdown/kit/preset/commonmark";
 import { gfm } from "@milkdown/kit/preset/gfm";
@@ -108,11 +108,11 @@ export class QuickReminderDialog {
                 <div class="b3-dialog__content" style="padding: 16px;">
                     <div style="margin-bottom: 12px;">
                         <label style="display: block; margin-bottom: 4px; font-size: 12px; color: var(--b3-theme-on-surface); opacity: 0.8;">${i18n('linkUrl') || '链接地址'}:</label>
-                        <textarea id="linkUrl" class="b3-text-field" style="width: 100%; resize: vertical;" rows="2" placeholder="https://...">${mark.attrs.href}</textarea>
+                        <textarea id="linkUrl" class="b3-text-field" style="width: 100%; resize: vertical;" rows="2" placeholder="https://..." spellcheck="false">${mark.attrs.href}</textarea>
                     </div>
                     <div style="margin-bottom: 12px;">
                         <label style="display: block; margin-bottom: 4px; font-size: 12px; color: var(--b3-theme-on-surface); opacity: 0.8;">${i18n('linkTitle')}:</label>
-                        <textarea id="linkTitle" class="b3-text-field" style="width: 100%; resize: vertical;" rows="2" placeholder="${i18n('linkTitlePlaceholder')}">${currentText}</textarea>
+                        <textarea id="linkTitle" class="b3-text-field" style="width: 100%; resize: vertical;" rows="2" placeholder="${i18n('linkTitlePlaceholder')}" spellcheck="false">${currentText}</textarea>
                     </div>
                 </div>
                 <div class="b3-dialog__action">
@@ -1173,7 +1173,7 @@ export class QuickReminderDialog {
                     <div class="b3-dialog__content">
                         <div class="b3-form__group">
                             <label class="b3-form__label">${i18n("nlInputLabel")}</label>
-                            <input type="text" id="quickNlInput" class="b3-text-field" value="${defaultValue}" placeholder="${i18n("nlInputPlaceholder")}" style="width: 100%;" autofocus>
+                            <input type="text" id="quickNlInput" class="b3-text-field" value="${defaultValue}" placeholder="${i18n("nlInputPlaceholder")}" style="width: 100%;" spellcheck="false" autofocus>
                             <div class="b3-form__desc">${i18n("nlInputDesc")}</div>
                         </div>
                         <div class="b3-form__group">
@@ -1483,7 +1483,7 @@ export class QuickReminderDialog {
                             <div id="quickCustomTimeInputArea" style="display: none; padding: 12px; background: var(--b3-theme-background-light); border-radius: 6px; border: 1px solid var(--b3-theme-surface-lighter);">
                                 <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
                                     <input type="datetime-local" id="quickCustomReminderTime" class="b3-text-field" style="flex: 1;" lang="${langTag}">
-                                    <input type="text" id="quickCustomReminderNote" class="b3-text-field" placeholder="${i18n("note")}" style="width: 120px;">
+                                    <input type="text" id="quickCustomReminderNote" class="b3-text-field" placeholder="${i18n("note")}" style="width: 120px;" spellcheck="false">
                                     <button type="button" id="quickConfirmCustomTimeBtn" class="b3-button b3-button--primary" title="${i18n("confirm")}">
                                         <svg class="b3-button__icon"><use xlink:href="#iconCheck"></use></svg>
                                     </button>
@@ -1520,7 +1520,7 @@ export class QuickReminderDialog {
                         <div class="b3-form__group">
                             <label class="b3-form__label">${i18n("bindToBlock") || '块或文档 ID'}</label>
                             <div style="display: flex; gap: 8px; flex-wrap: wrap; ">
-                                <input type="text" id="quickBlockInput" class="b3-text-field" value="${this.defaultBlockId || ''}" placeholder="${i18n("enterBlockId")}" style="flex: 1;">
+                                <input type="text" id="quickBlockInput" class="b3-text-field" value="${this.defaultBlockId || ''}" placeholder="${i18n("enterBlockId")}" style="flex: 1;" spellcheck="false">
                                 <button type="button" id="quickPasteBlockRefBtn" class="b3-button b3-button--outline" title="${i18n("pasteBlockRef")}">
                                     <svg class="b3-button__icon"><use xlink:href="#iconPaste"></use></svg>
                                 </button>
@@ -1543,7 +1543,7 @@ export class QuickReminderDialog {
                         <div class="b3-form__group">
                             <label class="b3-form__label">${i18n("bindUrl")}</label>
                             <div style="display: flex; gap: 8px;">
-                                <input type="url" id="quickUrlInput" class="b3-text-field" placeholder="${i18n("enterUrl")}" style="flex: 1;">
+                                <input type="url" id="quickUrlInput" class="b3-text-field" placeholder="${i18n("enterUrl")}" style="flex: 1;" spellcheck="false">
                                 <button type="button" id="quickOpenUrlBtn" class="b3-button b3-button--outline" title="${i18n("openUrl") || '在浏览器中打开'}">
                                     <svg class="b3-button__icon"><use xlink:href="#iconLink"></use></svg>
                                 </button>
@@ -1587,7 +1587,7 @@ export class QuickReminderDialog {
                         </div>
                         <div class="b3-form__group">
                             <label class="b3-form__label">${i18n("estimatedPomodoroDuration")}</label>
-                            <input type="text" id="quickEstimatedPomodoroDuration" class="b3-text-field" placeholder="${i18n("estimatedPomodoroDurationPlaceholder")}" style="width: 100%;">
+                            <input type="text" id="quickEstimatedPomodoroDuration" class="b3-text-field" placeholder="${i18n("estimatedPomodoroDurationPlaceholder")}" style="width: 100%;" spellcheck="false">
                         </div>
                         <div class="b3-form__group" id="quickPomodorosGroup" style="display: none;">
                             <label class="b3-form__label">${i18n("pomodoros")}</label>
@@ -1612,7 +1612,7 @@ export class QuickReminderDialog {
                             <label class="b3-form__label">${i18n("setProject")}</label>
                             <div class="custom-select" id="quickProjectSelectCustom" style="position: relative;">
                                 <div style="position: relative;">
-                                    <input type="text" id="quickProjectSearchInput" class="b3-text-field" placeholder="${i18n("searchProject")}" autocomplete="off" style="width: 100%; padding-right: 30px;  background: var(--b3-select-background);">
+                                    <input type="text" id="quickProjectSearchInput" class="b3-text-field" placeholder="${i18n("searchProject")}" autocomplete="off" style="width: 100%; padding-right: 30px;  background: var(--b3-select-background);" spellcheck="false">
                                     <input type="hidden" id="quickProjectSelector">
                                 </div>
                                 <div id="quickProjectDropdown" class="b3-menu" style="display: none; position: absolute; width: 100%; max-height: 200px; overflow-y: auto; z-index: 10; margin-top: 4px; box-shadow: var(--b3-menu-shadow); background: var(--b3-menu-background); border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius);">
@@ -1624,7 +1624,7 @@ export class QuickReminderDialog {
                             <label class="b3-form__label">${i18n("setTaskGroup")}</label>
                             <div class="custom-select" id="quickCustomGroupSelectCustom" style="position: relative;">
                                 <div style="position: relative;">
-                                    <input type="text" id="quickCustomGroupSearchInput" class="b3-text-field" placeholder="${i18n("searchGroup")}" autocomplete="off" style="width: 100%; padding-right: 30px; background: var(--b3-select-background);">
+                                    <input type="text" id="quickCustomGroupSearchInput" class="b3-text-field" placeholder="${i18n("searchGroup")}" autocomplete="off" style="width: 100%; padding-right: 30px; background: var(--b3-select-background);" spellcheck="false">
                                     <input type="hidden" id="quickCustomGroupSelector">
                                 </div>
                                 <div id="quickCustomGroupDropdown" class="b3-menu" style="display: none; position: absolute; width: 100%; max-height: 200px; overflow-y: auto; z-index: 10; margin-top: 4px; box-shadow: var(--b3-menu-shadow); background: var(--b3-menu-background); border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius);">
@@ -1636,7 +1636,7 @@ export class QuickReminderDialog {
                             <label class="b3-form__label">${i18n("milestone")}</label>
                             <div class="custom-select" id="quickMilestoneSelectCustom" style="position: relative;">
                                 <div style="position: relative;">
-                                    <input type="text" id="quickMilestoneSearchInput" class="b3-text-field" placeholder="${i18n("searchMilestone")}" autocomplete="off" style="width: 100%; padding-right: 30px; background: var(--b3-select-background);">
+                                    <input type="text" id="quickMilestoneSearchInput" class="b3-text-field" placeholder="${i18n("searchMilestone")}" autocomplete="off" style="width: 100%; padding-right: 30px; background: var(--b3-select-background);" spellcheck="false">
                                     <input type="hidden" id="quickMilestoneSelector">
                                 </div>
                                 <div id="quickMilestoneDropdown" class="b3-menu" style="display: none; position: absolute; width: 100%; max-height: 200px; overflow-y: auto; z-index: 10; margin-top: 4px; box-shadow: var(--b3-menu-shadow); background: var(--b3-menu-background); border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius);">
@@ -1725,6 +1725,13 @@ export class QuickReminderDialog {
                 .config((ctx) => {
                     ctx.set(rootCtx, noteContainer);
                     ctx.set(defaultValueCtx, initialNote);
+                    ctx.update(editorViewOptionsCtx, (prev) => ({
+                        ...prev,
+                        attributes: {
+                            ...prev.attributes,
+                            spellcheck: "false",
+                        },
+                    }));
                     ctx.get(listenerCtx).markdownUpdated((_ctx, markdown) => {
                         this.currentNote = markdown;
                     });
@@ -1737,29 +1744,33 @@ export class QuickReminderDialog {
                                 handlePaste: (view, event) => {
                                     let text = event.clipboardData?.getData('text/plain');
                                     if (text) {
-                                        // 移除首尾多余的换行符（兼容 Windows/Unix），保留空格以维持缩进层级
-                                        text = text.replace(/^[\r\n]+|[\r\n]+$/g, '');
+                                        // 统一换行符并将\r替换为\n，同时移除首尾多余的空行
+                                        text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+                                        text = text.replace(/^\n+|\n+$/g, '');
                                         if (!text) return false;
 
-                                        const parser = ctx.get(parserCtx);
-                                        const node = parser(text);
-                                        if (node) {
-                                            const { tr, doc } = view.state;
-                                            // 如果文档当前几乎为空（只有一个空的段落），则替换整个文档内容
-                                            const isEmpty = doc.childCount === 1 &&
-                                                doc.firstChild?.type.name === 'paragraph' &&
-                                                doc.firstChild.content.size === 0;
+                                        const { tr, doc } = view.state;
+                                        const isEmpty = doc.childCount === 1 &&
+                                            doc.firstChild?.type.name === 'paragraph' &&
+                                            doc.firstChild.content.size === 0;
 
-                                            // 获取节点内容 fragment
-                                            const content = node.type.name === 'doc' ? node.content : node;
-
-                                            if (isEmpty) {
+                                        if (isEmpty) {
+                                            const parser = ctx.get(parserCtx);
+                                            const node = parser(text);
+                                            if (node) {
+                                                const content = node.type.name === 'doc' ? node.content : node;
                                                 // 彻底替换初始的空段落
                                                 view.dispatch(tr.replaceWith(0, doc.content.size, content).scrollIntoView());
-                                            } else {
-                                                view.dispatch(tr.replaceSelectionWith(node).scrollIntoView());
+                                                return true;
                                             }
-                                            return true;
+                                        } else {
+                                            // 非空文档下，如果不含换行符，证明是行内粘贴，直接 insertText 以避免被切分为新段落
+                                            if (!text.includes('\n')) {
+                                                view.dispatch(tr.insertText(text).scrollIntoView());
+                                                return true;
+                                            }
+                                            // 如果有多行，则交由编辑器原生的剪贴板插件进行切片（Slice）合并，维持正确的嵌套和行内继承
+                                            return false;
                                         }
                                     }
                                     return false;
@@ -2361,6 +2372,7 @@ export class QuickReminderDialog {
             noteInput.placeholder = i18n("note");
             noteInput.style.cssText = 'width: 160px;';
             noteInput.value = item.note || '';
+            noteInput.spellcheck = false;
 
             const removeBtn = document.createElement('button');
             removeBtn.type = 'button';

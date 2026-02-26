@@ -4,7 +4,7 @@ import { autoDetectDateTimeFromTitle, getLocalDateTimeString } from "../utils/da
 import { getBlockByID, updateBindBlockAtrrs, addBlockProjectId } from "../api";
 import { getAllReminders, saveReminders } from "../utils/icsSubscription";
 import LoadingDialog from './LoadingDialog.svelte';
-import { Editor, rootCtx, defaultValueCtx, editorViewCtx } from "@milkdown/kit/core";
+import { Editor, rootCtx, defaultValueCtx, editorViewCtx, editorViewOptionsCtx } from "@milkdown/kit/core";
 import { commonmark } from "@milkdown/kit/preset/commonmark";
 import { gfm } from "@milkdown/kit/preset/gfm";
 import { history } from "@milkdown/kit/plugin/history";
@@ -145,11 +145,11 @@ export class PasteTaskDialog {
                 <div class="b3-dialog__content" style="padding: 16px;">
                     <div style="margin-bottom: 12px;">
                         <label style="display: block; margin-bottom: 4px; font-size: 12px; color: var(--b3-theme-on-surface); opacity: 0.8;">${i18n('linkUrl') || '链接地址'}:</label>
-                        <textarea id="linkUrl" class="b3-text-field" style="width: 100%; resize: vertical;" rows="2" placeholder="https://...">${mark.attrs.href}</textarea>
+                        <textarea id="linkUrl" class="b3-text-field" style="width: 100%; resize: vertical;" rows="2" placeholder="https://..." spellcheck="false">${mark.attrs.href}</textarea>
                     </div>
                     <div style="margin-bottom: 12px;">
                         <label style="display: block; margin-bottom: 4px; font-size: 12px; color: var(--b3-theme-on-surface); opacity: 0.8;">${i18n('linkTitle') || '显示文本'}:</label>
-                        <textarea id="linkTitle" class="b3-text-field" style="width: 100%; resize: vertical;" rows="2" placeholder="${i18n('linkTitlePlaceholder') || '输入链接文本'}">${currentText}</textarea>
+                        <textarea id="linkTitle" class="b3-text-field" style="width: 100%; resize: vertical;" rows="2" placeholder="${i18n('linkTitlePlaceholder') || '输入链接文本'}" spellcheck="false">${currentText}</textarea>
                     </div>
                 </div>
                 <div class="b3-dialog__action">
@@ -332,6 +332,13 @@ export class PasteTaskDialog {
                 .config((ctx) => {
                     ctx.set(rootCtx, taskListContainer);
                     ctx.set(defaultValueCtx, "");
+                    ctx.update(editorViewOptionsCtx, (prev) => ({
+                        ...prev,
+                        attributes: {
+                            ...prev.attributes,
+                            spellcheck: "false",
+                        },
+                    }));
                     ctx.get(listenerCtx).markdownUpdated((_ctx, markdown) => {
                         this.taskListContent = markdown;
                     });
@@ -344,29 +351,33 @@ export class PasteTaskDialog {
                                 handlePaste: (view, event) => {
                                     let text = event.clipboardData?.getData('text/plain');
                                     if (text) {
-                                        // 移除首尾多余的换行符（兼容 Windows/Unix），保留空格以维持缩进层级
-                                        text = text.replace(/^[\r\n]+|[\r\n]+$/g, '');
+                                        // 统一换行符并将\r替换为\n，同时移除首尾多余的空行
+                                        text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+                                        text = text.replace(/^\n+|\n+$/g, '');
                                         if (!text) return false;
 
-                                        const parser = ctx.get(parserCtx);
-                                        const node = parser(text);
-                                        if (node) {
-                                            const { tr, doc } = view.state;
-                                            // 如果文档当前几乎为空（只有一个空的段落），则替换整个文档内容
-                                            const isEmpty = doc.childCount === 1 &&
-                                                doc.firstChild?.type.name === 'paragraph' &&
-                                                doc.firstChild.content.size === 0;
+                                        const { tr, doc } = view.state;
+                                        const isEmpty = doc.childCount === 1 &&
+                                            doc.firstChild?.type.name === 'paragraph' &&
+                                            doc.firstChild.content.size === 0;
 
-                                            // 获取节点内容 fragment
-                                            const content = node.type.name === 'doc' ? node.content : node;
-
-                                            if (isEmpty) {
+                                        if (isEmpty) {
+                                            const parser = ctx.get(parserCtx);
+                                            const node = parser(text);
+                                            if (node) {
+                                                const content = node.type.name === 'doc' ? node.content : node;
                                                 // 彻底替换初始的空段落
                                                 view.dispatch(tr.replaceWith(0, doc.content.size, content).scrollIntoView());
-                                            } else {
-                                                view.dispatch(tr.replaceSelectionWith(node).scrollIntoView());
+                                                return true;
                                             }
-                                            return true;
+                                        } else {
+                                            // 非空文档下，如果不含换行符，证明是行内粘贴，直接 insertText 以避免被切分为新段落
+                                            if (!text.includes('\n')) {
+                                                view.dispatch(tr.insertText(text).scrollIntoView());
+                                                return true;
+                                            }
+                                            // 如果有多行，则交由编辑器原生的剪贴板插件进行切片（Slice）合并，维持正确的嵌套和行内继承
+                                            return false;
                                         }
                                     }
                                     return false;

@@ -117,6 +117,7 @@ export class HabitEditDialog {
             noteInput.placeholder = i18n("reminderNoteHint");
             noteInput.value = noteStr;
             noteInput.style.cssText = 'flex: 1; min-width: 100px;';
+            noteInput.spellcheck = false;
 
             const removeBtn = document.createElement('button');
             removeBtn.type = 'button';
@@ -171,6 +172,7 @@ export class HabitEditDialog {
         blockInput.placeholder = '块或文档 ID（例如：(()) 或 siyuan://blocks/ID）';
         blockInput.value = this.habit?.blockId || '';
         blockInput.style.cssText = 'flex: 1;';
+        blockInput.spellcheck = false;
 
         const pasteBtn = document.createElement('button');
         pasteBtn.type = 'button';
@@ -334,6 +336,9 @@ export class HabitEditDialog {
         input.name = name;
         input.value = value;
         input.className = 'b3-text-field';
+        if (type === 'text') {
+            input.spellcheck = false;
+        }
         if (type === 'number') {
             input.min = '1';
         }
