@@ -5657,7 +5657,7 @@ export class ReminderPanel {
 
             if (reminder.projectId) {
                 menu.addItem({
-                    icon: "iconGrid",
+                    icon: "iconProject",
                     label: i18n("openProjectKanban") || "打开项目看板",
                     click: () => this.openProjectKanban(reminder.projectId)
                 });

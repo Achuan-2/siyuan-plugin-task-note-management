@@ -1593,7 +1593,7 @@ export class ProjectPanel {
         if (project.blockId) {
             // 打开项目看板
             menu.addItem({
-                iconHTML: "📋",
+                icon: "iconProject",
                 label: i18n("openProjectKanban") || "打开项目看板",
                 click: () => this.openProjectKanban(project)
             });
