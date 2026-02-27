@@ -13,12 +13,14 @@
     let categories: any[] = [];
     let projectManager: any;
 
+    let syncingSubIds: { [key: string]: boolean } = {};
+
     onMount(async () => {
         await loadData();
     });
 
-    async function loadData() {
-        loading = true;
+    async function loadData(silent = false) {
+        if (!silent) loading = true;
         try {
             const { loadSubscriptions } = await import('../utils/icsSubscription');
             const { ProjectManager } = await import('../utils/projectManager');
@@ -38,7 +40,7 @@
             console.error('Failed to load subscription data:', error);
             pushErrMsg(i18n('loadDataFailed'));
         } finally {
-            loading = false;
+            if (!silent) loading = false;
         }
     }
 
@@ -52,10 +54,21 @@
     }
 
     async function handleSync(sub: any) {
-        const { syncSubscription } = await import('../utils/icsSubscription');
-        await syncSubscription(plugin, sub);
-        await loadData();
-        pushMsg(i18n('syncFinished'));
+        if (syncingSubIds[sub.id]) return;
+        syncingSubIds[sub.id] = true;
+        syncingSubIds = { ...syncingSubIds };
+        try {
+            const { syncSubscription } = await import('../utils/icsSubscription');
+            await syncSubscription(plugin, sub);
+            await loadData(true);
+            pushMsg(i18n('syncFinished'));
+        } catch (error) {
+            console.error('Failed to sync subscription:', error);
+            pushErrMsg(i18n('subscriptionSyncError') || 'Sync failed');
+        } finally {
+            delete syncingSubIds[sub.id];
+            syncingSubIds = { ...syncingSubIds };
+        }
     }
 
     async function handleDelete(sub: any) {
@@ -380,9 +393,14 @@
                             <button
                                 class="b3-button b3-button--outline"
                                 on:click={() => handleSync(sub)}
+                                disabled={syncingSubIds[sub.id]}
                                 title={i18n('syncNow')}
                             >
-                                <svg class="b3-button__icon">
+                                <svg
+                                    class="b3-button__icon {syncingSubIds[sub.id]
+                                        ? 'fn__rotate'
+                                        : ''}"
+                                >
                                     <use xlink:href="#iconRefresh"></use>
                                 </svg>
                             </button>
