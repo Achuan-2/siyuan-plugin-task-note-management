@@ -2,32 +2,6 @@
 
 [![Star History Chart](https://api.star-history.com/svg?repos=Achuan-2/siyuan-plugin-task-note-management&type=Date)](https://star-history.com/Achuan-2/siyuan-plugin-task-note-management&Date)
 
-## 📢 Announcement
-
-The plugin is planned to become paid after the Spring Festival (2026.02.24).
-
-Open-source projects rely heavily on donations, which generate very little income. Currently, many features of this plugin are primarily driven by donations from a few generous supporters. I only have the motivation to optimize a specific feature when I receive donations. The amount I receive is small (relative to the time I invest), while each of these generous supporters contributes a significant amount. This is not a sustainable model.
-
-To ensure the sustainable maintenance of the plugin, it is planned to charge for the Calendar View and Project Kanban features after the Spring Festival (2026.02.24): monthly subscription $2, annual subscription $12, lifetime $40, with membership bound to the SiYuan account ID. All other features (Task Management Sidebar, Pomodoro Timer, Habit Tracker, Four Quadrants Panel, etc.) will remain completely free. After implementing the fee, the development cost can be shared among each paying user. With everyone contributing a small amount, I will have the motivation to continue maintaining and optimizing the plugin.
-
-Users who have previously donated can offset the paid membership cost by providing a screenshot of their donation.
-
-The code will remain open-source. The previous free version can be downloaded from GitHub.
-
-Membership verification is performed locally based on an authorization code and does not rely on the network. Simply entering the ID and authorization code will verify membership and calculate the membership expiration date.
-
-Currently, many buttons and texts in the plugin are not internationalized. [Crowdfunding for paid development is underway](https://github.com/Achuan-2/siyuan-plugin-task-note-management/issues/266) (tips can be deducted from future membership prices).
-
-## ❤️ Support with Love
-
-If you like my plugin, please feel free to star the GitHub repository and donate. This will motivate me to continue improving this plugin and developing new plugins.
-
-Maintaining the plugin takes time and effort, open source is for sharing, not for me to waste my time providing free customer service to users.
-
-The current interface is primarily developed based on Chinese. If you wish for an English interface,  welcome to donate any amount. Once the total donations reach a certain level, I will optimize the interface.
-
-![Image](https://github.com/user-attachments/assets/08f5a8c0-40e2-48d4-b5b7-d48df5cd9ea1)
-
 
 ## Plugin Introduction
 
