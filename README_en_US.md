@@ -13,6 +13,10 @@ A task management plugin for SiYuan Notes, developed to practice the Bullet Jour
 
 See: [CHANGELOG.md](https://cdn.jsdelivr.net/gh/Achuan-2/siyuan-plugin-task-note-management@main/CHANGELOG.md)
 
+## Usage
+
+Yuque Knowledge Base: https://www.yuque.com/achuan-2/im3en6
+
 ## 🤔 Guiding Philosophy Behind the Plugin: Bullet Journal Method
 
 ### What is the Bullet Journal Method
