@@ -14,6 +14,9 @@
     let projectManager: any;
 
     let syncingSubIds: { [key: string]: boolean } = {};
+    let draggedIndex: number | null = null;
+    let dropIndex: number | null = null;
+    let dropPosition: 'above' | 'below' | null = null;
 
     onMount(async () => {
         await loadData();
@@ -35,6 +38,8 @@
             categories = categoryManager.getCategories();
 
             data = await loadSubscriptions(plugin);
+            // Ensure data.subscriptions exists
+            if (!data.subscriptions) data.subscriptions = {};
             subscriptions = Object.values(data.subscriptions);
         } catch (error) {
             console.error('Failed to load subscription data:', error);
@@ -42,6 +47,66 @@
         } finally {
             if (!silent) loading = false;
         }
+    }
+
+    async function updateOrder() {
+        const { saveSubscriptions } = await import('../utils/icsSubscription');
+        const newSubDict: { [id: string]: any } = {};
+        subscriptions.forEach(sub => {
+            newSubDict[sub.id] = sub;
+        });
+        data.subscriptions = newSubDict;
+        await saveSubscriptions(plugin, data);
+        window.dispatchEvent(new CustomEvent('reminderUpdated'));
+    }
+
+    function handleDragStart(index: number) {
+        draggedIndex = index;
+    }
+
+    function handleDragOver(e: DragEvent, index: number) {
+        e.preventDefault();
+        if (draggedIndex === null) return;
+        if (draggedIndex === index) {
+            dropIndex = null;
+            return;
+        }
+
+        const target = e.currentTarget as HTMLElement;
+        const rect = target.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+
+        dropIndex = index;
+        dropPosition = e.clientY < midY ? 'above' : 'below';
+    }
+
+    async function handleDrop(e: DragEvent, index: number) {
+        e.preventDefault();
+        if (draggedIndex === null || draggedIndex === index) return;
+
+        const movedSub = subscriptions[draggedIndex];
+        let newSubscriptions = [...subscriptions];
+        newSubscriptions.splice(draggedIndex, 1);
+
+        let targetIndex = newSubscriptions.indexOf(subscriptions[index]);
+        if (dropPosition === 'below') {
+            targetIndex += 1;
+        }
+
+        newSubscriptions.splice(targetIndex, 0, movedSub);
+        subscriptions = newSubscriptions;
+
+        await updateOrder();
+
+        draggedIndex = null;
+        dropIndex = null;
+        dropPosition = null;
+    }
+
+    function handleDragEnd() {
+        draggedIndex = null;
+        dropIndex = null;
+        dropPosition = null;
     }
 
     async function handleToggle(sub: any) {
@@ -349,8 +414,18 @@
         </div>
     {:else}
         <div class="subscription-list">
-            {#each subscriptions as sub}
-                <div class="subscription-card b3-card">
+            {#each subscriptions as sub, i (sub.id)}
+                <div
+                    class="subscription-card b3-card"
+                    draggable="true"
+                    on:dragstart={() => handleDragStart(i)}
+                    on:dragover={e => handleDragOver(e, i)}
+                    on:drop={e => handleDrop(e, i)}
+                    on:dragend={handleDragEnd}
+                    class:dragging={draggedIndex === i}
+                    class:drag-over-above={dropIndex === i && dropPosition === 'above'}
+                    class:drag-over-below={dropIndex === i && dropPosition === 'below'}
+                >
                     <div class="card-content">
                         <div class="sub-info">
                             <div class="sub-name">{sub.name}</div>
@@ -471,15 +546,76 @@
         display: flex;
         flex-direction: column;
         gap: 8px;
+
+        &.is-dragging {
+            .subscription-card * {
+                pointer-events: none;
+            }
+        }
     }
 
     .subscription-card {
         padding: 12px;
-        transition: transform 0.2s;
+        transition:
+            transform 0.2s,
+            border 0.1s;
         margin: 0px;
+        position: relative;
+        cursor: grab;
+
+        &:active {
+            cursor: grabbing;
+        }
 
         &:hover {
             background-color: var(--b3-theme-background-shallow);
+        }
+
+        &.dragging {
+            opacity: 0.4;
+            background-color: var(--b3-theme-background-shallow);
+        }
+
+        &.drag-over-above {
+            &::before {
+                content: '';
+                position: absolute;
+                top: -6px;
+                left: 0;
+                right: 0;
+                height: 4px;
+                background-color: var(--b3-theme-primary);
+                border-radius: 2px;
+                z-index: 10;
+                animation: pulse 1.5s infinite;
+            }
+        }
+
+        &.drag-over-below {
+            &::after {
+                content: '';
+                position: absolute;
+                bottom: -6px;
+                left: 0;
+                right: 0;
+                height: 4px;
+                background-color: var(--b3-theme-primary);
+                border-radius: 2px;
+                z-index: 10;
+                animation: pulse 1.5s infinite;
+            }
+        }
+    }
+
+    @keyframes pulse {
+        0% {
+            opacity: 0.6;
+        }
+        50% {
+            opacity: 1;
+        }
+        100% {
+            opacity: 0.6;
         }
     }
 

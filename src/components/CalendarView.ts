@@ -17,7 +17,7 @@ import { ProjectColorDialog } from "./ProjectColorDialog";
 import { PomodoroTimer } from "./PomodoroTimer";
 import { i18n } from "../pluginInstance";
 import { generateRepeatInstances, RepeatInstance, getDaysDifference, addDaysToDate } from "../utils/repeatUtils";
-import { getAllReminders, saveReminders, loadHolidays } from "../utils/icsSubscription";
+import { getAllReminders, saveReminders, loadHolidays, loadSubscriptions } from "../utils/icsSubscription";
 import { CalendarConfigManager } from "../utils/calendarConfigManager";
 import { TaskSummaryDialog } from "@/components/TaskSummaryDialog";
 import { PomodoroManager } from "../utils/pomodoroManager";
@@ -84,6 +84,7 @@ export class CalendarView {
 
     // 性能优化：颜色缓存
     private colorCache: Map<string, { backgroundColor: string; borderColor: string }> = new Map();
+    private subscriptionOrderMap: Map<string, number> = new Map(); // 订阅日历排序缓存
     private lastNavigatedToTodayAt: number = 0; // 记录最后一次点击"今天"的时间
 
     // 视图按钮引用
@@ -3870,6 +3871,17 @@ export class CalendarView {
             return isSubA ? -1 : 1;
         }
 
+        // 如果都是订阅日历，则按照订阅日历本身的排序进行 (ics-subscriptions.json 中的顺序)
+        if (isSubA && isSubB) {
+            const subIdA = a.extendedProps?.subscriptionId;
+            const subIdB = b.extendedProps?.subscriptionId;
+            if (subIdA && subIdB && subIdA !== subIdB) {
+                const orderA = this.subscriptionOrderMap.get(subIdA) ?? Infinity;
+                const orderB = this.subscriptionOrderMap.get(subIdB) ?? Infinity;
+                if (orderA !== orderB) return orderA - orderB;
+            }
+        }
+
         // 1. 优先根据优先级排序
         const priorityMap: { [key: string]: number } = {
             'high': 0,
@@ -5524,6 +5536,17 @@ export class CalendarView {
 
     private async getEvents(force: boolean = false) {
         try {
+            // 加载订阅日历排序
+            const subscriptionData = await loadSubscriptions(this.plugin);
+            this.subscriptionOrderMap.clear();
+            if (subscriptionData?.subscriptions) {
+                // 按顺序存储订阅 ID，Object.values 通常保持 JSON 中的顺序
+                const subArray = Object.values(subscriptionData.subscriptions);
+                subArray.forEach((sub: any, index) => {
+                    this.subscriptionOrderMap.set(sub.id, index);
+                });
+            }
+
             const reminderData = await getAllReminders(this.plugin, undefined, force);
             const events = [];
 
