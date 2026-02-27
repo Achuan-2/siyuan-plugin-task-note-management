@@ -1,4 +1,4 @@
-import { pushErrMsg, pushMsg, putFile, getFile } from '../api';
+import { pushErrMsg, pushMsg, putFile, getFile, removeFile } from '../api';
 import { parseIcsFile, isEventPast } from './icsImport';
 import { i18n } from "../pluginInstance";
 
@@ -424,7 +424,8 @@ export function getSyncIntervalMs(interval: IcsSubscription['syncInterval']): nu
 export async function removeSubscription(plugin: any, subscriptionId: string): Promise<void> {
     try {
         // Delete subscription tasks file
-        await saveSubscriptionTasks(plugin, subscriptionId, {});
+        const filePath = getSubscriptionFilePath(subscriptionId);
+        await removeFile(filePath);
 
         // Trigger update event
         window.dispatchEvent(new CustomEvent('reminderUpdated'));
