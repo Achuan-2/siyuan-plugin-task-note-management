@@ -1,6 +1,6 @@
 import { Dialog, showMessage, Menu } from "siyuan";
 import { i18n } from "../pluginInstance";
-import { getLocalDateString, getLogicalDateString } from "../utils/dateUtils";
+import { getLocalDateString, getLogicalDateString, getLocaleTag } from "../utils/dateUtils";
 import { ProjectManager } from "../utils/projectManager";
 
 import { generateRepeatInstances } from "@/utils/repeatUtils";
@@ -102,7 +102,7 @@ export class TaskSummaryDialog {
     let completed: Date;
     completed = new Date(completedTime.replace(' ', 'T') + ':00');
 
-    const timeStr = completed.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+    const timeStr = completed.toLocaleTimeString(getLocaleTag(), { hour: '2-digit', minute: '2-digit' });
 
     // 使用 getLogicalDateString 获取完成时间的逻辑日期（仅用于比较）
     // 例如：如果一天开始时间设置为03:00，则2026-01-20 02:30的逻辑日期是2026-01-19

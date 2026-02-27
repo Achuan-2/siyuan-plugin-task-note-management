@@ -866,6 +866,7 @@
     margin-right: 6px;
     min-width: 16px;
     padding-top: 2px; // 轻微向下调整，更好对齐标题
+    cursor: default; // 覆盖父元素的 grab 光标
 
     input[type="checkbox"] {
         width: 14px;
@@ -873,6 +874,7 @@
         margin: 0;
         flex-shrink: 0;
         order: 1; // 复选框在上方
+        cursor: pointer; // 复选框显示指针光标
     }
 }
 
@@ -1230,16 +1232,6 @@
     overflow: hidden;
 }
 
-
-
-
-.fc-event.completed .reminder-calendar-event-content {
-    text-decoration: line-through;
-}
-
-.fc-event.completed .reminder-calendar-event-content .fc-event-title {
-    text-decoration: line-through;
-}
 
 .reminder-calendar-event-note {
     font-size: 0.85em;

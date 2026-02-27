@@ -1,5 +1,5 @@
 import { Dialog } from "siyuan";
-
+import { i18n } from "../pluginInstance";
 /**
  * 块绑定对话框组件
  * 支持三种模式：绑定现有块、新建文档、新建标题
@@ -48,7 +48,7 @@ export class BlockBindingDialog {
         this.forGroup = options?.forGroup || false;
 
         this.dialog = new Dialog({
-            title: options?.title || "绑定块",
+            title: options?.title || i18n("bindBlock") || "绑定块",
             content: this.createDialogContent(),
             width: "600px",
             height: "500px"
@@ -73,9 +73,9 @@ export class BlockBindingDialog {
             <div class="create-doc-heading-dialog" style="display: flex; flex-direction: column; height: 100%;">
                 <!-- 按钮切换 -->
                 <div style="margin-bottom: 16px; flex-shrink: 0; display: flex; gap: 8px; justify-content: center;">
-                    <button class="b3-button b3-button--outline tab-switch-btn" data-tab="bind">绑定块</button>
-                    <button class="b3-button b3-button--outline tab-switch-btn" data-tab="document">新建文档</button>
-                    <button class="b3-button tab-switch-btn" data-tab="heading">新建标题</button>
+                    <button class="b3-button b3-button--outline tab-switch-btn" data-tab="bind">${i18n("bindBlock") || "绑定块"}</button>
+                    <button class="b3-button b3-button--outline tab-switch-btn" data-tab="document">${i18n("newDocument") || "新建文档"}</button>
+                    <button class="b3-button tab-switch-btn" data-tab="heading">${i18n("newHeading") || "新建标题"}</button>
                 </div>
 
                 <!-- 内容区域 -->
@@ -84,19 +84,19 @@ export class BlockBindingDialog {
                     <div class="tab-content" data-content="bind" style="display: none;">
                         <div class="b3-dialog__content">
                             <div class="b3-form__group">
-                                <label class="b3-form__label">块ID</label>
+                                <label class="b3-form__label">${i18n("blockId") || "块ID"}</label>
                                 <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px;">
-                                    <input type="text" id="bindBlockInput" class="b3-text-field" placeholder="输入块ID或搜索" style="flex: 1;">
+                                    <input type="text" id="bindBlockInput" class="b3-text-field" placeholder="${i18n("inputBlockIdOrSearch") || "输入块ID或搜索"}" style="flex: 1;">
                                     <label style="margin: 0;">
                                         <input type="checkbox" id="bindIncludeHeadingsCheckbox" class="b3-switch">
                                         <span class="b3-switch__slider"></span>
                                     </label>
-                                    <span style="font-size: 12px; color: var(--b3-theme-on-surface); white-space: nowrap;">搜索包含标题</span>
+                                    <span style="font-size: 12px; color: var(--b3-theme-on-surface); white-space: nowrap;">${i18n("searchIncludesHeadings") || "搜索包含标题"}</span>
                                 </div>
                                 <div id="bindSearchResults" style="max-height: 150px; overflow-y: auto; margin-top: 8px; border: 1px solid var(--b3-border-color); border-radius: 4px; display: none;"></div>
                                 <!-- 块预览区域 -->
                                 <div id="bindBlockPreview" style="margin-top: 8px; padding: 8px; background: var(--b3-theme-background-light); border: 1px solid var(--b3-border-color); border-radius: 4px; display: none;">
-                                    <div style="font-size: 12px; color: var(--b3-theme-on-surface-light); margin-bottom: 4px;">当前选择：</div>
+                                    <div style="font-size: 12px; color: var(--b3-theme-on-surface-light); margin-bottom: 4px;">${i18n("currentSelection") || "当前选择："}</div>
                                     <div id="bindBlockPreviewContent" style="font-size: 13px; color: var(--b3-theme-on-surface);"></div>
                                 </div>
                             </div>
@@ -107,22 +107,22 @@ export class BlockBindingDialog {
                     <div class="tab-content" data-content="document" style="display: none;">
                         <div class="b3-dialog__content">
                                     <div class="b3-form__group">
-                                        <label class="b3-form__label">文档标题</label>
-                                        <input type="text" id="docTitleInput" class="b3-text-field" value="" placeholder="请输入文档标题" style="width: 100%; margin-top: 8px;">
+                                        <label class="b3-form__label">${i18n("documentTitle") || "文档标题"}</label>
+                                        <input type="text" id="docTitleInput" class="b3-text-field" value="" placeholder="${i18n("inputDocumentTitle") || "请输入文档标题"}" style="width: 100%; margin-top: 8px;">
                                     </div>
 
                                     <div class="b3-form__group">
-                                        <label class="b3-form__label">保存路径（相对于所选笔记本）</label>
+                                        <label class="b3-form__label">${i18n("savePathRelativeToNotebook") || "保存路径（相对于所选笔记本）"}</label>
                                         <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
-                                            <input type="text" id="docParentPathInput" class="b3-text-field" placeholder="输入或搜索路径，例如 /项目/子页" style="flex:1;">
-                                            <button class="b3-button b3-button--outline" id="useParentDocPathBtn" style="display:none; white-space:nowrap;">使用父块文档路径</button>
+                                            <input type="text" id="docParentPathInput" class="b3-text-field" placeholder="${i18n("inputOrSearchPathDesc") || "输入或搜索路径，例如 /项目/子页"}" style="flex:1;">
+                                            <button class="b3-button b3-button--outline" id="useParentDocPathBtn" style="display:none; white-space:nowrap;">${i18n("useParentBlockDocPath") || "使用父块文档路径"}</button>
                                         </div>
                                         <div id="docPathSearchResults" style="max-height:150px; overflow-y:auto; margin-top:8px; border:1px solid var(--b3-border-color); border-radius:4px; display:none;"></div>
                                     </div>
 
                                     <div class="b3-form__group">
-                                        <label class="b3-form__label">文档内容（可选）</label>
-                                        <textarea id="docContentInput" class="b3-text-field" placeholder="请输入文档内容" style="width: 100%; margin-top: 8px; min-height: 80px; resize: vertical;"></textarea>
+                                        <label class="b3-form__label">${i18n("documentContentOptional") || "文档内容（可选）"}</label>
+                                        <textarea id="docContentInput" class="b3-text-field" placeholder="${i18n("inputDocumentContent") || "请输入文档内容"}" style="width: 100%; margin-top: 8px; min-height: 80px; resize: vertical;"></textarea>
                                     </div>
                         </div>
                     </div>
@@ -131,30 +131,30 @@ export class BlockBindingDialog {
                     <div class="tab-content" data-content="heading">
                         <div class="b3-dialog__content">
                             <div class="b3-form__group">
-                                <label class="b3-form__label">标题内容</label>
-                                <input type="text" id="headingContentInput" class="b3-text-field" value="" placeholder="请输入标题内容" style="width: 100%; margin-top: 8px;">
+                                <label class="b3-form__label">${i18n("headingContent") || "标题内容"}</label>
+                                <input type="text" id="headingContentInput" class="b3-text-field" value="" placeholder="${i18n("inputHeadingContent") || "请输入标题内容"}" style="width: 100%; margin-top: 8px;">
                             </div>
                             
                             <div class="b3-form__group">
-                                <label class="b3-form__label">父块</label>
+                                <label class="b3-form__label">${i18n("parentBlock") || "父块"}</label>
                                 <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px;">
-                                    <input type="text" id="headingParentInput" class="b3-text-field" placeholder="输入块ID或搜索" style="flex: 1;">
+                                    <input type="text" id="headingParentInput" class="b3-text-field" placeholder="${i18n("inputBlockIdOrSearch") || "输入块ID或搜索"}" style="flex: 1;">
                                     <label style="margin: 0;">
                                         <input type="checkbox" id="headingIncludeHeadingsCheckbox" class="b3-switch">
                                         <span class="b3-switch__slider"></span>
                                     </label>
-                                    <span style="font-size: 12px; color: var(--b3-theme-on-surface); white-space: nowrap;">搜索包含标题</span>
+                                    <span style="font-size: 12px; color: var(--b3-theme-on-surface); white-space: nowrap;">${i18n("searchIncludesHeadings") || "搜索包含标题"}</span>
                                 </div>
                                 <div id="headingSearchResults" style="max-height: 150px; overflow-y: auto; margin-top: 8px; border: 1px solid var(--b3-border-color); border-radius: 4px; display: none;"></div>
                                 <!-- 块预览区域 -->
                                 <div id="headingBlockPreview" style="margin-top: 8px; padding: 8px; background: var(--b3-theme-background-light); border: 1px solid var(--b3-border-color); border-radius: 4px; display: none;">
-                                    <div style="font-size: 12px; color: var(--b3-theme-on-surface-light); margin-bottom: 4px;">当前选择：</div>
+                                    <div style="font-size: 12px; color: var(--b3-theme-on-surface-light); margin-bottom: 4px;">${i18n("currentSelection") || "当前选择："}</div>
                                     <div id="headingBlockPreviewContent" style="font-size: 13px; color: var(--b3-theme-on-surface);"></div>
                                 </div>
                             </div>
 
                             <div class="b3-form__group">
-                                <label class="b3-form__label">插入的标题层级</label>
+                                <label class="b3-form__label">${i18n("insertedHeadingLevel") || "插入的标题层级"}</label>
                                 <select id="headingLevelSelect" class="b3-select" style="width: 100%; margin-top: 8px;">
                                     <option value="1">H1</option>
                                     <option value="2">H2</option>
@@ -166,10 +166,10 @@ export class BlockBindingDialog {
                             </div>
 
                             <div class="b3-form__group">
-                                <label class="b3-form__label">插入位置</label>
+                                <label class="b3-form__label">${i18n("insertPosition") || "插入位置"}</label>
                                 <select id="headingPositionSelect" class="b3-select" style="width: 100%; margin-top: 8px;">
-                                    <option value="prepend">插入到最前</option>
-                                    <option value="append" selected>插入到最后</option>
+                                    <option value="prepend">${i18n("insertAtBeginning") || "插入到最前"}</option>
+                                    <option value="append" selected>${i18n("insertAtEnd") || "插入到最后"}</option>
                                 </select>
                             </div>
                         </div>
@@ -178,8 +178,8 @@ export class BlockBindingDialog {
 
                 <!-- 按钮区域 -->
                 <div class="b3-dialog__action" style="flex-shrink: 0; margin-top: 16px;">
-                    <button class="b3-button b3-button--cancel" id="quickCreateCancelBtn">取消</button>
-                    <button class="b3-button b3-button--primary" id="quickCreateConfirmBtn">确定</button>
+                    <button class="b3-button b3-button--cancel" id="quickCreateCancelBtn">${i18n("cancel") || "取消"}</button>
+                    <button class="b3-button b3-button--primary" id="quickCreateConfirmBtn">${i18n("confirm") || "确定"}</button>
                 </div>
             </div>
         `;
@@ -504,7 +504,7 @@ export class BlockBindingDialog {
 
                             const mapped = (results || []).map((doc: any) => ({ ...doc, hPathRel: toRelativePath(doc.hPath || doc.hpath || ''), hPathFull: doc.hPath || doc.hpath || '' }));
                             if (!mapped || mapped.length === 0) {
-                                pathSearchResults.innerHTML = `<div style="padding:8px;text-align:center;color:var(--b3-theme-on-surface-light);">未找到匹配结果</div>`;
+                                pathSearchResults.innerHTML = `<div style="padding:8px;text-align:center;color:var(--b3-theme-on-surface-light);">${i18n("noMatchResult") || "未找到匹配结果"}</div>`;
                                 pathSearchResults.style.display = 'block';
                                 return;
                             }
@@ -528,7 +528,7 @@ export class BlockBindingDialog {
                             });
                         } catch (err) {
                             console.error('路径搜索失败:', err);
-                            pathSearchResults.innerHTML = `<div style="padding:8px;text-align:center;color:var(--b3-theme-error);">搜索失败</div>`;
+                            pathSearchResults.innerHTML = `<div style="padding:8px;text-align:center;color:var(--b3-theme-error);">${i18n("searchFailed") || "搜索失败"}</div>`;
                             pathSearchResults.style.display = 'block';
                         }
                     }, 300);
@@ -861,7 +861,7 @@ export class BlockBindingDialog {
             const results = await sql(sqlQuery);
 
             if (!results || results.length === 0) {
-                resultsContainer.innerHTML = `<div style="padding: 8px; text-align: center; color: var(--b3-theme-on-surface-light);">未找到匹配结果</div>`;
+                resultsContainer.innerHTML = `<div style="padding: 8px; text-align: center; color: var(--b3-theme-on-surface-light);">${i18n("noMatchResult") || "未找到匹配结果"}</div>`;
                 resultsContainer.style.display = 'block';
                 return;
             }
@@ -900,7 +900,7 @@ export class BlockBindingDialog {
             });
         } catch (error) {
             console.error('搜索块失败:', error);
-            resultsContainer.innerHTML = `<div style="padding: 8px; text-align: center; color: var(--b3-theme-error);">搜索失败</div>`;
+            resultsContainer.innerHTML = `<div style="padding: 8px; text-align: center; color: var(--b3-theme-error);">${i18n("searchFailed") || "搜索失败"}</div>`;
             resultsContainer.style.display = 'block';
         }
     }
@@ -962,7 +962,7 @@ export class BlockBindingDialog {
                     blockId = await this.handleHeadingConfirm();
                     break;
                 default:
-                    throw new Error('未知的标签页类型');
+                    throw new Error(i18n("unknownTabType") || '未知的标签页类型');
             }
 
             if (blockId) {
@@ -983,14 +983,14 @@ export class BlockBindingDialog {
         const blockId = input?.value?.trim();
 
         if (!blockId) {
-            throw new Error('请输入块ID');
+            throw new Error(i18n("pleaseInputBlockId") || '请输入块ID');
         }
 
         // 验证块是否存在
         const { getBlockByID } = await import("../api");
         const block = await getBlockByID(blockId);
         if (!block) {
-            throw new Error('块不存在');
+            throw new Error(i18n("blockNotExistError") || '块不存在');
         }
 
         return blockId;
@@ -1008,7 +1008,7 @@ export class BlockBindingDialog {
         let parentPath = parentPathInput?.value?.trim();
 
         if (!title) {
-            throw new Error('请输入文档标题');
+            throw new Error(i18n("pleaseInputDocumentTitle") || '请输入文档标题');
         }
 
         // 如果没有选择笔记本，尝试使用插件设置中的默认值
@@ -1070,7 +1070,7 @@ export class BlockBindingDialog {
                     } else {
                         // 如果没有匹配到笔记本名，且没有预设的目标笔记本，抛出错误
                         if (!targetNotebookId) {
-                            throw new Error('路径中的笔记本名不存在，请检查笔记本名或选择有效的笔记本');
+                            throw new Error(i18n("notebookNameInPathNotExist") || '路径中的笔记本名不存在，请检查笔记本名或选择有效的笔记本');
                         }
                         // 否则，保留完整渲染结果作为相对路径
                         relativePath = finalRendered;
@@ -1083,7 +1083,7 @@ export class BlockBindingDialog {
         }
 
         if (!targetNotebookId) {
-            throw new Error('无法确定目标笔记本，请在路径中包含笔记本名或在设置中指定默认笔记本，或通过路径搜索选择目标文档');
+            throw new Error(i18n("cannotDetermineTargetNotebookSearch") || '无法确定目标笔记本，请在路径中包含笔记本名或在设置中指定默认笔记本，或通过路径搜索选择目标文档');
         }
 
         // 如果仍然没有目标笔记本，自动选择第一个可用的笔记本
@@ -1092,7 +1092,7 @@ export class BlockBindingDialog {
         }
 
         if (!targetNotebookId) {
-            throw new Error('无法确定目标笔记本，请在路径中包含笔记本名或设置默认笔记本');
+            throw new Error(i18n("cannotDetermineTargetNotebook") || '无法确定目标笔记本，请在路径中包含笔记本名或设置默认笔记本');
         }
 
         // 最终调用 createDocWithMd，路径应为相对于笔记本的路径
@@ -1116,18 +1116,18 @@ export class BlockBindingDialog {
         const position = positionSelect?.value as 'prepend' | 'append';
 
         if (!content) {
-            throw new Error('请输入标题内容');
+            throw new Error(i18n("pleaseInputHeadingContent") || '请输入标题内容');
         }
 
         if (!parentId) {
-            throw new Error('请输入父块ID');
+            throw new Error(i18n("pleaseInputParentBlockId") || '请输入父块ID');
         }
 
         // 验证父块是否存在
         const { getBlockByID } = await import("../api");
         const parentBlock = await getBlockByID(parentId);
         if (!parentBlock) {
-            throw new Error('父块不存在');
+            throw new Error(i18n("parentBlockNotExist") || '父块不存在');
         }
 
         // 创建标题
@@ -1209,6 +1209,6 @@ export class BlockBindingDialog {
             return response[0].doOperations[0].id;
         }
 
-        throw new Error('创建标题失败：无法获取新建块ID');
+        throw new Error(i18n("createHeadingFailed") || '创建标题失败：无法获取新建块ID');
     }
 }

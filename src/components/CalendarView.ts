@@ -6,7 +6,7 @@ import listPlugin from '@fullcalendar/list';
 import interactionPlugin from '@fullcalendar/interaction';
 import { showMessage, confirm, openTab, Menu, Dialog, Constants } from "siyuan";
 import { refreshSql, getBlockByID, sql, updateBlock, getBlockKramdown, updateBindBlockAtrrs, openBlock } from "../api";
-import { getLocalDateString, getLocalDateTime, getLocalDateTimeString, compareDateStrings, getLogicalDateString, getRelativeDateString, getDayStartAdjustedDate } from "../utils/dateUtils";
+import { getLocalDateString, getLocalDateTime, getLocalDateTimeString, compareDateStrings, getLogicalDateString, getRelativeDateString, getDayStartAdjustedDate, getLocaleTag } from "../utils/dateUtils";
 import { QuickReminderDialog } from "./QuickReminderDialog";
 import { CategoryManager, Category } from "../utils/categoryManager";
 import { confirmDialog } from "../libs/dialog";
@@ -17,7 +17,7 @@ import { ProjectColorDialog } from "./ProjectColorDialog";
 import { PomodoroTimer } from "./PomodoroTimer";
 import { i18n } from "../pluginInstance";
 import { generateRepeatInstances, RepeatInstance, getDaysDifference, addDaysToDate } from "../utils/repeatUtils";
-import { getAllReminders, saveReminders, loadHolidays } from "../utils/icsSubscription";
+import { getAllReminders, saveReminders, loadHolidays, loadSubscriptions } from "../utils/icsSubscription";
 import { CalendarConfigManager } from "../utils/calendarConfigManager";
 import { TaskSummaryDialog } from "@/components/TaskSummaryDialog";
 import { PomodoroManager } from "../utils/pomodoroManager";
@@ -50,6 +50,8 @@ export class CalendarView {
     private showRepeatTasks: boolean = true; // 是否显示重复任务
     private repeatInstanceLimit: number = -1; // 重复任务显示实例数量限制
     private showHiddenTasks: boolean = false; // 是否显示不在日历视图显示的任务
+    private showCompletedTaskTime: boolean = true; // 是否显示已完成任务时间
+    private showCompletedTaskTimeOnlyWithoutDate: boolean = false; // 是否只显示没有日期的任务的完成时间
     private pomodoroToggleBtn: HTMLElement | null = null; // Pomodoro toggle button
     private holidays: { [date: string]: { title: string, type: 'holiday' | 'workday' } } = {}; // 节假日数据
     private colorBy: 'category' | 'priority' | 'project' = 'priority'; // 按分类或优先级上色
@@ -82,6 +84,7 @@ export class CalendarView {
 
     // 性能优化：颜色缓存
     private colorCache: Map<string, { backgroundColor: string; borderColor: string }> = new Map();
+    private subscriptionOrderMap: Map<string, number> = new Map(); // 订阅日历排序缓存
     private lastNavigatedToTodayAt: number = 0; // 记录最后一次点击"今天"的时间
 
     // 视图按钮引用
@@ -115,6 +118,8 @@ export class CalendarView {
             this.repeatInstanceLimit = this.calendarConfigManager.getRepeatInstanceLimit();
             this.showHiddenTasks = this.calendarConfigManager.getShowHiddenTasks();
             this.showPomodoro = this.calendarConfigManager.getShowPomodoro();
+            this.showCompletedTaskTime = this.calendarConfigManager.getShowCompletedTaskTime();
+            this.showCompletedTaskTimeOnlyWithoutDate = this.calendarConfigManager.getShowCompletedTaskTimeOnlyWithoutDate();
 
             try {
                 this.currentCompletionFilter = this.calendarConfigManager.getCompletionFilter();
@@ -432,6 +437,8 @@ export class CalendarView {
         this.showRepeatTasks = this.calendarConfigManager.getShowRepeatTasks();
         this.repeatInstanceLimit = this.calendarConfigManager.getRepeatInstanceLimit();
         this.showHiddenTasks = this.calendarConfigManager.getShowHiddenTasks();
+        this.showCompletedTaskTime = this.calendarConfigManager.getShowCompletedTaskTime();
+        this.showCompletedTaskTimeOnlyWithoutDate = this.calendarConfigManager.getShowCompletedTaskTimeOnlyWithoutDate();
         this.holidays = await loadHolidays(this.plugin);
 
         // 获取周开始日设置
@@ -531,19 +538,20 @@ export class CalendarView {
         });
         viewGroup.appendChild(this.weekBtn);
 
-        // 多天视图按钮（默认最近7天，今日为第二天）
+        // 多天视图按钮（默认最近3天，今日为第二天）
         this.multiDaysBtn = document.createElement('button');
         this.multiDaysBtn.className = 'b3-button b3-button--outline';
         this.multiDaysBtn.textContent = i18n("multiDays") || "多天";
         this.multiDaysBtn.addEventListener('click', async () => {
             const viewType = this.calendarConfigManager.getViewType();
+            const multiDaysCount = this.calendarConfigManager.getMultiDaysCount();
             let viewMode: string;
             if (viewType === 'timeline') {
-                viewMode = 'timeGridMultiDays7';
+                viewMode = 'timeGridMultiDays';
             } else if (viewType === 'kanban') {
-                viewMode = 'dayGridMultiDays7';
+                viewMode = 'dayGridMultiDays';
             } else { // list
-                viewMode = 'listMultiDays7';
+                viewMode = 'listMultiDays';
             }
 
             // 计算多天视图的起始日期（今天的前一天），使今天显示为第二天
@@ -658,13 +666,13 @@ export class CalendarView {
                         newViewMode = 'listWeek';
                     }
                 } else if (currentViewMode.includes('MultiDays')) {
-                    // Multi-days (7) view
+                    // Multi-days view
                     if (selectedViewType === 'timeline') {
-                        newViewMode = 'timeGridMultiDays7';
+                        newViewMode = 'timeGridMultiDays';
                     } else if (selectedViewType === 'kanban') {
-                        newViewMode = 'dayGridMultiDays7';
+                        newViewMode = 'dayGridMultiDays';
                     } else { // list
-                        newViewMode = 'listMultiDays7';
+                        newViewMode = 'listMultiDays';
                     }
                 } else if (currentViewMode.includes('Day')) {
                     // Day view
@@ -891,7 +899,7 @@ export class CalendarView {
                 <input class="b3-text-field fn__flex-1" type="number" value="${this.crossDayThreshold}" min="-1" style="width: 50px;">
                 <div>${i18n("crossDayThreshold") || "天及以下显示"}</div>
             </div>
-            <div style="font-size: 0.8em; color: var(--b3-theme-on-surface-light); margin-top: 4px;">(-1${i18n("noLimit") || "表示不限制"})</div>
+            <div style="font-size: 0.8em; color: var(--b3-theme-on-surface-light); margin-top: 4px;">(-1 ${i18n("noLimit") || "表示不限制"})</div>
         `;
         const thresholdInput = thresholdItem.querySelector('input') as HTMLInputElement;
         thresholdInput.addEventListener('change', async () => {
@@ -926,7 +934,7 @@ export class CalendarView {
                 <input class="b3-text-field fn__flex-1" type="number" value="${this.repeatInstanceLimit}" min="-1" style="width: 50px;">
                 <div>${i18n("instances") || "个实例"}</div>
             </div>
-            <div style="font-size: 0.8em; color: var(--b3-theme-on-surface-light); margin-top: 4px;">(-1${i18n("noLimit") || "表示不限制"})</div>
+            <div style="font-size: 0.8em; color: var(--b3-theme-on-surface-light); margin-top: 4px;">(-1 ${i18n("noLimit") || "表示不限制"})</div>
         `;
         const repeatLimitInput = repeatLimitItem.querySelector('input') as HTMLInputElement;
         repeatLimitInput.addEventListener('change', async () => {
@@ -944,6 +952,33 @@ export class CalendarView {
             this.updatePomodoroButtonState();
             await this.refreshEvents();
         }));
+
+        // 完成任务时间设置
+        displaySettingsDropdown.appendChild(createSwitchItem(i18n("showCompletedTaskTime") || "单独显示任务完成时间", this.showCompletedTaskTime, async (checked) => {
+            this.showCompletedTaskTime = checked;
+            await this.calendarConfigManager.setShowCompletedTaskTime(checked);
+            // 显示/隐藏子选项
+            onlyWithoutDateCheckbox.style.display = checked ? 'flex' : 'none';
+            await this.refreshEvents();
+        }));
+
+        // 子选项：只显示没有日期的任务
+        const onlyWithoutDateCheckbox = document.createElement('div');
+        onlyWithoutDateCheckbox.className = 'fn__flex fn__flex-center';
+        onlyWithoutDateCheckbox.style.padding = '4px 12px 4px 32px';
+        onlyWithoutDateCheckbox.style.gap = '8px';
+        onlyWithoutDateCheckbox.style.display = this.showCompletedTaskTime ? 'flex' : 'none';
+        onlyWithoutDateCheckbox.innerHTML = `
+            <input class="b3-switch" type="checkbox" ${this.showCompletedTaskTimeOnlyWithoutDate ? 'checked' : ''}>
+            <span style="font-size: 0.9em; color: var(--b3-theme-on-surface-light);">${i18n("onlyShowWithoutDate") || "只显示没有日期的任务"}</span>
+        `;
+        const checkbox = onlyWithoutDateCheckbox.querySelector('input') as HTMLInputElement;
+        checkbox.addEventListener('change', async () => {
+            this.showCompletedTaskTimeOnlyWithoutDate = checkbox.checked;
+            await this.calendarConfigManager.setShowCompletedTaskTimeOnlyWithoutDate(checkbox.checked);
+            await this.refreshEvents();
+        });
+        displaySettingsDropdown.appendChild(onlyWithoutDateCheckbox);
 
         // 隐藏任务设置（强制显示标记为不在日历显示的任务）
         displaySettingsDropdown.appendChild(createSwitchItem(i18n("showHiddenTasks") || "显示不在日历视图显示的任务", this.showHiddenTasks, async (checked) => {
@@ -1005,7 +1040,7 @@ export class CalendarView {
         statusLabel.style.padding = '4px 12px';
         statusLabel.style.fontSize = '0.9em';
         statusLabel.style.color = 'var(--b3-theme-on-surface-light)';
-        statusLabel.innerText = "任务状态过滤";
+        statusLabel.innerText = i18n("taskStatusFilter");
         displaySettingsDropdown.appendChild(statusLabel);
 
         const statusGroup = document.createElement('div');
@@ -1183,15 +1218,16 @@ export class CalendarView {
 
         // 初始化日历 - 使用用户设置的周开始日
         const initialViewMode = this.calendarConfigManager.getViewMode();
+        const multiDaysCount = this.calendarConfigManager.getMultiDaysCount();
         const multiDaysStartDate = getRelativeDateString(-1);
         this.calendar = new Calendar(calendarEl, {
             plugins: [dayGridPlugin, timeGridPlugin, multiMonthPlugin, listPlugin, interactionPlugin],
             initialView: initialViewMode,
             initialDate: (initialViewMode && initialViewMode.includes('MultiDays')) ? multiDaysStartDate : getLogicalDateString(),
             views: {
-                timeGridMultiDays7: { type: 'timeGrid', duration: { days: 7 } },
-                dayGridMultiDays7: { type: 'dayGrid', duration: { days: 7 } },
-                listMultiDays7: { type: 'list', duration: { days: 7 }, listDayFormat: { weekday: 'short', month: 'numeric', day: 'numeric', omitCommas: true }, listDaySideFormat: false },
+                timeGridMultiDays: { type: 'timeGrid', duration: { days: multiDaysCount } },
+                dayGridMultiDays: { type: 'dayGrid', duration: { days: multiDaysCount } },
+                listMultiDays: { type: 'list', duration: { days: multiDaysCount }, listDayFormat: { weekday: 'short', month: 'numeric', day: 'numeric', omitCommas: true }, listDaySideFormat: false },
                 listDay: { listDayFormat: { weekday: 'short', month: 'numeric', day: 'numeric', omitCommas: true }, listDaySideFormat: false },
                 listWeek: { listDayFormat: { weekday: 'short', month: 'numeric', day: 'numeric', omitCommas: true }, listDaySideFormat: false },
                 listMonth: { listDayFormat: { weekday: 'short', month: 'numeric', day: 'numeric', omitCommas: true }, listDaySideFormat: false },
@@ -1240,7 +1276,7 @@ export class CalendarView {
                             confirm: (ele) => {
                                 const inputEl = (ele.querySelector('#reminder-jump-to-date') || document.getElementById('reminder-jump-to-date')) as HTMLInputElement;
                                 if (!inputEl || !inputEl.value) {
-                                    showMessage(i18n("pleaseEnterDate") || "请选择一个日期", 3000, "warning");
+                                    showMessage(i18n("pleaseEnterDate") || "请选择一个日期", 3000, "info");
                                     return;
                                 }
                                 const target = new Date(inputEl.value + 'T00:00:00');
@@ -1284,7 +1320,8 @@ export class CalendarView {
             nowIndicator: true, // 显示当前时间指示线
             snapDuration: '00:05:00', // 设置吸附间隔为5分钟
             slotDuration: '00:15:00', // 设置默认时间间隔为15分钟
-            allDayText: '全天', // 设置全天事件的文本
+            allDayText: i18n("allDay"), // 置全天事件的文本
+            slotEventOverlap: false, // 不允许事件重叠
             slotLabelFormat: {
                 hour: '2-digit',
                 minute: '2-digit',
@@ -1297,30 +1334,7 @@ export class CalendarView {
                 hour12: false
             },
             eventClassNames: 'reminder-calendar-event',
-            eventOrder: (a: any, b: any) => {
-                // 1. 优先根据优先级排序
-                const priorityMap: { [key: string]: number } = {
-                    'high': 0,
-                    'medium': 1,
-                    'low': 2,
-                    'none': 3
-                };
-
-                const pA = a.extendedProps.priority || 'none';
-                const pB = b.extendedProps.priority || 'none';
-
-                const scoreA = priorityMap[pA] ?? 3;
-                const scoreB = priorityMap[pB] ?? 3;
-
-                if (scoreA !== scoreB) {
-                    return scoreA - scoreB;
-                }
-
-                // 2. 同优先级内根据 sort 字段排序
-                const orderA = typeof a.extendedProps.sort === 'number' ? a.extendedProps.sort : 0;
-                const orderB = typeof b.extendedProps.sort === 'number' ? b.extendedProps.sort : 0;
-                return orderA - orderB;
-            },
+            eventOrder: (a: any, b: any) => this.compareEventsForOrder(a, b),
             displayEventTime: true,
             // Custom Lunar Date and Holiday Rendering using DidMount hooks to preserve default behavior
             dayCellDidMount: (arg) => {
@@ -1575,17 +1589,19 @@ export class CalendarView {
                 }
 
                 if (!info.view.type.startsWith('list')) {
-                    const baseColor = info.event.backgroundColor || info.event.borderColor || 'var(--b3-theme-primary)';
+                    // 背景色使用项目/分类颜色，左边框使用优先级颜色
+                    const bgColor = info.event.backgroundColor || 'var(--b3-theme-primary)';
+                    const borderColor = info.event.borderColor || bgColor;
 
                     // Reset standard styles
                     targetEl.style.border = 'none';
                     // Adjust opacity based on theme mode
                     const themeMode = document.querySelector('html')?.getAttribute('data-theme-mode');
                     const opacity = themeMode === 'dark' ? '0.3' : '0.15';
-                    targetEl.style.backgroundColor = `rgba(from ${baseColor} r g b / ${opacity})`;
+                    targetEl.style.backgroundColor = `rgba(from ${bgColor} r g b / ${opacity})`;
 
-                    // Add thick left border
-                    targetEl.style.borderLeft = `4px solid ${baseColor}`;
+                    // Add thick left border (使用优先级颜色)
+                    targetEl.style.borderLeft = `4px solid ${borderColor}`;
                     targetEl.style.borderRadius = '3px';
 
                     // Set text color to theme text color (black/dark in light mode, light in dark mode)
@@ -1593,7 +1609,7 @@ export class CalendarView {
                     targetEl.style.color = 'var(--b3-theme-on-background)';
 
                     // Clean up potential overrides
-                    if (targetEl.style.borderColor === baseColor) {
+                    if (targetEl.style.borderColor === borderColor) {
                         targetEl.style.borderColor = 'transparent';
                     }
                 }
@@ -1756,7 +1772,7 @@ export class CalendarView {
                     var dateStr = dateEl.getAttribute('data-date') || '';
                 }
                 if (!dateStr) {
-                    showMessage('无法识别放置位置，请放到日历的日期或时间格上。');
+                    showMessage(i18n("dropToCalendarFailed"));
                     return;
                 }
 
@@ -2037,13 +2053,13 @@ export class CalendarView {
                         container.appendChild(statusHeader);
 
                         statusProjects.forEach(project => {
-                            container.appendChild(createCheckboxItem(project.id, project.title || '未命名项目'));
+                            container.appendChild(createCheckboxItem(project.id, project.title || i18n("unnamedProject")));
                         });
                     }
                 });
             }
         } catch (error) {
-            console.error('渲染项目筛选器失败:', error);
+            console.error(i18n("renderProjectFilterFailed"), error);
         }
     }
 
@@ -2140,7 +2156,7 @@ export class CalendarView {
                 });
             }
         } catch (error) {
-            console.error('渲染分类筛选器失败:', error);
+            console.error(i18n("renderCategoryFilterFailed"), error);
         }
     }
 
@@ -2151,7 +2167,7 @@ export class CalendarView {
         if (this.currentProjectFilter.has('all')) {
             textSpan.textContent = i18n("allProjects") || "全部项目";
         } else if (this.currentProjectFilter.size === 0) {
-            textSpan.textContent = i18n("noProjectSelected") || "未选择项目";
+            textSpan.textContent = i18n("noProjectSelected");
         } else if (this.currentProjectFilter.size === 1) {
             const projectId = Array.from(this.currentProjectFilter)[0];
             if (projectId === 'none') {
@@ -2173,7 +2189,7 @@ export class CalendarView {
         if (this.currentCategoryFilter.has('all')) {
             textSpan.textContent = i18n("allCategories") || "全部分类";
         } else if (this.currentCategoryFilter.size === 0) {
-            textSpan.textContent = i18n("noCategorySelected") || "未选择分类";
+            textSpan.textContent = i18n("noCategorySelected");
         } else if (this.currentCategoryFilter.size === 1) {
             const categoryId = Array.from(this.currentCategoryFilter)[0];
             if (categoryId === 'none') {
@@ -2385,7 +2401,7 @@ export class CalendarView {
         if (calendarEvent.extendedProps.type === 'pomodoro') {
             menu.addItem({
                 iconHTML: "📝",
-                label: i18n("viewPomodoroTask") || "查看所属任务",
+                label: i18n("viewPomodoroTask"),
                 click: async () => {
                     try {
                         let eventId = calendarEvent.extendedProps.eventId;
@@ -2450,7 +2466,7 @@ export class CalendarView {
 
             menu.addItem({
                 iconHTML: "🗑️",
-                label: i18n("deletePomodoroRecord") || "删除记录",
+                label: i18n("deletePomodoroRecord"),
                 click: async () => {
                     confirm(i18n("deletePomodoroRecord"), i18n("confirmDelete"), async () => {
                         const pomodoroManager = this.pomodoroRecordManager;
@@ -2470,10 +2486,33 @@ export class CalendarView {
             return;
         }
 
+        // Handle completed task time events - convert to normal task event and continue with normal menu
+        if (calendarEvent.extendedProps.type === 'completedTaskTime') {
+            // 构造一个与普通任务类似的事件对象，复用普通任务的右键菜单逻辑
+            const originalEventId = calendarEvent.extendedProps.originalId || calendarEvent.extendedProps.eventId;
+            const isRepeated = calendarEvent.extendedProps.isRepeated || false;
+
+            // 修改 calendarEvent 以模拟普通任务
+            calendarEvent = {
+                ...calendarEvent,
+                id: originalEventId,
+                title: calendarEvent.extendedProps.eventTitle || calendarEvent.title,
+                extendedProps: {
+                    ...calendarEvent.extendedProps,
+                    type: undefined, // 清除类型以走普通任务逻辑
+                    completed: true,
+                    isRepeated: isRepeated,
+                    originalId: calendarEvent.extendedProps.originalId,
+                    date: calendarEvent.extendedProps.completedInstanceDate || calendarEvent.extendedProps.date
+                }
+            };
+            // 继续执行后续普通任务的菜单逻辑，不 return
+        }
+
         if (calendarEvent.extendedProps.isSubscribed) {
             menu.addItem({
                 iconHTML: "ℹ️",
-                label: i18n("subscribedTaskReadOnly") || "订阅任务（只读）",
+                label: i18n("subscribedTaskReadOnly"),
                 disabled: true
             });
 
@@ -2581,7 +2620,7 @@ export class CalendarView {
         // 添加创建子任务选项
         menu.addItem({
             iconHTML: "➕",
-            label: i18n("createSubtask") || "创建子任务",
+            label: i18n("createSubtask"),
             click: () => {
                 this.showCreateSubtaskDialog(calendarEvent);
             }
@@ -2591,7 +2630,7 @@ export class CalendarView {
         if (calendarEvent.extendedProps.parentId) {
             menu.addItem({
                 iconHTML: "👁️‍🗨️",
-                label: i18n("viewParentTask") || "查看父任务",
+                label: i18n("viewParentTask"),
                 click: () => {
                     this.showParentTaskDialog(calendarEvent);
                 }
@@ -2826,10 +2865,24 @@ export class CalendarView {
                     const instanceIdStr = calendarEvent.id || '';
                     const instanceDate = instanceIdStr.split('_').pop() || calendarEvent.extendedProps.date;
 
+                    // 立即从 UI 中移除原事件和关联的已完成任务时间事件
+                    const targetId = calendarEvent.id;
+                    this.calendar.getEvents().forEach(event => {
+                        if (event.id === targetId) {
+                            event.remove();
+                        }
+                        // 同时移除关联的已完成任务时间事件
+                        if (event.extendedProps.type === 'completedTaskTime') {
+                            const completedEventId = event.extendedProps.eventId;
+                            if (completedEventId === targetId || completedEventId === `${originalId}_${instanceDate}`) {
+                                event.remove();
+                            }
+                        }
+                    });
+
                     await this.addExcludedDate(originalId, instanceDate);
 
                     showMessage(i18n("instanceDeleted"));
-                    await this.refreshEvents();
                     window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
                 } catch (error) {
                     console.error('删除重复实例失败:', error);
@@ -3134,6 +3187,15 @@ export class CalendarView {
             if (event.id === reminderId || event.extendedProps.originalId === reminderId) {
                 event.remove();
             }
+            // 同时移除关联的已完成任务时间事件
+            if (event.extendedProps.type === 'completedTaskTime') {
+                const completedEventId = event.extendedProps.eventId;
+                const completedOriginalId = event.extendedProps.originalId;
+                if (completedEventId === reminderId || completedOriginalId === reminderId ||
+                    (completedEventId && completedEventId.startsWith(`${reminderId}_`))) {
+                    event.remove();
+                }
+            }
         });
 
         // 2. 后台处理数据保存和同步
@@ -3190,6 +3252,31 @@ export class CalendarView {
             const titleEl = document.createElement('div');
             titleEl.className = 'fc-event-title';
             titleEl.textContent = event.title;
+            mainFrame.appendChild(titleEl);
+
+            return { domNodes: [mainFrame] };
+        }
+
+        // Special rendering for completed task time events
+        if (props.type === 'completedTaskTime') {
+            const mainFrame = document.createElement('div');
+            mainFrame.className = 'fc-event-main-frame';
+            mainFrame.style.padding = '2px 4px';
+
+            // 只显示完成时间（结束时间），不显示时间段
+            if (props.completedTime) {
+                const completedDate = new Date(props.completedTime);
+                const formattedTime = completedDate.toLocaleTimeString(getLocaleTag(), { hour: '2-digit', minute: '2-digit', hour12: false });
+                const timeEl = document.createElement('div');
+                timeEl.className = 'fc-event-time';
+                timeEl.textContent = formattedTime;
+                mainFrame.appendChild(timeEl);
+            }
+
+            const titleEl = document.createElement('div');
+            titleEl.className = 'fc-event-title';
+            titleEl.textContent = event.title;
+            titleEl.style.textDecoration = 'line-through';
             mainFrame.appendChild(titleEl);
 
             return { domNodes: [mainFrame] };
@@ -3383,7 +3470,8 @@ export class CalendarView {
         }
 
         // 6. 备注
-        if (props.note) {
+
+        if ((props.note && !props.isSubscribed) || (props.isSubscribed && props.showNoteInCalendar === true)) {
             const noteEl = document.createElement('div');
             noteEl.className = 'reminder-event-note';
             noteEl.innerHTML = this.lute ? this.lute.Md2HTML(props.note) : props.note;
@@ -3681,10 +3769,9 @@ export class CalendarView {
             this.allDayDragListener = null;
         }
 
-        // 2. 最后一次同步释放点（即使失败也不影响后续清理）
+        // 2. 最后一次同步释放点
         if (info && info.jsEvent) {
             try {
-                // 注意：此时 isLocked 是 false，允许最后一次更新位置
                 this.handleAllDayDragMove(info.jsEvent);
             } catch (err) {
                 console.warn('Final drag sync failed:', err);
@@ -3699,16 +3786,12 @@ export class CalendarView {
         const stateToProcess = { ...this.allDayDragState };
 
         // 4. 执行异步重排序
-        if (stateToProcess.targetEvent) {
-            try {
-                await this.handleAllDayReorder(stateToProcess);
-            } finally {
-                this.isAllDayReordering = false;
-                this.allDayDragState = null;
-            }
-        } else {
+        try {
+            await this.handleAllDayReorder(stateToProcess);
+        } finally {
             this.isAllDayReordering = false;
             this.allDayDragState = null;
+            this.isDragging = false;
         }
     }
 
@@ -3777,134 +3860,164 @@ export class CalendarView {
         this.dropIndicator.style.zIndex = '10000';
     }
 
+    /**
+     * 合并通用的事件排序逻辑
+     */
+    private compareEventsForOrder(a: any, b: any) {
+        // 0. 订阅日历置顶
+        const isSubA = a.extendedProps?.isSubscribed || false;
+        const isSubB = b.extendedProps?.isSubscribed || false;
+        if (isSubA !== isSubB) {
+            return isSubA ? -1 : 1;
+        }
+
+        // 如果都是订阅日历，则按照订阅日历本身的排序进行 (ics-subscriptions.json 中的顺序)
+        if (isSubA && isSubB) {
+            const subIdA = a.extendedProps?.subscriptionId;
+            const subIdB = b.extendedProps?.subscriptionId;
+            if (subIdA && subIdB && subIdA !== subIdB) {
+                const orderA = this.subscriptionOrderMap.get(subIdA) ?? Infinity;
+                const orderB = this.subscriptionOrderMap.get(subIdB) ?? Infinity;
+                if (orderA !== orderB) return orderA - orderB;
+            }
+        }
+
+        // 1. 优先根据优先级排序
+        const priorityMap: { [key: string]: number } = {
+            'high': 0,
+            'medium': 1,
+            'low': 2,
+            'none': 3
+        };
+
+        const pA = a.extendedProps?.priority || 'none';
+        const pB = b.extendedProps?.priority || 'none';
+
+        const scoreA = priorityMap[pA] ?? 3;
+        const scoreB = priorityMap[pB] ?? 3;
+
+        if (scoreA !== scoreB) {
+            return scoreA - scoreB;
+        }
+
+        // 2. 同优先级内根据 sort 字段排序
+        const orderA = typeof a.extendedProps?.sort === 'number' ? a.extendedProps.sort : 0;
+        const orderB = typeof b.extendedProps?.sort === 'number' ? b.extendedProps.sort : 0;
+        if (orderA !== orderB) {
+            return orderA - orderB;
+        }
+
+        // 3. 最后根据标题排序，确保稳定性
+        const titleA = a.title || '';
+        const titleB = b.title || '';
+        return titleA.localeCompare(titleB);
+    }
+
     private async handleAllDayReorder(state: any) {
         try {
             const reminderData = await getAllReminders(this.plugin);
-            const draggedId = (() => {
-                const d = state.draggedEvent.id || '';
-                const idx = d.lastIndexOf('_');
-                return idx !== -1 ? d.slice(0, idx) : d;
-            })();
-            // 判断是否为重复实例，并提取原始实例日期
-            const isDraggedInstance = state.draggedEvent.extendedProps?.isRepeated;
-            const draggedInstanceDate = isDraggedInstance ? state.draggedEvent.id.split('_').pop() : null;
-
             const targetDate = state.date;
+            const draggedEvent = state.draggedEvent;
 
-            // 获取该日期的所有全天事件实例，从而找出该天显示的所有模板
-            // 这样可以正确处理重复事件的排序
-            const calendarEvents = this.calendar.getEvents().filter(e => {
-                const eDate = getLocalDateString(e.start);
-                return eDate === targetDate && e.allDay;
+            if (!draggedEvent) return;
+
+            // 提取拖拽任务的 ID 信息
+            const draggedId = draggedEvent.id;
+
+            // 获取该日期所有的全天事件（排除当前正在拖拽的）
+            const otherEvents = this.calendar.getEvents().filter(e => {
+                return e.allDay && getLocalDateString(e.start) === targetDate && e.id !== draggedId;
             });
 
-            // 获取对应的提醒数据模板 ID (去重)
-            const dayTemplateIds = Array.from(new Set(calendarEvents.map(e => {
-                return e.extendedProps.originalId || e.id;
-            })));
+            // 按当前展示顺序排序
+            otherEvents.sort((a, b) => this.compareEventsForOrder(a, b));
 
-            const dayEvents = dayTemplateIds.map(id => reminderData[id]).filter(r => !!r);
-
-            // 按当前可见顺序排序 (优先级优先，sort 其次)
-            dayEvents.sort((a, b) => {
-                const priorityMap: { [key: string]: number } = {
-                    'high': 0,
-                    'medium': 1,
-                    'low': 2,
-                    'none': 3
-                };
-                const scoreA = priorityMap[a.priority || 'none'] ?? 3;
-                const scoreB = priorityMap[b.priority || 'none'] ?? 3;
-                if (scoreA !== scoreB) return scoreA - scoreB;
-                return (a.sort || 0) - (b.sort || 0);
-            });
-
-            // 获取当前拖拽的提醒模板
-            const currentEvent = reminderData[draggedId];
-            if (!currentEvent) return;
-
-            // 如果日期改变了，更新模板日期（处理跨天拖拽重排序）
-            // 对于重复实例，不修改原始任务的日期
-            if (!isDraggedInstance) {
-                const oldDate = currentEvent.date || '';
-                if (oldDate !== targetDate) {
-                    currentEvent.date = targetDate;
-                    if (currentEvent.endDate) {
-                        const diff = getDaysDifference(oldDate, targetDate);
-                        currentEvent.endDate = addDaysToDate(currentEvent.endDate, diff);
-                    }
-                }
-            }
-
-            // 从待排序列表中移除当前事件
-            const filteredEvents = dayEvents.filter(r => r.id !== draggedId);
-
+            // 构造新列表并确定被拖拽任务的新位置
             let newList: any[] = [];
             if (state.targetEvent) {
-                const targetId = (() => {
-                    const t = state.targetEvent.id || '';
-                    const idx = t.lastIndexOf('_');
-                    return idx !== -1 ? t.slice(0, idx) : t;
-                })();
+                const targetId = state.targetEvent.id;
+                const targetIndex = otherEvents.findIndex(e => e.id === targetId);
 
-                const targetIndex = filteredEvents.findIndex(r => r.id === targetId);
                 if (targetIndex !== -1) {
-                    // 计算插入位置
                     const insertPos = state.isAbove ? targetIndex : targetIndex + 1;
-                    newList = [...filteredEvents.slice(0, insertPos), currentEvent, ...filteredEvents.slice(insertPos)];
+                    newList = [...otherEvents.slice(0, insertPos), draggedEvent, ...otherEvents.slice(insertPos)];
 
-                    // --- 核心改进：根据插入位置自动调整优先级 ---
-                    // 逻辑：使被拖拽的任务优先级与它落点周围的任务一致
-                    // 如果列表只有一个，或者放在了首/尾，则参考邻居
-                    // 如果放在两个任务中间，则根据当前可见的排序规则调整
-                    if (state.isAbove) {
-                        // 拖动到了 targetEvent 的上方
-                        const targetEventInList = filteredEvents[targetIndex];
-                        currentEvent.priority = targetEventInList.priority || 'none';
-                    } else {
-                        // 拖动到了 targetEvent 的下方
-                        const targetEventInList = filteredEvents[targetIndex];
-                        currentEvent.priority = targetEventInList.priority || 'none';
+                    // --- 核心改进：根据落点自动调整优先级 ---
+                    // 使被拖拽的任务优先级与它落点周围的任务一致
+                    const neighbor = otherEvents[targetIndex];
+                    if (neighbor) {
+                        const newPriority = neighbor.extendedProps?.priority || 'none';
+                        draggedEvent.setExtendedProp('priority', newPriority);
                     }
                 } else {
-                    newList = [...filteredEvents, currentEvent];
+                    newList = [...otherEvents, draggedEvent];
                 }
             } else {
-                newList = [...filteredEvents, currentEvent];
+                newList = [...otherEvents, draggedEvent];
             }
 
-            // 分配新的 sort 值
-            // 注意：为了让 FullCalendar 的 eventOrder (priority-first) 表现正常，
-            // 我们需要对全天列表在相同优先级块内部重新赋予递增的 sort
+            // 更新所有该日期任务在 reminderData 中的 sort 值
             let currentPriority = '';
             let prioritySort = 0;
-            newList.forEach((r) => {
-                if (r) {
-                    const p = r.priority || 'none';
-                    if (p !== currentPriority) {
-                        currentPriority = p;
-                        prioritySort = 0;
-                    }
-                    // 对于重复实例，将 sort 存储到 instanceModifications 中
-                    if (isDraggedInstance && r.id === draggedId && draggedInstanceDate) {
-                        if (!r.repeat) r.repeat = {};
-                        if (!r.repeat.instanceModifications) r.repeat.instanceModifications = {};
-                        if (!r.repeat.instanceModifications[draggedInstanceDate]) {
-                            r.repeat.instanceModifications[draggedInstanceDate] = {};
+
+            for (const event of newList) {
+                const templateId = event.extendedProps?.originalId || event.id;
+                const reminder = reminderData[templateId];
+                if (!reminder) continue;
+
+                const priority = event.extendedProps?.priority || 'none';
+                if (priority !== currentPriority) {
+                    currentPriority = priority;
+                    prioritySort = 0;
+                }
+
+                const newSortValue = prioritySort++;
+
+                // 判断是否为此日期的实例
+                if (event.extendedProps?.isRepeated) {
+                    const instanceDate = event.id.split('_').pop();
+                    if (instanceDate) {
+                        if (!reminder.repeat) reminder.repeat = {};
+                        if (!reminder.repeat.instanceModifications) reminder.repeat.instanceModifications = {};
+                        if (!reminder.repeat.instanceModifications[instanceDate]) {
+                            reminder.repeat.instanceModifications[instanceDate] = {};
                         }
-                        r.repeat.instanceModifications[draggedInstanceDate].sort = prioritySort++;
-                    } else {
-                        r.sort = prioritySort++;
+                        const mod = reminder.repeat.instanceModifications[instanceDate];
+                        mod.sort = newSortValue;
+
+                        // 如果是被拖拽的任务，可能还需要更新其优先级、日期等
+                        if (event.id === draggedId) {
+                            mod.priority = priority;
+
+                            // 如果日期也发生了改变（跨天重排序）
+                            if (instanceDate !== targetDate) {
+                                // 处理重复实例的跨天拖动比较复杂，通常我们只更新修改中的 date
+                                mod.date = targetDate;
+                            }
+                        }
+                    }
+                } else {
+                    // 非重复任务，更新模板
+                    reminder.sort = newSortValue;
+
+                    if (event.id === draggedId) {
+                        reminder.priority = priority;
+
+                        // 更新日期
+                        const oldDate = reminder.date || '';
+                        if (oldDate !== targetDate) {
+                            reminder.date = targetDate;
+                            if (reminder.endDate) {
+                                const diff = getDaysDifference(oldDate, targetDate);
+                                reminder.endDate = addDaysToDate(reminder.endDate, diff);
+                            }
+                        }
                     }
                 }
-            });
+            }
 
             await saveReminders(this.plugin, reminderData);
-
-            // 刷新日历以应用新顺序
             await this.refreshEvents();
-
-            // 通知外部更新
             window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
 
         } catch (error) {
@@ -3922,6 +4035,25 @@ export class CalendarView {
         // Pomodoro events should act as read-only in click handler
         // Right-click context menu is available for them
         if (info.event.extendedProps.type === 'pomodoro') {
+            return;
+        }
+
+        // Handle completed task time events - open the original task
+        if (info.event.extendedProps.type === 'completedTaskTime') {
+            const originalEventId = info.event.extendedProps.originalId || info.event.extendedProps.eventId;
+            const reminderData = await getAllReminders(this.plugin);
+            const originalReminder = reminderData[originalEventId];
+
+            if (originalReminder?.blockId) {
+                try {
+                    openBlock(originalReminder.blockId);
+                } catch (error) {
+                    console.error('打开笔记失败:', error);
+                    showMessage(i18n("openNoteFailed"));
+                }
+            } else {
+                showMessage(i18n("unboundReminder") + "，请右键选择\"绑定到块\"");
+            }
             return;
         }
 
@@ -4067,7 +4199,7 @@ export class CalendarView {
         const view = this.calendar.view;
 
         // 只在周视图和日视图中启用当前时间吸附
-        if (view.type !== 'timeGridWeek' && view.type !== 'timeGridDay' && view.type !== 'timeGridMultiDays7') {
+        if (view.type !== 'timeGridWeek' && view.type !== 'timeGridDay' && view.type !== 'timeGridMultiDays') {
             return true;
         }
 
@@ -4118,7 +4250,7 @@ export class CalendarView {
             const view = this.calendar.view;
 
             // 只在周视图和日视图中启用缩放
-            if (view.type !== 'timeGridWeek' && view.type !== 'timeGridDay' && view.type !== 'timeGridMultiDays7') {
+            if (view.type !== 'timeGridWeek' && view.type !== 'timeGridDay' && view.type !== 'timeGridMultiDays') {
                 return;
             }
 
@@ -4894,13 +5026,12 @@ export class CalendarView {
             
             /* 已完成任务的样式优化 */
             .fc-event.completed {
-                opacity: 0.8 !important;
+                opacity: 0.6 !important;
             }
-            
-            .fc-event.completed .fc-event-title,
-            .fc-event.completed .fc-event-title span{
-                text-decoration: line-through;
+            .fc-event.completed:hover {
+                opacity: 1 !important;
             }
+
 
             /* Pomodoro Event Styles */
             .pomodoro-event {
@@ -4908,6 +5039,18 @@ export class CalendarView {
                 border-left: none !important;
                 box-shadow: none !important;
                 opacity: 0.7 !important;
+            }
+
+            /* Completed Task Time Event Styles */
+            .completed-task-time-event {
+                border: none !important;
+                border-left: 3px solid #27ae60 !important;
+                box-shadow: none !important;
+                opacity: 0.75 !important;
+            }
+
+            .completed-task-time-event .fc-event-title {
+                font-style: italic;
             }
 
             .all-day-reorder-indicator {
@@ -5393,6 +5536,17 @@ export class CalendarView {
 
     private async getEvents(force: boolean = false) {
         try {
+            // 加载订阅日历排序
+            const subscriptionData = await loadSubscriptions(this.plugin);
+            this.subscriptionOrderMap.clear();
+            if (subscriptionData?.subscriptions) {
+                // 按顺序存储订阅 ID，Object.values 通常保持 JSON 中的顺序
+                const subArray = Object.values(subscriptionData.subscriptions);
+                subArray.forEach((sub: any, index) => {
+                    this.subscriptionOrderMap.set(sub.id, index);
+                });
+            }
+
             const reminderData = await getAllReminders(this.plugin, undefined, force);
             const events = [];
 
@@ -5605,7 +5759,7 @@ export class CalendarView {
             // Add Pomodoro records if enabled and in Day/Week view
             if (this.showPomodoro && this.calendar && this.calendar.view) {
                 const viewType = this.calendar.view.type;
-                if (viewType === 'timeGridDay' || viewType === 'timeGridWeek' || viewType === 'timeGridMultiDays7') {
+                if (viewType === 'timeGridDay' || viewType === 'timeGridWeek' || viewType === 'timeGridMultiDays') {
                     const pomodoroManager = this.pomodoroRecordManager;
                     const sessions = await pomodoroManager.getDateRangeSessions(startDate, endDate);
 
@@ -5675,12 +5829,210 @@ export class CalendarView {
                 }
             }
 
+            // Add completed task times if enabled and in Day/Week view
+            if (this.showCompletedTaskTime && this.calendar && this.calendar.view) {
+                const viewType = this.calendar.view.type;
+                if (viewType === 'timeGridDay' || viewType === 'timeGridWeek' || viewType === 'timeGridMultiDays') {
+                    const completedTaskEvents = await this.getCompletedTaskTimeEvents(startDate, endDate, reminderData, projectData);
+                    events.push(...completedTaskEvents);
+                }
+            }
+
             return events;
         } catch (error) {
             console.error('获取事件数据失败:', error);
             showMessage(i18n("loadReminderDataFailed"));
             return [];
         }
+    }
+
+    /**
+     * 获取已完成任务时间事件列表
+     */
+    private async getCompletedTaskTimeEvents(startDate: string, endDate: string, reminderData: any, projectData: any): Promise<any[]> {
+        const completedTaskEvents: any[] = [];
+        const allReminders = Object.values(reminderData) as any[];
+
+        for (const reminder of allReminders) {
+            if (!reminder || typeof reminder !== 'object') continue;
+
+            // 处理普通已完成任务
+            if (reminder.completed && reminder.completedTime) {
+                const completedDateStr = reminder.completedTime.substring(0, 10); // YYYY-MM-DD
+
+                // 检查完成时间是否在视图范围内
+                if (compareDateStrings(completedDateStr, startDate) < 0 ||
+                    compareDateStrings(completedDateStr, endDate) > 0) {
+                    continue;
+                }
+
+                // 如果启用"只显示没有日期的任务"，过滤掉有日期（有开始日期或结束日期）的任务
+                if (this.showCompletedTaskTimeOnlyWithoutDate && (reminder.date || reminder.endDate)) {
+                    continue;
+                }
+
+                // 筛选项目和分类
+                if (!this.passesProjectFilter(reminder)) continue;
+                if (!this.passesCategoryFilter(reminder, projectData)) continue;
+
+                // 解析完成时间
+                const completedDate = new Date(reminder.completedTime);
+                // 默认显示30分钟，向前推（从完成时间往前推30分钟作为开始时间）
+                const startTimeDate = new Date(completedDate.getTime() - 30 * 60000);
+                const startTime = startTimeDate.toISOString();
+                const endTime = completedDate.toISOString();
+
+                // 获取任务颜色
+                let backgroundColor = '#27ae60'; // 默认绿色表示完成
+                if (this.colorBy === 'priority') {
+                    switch (reminder.priority) {
+                        case 'high': backgroundColor = '#27ae60'; break;
+                        case 'medium': backgroundColor = '#2ecc71'; break;
+                        case 'low': backgroundColor = '#58d68d'; break;
+                        default: backgroundColor = '#27ae60';
+                    }
+                } else if (this.colorBy === 'category' && reminder.categoryId) {
+                    const firstCategoryId = reminder.categoryId.split(',')[0];
+                    const categoryStyle = this.categoryManager.getCategoryStyle(firstCategoryId);
+                    backgroundColor = categoryStyle.backgroundColor || '#27ae60';
+                } else if (this.colorBy === 'project' && reminder.projectId) {
+                    backgroundColor = this.projectManager.getProjectColor(reminder.projectId) || '#27ae60';
+                }
+
+                const eventObj = {
+                    id: `completed-${reminder.id}`,
+                    title: `✅ ${reminder.title || i18n('unnamedTask')}`,
+                    start: startTime,
+                    end: endTime,
+                    backgroundColor: backgroundColor,
+                    borderColor: 'transparent',
+                    textColor: 'var(--b3-theme-on-background)',
+                    className: 'completed-task-time-event',
+                    editable: false,
+                    startEditable: false,
+                    durationEditable: false,
+                    allDay: false,
+                    extendedProps: {
+                        type: 'completedTaskTime',
+                        eventId: reminder.id,
+                        eventTitle: reminder.title,
+                        completedTime: reminder.completedTime,
+                        priority: reminder.priority,
+                        categoryId: reminder.categoryId,
+                        projectId: reminder.projectId,
+                        blockId: reminder.blockId,
+                        note: reminder.note,
+                        // 复制普通任务的所有属性以便右键菜单正常工作
+                        completed: true,
+                        endDate: reminder.endDate,
+                        time: reminder.time,
+                        endTime: reminder.endTime,
+                        date: reminder.date,
+                        sort: reminder.sort || 0,
+                        isSubscribed: reminder.isSubscribed || false,
+                        subscriptionId: reminder.subscriptionId,
+                        repeat: reminder.repeat,
+                        parentId: reminder.parentId || null,
+                        parentTitle: reminder.parentTitle || null
+                    }
+                };
+                completedTaskEvents.push(eventObj);
+            }
+
+            // 处理重复任务的已完成实例
+            if (reminder.repeat?.enabled && reminder.repeat.completedInstances) {
+                const completedInstances = reminder.repeat.completedInstances;
+                const completedTimes = reminder.repeat.completedTimes || {};
+
+                for (const instanceDate of completedInstances) {
+                    const completedTimeStr = completedTimes[instanceDate];
+                    if (!completedTimeStr) continue;
+
+                    const completedDateStr = completedTimeStr.substring(0, 10); // YYYY-MM-DD
+
+                    // 检查完成时间是否在视图范围内
+                    if (compareDateStrings(completedDateStr, startDate) < 0 ||
+                        compareDateStrings(completedDateStr, endDate) > 0) {
+                        continue;
+                    }
+
+                    // 筛选项目和分类（使用原始任务的设置）
+                    if (!this.passesProjectFilter(reminder)) continue;
+                    if (!this.passesCategoryFilter(reminder, projectData)) continue;
+
+                    // 如果启用"只显示没有日期的任务"，过滤掉有日期（有开始日期或结束日期）的任务
+                    if (this.showCompletedTaskTimeOnlyWithoutDate && (reminder.date || reminder.endDate)) {
+                        continue;
+                    }
+
+                    // 解析完成时间
+                    const completedDate = new Date(completedTimeStr);
+                    // 默认显示30分钟，向前推
+                    const startTimeDate = new Date(completedDate.getTime() - 30 * 60000);
+                    const startTime = startTimeDate.toISOString();
+                    const endTime = completedDate.toISOString();
+
+                    // 获取任务颜色
+                    let backgroundColor = '#27ae60';
+                    if (this.colorBy === 'priority') {
+                        switch (reminder.priority) {
+                            case 'high': backgroundColor = '#27ae60'; break;
+                            case 'medium': backgroundColor = '#2ecc71'; break;
+                            case 'low': backgroundColor = '#58d68d'; break;
+                            default: backgroundColor = '#27ae60';
+                        }
+                    } else if (this.colorBy === 'category' && reminder.categoryId) {
+                        const firstCategoryId = reminder.categoryId.split(',')[0];
+                        const categoryStyle = this.categoryManager.getCategoryStyle(firstCategoryId);
+                        backgroundColor = categoryStyle.backgroundColor || '#27ae60';
+                    } else if (this.colorBy === 'project' && reminder.projectId) {
+                        backgroundColor = this.projectManager.getProjectColor(reminder.projectId) || '#27ae60';
+                    }
+
+                    const uniqueInstanceId = `${reminder.id}_${instanceDate}`;
+                    const eventObj = {
+                        id: `completed-${uniqueInstanceId}`,
+                        title: `✅ ${reminder.title || i18n('unnamedTask')}`,
+                        start: startTime,
+                        end: endTime,
+                        backgroundColor: backgroundColor,
+                        borderColor: 'transparent',
+                        textColor: 'var(--b3-theme-on-background)',
+                        className: 'completed-task-time-event',
+                        editable: false,
+                        startEditable: false,
+                        durationEditable: false,
+                        allDay: false,
+                        extendedProps: {
+                            type: 'completedTaskTime',
+                            eventId: uniqueInstanceId,
+                            originalId: reminder.id,
+                            eventTitle: reminder.title,
+                            completedTime: completedTimeStr,
+                            completedInstanceDate: instanceDate,
+                            priority: reminder.priority,
+                            categoryId: reminder.categoryId,
+                            projectId: reminder.projectId,
+                            blockId: reminder.blockId,
+                            note: reminder.note,
+                            // 复制普通任务的所有属性以便右键菜单正常工作
+                            completed: true,
+                            date: instanceDate,
+                            isRepeated: true,
+                            sort: reminder.sort || 0,
+                            isSubscribed: reminder.isSubscribed || false,
+                            subscriptionId: reminder.subscriptionId,
+                            repeat: reminder.repeat,
+                            parentId: reminder.parentId || null,
+                            parentTitle: reminder.parentTitle || null
+                        }
+                    };
+                    completedTaskEvents.push(eventObj);
+                }
+            }
+        }
+
+        return completedTaskEvents;
     }
 
     /**
@@ -5908,14 +6260,32 @@ export class CalendarView {
             let backgroundColor: string;
             let borderColor: string;
 
+            // 获取优先级颜色（用于边框）
+            let priorityBorderColor: string;
+            switch (priority) {
+                case 'high':
+                    priorityBorderColor = '#ff0000';
+                    break;
+                case 'medium':
+                    priorityBorderColor = '#e67e22';
+                    break;
+                case 'low':
+                    priorityBorderColor = '#2980b9';
+                    break;
+                default:
+                    priorityBorderColor = ''; // 无优先级时返回空，后续使用默认颜色
+                    break;
+            }
+
             if (this.colorBy === 'project') {
                 if (reminder.projectId) {
                     const color = this.projectManager.getProjectColor(reminder.projectId);
                     backgroundColor = color;
-                    borderColor = color;
+                    // 有优先级时使用优先级颜色作为边框，否则使用项目颜色
+                    borderColor = priorityBorderColor || color;
                 } else {
                     backgroundColor = '#8f8f8f';
-                    borderColor = '#7f8c8d';
+                    borderColor = priorityBorderColor || '#7f8c8d';
                 }
             } else if (this.colorBy === 'category') {
                 if (reminder.categoryId) {
@@ -5923,10 +6293,11 @@ export class CalendarView {
                     const firstCategoryId = reminder.categoryId.split(',')[0];
                     const categoryStyle = this.categoryManager.getCategoryStyle(firstCategoryId);
                     backgroundColor = categoryStyle.backgroundColor;
-                    borderColor = categoryStyle.borderColor;
+                    // 有优先级时使用优先级颜色作为边框，否则使用分类颜色
+                    borderColor = priorityBorderColor || categoryStyle.borderColor;
                 } else {
                     backgroundColor = '#8f8f8f';
-                    borderColor = '#7f8c8d';
+                    borderColor = priorityBorderColor || '#7f8c8d';
                 }
             } else { // colorBy === 'priority'
                 switch (priority) {
@@ -5996,7 +6367,8 @@ export class CalendarView {
                 originalId: originalId || reminder.id,
                 repeat: reminder.repeat,
                 isSubscribed: reminder.isSubscribed || false,
-                subscriptionId: reminder.subscriptionId
+                subscriptionId: reminder.subscriptionId,
+                showNoteInCalendar: reminder.showNoteInCalendar
             }
         };
 
@@ -6208,8 +6580,8 @@ export class CalendarView {
 
             // Time & Duration
             if (calendarEvent.start && calendarEvent.end) {
-                const startTime = calendarEvent.start.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-                const endTime = calendarEvent.end.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+                const startTime = calendarEvent.start.toLocaleTimeString(getLocaleTag(), { hour: '2-digit', minute: '2-digit' });
+                const endTime = calendarEvent.end.toLocaleTimeString(getLocaleTag(), { hour: '2-digit', minute: '2-digit' });
                 htmlParts.push(
                     `<div style="color: var(--b3-theme-on-surface); margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">`,
                     `<span style="opacity: 0.7;">🕐</span>`,
@@ -6226,6 +6598,51 @@ export class CalendarView {
                     `</div>`
                 );
             }
+
+            return htmlParts.join('');
+        }
+
+        // Special tooltip for completed task time events
+        if (reminder.type === 'completedTaskTime') {
+            const htmlParts: string[] = [];
+            const title = reminder.eventTitle || i18n("unnamedTask");
+
+            // Title
+            htmlParts.push(
+                `<div style="font-weight: 600; color: var(--b3-theme-success); margin-bottom: 8px; font-size: 14px; text-align: left; width: 100%;">`,
+                `✅ ${this.escapeHtml(title)}`,
+                `</div>`
+            );
+
+            // Parent task info (if subtask)
+            if (reminder.parentId && reminder.parentTitle) {
+                htmlParts.push(
+                    `<div style="color: var(--b3-theme-on-surface); margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">`,
+                    `<span style="opacity: 0.7;">↪️</span>`,
+                    `<span style="font-size: 13px;">${i18n("parentTask") || '父任务'}: ${this.escapeHtml(reminder.parentTitle)}</span>`,
+                    `</div>`
+                );
+            }
+
+            // Completed time info - only show completion time, not duration
+            if (reminder.completedTime) {
+                const completedDate = new Date(reminder.completedTime);
+                const formattedTime = completedDate.toLocaleTimeString(getLocaleTag(), { hour: '2-digit', minute: '2-digit', hour12: false });
+                const formattedDate = completedDate.toLocaleDateString(getLocaleTag(), { month: 'short', day: 'numeric' });
+                htmlParts.push(
+                    `<div style="color: var(--b3-theme-on-surface); margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">`,
+                    `<span style="opacity: 0.7;">✓</span>`,
+                    `<span>${i18n("completedAt") || "完成于"} ${formattedDate} ${formattedTime}</span>`,
+                    `</div>`
+                );
+            }
+
+            // Hint
+            htmlParts.push(
+                `<div style="color: var(--b3-theme-on-surface-light); margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--b3-theme-border); font-size: 12px; font-style: italic;">`,
+                `${i18n("rightClickToEdit") || "右键编辑任务"}`,
+                `</div>`
+            );
 
             return htmlParts.join('');
         }
@@ -6445,7 +6862,7 @@ export class CalendarView {
             const completedDate = new Date(completedTime);
             const completedDateStr = getLocalDateString(completedDate);
 
-            const timeStr = completedDate.toLocaleTimeString('zh-CN', {
+            const timeStr = completedDate.toLocaleTimeString(getLocaleTag(), {
                 hour: '2-digit',
                 minute: '2-digit'
             });
@@ -6455,7 +6872,7 @@ export class CalendarView {
             } else if (completedDateStr === yesterdayStr) {
                 return `${i18n("completedYesterday")} ${timeStr}`;
             } else {
-                const dateStr = completedDate.toLocaleDateString('zh-CN', {
+                const dateStr = completedDate.toLocaleDateString(getLocaleTag(), {
                     month: 'short',
                     day: 'numeric'
                 });
@@ -6491,7 +6908,7 @@ export class CalendarView {
             } else {
                 const reminderDate = new Date(startDate + 'T00:00:00');
 
-                dateStr = reminderDate.toLocaleDateString('zh-CN', {
+                dateStr = reminderDate.toLocaleDateString(getLocaleTag(), {
                     year: 'numeric',
                     month: 'short',
                     day: 'numeric',
@@ -6508,7 +6925,7 @@ export class CalendarView {
                     endDateStr = i18n("tomorrow");
                 } else {
                     const endReminderDate = new Date(endDate + 'T00:00:00');
-                    endDateStr = endReminderDate.toLocaleDateString('zh-CN', {
+                    endDateStr = endReminderDate.toLocaleDateString(getLocaleTag(), {
                         year: 'numeric',
                         month: 'short',
                         day: 'numeric',
@@ -6528,9 +6945,9 @@ export class CalendarView {
             // 只有结束日期（没有开始日期）的情况，显示为 "截止: 日期"
             if (endDate && !reminder.date) {
                 if (reminder.endTime) {
-                    return `${i18n("deadline") || '截止'}: ${dateStr} ${reminder.endTime}`;
+                    return `${i18n("deadline")}: ${dateStr} ${reminder.endTime}`;
                 } else {
-                    return `${i18n("deadline") || '截止'}: ${dateStr}`;
+                    return `${i18n("deadline")}: ${dateStr}`;
                 }
             }
 
@@ -7342,7 +7759,7 @@ export class CalendarView {
         const isTimeGridView = currentViewType && (
             currentViewType === 'timeGridDay' ||
             currentViewType === 'timeGridWeek' ||
-            currentViewType === 'timeGridMultiDays7'
+            currentViewType === 'timeGridMultiDays'
         );
 
         if (isTimeGridView) {
@@ -7404,9 +7821,9 @@ export class CalendarView {
             case 'multiMonthYear':
                 this.yearBtn.classList.add('b3-button--primary');
                 break;
-            case 'timeGridMultiDays7':
-            case 'dayGridMultiDays7':
-            case 'listMultiDays7':
+            case 'timeGridMultiDays':
+            case 'dayGridMultiDays':
+            case 'listMultiDays':
                 if (this.multiDaysBtn) this.multiDaysBtn.classList.add('b3-button--primary');
                 break;
             case 'listMonth':
@@ -7531,7 +7948,7 @@ export class CalendarView {
 
             const reminderData = await getAllReminders(this.plugin);
             const dateStr = getLocalDateString(startDate);
-            const timeStr = isAllDay ? "" : startDate.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+            const timeStr = isAllDay ? "" : startDate.toLocaleTimeString(getLocaleTag(), { hour: '2-digit', minute: '2-digit', hour12: false });
 
             const reminderId = window.Lute?.NewNodeID?.() || `reminder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
             let title = block.content || i18n('unnamedNote') || '未命名任务';

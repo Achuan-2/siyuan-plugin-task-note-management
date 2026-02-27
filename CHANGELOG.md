@@ -1,4 +1,42 @@
 
+## v6.1.1 / 20260228
+- 🎨 块菜单：列表块右键菜单支持批量将列表项转为任务
+- 🎨 订阅日历：在日历视图的排序按照订阅排序置顶展示
+- 🎨 订阅日历：支持设置是否在四象限和任务侧栏显示
+- 🎨 日历视图：按项目、分类上色，border需要改为优先级颜色，如果无优先级，则按项目、分类颜色上色
+- 🎨 新建绑定块：新建文档默认路径修改
+- 🐛 订阅日历：定时更新订阅日历报错
+- 🐛 任务侧栏：修复侧栏任务拖拽排序无法保存
+- 📝 vip：学生优惠需要用教育邮箱发送学信网证明邮件
+
+---
+
+- 🎨 Block Menu: Right-click menu for list blocks now supports batch conversion of list items into tasks
+- 🎨 Subscribed Calendars: In calendar view, sorting now prioritizes subscribed calendars and displays them at the top
+- 🎨 Subscribed Calendars: Added option to control display in the four quadrants and task sidebar
+- 🎨 Calendar View: Color coding by project and category; border color now reflects priority color. If no priority is set, color is based on project or category
+- 🎨 New Bound Block: Modified default path for new document creation
+- 🐛 Subscribed Calendars: Fixed error in scheduled updates for subscribed calendars
+- 🐛 Task Sidebar: Fixed issue where drag-and-drop sorting in the sidebar tasks could not be saved
+- 📝 VIP: Student discounts require sending an email with a verification from the China Higher Education Student Information (CHSI) using an educational email address
+
+## v6.1.0 / 20260227
+- 🌐 完善i18n
+- 🎨 番茄钟：吸附到屏幕边缘emoji🧲改为⬅️ ➡️ ⬆️ ⬇️
+- 🎨 日历视图：支持单独显示任务完成时间
+- 🎨 日历视图：多天视图支持配置天数
+- 🎨 项目看板：筛选日期优化，筛选今日和明日，应该是根据任务起始日期是否属于任务范围进行筛选，而不是仅靠起始日期
+-  🐛 milkdown 粘贴内容，会错误添加换行
+
+---
+
+- 🌐 Improve i18n
+- 🎨 Pomodoro: Change the "snap to screen edge" emoji 🧲 to ⬅️ ➡️ ⬆️ ⬇️
+- 🎨 Calendar view: Support displaying task completion time separately
+- 🎨 Calendar view: Multi-day view supports configurable number of days
+- 🎨 Project board: Optimize date filtering; filtering for today and tomorrow should be based on whether the task's start date falls within the task range, not solely on the start date
+- 🐛 milkdown: Pasting content incorrectly adds line breaks
+
 ## v6.0.4 / 20260225
 - 🎨 项目看板：任务状态看板和任务列表分组看板支持隐藏没有进行中、没有今日任务的分组
 - 🎨 项目看板：限制分组最大宽度

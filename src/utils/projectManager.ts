@@ -1,5 +1,6 @@
 import { getFile, putFile, removeFile } from '../api';
 import { StatusManager } from './statusManager';
+import { i18n } from '../pluginInstance';
 
 export interface Milestone {
     id: string;
@@ -117,6 +118,19 @@ export class ProjectManager {
         return "#" + "00000".substring(0, 6 - c.length) + c;
     }
 
+    /**
+     * 检查状态名称是否为默认名称
+     */
+    private isDefaultStatusName(id: string, name: string): boolean {
+        const defaultNames: { [key: string]: string[] } = {
+            'doing': ['进行中', 'Doing'],
+            'short_term': ['短期', 'Short Term', 'shortTerm'],
+            'long_term': ['长期', 'Long Term', 'longTerm'],
+            'completed': ['已完成', 'Completed']
+        };
+        return defaultNames[id]?.includes(name) || false;
+    }
+
     public async loadProjects() {
         try {
             const projectData = await this.plugin.loadProjectData() || {};
@@ -126,8 +140,8 @@ export class ProjectManager {
                 this.projects = projectEntries
                     .map(([id, project]: [string, any]) => ({
                         id: id,
-                        name: project.title || '未命名项目',
-                        status: project.status || 'doing',
+                        name: project.title || i18n('unnamedProject'),
+                        status: project.status || 'active',
                         color: project.color,
                         blockId: project.blockId,
                         priority: project.priority || 'none',
@@ -505,7 +519,7 @@ export class ProjectManager {
         return [
             {
                 id: 'doing',
-                name: '进行中',
+                name: i18n('doing'),
                 color: '#e74c3c',
                 icon: '⏳',
                 isFixed: true,
@@ -513,7 +527,7 @@ export class ProjectManager {
             },
             {
                 id: 'short_term',
-                name: '短期',
+                name: i18n('shortTerm'),
                 color: '#3498db',
                 icon: '📋',
                 isFixed: false,
@@ -521,7 +535,7 @@ export class ProjectManager {
             },
             {
                 id: 'long_term',
-                name: '长期',
+                name: i18n('longTerm'),
                 color: '#9b59b6',
                 icon: '🤔',
                 isFixed: false,
@@ -529,7 +543,7 @@ export class ProjectManager {
             },
             {
                 id: 'completed',
-                name: '已完成',
+                name: i18n('completed'),
                 color: '#27ae60',
                 icon: '✅',
                 isFixed: true,
@@ -554,15 +568,30 @@ export class ProjectManager {
 
                 // 分离已保存的固定状态配置和非固定状态
                 const savedFixedConfigs = customStatuses.filter(s => s.isFixed === true);
-                const customNonFixed = customStatuses.filter(s => s.isFixed === false);
+                const customNonFixed = customStatuses.filter(s => s.isFixed === false).map(status => {
+                    // 如果名称是默认名称，自动更换为 i18n 文本
+                    if (this.isDefaultStatusName(status.id, status.name)) {
+                        const defaultStatus = defaults.find(d => d.id === status.id);
+                        if (defaultStatus) {
+                            return { ...status, name: defaultStatus.name };
+                        }
+                    }
+                    return status;
+                });
 
                 // 合并固定状态：使用默认配置，但应用保存的自定义配置
                 const fixedStatuses = defaults.filter(s => s.isFixed).map(defaultStatus => {
                     const savedConfig = savedFixedConfigs.find(s => s.id === defaultStatus.id);
                     if (savedConfig) {
+                        // 如果保存的名称是默认名称，则使用当前语言的 i18n 文本
+                        const name = this.isDefaultStatusName(defaultStatus.id, savedConfig.name)
+                            ? defaultStatus.name
+                            : savedConfig.name;
+
                         // 使用保存的图标、颜色和排序
                         return {
                             ...defaultStatus,
+                            name: name,
                             icon: savedConfig.icon,
                             color: savedConfig.color,
                             sort: savedConfig.sort

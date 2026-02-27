@@ -2,7 +2,7 @@ import { Dialog, showMessage } from "siyuan";
 import { i18n } from "../pluginInstance";
 import { updateBindBlockAtrrs, getBlockByID } from "../api";
 import { getRepeatDescription } from "../utils/repeatUtils";
-import { getLogicalDateString, parseNaturalDateTime, autoDetectDateTimeFromTitle } from "../utils/dateUtils";
+import { getLogicalDateString, parseNaturalDateTime, autoDetectDateTimeFromTitle, getLocaleTag } from "../utils/dateUtils";
 import { RepeatConfig, RepeatSettingsDialog } from "./RepeatSettingsDialog";
 import { QuickReminderDialog } from "./QuickReminderDialog";
 import { CategoryManager } from "../utils/categoryManager";
@@ -396,7 +396,7 @@ class SmartBatchDialog {
         const listHtml = await Promise.all(this.autoDetectedData.map(async data => {
             const setting = this.blockSettings.get(data.blockId);
             const dateStatus = data.date ? '✅' : '❌';
-            const dateDisplay = setting?.date ? new Date(setting.date + 'T00:00:00').toLocaleDateString('zh-CN') : '未设置';
+            const dateDisplay = setting?.date ? new Date(setting.date + 'T00:00:00').toLocaleDateString(getLocaleTag()) : '未设置';
             const timeDisplay = setting?.hasTime && setting.time ? setting.time : '全天';
 
             // 获取分类、优先级和项目显示
@@ -433,7 +433,7 @@ class SmartBatchDialog {
                             <div class="block-title">${setting?.cleanTitle || data.content}</div>
                             <div class="block-meta">
                                 <div class="block-datetime">
-                                    <span class="block-date">${dateDisplay}${setting?.endDate ? ` ➡️ ${new Date(setting.endDate + 'T00:00:00').toLocaleDateString('zh-CN')}` : ''}</span>
+                                    <span class="block-date">${dateDisplay}${setting?.endDate ? ` ➡️ ${new Date(setting.endDate + 'T00:00:00').toLocaleDateString(getLocaleTag())}` : ''}</span>
                                     <span class="block-time">${timeDisplay}${setting?.hasEndTime && setting?.endTime ? ` - ${setting.endTime}` : ''}</span>
                                 </div>
                                 <div class="block-attributes">
@@ -763,7 +763,7 @@ class SmartBatchDialog {
             currentParseResult = parseNaturalDateTime(text);
 
             if (currentParseResult.date) {
-                const dateStr = new Date(currentParseResult.date + 'T00:00:00').toLocaleDateString('zh-CN', {
+                const dateStr = new Date(currentParseResult.date + 'T00:00:00').toLocaleDateString(getLocaleTag(), {
                     year: 'numeric',
                     month: 'long',
                     day: 'numeric',
@@ -776,7 +776,7 @@ class SmartBatchDialog {
                 }
 
                 if (currentParseResult.endDate) {
-                    const endDateStr = new Date(currentParseResult.endDate + 'T00:00:00').toLocaleDateString('zh-CN', {
+                    const endDateStr = new Date(currentParseResult.endDate + 'T00:00:00').toLocaleDateString(getLocaleTag(), {
                         month: 'long',
                         day: 'numeric'
                     });
@@ -850,7 +850,7 @@ class SmartBatchDialog {
 
         this.updateBlockListDisplay(dialog);
 
-        const dateStr = new Date(result.date + 'T00:00:00').toLocaleDateString('zh-CN');
+        const dateStr = new Date(result.date + 'T00:00:00').toLocaleDateString(getLocaleTag());
         showMessage(i18n("dateTimeSet", {
             date: dateStr,
             time: result.time ? ` ${result.time}` : ''
@@ -1164,9 +1164,9 @@ class SmartBatchDialog {
         const blockItem = dialog.element.querySelector(`[data-block-id="${blockId}"]`) as HTMLElement;
         if (!blockItem) return;
 
-        let dateDisplay = setting.date ? new Date(setting.date + 'T00:00:00').toLocaleDateString('zh-CN') : '未设置';
+        let dateDisplay = setting.date ? new Date(setting.date + 'T00:00:00').toLocaleDateString(getLocaleTag()) : '未设置';
         if (setting.endDate) {
-            dateDisplay += ` ➡️ ${new Date(setting.endDate + 'T00:00:00').toLocaleDateString('zh-CN')}`;
+            dateDisplay += ` ➡️ ${new Date(setting.endDate + 'T00:00:00').toLocaleDateString(getLocaleTag())}`;
         }
 
         let timeDisplay = setting.hasTime && setting.time ? setting.time : '全天';
@@ -1654,12 +1654,12 @@ class BlockEditDialog {
             currentParseResult = result;
 
             if (result.date) {
-                const dateStr = new Date(result.date + 'T00:00:00').toLocaleDateString('zh-CN');
+                const dateStr = new Date(result.date + 'T00:00:00').toLocaleDateString(getLocaleTag());
                 const timeStr = result.time ? ` ${result.time}` : '';
                 let previewText = `${dateStr}${timeStr}`;
 
                 if (currentParseResult.endDate) {
-                    const endDateStr = new Date(currentParseResult.endDate + 'T00:00:00').toLocaleDateString('zh-CN', {
+                    const endDateStr = new Date(currentParseResult.endDate + 'T00:00:00').toLocaleDateString(getLocaleTag(), {
                         month: 'long',
                         day: 'numeric'
                     });
@@ -1733,7 +1733,7 @@ class BlockEditDialog {
         // 更新显示
         this.toggleDateTimeInputs(dialog, !result.hasTime);
 
-        showMessage(`✨ 已识别并设置：${new Date(result.date + 'T00:00:00').toLocaleDateString('zh-CN')}${result.time ? ` ${result.time}` : ''}`);
+        showMessage(`✨ 已识别并设置：${new Date(result.date + 'T00:00:00').toLocaleDateString(getLocaleTag())}${result.time ? ` ${result.time}` : ''}`);
     }
 
     // 切换日期时间输入框类型

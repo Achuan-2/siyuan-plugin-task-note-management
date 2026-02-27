@@ -1,11 +1,11 @@
 import { Plugin } from "siyuan";
 import { getFile, removeFile } from "../api";
 
-const CALENDAR_CONFIG_FILE = 'data/storage/petal/siyuan-plugin-task-note-management/calendar-config.json';
+const CALENDAR_CONFIG_FILE = '/data/storage/petal/siyuan-plugin-task-note-management/calendar-config.json';
 
 export interface CalendarConfig {
     colorBy: 'category' | 'priority' | 'project';
-    viewMode: 'multiMonthYear' | 'dayGridMonth' | 'timeGridWeek' | 'timeGridDay' | 'dayGridWeek' | 'dayGridDay' | 'listDay' | 'listWeek' | 'listMonth' | 'listYear' | 'timeGridMultiDays7' | 'dayGridMultiDays7' | 'listMultiDays7';
+    viewMode: 'multiMonthYear' | 'dayGridMonth' | 'timeGridWeek' | 'timeGridDay' | 'dayGridWeek' | 'dayGridDay' | 'listDay' | 'listWeek' | 'listMonth' | 'listYear' | 'timeGridMultiDays' | 'dayGridMultiDays' | 'listMultiDays';
     viewType: 'timeline' | 'kanban' | 'list';
     showLunar: boolean;
     showPomodoro: boolean;
@@ -16,6 +16,9 @@ export interface CalendarConfig {
     showRepeatTasks: boolean;
     repeatInstanceLimit: number;
     showHiddenTasks: boolean; // 显示不在日历视图显示的任务
+    showCompletedTaskTime: boolean; // 显示已完成任务时间
+    showCompletedTaskTimeOnlyWithoutDate: boolean; // 只显示没有日期的任务的完成时间
+    multiDaysCount: number; // 多天视图显示的天数，默认为3天
 }
 
 export class CalendarConfigManager {
@@ -37,7 +40,10 @@ export class CalendarConfigManager {
             showSubtasks: true, // 默认显示子任务
             showRepeatTasks: true, // 默认显示重复任务
             repeatInstanceLimit: -1, // 默认显示全部实例 (-1表示不限制)
-            showHiddenTasks: false // 默认不显示隐藏任务
+            showHiddenTasks: false, // 默认不显示隐藏任务
+            showCompletedTaskTime: true, // 默认显示已完成任务时间
+            showCompletedTaskTimeOnlyWithoutDate: false, // 默认显示所有已完成任务的时间
+            multiDaysCount: 3 // 默认显示3天
         };
     }
 
@@ -67,6 +73,9 @@ export class CalendarConfigManager {
             settings.calendarShowRepeatTasks = this.config.showRepeatTasks;
             settings.calendarRepeatInstanceLimit = this.config.repeatInstanceLimit;
             settings.calendarShowHiddenTasks = this.config.showHiddenTasks;
+            settings.calendarShowCompletedTaskTime = this.config.showCompletedTaskTime;
+            settings.calendarShowCompletedTaskTimeOnlyWithoutDate = this.config.showCompletedTaskTimeOnlyWithoutDate;
+            settings.calendarMultiDaysCount = this.config.multiDaysCount;
             await (this.plugin as any).saveSettings(settings);
         } catch (error) {
             console.error('Failed to save calendar config:', error);
@@ -98,9 +107,15 @@ export class CalendarConfigManager {
                 console.log('旧的 calendar-config.json 文件不存在或已处理');
             }
 
+            // 处理旧版视图名称迁移：将 MultiDays7 转换为 MultiDays
+            let viewMode = settings.calendarViewMode || 'timeGridWeek';
+            if (viewMode.includes('MultiDays7')) {
+                viewMode = viewMode.replace('MultiDays7', 'MultiDays');
+            }
+
             this.config = {
-                colorBy: settings.calendarColorBy || 'priority',
-                viewMode: settings.calendarViewMode || 'timeGridWeek',
+                colorBy: settings.calendarColorBy || 'project',
+                viewMode: viewMode as any,
                 viewType: settings.calendarViewType || 'timeline',
                 showLunar: settings.calendarShowLunar !== false, // 默认为 true
                 showPomodoro: settings.calendarShowPomodoro !== false, // 默认为 true
@@ -110,7 +125,10 @@ export class CalendarConfigManager {
                 showSubtasks: settings.calendarShowSubtasks !== false, // 默认为 true
                 showRepeatTasks: settings.calendarShowRepeatTasks !== false, // 默认为 true
                 repeatInstanceLimit: settings.calendarRepeatInstanceLimit !== undefined ? settings.calendarRepeatInstanceLimit : -1, // 默认为 -1
-                showHiddenTasks: settings.calendarShowHiddenTasks === true // 默认为 false
+                showHiddenTasks: settings.calendarShowHiddenTasks === true, // 默认为 false
+                showCompletedTaskTime: settings.calendarShowCompletedTaskTime !== false, // 默认为 true
+                showCompletedTaskTimeOnlyWithoutDate: settings.calendarShowCompletedTaskTimeOnlyWithoutDate === true, // 默认为 false
+                multiDaysCount: settings.calendarMultiDaysCount !== undefined ? settings.calendarMultiDaysCount : 3 // 默认为3天
             };
         } catch (error) {
             console.warn('Failed to load calendar config, using defaults:', error);
@@ -126,7 +144,10 @@ export class CalendarConfigManager {
                 showSubtasks: true,
                 showRepeatTasks: true,
                 repeatInstanceLimit: -1,
-                showHiddenTasks: false
+                showHiddenTasks: false,
+                showCompletedTaskTime: true,
+                showCompletedTaskTimeOnlyWithoutDate: false,
+                multiDaysCount: 3
             };
             try {
                 await this.saveConfig();
@@ -150,12 +171,12 @@ export class CalendarConfigManager {
         return this.config.colorBy;
     }
 
-    public async setViewMode(viewMode: 'multiMonthYear' | 'dayGridMonth' | 'timeGridWeek' | 'timeGridDay' | 'dayGridWeek' | 'dayGridDay' | 'listDay' | 'listWeek' | 'listMonth' | 'listYear' | 'timeGridMultiDays7' | 'dayGridMultiDays7' | 'listMultiDays7') {
+    public async setViewMode(viewMode: 'multiMonthYear' | 'dayGridMonth' | 'timeGridWeek' | 'timeGridDay' | 'dayGridWeek' | 'dayGridDay' | 'listDay' | 'listWeek' | 'listMonth' | 'listYear' | 'timeGridMultiDays' | 'dayGridMultiDays' | 'listMultiDays') {
         this.config.viewMode = viewMode;
         await this.saveConfig();
     }
 
-    public getViewMode(): 'multiMonthYear' | 'dayGridMonth' | 'timeGridWeek' | 'timeGridDay' | 'dayGridWeek' | 'dayGridDay' | 'listDay' | 'listWeek' | 'listMonth' | 'listYear' | 'timeGridMultiDays7' | 'dayGridMultiDays7' | 'listMultiDays7' {
+    public getViewMode(): 'multiMonthYear' | 'dayGridMonth' | 'timeGridWeek' | 'timeGridDay' | 'dayGridWeek' | 'dayGridDay' | 'listDay' | 'listWeek' | 'listMonth' | 'listYear' | 'timeGridMultiDays' | 'dayGridMultiDays' | 'listMultiDays' {
         return this.config.viewMode;
     }
 
@@ -242,6 +263,33 @@ export class CalendarConfigManager {
 
     public getShowHiddenTasks(): boolean {
         return this.config.showHiddenTasks !== undefined ? this.config.showHiddenTasks : false;
+    }
+
+    public async setShowCompletedTaskTime(show: boolean) {
+        this.config.showCompletedTaskTime = show;
+        await this.saveConfig();
+    }
+
+    public getShowCompletedTaskTime(): boolean {
+        return this.config.showCompletedTaskTime !== undefined ? this.config.showCompletedTaskTime : true;
+    }
+
+    public async setShowCompletedTaskTimeOnlyWithoutDate(show: boolean) {
+        this.config.showCompletedTaskTimeOnlyWithoutDate = show;
+        await this.saveConfig();
+    }
+
+    public getShowCompletedTaskTimeOnlyWithoutDate(): boolean {
+        return this.config.showCompletedTaskTimeOnlyWithoutDate !== undefined ? this.config.showCompletedTaskTimeOnlyWithoutDate : false;
+    }
+
+    public async setMultiDaysCount(count: number) {
+        this.config.multiDaysCount = count;
+        await this.saveConfig();
+    }
+
+    public getMultiDaysCount(): number {
+        return this.config.multiDaysCount !== undefined ? this.config.multiDaysCount : 3;
     }
 
     public getConfig(): CalendarConfig {

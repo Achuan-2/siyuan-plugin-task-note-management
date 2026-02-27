@@ -10,6 +10,7 @@
 import { Dialog, confirm, showMessage } from "siyuan";
 import { PomodoroRecordManager, PomodoroSession } from "../utils/pomodoroRecord";
 import { i18n } from "../pluginInstance";
+import { getLocaleTag } from "../utils/dateUtils";
 
 export class PomodoroSessionsDialog {
     private dialog: Dialog;
@@ -78,13 +79,13 @@ export class PomodoroSessionsDialog {
                 // 筛选出属于当前提醒的会话
                 const eventSessions = record.sessions.filter((session: PomodoroSession) => {
                     if (session.eventId === this.reminderId) return true;
-                    
+
                     // 如果启用了 includeInstances，还匹配该任务的所有实例（ID格式: reminderId_YYYY-MM-DD）
                     if (this.includeInstances && session.eventId.startsWith(this.reminderId + '_')) {
                         const suffix = session.eventId.substring(this.reminderId.length + 1);
                         return /^\d{4}-\d{2}-\d{2}$/.test(suffix);
                     }
-                    
+
                     return false;
                 });
                 allSessions.push(...eventSessions);
@@ -158,18 +159,18 @@ export class PomodoroSessionsDialog {
         const startTime = new Date(session.startTime);
         const endTime = new Date(session.endTime);
 
-        const dateStr = startTime.toLocaleDateString('zh-CN', {
+        const dateStr = startTime.toLocaleDateString(getLocaleTag(), {
             year: 'numeric',
             month: '2-digit',
             day: '2-digit'
         });
 
-        const startTimeStr = startTime.toLocaleTimeString('zh-CN', {
+        const startTimeStr = startTime.toLocaleTimeString(getLocaleTag(), {
             hour: '2-digit',
             minute: '2-digit'
         });
 
-        const endTimeStr = endTime.toLocaleTimeString('zh-CN', {
+        const endTimeStr = endTime.toLocaleTimeString(getLocaleTag(), {
             hour: '2-digit',
             minute: '2-digit'
         });
@@ -396,7 +397,7 @@ export class PomodoroSessionsDialog {
                 const reminderData = await this.plugin.loadReminderData();
                 let reminder = reminderData[this.reminderId];
                 let eventTitle = reminder?.title;
-                
+
                 // 如果没有找到，可能是重复任务实例（ID格式: originalId_YYYY-MM-DD）
                 if (!reminder && this.reminderId.includes('_')) {
                     const parts = this.reminderId.split('_');
@@ -408,7 +409,7 @@ export class PomodoroSessionsDialog {
                         eventTitle = reminder?.title;
                     }
                 }
-                
+
                 // 如果还是没有找到，使用默认标题
                 if (!eventTitle) {
                     eventTitle = "未知任务";
@@ -573,7 +574,7 @@ export class PomodoroSessionsDialog {
                 const reminderData = await this.plugin.loadReminderData();
                 let reminder = reminderData[this.reminderId];
                 let eventTitle = reminder?.title;
-                
+
                 // 如果没有找到，可能是重复任务实例（ID格式: originalId_YYYY-MM-DD）
                 if (!reminder && this.reminderId.includes('_')) {
                     const parts = this.reminderId.split('_');
@@ -585,7 +586,7 @@ export class PomodoroSessionsDialog {
                         eventTitle = reminder?.title;
                     }
                 }
-                
+
                 // 如果还是没有找到，使用原会话的标题
                 if (!eventTitle) {
                     eventTitle = session.eventTitle || "未知任务";
@@ -674,7 +675,7 @@ export class PomodoroSessionsDialog {
             `<div style="padding: 16px;">
                 <p>${i18n("confirmDeletePomodoro") || "确定要删除这个番茄钟记录吗？"}</p>
                 <p style="color: var(--b3-theme-on-surface-light); font-size: 12px;">
-                    ${session.eventTitle} - ${new Date(session.startTime).toLocaleString('zh-CN')} (${session.duration}分钟)
+                    ${session.eventTitle} - ${new Date(session.startTime).toLocaleString(getLocaleTag())} (${session.duration}分钟)
                 </p>
             </div>`,
             async (dialog) => {

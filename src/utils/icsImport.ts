@@ -93,7 +93,7 @@ function parseIcalEvent(vevent: ICAL.Component): ParsedIcsEvent | null {
                 const valueStr = typeof rawValue === 'string' ? rawValue : (Array.isArray(rawValue) ? rawValue[0] : String(rawValue));
                 const valueType = prop.jCal[2]; // 值类型："date" 或 "date-time"
 
-                // 判断是否是纯日期格式（YYYYMMDD）或错误转换的格式（YYYY-MM-DDT::）
+                // 判断是否是纯日期格式（YYYYMMDD）或日期格式（YYYY-MM-DD）
                 if (/^\d{8}$/.test(valueStr)) {
                     // 纯日期格式，全天事件
                     const year = valueStr.substring(0, 4);
@@ -101,7 +101,7 @@ function parseIcalEvent(vevent: ICAL.Component): ParsedIcsEvent | null {
                     const day = valueStr.substring(6, 8);
                     parsedEvent.date = `${year}-${month}-${day}`;
                 } else if (/^\d{4}-\d{2}-\d{2}T::$/.test(valueStr) || valueType === 'date') {
-                    // ical.js 错误转换的全天事件格式（如 "2026-01-04T::"）或明确标记为 date 类型
+                    // ical.js 转换的全天事件格式（如 "2026-01-04T::"）或明确标记为 date 类型
                     const dateMatch = valueStr.match(/^(\d{4}-\d{2}-\d{2})/);
                     if (dateMatch) {
                         parsedEvent.date = dateMatch[1];
@@ -144,7 +144,7 @@ function parseIcalEvent(vevent: ICAL.Component): ParsedIcsEvent | null {
                 const valueStr = typeof rawValue === 'string' ? rawValue : (Array.isArray(rawValue) ? rawValue[0] : String(rawValue));
                 const valueType = prop.jCal[2]; // 值类型："date" 或 "date-time"
 
-                // 判断是否是纯日期格式（YYYYMMDD）或错误转换的格式（YYYY-MM-DDT::）
+                // 判断是否是纯日期格式（YYYYMMDD）或日期格式（YYYY-MM-DD）
                 if (/^\d{8}$/.test(valueStr)) {
                     // 纯日期格式，全天事件
                     const year = valueStr.substring(0, 4);
@@ -155,14 +155,22 @@ function parseIcalEvent(vevent: ICAL.Component): ParsedIcsEvent | null {
                     const date = new Date(endDate);
                     date.setDate(date.getDate() - 1);
                     parsedEvent.endDate = formatDate(date);
+                    // 确保结束日期不早于开始日期（处理某些ICS生成器DTSTART=DTEND的情况）
+                    if (parsedEvent.date && parsedEvent.endDate < parsedEvent.date) {
+                        parsedEvent.endDate = parsedEvent.date;
+                    }
                 } else if (/^\d{4}-\d{2}-\d{2}T::$/.test(valueStr) || valueType === 'date') {
-                    // ical.js 错误转换的全天事件格式（如 "2026-01-05T::"）或明确标记为 date 类型
+                    // ical.js 转换的全天事件格式（如 "2026-01-05T::"）或明确标记为 date 类型
                     const dateMatch = valueStr.match(/^(\d{4}-\d{2}-\d{2})/);
                     if (dateMatch) {
                         // ICS 全天事件的结束日期是独占的，需要减1天
                         const date = new Date(dateMatch[1]);
                         date.setDate(date.getDate() - 1);
                         parsedEvent.endDate = formatDate(date);
+                        // 确保结束日期不早于开始日期（处理某些ICS生成器DTSTART=DTEND的情况）
+                        if (parsedEvent.date && parsedEvent.endDate < parsedEvent.date) {
+                            parsedEvent.endDate = parsedEvent.date;
+                        }
                     }
                 } else {
                     // 尝试正常解析为时间
@@ -378,10 +386,10 @@ export function mergeImportedEvents(
         });
 
         if (existingId) {
-            // 更新现有事件
             merged[existingId] = {
                 ...merged[existingId],
                 ...event,
+                note: event.description || merged[existingId].note, // Prefer ICS description, fallback to existing note
                 // 应用批量设置
                 projectId: options.projectId || merged[existingId].projectId,
                 categoryId: options.categoryId || merged[existingId].categoryId,
@@ -390,10 +398,10 @@ export function mergeImportedEvents(
             };
             updatedCount++;
         } else {
-            // 添加新事件
             merged[id] = {
                 id,
                 ...event,
+                note: event.description,
                 // 应用批量设置
                 projectId: options.projectId,
                 categoryId: options.categoryId,

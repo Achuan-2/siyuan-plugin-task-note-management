@@ -187,7 +187,7 @@
             },
             {
                 id: 'builtin_allUncompleted',
-                name: i18n('allUncompletedReminders') || '所有未完成',
+                name: i18n('allUncompletedReminders'),
                 isBuiltIn: true,
                 dateFilters: [],
                 statusFilter: 'uncompleted',
@@ -197,7 +197,7 @@
             },
             {
                 id: 'builtin_noDate',
-                name: i18n('noDateReminders') || '无日期任务',
+                name: i18n('noDateReminders'),
                 isBuiltIn: true,
                 dateFilters: [{ type: 'none' }],
                 statusFilter: 'all',
@@ -207,7 +207,7 @@
             },
             {
                 id: 'builtin_todayCompleted',
-                name: i18n('todayCompletedReminders') || '今日已完成',
+                name: i18n('todayCompletedReminders'),
                 isBuiltIn: true,
                 dateFilters: [{ type: 'today' }],
                 statusFilter: 'completed',
@@ -217,7 +217,7 @@
             },
             {
                 id: 'builtin_yesterdayCompleted',
-                name: i18n('yesterdayCompletedReminders') || '昨日已完成',
+                name: i18n('yesterdayCompletedReminders'),
                 isBuiltIn: true,
                 dateFilters: [{ type: 'yesterday' }],
                 statusFilter: 'completed',
@@ -227,7 +227,7 @@
             },
             {
                 id: 'builtin_completed',
-                name: i18n('completedReminders') || '已完成',
+                name: i18n('completedReminders'),
                 isBuiltIn: true,
                 dateFilters: [],
                 statusFilter: 'completed',
@@ -309,7 +309,7 @@
 
     async function saveFilter() {
         if (!filterName.trim()) {
-            showMessage(i18n('pleaseEnterFilterName') || '请输入过滤器名称');
+            showMessage(i18n('pleaseEnterFilterName'));
             return;
         }
 
@@ -341,7 +341,7 @@
         }
 
         await saveFilters();
-        showMessage(i18n('filterSaved') || '过滤器已保存');
+        showMessage(i18n('filterSaved'));
         isEditing = false;
         selectedFilter = null;
     }
@@ -355,7 +355,7 @@
                 // 用户确认删除
                 filters = filters.filter(f => f.id !== filter.id);
                 await saveFilters();
-                showMessage(i18n('filterDeleted') || '过滤器已删除');
+                showMessage(i18n('filterDeleted'));
                 if (selectedFilter?.id === filter.id) {
                     selectedFilter = null;
                     isEditing = false;
@@ -499,10 +499,10 @@
 <div class="filter-management">
     <div class="filter-list">
         <div class="filter-list-header">
-            <h3>{i18n('filterManagement') || '过滤器管理'}</h3>
+            <h3>{i18n('filterManagement')}</h3>
             <button class="b3-button b3-button--primary" on:click={startNewFilter}>
                 <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
-                {i18n('newFilter') || '新建'}
+                {i18n('newFilter')}
             </button>
         </div>
         <div class="filter-list-content">
@@ -531,7 +531,7 @@
                             </span>
                             {filter.name}
                             {#if filter.isBuiltIn}
-                                <span class="filter-badge">{i18n('builtInFilter') || '内置'}</span>
+                                <span class="filter-badge">{i18n('builtInFilter')}</span>
                             {/if}
                         </div>
                     </div>
@@ -540,7 +540,7 @@
                             <button
                                 class="b3-button b3-button--outline"
                                 on:click|stopPropagation={() => deleteFilter(filter)}
-                                title={i18n('deleteFilter') || '删除'}
+                                title={i18n('deleteFilter')}
                             >
                                 <svg class="b3-button__icon">
                                     <use xlink:href="#iconTrashcan"></use>
@@ -557,102 +557,102 @@
         {#if isEditing}
             <div class="filter-editor-header-input">
                 <div class="b3-form__group" style="margin-bottom: 0;">
-                    <label class="b3-form__label">{i18n('filterName') || '过滤器名称'}</label>
+                    <label class="b3-form__label">{i18n('filterName')}</label>
                     <input
                         type="text"
                         class="b3-text-field"
                         bind:value={filterName}
-                        placeholder={i18n('pleaseEnterFilterName') || '请输入过滤器名称'}
+                        placeholder={i18n('pleaseEnterFilterName')}
                     />
                 </div>
             </div>
 
             <div class="filter-editor-content">
                 <div class="b3-form__group">
-                    <label class="b3-form__label">{i18n('dateFilters') || '日期筛选'}</label>
+                    <label class="b3-form__label">{i18n('dateFilters')}</label>
                     <div class="filter-options">
                         <div
                             class="filter-option"
                             class:selected={selectedDateFilters.includes('all')}
                             on:click={() => toggleDateFilter('all')}
                         >
-                            {i18n('allDates') || '全部日期'}
+                            {i18n('allDates')}
                         </div>
                         <div
                             class="filter-option"
                             class:selected={selectedDateFilters.includes('none')}
                             on:click={() => toggleDateFilter('none')}
                         >
-                            {i18n('noDate') || '无日期'}
+                            {i18n('noDate')}
                         </div>
                         <div
                             class="filter-option"
                             class:selected={selectedDateFilters.includes('yesterday')}
                             on:click={() => toggleDateFilter('yesterday')}
                         >
-                            {i18n('yesterday') || '昨天'}
+                            {i18n('yesterday')}
                         </div>
                         <div
                             class="filter-option"
                             class:selected={selectedDateFilters.includes('today')}
                             on:click={() => toggleDateFilter('today')}
                         >
-                            {i18n('today') || '今天'}
+                            {i18n('today')}
                         </div>
                         <div
                             class="filter-option"
                             class:selected={selectedDateFilters.includes('tomorrow')}
                             on:click={() => toggleDateFilter('tomorrow')}
                         >
-                            {i18n('tomorrow') || '明天'}
+                            {i18n('tomorrow')}
                         </div>
                         <div
                             class="filter-option"
                             class:selected={selectedDateFilters.includes('this_week')}
                             on:click={() => toggleDateFilter('this_week')}
                         >
-                            {i18n('thisWeek') || '本周'}
+                            {i18n('thisWeek')}
                         </div>
                         <div
                             class="filter-option"
                             class:selected={selectedDateFilters.includes('next_7_days')}
                             on:click={() => toggleDateFilter('next_7_days')}
                         >
-                            {i18n('next7Days') || '未来七天'}
+                            {i18n('next7Days')}
                         </div>
                         <div
                             class="filter-option"
                             class:selected={selectedDateFilters.includes('future')}
                             on:click={() => toggleDateFilter('future')}
                         >
-                            {i18n('future') || '未来日期'}
+                            {i18n('future')}
                         </div>
                         <div
                             class="filter-option"
                             class:selected={selectedDateFilters.includes('past_7_days')}
                             on:click={() => toggleDateFilter('past_7_days')}
                         >
-                            {i18n('past7Days') || '过去七天'}
+                            {i18n('past7Days')}
                         </div>
                         <div
                             class="filter-option"
                             class:selected={selectedDateFilters.includes('custom_range')}
                             on:click={() => toggleDateFilter('custom_range')}
                         >
-                            {i18n('customRange') || '自定义范围'}
+                            {i18n('customRange')}
                         </div>
                     </div>
                 </div>
 
                 {#if selectedDateFilters.includes('custom_range')}
                     <div class="b3-form__group">
-                        <label class="b3-form__label">{i18n('dateRange') || '日期范围'}</label>
+                        <label class="b3-form__label">{i18n('dateRange')}</label>
                         <div style="display: flex; gap: 8px; align-items: center;">
                             <input
                                 type="date"
                                 class="b3-text-field"
                                 bind:value={customRangeStart}
-                                placeholder={i18n('dateRangeFrom') || '开始日期'}
+                                placeholder={i18n('dateRangeFrom')}
                                 style="flex: 1;"
                             />
                             <span>-</span>
@@ -660,7 +660,7 @@
                                 type="date"
                                 class="b3-text-field"
                                 bind:value={customRangeEnd}
-                                placeholder={i18n('dateRangeTo') || '结束日期'}
+                                placeholder={i18n('dateRangeTo')}
                                 style="flex: 1;"
                             />
                         </div>
@@ -668,48 +668,48 @@
                 {/if}
 
                 <div class="b3-form__group">
-                    <label class="b3-form__label">{i18n('statusFilters') || '状态筛选'}</label>
+                    <label class="b3-form__label">{i18n('statusFilters')}</label>
                     <div class="filter-options">
                         <div
                             class="filter-option"
                             class:selected={statusFilter === 'all'}
                             on:click={() => (statusFilter = 'all')}
                         >
-                            {i18n('all') || '全部'}
+                            {i18n('all')}
                         </div>
                         <div
                             class="filter-option"
                             class:selected={statusFilter === 'completed'}
                             on:click={() => (statusFilter = 'completed')}
                         >
-                            {i18n('completed') || '已完成'}
+                            {i18n('completed')}
                         </div>
                         <div
                             class="filter-option"
                             class:selected={statusFilter === 'uncompleted'}
                             on:click={() => (statusFilter = 'uncompleted')}
                         >
-                            {i18n('uncompleted') || '未完成'}
+                            {i18n('uncompleted')}
                         </div>
                     </div>
                 </div>
 
                 <div class="b3-form__group">
-                    <label class="b3-form__label">{i18n('projectFilters') || '项目筛选'}</label>
+                    <label class="b3-form__label">{i18n('projectFilters')}</label>
                     <div class="filter-options">
                         <div
                             class="filter-option"
                             class:selected={selectedProjects.includes('all')}
                             on:click={() => toggleProject('all')}
                         >
-                            {i18n('allProjects') || '全部项目'}
+                            {i18n('allProjects')}
                         </div>
                         <div
                             class="filter-option"
                             class:selected={selectedProjects.includes('none')}
                             on:click={() => toggleProject('none')}
                         >
-                            {i18n('noProject') || '无项目'}
+                            {i18n('noProject')}
                         </div>
                         {#each projects as project}
                             <div
@@ -725,21 +725,21 @@
                 </div>
 
                 <div class="b3-form__group">
-                    <label class="b3-form__label">{i18n('categoryFilters') || '分类筛选'}</label>
+                    <label class="b3-form__label">{i18n('categoryFilters')}</label>
                     <div class="filter-options">
                         <div
                             class="filter-option"
                             class:selected={selectedCategories.includes('all')}
                             on:click={() => toggleCategory('all')}
                         >
-                            {i18n('allCategories') || '所有分类'}
+                            {i18n('allCategories')}
                         </div>
                         <div
                             class="filter-option"
                             class:selected={selectedCategories.includes('none')}
                             on:click={() => toggleCategory('none')}
                         >
-                            {i18n('noCategory') || '无分类'}
+                            {i18n('noCategory')}
                         </div>
                         {#each categories as category}
                             <div
@@ -759,58 +759,58 @@
                 </div>
 
                 <div class="b3-form__group">
-                    <label class="b3-form__label">{i18n('priorityFilters') || '优先级筛选'}</label>
+                    <label class="b3-form__label">{i18n('priorityFilters')}</label>
                     <div class="filter-options">
                         <div
                             class="filter-option"
                             class:selected={selectedPriorities.includes('all')}
                             on:click={() => togglePriority('all')}
                         >
-                            {i18n('allPriorities') || '全部优先级'}
+                            {i18n('allPriorities')}
                         </div>
                         <div
                             class="filter-option"
                             class:selected={selectedPriorities.includes('high')}
                             on:click={() => togglePriority('high')}
                         >
-                            🔴 {i18n('highPriority') || '高优先级'}
+                            🔴 {i18n('highPriority')}
                         </div>
                         <div
                             class="filter-option"
                             class:selected={selectedPriorities.includes('medium')}
                             on:click={() => togglePriority('medium')}
                         >
-                            🟡 {i18n('mediumPriority') || '中优先级'}
+                            🟡 {i18n('mediumPriority')}
                         </div>
                         <div
                             class="filter-option"
                             class:selected={selectedPriorities.includes('low')}
                             on:click={() => togglePriority('low')}
                         >
-                            🔵 {i18n('lowPriority') || '低优先级'}
+                            🔵 {i18n('lowPriority')}
                         </div>
                         <div
                             class="filter-option"
                             class:selected={selectedPriorities.includes('none')}
                             on:click={() => togglePriority('none')}
                         >
-                            ⚪ {i18n('noPriority') || '无优先级'}
+                            ⚪ {i18n('noPriority')}
                         </div>
                     </div>
                 </div>
             </div>
             <div class="filter-editor-actions">
                 <button class="b3-button b3-button--cancel" on:click={() => (isEditing = false)}>
-                    {i18n('cancel') || '取消'}
+                    {i18n('cancel')}
                 </button>
                 <button class="b3-button b3-button--primary" on:click={saveFilter}>
-                    {i18n('save') || '保存'}
+                    {i18n('save')}
                 </button>
             </div>
         {:else}
             <div class="empty-state">
                 <svg class="empty-icon"><use xlink:href="#iconFilter"></use></svg>
-                <p>{i18n('selectFilterToEdit') || '选择一个过滤器进行编辑，或创建新的过滤器'}</p>
+                <p>{i18n('selectFilterToEdit')}</p>
             </div>
         {/if}
     </div>

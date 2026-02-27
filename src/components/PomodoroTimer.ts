@@ -380,6 +380,21 @@ export class PomodoroTimer {
         };
     }
 
+    /**
+     * 根据吸附位置获取对应的 emoji
+     */
+    private getDockPositionEmoji(position: string): string {
+        const emojiMap: Record<string, string> = {
+            'top': '⬆️',
+            'bottom': '⬇️',
+            'left': '⬅️',
+            'right': '➡️'
+        };
+        // 使用传入值，如果没有则使用 settings 中的值，最后使用默认值 'top'
+        const pos = position || this.settings?.pomodoroDockPosition || 'top';
+        return emojiMap[pos] || '⬆️';
+    }
+
     private async initComponents(container?: HTMLElement, orphanedWindow?: any) {
         await this.recordManager.initialize();
         await this.initAudio();
@@ -2352,8 +2367,10 @@ export class PomodoroTimer {
             align-items: center;
             justify-content: center;
         `;
-        dockBtn.innerHTML = '🧲';
+        dockBtn.innerHTML = this.getDockPositionEmoji(this.settings.pomodoroDockPosition);
         dockBtn.title = i18n('dockToEdge') || '吸附到屏幕边缘';
+        // 保存引用以便后续更新
+        (this as any).dockBtnElement = dockBtn;
         dockBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -7493,7 +7510,7 @@ document.body.classList.remove('docked-mode');
                 ⭕
             </button>
             <button class="titlebar-btn" id="dockBtn" onclick="toggleDock()" title="${dockModeTitle}">
-                🧲
+                ${this.getDockPositionEmoji(this.settings.pomodoroDockPosition)}
             </button>
             <div class="switch-container">
                 <button class="titlebar-btn" id="statusBtn" onclick="toggleSwitchMenu(event)">
@@ -7596,7 +7613,8 @@ document.body.classList.remove('docked-mode');
                 workDuration: this.settings.workDuration,
                 breakDuration: this.settings.breakDuration,
                 longBreakDuration: this.settings.longBreakDuration,
-                dailyFocusGoal: dailyFocusGoal
+                dailyFocusGoal: dailyFocusGoal,
+                pomodoroDockPosition: this.settings.pomodoroDockPosition || 'top'
             })};
 
         function callMethod(method) {
@@ -7839,6 +7857,21 @@ document.body.classList.remove('docked-mode');
             if (soundBtn) {
                 soundBtn.textContent = localState.isBackgroundAudioMuted ? '🔇' : '🔊';
                 soundBtn.title = localState.isBackgroundAudioMuted ? '${i18n('enableBackgroundAudio') || '开启背景音'}' : '${i18n('muteBackgroundAudio') || '静音背景音'}';
+            }
+            
+            // 11. Update Dock Button Emoji based on position
+            const dockBtn = document.getElementById('dockBtn');
+            if (dockBtn) {
+                const posEmojiMap = {
+                    'top': '⬆️',
+                    'bottom': '⬇️',
+                    'left': '⬅️',
+                    'right': '➡️'
+                };
+                const emoji = posEmojiMap[settings.pomodoroDockPosition] || '➡️';
+                if (dockBtn.textContent !== emoji) {
+                    dockBtn.textContent = emoji;
+                }
             }
         }
 
@@ -8098,7 +8131,8 @@ document.body.classList.remove('docked-mode');
                 workDuration: this.settings.workDuration,
                 breakDuration: this.settings.breakDuration,
                 longBreakDuration: this.settings.longBreakDuration,
-                dailyFocusGoal: (this.settings.dailyFocusGoal || 0)
+                dailyFocusGoal: (this.settings.dailyFocusGoal || 0),
+                pomodoroDockPosition: this.settings.pomodoroDockPosition || 'top'
             };
 
             // Send state to window using executeJavaScript
@@ -8281,6 +8315,11 @@ document.body.classList.remove('mini-mode');
     public async updateSettings(settings: any) {
         const oldDockPosition = this.settings?.pomodoroDockPosition;
         this.settings = settings;
+
+        // 更新 DOM 模式下吸附按钮的 emoji（无论是否处于吸附模式）
+        if ((this as any).dockBtnElement) {
+            (this as any).dockBtnElement.innerHTML = this.getDockPositionEmoji(settings.pomodoroDockPosition);
+        }
 
         const pomodoroWindow = PomodoroTimer.browserWindowInstance;
         if (pomodoroWindow && !pomodoroWindow.isDestroyed()) {

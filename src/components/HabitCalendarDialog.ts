@@ -1,6 +1,7 @@
 import { Dialog } from "siyuan";
 import { Habit } from "./HabitPanel";
 import { DEFAULT_SETTINGS } from "../index";
+import { i18n } from "../pluginInstance";
 
 export class HabitCalendarDialog {
     private plugin: any;
@@ -17,7 +18,7 @@ export class HabitCalendarDialog {
 
     show() {
         this.dialog = new Dialog({
-            title: "打卡日历",
+            title: i18n("calendarTitle"),
             content: '<div id="habitCalendarContainer"></div>',
             width: "1100px",
             height: "81vh"
@@ -58,7 +59,7 @@ export class HabitCalendarDialog {
 
         const weekBtn = document.createElement('button');
         weekBtn.className = this.currentView === 'week' ? 'view-toggle-btn active' : 'view-toggle-btn';
-        weekBtn.textContent = '周视图';
+        weekBtn.textContent = i18n("habitCalendarWeekView");
         weekBtn.addEventListener('click', () => {
             this.currentView = 'week';
             this.renderCalendar(container);
@@ -66,7 +67,7 @@ export class HabitCalendarDialog {
 
         const monthBtn = document.createElement('button');
         monthBtn.className = this.currentView === 'month' ? 'view-toggle-btn active' : 'view-toggle-btn';
-        monthBtn.textContent = '月视图';
+        monthBtn.textContent = i18n("habitCalendarMonthView");
         monthBtn.addEventListener('click', () => {
             this.currentView = 'month';
             this.renderCalendar(container);
@@ -95,7 +96,7 @@ export class HabitCalendarDialog {
 
         const todayBtn = document.createElement('button');
         todayBtn.className = 'b3-button';
-        todayBtn.textContent = '今天';
+        todayBtn.textContent = i18n("today");
         todayBtn.addEventListener('click', () => {
             this.currentDate = new Date();
             this.renderCalendar(container);
@@ -156,14 +157,22 @@ export class HabitCalendarDialog {
     private getDateRangeLabel(weekStartDay: number = DEFAULT_SETTINGS.weekStartDay): string {
         if (this.currentView === 'week') {
             const weekStart = new Date(this.currentDate);
-            // 计算偏移量：当前日期weekday相对于用户配置的周开始日的偏移
             const offset = (weekStart.getDay() - (weekStartDay ?? DEFAULT_SETTINGS.weekStartDay) + 7) % 7;
             weekStart.setDate(weekStart.getDate() - offset);
             const weekEnd = new Date(weekStart);
             weekEnd.setDate(weekEnd.getDate() + 6);
-            return `${weekStart.getFullYear()}年${weekStart.getMonth() + 1}月${weekStart.getDate()}日 - ${weekEnd.getMonth() + 1}月${weekEnd.getDate()}日`;
+            return i18n("calendarDateRangeWeek", {
+                year: String(weekStart.getFullYear()),
+                m1: String(weekStart.getMonth() + 1),
+                d1: String(weekStart.getDate()),
+                m2: String(weekEnd.getMonth() + 1),
+                d2: String(weekEnd.getDate())
+            });
         } else {
-            return `${this.currentDate.getFullYear()}年${this.currentDate.getMonth() + 1}月`;
+            return i18n("calendarDateRangeMonth", {
+                year: String(this.currentDate.getFullYear()),
+                month: String(this.currentDate.getMonth() + 1)
+            });
         }
     }
 
@@ -178,7 +187,7 @@ export class HabitCalendarDialog {
         const habitHeader = document.createElement('div');
         habitHeader.className = 'grid-header habit-header';
         habitHeader.contentEditable = 'false';
-        habitHeader.textContent = '习惯';
+        habitHeader.textContent = i18n("habitColumnHeader");
         grid.appendChild(habitHeader);
 
         const weekStart = new Date(this.currentDate);
@@ -186,15 +195,15 @@ export class HabitCalendarDialog {
         const offset = (weekStart.getDay() - (weekStartDay ?? DEFAULT_SETTINGS.weekStartDay) + 7) % 7;
         weekStart.setDate(weekStart.getDate() - offset);
 
+        const weekdayNamesArr = i18n("calendarWeekNames").split(',');
         for (let i = 0; i < 7; i++) {
             const date = new Date(weekStart);
             date.setDate(date.getDate() + i);
             const th = document.createElement('div');
             th.className = 'grid-header date-header';
             th.contentEditable = 'false';
-            // 计算每列的星期名称，根据 weekStartDay 决定顺序
             const weekday = (weekStartDay + i) % 7;
-            th.textContent = `${['日', '一', '二', '三', '四', '五', '六'][weekday]} ${date.getMonth() + 1}/${date.getDate()}`;
+            th.textContent = `${weekdayNamesArr[weekday]} ${date.getMonth() + 1}/${date.getDate()}`;
             grid.appendChild(th);
         }
 
@@ -282,7 +291,7 @@ export class HabitCalendarDialog {
         const habitHeader = document.createElement('div');
         habitHeader.className = 'grid-header habit-header';
         habitHeader.contentEditable = 'false';
-        habitHeader.textContent = '习惯';
+        habitHeader.textContent = i18n("habitColumnHeader");
         grid.appendChild(habitHeader);
 
         for (let day = 1; day <= daysInMonth; day++) {

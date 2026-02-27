@@ -85,7 +85,7 @@ export const DEFAULT_SETTINGS = {
     autoDetectDateTime: false, // 新增：是否自动识别日期时间
     removeDateAfterDetection: true, // 新增：识别日期后是否移除标题中的日期
     newDocNotebook: '', // 新增：新建文档的笔记本ID
-    newDocPath: '/{{now | date "2006-01-02"}}/', // 新增：新建文档的路径模板，支持sprig语法
+    newDocPath: '/{{now | date "2006/200601"}}/', // 新增：新建文档的路径模板，支持sprig语法
     groupDefaultHeadingLevel: 1, // 新增：新建标题分组的默认层级（1-6），默认为1级标题
     milestoneDefaultHeadingLevel: 2, // 新增：新建标题里程碑的默认层级（1-6），默认为2级标题
     defaultHeadingLevel: 3, // 新增：新建标题的默认层级（1-6），默认为3级标题
@@ -145,6 +145,7 @@ export const DEFAULT_SETTINGS = {
     calendarShowHoliday: true, // 是否显示节假日
     calendarShowPomodoro: true, // 是否显示番茄专注时间
     calendarHolidayIcsUrl: 'https://www.shuyz.com/githubfiles/china-holiday-calender/master/holidayCal.ics?token=cb429c2a-81a6-4c26-8f35-4f4bf0c84b2c&compStart=*&compEnd=*', // 节假日ICS URL
+    calendarMultiDaysCount: 3, // 多天视图默认显示天数
     // 数据迁移标记
     datatransfer: {
         bindblockAddAttr: false, // 是否已迁移绑定块的 custom-bind-reminders 属性
@@ -478,7 +479,7 @@ export default class ReminderPlugin extends Plugin {
         if (update || !this.subscriptionTasksCache[id]) {
             try {
                 // Subscribe/ is a relative directory in the plugin's data folder
-                const filePath = `data/storage/petal/siyuan-plugin-task-note-management/Subscribe/${id}.json`;
+                const filePath = `/data/storage/petal/siyuan-plugin-task-note-management/Subscribe/${id}.json`;
                 // loadData 不支持子目录，使用 getFile 读取
                 const response = await getFile(filePath);
 
@@ -924,7 +925,7 @@ export default class ReminderPlugin extends Plugin {
             dailyFocusGoal: settings.dailyFocusGoal,
             randomRestPopupWindow: settings.randomRestPopupWindow,
             pomodoroEndPopupWindow: settings.pomodoroEndPopupWindow,
-            pomodoroDockPosition: settings.pomodoroDockPosition
+            pomodoroDockPosition: settings.pomodoroDockPosition || 'top'
         };
     }
 
@@ -2302,21 +2303,62 @@ export default class ReminderPlugin extends Plugin {
     }
 
     private handleBlockMenu({ detail }) {
-        detail.menu.addItem({
-            iconHTML: "⏰",
-            label: detail.blockElements.length > 1 ? i18n("batchSetReminderBlocks", { count: detail.blockElements.length.toString() }) : i18n("setTimeReminder"),
-            click: async () => {
-                if (detail.blockElements && detail.blockElements.length > 0) {
-                    const blockIds = detail.blockElements
-                        .map(el => el.getAttribute("data-node-id"))
-                        .filter(id => id);
+        // 检查选中的块是否为列表块
+        const isListBlock = detail.blockElements && detail.blockElements.length === 1 &&
+            detail.blockElements[0].getAttribute("data-type") === "NodeList";
 
-                    if (blockIds.length > 0) {
-                        await this.handleMultipleBlocks(blockIds);
+        // 列表块同时显示"设置任务"和"批量设置任务"
+        if (isListBlock) {
+            const listBlockElement = detail.blockElements[0];
+            const listBlockId = listBlockElement.getAttribute("data-node-id");
+            // 从DOM中获取列表项数量（列表项的data-type为"NodeListItem"）
+            // 思源列表结构：列表块 > 子元素（直接是列表项div[data-type="NodeListItem"]）
+            const listItems = listBlockElement.querySelectorAll(':scope > [data-type="NodeListItem"]');
+            const listItemCount = listItems.length;
+
+            // 1. 设置任务（给列表块本身设置任务）
+            detail.menu.addItem({
+                iconHTML: "⏰",
+                label: i18n("setTimeReminder"),
+                click: () => {
+                    const blockId = listBlockElement.getAttribute("data-node-id");
+                    if (blockId) {
+                        this.handleMultipleBlocks([blockId]);
                     }
                 }
-            }
-        });
+            });
+
+            // 2. 批量设置任务（给所有列表项子块设置任务）
+            detail.menu.addItem({
+                iconHTML: "⏰",
+                label: i18n("batchSetReminderBlocks", { count: listItemCount.toString() }),
+                click: async () => {
+                    if (listBlockId) {
+                        const blockIds = await this.getListItemBlockIds(listBlockId);
+                        if (blockIds.length > 0) {
+                            this.handleMultipleBlocks(blockIds);
+                        }
+                    }
+                }
+            });
+        } else {
+            // 非列表块，按原有逻辑显示
+            detail.menu.addItem({
+                iconHTML: "⏰",
+                label: detail.blockElements.length > 1 ? i18n("batchSetReminderBlocks", { count: detail.blockElements.length.toString() }) : i18n("setTimeReminder"),
+                click: () => {
+                    if (detail.blockElements && detail.blockElements.length > 0) {
+                        const blockIds = detail.blockElements
+                            .map(el => el.getAttribute("data-node-id"))
+                            .filter(id => id);
+
+                        if (blockIds.length > 0) {
+                            this.handleMultipleBlocks(blockIds);
+                        }
+                    }
+                }
+            });
+        }
 
         // 添加查看绑定任务菜单项（仅当选中单个块且有custom-bind-reminders属性时显示）
         if (detail.blockElements && detail.blockElements.length === 1) {
@@ -2335,6 +2377,28 @@ export default class ReminderPlugin extends Plugin {
             }
         }
 
+    }
+
+    /**
+     * 获取列表块的所有列表项子块ID
+     * @param listBlockId 列表块ID
+     * @returns 列表项子块ID数组
+     */
+    private async getListItemBlockIds(listBlockId: string): Promise<string[]> {
+        try {
+            const { getChildBlocks } = await import("./api");
+            const childBlocks = await getChildBlocks(listBlockId);
+            if (childBlocks && Array.isArray(childBlocks)) {
+                // 过滤出列表项块（type为'i'表示列表项）
+                return childBlocks
+                    .filter(block => block.type === 'i')
+                    .map(block => block.id)
+                    .filter(id => id);
+            }
+        } catch (error) {
+            console.warn('获取列表项子块失败:', error);
+        }
+        return [];
     }
 
     private async handleMultipleBlocks(blockIds: string[]) {
@@ -4500,7 +4564,7 @@ export default class ReminderPlugin extends Plugin {
             if (!settings.icsSyncEnabled) return;
 
             // 检查reminder.json是否有新事件
-            const reminderPath = 'data/storage/petal/siyuan-plugin-task-note-management/reminder.json';
+            const reminderPath = '/data/storage/petal/siyuan-plugin-task-note-management/reminder.json';
             const stat = await getFileStat(reminderPath);
             const lastSync = settings.icsLastSyncAt ? new Date(settings.icsLastSyncAt).getTime() : 0;
             if (stat && stat.mtime <= lastSync) {
@@ -4575,7 +4639,7 @@ export default class ReminderPlugin extends Plugin {
             // 如果到了同步时间
             if (now >= lastSyncMs + intervalMs) {
                 console.log(`[Timer] Syncing ICS subscription: ${sub.name}`);
-                const result = await syncSubscription(sub);
+                const result = await syncSubscription(this, sub);
 
                 // 更新订阅状态信息
                 sub.lastSync = new Date().toISOString();

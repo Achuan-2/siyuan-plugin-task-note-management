@@ -1,4 +1,4 @@
-import { pushErrMsg, pushMsg, putFile, getFile } from '../api';
+import { pushErrMsg, pushMsg, putFile, getFile, removeFile } from '../api';
 import { parseIcsFile, isEventPast } from './icsImport';
 import { i18n } from "../pluginInstance";
 
@@ -15,6 +15,9 @@ export interface IcsSubscription {
     lastSyncStatus?: 'success' | 'error';
     lastSyncError?: string;
     tagIds?: string[];
+    showInSidebar?: boolean;
+    showInMatrix?: boolean;
+    showNoteInCalendar?: boolean;
     createdAt: string;
 }
 
@@ -23,7 +26,7 @@ export interface IcsSubscriptionData {
 }
 
 const SUBSCRIPTION_DATA_FILE = 'ics-subscriptions.json';
-const SUBSCRIBE_DIR = 'data/storage/petal/siyuan-plugin-task-note-management/Subscribe/';
+const SUBSCRIBE_DIR = '/data/storage/petal/siyuan-plugin-task-note-management/Subscribe/';
 
 /**
  * Get subscription file path
@@ -130,7 +133,12 @@ export async function saveSubscriptionTasks(plugin: any, subscriptionId: string,
  * @param projectId Optional project ID to filter by
  * @param force Whether to force reload data from disk/network
  */
-export async function getAllReminders(plugin: any, projectId?: string, force: boolean = false): Promise<any> {
+export async function getAllReminders(
+    plugin: any,
+    projectId?: string,
+    force: boolean = false,
+    filterType?: 'sidebar' | 'matrix' | 'none'
+): Promise<any> {
     try {
         // Load main reminders
         const mainReminders = (await plugin.loadReminderData(force)) || {};
@@ -159,6 +167,9 @@ export async function getAllReminders(plugin: any, projectId?: string, force: bo
 
         for (const subscription of subscriptions) {
             if (subscription.enabled) {
+                // 根据 context 过滤显示
+                if (filterType === 'sidebar' && !subscription.showInSidebar) continue;
+                if (filterType === 'matrix' && !subscription.showInMatrix) continue;
                 const subTasks = await loadSubscriptionTasks(plugin, subscription.id);
                 const updatedSubTasks: any = {};
                 let subTasksUpdated = false;
@@ -175,6 +186,7 @@ export async function getAllReminders(plugin: any, projectId?: string, force: bo
                             ...task,
                             isSubscribed: true,
                             subscriptionId: subscription.id,
+                            showNoteInCalendar: subscription.showNoteInCalendar,
                         };
                     } else {
                         // 非重复事件的处理逻辑（原有逻辑）
@@ -194,6 +206,7 @@ export async function getAllReminders(plugin: any, projectId?: string, force: bo
                             completed,
                             isSubscribed: true,
                             subscriptionId: subscription.id,
+                            showNoteInCalendar: subscription.showNoteInCalendar,
                         };
                     }
                 });
@@ -296,6 +309,10 @@ export async function syncSubscription(
     plugin: any,
     subscription: IcsSubscription
 ): Promise<{ success: boolean; error?: string; eventsCount?: number }> {
+    if (!subscription) {
+        console.error('syncSubscription: subscription is undefined');
+        return { success: false, error: 'Subscription is undefined' };
+    }
     try {
         // Fetch ICS content
         const icsContent = await fetchIcsContent(subscription.url);
@@ -316,6 +333,7 @@ export async function syncSubscription(
             tasks[id] = {
                 id,
                 ...event,
+                note: event.description,
                 // Apply subscription settings
                 projectId: subscription.projectId,
                 categoryId: subscription.categoryId,
@@ -326,6 +344,7 @@ export async function syncSubscription(
                 // Mark as subscribed (read-only)
                 subscriptionId: subscription.id,
                 isSubscribed: true,
+                showNoteInCalendar: subscription.showNoteInCalendar,
             };
         }
 
@@ -337,7 +356,7 @@ export async function syncSubscription(
 
         return { success: true, eventsCount: events.length };
     } catch (error) {
-        console.error('Failed to sync subscription:', subscription.name, error);
+        console.error('Failed to sync subscription:', subscription?.name || 'unknown', error);
         return {
             success: false,
             error: error.message || String(error),
@@ -414,7 +433,8 @@ export function getSyncIntervalMs(interval: IcsSubscription['syncInterval']): nu
 export async function removeSubscription(plugin: any, subscriptionId: string): Promise<void> {
     try {
         // Delete subscription tasks file
-        await saveSubscriptionTasks(plugin, subscriptionId, {});
+        const filePath = getSubscriptionFilePath(subscriptionId);
+        await removeFile(filePath);
 
         // Trigger update event
         window.dispatchEvent(new CustomEvent('reminderUpdated'));

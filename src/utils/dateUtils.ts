@@ -14,6 +14,14 @@ function formatDateString(date: Date): string {
     return `${year}-${month}-${day}`;
 }
 
+/**
+ * 获取当前的语言区域标识符（BCP 47格式，如 zh-CN, en-US）
+ */
+export function getLocaleTag(): string {
+    const lang = (window as any).siyuan?.config?.lang || 'zh_CN';
+    return lang.replace('_', '-');
+}
+
 function parseTimeToMinutes(value?: string | number): number {
     if (typeof value === 'number') {
         const h = Math.max(0, Math.min(23, Math.floor(value)));

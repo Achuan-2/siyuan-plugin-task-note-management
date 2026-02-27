@@ -4,7 +4,7 @@ import { autoDetectDateTimeFromTitle, getLocalDateTimeString } from "../utils/da
 import { getBlockByID, updateBindBlockAtrrs, addBlockProjectId } from "../api";
 import { getAllReminders, saveReminders } from "../utils/icsSubscription";
 import LoadingDialog from './LoadingDialog.svelte';
-import { Editor, rootCtx, defaultValueCtx, editorViewCtx } from "@milkdown/kit/core";
+import { Editor, rootCtx, defaultValueCtx, editorViewCtx, editorViewOptionsCtx } from "@milkdown/kit/core";
 import { commonmark } from "@milkdown/kit/preset/commonmark";
 import { gfm } from "@milkdown/kit/preset/gfm";
 import { history } from "@milkdown/kit/plugin/history";
@@ -52,6 +52,10 @@ export interface PasteTaskDialogConfig {
     isTempMode?: boolean;
     // 临时模式回调，参数为创建的任务数组
     onTasksCreated?: (tasks: any[]) => void;
+    // 默认统一设置日期（默认不勾选，除非提供为true）
+    defaultSetDate?: boolean;
+    // 统一设置日期的默认值（例如当前筛选的日期）
+    defaultDateStr?: string;
 }
 
 export class PasteTaskDialog {
@@ -141,11 +145,11 @@ export class PasteTaskDialog {
                 <div class="b3-dialog__content" style="padding: 16px;">
                     <div style="margin-bottom: 12px;">
                         <label style="display: block; margin-bottom: 4px; font-size: 12px; color: var(--b3-theme-on-surface); opacity: 0.8;">${i18n('linkUrl') || '链接地址'}:</label>
-                        <textarea id="linkUrl" class="b3-text-field" style="width: 100%; resize: vertical;" rows="2" placeholder="https://...">${mark.attrs.href}</textarea>
+                        <textarea id="linkUrl" class="b3-text-field" style="width: 100%; resize: vertical;" rows="2" placeholder="https://..." spellcheck="false">${mark.attrs.href}</textarea>
                     </div>
                     <div style="margin-bottom: 12px;">
                         <label style="display: block; margin-bottom: 4px; font-size: 12px; color: var(--b3-theme-on-surface); opacity: 0.8;">${i18n('linkTitle') || '显示文本'}:</label>
-                        <textarea id="linkTitle" class="b3-text-field" style="width: 100%; resize: vertical;" rows="2" placeholder="${i18n('linkTitlePlaceholder') || '输入链接文本'}">${currentText}</textarea>
+                        <textarea id="linkTitle" class="b3-text-field" style="width: 100%; resize: vertical;" rows="2" placeholder="${i18n('linkTitlePlaceholder') || '输入链接文本'}" spellcheck="false">${currentText}</textarea>
                     </div>
                 </div>
                 <div class="b3-dialog__action">
@@ -210,10 +214,10 @@ export class PasteTaskDialog {
                 <div class="b3-dialog__content">
                     <p>${i18n("pasteInstructions") || "粘贴Markdown列表或多行文本，每行将创建一个任务。支持多层级列表自动创建父子任务。"}</p>
                     <p style="font-size: 12px; color: var(--b3-theme-on-surface); opacity: 0.8; margin-bottom: 4px; word-break: break-all;">
-                        ${i18n("supportPrioritySyntax") || "支持语法："}<code>@priority=high&startDate=2025-08-12&endDate=2025-08-30&reminderTimes=[{"time":"2026-02-24T12:33","note":"备注1"}]</code>
+                        ${i18n("supportPrioritySyntaxDemo") || "支持语法：<code>@priority=high&startDate=2025-08-12&endDate=2025-08-30&reminderTimes=[{\"time\":\"2026-02-24T12:33\",\"note\":\"备注1\"}]</code>"}
                     </p>
                     <p style="font-size: 12px; color: var(--b3-theme-on-surface); opacity: 0.8; margin-bottom: 4px;">
-                        ${i18n("supportBlockLink") || "支持绑定块："}<code>[任务标题](siyuan://blocks/块ID)</code> 或 <code>((块ID '任务标题'))</code>
+                        ${i18n("supportBlockLinkDemo") || "支持绑定块：<code>[任务标题](siyuan://blocks/块ID)</code> 或 <code>((块ID '任务标题'))</code>"}
                     </p>
                     <p style="font-size: 12px; color: var(--b3-theme-on-surface); opacity: 0.8; margin-bottom: 8px;">
                         ${i18n("supportHierarchy") || "支持多层级：使用缩进或多个<code>-</code>符号创建父子任务关系"}
@@ -231,6 +235,14 @@ export class PasteTaskDialog {
                             <span class="b3-checkbox__graphic"></span>
                             <span class="b3-checkbox__label">${i18n("removeDateAfterDetection")}</span>
                         </label>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <label class="b3-checkbox" style="display: flex; align-items: center;">
+                                <input id="unifiedDateCheckbox" type="checkbox" class="b3-switch" ${this.config.defaultSetDate ? 'checked' : ''}>
+                                <span class="b3-checkbox__graphic"></span>
+                                <span class="b3-checkbox__label">${i18n("unifiedSetDate") || "统一设置日期"}</span>
+                            </label>
+                            <input id="unifiedDateInput" type="date" class="b3-text-field" value="${this.config.defaultDateStr || ''}" style="${this.config.defaultSetDate ? '' : 'display: none;'} margin-left: 8px;">
+                        </div>
                     </div>
                 </div>
                 <div class="b3-dialog__action">
@@ -255,6 +267,14 @@ export class PasteTaskDialog {
         const groupSelect = dialog.element.querySelector('#pasteTaskGroup') as HTMLSelectElement;
         const milestoneSelect = dialog.element.querySelector('#pasteTaskMilestone') as HTMLSelectElement;
         const milestoneContainer = dialog.element.querySelector('#pasteTaskMilestoneContainer') as HTMLElement;
+        const unifiedDateCheckbox = dialog.element.querySelector('#unifiedDateCheckbox') as HTMLInputElement;
+        const unifiedDateInput = dialog.element.querySelector('#unifiedDateInput') as HTMLInputElement;
+
+        if (unifiedDateCheckbox && unifiedDateInput) {
+            unifiedDateCheckbox.addEventListener('change', () => {
+                unifiedDateInput.style.display = unifiedDateCheckbox.checked ? '' : 'none';
+            });
+        }
 
         // 监听分组变更，更新里程碑选项
         if (groupSelect && milestoneSelect) {
@@ -312,6 +332,13 @@ export class PasteTaskDialog {
                 .config((ctx) => {
                     ctx.set(rootCtx, taskListContainer);
                     ctx.set(defaultValueCtx, "");
+                    ctx.update(editorViewOptionsCtx, (prev) => ({
+                        ...prev,
+                        attributes: {
+                            ...prev.attributes,
+                            spellcheck: "false",
+                        },
+                    }));
                     ctx.get(listenerCtx).markdownUpdated((_ctx, markdown) => {
                         this.taskListContent = markdown;
                     });
@@ -324,29 +351,33 @@ export class PasteTaskDialog {
                                 handlePaste: (view, event) => {
                                     let text = event.clipboardData?.getData('text/plain');
                                     if (text) {
-                                        // 移除首尾多余的换行符（兼容 Windows/Unix），保留空格以维持缩进层级
-                                        text = text.replace(/^[\r\n]+|[\r\n]+$/g, '');
+                                        // 统一换行符并将\r替换为\n，同时移除首尾多余的空行
+                                        text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+                                        text = text.replace(/^\n+|\n+$/g, '');
                                         if (!text) return false;
 
-                                        const parser = ctx.get(parserCtx);
-                                        const node = parser(text);
-                                        if (node) {
-                                            const { tr, doc } = view.state;
-                                            // 如果文档当前几乎为空（只有一个空的段落），则替换整个文档内容
-                                            const isEmpty = doc.childCount === 1 &&
-                                                doc.firstChild?.type.name === 'paragraph' &&
-                                                doc.firstChild.content.size === 0;
+                                        const { tr, doc } = view.state;
+                                        const isEmpty = doc.childCount === 1 &&
+                                            doc.firstChild?.type.name === 'paragraph' &&
+                                            doc.firstChild.content.size === 0;
 
-                                            // 获取节点内容 fragment
-                                            const content = node.type.name === 'doc' ? node.content : node;
-
-                                            if (isEmpty) {
+                                        if (isEmpty) {
+                                            const parser = ctx.get(parserCtx);
+                                            const node = parser(text);
+                                            if (node) {
+                                                const content = node.type.name === 'doc' ? node.content : node;
                                                 // 彻底替换初始的空段落
                                                 view.dispatch(tr.replaceWith(0, doc.content.size, content).scrollIntoView());
-                                            } else {
-                                                view.dispatch(tr.replaceSelectionWith(node).scrollIntoView());
+                                                return true;
                                             }
-                                            return true;
+                                        } else {
+                                            // 非空文档下，如果不含换行符，证明是行内粘贴，直接 insertText 以避免被切分为新段落
+                                            if (!text.includes('\n')) {
+                                                view.dispatch(tr.insertText(text).scrollIntoView());
+                                                return true;
+                                            }
+                                            // 如果有多行，则交由编辑器原生的剪贴板插件进行切片（Slice）合并，维持正确的嵌套和行内继承
+                                            return false;
                                         }
                                     }
                                     return false;
@@ -491,11 +522,26 @@ export class PasteTaskDialog {
             createBtn.innerHTML = i18n('creating') || '创建中...';
 
             // 显示加载对话框
-            this.showLoadingDialog("创建任务中...");
+            this.showLoadingDialog(i18n('creatingTask') || "创建任务中...");
 
             const autoDetect = autoDetectCheckbox.checked;
             const removeDate = removeDateCheckbox.checked;
             const hierarchicalTasks = this.parseHierarchicalTaskList(text, autoDetect, removeDate);
+
+            const useUnifiedDate = unifiedDateCheckbox?.checked;
+            const unifiedDateVal = unifiedDateInput?.value;
+
+            const applyUnifiedDate = (tasks: HierarchicalTask[]) => {
+                for (const task of tasks) {
+                    if (useUnifiedDate && unifiedDateVal) {
+                        if (!task.startDate && !task.endDate) {
+                            task.startDate = unifiedDateVal;
+                        }
+                    }
+                    if (task.children) applyUnifiedDate(task.children);
+                }
+            };
+            applyUnifiedDate(hierarchicalTasks);
 
             // 获取用户选择的状态和分组
             let selectedStatus = this.config.defaultStatus;
@@ -573,7 +619,7 @@ export class PasteTaskDialog {
             this.loadingDialog.destroy();
         }
         this.loadingDialog = new Dialog({
-            title: "Processing",
+            title: i18n("processing") || "Processing",
             content: `<div id="loadingDialogContent"></div>`,
             width: "350px",
             height: "230px",
@@ -946,10 +992,10 @@ export class PasteTaskDialog {
 
         // 状态名称映射
         const statusNameMap: { [key: string]: string } = {
-            'doing': '进行中',
-            'long_term': '长期',
-            'short_term': '短期',
-            'completed': '已完成'
+            'doing': i18n('doingTasks') || '进行中',
+            'long_term': i18n('longTerm') || '长期',
+            'short_term': i18n('shortTerm') || '短期',
+            'completed': i18n('completed') || '已完成'
         };
 
         // 构建状态选项（排除已完成状态）
@@ -965,9 +1011,9 @@ export class PasteTaskDialog {
         // 如果没有配置状态，使用默认选项
         if (kanbanStatuses.length === 0) {
             statusOptionsHtml = `
-                <option value="short_term" ${defaultStatus === 'short_term' ? 'selected' : ''}>短期</option>
-                <option value="long_term" ${defaultStatus === 'long_term' ? 'selected' : ''}>长期</option>
-                <option value="doing" ${defaultStatus === 'doing' ? 'selected' : ''}>进行中</option>
+                <option value="short_term" ${defaultStatus === 'short_term' ? 'selected' : ''}>${i18n('shortTerm') || '短期'}</option>
+                <option value="long_term" ${defaultStatus === 'long_term' ? 'selected' : ''}>${i18n('longTerm') || '长期'}</option>
+                <option value="doing" ${defaultStatus === 'doing' ? 'selected' : ''}>${i18n('doingTasks') || '进行中'}</option>
             `;
         }
 

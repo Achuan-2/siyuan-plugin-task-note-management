@@ -615,8 +615,6 @@ export async function putFile(path: string, isDir: boolean, file: any) {
     let form = new FormData();
     form.append('path', path);
     form.append('isDir', isDir.toString());
-    // Copyright (c) 2023, terwer.
-    // https://github.com/terwer/siyuan-plugin-importer/blob/v1.4.1/src/api/kernel-api.ts
     form.append('modTime', Date.now().toString());
     form.append('file', file);
     let url = '/api/file/putFile';
@@ -625,10 +623,9 @@ export async function putFile(path: string, isDir: boolean, file: any) {
 
 export async function removeFile(path: string) {
     let data = {
-        path: path
+        path: path // "/data/20210808180117-6v0mkxr/20200923234011-ieuun1p.sy"
     }
     let url = '/api/file/removeFile';
-    // "path": "/data/20210808180117-6v0mkxr/20200923234011-ieuun1p.sy"
     return request(url, data);
 }
 
