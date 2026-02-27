@@ -67,17 +67,30 @@
     function handleDragOver(e: DragEvent, index: number) {
         e.preventDefault();
         if (draggedIndex === null) return;
+
         if (draggedIndex === index) {
             dropIndex = null;
             return;
+        }
+
+        if (e.dataTransfer) {
+            e.dataTransfer.dropEffect = 'move';
         }
 
         const target = e.currentTarget as HTMLElement;
         const rect = target.getBoundingClientRect();
         const midY = rect.top + rect.height / 2;
 
+        const newPos = e.clientY < midY ? 'above' : 'below';
+        if (dropIndex !== index || dropPosition !== newPos) {
+            dropIndex = index;
+            dropPosition = newPos;
+        }
+    }
+
+    function handleDragEnter(e: DragEvent, index: number) {
+        if (draggedIndex === null || draggedIndex === index) return;
         dropIndex = index;
-        dropPosition = e.clientY < midY ? 'above' : 'below';
     }
 
     async function handleDrop(e: DragEvent, index: number) {
@@ -413,13 +426,14 @@
             {i18n('noSubscriptions')}
         </div>
     {:else}
-        <div class="subscription-list">
+        <div class="subscription-list" class:is-dragging={draggedIndex !== null}>
             {#each subscriptions as sub, i (sub.id)}
                 <div
                     class="subscription-card b3-card"
                     draggable="true"
                     on:dragstart={() => handleDragStart(i)}
                     on:dragover={e => handleDragOver(e, i)}
+                    on:dragenter={e => handleDragEnter(e, i)}
                     on:drop={e => handleDrop(e, i)}
                     on:dragend={handleDragEnd}
                     class:dragging={draggedIndex === i}
@@ -562,6 +576,7 @@
         margin: 0px;
         position: relative;
         cursor: grab;
+        overflow: visible !important;
 
         &:active {
             cursor: grabbing;
@@ -586,8 +601,9 @@
                 height: 4px;
                 background-color: var(--b3-theme-primary);
                 border-radius: 2px;
-                z-index: 10;
-                animation: pulse 1.5s infinite;
+                z-index: 100;
+                animation: pulse 1s infinite;
+                box-shadow: 0 0 4px var(--b3-theme-primary);
             }
         }
 
@@ -601,8 +617,9 @@
                 height: 4px;
                 background-color: var(--b3-theme-primary);
                 border-radius: 2px;
-                z-index: 10;
-                animation: pulse 1.5s infinite;
+                z-index: 100;
+                animation: pulse 1s infinite;
+                box-shadow: 0 0 4px var(--b3-theme-primary);
             }
         }
     }
