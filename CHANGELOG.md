@@ -9,6 +9,17 @@
 - 🐛 任务侧栏：修复侧栏任务拖拽排序无法保存
 - 📝 vip：学生优惠需要用教育邮箱发送学信网证明邮件
 
+---
+
+- 🎨 Block Menu: Right-click menu for list blocks now supports batch conversion of list items into tasks
+- 🎨 Subscribed Calendars: In calendar view, sorting now prioritizes subscribed calendars and displays them at the top
+- 🎨 Subscribed Calendars: Added option to control display in the four quadrants and task sidebar
+- 🎨 Calendar View: Color coding by project and category; border color now reflects priority color. If no priority is set, color is based on project or category
+- 🎨 New Bound Block: Modified default path for new document creation
+- 🐛 Subscribed Calendars: Fixed error in scheduled updates for subscribed calendars
+- 🐛 Task Sidebar: Fixed issue where drag-and-drop sorting in the sidebar tasks could not be saved
+- 📝 VIP: Student discounts require sending an email with a verification from the China Higher Education Student Information (CHSI) using an educational email address
+
 ## v6.1.0 / 20260227
 - 🌐 完善i18n
 - 🎨 番茄钟：吸附到屏幕边缘emoji🧲改为⬅️ ➡️ ⬆️ ⬇️
