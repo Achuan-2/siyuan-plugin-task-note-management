@@ -161,11 +161,11 @@
                         </div>
                         <div style="display: flex; gap: 24px;">
                             <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                <input type="checkbox" class="b3-checkbox" id="sub-show-sidebar" ${subscription?.showInSidebar !== false ? 'checked' : ''}>
+                                <input type="checkbox" class="b3-checkbox" id="sub-show-sidebar" ${subscription?.showInSidebar === true ? 'checked' : ''}>
                                 ${i18n('subscriptionShowInSidebar')}
                             </label>
                             <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                <input type="checkbox" class="b3-checkbox" id="sub-show-matrix" ${subscription?.showInMatrix !== false ? 'checked' : ''}>
+                                <input type="checkbox" class="b3-checkbox" id="sub-show-matrix" ${subscription?.showInMatrix === true ? 'checked' : ''}>
                                 ${i18n('subscriptionShowInMatrix')}
                             </label>
                         </div>
