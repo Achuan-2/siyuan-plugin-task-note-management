@@ -1021,7 +1021,7 @@
   "subscriptionUrl": "ICS URL",
   "subscriptionUrlPlaceholder": "Enter ICS calendar subscription URL",
   "subscriptionSyncInterval": "Sync Frequency",
-  "subscriptionProject": "Project *",
+  "subscriptionProject": "Project",
   "subscriptionShowInSidebar": "Show in Task Sidebar",
   "subscriptionShowInMatrix": "Show in Eisenhower Matrix",
   "subscriptionCategory": "Default Category",

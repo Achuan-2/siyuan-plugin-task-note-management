@@ -1067,7 +1067,7 @@
   "subscriptionUrl": "ICS链接",
   "subscriptionUrlPlaceholder": "输入ICS日历订阅链接",
   "subscriptionSyncInterval": "同步频率",
-  "subscriptionProject": "所属项目 *",
+  "subscriptionProject": "所属项目",
   "subscriptionShowInSidebar": "在任务管理侧栏显示",
   "subscriptionShowInMatrix": "在四象限中显示",
   "subscriptionCategory": "默认分类",
