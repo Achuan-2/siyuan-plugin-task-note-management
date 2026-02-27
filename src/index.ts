@@ -4576,7 +4576,7 @@ export default class ReminderPlugin extends Plugin {
             // 如果到了同步时间
             if (now >= lastSyncMs + intervalMs) {
                 console.log(`[Timer] Syncing ICS subscription: ${sub.name}`);
-                const result = await syncSubscription(sub);
+                const result = await syncSubscription(this, sub);
 
                 // 更新订阅状态信息
                 sub.lastSync = new Date().toISOString();

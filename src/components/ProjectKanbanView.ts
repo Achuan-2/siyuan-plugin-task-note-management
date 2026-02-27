@@ -16682,7 +16682,7 @@ export class ProjectKanbanView {
      * 批量更新任务属性 (用于拖拽)
      */
     private async batchUpdateTasks(taskIds: string[], updates: { kanbanStatus?: string, customGroupId?: string | null, tagIds?: string[], milestoneId?: string | null, projectId?: string | null, priority?: string }) {
-        console.log('[Kanban] batchUpdateTasks called:', { taskIds, updates });
+        // console.log('[Kanban] batchUpdateTasks called:', { taskIds, updates });
         try {
             const reminderData = await this.getReminders();
             // 如果尝试修改状态（尤其是将任务移出 doing/completed），在执行前先检查是否有未完成且日期为今天或已过的任务。
@@ -16775,7 +16775,7 @@ export class ProjectKanbanView {
                     continue;
                 }
 
-                console.log('[Kanban] Processing task update:', { taskId, title: taskInDb.title, dbId });
+                // console.log('[Kanban] Processing task update:', { taskId, title: taskInDb.title, dbId });
 
                 if (uiTask.isRepeatInstance && uiTask.originalId) {
                     const instanceDate = uiTask.date;
@@ -17029,7 +17029,7 @@ export class ProjectKanbanView {
                         }
 
                         if (itemChanged) {
-                            console.log('[Kanban] Task updated in DB cache:', { taskId: item.id, itemChanged, finalProject: item.projectId, finalStatus: item.kanbanStatus });
+                            // console.log('[Kanban] Task updated in DB cache:', { taskId: item.id, itemChanged, finalProject: item.projectId, finalStatus: item.kanbanStatus });
                             hasChanges = true;
                             updatedCount++;
                             if (item.blockId || item.docId) {

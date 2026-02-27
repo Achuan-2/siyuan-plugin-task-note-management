@@ -306,6 +306,10 @@ export async function syncSubscription(
     plugin: any,
     subscription: IcsSubscription
 ): Promise<{ success: boolean; error?: string; eventsCount?: number }> {
+    if (!subscription) {
+        console.error('syncSubscription: subscription is undefined');
+        return { success: false, error: 'Subscription is undefined' };
+    }
     try {
         // Fetch ICS content
         const icsContent = await fetchIcsContent(subscription.url);
@@ -347,7 +351,7 @@ export async function syncSubscription(
 
         return { success: true, eventsCount: events.length };
     } catch (error) {
-        console.error('Failed to sync subscription:', subscription.name, error);
+        console.error('Failed to sync subscription:', subscription?.name || 'unknown', error);
         return {
             success: false,
             error: error.message || String(error),
