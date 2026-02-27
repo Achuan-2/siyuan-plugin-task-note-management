@@ -1,7 +1,7 @@
 import { Plugin } from "siyuan";
 import { getFile, removeFile } from "../api";
 
-const CALENDAR_CONFIG_FILE = 'data/storage/petal/siyuan-plugin-task-note-management/calendar-config.json';
+const CALENDAR_CONFIG_FILE = '/data/storage/petal/siyuan-plugin-task-note-management/calendar-config.json';
 
 export interface CalendarConfig {
     colorBy: 'category' | 'priority' | 'project';
@@ -126,6 +126,8 @@ export class CalendarConfigManager {
                 showRepeatTasks: settings.calendarShowRepeatTasks !== false, // 默认为 true
                 repeatInstanceLimit: settings.calendarRepeatInstanceLimit !== undefined ? settings.calendarRepeatInstanceLimit : -1, // 默认为 -1
                 showHiddenTasks: settings.calendarShowHiddenTasks === true, // 默认为 false
+                showCompletedTaskTime: settings.calendarShowCompletedTaskTime !== false, // 默认为 true
+                showCompletedTaskTimeOnlyWithoutDate: settings.calendarShowCompletedTaskTimeOnlyWithoutDate === true, // 默认为 false
                 multiDaysCount: settings.calendarMultiDaysCount !== undefined ? settings.calendarMultiDaysCount : 3 // 默认为3天
             };
         } catch (error) {
@@ -143,6 +145,8 @@ export class CalendarConfigManager {
                 showRepeatTasks: true,
                 repeatInstanceLimit: -1,
                 showHiddenTasks: false,
+                showCompletedTaskTime: true,
+                showCompletedTaskTimeOnlyWithoutDate: false,
                 multiDaysCount: 3
             };
             try {

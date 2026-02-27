@@ -821,7 +821,7 @@
                             const confirmed = confirm(i18n('confirmDeletePluginData'));
                             if (confirmed) {
                                 const dataDir =
-                                    'data/storage/petal/siyuan-plugin-task-note-management/';
+                                    '/data/storage/petal/siyuan-plugin-task-note-management/';
                                 const files = [
                                     SETTINGS_FILE,
                                     PROJECT_DATA_FILE,
@@ -1403,7 +1403,7 @@
         // 加载项目和标签数据
         const { ProjectManager } = await import('./utils/projectManager');
         const projectManager = ProjectManager.getInstance(plugin);
-        await projectManager.loadProjects();
+        await projectManager.initialize();
         const groupedProjects = projectManager.getProjectsGroupedByStatus();
 
         const dialog = new Dialog({
@@ -1617,7 +1617,7 @@
                 // 监听项目创建成功事件
                 const handleProjectCreated = async (event: CustomEvent) => {
                     // 重新加载项目列表
-                    await projectManager.loadProjects();
+                    await projectManager.initialize();
                     const groupedProjects = projectManager.getProjectsGroupedByStatus();
 
                     // 清空并重新填充下拉列表
@@ -1692,7 +1692,7 @@
         } = await import('./utils/icsSubscription');
         const { ProjectManager } = await import('./utils/projectManager');
         const projectManager = ProjectManager.getInstance(plugin);
-        await projectManager.loadProjects();
+        await projectManager.initialize();
         const groupedProjects = projectManager.getProjectsGroupedByStatus();
 
         const { CategoryManager } = await import('./utils/categoryManager');
@@ -1921,7 +1921,7 @@
                     await projectDialog.show();
 
                     const handleProjectCreated = async (event: CustomEvent) => {
-                        await projectManager.loadProjects();
+                        await projectManager.initialize();
                         const groupedProjects = projectManager.getProjectsGroupedByStatus();
 
                         projectSelect.innerHTML = `<option value="">${i18n('pleaseSelectProject')}</option>`;

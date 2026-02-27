@@ -25,7 +25,7 @@ export interface IcsSubscriptionData {
 }
 
 const SUBSCRIPTION_DATA_FILE = 'ics-subscriptions.json';
-const SUBSCRIBE_DIR = 'data/storage/petal/siyuan-plugin-task-note-management/Subscribe/';
+const SUBSCRIBE_DIR = '/data/storage/petal/siyuan-plugin-task-note-management/Subscribe/';
 
 /**
  * Get subscription file path
@@ -136,7 +136,7 @@ export async function getAllReminders(
     plugin: any,
     projectId?: string,
     force: boolean = false,
-    filterType?: 'sidebar' | 'matrix' |'none' 
+    filterType?: 'sidebar' | 'matrix' | 'none'
 ): Promise<any> {
     try {
         // Load main reminders

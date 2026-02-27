@@ -1021,7 +1021,7 @@ export class TaskStatsView {
 
     private async readCategoryData(): Promise<any[]> {
         try {
-            const content = await getFile('data/storage/petal/siyuan-plugin-task-note-management/categories.json');
+            const content = await getFile('/data/storage/petal/siyuan-plugin-task-note-management/categories.json');
             if (!content || content?.code === 404) {
                 return [];
             }

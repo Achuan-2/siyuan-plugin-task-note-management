@@ -479,7 +479,7 @@ export default class ReminderPlugin extends Plugin {
         if (update || !this.subscriptionTasksCache[id]) {
             try {
                 // Subscribe/ is a relative directory in the plugin's data folder
-                const filePath = `data/storage/petal/siyuan-plugin-task-note-management/Subscribe/${id}.json`;
+                const filePath = `/data/storage/petal/siyuan-plugin-task-note-management/Subscribe/${id}.json`;
                 // loadData 不支持子目录，使用 getFile 读取
                 const response = await getFile(filePath);
 
@@ -4501,7 +4501,7 @@ export default class ReminderPlugin extends Plugin {
             if (!settings.icsSyncEnabled) return;
 
             // 检查reminder.json是否有新事件
-            const reminderPath = 'data/storage/petal/siyuan-plugin-task-note-management/reminder.json';
+            const reminderPath = '/data/storage/petal/siyuan-plugin-task-note-management/reminder.json';
             const stat = await getFileStat(reminderPath);
             const lastSync = settings.icsLastSyncAt ? new Date(settings.icsLastSyncAt).getTime() : 0;
             if (stat && stat.mtime <= lastSync) {

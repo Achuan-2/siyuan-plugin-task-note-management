@@ -1309,8 +1309,8 @@ export class QuickReminderDialog {
     }
 
     public async show() {
-        // 初始化分类管理器
         await this.categoryManager.initialize();
+        await this.projectManager.initialize();
 
         // 如果未通过构造器显式指定 autoDetectDateTime，则从插件设置中读取（如果有传入 plugin）
         if (this.autoDetectDateTime === undefined) {
