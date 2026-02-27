@@ -397,13 +397,14 @@
                         5: i18n('friday'),
                         6: i18n('saturday'),
                     },
-                },                
+                },
                 {
                     key: 'calendarMultiDaysCount',
                     value: settings.calendarMultiDaysCount ?? 3,
                     type: 'number',
                     title: i18n('calendarMultiDaysCount') || '多天视图天数',
-                    description: i18n('calendarMultiDaysCountDesc') || '设置多天视图显示的天数，默认为3天',
+                    description:
+                        i18n('calendarMultiDaysCountDesc') || '设置多天视图显示的天数，默认为3天',
                 },
                 {
                     key: 'calendarShowLunar',
@@ -1883,7 +1884,16 @@
                                     ${categories.map(c => `<option value="${c.id}" ${subscription?.categoryId === c.id ? 'selected' : ''}>${c.name}</option>`).join('')}
                                 </select>
                             </div>
-
+                            <div style="display: flex; gap: 24px;">
+                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                    <input type="checkbox" class="b3-checkbox" id="sub-show-sidebar" ${subscription?.showInSidebar === true ? 'checked' : ''}>
+                                    ${i18n('subscriptionShowInSidebar')}
+                                </label>
+                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                    <input type="checkbox" class="b3-checkbox" id="sub-show-matrix" ${subscription?.showInMatrix === true ? 'checked' : ''}>
+                                    ${i18n('subscriptionShowInMatrix')}
+                                </label>
+                            </div>
                         </div>
                         <div class="b3-dialog__action" style="margin-top: 16px;">
                             <button class="b3-button b3-button--cancel">${i18n('cancel')}</button>
@@ -1972,6 +1982,12 @@
                 const categoryId = (
                     editDialog.element.querySelector('#sub-category') as HTMLSelectElement
                 ).value;
+                const showInSidebar = (
+                    editDialog.element.querySelector('#sub-show-sidebar') as HTMLInputElement
+                ).checked;
+                const showInMatrix = (
+                    editDialog.element.querySelector('#sub-show-matrix') as HTMLInputElement
+                ).checked;
                 const tagIds: string[] = [];
 
                 if (!name) {
@@ -1995,6 +2011,8 @@
                     projectId,
                     priority,
                     categoryId,
+                    showInSidebar,
+                    showInMatrix,
                     tagIds,
                     enabled: true,
                     createdAt: subscription?.createdAt || new Date().toISOString(),

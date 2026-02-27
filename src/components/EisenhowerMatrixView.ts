@@ -226,7 +226,7 @@ export class EisenhowerMatrixView {
 
     private async loadTasks(force: boolean = false) {
         try {
-            const reminderData = await getAllReminders(this.plugin, undefined, force);
+            const reminderData = await getAllReminders(this.plugin, undefined, force, 'matrix');
             const today = getLogicalDateString();
             this.allTasks = [];
 
@@ -3369,7 +3369,7 @@ export class EisenhowerMatrixView {
 
             // 注意：这里需要根据实际的 ProjectManager API 调整
             // const project = await this.projectManager.createProject(projectName);
-                    showMessage(i18n('featureNotImplemented'));
+            showMessage(i18n('featureNotImplemented'));
             return;
         } catch (error) {
             console.error('创建项目并分配失败:', error);

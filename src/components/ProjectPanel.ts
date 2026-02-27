@@ -506,7 +506,7 @@ export class ProjectPanel {
 
             // 预先读取提醒数据缓存，用于计算每个项目的任务计数
             try {
-                this.reminderDataCache = await getAllReminders(this.plugin);
+                this.reminderDataCache = await getAllReminders(this.plugin, undefined, false);
             } catch (err) {
                 console.warn('读取提醒数据失败，计数将异步回退：', err);
                 this.reminderDataCache = null;

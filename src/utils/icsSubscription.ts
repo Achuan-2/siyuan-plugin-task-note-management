@@ -15,6 +15,8 @@ export interface IcsSubscription {
     lastSyncStatus?: 'success' | 'error';
     lastSyncError?: string;
     tagIds?: string[];
+    showInSidebar?: boolean;
+    showInMatrix?: boolean;
     createdAt: string;
 }
 
@@ -130,7 +132,12 @@ export async function saveSubscriptionTasks(plugin: any, subscriptionId: string,
  * @param projectId Optional project ID to filter by
  * @param force Whether to force reload data from disk/network
  */
-export async function getAllReminders(plugin: any, projectId?: string, force: boolean = false): Promise<any> {
+export async function getAllReminders(
+    plugin: any,
+    projectId?: string,
+    force: boolean = false,
+    filterType?: 'sidebar' | 'matrix' |'none' 
+): Promise<any> {
     try {
         // Load main reminders
         const mainReminders = (await plugin.loadReminderData(force)) || {};
@@ -159,6 +166,9 @@ export async function getAllReminders(plugin: any, projectId?: string, force: bo
 
         for (const subscription of subscriptions) {
             if (subscription.enabled) {
+                // 根据 context 过滤显示
+                if (filterType === 'sidebar' && !subscription.showInSidebar) continue;
+                if (filterType === 'matrix' && !subscription.showInMatrix) continue;
                 const subTasks = await loadSubscriptionTasks(plugin, subscription.id);
                 const updatedSubTasks: any = {};
                 let subTasksUpdated = false;
