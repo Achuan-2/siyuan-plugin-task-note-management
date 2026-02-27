@@ -378,10 +378,10 @@ export function mergeImportedEvents(
         });
 
         if (existingId) {
-            // 更新现有事件
             merged[existingId] = {
                 ...merged[existingId],
                 ...event,
+                note: event.description || merged[existingId].note, // Prefer ICS description, fallback to existing note
                 // 应用批量设置
                 projectId: options.projectId || merged[existingId].projectId,
                 categoryId: options.categoryId || merged[existingId].categoryId,
@@ -390,10 +390,10 @@ export function mergeImportedEvents(
             };
             updatedCount++;
         } else {
-            // 添加新事件
             merged[id] = {
                 id,
                 ...event,
+                note: event.description,
                 // 应用批量设置
                 projectId: options.projectId,
                 categoryId: options.categoryId,

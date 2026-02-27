@@ -330,6 +330,7 @@ export async function syncSubscription(
             tasks[id] = {
                 id,
                 ...event,
+                note: event.description,
                 // Apply subscription settings
                 projectId: subscription.projectId,
                 categoryId: subscription.categoryId,
