@@ -85,7 +85,7 @@ export const DEFAULT_SETTINGS = {
     autoDetectDateTime: false, // 新增：是否自动识别日期时间
     removeDateAfterDetection: true, // 新增：识别日期后是否移除标题中的日期
     newDocNotebook: '', // 新增：新建文档的笔记本ID
-    newDocPath: '/{{now | date "2006-01-02"}}/', // 新增：新建文档的路径模板，支持sprig语法
+    newDocPath: '/{{now | date "2006/200601"}}/', // 新增：新建文档的路径模板，支持sprig语法
     groupDefaultHeadingLevel: 1, // 新增：新建标题分组的默认层级（1-6），默认为1级标题
     milestoneDefaultHeadingLevel: 2, // 新增：新建标题里程碑的默认层级（1-6），默认为2级标题
     defaultHeadingLevel: 3, // 新增：新建标题的默认层级（1-6），默认为3级标题
