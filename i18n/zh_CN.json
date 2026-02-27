@@ -1081,7 +1081,7 @@
   "subscriptionCreated": "订阅已创建",
   "subscriptionUpdated": "订阅已更新",
   "subscriptionDeleted": "订阅已删除",
-  "confirmDeleteSubscription": "确定要删除订阅\"${name}\"吗？",
+  "confirmDeleteSubscription": "确定要删除订阅${name}吗？",
   "deleteSubscriptionTasks": "同时删除订阅的任务",
   "subscriptionTasksDeleted": "已删除订阅的 ${count} 个任务",
   "syncNow": "立即同步",

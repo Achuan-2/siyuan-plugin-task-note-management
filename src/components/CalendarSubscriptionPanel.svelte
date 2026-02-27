@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import { Dialog } from 'siyuan';
+    import { Dialog, confirm } from 'siyuan';
     import { i18n } from '../pluginInstance';
     import { pushMsg, pushErrMsg } from '../api';
 
@@ -60,13 +60,17 @@
 
     async function handleDelete(sub: any) {
         const { removeSubscription, saveSubscriptions } = await import('../utils/icsSubscription');
-        if (confirm(i18n('confirmDeleteSubscription').replace('${name}', sub.name))) {
-            await removeSubscription(plugin, sub.id);
-            delete data.subscriptions[sub.id];
-            await saveSubscriptions(plugin, data);
-            subscriptions = subscriptions.filter(s => s.id !== sub.id);
-            pushMsg(i18n('subscriptionDeleted'));
-        }
+        await confirm(
+            i18n('confirmDeleteTitle') || '确认删除',
+            i18n('confirmDeleteSubscription').replace('${name}', sub.name),
+            async () => {
+                await removeSubscription(plugin, sub.id);
+                delete data.subscriptions[sub.id];
+                await saveSubscriptions(plugin, data);
+                subscriptions = subscriptions.filter(s => s.id !== sub.id);
+                pushMsg(i18n('subscriptionDeleted'));
+            }
+        );
     }
 
     async function showEditSubscriptionDialog(subscription?: any) {

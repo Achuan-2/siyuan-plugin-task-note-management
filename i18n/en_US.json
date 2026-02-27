@@ -1035,7 +1035,7 @@
   "subscriptionCreated": "Subscription created",
   "subscriptionUpdated": "Subscription updated",
   "subscriptionDeleted": "Subscription deleted",
-  "confirmDeleteSubscription": "Are you sure to delete subscription \"${name}\"?",
+  "confirmDeleteSubscription": "Are you sure to delete subscription ${name}?",
   "deleteSubscriptionTasks": "Also delete subscription tasks",
   "subscriptionTasksDeleted": "Deleted ${count} tasks from subscription",
   "syncNow": "Sync Now",
