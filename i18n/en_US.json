@@ -1041,6 +1041,7 @@
   "syncNow": "Sync Now",
   "syncingSubscription": "Syncing...",
   "subscriptionSyncCompleted": "Subscription sync completed",
+  "syncFinished": "Sync finished",
   "subscriptionTaskReadOnly": "Subscription task (read-only)",
   "cannotEditSubscriptionTask": "Subscription tasks cannot be edited, please modify in the original calendar",
   "manual": "Manual",
