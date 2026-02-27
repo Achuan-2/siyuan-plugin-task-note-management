@@ -17,6 +17,7 @@ export interface IcsSubscription {
     tagIds?: string[];
     showInSidebar?: boolean;
     showInMatrix?: boolean;
+    showNoteInCalendar?: boolean;
     createdAt: string;
 }
 
@@ -185,6 +186,7 @@ export async function getAllReminders(
                             ...task,
                             isSubscribed: true,
                             subscriptionId: subscription.id,
+                            showNoteInCalendar: subscription.showNoteInCalendar,
                         };
                     } else {
                         // 非重复事件的处理逻辑（原有逻辑）
@@ -204,6 +206,7 @@ export async function getAllReminders(
                             completed,
                             isSubscribed: true,
                             subscriptionId: subscription.id,
+                            showNoteInCalendar: subscription.showNoteInCalendar,
                         };
                     }
                 });
@@ -341,6 +344,7 @@ export async function syncSubscription(
                 // Mark as subscribed (read-only)
                 subscriptionId: subscription.id,
                 isSubscribed: true,
+                showNoteInCalendar: subscription.showNoteInCalendar,
             };
         }
 

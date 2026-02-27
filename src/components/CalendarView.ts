@@ -3467,7 +3467,8 @@ export class CalendarView {
         }
 
         // 6. 备注
-        if (props.note) {
+
+        if ((props.note && !props.isSubscribed) || (props.isSubscribed && props.showNoteInCalendar === true)) {
             const noteEl = document.createElement('div');
             noteEl.className = 'reminder-event-note';
             noteEl.innerHTML = this.lute ? this.lute.Md2HTML(props.note) : props.note;
@@ -6322,7 +6323,8 @@ export class CalendarView {
                 originalId: originalId || reminder.id,
                 repeat: reminder.repeat,
                 isSubscribed: reminder.isSubscribed || false,
-                subscriptionId: reminder.subscriptionId
+                subscriptionId: reminder.subscriptionId,
+                showNoteInCalendar: reminder.showNoteInCalendar
             }
         };
 

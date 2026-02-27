@@ -168,6 +168,10 @@
                                 <input type="checkbox" class="b3-checkbox" id="sub-show-matrix" ${subscription?.showInMatrix === true ? 'checked' : ''}>
                                 ${i18n('subscriptionShowInMatrix')}
                             </label>
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                <input type="checkbox" class="b3-checkbox" id="sub-show-note-calendar" ${subscription?.showNoteInCalendar === true ? 'checked' : ''}>
+                                ${i18n('subscriptionShowNoteInCalendar') || '在日历显示备注'}
+                            </label>
                         </div>
                     </div>
                     <div class="b3-dialog__action" style="margin-top: 16px;">
@@ -253,6 +257,9 @@
             const showInMatrix = (
                 editDialog.element.querySelector('#sub-show-matrix') as HTMLInputElement
             ).checked;
+            const showNoteInCalendar = (
+                editDialog.element.querySelector('#sub-show-note-calendar') as HTMLInputElement
+            ).checked;
 
             if (!name) {
                 pushErrMsg(i18n('pleaseEnterSubscriptionName'));
@@ -277,6 +284,7 @@
                 categoryId,
                 showInSidebar,
                 showInMatrix,
+                showNoteInCalendar,
                 tagIds: subscription?.tagIds || [],
                 enabled: subscription ? subscription.enabled : true,
                 createdAt: subscription?.createdAt || new Date().toISOString(),

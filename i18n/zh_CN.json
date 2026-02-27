@@ -1070,6 +1070,7 @@
     "subscriptionProject": "所属项目",
     "subscriptionShowInSidebar": "在任务管理侧栏显示",
     "subscriptionShowInMatrix": "在四象限中显示",
+    "subscriptionShowNoteInCalendar": "在日历显示备注",
     "subscriptionCategory": "默认分类",
     "subscriptionPriority": "默认优先级",
     "subscriptionEnabled": "启用订阅",

@@ -1070,6 +1070,7 @@
     "subscriptionProject": "Project",
     "subscriptionShowInSidebar": "Show in Task Sidebar",
     "subscriptionShowInMatrix": "Show in Eisenhower Matrix",
+    "subscriptionShowNoteInCalendar": "Show Note in Calendar",
     "subscriptionCategory": "Default Category",
     "subscriptionPriority": "Default Priority",
     "subscriptionEnabled": "Subscription Enabled",
