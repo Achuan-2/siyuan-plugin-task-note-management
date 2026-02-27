@@ -114,7 +114,7 @@ export class CalendarConfigManager {
             }
 
             this.config = {
-                colorBy: settings.calendarColorBy || 'priority',
+                colorBy: settings.calendarColorBy || 'project',
                 viewMode: viewMode as any,
                 viewType: settings.calendarViewType || 'timeline',
                 showLunar: settings.calendarShowLunar !== false, // 默认为 true

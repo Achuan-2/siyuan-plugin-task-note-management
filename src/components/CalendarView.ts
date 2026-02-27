@@ -1588,17 +1588,19 @@ export class CalendarView {
                 }
 
                 if (!info.view.type.startsWith('list')) {
-                    const baseColor = info.event.backgroundColor || info.event.borderColor || 'var(--b3-theme-primary)';
+                    // 背景色使用项目/分类颜色，左边框使用优先级颜色
+                    const bgColor = info.event.backgroundColor || 'var(--b3-theme-primary)';
+                    const borderColor = info.event.borderColor || bgColor;
 
                     // Reset standard styles
                     targetEl.style.border = 'none';
                     // Adjust opacity based on theme mode
                     const themeMode = document.querySelector('html')?.getAttribute('data-theme-mode');
                     const opacity = themeMode === 'dark' ? '0.3' : '0.15';
-                    targetEl.style.backgroundColor = `rgba(from ${baseColor} r g b / ${opacity})`;
+                    targetEl.style.backgroundColor = `rgba(from ${bgColor} r g b / ${opacity})`;
 
-                    // Add thick left border
-                    targetEl.style.borderLeft = `4px solid ${baseColor}`;
+                    // Add thick left border (使用优先级颜色)
+                    targetEl.style.borderLeft = `4px solid ${borderColor}`;
                     targetEl.style.borderRadius = '3px';
 
                     // Set text color to theme text color (black/dark in light mode, light in dark mode)
@@ -1606,7 +1608,7 @@ export class CalendarView {
                     targetEl.style.color = 'var(--b3-theme-on-background)';
 
                     // Clean up potential overrides
-                    if (targetEl.style.borderColor === baseColor) {
+                    if (targetEl.style.borderColor === borderColor) {
                         targetEl.style.borderColor = 'transparent';
                     }
                 }
@@ -6235,14 +6237,32 @@ export class CalendarView {
             let backgroundColor: string;
             let borderColor: string;
 
+            // 获取优先级颜色（用于边框）
+            let priorityBorderColor: string;
+            switch (priority) {
+                case 'high':
+                    priorityBorderColor = '#ff0000';
+                    break;
+                case 'medium':
+                    priorityBorderColor = '#e67e22';
+                    break;
+                case 'low':
+                    priorityBorderColor = '#2980b9';
+                    break;
+                default:
+                    priorityBorderColor = ''; // 无优先级时返回空，后续使用默认颜色
+                    break;
+            }
+
             if (this.colorBy === 'project') {
                 if (reminder.projectId) {
                     const color = this.projectManager.getProjectColor(reminder.projectId);
                     backgroundColor = color;
-                    borderColor = color;
+                    // 有优先级时使用优先级颜色作为边框，否则使用项目颜色
+                    borderColor = priorityBorderColor || color;
                 } else {
                     backgroundColor = '#8f8f8f';
-                    borderColor = '#7f8c8d';
+                    borderColor = priorityBorderColor || '#7f8c8d';
                 }
             } else if (this.colorBy === 'category') {
                 if (reminder.categoryId) {
@@ -6250,10 +6270,11 @@ export class CalendarView {
                     const firstCategoryId = reminder.categoryId.split(',')[0];
                     const categoryStyle = this.categoryManager.getCategoryStyle(firstCategoryId);
                     backgroundColor = categoryStyle.backgroundColor;
-                    borderColor = categoryStyle.borderColor;
+                    // 有优先级时使用优先级颜色作为边框，否则使用分类颜色
+                    borderColor = priorityBorderColor || categoryStyle.borderColor;
                 } else {
                     backgroundColor = '#8f8f8f';
-                    borderColor = '#7f8c8d';
+                    borderColor = priorityBorderColor || '#7f8c8d';
                 }
             } else { // colorBy === 'priority'
                 switch (priority) {
