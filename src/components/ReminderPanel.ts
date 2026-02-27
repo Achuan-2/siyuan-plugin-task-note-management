@@ -577,19 +577,22 @@ export class ReminderPanel {
                     result = this.compareByTime(a, b);
             }
 
-            // 特殊处理：今日可做任务 (Desserts) 排在最后
-            // 只有在 "today" 视图下才生效? 或者是全局策略?
-            // 用户需求: "今日要完成的任务下方会显示这些每日可做任务" -> imply separation.
-            // 无论排序方式如何，Daily Dessert 应该在普通任务之后?
-            // "日历视图那些真正有明确截止日期的事项...重要性...稀释"
-            // Let's force desserts to bottom effectively.
+            // 特殊处理：今日可做任务 (Desserts) 和 订阅日历任务 排在最后
             if (this.currentTab === 'today') {
                 const todayStr = getLogicalDateString();
-                const aIsDessert = a.isAvailableToday && (!a.date && !a.endDate || (a.date || a.endDate) !== todayStr);
-                const bIsDessert = b.isAvailableToday && (!b.date && !b.endDate || (b.date || b.endDate) !== todayStr);
 
-                if (aIsDessert && !bIsDessert) return 1;
-                if (!aIsDessert && bIsDessert) return -1;
+                // 定义分组顺序：0-普通任务, 1-订阅任务, 2-每日可做(Dessert)
+                const getGroupOrder = (item: any) => {
+                    const isDessert = item.isAvailableToday && (!item.date && !item.endDate || (item.date || item.endDate) !== todayStr);
+                    if (isDessert) return 2;
+                    if (item.isSubscribed) return 1;
+                    return 0;
+                };
+
+                const orderA = getGroupOrder(a);
+                const orderB = getGroupOrder(b);
+
+                if (orderA !== orderB) return orderA - orderB;
             }
 
             // 在已完成视图中，优先展示子任务（子任务靠前），以满足父未完成时只展示子任务的需求
@@ -1792,61 +1795,60 @@ export class ReminderPanel {
 
                 // 只有 top-level 任务需要分隔符。
                 if (level === 0 && (this.currentTab === 'today' || this.currentTab === 'todayCompleted')) {
-                    // 判断是否属于“底部栏目”（每日可做或今日忽略）
-                    let isBottomGroup = false;
-                    if (this.currentTab === 'today') {
-                        // 今日任务 Tab 中：所有显示的每日可做任务（即未完成未忽略的）
-                        isBottomGroup = reminder.isAvailableToday && (!reminder.date || reminder.date !== today);
-                    } else if (this.currentTab === 'todayCompleted') {
-                        // 今日已完成 Tab 中：仅显示被忽略的任务，已完成的每日可做不再进入此组
-                        const dailyIgnored = Array.isArray(reminder.dailyDessertIgnored) ? reminder.dailyDessertIgnored : [];
-                        const dailyCompleted = Array.isArray(reminder.dailyDessertCompleted) ? reminder.dailyDessertCompleted : [];
-                        isBottomGroup = reminder.isAvailableToday && dailyIgnored.includes(today) && !dailyCompleted.includes(today);
-                    }
-
-                    if (isBottomGroup) {
-                        const prevIndex = topLevelReminders.indexOf(reminder) - 1;
-                        let shouldInsert = false;
-
-                        // Case 1: Transition from normal tasks to bottom group tasks
-                        if (prevIndex >= 0) {
-                            const prev = topLevelReminders[prevIndex];
-                            let prevIsBottomGroup = false;
-                            if (this.currentTab === 'today') {
-                                prevIsBottomGroup = prev.isAvailableToday && (!prev.date || prev.date !== today);
-                            } else {
-                                const dailyIgnored = Array.isArray(prev.dailyDessertIgnored) ? prev.dailyDessertIgnored : [];
-                                const dailyCompleted = Array.isArray(prev.dailyDessertCompleted) ? prev.dailyDessertCompleted : [];
-                                prevIsBottomGroup = prev.isAvailableToday && dailyIgnored.includes(today) && !dailyCompleted.includes(today);
-                            }
-
-                            if (!prevIsBottomGroup) {
-                                shouldInsert = true;
-                            }
-                        }
-                        // Case 2: No normal tasks, only desserts (first item is dessert)
-                        else if (prevIndex === -1) {
-                            shouldInsert = true;
+                    // 定义分组类型：0-普通任务, 1-订阅任务, 2-底部任务(每日可做/今日忽略)
+                    const getGroupType = (item: any) => {
+                        let isBottomGroup = false;
+                        if (this.currentTab === 'today') {
+                            isBottomGroup = item.isAvailableToday && (!item.date && !item.endDate || (item.date || item.endDate) !== today);
+                        } else if (this.currentTab === 'todayCompleted') {
+                            const dailyIgnored = Array.isArray(item.dailyDessertIgnored) ? item.dailyDessertIgnored : [];
+                            const dailyCompleted = Array.isArray(item.dailyDessertCompleted) ? item.dailyDessertCompleted : [];
+                            isBottomGroup = item.isAvailableToday && dailyIgnored.includes(today) && !dailyCompleted.includes(today);
                         }
 
-                        if (shouldInsert) {
-                            // Creating separator element.
-                            const separatorId = 'daily-dessert-separator';
-                            if (!fragment.querySelector('#' + separatorId)) {
-                                const separator = document.createElement('div');
-                                separator.id = separatorId;
-                                separator.className = 'reminder-separator daily-dessert-separator';
-                                const separatorText = this.currentTab === 'todayCompleted' ? i18n('todayIgnored') : i18n('dailyAvailable');
-                                separator.innerHTML = `<span style="padding:0 8px;">${separatorText}</span>`;
-                                separator.style.cssText = `
-                                     display: flex; 
-                                     align-items: center; 
-                                     justify-content: center; 
-                                     margin: 16px 0 8px 0; 
-                                     font-size: 12px; 
-                                 `;
-                                fragment.appendChild(separator);
-                            }
+                        if (isBottomGroup) return 2;
+                        if (item.isSubscribed) return 1;
+                        return 0;
+                    };
+
+                    const currentType = getGroupType(reminder);
+                    const prevIndex = topLevelReminders.indexOf(reminder) - 1;
+                    const prevType = prevIndex >= 0 ? getGroupType(topLevelReminders[prevIndex]) : -1;
+
+                    // 当类型发生变化且当前不是普通任务时，插入对应的分隔符
+                    if (currentType > 0 && currentType !== prevType) {
+                        let separatorText = '';
+                        let separatorId = '';
+
+                        if (currentType === 1) { // 订阅日历
+                            separatorText = i18n('subscribedTask');
+                            separatorId = 'subscribed-tasks-separator';
+                        } else if (currentType === 2) { // 每日可做/今日忽略
+                            separatorText = this.currentTab === 'todayCompleted' ? i18n('todayIgnored') : i18n('dailyAvailable');
+                            separatorId = 'daily-dessert-separator';
+                        }
+
+                        if (separatorText && !fragment.querySelector('#' + separatorId)) {
+                            const separator = document.createElement('div');
+                            separator.id = separatorId;
+                            separator.className = `reminder-separator ${separatorId}`;
+                            separator.innerHTML = `<span style="padding:0 8px;">${separatorText}</span>`;
+                            separator.style.cssText = `
+                                display: flex; 
+                                align-items: center; 
+                                justify-content: center; 
+                                margin: 16px 0 8px 0; 
+                                font-size: 12px; 
+                                color: var(--b3-theme-on-surface-light);
+                                opacity: 0.8;
+                            `;
+
+                            // 添加左右横线装饰
+                            const lineStyle = 'flex: 1; height: 1px; background: var(--b3-theme-surface-lighter);';
+                            separator.insertAdjacentHTML('afterbegin', `<div style="${lineStyle}"></div>`);
+                            separator.insertAdjacentHTML('beforeend', `<div style="${lineStyle}"></div>`);
+
+                            fragment.appendChild(separator);
                         }
                     }
                 }
