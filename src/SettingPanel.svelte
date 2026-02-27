@@ -24,7 +24,7 @@
     import { PomodoroManager } from './utils/pomodoroManager';
     import { resolveAudioPath } from './utils/audioUtils';
     import VipPanel from './components/VipPanel.svelte';
-    import SubscriptionPanel from './components/CalendarSubscriptionPanel.svelte';
+    import SubscriptionPanel from './components/icsSubscriptionPanel.svelte';
 
     export let plugin;
 
