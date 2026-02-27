@@ -2715,6 +2715,15 @@ export class QuickReminderDialog {
             }
         });
 
+        // 标题输入框回车键禁用换行，改为保存
+        titleInput?.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.isComposing && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.saveReminder();
+            }
+        });
+
         // 自定义提醒时间相关元素
         const showCustomTimeBtn = this.dialog.element.querySelector('#quickShowCustomTimeBtn') as HTMLButtonElement;
         const confirmCustomTimeBtn = this.dialog.element.querySelector('#quickConfirmCustomTimeBtn') as HTMLButtonElement;
