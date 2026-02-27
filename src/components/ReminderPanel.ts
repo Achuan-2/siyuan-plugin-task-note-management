@@ -5370,8 +5370,13 @@ export class ReminderPanel {
             const reminderData = providedReminderData || await getAllReminders(this.plugin, undefined, false, 'sidebar');
 
             // 判断是否为重复实例
-            const isDraggedInstance = draggedReminder.isRepeatInstance || draggedReminder.id.includes('_');
-            const isTargetInstance = targetReminder.isRepeatInstance || targetReminder.id.includes('_');
+            // 优先使用 isRepeatInstance 属性，如果未设置则通过 originalId 判断（只有明确有 originalId 才是实例）
+            const isDraggedInstance = draggedReminder.isRepeatInstance !== undefined 
+                ? draggedReminder.isRepeatInstance 
+                : !!draggedReminder.originalId;
+            const isTargetInstance = targetReminder.isRepeatInstance !== undefined 
+                ? targetReminder.isRepeatInstance 
+                : !!targetReminder.originalId;
 
             // 获取原始ID
             const draggedOriginalId = isDraggedInstance ? (draggedReminder.originalId || draggedReminder.id.split('_')[0]) : draggedReminder.id;
@@ -5519,7 +5524,10 @@ export class ReminderPanel {
         }
 
         // 确保目标项在列表中
-        const isTargetInstance = targetReminder?.isRepeatInstance || (targetOriginalId !== targetReminder?.id);
+        // 优先使用 isRepeatInstance 属性，如果未设置则通过 originalId 判断（只有明确有 originalId 才是实例）
+        const isTargetInstance = targetReminder?.isRepeatInstance !== undefined
+            ? targetReminder.isRepeatInstance
+            : !!targetReminder?.originalId;
         const targetFullId = isTargetInstance ? `${targetOriginalId}_${targetInstanceDate}` : targetOriginalId;
         const targetExists = items.some(item => item.id === targetFullId);
         if (!targetExists && targetReminder) {
