@@ -1334,6 +1334,13 @@ export class CalendarView {
             },
             eventClassNames: 'reminder-calendar-event',
             eventOrder: (a: any, b: any) => {
+                // 0. 订阅日历置顶
+                const isSubA = a.extendedProps.isSubscribed || false;
+                const isSubB = b.extendedProps.isSubscribed || false;
+                if (isSubA !== isSubB) {
+                    return isSubA ? -1 : 1;
+                }
+
                 // 1. 优先根据优先级排序
                 const priorityMap: { [key: string]: number } = {
                     'high': 0,
@@ -2511,7 +2518,7 @@ export class CalendarView {
             // 构造一个与普通任务类似的事件对象，复用普通任务的右键菜单逻辑
             const originalEventId = calendarEvent.extendedProps.originalId || calendarEvent.extendedProps.eventId;
             const isRepeated = calendarEvent.extendedProps.isRepeated || false;
-            
+
             // 修改 calendarEvent 以模拟普通任务
             calendarEvent = {
                 ...calendarEvent,
@@ -3912,8 +3919,15 @@ export class CalendarView {
 
             const dayEvents = dayTemplateIds.map(id => reminderData[id]).filter(r => !!r);
 
-            // 按当前可见顺序排序 (优先级优先，sort 其次)
+            // 按当前可见顺序排序 (订阅置顶，优先级优先，sort 其次)
             dayEvents.sort((a, b) => {
+                // 0. 订阅日历置顶
+                const isSubA = a.isSubscribed || false;
+                const isSubB = b.isSubscribed || false;
+                if (isSubA !== isSubB) {
+                    return isSubA ? -1 : 1;
+                }
+
                 const priorityMap: { [key: string]: number } = {
                     'high': 0,
                     'medium': 1,
@@ -4037,7 +4051,7 @@ export class CalendarView {
             const originalEventId = info.event.extendedProps.originalId || info.event.extendedProps.eventId;
             const reminderData = await getAllReminders(this.plugin);
             const originalReminder = reminderData[originalEventId];
-            
+
             if (originalReminder?.blockId) {
                 try {
                     openBlock(originalReminder.blockId);
@@ -5842,9 +5856,9 @@ export class CalendarView {
             // 处理普通已完成任务
             if (reminder.completed && reminder.completedTime) {
                 const completedDateStr = reminder.completedTime.substring(0, 10); // YYYY-MM-DD
-                
+
                 // 检查完成时间是否在视图范围内
-                if (compareDateStrings(completedDateStr, startDate) < 0 || 
+                if (compareDateStrings(completedDateStr, startDate) < 0 ||
                     compareDateStrings(completedDateStr, endDate) > 0) {
                     continue;
                 }
@@ -5932,9 +5946,9 @@ export class CalendarView {
                     if (!completedTimeStr) continue;
 
                     const completedDateStr = completedTimeStr.substring(0, 10); // YYYY-MM-DD
-                    
+
                     // 检查完成时间是否在视图范围内
-                    if (compareDateStrings(completedDateStr, startDate) < 0 || 
+                    if (compareDateStrings(completedDateStr, startDate) < 0 ||
                         compareDateStrings(completedDateStr, endDate) > 0) {
                         continue;
                     }
