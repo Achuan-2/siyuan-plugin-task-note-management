@@ -1333,37 +1333,7 @@ export class CalendarView {
                 hour12: false
             },
             eventClassNames: 'reminder-calendar-event',
-            eventOrder: (a: any, b: any) => {
-                // 0. 订阅日历置顶
-                const isSubA = a.extendedProps.isSubscribed || false;
-                const isSubB = b.extendedProps.isSubscribed || false;
-                if (isSubA !== isSubB) {
-                    return isSubA ? -1 : 1;
-                }
-
-                // 1. 优先根据优先级排序
-                const priorityMap: { [key: string]: number } = {
-                    'high': 0,
-                    'medium': 1,
-                    'low': 2,
-                    'none': 3
-                };
-
-                const pA = a.extendedProps.priority || 'none';
-                const pB = b.extendedProps.priority || 'none';
-
-                const scoreA = priorityMap[pA] ?? 3;
-                const scoreB = priorityMap[pB] ?? 3;
-
-                if (scoreA !== scoreB) {
-                    return scoreA - scoreB;
-                }
-
-                // 2. 同优先级内根据 sort 字段排序
-                const orderA = typeof a.extendedProps.sort === 'number' ? a.extendedProps.sort : 0;
-                const orderB = typeof b.extendedProps.sort === 'number' ? b.extendedProps.sort : 0;
-                return orderA - orderB;
-            },
+            eventOrder: (a: any, b: any) => this.compareEventsForOrder(a, b),
             displayEventTime: true,
             // Custom Lunar Date and Holiday Rendering using DidMount hooks to preserve default behavior
             dayCellDidMount: (arg) => {
@@ -3795,10 +3765,9 @@ export class CalendarView {
             this.allDayDragListener = null;
         }
 
-        // 2. 最后一次同步释放点（即使失败也不影响后续清理）
+        // 2. 最后一次同步释放点
         if (info && info.jsEvent) {
             try {
-                // 注意：此时 isLocked 是 false，允许最后一次更新位置
                 this.handleAllDayDragMove(info.jsEvent);
             } catch (err) {
                 console.warn('Final drag sync failed:', err);
@@ -3813,16 +3782,12 @@ export class CalendarView {
         const stateToProcess = { ...this.allDayDragState };
 
         // 4. 执行异步重排序
-        if (stateToProcess.targetEvent) {
-            try {
-                await this.handleAllDayReorder(stateToProcess);
-            } finally {
-                this.isAllDayReordering = false;
-                this.allDayDragState = null;
-            }
-        } else {
+        try {
+            await this.handleAllDayReorder(stateToProcess);
+        } finally {
             this.isAllDayReordering = false;
             this.allDayDragState = null;
+            this.isDragging = false;
         }
     }
 
@@ -3891,141 +3856,153 @@ export class CalendarView {
         this.dropIndicator.style.zIndex = '10000';
     }
 
+    /**
+     * 合并通用的事件排序逻辑
+     */
+    private compareEventsForOrder(a: any, b: any) {
+        // 0. 订阅日历置顶
+        const isSubA = a.extendedProps?.isSubscribed || false;
+        const isSubB = b.extendedProps?.isSubscribed || false;
+        if (isSubA !== isSubB) {
+            return isSubA ? -1 : 1;
+        }
+
+        // 1. 优先根据优先级排序
+        const priorityMap: { [key: string]: number } = {
+            'high': 0,
+            'medium': 1,
+            'low': 2,
+            'none': 3
+        };
+
+        const pA = a.extendedProps?.priority || 'none';
+        const pB = b.extendedProps?.priority || 'none';
+
+        const scoreA = priorityMap[pA] ?? 3;
+        const scoreB = priorityMap[pB] ?? 3;
+
+        if (scoreA !== scoreB) {
+            return scoreA - scoreB;
+        }
+
+        // 2. 同优先级内根据 sort 字段排序
+        const orderA = typeof a.extendedProps?.sort === 'number' ? a.extendedProps.sort : 0;
+        const orderB = typeof b.extendedProps?.sort === 'number' ? b.extendedProps.sort : 0;
+        if (orderA !== orderB) {
+            return orderA - orderB;
+        }
+
+        // 3. 最后根据标题排序，确保稳定性
+        const titleA = a.title || '';
+        const titleB = b.title || '';
+        return titleA.localeCompare(titleB);
+    }
+
     private async handleAllDayReorder(state: any) {
         try {
             const reminderData = await getAllReminders(this.plugin);
-            const draggedId = (() => {
-                const d = state.draggedEvent.id || '';
-                const idx = d.lastIndexOf('_');
-                return idx !== -1 ? d.slice(0, idx) : d;
-            })();
-            // 判断是否为重复实例，并提取原始实例日期
-            const isDraggedInstance = state.draggedEvent.extendedProps?.isRepeated;
-            const draggedInstanceDate = isDraggedInstance ? state.draggedEvent.id.split('_').pop() : null;
-
             const targetDate = state.date;
+            const draggedEvent = state.draggedEvent;
 
-            // 获取该日期的所有全天事件实例，从而找出该天显示的所有模板
-            // 这样可以正确处理重复事件的排序
-            const calendarEvents = this.calendar.getEvents().filter(e => {
-                const eDate = getLocalDateString(e.start);
-                return eDate === targetDate && e.allDay;
+            if (!draggedEvent) return;
+
+            // 提取拖拽任务的 ID 信息
+            const draggedId = draggedEvent.id;
+
+            // 获取该日期所有的全天事件（排除当前正在拖拽的）
+            const otherEvents = this.calendar.getEvents().filter(e => {
+                return e.allDay && getLocalDateString(e.start) === targetDate && e.id !== draggedId;
             });
 
-            // 获取对应的提醒数据模板 ID (去重)
-            const dayTemplateIds = Array.from(new Set(calendarEvents.map(e => {
-                return e.extendedProps.originalId || e.id;
-            })));
+            // 按当前展示顺序排序
+            otherEvents.sort((a, b) => this.compareEventsForOrder(a, b));
 
-            const dayEvents = dayTemplateIds.map(id => reminderData[id]).filter(r => !!r);
-
-            // 按当前可见顺序排序 (订阅置顶，优先级优先，sort 其次)
-            dayEvents.sort((a, b) => {
-                // 0. 订阅日历置顶
-                const isSubA = a.isSubscribed || false;
-                const isSubB = b.isSubscribed || false;
-                if (isSubA !== isSubB) {
-                    return isSubA ? -1 : 1;
-                }
-
-                const priorityMap: { [key: string]: number } = {
-                    'high': 0,
-                    'medium': 1,
-                    'low': 2,
-                    'none': 3
-                };
-                const scoreA = priorityMap[a.priority || 'none'] ?? 3;
-                const scoreB = priorityMap[b.priority || 'none'] ?? 3;
-                if (scoreA !== scoreB) return scoreA - scoreB;
-                return (a.sort || 0) - (b.sort || 0);
-            });
-
-            // 获取当前拖拽的提醒模板
-            const currentEvent = reminderData[draggedId];
-            if (!currentEvent) return;
-
-            // 如果日期改变了，更新模板日期（处理跨天拖拽重排序）
-            // 对于重复实例，不修改原始任务的日期
-            if (!isDraggedInstance) {
-                const oldDate = currentEvent.date || '';
-                if (oldDate !== targetDate) {
-                    currentEvent.date = targetDate;
-                    if (currentEvent.endDate) {
-                        const diff = getDaysDifference(oldDate, targetDate);
-                        currentEvent.endDate = addDaysToDate(currentEvent.endDate, diff);
-                    }
-                }
-            }
-
-            // 从待排序列表中移除当前事件
-            const filteredEvents = dayEvents.filter(r => r.id !== draggedId);
-
+            // 构造新列表并确定被拖拽任务的新位置
             let newList: any[] = [];
             if (state.targetEvent) {
-                const targetId = (() => {
-                    const t = state.targetEvent.id || '';
-                    const idx = t.lastIndexOf('_');
-                    return idx !== -1 ? t.slice(0, idx) : t;
-                })();
+                const targetId = state.targetEvent.id;
+                const targetIndex = otherEvents.findIndex(e => e.id === targetId);
 
-                const targetIndex = filteredEvents.findIndex(r => r.id === targetId);
                 if (targetIndex !== -1) {
-                    // 计算插入位置
                     const insertPos = state.isAbove ? targetIndex : targetIndex + 1;
-                    newList = [...filteredEvents.slice(0, insertPos), currentEvent, ...filteredEvents.slice(insertPos)];
+                    newList = [...otherEvents.slice(0, insertPos), draggedEvent, ...otherEvents.slice(insertPos)];
 
-                    // --- 核心改进：根据插入位置自动调整优先级 ---
-                    // 逻辑：使被拖拽的任务优先级与它落点周围的任务一致
-                    // 如果列表只有一个，或者放在了首/尾，则参考邻居
-                    // 如果放在两个任务中间，则根据当前可见的排序规则调整
-                    if (state.isAbove) {
-                        // 拖动到了 targetEvent 的上方
-                        const targetEventInList = filteredEvents[targetIndex];
-                        currentEvent.priority = targetEventInList.priority || 'none';
-                    } else {
-                        // 拖动到了 targetEvent 的下方
-                        const targetEventInList = filteredEvents[targetIndex];
-                        currentEvent.priority = targetEventInList.priority || 'none';
+                    // --- 核心改进：根据落点自动调整优先级 ---
+                    // 使被拖拽的任务优先级与它落点周围的任务一致
+                    const neighbor = otherEvents[targetIndex];
+                    if (neighbor) {
+                        const newPriority = neighbor.extendedProps?.priority || 'none';
+                        draggedEvent.setExtendedProp('priority', newPriority);
                     }
                 } else {
-                    newList = [...filteredEvents, currentEvent];
+                    newList = [...otherEvents, draggedEvent];
                 }
             } else {
-                newList = [...filteredEvents, currentEvent];
+                newList = [...otherEvents, draggedEvent];
             }
 
-            // 分配新的 sort 值
-            // 注意：为了让 FullCalendar 的 eventOrder (priority-first) 表现正常，
-            // 我们需要对全天列表在相同优先级块内部重新赋予递增的 sort
+            // 更新所有该日期任务在 reminderData 中的 sort 值
             let currentPriority = '';
             let prioritySort = 0;
-            newList.forEach((r) => {
-                if (r) {
-                    const p = r.priority || 'none';
-                    if (p !== currentPriority) {
-                        currentPriority = p;
-                        prioritySort = 0;
-                    }
-                    // 对于重复实例，将 sort 存储到 instanceModifications 中
-                    if (isDraggedInstance && r.id === draggedId && draggedInstanceDate) {
-                        if (!r.repeat) r.repeat = {};
-                        if (!r.repeat.instanceModifications) r.repeat.instanceModifications = {};
-                        if (!r.repeat.instanceModifications[draggedInstanceDate]) {
-                            r.repeat.instanceModifications[draggedInstanceDate] = {};
+
+            for (const event of newList) {
+                const templateId = event.extendedProps?.originalId || event.id;
+                const reminder = reminderData[templateId];
+                if (!reminder) continue;
+
+                const priority = event.extendedProps?.priority || 'none';
+                if (priority !== currentPriority) {
+                    currentPriority = priority;
+                    prioritySort = 0;
+                }
+
+                const newSortValue = prioritySort++;
+
+                // 判断是否为此日期的实例
+                if (event.extendedProps?.isRepeated) {
+                    const instanceDate = event.id.split('_').pop();
+                    if (instanceDate) {
+                        if (!reminder.repeat) reminder.repeat = {};
+                        if (!reminder.repeat.instanceModifications) reminder.repeat.instanceModifications = {};
+                        if (!reminder.repeat.instanceModifications[instanceDate]) {
+                            reminder.repeat.instanceModifications[instanceDate] = {};
                         }
-                        r.repeat.instanceModifications[draggedInstanceDate].sort = prioritySort++;
-                    } else {
-                        r.sort = prioritySort++;
+                        const mod = reminder.repeat.instanceModifications[instanceDate];
+                        mod.sort = newSortValue;
+
+                        // 如果是被拖拽的任务，可能还需要更新其优先级、日期等
+                        if (event.id === draggedId) {
+                            mod.priority = priority;
+
+                            // 如果日期也发生了改变（跨天重排序）
+                            if (instanceDate !== targetDate) {
+                                // 处理重复实例的跨天拖动比较复杂，通常我们只更新修改中的 date
+                                mod.date = targetDate;
+                            }
+                        }
+                    }
+                } else {
+                    // 非重复任务，更新模板
+                    reminder.sort = newSortValue;
+
+                    if (event.id === draggedId) {
+                        reminder.priority = priority;
+
+                        // 更新日期
+                        const oldDate = reminder.date || '';
+                        if (oldDate !== targetDate) {
+                            reminder.date = targetDate;
+                            if (reminder.endDate) {
+                                const diff = getDaysDifference(oldDate, targetDate);
+                                reminder.endDate = addDaysToDate(reminder.endDate, diff);
+                            }
+                        }
                     }
                 }
-            });
+            }
 
             await saveReminders(this.plugin, reminderData);
-
-            // 刷新日历以应用新顺序
             await this.refreshEvents();
-
-            // 通知外部更新
             window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
 
         } catch (error) {
