@@ -994,6 +994,7 @@
                     button: {
                         label: i18n('generateAndUpload'),
                         callback: async () => {
+                            await pushMsg(i18n('icsUploading'));
                             await uploadIcsToCloud(plugin, settings);
                         },
                     },
@@ -1367,8 +1368,7 @@
                 ].includes(item.key)
             ) {
                 updated.hidden =
-                    settings.icsSyncMethod !== 's3' ||
-                    settings.s3UseSiyuanConfig === true;
+                    settings.icsSyncMethod !== 's3' || settings.s3UseSiyuanConfig === true;
             }
 
             return updated;

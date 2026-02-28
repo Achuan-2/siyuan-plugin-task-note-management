@@ -1290,6 +1290,7 @@
     "icsSilentUploadDesc": "When enabled, scheduled ICS uploads will not show success notification messages",
     "uploadIcsToCloud": "Generate and Upload ICS to Cloud",
     "uploadIcsToCloudDesc": "Generate ICS file and immediately upload it to the cloud",
+    "icsUploading": "Generating and uploading ICS file to cloud...",
     "generateAndUpload": "Generate & Upload",
     "icsCloudUrl": "ICS Cloud URL",
     "icsCloudUrlDesc": "Cloud URL automatically generated after successful upload",

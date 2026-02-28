@@ -137,7 +137,7 @@ export const DEFAULT_SETTINGS = {
     s3Region: 'auto', // S3 区域，默认为 auto
     s3AccessKeyId: '',
     s3AccessKeySecret: '',
-    s3StoragePath: '', // S3存储路径，例如: /calendar/
+    s3StoragePath: '/calendar/', // S3存储路径，例如: /calendar/
     s3ForcePathStyle: false, // S3 Addressing风格，true为Path-style，false为Virtual hosted style（默认）
     s3TlsVerify: true, // S3 TLS证书验证，true为启用验证（默认），false为禁用验证
     s3CustomDomain: '', // S3 自定义域名，用于生成外链
