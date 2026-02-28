@@ -3865,6 +3865,19 @@ export class CalendarView {
      * 合并通用的事件排序逻辑
      */
     private compareEventsForOrder(a: any, b: any) {
+        // 完成的任务时间按完成时间排序并集中放置在最后
+        const typeA = a.extendedProps?.type;
+        const typeB = b.extendedProps?.type;
+        if (typeA === 'completedTaskTime' && typeB === 'completedTaskTime') {
+            const timeA = a.extendedProps?.completedTime || '';
+            const timeB = b.extendedProps?.completedTime || '';
+            if (timeA !== timeB) {
+                return timeA.localeCompare(timeB);
+            }
+        } else if (typeA === 'completedTaskTime' || typeB === 'completedTaskTime') {
+            return typeA === 'completedTaskTime' ? 1 : -1;
+        }
+
         // 0. 订阅日历置顶
         const isSubA = a.extendedProps?.isSubscribed || false;
         const isSubB = b.extendedProps?.isSubscribed || false;
@@ -5054,6 +5067,30 @@ export class CalendarView {
                 font-style: italic;
             }
 
+            /* 完成任务时间分隔线 (仅用于 dayGrid 视图的 All-day/日网格区域) */
+            .fc-daygrid-day-events .fc-daygrid-event-harness:has(.completed-task-time-event) .completed-task-time-event {
+                margin-top: 12px !important;
+                position: relative;
+            }
+            
+            .fc-daygrid-day-events .fc-daygrid-event-harness:has(.completed-task-time-event) .completed-task-time-event::before {
+                content: "";
+                position: absolute;
+                top: -8px;
+                left: 0;
+                right: 0;
+                border-top: 1px dashed var(--b3-theme-on-surface-light);
+                opacity: 0.6;
+            }
+
+            .fc-daygrid-day-events .fc-daygrid-event-harness:has(.completed-task-time-event) ~ .fc-daygrid-event-harness:has(.completed-task-time-event) .completed-task-time-event {
+                margin-top: 1px !important;
+            }
+            
+            .fc-daygrid-day-events .fc-daygrid-event-harness:has(.completed-task-time-event) ~ .fc-daygrid-event-harness:has(.completed-task-time-event) .completed-task-time-event::before {
+                display: none;
+            }
+
             .all-day-reorder-indicator {
                 height: 2px !important;
                 background-color: var(--b3-theme-primary) !important;
@@ -5833,7 +5870,8 @@ export class CalendarView {
             // Add completed task times if enabled and in Day/Week view
             if (this.showCompletedTaskTime && this.calendar && this.calendar.view) {
                 const viewType = this.calendar.view.type;
-                if (viewType === 'timeGridDay' || viewType === 'timeGridWeek' || viewType === 'timeGridMultiDays') {
+                if (viewType === 'timeGridDay' || viewType === 'timeGridWeek' || viewType === 'timeGridMultiDays' ||
+                    viewType === 'dayGridDay' || viewType === 'dayGridWeek' || viewType === 'dayGridMultiDays') {
                     const completedTaskEvents = await this.getCompletedTaskTimeEvents(startDate, endDate, reminderData, projectData);
                     events.push(...completedTaskEvents);
                 }
