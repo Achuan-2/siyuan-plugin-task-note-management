@@ -1828,5 +1828,8 @@
     "helpDocument": "帮助文档",
     "helpDocumentDesc": "点击下方链接查看详细的使用教程和常见问题解答，帮助您更好地使用任务笔记管理插件。",
     "viewDocumentNow": "立即查看文档",
-    "rightClickToEdit": "右键编辑任务"
+    "rightClickToEdit": "右键编辑任务",
+    "vipOnlyFeature": "此功能仅限 VIP 用户使用",
+    "upgradeToVipTip": "升级到 VIP 以解锁更多高级功能，让任务管理更高效",
+    "upgradeNow": "立即升级"
 }

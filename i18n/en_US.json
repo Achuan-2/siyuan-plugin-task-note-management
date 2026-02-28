@@ -1828,5 +1828,8 @@
     "helpDocument": "Help Document",
     "helpDocumentDesc": "Click the link below to view detailed tutorials and FAQs to help you better use the Task Note Management plugin.",
     "viewDocumentNow": "View Documentation Now",
-    "rightClickToEdit": "Right Click to Edit"
+    "rightClickToEdit": "Right Click to Edit",
+    "vipOnlyFeature": "This feature is only available to VIP users",
+    "upgradeToVipTip": "Upgrade to VIP to unlock more advanced features and make task management more efficient",
+    "upgradeNow": "Upgrade Now"
 }
