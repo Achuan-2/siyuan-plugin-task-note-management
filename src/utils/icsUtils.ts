@@ -885,7 +885,7 @@ async function uploadToS3(settings: any, icsContent: string, fileName: string, p
                 await pushErrMsg('未找到思源的S3配置，请先在思源设置中配置S3同步');
                 return;
             }
-            s3Bucket = siyuanS3.bucket || '';
+            s3Bucket = settings.s3Bucket || siyuanS3.bucket || '';
             s3Endpoint = siyuanS3.endpoint || '';
             s3Region = siyuanS3.region || 'auto';
             s3AccessKeyId = siyuanS3.accessKey || '';
