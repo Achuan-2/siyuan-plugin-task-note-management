@@ -1244,15 +1244,24 @@ export class CalendarView {
                     text: i18n("today"),
                     click: () => {
                         this.lastNavigatedToTodayAt = Date.now();
-                        const targetDate = getDayStartAdjustedDate(new Date());
+                        let targetDate = getDayStartAdjustedDate(new Date());
+
+                        // 若为多日视图，则跳转到昨天，以使今天保持在第二天的位置
+                        if (this.calendar.view.type.includes('MultiDays')) {
+                            const yesterday = new Date(targetDate);
+                            yesterday.setDate(yesterday.getDate() - 1);
+                            targetDate = yesterday;
+                        }
+
                         this.calendar.gotoDate(targetDate);
 
                         // 尝试滚动到今天的位置（主要修复 dayGridMonth 不会自动滚动的问题）
                         setTimeout(() => {
                             // 优先查找高亮的今天元素
+                            const realTodayDate = getDayStartAdjustedDate(new Date());
                             const todayEl = this.container.querySelector('.fc-day-today') ||
                                 this.container.querySelector('.fc-today-custom') ||
-                                this.container.querySelector(`[data-date="${getLocalDateString(targetDate)}"]`);
+                                this.container.querySelector(`[data-date="${getLocalDateString(realTodayDate)}"]`);
 
                             if (todayEl) {
                                 todayEl.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
