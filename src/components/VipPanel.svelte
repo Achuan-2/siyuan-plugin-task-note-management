@@ -222,17 +222,17 @@
         let results = [];
 
         for (const k of validKeys) {
+            const isLifetime = k.term === 'Lifetime';
             const termMs = VipManager.getTermMs(k.term, k.purchaseTime);
             let start = k.purchaseTime;
-            if (currentExpire > start) {
+
+            if (!isLifetime && currentExpire > start) {
                 start = currentExpire;
             }
-            const end =
-                k.term === 'Lifetime'
-                    ? new Date(k.purchaseTime).setFullYear(
-                          new Date(k.purchaseTime).getFullYear() + 999
-                      )
-                    : start + termMs;
+
+            const end = isLifetime
+                ? new Date(k.purchaseTime).setFullYear(new Date(k.purchaseTime).getFullYear() + 999)
+                : start + termMs;
 
             currentExpire = end;
 
@@ -240,9 +240,9 @@
                 results.push({
                     key: k.key,
                     term: k.term,
-                    start: VipManager.formatDate(new Date(start)),
+                    start: VipManager.formatDate(new Date(isLifetime ? k.purchaseTime : start)),
                     end: VipManager.formatDate(new Date(end)),
-                    isLifetime: k.term === 'Lifetime',
+                    isLifetime: isLifetime,
                 });
             }
         }
@@ -538,9 +538,17 @@
                         <div class="key-info">
                             <div class="key-text">{item.key}</div>
                             <div class="key-detail">
-                                {item.isLifetime
-                                    ? `${i18n('vipLifetimeVersion')}${item.start})`
-                                    : `${item.term === '1y' ? i18n('vipAnnualPay') : item.term === '1m' ? i18n('vipMonthlyPay') : i18n('vipTrial7Days')} (${item.start}${i18n('vipTo')}${item.end})`}
+                                {#if item.isLifetime}
+                                    {i18n('vipLifetimeVersion')} ({i18n('vipActivatedAt')}: {item.start})
+                                {:else}
+                                    {item.term === '1y'
+                                        ? i18n('vipAnnualPay')
+                                        : item.term === '1m'
+                                          ? i18n('vipMonthlyPay')
+                                          : i18n('vipTrial7Days')} ({item.start}{i18n(
+                                        'vipTo'
+                                    )}{item.end})
+                                {/if}
                             </div>
                         </div>
                         <button
@@ -554,6 +562,13 @@
             </div>
         </div>
     {/if}
+
+    <div class="vip-section">
+        <h3>{i18n('vipExchangeAndQA')}</h3>
+        <div class="activation-notice">
+            {i18n('vipExchangeAndQADesc')}
+        </div>
+    </div>
 </div>
 
 <style>

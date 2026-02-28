@@ -25,6 +25,7 @@
     import { resolveAudioPath } from './utils/audioUtils';
     import VipPanel from './components/VipPanel.svelte';
     import SubscriptionPanel from './components/icsSubscriptionPanel.svelte';
+    import HelpPanel from './components/HelpPanel.svelte';
 
     export let plugin;
 
@@ -994,7 +995,10 @@
                     button: {
                         label: i18n('generateAndUpload'),
                         callback: async () => {
+                            await pushMsg(i18n('icsUploading'));
                             await uploadIcsToCloud(plugin, settings);
+                            settings = settings;
+                            updateGroupItems();
                         },
                     },
                 },
@@ -1104,6 +1108,10 @@
                     placeholder: 'cdn.example.com',
                 },
             ],
+        },
+        {
+            name: '❓' + i18n('helpDocument'),
+            items: [],
         },
         {
             name: '❤️' + i18n('donate'),
@@ -1347,12 +1355,12 @@
 
             // S3专用设置 - s3UseSiyuanConfig仅在启用同步且选择S3存储时显示
             if (item.key === 's3UseSiyuanConfig') {
-                updated.hidden = !settings.icsSyncEnabled || settings.icsSyncMethod !== 's3';
+                updated.hidden = settings.icsSyncMethod !== 's3';
             }
 
             // S3 bucket、存储路径和自定义域名 - 仅在启用同步且选择S3存储时显示（即使使用思源配置也允许覆盖）
             if (['s3Bucket', 's3StoragePath', 's3CustomDomain'].includes(item.key)) {
-                updated.hidden = !settings.icsSyncEnabled || settings.icsSyncMethod !== 's3';
+                updated.hidden = settings.icsSyncMethod !== 's3';
             }
 
             // S3详细配置 - 仅在启用同步、选择S3存储且未启用"使用思源S3设置"时显示
@@ -1367,9 +1375,7 @@
                 ].includes(item.key)
             ) {
                 updated.hidden =
-                    !settings.icsSyncEnabled ||
-                    settings.icsSyncMethod !== 's3' ||
-                    settings.s3UseSiyuanConfig === true;
+                    settings.icsSyncMethod !== 's3' || settings.s3UseSiyuanConfig === true;
             }
 
             return updated;
@@ -1688,6 +1694,9 @@
             {/if}
             {#if currentGroup?.name === '📅' + i18n('icsSubscription')}
                 <SubscriptionPanel {plugin} />
+            {/if}
+            {#if currentGroup?.name === '❓' + i18n('helpDocument')}
+                <HelpPanel />
             {/if}
             {#each currentGroup?.items || [] as item (item.key)}
                 {#if !item.hidden}

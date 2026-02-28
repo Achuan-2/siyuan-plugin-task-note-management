@@ -13876,6 +13876,8 @@ export class ProjectKanbanView {
                 }
             });
 
+            // 依然要重新刷新DOM，避免乐观更新错误
+            await this.queueLoadTasks();
             this.dispatchReminderUpdate(true);
 
         } catch (error) {
@@ -14256,6 +14258,53 @@ export class ProjectKanbanView {
                 throw new Error("Task not found in data");
             }
 
+            // --- Subtask check logic moved early to prevent state changes ---
+            const isSubtaskReorder = draggedTaskInDb.parentId && targetTaskInDb.parentId &&
+                draggedTaskInDb.parentId === targetTaskInDb.parentId;
+
+            if (isSubtaskReorder) {
+                const parentId = draggedTaskInDb.parentId;
+                const siblingTasks = Object.values(reminderData)
+                    .filter((r: any) => r && r.parentId === parentId && r.id !== draggedId)
+                    .sort((a: any, b: any) => (a.sort || 0) - (b.sort || 0));
+
+                const targetIndex = siblingTasks.findIndex((t: any) => t.id === targetId);
+                const insertIndex = insertBefore ? targetIndex : targetIndex + 1;
+
+                const oldPriority = draggedTaskInDb.priority || 'none';
+                const targetPriority = targetTaskInDb.priority || 'none';
+                if (oldPriority !== targetPriority) {
+                    draggedTaskInDb.priority = targetPriority;
+                }
+
+                siblingTasks.splice(insertIndex, 0, draggedTaskInDb);
+                siblingTasks.forEach((task: any, index: number) => {
+                    reminderData[task.id].sort = index * 10;
+                });
+                await saveReminders(this.plugin, reminderData);
+                siblingTasks.forEach((task: any) => {
+                    const localTask = this.tasks.find(t => t.id === task.id);
+                    if (localTask) {
+                        localTask.sort = task.sort;
+                        localTask.priority = task.priority;
+                    }
+                });
+                const oldStatus = this.getTaskStatus(draggedTaskInDb);
+                const newStatus = this.getTaskStatus(targetTaskInDb);
+                const oldGroup = (draggedTaskInDb.customGroupId === undefined) ? null : draggedTaskInDb.customGroupId;
+                const newGroup = (targetTaskInDb.customGroupId === undefined) ? null : targetTaskInDb.customGroupId;
+
+                // 仅在属于相同列/分组时执行乐观 DOM 排序，避免跨列拖拽时出现瞬间的状态错误（视觉重排）
+                if (oldStatus === newStatus && oldGroup === newGroup) {
+                    this.reorderTasksDOM(draggedId, targetId, insertBefore);
+                }
+
+                // 依然要重新刷新DOM，避免乐观更新错误
+                await this.queueLoadTasks();
+                this.dispatchReminderUpdate(true);
+                return true;
+            }
+
             const oldStatus = this.getTaskStatus(draggedTaskInDb);
             const newStatus = this.getTaskStatus(targetTaskInDb);
 
@@ -14483,9 +14532,10 @@ export class ProjectKanbanView {
                 // Refresh the dragged task's visual appearance to reflect changes in priority/status
                 if (domUpdated) {
                     this.refreshTaskElement(draggedId);
-                } else {
-                    await this.queueLoadTasks();
                 }
+
+                // 依然要重新刷新DOM，避免乐观更新错误
+                await this.queueLoadTasks();
 
                 this.dispatchReminderUpdate(true);
                 return true;
@@ -14502,35 +14552,6 @@ export class ProjectKanbanView {
                 } else {
                     reminderData[draggedId].customGroupId = targetGroup;
                 }
-            }
-
-            // ... (subtask check logic unchanged) ...
-            const isSubtaskReorder = draggedTaskInDb.parentId && targetTaskInDb.parentId &&
-                draggedTaskInDb.parentId === targetTaskInDb.parentId;
-
-            if (isSubtaskReorder) {
-                // ... (subtask existing logic) ...
-                const parentId = draggedTaskInDb.parentId;
-                const siblingTasks = Object.values(reminderData)
-                    .filter((r: any) => r && r.parentId === parentId && r.id !== draggedId)
-                    .sort((a: any, b: any) => (a.sort || 0) - (b.sort || 0));
-
-                const targetIndex = siblingTasks.findIndex((t: any) => t.id === targetId);
-                const insertIndex = insertBefore ? targetIndex : targetIndex + 1;
-
-                siblingTasks.splice(insertIndex, 0, draggedTaskInDb);
-                siblingTasks.forEach((task: any, index: number) => {
-                    reminderData[task.id].sort = index * 10;
-                });
-                await saveReminders(this.plugin, reminderData);
-                siblingTasks.forEach((task: any) => {
-                    const localTask = this.tasks.find(t => t.id === task.id);
-                    if (localTask) localTask.sort = task.sort;
-                });
-                const domUpdated = this.reorderTasksDOM(draggedId, targetId, insertBefore);
-                if (!domUpdated) await this.queueLoadTasks();
-                this.dispatchReminderUpdate(true);
-                return true;
             }
 
             // ... (top level logic) ...
@@ -14679,14 +14700,14 @@ export class ProjectKanbanView {
                 }
             } catch (err) { console.warn('Update local descendants (fallback) failed', err); }
 
-            // 尝试直接更新DOM,失败时才重新加载
+            // 尝试直接更新DOM(乐观更新)，随后重新加载以避免状态错误
             const domUpdated = this.reorderTasksDOM(draggedId, targetId, insertBefore);
             if (domUpdated) {
                 // Refresh the dragged task's visual appearance
                 this.refreshTaskElement(draggedId);
-            } else {
-                await this.queueLoadTasks();
             }
+            // 依然要重新刷新DOM，避免乐观更新错误
+            await this.queueLoadTasks();
 
             this.dispatchReminderUpdate(true);
 
@@ -15745,6 +15766,8 @@ export class ProjectKanbanView {
             if (proceeded) {
                 this.batchReorderTasksDOM(taskIds, targetTask.id, insertBefore);
             }
+            // 依然要重新刷新DOM，避免乐观更新错误
+            await this.queueLoadTasks();
         } catch (error) {
             console.error('批量排序失败:', error);
             showMessage(i18n("sortUpdateFailed") || "排序更新失败");

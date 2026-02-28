@@ -817,7 +817,7 @@ export async function uploadIcsToCloud(plugin: any, settings: any, silent: boole
             icsFileName = `reminder-${genId}`;
             settings.icsFileName = icsFileName;
             try {
-                await plugin.saveData('reminder-settings.json', settings);
+                await plugin.saveSettings(settings);
                 try {
                     window.dispatchEvent(new CustomEvent('reminderSettingsUpdated'));
                 } catch (e) {
@@ -885,7 +885,7 @@ async function uploadToS3(settings: any, icsContent: string, fileName: string, p
                 await pushErrMsg('未找到思源的S3配置，请先在思源设置中配置S3同步');
                 return;
             }
-            s3Bucket = siyuanS3.bucket || '';
+            s3Bucket = settings.s3Bucket || siyuanS3.bucket || '';
             s3Endpoint = siyuanS3.endpoint || '';
             s3Region = siyuanS3.region || 'auto';
             s3AccessKeyId = siyuanS3.accessKey || '';
@@ -1007,7 +1007,7 @@ async function uploadToS3(settings: any, icsContent: string, fileName: string, p
         settings.icsLastSyncAt = new Date().toISOString();
 
         // 保存设置到文件
-        await plugin.saveData('reminder-settings.json', settings);
+        await plugin.saveSettings(settings);
 
         // 触发设置更新事件，刷新UI
         try {
@@ -1040,7 +1040,7 @@ async function uploadToSiyuan(settings: any, icsContent: string, plugin: any, si
             icsFileName = `reminder-${genId}`;
             settings.icsFileName = icsFileName;
             try {
-                await plugin.saveData('reminder-settings.json', settings);
+                await plugin.saveSettings(settings);
                 try {
                     window.dispatchEvent(new CustomEvent('reminderSettingsUpdated'));
                 } catch (e) { }
@@ -1074,7 +1074,7 @@ async function uploadToSiyuan(settings: any, icsContent: string, plugin: any, si
             // 记录上次成功同步时间并保存设置
             try {
                 settings.icsLastSyncAt = new Date().toISOString();
-                await plugin.saveData('reminder-settings.json', settings);
+                await plugin.saveSettings(settings);
 
                 try {
                     window.dispatchEvent(new CustomEvent('reminderSettingsUpdated'));

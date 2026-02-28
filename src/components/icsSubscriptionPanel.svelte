@@ -88,7 +88,7 @@
         }
     }
 
-    function handleDragEnter(e: DragEvent, index: number) {
+    function handleDragEnter(index: number) {
         if (draggedIndex === null || draggedIndex === index) return;
         dropIndex = index;
     }
@@ -406,7 +406,7 @@
     <div class="panel-header">
         <div class="header-info">
             <h3 class="panel-title">{i18n('icsSubscription')}</h3>
-            <div class="panel-desc">{i18n('icsSubscriptionDesc')}</div>
+            <div class="panel-desc">{@html i18n('icsSubscriptionDesc')}</div>
         </div>
         <button
             class="b3-button b3-button--outline fn__flex-center"
@@ -433,7 +433,7 @@
                     draggable="true"
                     on:dragstart={() => handleDragStart(i)}
                     on:dragover={e => handleDragOver(e, i)}
-                    on:dragenter={e => handleDragEnter(e, i)}
+                    on:dragenter={() => handleDragEnter(i)}
                     on:drop={e => handleDrop(e, i)}
                     on:dragend={handleDragEnd}
                     class:dragging={draggedIndex === i}
@@ -554,6 +554,11 @@
         color: var(--b3-theme-on-surface-light);
         line-height: 1.5;
         opacity: 0.8;
+
+        :global(a) {
+            color: var(--b3-theme-primary);
+            text-decoration: underline;
+        }
     }
 
     .subscription-list {
@@ -637,14 +642,16 @@
     }
 
     .card-content {
-        justify-content: space-between;
-        align-items: flex-start;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
         gap: 12px;
+        align-items: flex-start;
+        width: 100%;
     }
 
     .sub-info {
-        flex: 1;
         min-width: 0;
+        overflow: hidden;
     }
 
     .sub-name {
@@ -668,6 +675,9 @@
         font-size: 11px;
         color: var(--b3-theme-on-surface-light);
         opacity: 0.8;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     .card-actions {

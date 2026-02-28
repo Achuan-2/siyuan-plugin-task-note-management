@@ -1244,15 +1244,24 @@ export class CalendarView {
                     text: i18n("today"),
                     click: () => {
                         this.lastNavigatedToTodayAt = Date.now();
-                        const targetDate = getDayStartAdjustedDate(new Date());
+                        let targetDate = getDayStartAdjustedDate(new Date());
+
+                        // 若为多日视图，则跳转到昨天，以使今天保持在第二天的位置
+                        if (this.calendar.view.type.includes('MultiDays')) {
+                            const yesterday = new Date(targetDate);
+                            yesterday.setDate(yesterday.getDate() - 1);
+                            targetDate = yesterday;
+                        }
+
                         this.calendar.gotoDate(targetDate);
 
                         // 尝试滚动到今天的位置（主要修复 dayGridMonth 不会自动滚动的问题）
                         setTimeout(() => {
                             // 优先查找高亮的今天元素
+                            const realTodayDate = getDayStartAdjustedDate(new Date());
                             const todayEl = this.container.querySelector('.fc-day-today') ||
                                 this.container.querySelector('.fc-today-custom') ||
-                                this.container.querySelector(`[data-date="${getLocalDateString(targetDate)}"]`);
+                                this.container.querySelector(`[data-date="${getLocalDateString(realTodayDate)}"]`);
 
                             if (todayEl) {
                                 todayEl.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
@@ -1320,6 +1329,7 @@ export class CalendarView {
             nowIndicator: true, // 显示当前时间指示线
             snapDuration: '00:05:00', // 设置吸附间隔为5分钟
             slotDuration: '00:15:00', // 设置默认时间间隔为15分钟
+            eventMaxStack: 2, // 最多显示2个重叠事件
             allDayText: i18n("allDay"), // 置全天事件的文本
             slotEventOverlap: false, // 不允许事件重叠
             slotLabelFormat: {
@@ -1354,15 +1364,15 @@ export class CalendarView {
 
                         const extraInfoWrapper = document.createElement('div');
                         extraInfoWrapper.className = 'day-extra-info-wrapper';
-                        extraInfoWrapper.style.cssText = 'display: flex; align-items: center; gap: 4px;  line-height: 1; margin-right: 4px;';
+                        extraInfoWrapper.style.cssText = 'display: flex; align-items: center; justify-content: flex-end; gap: 4px;  line-height: 1; margin-right: 4px; flex: 1; min-width: 0; overflow: hidden;';
 
                         if (this.showLunar) {
-                            const { displayLunar, isFestival, fullLunarDate } = this.getLunarInfo(arg.date);
+                            const { displayLunar, isFestival, fullLunarDate, festivalName } = this.getLunarInfo(arg.date);
                             const lunarSpan = document.createElement('span');
                             lunarSpan.className = `day-lunar ${isFestival ? 'festival' : ''}`;
                             lunarSpan.textContent = displayLunar;
-                            lunarSpan.title = fullLunarDate;
-                            lunarSpan.style.cssText = `${isFestival ? 'color: var(--b3-theme-primary); font-weight: bold;' : 'color: var(--b3-theme-on-surface-light); opacity: 0.8; font-size: 0.9em;'} z-index: 1; line-height: 1;`;
+                            lunarSpan.title = isFestival && festivalName ? `${fullLunarDate} ${festivalName}` : fullLunarDate;
+                            lunarSpan.style.cssText = `${isFestival ? 'color: var(--b3-theme-primary); font-weight: bold;' : 'color: var(--b3-theme-on-surface-light); opacity: 0.8; font-size: 0.9em;'} z-index: 1; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; text-align: right;`;
                             extraInfoWrapper.appendChild(lunarSpan);
                         }
 
@@ -1372,7 +1382,7 @@ export class CalendarView {
                             holidaySpan.className = 'day-holiday';
                             holidaySpan.textContent = isWorkday ? i18n('workdayMarker') : i18n('holidayMarker');
                             holidaySpan.title = typeof holidayName === 'object' ? holidayName.title : holidayName;
-                            holidaySpan.style.cssText = `color: ${isWorkday ? 'var(--b3-theme-error)' : 'var(--b3-card-success-color)'}; font-size: 0.8em; cursor: help; font-weight: bold;`;
+                            holidaySpan.style.cssText = `background-color: ${isWorkday ? 'var(--b3-theme-error)' : 'rgba(from var(--b3-card-success-color) r g b / .5);'}; color: var(--b3-theme-background); font-size: 0.75em; padding: 2px 4px; border-radius: 50%; cursor: help; font-weight: normal; line-height: 1; flex-shrink: 0;`;
                             extraInfoWrapper.appendChild(holidaySpan);
                         }
 
@@ -1412,15 +1422,15 @@ export class CalendarView {
 
                         const extraInfoWrapper = document.createElement('div');
                         extraInfoWrapper.className = 'day-header-extra-wrapper';
-                        extraInfoWrapper.style.cssText = 'display: flex; align-items: center; gap: 4px; margin-top: 2px; line-height: 1.2;';
+                        extraInfoWrapper.style.cssText = 'display: flex; align-items: center; gap: 4px; margin-top: 2px; line-height: 1.2; min-width: 0; max-width: 100%; overflow: hidden;';
 
                         if (this.showLunar) {
-                            const { displayLunar, isFestival, fullLunarDate } = this.getLunarInfo(arg.date);
+                            const { displayLunar, isFestival, fullLunarDate, festivalName } = this.getLunarInfo(arg.date);
                             const lunarSpan = document.createElement('span');
                             lunarSpan.className = `day-header-lunar ${isFestival ? 'festival' : ''}`;
                             lunarSpan.textContent = displayLunar;
-                            lunarSpan.title = fullLunarDate;
-                            lunarSpan.style.cssText = `font-size: 0.8em; ${isFestival ? 'color: var(--b3-theme-primary);' : 'color: var(--b3-theme-on-surface-light); opacity: 0.8;'}`;
+                            lunarSpan.title = isFestival && festivalName ? `${fullLunarDate} ${festivalName}` : fullLunarDate;
+                            lunarSpan.style.cssText = `font-size: 0.8em; ${isFestival ? 'color: var(--b3-theme-primary);' : 'color: var(--b3-theme-on-surface-light); opacity: 0.8;'} white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex-shrink: 1;`;
                             extraInfoWrapper.appendChild(lunarSpan);
                         }
 
@@ -1430,7 +1440,7 @@ export class CalendarView {
                             holidaySpan.className = 'day-header-holiday';
                             holidaySpan.textContent = isWorkday ? i18n('workdayMarker') : i18n('holidayMarker');
                             holidaySpan.title = typeof holidayName === 'object' ? holidayName.title : holidayName;
-                            holidaySpan.style.cssText = `font-size: 0.75em; color: ${isWorkday ? 'var(--b3-theme-error)' : 'var(--b3-card-success-color)'}; cursor: help; font-weight: bold;`;
+                            holidaySpan.style.cssText = `background-color: ${isWorkday ? 'var(--b3-theme-error)' : 'rgba(from var(--b3-card-success-color) r g b / .5);'}; color: var(--b3-theme-background); font-size: 0.75em; padding: 2px 4px; border-radius: 50%; cursor: help; font-weight: normal; line-height: 1; flex-shrink: 0;`;
                             extraInfoWrapper.appendChild(holidaySpan);
                         }
 
@@ -1519,12 +1529,12 @@ export class CalendarView {
                                 listHeader.removeAttribute('data-lunar-processed');
                             } else if (!listHeader.getAttribute('data-lunar-processed')) {
                                 if (textContainer) {
-                                    const { displayLunar, isFestival, fullLunarDate } = this.getLunarInfo(date);
+                                    const { displayLunar, isFestival, fullLunarDate, festivalName } = this.getLunarInfo(date);
                                     const lunarSpan = document.createElement('span');
                                     lunarSpan.className = `day-lunar ${isFestival ? 'festival' : ''}`;
                                     lunarSpan.textContent = displayLunar;
-                                    lunarSpan.title = fullLunarDate;
-                                    lunarSpan.style.cssText = `${isFestival ? 'color: var(--b3-theme-primary); font-weight: bold;' : 'color: var(--b3-theme-on-surface-light); opacity: 0.8; font-size: 0.9em;'} margin-left: 8px;`;
+                                    lunarSpan.title = isFestival && festivalName ? `${fullLunarDate} ${festivalName}` : fullLunarDate;
+                                    lunarSpan.style.cssText = `${isFestival ? 'color: var(--b3-theme-primary); font-weight: bold;' : 'color: var(--b3-theme-on-surface-light); opacity: 0.8; font-size: 0.9em;'} margin-left: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; max-width: 200px; display: inline-block;`;
                                     textContainer.appendChild(lunarSpan);
                                 }
                                 listHeader.setAttribute('data-lunar-processed', 'true');
@@ -1542,7 +1552,7 @@ export class CalendarView {
                                     holidaySpan.className = 'day-holiday';
                                     holidaySpan.textContent = isWorkday ? i18n('workdayMarker') : i18n('holidayMarker');
                                     holidaySpan.title = typeof holidayName === 'object' ? holidayName.title : holidayName;
-                                    holidaySpan.style.cssText = `color: ${isWorkday ? 'var(--b3-theme-error)' : 'var(--b3-card-success-color)'}; font-size: 0.8em; margin-left: 8px; cursor: help; font-weight: bold;`;
+                                    holidaySpan.style.cssText = `background-color: ${isWorkday ? 'var(--b3-theme-error)' : 'var(--b3-card-success-color)'}; color: #fff; font-size: 0.75em; padding: 2px 4px; border-radius: 4px; cursor: help; font-weight: normal; line-height: 1; margin-left: 8px;`;
                                     textContainer.appendChild(holidaySpan);
                                 }
                                 listHeader.setAttribute('data-holiday-processed', 'true');
@@ -2347,7 +2357,7 @@ export class CalendarView {
         const displayLunar = festival ? festival : lunarText;
         const isFestival = !!festival;
         const fullLunarDate = lunar.getMonthInChinese() + '月' + lunar.getDayInChinese();
-        return { displayLunar, isFestival, dateNum: date.getDate(), fullLunarDate };
+        return { displayLunar, isFestival, dateNum: date.getDate(), fullLunarDate, festivalName: festival };
     }
 
 
@@ -3301,7 +3311,10 @@ export class CalendarView {
             subIcon.style.display = 'flex';
             subIcon.style.alignItems = 'center';
             subIcon.style.justifyContent = 'center';
-            subIcon.style.fontSize = '12px';
+            subIcon.style.fontSize = '10px';
+            subIcon.style.backgroundColor = 'var(--b3-theme-primary)';
+            subIcon.style.borderRadius = '50%';
+            subIcon.style.lineHeight = '1';
             subIcon.style.flexShrink = '0';
             topRow.appendChild(subIcon);
         } else {
@@ -3362,6 +3375,21 @@ export class CalendarView {
             titleEl.innerHTML = event.title;
         }
 
+        // 重复图标 (移动到标题前)
+        if (props.isRepeated || props.repeat?.enabled) {
+            const repeatIcon = document.createElement('span');
+            repeatIcon.className = 'reminder-event-icon';
+            repeatIcon.style.flexShrink = '0';
+            if (props.isRepeated) {
+                repeatIcon.innerHTML = '🔄';
+                repeatIcon.title = i18n("repeatInstance");
+            } else {
+                repeatIcon.innerHTML = '🔁';
+                repeatIcon.title = i18n("repeatSeries");
+            }
+            topRow.appendChild(repeatIcon);
+        }
+
         topRow.appendChild(titleEl);
 
         mainFrame.appendChild(topRow);
@@ -3384,20 +3412,6 @@ export class CalendarView {
                     indicatorsRow.appendChild(catIcon);
                 }
             });
-        }
-
-        // 重复图标
-        if (props.isRepeated || props.repeat?.enabled) {
-            const repeatIcon = document.createElement('span');
-            repeatIcon.className = 'reminder-event-icon';
-            if (props.isRepeated) {
-                repeatIcon.innerHTML = '🔄';
-                repeatIcon.title = i18n("repeatInstance");
-            } else {
-                repeatIcon.innerHTML = '🔁';
-                repeatIcon.title = i18n("repeatSeries");
-            }
-            indicatorsRow.appendChild(repeatIcon);
         }
 
         // 只有当有图标时才添加指标行
@@ -3864,6 +3878,19 @@ export class CalendarView {
      * 合并通用的事件排序逻辑
      */
     private compareEventsForOrder(a: any, b: any) {
+        // 完成的任务时间按完成时间排序并集中放置在最后
+        const typeA = a.extendedProps?.type;
+        const typeB = b.extendedProps?.type;
+        if (typeA === 'completedTaskTime' && typeB === 'completedTaskTime') {
+            const timeA = a.extendedProps?.completedTime || '';
+            const timeB = b.extendedProps?.completedTime || '';
+            if (timeA !== timeB) {
+                return timeA.localeCompare(timeB);
+            }
+        } else if (typeA === 'completedTaskTime' || typeB === 'completedTaskTime') {
+            return typeA === 'completedTaskTime' ? 1 : -1;
+        }
+
         // 0. 订阅日历置顶
         const isSubA = a.extendedProps?.isSubscribed || false;
         const isSubB = b.extendedProps?.isSubscribed || false;
@@ -4858,7 +4885,7 @@ export class CalendarView {
             .reminder-event-top-row {
                 display: flex;
                 align-items: center;
-                gap: 4px;
+                gap: 1px;
                 width: 100%;
                 min-height: 18px;
                 flex-shrink: 0;
@@ -5051,6 +5078,30 @@ export class CalendarView {
 
             .completed-task-time-event .fc-event-title {
                 font-style: italic;
+            }
+
+            /* 完成任务时间分隔线 (仅用于 dayGrid 视图的 All-day/日网格区域) */
+            .fc-daygrid-day-events .fc-daygrid-event-harness:has(.completed-task-time-event) .completed-task-time-event {
+                margin-top: 12px !important;
+                position: relative;
+            }
+            
+            .fc-daygrid-day-events .fc-daygrid-event-harness:has(.completed-task-time-event) .completed-task-time-event::before {
+                content: "";
+                position: absolute;
+                top: -8px;
+                left: 0;
+                right: 0;
+                border-top: 1px dashed var(--b3-theme-on-surface-light);
+                opacity: 0.6;
+            }
+
+            .fc-daygrid-day-events .fc-daygrid-event-harness:has(.completed-task-time-event) ~ .fc-daygrid-event-harness:has(.completed-task-time-event) .completed-task-time-event {
+                margin-top: 1px !important;
+            }
+            
+            .fc-daygrid-day-events .fc-daygrid-event-harness:has(.completed-task-time-event) ~ .fc-daygrid-event-harness:has(.completed-task-time-event) .completed-task-time-event::before {
+                display: none;
             }
 
             .all-day-reorder-indicator {
@@ -5832,7 +5883,8 @@ export class CalendarView {
             // Add completed task times if enabled and in Day/Week view
             if (this.showCompletedTaskTime && this.calendar && this.calendar.view) {
                 const viewType = this.calendar.view.type;
-                if (viewType === 'timeGridDay' || viewType === 'timeGridWeek' || viewType === 'timeGridMultiDays') {
+                if (viewType === 'timeGridDay' || viewType === 'timeGridWeek' || viewType === 'timeGridMultiDays' ||
+                    viewType === 'dayGridDay' || viewType === 'dayGridWeek' || viewType === 'dayGridMultiDays') {
                     const completedTaskEvents = await this.getCompletedTaskTimeEvents(startDate, endDate, reminderData, projectData);
                     events.push(...completedTaskEvents);
                 }
