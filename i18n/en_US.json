@@ -1060,7 +1060,7 @@
     "noValidEvents": "No valid events found in ICS file",
     "parseIcsFailed": "Failed to parse ICS file",
     "icsSubscription": "Calendar Subscription",
-    "icsSubscriptionDesc": "Subscribe to external ICS calendars and automatically sync tasks to the plugin",
+    "icsSubscriptionDesc": "Subscribe to external ICS calendars (such as Outlook-generated ICS links, as well as importing holiday calendars, weather calendars, etc., created by others), and automatically synchronize events into this plugin. It is recommended to set up dedicated projects for each subscribed calendar (you can create a project status \"Subscribed Calendar\" specifically for storing these items). ⚠️ Note: Subscribed events cannot be edited. For a usage tutorial, see <a href=\"https://www.yuque.com/achuan-2/im3en6/sdlhrxn1dcdv0r4k\">link</a>.",
     "addSubscription": "Add Subscription",
     "manageSubscriptions": "Manage Subscriptions",
     "subscriptionName": "Subscription Name",

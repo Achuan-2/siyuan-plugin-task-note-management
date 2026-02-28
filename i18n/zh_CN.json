@@ -1060,7 +1060,7 @@
     "noValidEvents": "ICS文件中没有找到有效的事件",
     "parseIcsFailed": "解析ICS文件失败",
     "icsSubscription": "日历订阅",
-    "icsSubscriptionDesc": "订阅外部ICS日历（如outlook可生成ics链接，以及导入别人制作的节假日日历、天气日历等），自动同步日程到本插件里，建议为每个订阅日历设置专门项目（项目状态可以设置为订阅日历），注意：订阅的日程不可编辑",
+    "icsSubscriptionDesc": "订阅外部ICS日历（如outlook可生成ics链接，以及导入别人制作的节假日日历、天气日历等），自动同步日程到本插件里，建议为每个订阅日历设置专门项目（可以新建一个项目状态为订阅日历，专门存放这些项目）。⚠️注意：订阅的日程不可编辑。使用教程见<a href=\"https://www.yuque.com/achuan-2/im3en6/sdlhrxn1dcdv0r4k\">链接</a>",
     "addSubscription": "添加订阅",
     "manageSubscriptions": "管理订阅",
     "subscriptionName": "订阅名称",
