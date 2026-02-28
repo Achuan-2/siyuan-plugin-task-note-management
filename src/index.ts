@@ -605,7 +605,7 @@ export default class ReminderPlugin extends Plugin {
         this.initSystemNotificationPermission();
 
         // 监听设置变更，动态显示/隐藏侧边停靠栏
-        window.addEventListener('reminderSettingsUpdated', async () => {
+        const onSettingsUpdated = async () => {
             try {
                 const settings = await this.loadSettings();
                 this.toggleDockVisibility('project_dock', settings.enableProjectDock !== false);
@@ -691,10 +691,14 @@ export default class ReminderPlugin extends Plugin {
             } catch (err) {
                 console.warn('处理设置变更失败:', err);
             }
-        });
+        };
+        window.addEventListener('reminderSettingsUpdated', onSettingsUpdated);
+        this.addCleanup(() => window.removeEventListener('reminderSettingsUpdated', onSettingsUpdated));
 
         // 监听文档树右键菜单事件
-        this.eventBus.on('open-menu-doctree', this.handleDocumentTreeMenu.bind(this));
+        const handleDocTreeMenu = this.handleDocumentTreeMenu.bind(this);
+        this.eventBus.on('open-menu-doctree', handleDocTreeMenu);
+        this.addCleanup(() => this.eventBus.off('open-menu-doctree', handleDocTreeMenu));
 
         // 初始化ICS云端同步
         this.initIcsSync();
@@ -768,6 +772,11 @@ export default class ReminderPlugin extends Plugin {
 
         events.forEach(event => {
             document.addEventListener(event, handleUserInteraction, { once: true });
+        });
+        this.addCleanup(() => {
+            events.forEach(event => {
+                document.removeEventListener(event, handleUserInteraction);
+            });
         });
     }
 
@@ -1168,10 +1177,14 @@ export default class ReminderPlugin extends Plugin {
         }
 
         // 文档块标添加菜单
-        this.eventBus.on('click-editortitleicon', this.handleDocumentMenu.bind(this));
+        const handleDocMenu = this.handleDocumentMenu.bind(this);
+        this.eventBus.on('click-editortitleicon', handleDocMenu);
+        this.addCleanup(() => this.eventBus.off('click-editortitleicon', handleDocMenu));
 
         // 块菜单添加菜单
-        this.eventBus.on('click-blockicon', this.handleBlockMenu.bind(this));
+        const handleBlkMenu = this.handleBlockMenu.bind(this);
+        this.eventBus.on('click-blockicon', handleBlkMenu);
+        this.addCleanup(() => this.eventBus.off('click-blockicon', handleBlkMenu));
 
         // 定期检查提醒
         this.startReminderCheck();
@@ -1182,14 +1195,15 @@ export default class ReminderPlugin extends Plugin {
         this.updateHabitBadges();
 
         // 延迟一些时间后再次更新徽章，确保停靠栏已渲染
-        setTimeout(() => {
+        const badgeTimer = setTimeout(() => {
             this.updateBadges();
             this.updateProjectBadges();
             this.updateHabitBadges();
         }, 2000);
+        this.addCleanup(() => clearTimeout(badgeTimer));
 
         // 监听提醒更新事件，更新徽章
-        window.addEventListener('reminderUpdated', () => {
+        const onReminderUpdated = () => {
             this.updateBadges();
             this.addBreadcrumbButtonsToExistingProtyles();
             const currentProtyle = getActiveEditor(false)?.protyle;
@@ -1197,18 +1211,24 @@ export default class ReminderPlugin extends Plugin {
             setTimeout(() => {
                 this.addBlockProjectButtonsToProtyle(currentProtyle);
             }, 500);
-        });
+        };
+        window.addEventListener('reminderUpdated', onReminderUpdated);
+        this.addCleanup(() => window.removeEventListener('reminderUpdated', onReminderUpdated));
 
         // 监听项目更新事件，更新项目徽章并重新扫描protyle块按钮
-        window.addEventListener('projectUpdated', () => {
+        const onProjectUpdated = () => {
             this.updateProjectBadges();
             this.addBreadcrumbButtonsToExistingProtyles();
-        });
+        };
+        window.addEventListener('projectUpdated', onProjectUpdated);
+        this.addCleanup(() => window.removeEventListener('projectUpdated', onProjectUpdated));
 
         // 监听习惯更新事件，更新习惯徽章
-        window.addEventListener('habitUpdated', () => {
+        const onHabitUpdated = () => {
             this.updateHabitBadges();
-        });
+        };
+        window.addEventListener('habitUpdated', onHabitUpdated);
+        this.addCleanup(() => window.removeEventListener('habitUpdated', onHabitUpdated));
     }
 
     async onLayoutReady() {
@@ -1222,7 +1242,7 @@ export default class ReminderPlugin extends Plugin {
 
         // 在布局准备就绪后监听protyle切换事件
         // 注册 switch-protyle 事件处理：仅在此事件中调用 addBlockProjectButtonsToProtyle
-        this.eventBus.on('switch-protyle', (e) => {
+        const onSwitchProtyle = (e: any) => {
             // 延迟添加按钮，确保protyle完全切换完成
             setTimeout(() => {
                 // 保持原有面包屑按钮初始化
@@ -1230,20 +1250,27 @@ export default class ReminderPlugin extends Plugin {
                 // 将块按钮逻辑限定为 switch-protyle 事件中调用
                 this.addBlockProjectButtonsToProtyle(e.detail.protyle);
             }, 500);
-        });
-        this.eventBus.on('loaded-protyle-dynamic', (e) => {
-            // 延迟添加按钮，确保protyle完全加载完成
-            setTimeout(() => {
-                this.addBlockProjectButtonsToProtyle(e.detail.protyle);
-            }, 500);
-        });
-        this.eventBus.on('loaded-protyle-static', (e) => {
-            // 延迟添加按钮，确保protyle完全加载完成
-            setTimeout(() => {
+        };
+        this.eventBus.on('switch-protyle', onSwitchProtyle);
+        this.addCleanup(() => this.eventBus.off('switch-protyle', onSwitchProtyle));
 
+        const onLoadedProtyleDynamic = (e: any) => {
+            // 延迟添加按钮，确保protyle完全加载完成
+            setTimeout(() => {
                 this.addBlockProjectButtonsToProtyle(e.detail.protyle);
             }, 500);
-        });
+        };
+        this.eventBus.on('loaded-protyle-dynamic', onLoadedProtyleDynamic);
+        this.addCleanup(() => this.eventBus.off('loaded-protyle-dynamic', onLoadedProtyleDynamic));
+
+        const onLoadedProtyleStatic = (e: any) => {
+            // 延迟添加按钮，确保protyle完全加载完成
+            setTimeout(() => {
+                this.addBlockProjectButtonsToProtyle(e.detail.protyle);
+            }, 500);
+        };
+        this.eventBus.on('loaded-protyle-static', onLoadedProtyleStatic);
+        this.addCleanup(() => this.eventBus.off('loaded-protyle-static', onLoadedProtyleStatic));
         // 为当前已存在的protyle添加按钮
         this.addBreadcrumbButtonsToExistingProtyles();
 
@@ -2460,9 +2487,10 @@ export default class ReminderPlugin extends Plugin {
         }, 30000);
 
         // 启动时立即检查一次
-        setTimeout(() => {
+        const initCheckTimer = setTimeout(() => {
             this.checkReminders();
         }, 5000);
+        this.addCleanup(() => clearTimeout(initCheckTimer));
     }
 
     private async checkReminders() {
@@ -4332,6 +4360,12 @@ export default class ReminderPlugin extends Plugin {
             this.reminderCheckTimer = null;
         }
 
+        // 清理 ICS 订阅同步定时器
+        if (this.icsSubscriptionSyncTimer) {
+            clearInterval(this.icsSubscriptionSyncTimer);
+            this.icsSubscriptionSyncTimer = null;
+        }
+
         // 执行所有注册的清理函数
         this.cleanupFunctions.forEach(fn => {
             try {
@@ -4391,6 +4425,12 @@ export default class ReminderPlugin extends Plugin {
                     document.addEventListener('click', enableNotification, { once: true });
                     document.addEventListener('touchstart', enableNotification, { once: true });
                     document.addEventListener('keydown', enableNotification, { once: true });
+
+                    this.addCleanup(() => {
+                        document.removeEventListener('click', enableNotification);
+                        document.removeEventListener('touchstart', enableNotification);
+                        document.removeEventListener('keydown', enableNotification);
+                    });
                 }
             }
         } catch (error) {
