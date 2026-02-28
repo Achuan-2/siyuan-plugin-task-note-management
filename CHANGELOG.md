@@ -1,3 +1,28 @@
+## v6.1.3 / 20260228
+- 🎨 日历视图：看板样式也支持显示任务完成时间
+- 🎨 日历视图：默认不显示分类图标和项目信息
+- 🎨 日历视图：优化节假日显示，样式改为圆形徽章
+- 🎨 日历视图：订阅日历的emoji添加背景色和圆角
+- 🎨 日历视图：重复日程在日历显示优化，把🔄移动在任务标题前
+- 🎨 日历视图：多天视图点击today，依然要保持today是第二天，第一天是昨天
+- 🎨 任务编辑：编辑子任务，所属父任务置顶
+- 🎨 日历视图：最多显示2个重叠事件
+- 🎨 插件设置：添加帮助文档
+- 🎨 禁用插件时监听事件需要全部清理
+
+---
+
+- 🎨 Calendar View: Kanban style now supports displaying task completion time
+- 🎨 Calendar View: Category icons and project information are hidden by default
+- 🎨 Calendar View: Optimized holiday display, style changed to circular badges
+- 🎨 Calendar View: Added background color and rounded corners to emojis in subscribed calendars
+- 🎨 Calendar View: Optimized display of recurring events in the calendar, moved 🔄 to the front of the task title
+- 🎨 Calendar View: In multi-day view, clicking "today" still keeps "today" as the second day, with the first day being yesterday
+- 🎨 Task Editing: When editing subtasks, the parent task is pinned to the top
+- 🎨 Calendar View: Display a maximum of 2 overlapping events
+- 🎨 Plugin Settings: Added help documentation
+- 🎨 When disabling the plugin, all monitored events need to be cleared
+
 ## v6.1.2 / 20260228
 - 🎨 vip：终身会员的激活时间显示为终身会员key生成时间，不考虑其他key的累加时间
 - 📝 vip：vip设置添加答疑交流方法
