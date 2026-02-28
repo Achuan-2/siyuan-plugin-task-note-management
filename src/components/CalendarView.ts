@@ -1364,15 +1364,15 @@ export class CalendarView {
 
                         const extraInfoWrapper = document.createElement('div');
                         extraInfoWrapper.className = 'day-extra-info-wrapper';
-                        extraInfoWrapper.style.cssText = 'display: flex; align-items: center; gap: 4px;  line-height: 1; margin-right: 4px;';
+                        extraInfoWrapper.style.cssText = 'display: flex; align-items: center; justify-content: flex-end; gap: 4px;  line-height: 1; margin-right: 4px; flex: 1; min-width: 0; overflow: hidden;';
 
                         if (this.showLunar) {
-                            const { displayLunar, isFestival, fullLunarDate } = this.getLunarInfo(arg.date);
+                            const { displayLunar, isFestival, fullLunarDate, festivalName } = this.getLunarInfo(arg.date);
                             const lunarSpan = document.createElement('span');
                             lunarSpan.className = `day-lunar ${isFestival ? 'festival' : ''}`;
                             lunarSpan.textContent = displayLunar;
-                            lunarSpan.title = fullLunarDate;
-                            lunarSpan.style.cssText = `${isFestival ? 'color: var(--b3-theme-primary); font-weight: bold;' : 'color: var(--b3-theme-on-surface-light); opacity: 0.8; font-size: 0.9em;'} z-index: 1; line-height: 1;`;
+                            lunarSpan.title = isFestival && festivalName ? `${fullLunarDate} ${festivalName}` : fullLunarDate;
+                            lunarSpan.style.cssText = `${isFestival ? 'color: var(--b3-theme-primary); font-weight: bold;' : 'color: var(--b3-theme-on-surface-light); opacity: 0.8; font-size: 0.9em;'} z-index: 1; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; text-align: right;`;
                             extraInfoWrapper.appendChild(lunarSpan);
                         }
 
@@ -1382,7 +1382,7 @@ export class CalendarView {
                             holidaySpan.className = 'day-holiday';
                             holidaySpan.textContent = isWorkday ? i18n('workdayMarker') : i18n('holidayMarker');
                             holidaySpan.title = typeof holidayName === 'object' ? holidayName.title : holidayName;
-                            holidaySpan.style.cssText = `background-color: ${isWorkday ? 'var(--b3-theme-error)' : 'rgba(from var(--b3-card-success-color) r g b / .5);'}; color: var(--b3-theme-background); font-size: 0.75em; padding: 2px 4px; border-radius: 50%; cursor: help; font-weight: normal; line-height: 1;`;
+                            holidaySpan.style.cssText = `background-color: ${isWorkday ? 'var(--b3-theme-error)' : 'rgba(from var(--b3-card-success-color) r g b / .5);'}; color: var(--b3-theme-background); font-size: 0.75em; padding: 2px 4px; border-radius: 50%; cursor: help; font-weight: normal; line-height: 1; flex-shrink: 0;`;
                             extraInfoWrapper.appendChild(holidaySpan);
                         }
 
@@ -1422,15 +1422,15 @@ export class CalendarView {
 
                         const extraInfoWrapper = document.createElement('div');
                         extraInfoWrapper.className = 'day-header-extra-wrapper';
-                        extraInfoWrapper.style.cssText = 'display: flex; align-items: center; gap: 4px; margin-top: 2px; line-height: 1.2;';
+                        extraInfoWrapper.style.cssText = 'display: flex; align-items: center; gap: 4px; margin-top: 2px; line-height: 1.2; min-width: 0; max-width: 100%; overflow: hidden;';
 
                         if (this.showLunar) {
-                            const { displayLunar, isFestival, fullLunarDate } = this.getLunarInfo(arg.date);
+                            const { displayLunar, isFestival, fullLunarDate, festivalName } = this.getLunarInfo(arg.date);
                             const lunarSpan = document.createElement('span');
                             lunarSpan.className = `day-header-lunar ${isFestival ? 'festival' : ''}`;
                             lunarSpan.textContent = displayLunar;
-                            lunarSpan.title = fullLunarDate;
-                            lunarSpan.style.cssText = `font-size: 0.8em; ${isFestival ? 'color: var(--b3-theme-primary);' : 'color: var(--b3-theme-on-surface-light); opacity: 0.8;'}`;
+                            lunarSpan.title = isFestival && festivalName ? `${fullLunarDate} ${festivalName}` : fullLunarDate;
+                            lunarSpan.style.cssText = `font-size: 0.8em; ${isFestival ? 'color: var(--b3-theme-primary);' : 'color: var(--b3-theme-on-surface-light); opacity: 0.8;'} white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex-shrink: 1;`;
                             extraInfoWrapper.appendChild(lunarSpan);
                         }
 
@@ -1440,7 +1440,7 @@ export class CalendarView {
                             holidaySpan.className = 'day-header-holiday';
                             holidaySpan.textContent = isWorkday ? i18n('workdayMarker') : i18n('holidayMarker');
                             holidaySpan.title = typeof holidayName === 'object' ? holidayName.title : holidayName;
-                            holidaySpan.style.cssText = `background-color: ${isWorkday ? 'var(--b3-theme-error)' : 'rgba(from var(--b3-card-success-color) r g b / .5);'}; color: var(--b3-theme-background); font-size: 0.75em; padding: 2px 4px; border-radius: 50%; cursor: help; font-weight: normal; line-height: 1;`;
+                            holidaySpan.style.cssText = `background-color: ${isWorkday ? 'var(--b3-theme-error)' : 'rgba(from var(--b3-card-success-color) r g b / .5);'}; color: var(--b3-theme-background); font-size: 0.75em; padding: 2px 4px; border-radius: 50%; cursor: help; font-weight: normal; line-height: 1; flex-shrink: 0;`;
                             extraInfoWrapper.appendChild(holidaySpan);
                         }
 
@@ -1529,12 +1529,12 @@ export class CalendarView {
                                 listHeader.removeAttribute('data-lunar-processed');
                             } else if (!listHeader.getAttribute('data-lunar-processed')) {
                                 if (textContainer) {
-                                    const { displayLunar, isFestival, fullLunarDate } = this.getLunarInfo(date);
+                                    const { displayLunar, isFestival, fullLunarDate, festivalName } = this.getLunarInfo(date);
                                     const lunarSpan = document.createElement('span');
                                     lunarSpan.className = `day-lunar ${isFestival ? 'festival' : ''}`;
                                     lunarSpan.textContent = displayLunar;
-                                    lunarSpan.title = fullLunarDate;
-                                    lunarSpan.style.cssText = `${isFestival ? 'color: var(--b3-theme-primary); font-weight: bold;' : 'color: var(--b3-theme-on-surface-light); opacity: 0.8; font-size: 0.9em;'} margin-left: 8px;`;
+                                    lunarSpan.title = isFestival && festivalName ? `${fullLunarDate} ${festivalName}` : fullLunarDate;
+                                    lunarSpan.style.cssText = `${isFestival ? 'color: var(--b3-theme-primary); font-weight: bold;' : 'color: var(--b3-theme-on-surface-light); opacity: 0.8; font-size: 0.9em;'} margin-left: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; max-width: 200px; display: inline-block;`;
                                     textContainer.appendChild(lunarSpan);
                                 }
                                 listHeader.setAttribute('data-lunar-processed', 'true');
@@ -2357,7 +2357,7 @@ export class CalendarView {
         const displayLunar = festival ? festival : lunarText;
         const isFestival = !!festival;
         const fullLunarDate = lunar.getMonthInChinese() + '月' + lunar.getDayInChinese();
-        return { displayLunar, isFestival, dateNum: date.getDate(), fullLunarDate };
+        return { displayLunar, isFestival, dateNum: date.getDate(), fullLunarDate, festivalName: festival };
     }
 
 
