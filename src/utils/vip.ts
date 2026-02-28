@@ -23,6 +23,8 @@ export interface VIPStatus {
     freeTrialUsed: boolean;
     /** 错误信息 */
     error?: string;
+    /** 是否终身会员 */
+    isLifetime?: boolean;
 }
 
 export type PurchaseTerm = '7d' | '1m' | '1y' | 'Lifetime';
@@ -70,6 +72,7 @@ export class VipManager {
         }
 
         let currentExpire: number = 0;
+        let isLifetime: boolean = false;
 
         for (const key of validKeys) {
             const termMs = this.getTermMs(key.term, key.purchaseTime);
@@ -77,6 +80,7 @@ export class VipManager {
             if (key.term === 'Lifetime') {
                 // 终身版直接设置一个极远的时间
                 currentExpire = new Date(key.purchaseTime).setFullYear(new Date(key.purchaseTime).getFullYear() + 99);
+                isLifetime = true;
                 break; // 终身之后不再累加
             }
 
@@ -99,7 +103,8 @@ export class VipManager {
             isVip,
             expireDate: this.formatDate(new Date(currentExpire)),
             remainingDays: isVip ? remainingDays : 0,
-            freeTrialUsed
+            freeTrialUsed,
+            isLifetime
         };
     }
 

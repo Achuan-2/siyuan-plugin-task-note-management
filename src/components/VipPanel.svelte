@@ -190,7 +190,7 @@
 
         let currentExpire = 0;
         const now = Date.now();
-        const results = [];
+        let results = [];
 
         for (const k of validKeys) {
             const termMs = VipManager.getTermMs(k.term, k.purchaseTime);
@@ -216,6 +216,11 @@
                 });
             }
         }
+
+        if (results.some(r => r.isLifetime)) {
+            results = results.filter(r => r.isLifetime);
+        }
+
         return results;
     })();
 
@@ -227,22 +232,26 @@
 
 <div class="vip-container {isDialog ? 'in-dialog' : ''}">
     <div class="vip-header">
-        <div class="vip-card">
+        <div class="vip-card" class:is-vip={vipStatus.isVip} class:not-vip={!vipStatus.isVip}>
             <div class="vip-card__title">
                 <span class="vip-icon">👑</span>
-                VIP
+                订阅信息
             </div>
             <div class="vip-card__status">
                 {#if vipStatus.isVip}
-                    <div class="status-active">
-                        <div class="status-label">已激活</div>
-                        <div class="status-date">
-                            {vipStatus.expireDate} 到期
+                    {#if vipStatus.isLifetime}
+                        <div class="status-inactive">终身会员</div>
+                    {:else}
+                        <div class="status-active">
+                            <div class="status-label">已激活</div>
+                            <div class="status-date">
+                                {vipStatus.expireDate} 到期
+                            </div>
+                            <div class="status-days">
+                                剩余 {vipStatus.remainingDays} 天
+                            </div>
                         </div>
-                        <div class="status-days">
-                            剩余 {vipStatus.remainingDays} 天
-                        </div>
-                    </div>
+                    {/if}
                 {:else}
                     <div class="status-inactive">未订阅</div>
                 {/if}
@@ -413,7 +422,9 @@
                         <div class="key-info">
                             <div class="key-text">{item.key.split('_')[2].substring(0, 8)}...</div>
                             <div class="key-detail">
-                                {item.isLifetime ? '终身版' : `${item.term} 到期: ${item.end}`}
+                                {item.isLifetime
+                                    ? '终身版'
+                                    : `${item.term === '1y' ? '年付' : item.term === '1m' ? '月付' : '试用 7 天'} 到期: ${item.end}`}
                             </div>
                         </div>
                         <button
@@ -508,14 +519,22 @@
     }
 
     .vip-card {
-        background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
         border-radius: 16px;
         padding: 24px;
-        color: white;
-        box-shadow: 0 10px 25px -5px rgba(99, 102, 241, 0.4);
         margin-bottom: 24px;
         position: relative;
         overflow: hidden;
+    }
+
+    .vip-card.is-vip {
+        background: linear-gradient(135deg, #eab308, #de8d04);
+        color: white;
+        box-shadow: 0 10px 25px -5px rgba(234, 179, 8, 0.4);
+    }
+
+    .vip-card.not-vip {
+        background: var(--b3-theme-surface);
+        color: var(--b3-theme-on-background);
     }
 
     .vip-card::after {
@@ -643,7 +662,7 @@
     .plan-price {
         font-size: 18px;
         font-weight: bold;
-        color: var(--b3-theme-primary);
+        color: var(--b3-card-warning-color);
     }
 
     .pay-tips {
