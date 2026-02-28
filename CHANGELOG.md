@@ -1,5 +1,21 @@
+## v6.1.2 / 20260228
+- 🎨 vip：终身会员的激活时间显示为终身会员key生成时间，不考虑其他key的累加时间
+- 📝 vip：vip设置添加答疑交流方法
+- 🎨 订阅日历：完善设置，添加帮助文档
+- 🐛 日历上传：使用思源S3设置，同时自定义bucket，没有使用自定义的bucket
+- 🐛 日历上传：不开启定时同步无法显示S3设置
+- 🐛 日历上传：手动上传 ICS 到云端，没有自动更新ICS 云端链接
 
-## v6.1.1 / 20260228
+---
+
+- 🎨 vip: The activation time for lifetime members is displayed as the generation time of the lifetime membership key, without considering the cumulative time of other keys.
+- 📝 vip: Add Q&A communication methods in vip settings.
+- 🎨 Subscription Calendar: Improve settings and add help documentation.
+- 🐛 Calendar Upload: When using Siyuan S3 settings and customizing a bucket, the custom bucket is not utilized.
+- 🐛 Calendar Upload: S3 settings cannot be displayed without enabling scheduled synchronization.
+- 🐛 Calendar Upload: Manually uploading ICS to the cloud does not automatically update the ICS cloud link.
+
+## v6.1.1 / 20260227
 - 🎨 块菜单：列表块右键菜单支持批量将列表项转为任务
 - 🎨 订阅日历：在日历视图的排序按照订阅排序置顶展示
 - 🎨 订阅日历：支持设置是否在四象限和任务侧栏显示
