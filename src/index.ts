@@ -108,7 +108,7 @@ export const DEFAULT_SETTINGS = {
     sortMethod: 'time',
     sortOrder: 'asc',
     // 日历配置
-    calendarShowCategoryAndProject: true, // 新增：是否显示分类图标和项目信息
+    calendarShowCategoryAndProject: false, // 是否显示分类图标和项目信息
     calendarColorBy: 'priority',
     calendarViewMode: 'timeGridWeek',
     dayStartTime: '08:00', // 日历视图一天的起始时间
