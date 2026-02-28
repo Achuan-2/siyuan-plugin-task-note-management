@@ -554,6 +554,13 @@
             </div>
         </div>
     {/if}
+
+    <div class="vip-section">
+        <h3>{i18n('vipExchangeAndQA')}</h3>
+        <div class="activation-notice">
+            {i18n('vipExchangeAndQADesc')}
+        </div>
+    </div>
 </div>
 
 <style>

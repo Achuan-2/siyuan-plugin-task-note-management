@@ -1229,6 +1229,8 @@
     "vipInputKeyPlaceholder": "Enter activation code",
     "vipActivateBtn": "Activate",
     "vipActiveKeys": "Active Activation Codes",
+    "vipExchangeAndQA": "Q&A and Support",
+    "vipExchangeAndQADesc": "For premium members, you can send payment screenshots to achuan-2@outlook to apply for joining the WeChat discussion group. If you prefer not to join the group or are unable to use WeChat, you can also consult me via email regarding usage issues.",
     "vipLifetimeVersion": "Lifetime version (Started: ",
     "vipTo": " to ",
     "vipPaymentSuccess": "Payment successful!",
