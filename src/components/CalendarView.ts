@@ -1382,7 +1382,7 @@ export class CalendarView {
                             holidaySpan.className = 'day-holiday';
                             holidaySpan.textContent = isWorkday ? i18n('workdayMarker') : i18n('holidayMarker');
                             holidaySpan.title = typeof holidayName === 'object' ? holidayName.title : holidayName;
-                            holidaySpan.style.cssText = `color: ${isWorkday ? 'var(--b3-theme-error)' : 'var(--b3-card-success-color)'}; font-size: 0.8em; cursor: help; font-weight: bold;`;
+                            holidaySpan.style.cssText = `background-color: ${isWorkday ? 'var(--b3-theme-error)' : 'rgba(from var(--b3-card-success-color) r g b / .5);'}; color: var(--b3-theme-background); font-size: 0.75em; padding: 2px 4px; border-radius: 50%; cursor: help; font-weight: normal; line-height: 1;`;
                             extraInfoWrapper.appendChild(holidaySpan);
                         }
 
@@ -1440,7 +1440,7 @@ export class CalendarView {
                             holidaySpan.className = 'day-header-holiday';
                             holidaySpan.textContent = isWorkday ? i18n('workdayMarker') : i18n('holidayMarker');
                             holidaySpan.title = typeof holidayName === 'object' ? holidayName.title : holidayName;
-                            holidaySpan.style.cssText = `font-size: 0.75em; color: ${isWorkday ? 'var(--b3-theme-error)' : 'var(--b3-card-success-color)'}; cursor: help; font-weight: bold;`;
+                            holidaySpan.style.cssText = `background-color: ${isWorkday ? 'var(--b3-theme-error)' : 'rgba(from var(--b3-card-success-color) r g b / .5);'}; color: var(--b3-theme-background); font-size: 0.75em; padding: 2px 4px; border-radius: 50%; cursor: help; font-weight: normal; line-height: 1;`;
                             extraInfoWrapper.appendChild(holidaySpan);
                         }
 
@@ -1552,7 +1552,7 @@ export class CalendarView {
                                     holidaySpan.className = 'day-holiday';
                                     holidaySpan.textContent = isWorkday ? i18n('workdayMarker') : i18n('holidayMarker');
                                     holidaySpan.title = typeof holidayName === 'object' ? holidayName.title : holidayName;
-                                    holidaySpan.style.cssText = `color: ${isWorkday ? 'var(--b3-theme-error)' : 'var(--b3-card-success-color)'}; font-size: 0.8em; margin-left: 8px; cursor: help; font-weight: bold;`;
+                                    holidaySpan.style.cssText = `background-color: ${isWorkday ? 'var(--b3-theme-error)' : 'var(--b3-card-success-color)'}; color: #fff; font-size: 0.75em; padding: 2px 4px; border-radius: 4px; cursor: help; font-weight: normal; line-height: 1; margin-left: 8px;`;
                                     textContainer.appendChild(holidaySpan);
                                 }
                                 listHeader.setAttribute('data-holiday-processed', 'true');
@@ -3380,7 +3380,6 @@ export class CalendarView {
             const repeatIcon = document.createElement('span');
             repeatIcon.className = 'reminder-event-icon';
             repeatIcon.style.flexShrink = '0';
-            repeatIcon.style.fontSize = '10px';
             if (props.isRepeated) {
                 repeatIcon.innerHTML = '🔄';
                 repeatIcon.title = i18n("repeatInstance");
