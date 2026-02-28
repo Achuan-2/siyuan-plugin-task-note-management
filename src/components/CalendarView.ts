@@ -3372,6 +3372,21 @@ export class CalendarView {
             titleEl.innerHTML = event.title;
         }
 
+        // 重复图标 (移动到标题前)
+        if (props.isRepeated || props.repeat?.enabled) {
+            const repeatIcon = document.createElement('span');
+            repeatIcon.className = 'reminder-event-icon';
+            repeatIcon.style.flexShrink = '0';
+            if (props.isRepeated) {
+                repeatIcon.innerHTML = '🔄';
+                repeatIcon.title = i18n("repeatInstance");
+            } else {
+                repeatIcon.innerHTML = '🔁';
+                repeatIcon.title = i18n("repeatSeries");
+            }
+            topRow.appendChild(repeatIcon);
+        }
+
         topRow.appendChild(titleEl);
 
         mainFrame.appendChild(topRow);
@@ -3394,20 +3409,6 @@ export class CalendarView {
                     indicatorsRow.appendChild(catIcon);
                 }
             });
-        }
-
-        // 重复图标
-        if (props.isRepeated || props.repeat?.enabled) {
-            const repeatIcon = document.createElement('span');
-            repeatIcon.className = 'reminder-event-icon';
-            if (props.isRepeated) {
-                repeatIcon.innerHTML = '🔄';
-                repeatIcon.title = i18n("repeatInstance");
-            } else {
-                repeatIcon.innerHTML = '🔁';
-                repeatIcon.title = i18n("repeatSeries");
-            }
-            indicatorsRow.appendChild(repeatIcon);
         }
 
         // 只有当有图标时才添加指标行
@@ -4881,7 +4882,7 @@ export class CalendarView {
             .reminder-event-top-row {
                 display: flex;
                 align-items: center;
-                gap: 4px;
+                gap: 1px;
                 width: 100%;
                 min-height: 18px;
                 flex-shrink: 0;
