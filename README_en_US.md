@@ -15,7 +15,7 @@ See: [CHANGELOG.md](https://cdn.jsdelivr.net/gh/Achuan-2/siyuan-plugin-task-note
 
 ## Usage
 
-Yuque Knowledge Base: https://www.yuque.com/achuan-2/im3en6
+Help Documentation: https://www.zhihu.com/column/c_1998349446233202806
 
 ## 🤔 Guiding Philosophy Behind the Plugin: Bullet Journal Method
 

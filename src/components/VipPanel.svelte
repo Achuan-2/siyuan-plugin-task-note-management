@@ -301,6 +301,12 @@
     </div>
 
     <div class="vip-section">
+        <div class="activation-notice">
+            {@html i18n('vipTutorial')}
+        </div>
+    </div>
+
+    <div class="vip-section">
         <h3>{i18n('vipUserInfo')}</h3>
         <div class="user-info">
             <div class="user-id">
@@ -898,6 +904,10 @@
 
     .activation-notice li {
         color: var(--b3-theme-on-surface-light);
+    }
+    .activation-notice :global(a) {
+        color: var(--b3-theme-primary);
+        text-decoration: underline;
     }
 
     .activation-box {
