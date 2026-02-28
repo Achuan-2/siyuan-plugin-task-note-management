@@ -1,3 +1,10 @@
+## v6.1.6 / 20260228
+- 🎨 帮助文档：将帮助文档链接改为知乎专栏
+
+---
+
+- 🎨 Help Documentation: Changed help documentation link to Zhihu Column
+
 ## v6.1.5 / 20260228
 - 🐛 vip：丢失 VIP 弹窗的文本内容
 

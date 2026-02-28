@@ -2,7 +2,7 @@
   "name": "siyuan-plugin-task-note-management",
   "author": "Achuan-2",
   "url": "https://github.com/Achuan-2/siyuan-plugin-task-note-management",
-  "version": "6.1.5",
+  "version": "6.1.6",
   "minAppVersion": "3.5.1",
   "backends": [
     "windows",
@@ -35,7 +35,7 @@
   },
   "funding": {
     "custom": [
-      "https://www.yuque.com/achuan-2"
+      "https://fastly.jsdelivr.net/gh/Achuan-2/PicBed/assets/20241128221208-2024-11-28.png"
     ]
   },
   "keywords": [
