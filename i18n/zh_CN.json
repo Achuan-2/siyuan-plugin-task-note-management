@@ -1299,7 +1299,7 @@
     "s3UseSiyuanConfig": "使用思源S3设置",
     "s3UseSiyuanConfigDesc": "启用后将使用思源的S3配置，无需手动配置下方的S3参数",
     "s3BucketDesc": "S3存储桶名称",
-    "s3EndpointDesc": "S3服务端点地址，可省略协议前缀（自动添加https://）",
+    "s3EndpointDesc": "S3服务端点地址，可省略协议前缀（自动添加https://）。推荐阿里云，不推荐七牛云（七牛云需要有域名且备案才可以外链访问文件）",
     "s3RegionDesc": "S3区域，例如 oss-cn-shanghai",
     "s3AccessKeyIdDesc": "S3访问密钥ID",
     "s3AccessKeySecretDesc": "S3访问密钥Secret",
