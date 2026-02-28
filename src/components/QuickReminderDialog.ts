@@ -1394,6 +1394,18 @@ export class QuickReminderDialog {
             ` : `
                 <div class="quick-reminder-dialog">
                     <div class="b3-dialog__content">
+                        <div class="b3-form__group" id="quickParentTaskGroup" style="display: none;">
+                            <label class="b3-form__label">${i18n("parentTask")}</label>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <input type="text" id="quickParentTaskDisplay" class="b3-text-field" readonly style="flex: 1; background: var(--b3-theme-background-light); cursor: default;" placeholder="${i18n("noParentTask")}">
+                                <button type="button" id="quickViewParentBtn" class="b3-button b3-button--outline" title="${i18n("viewParentTask")}" style="display: none;">
+                                    <svg class="b3-button__icon"><use xlink:href="#iconEye"></use></svg>
+                                </button>
+                            </div>
+                            <div class="b3-form__desc" style="font-size: 11px; color: var(--b3-theme-on-surface-light);">
+                                ${i18n("parentTaskIdLabel")}<span id="quickParentTaskId" style="font-family: monospace;">-</span>
+                            </div>
+                        </div>
                         <div class="b3-form__group">
                             <label class="b3-form__label">${i18n("eventTitle")}</label>
                             <div class="title-input-container" style="display: flex; gap: 8px; align-items: flex-start;">
@@ -1553,19 +1565,6 @@ export class QuickReminderDialog {
                         <div class="b3-form__group">
                             <label class="b3-form__label">${i18n("reminderNoteOptional")}</label>
                             <div id="quickReminderNote" style="width: 100%; min-height: 50px; border: 1px solid var(--b3-theme-surface-lighter); border-radius: 4px; position: relative;"></div>
-                        </div>
-
-                        <div class="b3-form__group" id="quickParentTaskGroup" style="display: none;">
-                            <label class="b3-form__label">${i18n("parentTask")}</label>
-                            <div style="display: flex; gap: 8px; align-items: center;">
-                                <input type="text" id="quickParentTaskDisplay" class="b3-text-field" readonly style="flex: 1; background: var(--b3-theme-background-light); cursor: default;" placeholder="${i18n("noParentTask")}">
-                                <button type="button" id="quickViewParentBtn" class="b3-button b3-button--outline" title="${i18n("viewParentTask")}" style="display: none;">
-                                    <svg class="b3-button__icon"><use xlink:href="#iconEye"></use></svg>
-                                </button>
-                            </div>
-                            <div class="b3-form__desc" style="font-size: 11px; color: var(--b3-theme-on-surface-light);">
-                                ${i18n("parentTaskIdLabel")}<span id="quickParentTaskId" style="font-family: monospace;">-</span>
-                            </div>
                         </div>
                         <div class="b3-form__group" id="quickEditAllInstancesGroup" style="display: none;">
                             <label class="b3-form__label">${i18n("recurringTask")}</label>
