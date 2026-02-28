@@ -3311,7 +3311,10 @@ export class CalendarView {
             subIcon.style.display = 'flex';
             subIcon.style.alignItems = 'center';
             subIcon.style.justifyContent = 'center';
-            subIcon.style.fontSize = '12px';
+            subIcon.style.fontSize = '10px';
+            subIcon.style.backgroundColor = 'var(--b3-theme-primary)';
+            subIcon.style.borderRadius = '50%';
+            subIcon.style.lineHeight = '1';
             subIcon.style.flexShrink = '0';
             topRow.appendChild(subIcon);
         } else {
@@ -3377,6 +3380,7 @@ export class CalendarView {
             const repeatIcon = document.createElement('span');
             repeatIcon.className = 'reminder-event-icon';
             repeatIcon.style.flexShrink = '0';
+            repeatIcon.style.fontSize = '10px';
             if (props.isRepeated) {
                 repeatIcon.innerHTML = '🔄';
                 repeatIcon.title = i18n("repeatInstance");
