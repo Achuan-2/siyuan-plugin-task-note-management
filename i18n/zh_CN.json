@@ -540,7 +540,7 @@
     "autoDetectDateTime": "添加提醒时自动时间识别",
     "autoDetectDateTimeDesc": "在创建提醒时自动识别块内容中的日期时间信息，支持自然语言表达如'明天下午3点'、'下周五'等",
     "removeDateAfterDetection": "识别日期后标题移除日期",
-    "removeDateAfterDetectionDesc": "自动从任务标题中移除已识别出的日期和时间描述文本",
+    "removeDateAfterDetectionDesc": "自动从任务标题中移除已识别出的日期描述文本",
     "pasteAutoDetectDate": "粘贴自动识别日期",
     "createQuickReminder": "创建快速任务",
     "bindToBlock": "绑定到块",
