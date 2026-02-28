@@ -1,3 +1,14 @@
+## v6.1.4 / 20260228
+- 🎨 日历视图：优化农历节日显示，单行显示，太长自动缩略
+- 🎨 项目看板：子任务排序更新不改变任务状态
+- 📝 日历上传：S3同步推荐阿里云，不推荐七牛云
+
+---
+
+- 🎨 Calendar View: Optimized display of lunar holidays, showing them in a single line and automatically truncating if too long
+- 🎨 Project Kanban: Updating subtask sorting does not change the task status
+- 📝 Calendar Upload: Recommending Alibaba Cloud for S3 synchronization, not recommending Qiniu Cloud
+
 ## v6.1.3 / 20260228
 - 🎨 日历视图：看板样式也支持显示任务完成时间
 - 🎨 日历视图：默认不显示分类图标和项目信息
