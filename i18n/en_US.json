@@ -1824,5 +1824,8 @@
     "createHeadingFailed": "Failed to create heading: cannot get new block ID",
     "pasteCreateTask": "Paste Create Task",
     "unifiedSetDate": "Uniformly set to date",
-    "selectNewCheckInStatus": "Select new check-in status"
+    "selectNewCheckInStatus": "Select new check-in status",
+    "helpDocument": "Help Document",
+    "helpDocumentDesc": "Click the link below to view detailed tutorials and FAQs to help you better use the Task Note Management plugin.",
+    "viewDocumentNow": "View Documentation Now"
 }

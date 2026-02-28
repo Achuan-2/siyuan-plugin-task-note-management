@@ -1824,5 +1824,8 @@
     "createHeadingFailed": "创建标题失败：无法获取新建块ID",
     "pasteCreateTask": "粘贴新建任务",
     "unifiedSetDate": "统一定为以下日期",
-    "selectNewCheckInStatus": "Select new check-in status"
+    "selectNewCheckInStatus": "Select new check-in status",
+    "helpDocument": "帮助文档",
+    "helpDocumentDesc": "点击下方链接查看详细的使用教程和常见问题解答，帮助您更好地使用任务笔记管理插件。",
+    "viewDocumentNow": "立即查看文档"
 }

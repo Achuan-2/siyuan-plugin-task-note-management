@@ -25,6 +25,7 @@
     import { resolveAudioPath } from './utils/audioUtils';
     import VipPanel from './components/VipPanel.svelte';
     import SubscriptionPanel from './components/icsSubscriptionPanel.svelte';
+    import HelpPanel from './components/HelpPanel.svelte';
 
     export let plugin;
 
@@ -1109,6 +1110,10 @@
             ],
         },
         {
+            name: '❓' + i18n('helpDocument'),
+            items: [],
+        },
+        {
             name: '❤️' + i18n('donate'),
             items: [
                 {
@@ -1689,6 +1694,9 @@
             {/if}
             {#if currentGroup?.name === '📅' + i18n('icsSubscription')}
                 <SubscriptionPanel {plugin} />
+            {/if}
+            {#if currentGroup?.name === '❓' + i18n('helpDocument')}
+                <HelpPanel />
             {/if}
             {#each currentGroup?.items || [] as item (item.key)}
                 {#if !item.hidden}
