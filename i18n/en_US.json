@@ -1827,5 +1827,6 @@
     "selectNewCheckInStatus": "Select new check-in status",
     "helpDocument": "Help Document",
     "helpDocumentDesc": "Click the link below to view detailed tutorials and FAQs to help you better use the Task Note Management plugin.",
-    "viewDocumentNow": "View Documentation Now"
+    "viewDocumentNow": "View Documentation Now",
+    "rightClickToEdit": "Right Click to Edit"
 }

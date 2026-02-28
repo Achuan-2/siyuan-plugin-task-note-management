@@ -1827,5 +1827,6 @@
     "selectNewCheckInStatus": "Select new check-in status",
     "helpDocument": "帮助文档",
     "helpDocumentDesc": "点击下方链接查看详细的使用教程和常见问题解答，帮助您更好地使用任务笔记管理插件。",
-    "viewDocumentNow": "立即查看文档"
+    "viewDocumentNow": "立即查看文档",
+    "rightClickToEdit": "右键编辑任务"
 }

@@ -1320,6 +1320,7 @@ export class CalendarView {
             nowIndicator: true, // 显示当前时间指示线
             snapDuration: '00:05:00', // 设置吸附间隔为5分钟
             slotDuration: '00:15:00', // 设置默认时间间隔为15分钟
+            eventMaxStack: 2, // 最多显示2个重叠事件
             allDayText: i18n("allDay"), // 置全天事件的文本
             slotEventOverlap: false, // 不允许事件重叠
             slotLabelFormat: {
