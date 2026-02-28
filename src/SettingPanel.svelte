@@ -996,6 +996,8 @@
                         callback: async () => {
                             await pushMsg(i18n('icsUploading'));
                             await uploadIcsToCloud(plugin, settings);
+                            settings = settings;
+                            updateGroupItems();
                         },
                     },
                 },
