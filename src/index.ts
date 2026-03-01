@@ -83,7 +83,7 @@ export const DEFAULT_SETTINGS = {
     randomRestPopupWindow: true, // 新增：随机微休息弹窗提醒，默认关闭
     dailyFocusGoal: 6,
     autoDetectDateTime: false, // 新增：是否自动识别日期时间
-    removeDateAfterDetection: true, // 新增：识别日期后是否移除标题中的日期
+    removeDateAfterDetection: 'all', // 从bool改为option：'none' | 'date' | 'all'
     newDocNotebook: '', // 新增：新建文档的笔记本ID
     newDocPath: '/{{now | date "2006/200601"}}/', // 新增：新建文档的路径模板，支持sprig语法
     groupDefaultHeadingLevel: 1, // 新增：新建标题分组的默认层级（1-6），默认为1级标题
@@ -4474,9 +4474,12 @@ export default class ReminderPlugin extends Plugin {
     }
 
     // 获取识别后移除日期设置
-    async getRemoveDateAfterDetectionEnabled(): Promise<boolean> {
+    async getRemoveDateAfterDetectionMode(): Promise<'none' | 'date' | 'all'> {
         const settings = await this.loadSettings();
-        return settings.removeDateAfterDetection !== false;
+        // 兼容旧版 bool 值，迁移逻辑主要在 performDataMigration，这里做兜底
+        if (settings.removeDateAfterDetection === true) return 'all';
+        if (settings.removeDateAfterDetection === false) return 'none';
+        return settings.removeDateAfterDetection || 'all';
     }
 
     /**
@@ -4825,10 +4828,21 @@ export default class ReminderPlugin extends Plugin {
                     }
                 }
 
-                settings.datatransfer = settings.datatransfer || {};
-                settings.datatransfer.randomRestTransfer = true;
+                if (migratedCount > 0) {
+                    settings.datatransfer = settings.datatransfer || {};
+                    settings.datatransfer.randomRestTransfer = true;
+                    await this.saveSettings(settings);
+                    console.log(`随机休息设置项迁移完成，共迁移 ${migratedCount} 项`);
+                }
+            }
+
+            // 检查是否需要迁移 removeDateAfterDetection 从 bool 到 string
+            if (typeof settings.removeDateAfterDetection === 'boolean') {
+                console.log('开始迁移 removeDateAfterDetection...');
+                const oldVal = (settings as any).removeDateAfterDetection;
+                settings.removeDateAfterDetection = oldVal ? 'all' : 'none';
                 await this.saveSettings(settings);
-                console.log(`随机休息设置项迁移完成，更新了 ${migratedCount} 个项`);
+                console.log('removeDateAfterDetection 迁移完成');
             }
 
             // 检查是否需要迁移音频文件列表
@@ -4847,7 +4861,7 @@ export default class ReminderPlugin extends Plugin {
                 if (!settings.audioFileLists) settings.audioFileLists = {};
                 if (!settings.audioSelected) settings.audioSelected = {};
 
-                let migratedCount = 0;
+                let audioMigratedCount = 0;
                 for (const key of audioKeys) {
                     const existing = (settings as any)[key] as string | undefined;
                     if (existing) {
@@ -4857,10 +4871,9 @@ export default class ReminderPlugin extends Plugin {
                             typeof item === 'string' ? { path: item } : item
                         );
 
-                        // 特殊处理随机微休息的多选字符串
                         if (!itemList.some(i => i.path === existing)) {
                             itemList.push({ path: existing }); // 保持原有顺序，加到后面
-                            migratedCount++;
+                            audioMigratedCount++;
                         }
                         settings.audioFileLists[key] = itemList;
                         // 记录当前选中
@@ -4879,7 +4892,7 @@ export default class ReminderPlugin extends Plugin {
                 settings.datatransfer = settings.datatransfer || {};
                 settings.datatransfer.audioFileTransfer = true;
                 await this.saveSettings(settings);
-                console.log(`音频文件列表迁移完成，更新了 ${migratedCount} 个项`);
+                console.log(`音频文件列表迁移完成，更新了 ${audioMigratedCount} 个项`);
             }
         } catch (error) {
             console.error('数据迁移失败:', error);

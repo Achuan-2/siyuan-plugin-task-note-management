@@ -1,6 +1,6 @@
 import { showMessage, Dialog } from "siyuan";
 import { getBlockByID, getBlockDOM, refreshSql, updateBindBlockAtrrs, updateBlock } from "../api";
-import { compareDateStrings, getLogicalDateString, parseNaturalDateTime, autoDetectDateTimeFromTitle } from "../utils/dateUtils";
+import { compareDateStrings, getLogicalDateString, autoDetectDateTimeFromTitle } from "../utils/dateUtils";
 import { CategoryManager } from "../utils/categoryManager";
 import { ProjectManager } from "../utils/projectManager";
 import { i18n } from "../pluginInstance";
@@ -1161,10 +1161,11 @@ export class QuickReminderDialog {
     }
 
     // 显示自然语言输入对话框
-    private showNaturalLanguageDialog() {
+    private async showNaturalLanguageDialog() {
         // 获取标题输入框的内容作为默认值
         const titleInput = this.dialog.element.querySelector('#quickReminderTitle') as HTMLTextAreaElement;
-        const defaultValue = titleInput?.value?.trim() || '';
+        const originalTitle = titleInput?.value?.trim() || '';
+        const defaultRemoveMode = this.plugin ? await this.plugin.getRemoveDateAfterDetectionMode() : 'all';
 
         const nlDialog = new Dialog({
             title: i18n("smartDateRecognition"),
@@ -1172,26 +1173,35 @@ export class QuickReminderDialog {
                 <div class="nl-dialog">
                     <div class="b3-dialog__content">
                         <div class="b3-form__group">
-                            <label class="b3-form__label">${i18n("nlInputLabel")}</label>
-                            <input type="text" id="quickNlInput" class="b3-text-field" value="${defaultValue}" placeholder="${i18n("nlInputPlaceholder")}" style="width: 100%;" spellcheck="false" autofocus>
-                            <div class="b3-form__desc">${i18n("nlInputDesc")}</div>
+                            <label class="b3-form__label">${i18n("nlInputLabel") || '输入自然语言描述'}</label>
+                            <textarea id="quickNlInput" class="b3-text-field" placeholder="${i18n("nlInputPlaceholder") || '例如：明天下午3点'}" style="width: 100%; height: 80px; resize: vertical;" spellcheck="false" autofocus>${originalTitle}</textarea>
+                            <div class="b3-form__desc">${i18n("nlInputDesc") || '支持识别日期、时间、范围和重复设置'}</div>
+                        </div>
+                        <div class="b3-form__group" style="display: flex; align-items: center; gap: 8px;">
+                            <label class="b3-form__label" style="margin-bottom: 0;">${i18n("removeDateAfterDetection")}</label>
+                            <select id="quickNlRemoveMode" class="b3-select" style="flex: 1;">
+                                <option value="none" ${defaultRemoveMode === 'none' ? 'selected' : ''}>${i18n('removeNone') || '不去除'}</option>
+                                <option value="date" ${defaultRemoveMode === 'date' ? 'selected' : ''}>${i18n('removeDateOnly') || '仅去除日期'}</option>
+                                <option value="all" ${defaultRemoveMode === 'all' ? 'selected' : ''}>${i18n('removeDateAndTime') || '去除日期和时间'}</option>
+                            </select>
                         </div>
                         <div class="b3-form__group">
                             <label class="b3-form__label">${i18n("recognitionResultPreview")}</label>
-                            <div id="quickNlPreview" class="nl-preview">${i18n("pleaseEnterDateTimeDesc")}</div>
+                            <div id="quickNlPreview" class="nl-preview">${i18n("pleaseEnterDateTimeDesc") || '请输入日期时间描述'}</div>
                         </div>
                     </div>
                     <div class="b3-dialog__action">
                         <button class="b3-button b3-button--cancel" id="quickNlCancelBtn">${i18n("cancel")}</button>
-                        <button class="b3-button b3-button--primary" id="quickNlConfirmBtn" disabled>${i18n("apply")}</button>
+                        <button class="b3-button b3-button--primary" id="quickNlConfirmBtn" disabled>${i18n("apply") || '应用'}</button>
                     </div>
                 </div>
             `,
             width: "400px",
-            height: "30%"
+            height: "auto"
         });
 
         const nlInput = nlDialog.element.querySelector('#quickNlInput') as HTMLInputElement;
+        const nlRemoveMode = nlDialog.element.querySelector('#quickNlRemoveMode') as HTMLSelectElement;
         const nlPreview = nlDialog.element.querySelector('#quickNlPreview') as HTMLElement;
         const nlCancelBtn = nlDialog.element.querySelector('#quickNlCancelBtn') as HTMLButtonElement;
         const nlConfirmBtn = nlDialog.element.querySelector('#quickNlConfirmBtn') as HTMLButtonElement;
@@ -1201,14 +1211,32 @@ export class QuickReminderDialog {
         // 实时解析输入
         const updatePreview = () => {
             const text = nlInput.value.trim();
+            const removeMode = nlRemoveMode.value as 'none' | 'date' | 'all';
+
             if (!text) {
-                nlPreview.textContent = '请输入日期时间描述';
+                nlPreview.textContent = i18n('pleaseInputDateTimeDesc') || '请输入日期时间描述';
                 nlPreview.className = 'nl-preview';
                 nlConfirmBtn.disabled = true;
                 return;
             }
 
-            currentParseResult = parseNaturalDateTime(text);
+            // 识别日期时间从输入框获取
+            const detection = autoDetectDateTimeFromTitle(text, 'none');
+
+            // 获取待清理的标题（用户原有的标题）
+            const targetTitle = titleInput.value.trim();
+            let finalCleanTitle = targetTitle;
+
+            if (removeMode !== 'none' && targetTitle) {
+                // 如果是从输入框识别出的，我们也从原标题中尝试移除类似的表达式
+                const cleanupResult = autoDetectDateTimeFromTitle(targetTitle, removeMode);
+                finalCleanTitle = cleanupResult.cleanTitle;
+            }
+
+            currentParseResult = {
+                ...detection,
+                cleanTitle: finalCleanTitle
+            };
 
             if (currentParseResult.date || currentParseResult.endDate) {
                 let previewText = `📅 ${currentParseResult.date || currentParseResult.endDate || ''}`;
@@ -1222,11 +1250,15 @@ export class QuickReminderDialog {
                     previewText = `🏁 截止：${currentParseResult.endDate}${currentParseResult.endTime ? ' ' + currentParseResult.endTime : ''}`;
                 }
 
-                nlPreview.textContent = previewText;
+                if (removeMode !== 'none' && currentParseResult.cleanTitle) {
+                    previewText += `\n📝 标题：${currentParseResult.cleanTitle}`;
+                }
+
+                nlPreview.innerText = previewText;
                 nlPreview.className = 'nl-preview nl-preview--success';
                 nlConfirmBtn.disabled = false;
             } else {
-                nlPreview.textContent = '❌ 无法识别日期时间，请尝试其他表达方式';
+                nlPreview.textContent = i18n('cannotRecognize') || '❌ 无法识别日期时间，请尝试其他表达方式';
                 nlPreview.className = 'nl-preview nl-preview--error';
                 nlConfirmBtn.disabled = true;
             }
@@ -1234,6 +1266,7 @@ export class QuickReminderDialog {
 
         // 绑定事件
         nlInput.addEventListener('input', updatePreview);
+        nlRemoveMode.addEventListener('change', updatePreview);
         nlInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !nlConfirmBtn.disabled) {
                 this.applyNaturalLanguageResult(currentParseResult);
@@ -1254,7 +1287,7 @@ export class QuickReminderDialog {
         setTimeout(() => {
             nlInput.focus();
             // 如果有默认值，立即触发预览更新
-            if (defaultValue) {
+            if (originalTitle) {
                 updatePreview();
             }
         }, 100);
@@ -1268,13 +1301,24 @@ export class QuickReminderDialog {
         endDate?: string;
         endTime?: string;
         hasEndTime?: boolean;
+        cleanTitle?: string;
     }) {
         if (!result.date && !result.endDate) return;
 
+        const titleInput = this.dialog.element.querySelector('#quickReminderTitle') as HTMLTextAreaElement;
         const dateInput = this.dialog.element.querySelector('#quickReminderDate') as HTMLInputElement;
         const endDateInput = this.dialog.element.querySelector('#quickReminderEndDate') as HTMLInputElement;
         const timeInput = this.dialog.element.querySelector('#quickReminderTime') as HTMLInputElement;
         const endTimeInput = this.dialog.element.querySelector('#quickReminderEndTime') as HTMLInputElement;
+
+        // 更新标题（如果识别并清理了）
+        if (result.cleanTitle !== undefined && titleInput) {
+            titleInput.value = result.cleanTitle;
+            // 如果使用了编辑器，需要同步
+            if (this.editor) {
+                this.editor.action(replaceAll(result.cleanTitle));
+            }
+        }
 
         // 设置日期
         if (result.date) {
@@ -1986,13 +2030,16 @@ export class QuickReminderDialog {
                             }
 
                             // 如果启用了识别后移除日期设置，更新标题
-                            this.plugin.getRemoveDateAfterDetectionEnabled().then((removeEnabled: boolean) => {
-                                if (removeEnabled && detected.cleanTitle !== undefined) {
-                                    titleInput.value = detected.cleanTitle || titleInput.value;
-                                    // 将光标移到开头，显示开头的字
-                                    titleInput.setSelectionRange(0, 0);
-                                    // 自动调整高度
-                                    this.autoResizeTextarea(titleInput);
+                            this.plugin.getRemoveDateAfterDetectionMode().then((mode: 'none' | 'date' | 'all') => {
+                                if (mode !== 'none') {
+                                    const detectedWithMode = autoDetectDateTimeFromTitle(this.blockContent, mode);
+                                    if (detectedWithMode.cleanTitle !== undefined) {
+                                        titleInput.value = detectedWithMode.cleanTitle || titleInput.value;
+                                        // 将光标移到开头，显示开头的字
+                                        titleInput.setSelectionRange(0, 0);
+                                        // 自动调整高度
+                                        this.autoResizeTextarea(titleInput);
+                                    }
                                 }
                             });
                         }
@@ -2694,12 +2741,16 @@ export class QuickReminderDialog {
                         this.applyNaturalLanguageResult(detected);
 
                         // 识别后移除日期
-                        this.plugin.getRemoveDateAfterDetectionEnabled().then((removeEnabled: boolean) => {
-                            if (removeEnabled && detected.cleanTitle !== undefined) {
-                                // 重新计算 titleInput 的值，将粘贴的那部分替换为清理后的文本
-                                const cleanPart = detected.cleanTitle || '';
-                                titleInput.value = before + cleanPart + after;
-                                titleInput.selectionStart = titleInput.selectionEnd = start + cleanPart.length;
+                        this.plugin.getRemoveDateAfterDetectionMode().then((mode: 'none' | 'date' | 'all') => {
+                            if (mode !== 'none') {
+                                // 重新以指定模式识别以获取清理后的标题
+                                const detectedWithMode = autoDetectDateTimeFromTitle(joined, mode);
+                                if (detectedWithMode.cleanTitle !== undefined) {
+                                    // 重新计算 titleInput 的值，将粘贴的那部分替换为清理后的文本
+                                    const cleanPart = detectedWithMode.cleanTitle || '';
+                                    titleInput.value = before + cleanPart + after;
+                                    titleInput.selectionStart = titleInput.selectionEnd = start + cleanPart.length;
+                                }
                             }
                         });
                     }

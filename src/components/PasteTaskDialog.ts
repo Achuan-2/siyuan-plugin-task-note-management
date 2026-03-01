@@ -230,11 +230,14 @@ export class PasteTaskDialog {
                             <span class="b3-checkbox__graphic"></span>
                             <span class="b3-checkbox__label">${i18n("autoDetectDateTime")}</span>
                         </label>
-                        <label id="removeDateLabel" class="b3-checkbox" style="display: flex; align-items: center; margin-left: 24px;">
-                            <input id="removeDate" type="checkbox" class="b3-switch">
-                            <span class="b3-checkbox__graphic"></span>
-                            <span class="b3-checkbox__label">${i18n("removeDateAfterDetection")}</span>
-                        </label>
+                        <div id="removeDateContainer" style="display: flex; align-items: center; gap: 8px; margin-left: 24px;">
+                            <span style="font-size: 14px; color: var(--b3-theme-on-surface); cursor: default;">${i18n("removeDateAfterDetection")}</span>
+                            <select id="removeDateMode" class="b3-select" style="padding: 2px 8px; height: 28px;">
+                                <option value="none">${i18n('removeNone') || '不去除'}</option>
+                                <option value="date">${i18n('removeDateOnly') || '仅去除日期'}</option>
+                                <option value="all" selected>${i18n('removeDateAndTime') || '去除日期和时间'}</option>
+                            </select>
+                        </div>
                         <div style="display: flex; align-items: center; gap: 8px;">
                             <label class="b3-checkbox" style="display: flex; align-items: center;">
                                 <input id="unifiedDateCheckbox" type="checkbox" class="b3-switch" ${this.config.defaultSetDate ? 'checked' : ''}>
@@ -262,8 +265,8 @@ export class PasteTaskDialog {
         const cancelBtn = dialog.element.querySelector('#cancelBtn') as HTMLButtonElement;
         const createBtn = dialog.element.querySelector('#createBtn') as HTMLButtonElement;
         const autoDetectCheckbox = dialog.element.querySelector('#autoDetectDate') as HTMLInputElement;
-        const removeDateCheckbox = dialog.element.querySelector('#removeDate') as HTMLInputElement;
-        const removeDateLabel = dialog.element.querySelector('#removeDateLabel') as HTMLElement;
+        const removeDateModeSelect = dialog.element.querySelector('#removeDateMode') as HTMLSelectElement;
+        const removeDateContainer = dialog.element.querySelector('#removeDateContainer') as HTMLElement;
         const groupSelect = dialog.element.querySelector('#pasteTaskGroup') as HTMLSelectElement;
         const milestoneSelect = dialog.element.querySelector('#pasteTaskMilestone') as HTMLSelectElement;
         const milestoneContainer = dialog.element.querySelector('#pasteTaskMilestoneContainer') as HTMLElement;
@@ -304,19 +307,19 @@ export class PasteTaskDialog {
             autoDetectCheckbox.checked = enabled;
             updateRemoveDateVisibility();
         });
-        this.config.plugin.getRemoveDateAfterDetectionEnabled().then((enabled: boolean) => {
-            removeDateCheckbox.checked = enabled;
+        this.config.plugin.getRemoveDateAfterDetectionMode().then((mode: 'none' | 'date' | 'all') => {
+            removeDateModeSelect.value = mode;
         });
 
         function updateRemoveDateVisibility() {
             if (autoDetectCheckbox.checked) {
-                removeDateLabel.style.opacity = "1";
-                removeDateLabel.style.pointerEvents = "auto";
-                removeDateCheckbox.disabled = false;
+                removeDateContainer.style.opacity = "1";
+                removeDateContainer.style.pointerEvents = "auto";
+                removeDateModeSelect.disabled = false;
             } else {
-                removeDateLabel.style.opacity = "0.5";
-                removeDateLabel.style.pointerEvents = "none";
-                removeDateCheckbox.disabled = true;
+                removeDateContainer.style.opacity = "0.5";
+                removeDateContainer.style.pointerEvents = "none";
+                removeDateModeSelect.disabled = true;
             }
         }
 
@@ -525,8 +528,8 @@ export class PasteTaskDialog {
             this.showLoadingDialog(i18n('creatingTask') || "创建任务中...");
 
             const autoDetect = autoDetectCheckbox.checked;
-            const removeDate = removeDateCheckbox.checked;
-            const hierarchicalTasks = this.parseHierarchicalTaskList(text, autoDetect, removeDate);
+            const removeMode = removeDateModeSelect.value as 'none' | 'date' | 'all';
+            const hierarchicalTasks = this.parseHierarchicalTaskList(text, autoDetect, removeMode);
 
             const useUnifiedDate = unifiedDateCheckbox?.checked;
             const unifiedDateVal = unifiedDateInput?.value;
@@ -642,7 +645,7 @@ export class PasteTaskDialog {
         }
     }
 
-    private parseHierarchicalTaskList(text: string, autoDetect: boolean = false, removeDate: boolean = true): HierarchicalTask[] {
+    private parseHierarchicalTaskList(text: string, autoDetect: boolean = false, removeMode: 'none' | 'date' | 'all' = 'all'): HierarchicalTask[] {
         const lines = text.split('\n');
         const tasks: HierarchicalTask[] = [];
         const stack: Array<{ task: HierarchicalTask; level: number }> = [];
@@ -656,7 +659,7 @@ export class PasteTaskDialog {
             const isListItem = /^([-*+]|\d+\.|\[[ xX]\])/.test(cleanLine);
             if (!cleanLine || (!isListItem && level === 0)) {
                 if (cleanLine && level === 0) {
-                    const taskData = this.parseTaskLine(cleanLine, autoDetect, removeDate);
+                    const taskData = this.parseTaskLine(cleanLine, autoDetect, removeMode);
                     const task: HierarchicalTask = {
                         ...taskData,
                         level: 0,
@@ -679,7 +682,7 @@ export class PasteTaskDialog {
             const taskContent = cleanLine.replace(/^([-*+]|\d+\.)\s*/, '').replace(/^(-{2,})\s*/, '');
             if (!taskContent) continue;
 
-            const taskData = this.parseTaskLine(taskContent, autoDetect, removeDate);
+            const taskData = this.parseTaskLine(taskContent, autoDetect, removeMode);
             const task: HierarchicalTask = {
                 ...taskData,
                 level: combinedLevel,
@@ -711,7 +714,7 @@ export class PasteTaskDialog {
         return Math.floor(spaces / 2);
     }
 
-    private parseTaskLine(line: string, autoDetect: boolean = false, removeDate: boolean = true): Omit<HierarchicalTask, 'level' | 'children'> {
+    private parseTaskLine(line: string, autoDetect: boolean = false, removeMode: 'none' | 'date' | 'all' = 'all'): Omit<HierarchicalTask, 'level' | 'children'> {
         const paramMatch = line.match(/@(.*)$/);
         let title = line.trim();
 
@@ -753,11 +756,9 @@ export class PasteTaskDialog {
         title = title.replace(/\\([\\*_{}[\]()#+\-.!~])/g, '$1');
 
         if (autoDetect) {
-            const detected = autoDetectDateTimeFromTitle(title);
+            const detected = autoDetectDateTimeFromTitle(title, removeMode);
             if (detected.date || detected.endDate) {
-                if (removeDate) {
-                    title = detected.cleanTitle || title;
-                }
+                title = detected.cleanTitle || title;
                 startDate = detected.date;
                 time = detected.time;
                 endDate = detected.endDate;

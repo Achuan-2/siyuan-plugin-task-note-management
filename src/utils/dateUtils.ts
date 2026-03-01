@@ -482,38 +482,55 @@ function parseNaturalDateTimeInner(text: string): ParseResult {
 /**
  * 从标题自动识别日期时间
  */
-export function autoDetectDateTimeFromTitle(title: string): ParseResult & { cleanTitle?: string } {
+export function autoDetectDateTimeFromTitle(title: string, removeMode: 'none' | 'date' | 'all' = 'all'): ParseResult & { cleanTitle?: string } {
     const parseResult = parseNaturalDateTime(title);
 
-    if (!parseResult.date) {
-        return { cleanTitle: title };
+    if (!parseResult.date || removeMode === 'none') {
+        return { ...parseResult, cleanTitle: title };
     }
 
     // 尝试从标题中移除已识别的时间表达式
     let cleanTitle = title;
-    const timeExpressions = [
+
+    // 时间相关的表达式
+    const timeOnlyExpressions = [
+        /早上|上午|中午|下午|晚上/gi,
+        /[\d一二三四五六七八九十]+\s*[点时]\s*\d{0,2}\s*分?半?/gi,
+        /\d{1,2}\s*:\s*\d{2}(?::\d{2})?/gi,
+        /[点时]\s*\d{1,2}\s*分?/gi,
+        /\d+\s*小时[后以]后/gi,
+    ];
+
+    // 日期相关的表达式
+    const dateOnlyExpressions = [
         /今天|今日/gi,
         /明天|明日/gi,
         /后天/gi,
         /大后天/gi,
         /下?周[一二三四五六日天]/gi,
         /下?星期[一二三四五六日天]/gi,
-        /早上|上午|中午|下午|晚上/gi, // 新增时间段描述
         /\d{4}年\s*\d{1,2}月\s*\d{1,2}[日号]/gi,
         /\d{1,2}月\s*\d{1,2}[日号]/gi,
-        /[\d一二三四五六七八九十]+\s*[点时]\s*\d{0,2}\s*分?半?/gi, // 允许空格
         /\d+\s*天[后以]后/gi,
-        /\d+\s*小时[后以]后/gi,
         /(?:\d{4}年\s*)?农历\s*[\u4e00-\u9fa5\d]+月[\u4e00-\u9fa5\d]+/gi,
         /\d{8}/gi,
         /\d{4}[年\-\/\.]\s*\d{1,2}[月日\-\/\.]\s*\d{1,2}[日号]?/gi,
         /\d{1,2}[月日]\s*\d{1,2}[日号]/gi,
-        /\d{1,2}\s*:\s*\d{2}(?::\d{2})?/gi,
-        /[点时]\s*\d{1,2}\s*分?/gi,
+    ];
+
+    // 其它连接词
+    const otherExpressions = [
         /到|至|~|-/gi,
     ];
 
-    timeExpressions.forEach(pattern => {
+    let expressionsToRemove: RegExp[] = [];
+    if (removeMode === 'all') {
+        expressionsToRemove = [...dateOnlyExpressions, ...timeOnlyExpressions, ...otherExpressions];
+    } else if (removeMode === 'date') {
+        expressionsToRemove = dateOnlyExpressions;
+    }
+
+    expressionsToRemove.forEach(pattern => {
         cleanTitle = cleanTitle.replace(pattern, '').trim();
     });
 
@@ -522,6 +539,6 @@ export function autoDetectDateTimeFromTitle(title: string): ParseResult & { clea
 
     return {
         ...parseResult,
-        cleanTitle: cleanTitle // 允许返回空字符串，如果不允许则会在调用处无法区分是否整个标题都是日期
+        cleanTitle: cleanTitle
     };
 }

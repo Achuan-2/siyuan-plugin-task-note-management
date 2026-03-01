@@ -541,6 +541,9 @@
     "autoDetectDateTimeDesc": "Automatically detect date and time information in block content when creating reminders, supports natural language expressions like 'tomorrow 3pm', 'next Friday', etc.",
     "removeDateAfterDetection": "Remove date from title after detection",
     "removeDateAfterDetectionDesc": "Automatically remove recognized date and time description text from the task title",
+    "removeNone": "Do not remove",
+    "removeDateOnly": "Remove date only",
+    "removeDateAndTime": "Remove date and time",
     "pasteAutoDetectDate": "Auto Detect Date on Paste",
     "createQuickReminder": "Create task",
     "bindToBlock": "Bind To Block",
@@ -1832,5 +1835,6 @@
     "rightClickToEdit": "Right Click to Edit",
     "vipOnlyFeature": "This feature is only available to VIP users",
     "upgradeToVipTip": "Upgrade to VIP to unlock more advanced features and make task management more efficient",
-    "upgradeNow": "Upgrade Now"
+    "upgradeNow": "Upgrade Now",
+    "applyStatusToAll": "Apply Status"
 }

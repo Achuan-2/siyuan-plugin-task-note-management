@@ -541,6 +541,9 @@
     "autoDetectDateTimeDesc": "在创建提醒时自动识别块内容中的日期时间信息，支持自然语言表达如'明天下午3点'、'下周五'等",
     "removeDateAfterDetection": "识别日期后标题移除日期",
     "removeDateAfterDetectionDesc": "自动从任务标题中移除已识别出的日期描述文本",
+    "removeNone": "不去除",
+    "removeDateOnly": "仅去除日期",
+    "removeDateAndTime": "去除日期和时间",
     "pasteAutoDetectDate": "粘贴自动识别日期",
     "createQuickReminder": "创建快速任务",
     "bindToBlock": "绑定到块",
@@ -1832,5 +1835,6 @@
     "rightClickToEdit": "右键编辑任务",
     "vipOnlyFeature": "此功能仅限 VIP 用户使用",
     "upgradeToVipTip": "升级到 VIP 以解锁更多高级功能，让任务管理更高效",
-    "upgradeNow": "立即升级"
+    "upgradeNow": "立即升级",
+    "applyStatusToAll": "应用状态"
 }

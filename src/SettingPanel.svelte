@@ -504,10 +504,15 @@
                 },
                 {
                     key: 'removeDateAfterDetection',
-                    value: settings.removeDateAfterDetection,
-                    type: 'checkbox',
+                    value: settings.removeDateAfterDetection || 'all',
+                    type: 'select',
                     title: i18n('removeDateAfterDetection'),
                     description: i18n('removeDateAfterDetectionDesc'),
+                    options: {
+                        none: i18n('removeNone') || '不去除',
+                        date: i18n('removeDateOnly') || '仅去除日期',
+                        all: i18n('removeDateAndTime') || '去除日期和时间',
+                    },
                 },
                 {
                     key: 'newDocNotebook',
