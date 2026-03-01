@@ -1,10 +1,21 @@
 ## v6.1.7 / 20260301
+- ✨ 任务提醒和番茄钟结束提醒支持安卓端系统通知，需要思源笔记v3.5.9及以上版本
 - 🎨 日期智能识别：优化时间段日期识别和识别后的时间去除效果
 - 🎨 日期智能识别：识别日期后标题移除日期，支持设置移除日期和时间，还是只移除日期
 - 🎨 日历订阅和日历上传：支持设置每天固定时间同步
 - 🎨 绑定块新建标题、新建文档优化，如果任务有备注，新建标题和新建文档要自动填充备注内容
 - 🎨 查看块绑定任务：显示结束时间
 - 🐛 备注、粘贴新建任务粘贴多行会合并为一行
+
+---
+
+- ✨ Task reminders and Pomodoro timer end notifications now support Android system notifications, requires SiYuan Note v3.5.9 or higher.
+- 🎨 Smart date recognition: Optimized date range recognition and the effect of removing recognized time.
+- 🎨 Smart date recognition: After recognizing a date, remove the date from the title; supports setting whether to remove both date and time, or only the date.
+- 🎨 Calendar subscription and calendar upload: Supports setting a fixed daily sync time.
+- 🎨 Optimized creating titles and documents for bound blocks: If a task has notes, the new title or document should automatically fill in the note content.
+- 🎨 View tasks bound to blocks: Display the end time.
+- 🐛 Notes, pasting to create new tasks: Pasting multiple lines will merge into a single line.
 
 
 ## v6.1.6 / 20260228
