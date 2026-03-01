@@ -960,6 +960,7 @@
                     options: {
                         siyuan: i18n('siyuanServer'),
                         s3: i18n('s3Storage'),
+                        webdav: i18n('webdavServer'),
                     },
                 },
                 {
@@ -990,7 +991,8 @@
                     value: settings.icsDailySyncTime || '08:00',
                     type: 'textinput',
                     title: i18n('icsDailySyncTime') || '每天同步时间',
-                    description: i18n('icsDailySyncTimeDesc') || '设置每天几点同步，格式 HH:MM（如 08:00）',
+                    description:
+                        i18n('icsDailySyncTimeDesc') || '设置每天几点同步，格式 HH:MM（如 08:00）',
                     placeholder: '08:00',
                 },
                 {
@@ -1120,6 +1122,28 @@
                     title: i18n('s3CustomDomain'),
                     description: i18n('s3CustomDomainDesc'),
                     placeholder: 'cdn.example.com',
+                },
+                {
+                    key: 'webdavUrl',
+                    value: settings.webdavUrl,
+                    type: 'textinput',
+                    title: i18n('webdavUrl'),
+                    description: i18n('webdavUrlDesc'),
+                    placeholder: '',
+                },
+                {
+                    key: 'webdavUsername',
+                    value: settings.webdavUsername,
+                    type: 'textinput',
+                    title: i18n('webdavUsername'),
+                    description: i18n('webdavUsernameDesc'),
+                },
+                {
+                    key: 'webdavPassword',
+                    value: settings.webdavPassword,
+                    type: 'password',
+                    title: i18n('webdavPassword'),
+                    description: i18n('webdavPasswordDesc'),
                 },
             ],
         },
@@ -1395,6 +1419,11 @@
             ) {
                 updated.hidden =
                     settings.icsSyncMethod !== 's3' || settings.s3UseSiyuanConfig === true;
+            }
+
+            // WebDAV 配置显示条件
+            if (['webdavUrl', 'webdavUsername', 'webdavPassword'].includes(item.key)) {
+                updated.hidden = settings.icsSyncMethod !== 'webdav';
             }
 
             return updated;

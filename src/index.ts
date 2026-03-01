@@ -130,7 +130,11 @@ export const DEFAULT_SETTINGS = {
     icsSilentUpload: false, // 是否静默上传ICS文件，不显示成功提示
     icsTaskFilter: 'all', // 'all' | 'completed' | 'uncompleted' - 任务筛选
     // ICS 同步方式配置
-    icsSyncMethod: 'siyuan', // 'siyuan' | 's3' - 同步方式
+    icsSyncMethod: 'siyuan', // 'siyuan' | 's3' | 'webdav' - 同步方式
+    // WebDAV 配置
+    webdavUrl: '',
+    webdavUsername: '',
+    webdavPassword: '',
     // S3 配置
     s3UseSiyuanConfig: false, // 是否使用思源的S3配置
     s3Bucket: '',

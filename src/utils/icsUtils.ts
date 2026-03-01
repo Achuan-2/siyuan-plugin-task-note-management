@@ -853,6 +853,9 @@ export async function uploadIcsToCloud(plugin: any, settings: any, silent: boole
         if (syncMethod === 's3') {
             // S3 同步方式
             await uploadToS3(settings, icsContent, fullFileName, plugin, silent);
+        } else if (syncMethod === 'webdav') {
+            // WebDAV 同步方式
+            await uploadToWebdav(settings, icsContent, fullFileName, plugin, silent);
         } else {
             // 思源服务器同步方式
             await uploadToSiyuan(settings, icsContent, plugin, silent);
@@ -860,6 +863,107 @@ export async function uploadIcsToCloud(plugin: any, settings: any, silent: boole
     } catch (err) {
         console.error('上传ICS到云端失败:', err);
         await pushErrMsg('上传ICS到云端失败: ' + (err.message || err));
+    }
+}
+
+/**
+ * 上传到WebDAV服务器
+ */
+async function uploadToWebdav(settings: any, icsContent: string, fileName: string, plugin: any, silent: boolean = false) {
+    try {
+        const url = settings.webdavUrl;
+        const username = settings.webdavUsername || '';
+        const password = settings.webdavPassword || '';
+
+        if (!url) {
+            await pushErrMsg('请先配置 WebDAV 网址');
+            return;
+        }
+
+        let targetUrl = url;
+        if (!targetUrl.endsWith('/')) {
+            targetUrl += '/';
+        }
+        const dirUrl = targetUrl;
+        targetUrl += fileName;
+
+        const credentials = btoa(unescape(encodeURIComponent(`${username}:${password}`)));
+
+        let response = await fetch(targetUrl, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'text/calendar; charset=utf-8',
+                'Authorization': `Basic ${credentials}`
+            },
+            body: icsContent
+        });
+
+        if (response.status === 409) {
+            // 可能是由于所在的目录不存在，尝试先创建该目录 (WebDAV: MKCOL)
+            // 兼容坚果云等普通 WebDAV 服务
+            try {
+                await fetch(dirUrl, {
+                    method: 'MKCOL',
+                    headers: {
+                        'Authorization': `Basic ${credentials}`
+                    }
+                });
+            } catch (e) {
+                console.warn('MKCOL 尝试创建目录失败 (可忽略):', e);
+            }
+
+            // 再次重试 PUT 请求
+            response = await fetch(targetUrl, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'text/calendar; charset=utf-8',
+                    'Authorization': `Basic ${credentials}`
+                },
+                body: icsContent
+            });
+        }
+
+        if (!response.ok) {
+            let errorMsg = `HTTP error! status: ${response.status} ${response.statusText}`;
+            if (response.status === 409) {
+                errorMsg += ` (冲突: 请先在 WebDAV/WebDAV 服务器中手动创建对应的文件夹)`;
+            }
+            throw new Error(errorMsg);
+        }
+
+        let displayUrl = targetUrl;
+        try {
+            const urlObj = new URL(targetUrl);
+            if (username) {
+                urlObj.username = encodeURIComponent(username);
+            }
+            if (password) {
+                urlObj.password = encodeURIComponent(password);
+            }
+            displayUrl = urlObj.toString();
+        } catch (e) {
+            console.warn('URL 解析失败，无法在URL中嵌入凭据', e);
+        }
+
+        settings.icsCloudUrl = displayUrl;
+        settings.icsLastSyncAt = new Date().toISOString();
+
+        // 保存设置到文件
+        await plugin.saveSettings(settings);
+
+        try {
+            window.dispatchEvent(new CustomEvent('reminderSettingsUpdated'));
+        } catch (e) {
+            console.warn('触发设置更新事件失败:', e);
+        }
+
+        if (!silent) {
+            await pushMsg(`ICS文件已上传到WebDAV`);
+        }
+        console.log('ICS 文件上传到 WebDAV 成功');
+    } catch (err) {
+        console.error('上传到WebDAV失败:', err);
+        throw new Error('上传到WebDAV失败: ' + (err.message || err));
     }
 }
 
