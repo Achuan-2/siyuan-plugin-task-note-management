@@ -2,7 +2,7 @@
   "name": "siyuan-plugin-task-note-management",
   "author": "Achuan-2",
   "url": "https://github.com/Achuan-2/siyuan-plugin-task-note-management",
-  "version": "6.1.6",
+  "version": "6.1.7",
   "minAppVersion": "3.5.1",
   "backends": [
     "windows",
