@@ -2602,7 +2602,27 @@ export default class ReminderPlugin extends Plugin {
             const dailyNotificationTimeNumber = this.timeStringToNumber(dailyNotificationTime);
 
             // 检查单个时间提醒（不受每日通知时间限制）
-            await this.checkTimeReminders(reminderData, today, currentTime);
+            // 同时合并已启用的订阅日历任务，使订阅事件也能触发到期提醒
+            let reminderDataForTimeCheck = reminderData;
+            try {
+                const subscriptionData = await this.loadSubscriptionData();
+                if (subscriptionData && subscriptionData.subscriptions) {
+                    const enabledSubs = (Object.values(subscriptionData.subscriptions) as any[]).filter(s => s.enabled);
+                    if (enabledSubs.length > 0) {
+                        const merged: any = { ...reminderData };
+                        for (const sub of enabledSubs) {
+                            const subTasks = await this.loadSubscriptionTasks(sub.id);
+                            if (subTasks && typeof subTasks === 'object') {
+                                Object.assign(merged, subTasks);
+                            }
+                        }
+                        reminderDataForTimeCheck = merged;
+                    }
+                }
+            } catch (err) {
+                console.warn('加载订阅任务失败，跳过订阅提醒检查:', err);
+            }
+            await this.checkTimeReminders(reminderDataForTimeCheck, today, currentTime);
 
             // 检查习惯提醒（当有习惯在今日设置了 reminderTime 时，也应触发提醒）
             try {
