@@ -1330,7 +1330,7 @@
     "s3CustomDomain": "S3 Custom Domain",
     "s3CustomDomainDesc": "Custom domain for generating external links, leave empty to use standard S3 URL",
     "webdavUrl": "WebDAV URL",
-    "webdavUrlDesc": "e.g., https://dav.jianguoyun.com/dav/siyuan-webdav",
+    "webdavUrlDesc": "e.g., https://dav.jianguoyun.com/dav/ics",
     "webdavUsername": "Username",
     "webdavUsernameDesc": "Please enter the username for the WebDAV server",
     "webdavPassword": "Password",

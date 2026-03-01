@@ -1330,7 +1330,7 @@
     "s3CustomDomain": "S3 自定义域名",
     "s3CustomDomainDesc": "用于生成外链的自定义域名，留空则使用标准S3 URL",
     "webdavUrl": "WebDAV 网址",
-    "webdavUrlDesc": "例如：https://dav.jianguoyun.com/dav/siyuan-webdav",
+    "webdavUrlDesc": "例如：https://dav.jianguoyun.com/dav/ics",
     "webdavUsername": "用户名",
     "webdavUsernameDesc": "请输入 WebDAV 服务器的用户名",
     "webdavPassword": "密码",
