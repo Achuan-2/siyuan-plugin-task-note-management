@@ -359,28 +359,38 @@ export class PasteTaskDialog {
                                         text = text.replace(/^\n+|\n+$/g, '');
                                         if (!text) return false;
 
+                                        // 关键修复：确保单换行符被视为分段（即每个任务一行）
+                                        // 在 Markdown 中，单个换行符会被解析为软换行，合并到同一段落
+                                        // 我们将其转换为双换行符以强制分段，从而使 parseHierarchicalTaskList 能够正确按行切分
+                                        if (text.includes('\n')) {
+                                            text = text.replace(/(?<!\n)\n(?!\n)/g, '\n\n');
+                                        }
+
                                         const { tr, doc } = view.state;
                                         const isEmpty = doc.childCount === 1 &&
                                             doc.firstChild?.type.name === 'paragraph' &&
                                             doc.firstChild.content.size === 0;
 
+                                        const parser = ctx.get(parserCtx);
+                                        const node = parser(text);
+                                        if (!node) return false;
+
                                         if (isEmpty) {
-                                            const parser = ctx.get(parserCtx);
-                                            const node = parser(text);
-                                            if (node) {
-                                                const content = node.type.name === 'doc' ? node.content : node;
-                                                // 彻底替换初始的空段落
-                                                view.dispatch(tr.replaceWith(0, doc.content.size, content).scrollIntoView());
-                                                return true;
-                                            }
+                                            const content = node.type.name === 'doc' ? node.content : node;
+                                            // 彻底替换初始的空段落
+                                            view.dispatch(tr.replaceWith(0, doc.content.size, content).scrollIntoView());
+                                            return true;
                                         } else {
                                             // 非空文档下，如果不含换行符，证明是行内粘贴，直接 insertText 以避免被切分为新段落
                                             if (!text.includes('\n')) {
                                                 view.dispatch(tr.insertText(text).scrollIntoView());
                                                 return true;
                                             }
-                                            // 如果有多行，则交由编辑器原生的剪贴板插件进行切片（Slice）合并，维持正确的嵌套和行内继承
-                                            return false;
+                                            // 如果有多行，我们也手动处理以确保刚才的换行符转换生效
+                                            // 使用 Node.slice(0) 将文档内容转为 Slice 以便 replaceSelection
+                                            const slice = (node as any).slice(0);
+                                            view.dispatch(tr.replaceSelection(slice).scrollIntoView());
+                                            return true;
                                         }
                                     }
                                     return false;
