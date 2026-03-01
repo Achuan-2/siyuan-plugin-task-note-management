@@ -190,7 +190,6 @@ export const DEFAULT_SETTINGS = {
         randomRestSounds: '/plugins/siyuan-plugin-task-note-management/audios/random_start.mp3',
         randomRestEndSound: '/plugins/siyuan-plugin-task-note-management/audios/random_end.mp3',
     } as Record<string, string>,
-    pomodoroPresets: [5, 10, 15, 20, 25],
 };
 
 export default class ReminderPlugin extends Plugin {
