@@ -925,6 +925,13 @@
             name: '☁️' + i18n('calendarUpload'),
             items: [
                 {
+                    key: 'calendarSubscribeHint',
+                    value: '',
+                    type: 'hint',
+                    title: '❓'+i18n('helpDocument'),
+                    description: i18n('calendarSubscribeHintDesc'),
+                },
+                {
                     key: 'icsSyncHint',
                     value: '',
                     type: 'hint',

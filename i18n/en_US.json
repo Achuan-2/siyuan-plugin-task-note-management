@@ -1287,6 +1287,7 @@
     "calendarUpload": "Calendar Upload",
     "icsSyncTitle": "ICS Cloud Sync",
     "icsSyncDesc": "Upload ICS files to the cloud to sync reminders across devices. Supports SiYuan server or S3 storage.",
+    "calendarSubscribeHintDesc": "Help Document: <a href=\"https://zhuanlan.zhihu.com/p/2011496948599898861\" target=\"_blank\">How to subscribe to plugin schedule in mobile calendars and other software</a>",
     "icsTaskFilter": "Task Status Filter",
     "icsTaskFilterDesc": "Select which tasks to export to the ICS file",
     "allTasks": "All Tasks",

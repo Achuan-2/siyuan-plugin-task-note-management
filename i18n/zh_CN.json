@@ -1287,6 +1287,7 @@
     "calendarUpload": "日历上传",
     "icsSyncTitle": "ICS 云端同步",
     "icsSyncDesc": "将ICS文件上传到云端，实现多设备间的提醒同步。支持思源服务器或S3存储。",
+    "calendarSubscribeHintDesc": "帮助文档：<a href=\"https://zhuanlan.zhihu.com/p/2011496948599898861\" target=\"_blank\">手机日历等其他软件如何订阅插件日程</a>",
     "icsTaskFilter": "任务状态筛选",
     "icsTaskFilterDesc": "选择导出哪些任务到 ICS 文件",
     "allTasks": "全部任务",
