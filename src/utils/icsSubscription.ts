@@ -9,7 +9,8 @@ export interface IcsSubscription {
     projectId: string; // Required - must have a project
     categoryId?: string;
     priority?: 'high' | 'medium' | 'low' | 'none';
-    syncInterval: 'manual' | '15min' | '30min' | 'hourly' | '4hour' | '12hour' | 'daily';
+    syncInterval: 'manual' | '15min' | '30min' | 'hourly' | '4hour' | '12hour' | 'daily' | 'dailyAt';
+    dailySyncTime?: string; // 每天同步时间点，格式 HH:MM（当 syncInterval 为 'dailyAt' 时使用）
     enabled: boolean;
     lastSync?: string; // ISO timestamp
     lastSyncStatus?: 'success' | 'error';
@@ -326,10 +327,29 @@ export async function syncSubscription(
             return { success: true, eventsCount: 0 };
         }
 
-        // Convert events to reminder format
+        // Load existing tasks to merge with new data
+        const existingTasks = await loadSubscriptionTasks(plugin, subscription.id);
+        
+        // Build a map of existing tasks by UID for quick lookup
+        const existingTasksByUid = new Map<string, any>();
+        for (const task of Object.values(existingTasks) as any[]) {
+            if (task.uid) {
+                existingTasksByUid.set(task.uid, task);
+            }
+        }
+
+        // Convert events to reminder format and merge with existing data
         const tasks: any = {};
         for (const event of events) {
-            const id = window.Lute?.NewNodeID?.() || `${subscription.id}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+            // Check if there's an existing task with the same UID
+            const existingTask = event.uid ? existingTasksByUid.get(event.uid) : undefined;
+            
+            // Determine if we should preserve the completed status
+            // If the existing task is completed, preserve completed and completedAt
+            const preserveCompleted = existingTask?.completed === true;
+            
+            const id = existingTask?.id || window.Lute?.NewNodeID?.() || `${subscription.id}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+            
             tasks[id] = {
                 id,
                 ...event,
@@ -339,8 +359,10 @@ export async function syncSubscription(
                 categoryId: subscription.categoryId,
                 priority: subscription.priority || 'none',
                 tagIds: subscription.tagIds || [],
-                completed: event.completed || isEventPast(event),
-                createdAt: event.createdAt || new Date().toISOString(),
+                // Preserve completed status if the existing task is completed
+                completed: preserveCompleted ? existingTask.completed : (event.completed || isEventPast(event)),
+                completedAt: preserveCompleted ? existingTask.completedAt : undefined,
+                createdAt: existingTask?.createdAt || event.createdAt || new Date().toISOString(),
                 // Mark as subscribed (read-only)
                 subscriptionId: subscription.id,
                 isSubscribed: true,
@@ -413,6 +435,7 @@ export async function syncAllSubscriptions(plugin: any): Promise<void> {
 
 /**
  * Get sync interval in milliseconds
+ * 注意：dailyAt 模式也返回 24小时，实际同步时间由 calculateNextDailySyncTime 计算
  */
 export function getSyncIntervalMs(interval: IcsSubscription['syncInterval']): number {
     const intervals = {
@@ -423,8 +446,26 @@ export function getSyncIntervalMs(interval: IcsSubscription['syncInterval']): nu
         '4hour': 4 * 60 * 60 * 1000,
         '12hour': 12 * 60 * 60 * 1000,
         'daily': 24 * 60 * 60 * 1000,
+        'dailyAt': 24 * 60 * 60 * 1000, // 每天一次，按指定时间点
     };
     return intervals[interval] || intervals['daily'];
+}
+
+/**
+ * 计算 dailyAt 模式的下次同步时间
+ * @param syncTime 同步时间点，格式 HH:MM
+ * @returns 下次同步时间的毫秒时间戳
+ */
+export function calculateNextDailySyncTime(syncTime: string): number {
+    const [hours, minutes] = syncTime.split(':').map(Number);
+    const now = new Date();
+    const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes, 0, 0);
+    
+    // 如果今天的时间已过，设置为明天
+    if (target.getTime() <= now.getTime()) {
+        target.setDate(target.getDate() + 1);
+    }
+    return target.getTime();
 }
 
 /**

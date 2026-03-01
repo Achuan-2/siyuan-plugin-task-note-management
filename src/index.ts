@@ -121,7 +121,8 @@ export const DEFAULT_SETTINGS = {
     projectSortOrder: [],
     projectSortMode: 'custom',
     // 日历上传：ICS云端同步配置
-    icsSyncInterval: 'daily', // 'manual' | '15min' | 'hourly' | '4hour' | '12hour' | 'daily'
+    icsSyncInterval: 'daily', // 'manual' | '15min' | 'hourly' | '4hour' | '12hour' | 'daily' | 'dailyAt'
+    icsDailySyncTime: '08:00', // 每天同步时间点（当 syncInterval 为 'dailyAt' 时使用），格式 HH:MM
     icsCloudUrl: '',
     icsLastSyncAt: '', // 上一次上传时间
     icsSyncEnabled: false, // 是否启用ICS云端同步
@@ -189,6 +190,7 @@ export const DEFAULT_SETTINGS = {
         randomRestSounds: '/plugins/siyuan-plugin-task-note-management/audios/random_start.mp3',
         randomRestEndSound: '/plugins/siyuan-plugin-task-note-management/audios/random_end.mp3',
     } as Record<string, string>,
+    pomodoroPresets: [5, 10, 15, 20, 25],
 };
 
 export default class ReminderPlugin extends Plugin {
@@ -4493,13 +4495,14 @@ export default class ReminderPlugin extends Plugin {
     private async initIcsSync() {
         const settings = await this.loadSettings();
         if (settings.icsSyncEnabled && settings.icsSyncInterval && settings.icsSyncInterval !== 'manual') {
-            // 启用时立即执行一次初始同步
-            await this.scheduleIcsSync(settings.icsSyncInterval, true);
+            // 启用时执行：如果是 dailyAt 模式，不立即执行，等待到指定时间点
+            const executeImmediately = settings.icsSyncInterval !== 'dailyAt';
+            await this.scheduleIcsSync(settings.icsSyncInterval as any, executeImmediately);
         }
     }
 
     // 调度ICS同步
-    private async scheduleIcsSync(interval: 'manual' | '15min' | 'hourly' | '4hour' | '12hour' | 'daily', executeImmediately: boolean = true) {
+    private async scheduleIcsSync(interval: 'manual' | '15min' | 'hourly' | '4hour' | '12hour' | 'daily' | 'dailyAt', executeImmediately: boolean = true) {
         // 如果是手动模式，不启动定时同步
         if (interval === 'manual') {
             if (this.icsSyncTimer) {
@@ -4519,39 +4522,83 @@ export default class ReminderPlugin extends Plugin {
             '4hour': 4 * 60 * 60 * 1000,
             '12hour': 12 * 60 * 60 * 1000,
             'daily': 24 * 60 * 60 * 1000,
+            'dailyAt': 24 * 60 * 60 * 1000, // 每天同步一次，按指定时间点
         };
         const intervalMs = intervalMsMap[interval] || 24 * 60 * 60 * 1000;
         const shortPollMs = 30 * 1000; // 30s 检查一次
 
-        // 计算首次的 nextDue 时间
-        let nextDueMs: number;
-        try {
+        // 计算下次同步时间的函数
+        const calculateNextDueMs = async (): Promise<number> => {
             const settings = await this.loadSettings();
+
+            // dailyAt 模式：按每天指定时间点
+            if (interval === 'dailyAt') {
+                const syncTime = settings.icsDailySyncTime || '08:00';
+                const [hours, minutes] = syncTime.split(':').map(Number);
+                const now = new Date();
+                const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes, 0, 0);
+
+                // 如果今天的时间已过，设置为明天
+                if (target.getTime() <= now.getTime()) {
+                    target.setDate(target.getDate() + 1);
+                }
+                return target.getTime();
+            }
+
+            // 其他模式：基于上次同步时间 + 间隔
             if (settings && settings.icsLastSyncAt) {
                 const last = Date.parse(settings.icsLastSyncAt);
                 if (!isNaN(last)) {
-                    nextDueMs = last + intervalMs;
-                } else {
-                    // 无效时间，按间隔后触发
-                    nextDueMs = Date.now() + intervalMs;
+                    return last + intervalMs;
                 }
-            } else {
-                // 若没有上次同步时间，按是否立即执行决定：
+            }
+            return Date.now() + intervalMs;
+        };
+
+        // 计算首次的 nextDue 时间
+        let nextDueMs: number;
+        try {
+            if (interval === 'dailyAt') {
+                // dailyAt 模式单独处理首次同步时间
+                const settings = await this.loadSettings();
+                const syncTime = settings.icsDailySyncTime || '08:00';
+                const [hours, minutes] = syncTime.split(':').map(Number);
+                const now = new Date();
+                const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes, 0, 0);
+
                 if (executeImmediately) {
-                    nextDueMs = Date.now();
-                } else if (interval === 'hourly' || interval === '4hour' || interval === '12hour') {
-                    // 对齐到下一个整点或多个小时边界（例如每4小时、每12小时）
-                    const d = new Date();
-                    const h = d.getHours();
-                    let step = 1;
-                    if (interval === '4hour') step = 4;
-                    else if (interval === '12hour') step = 12;
-                    // 计算下一个 step 的边界小时（例如当前小时为 5，step=4 则下一个为 8）
-                    const nextHour = Math.ceil((h + 1) / step) * step;
-                    d.setHours(nextHour, 0, 0, 0);
-                    nextDueMs = d.getTime();
+                    // 如果开启了立即执行，且今天的时间还没到，则等到指定时间
+                    nextDueMs = target.getTime();
                 } else {
-                    nextDueMs = Date.now() + intervalMs;
+                    // 不立即执行：如果今天时间已过，设置为明天
+                    if (target.getTime() <= now.getTime()) {
+                        target.setDate(target.getDate() + 1);
+                    }
+                    nextDueMs = target.getTime();
+                }
+            } else if (interval === 'hourly' || interval === '4hour' || interval === '12hour') {
+                // 对齐到下一个整点或多个小时边界（例如每4小时、每12小时）
+                const d = new Date();
+                const h = d.getHours();
+                let step = 1;
+                if (interval === '4hour') step = 4;
+                else if (interval === '12hour') step = 12;
+                // 计算下一个 step 的边界小时（例如当前小时为 5，step=4 则下一个为 8）
+                const nextHour = Math.ceil((h + 1) / step) * step;
+                d.setHours(nextHour, 0, 0, 0);
+                nextDueMs = d.getTime();
+            } else {
+                // 其他间隔模式
+                const settings = await this.loadSettings();
+                if (settings && settings.icsLastSyncAt) {
+                    const last = Date.parse(settings.icsLastSyncAt);
+                    if (!isNaN(last)) {
+                        nextDueMs = last + intervalMs;
+                    } else {
+                        nextDueMs = Date.now() + intervalMs;
+                    }
+                } else {
+                    nextDueMs = executeImmediately ? Date.now() : Date.now() + intervalMs;
                 }
             }
         } catch (e) {
@@ -4562,13 +4609,7 @@ export default class ReminderPlugin extends Plugin {
         // 立即触发（当需要时）
         if (executeImmediately && Date.now() >= nextDueMs) {
             await this.performIcsSync();
-            try {
-                const s2 = await this.loadSettings();
-                const last2 = s2 && s2.icsLastSyncAt ? Date.parse(s2.icsLastSyncAt) : Date.now();
-                nextDueMs = (isNaN(last2) ? Date.now() : last2) + intervalMs;
-            } catch (e) {
-                nextDueMs = Date.now() + intervalMs;
-            }
+            nextDueMs = await calculateNextDueMs();
         }
 
         // 启动短轮询，比较当前时间与 nextDue
@@ -4580,18 +4621,8 @@ export default class ReminderPlugin extends Plugin {
                 if (this.isPerformingIcsSync) return;
                 await this.performIcsSync();
 
-                // 同步成功后，重新读取设置中的 last sync 时间以计算下一次触发时间
-                try {
-                    const s = await this.loadSettings();
-                    const last = s && s.icsLastSyncAt ? Date.parse(s.icsLastSyncAt) : NaN;
-                    if (!isNaN(last)) {
-                        nextDueMs = last + intervalMs;
-                    } else {
-                        nextDueMs = Date.now() + intervalMs;
-                    }
-                } catch (e) {
-                    nextDueMs = Date.now() + intervalMs;
-                }
+                // 同步成功后，重新计算下一次触发时间
+                nextDueMs = await calculateNextDueMs();
             } catch (e) {
                 console.warn('短轮询触发 ICS 同步失败:', e);
             }
@@ -4655,7 +4686,7 @@ export default class ReminderPlugin extends Plugin {
 
     // 执行到期的订阅同步
     private async performIcsSubscriptionSync() {
-        const { loadSubscriptions, syncSubscription, getSyncIntervalMs, saveSubscriptions } = await import('./utils/icsSubscription');
+        const { loadSubscriptions, syncSubscription, getSyncIntervalMs, calculateNextDailySyncTime, saveSubscriptions } = await import('./utils/icsSubscription');
 
         let data;
         try {
@@ -4676,11 +4707,27 @@ export default class ReminderPlugin extends Plugin {
                 continue;
             }
 
-            const intervalMs = getSyncIntervalMs(sub.syncInterval);
-            const lastSyncMs = sub.lastSync ? Date.parse(sub.lastSync) : 0;
+            let shouldSync = false;
+
+            if (sub.syncInterval === 'dailyAt') {
+                // dailyAt 模式：按指定时间点同步
+                const syncTime = sub.dailySyncTime || '08:00';
+                const nextSyncTime = calculateNextDailySyncTime(syncTime);
+                const lastSyncMs = sub.lastSync ? Date.parse(sub.lastSync) : 0;
+
+                // 如果已经过了下次同步时间，且上次同步是在这个时间之前
+                if (now >= nextSyncTime && lastSyncMs < nextSyncTime) {
+                    shouldSync = true;
+                }
+            } else {
+                // 其他模式：基于间隔时间
+                const intervalMs = getSyncIntervalMs(sub.syncInterval);
+                const lastSyncMs = sub.lastSync ? Date.parse(sub.lastSync) : 0;
+                shouldSync = now >= lastSyncMs + intervalMs;
+            }
 
             // 如果到了同步时间
-            if (now >= lastSyncMs + intervalMs) {
+            if (shouldSync) {
                 console.log(`[Timer] Syncing ICS subscription: ${sub.name}`);
                 const result = await syncSubscription(this, sub);
 

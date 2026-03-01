@@ -982,7 +982,16 @@
                         '4hour': i18n('every4Hours'),
                         '12hour': i18n('every12Hours'),
                         daily: i18n('everyDay'),
+                        dailyAt: i18n('dailyAt') || '每天指定时间',
                     },
+                },
+                {
+                    key: 'icsDailySyncTime',
+                    value: settings.icsDailySyncTime || '08:00',
+                    type: 'textinput',
+                    title: i18n('icsDailySyncTime') || '每天同步时间',
+                    description: i18n('icsDailySyncTimeDesc') || '设置每天几点同步，格式 HH:MM（如 08:00）',
+                    placeholder: '08:00',
                 },
                 {
                     key: 'icsSilentUpload',
@@ -1356,6 +1365,11 @@
             // 通用同步设置，仅在同步启用时可用
             if (item.key === 'icsSyncInterval') {
                 updated.disabled = !settings.icsSyncEnabled;
+            }
+
+            // 每天同步时间设置，仅在启用同步且选择 dailyAt 模式时显示
+            if (item.key === 'icsDailySyncTime') {
+                updated.hidden = !settings.icsSyncEnabled || settings.icsSyncInterval !== 'dailyAt';
             }
 
             // S3专用设置 - s3UseSiyuanConfig仅在启用同步且选择S3存储时显示
