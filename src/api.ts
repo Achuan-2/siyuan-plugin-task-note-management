@@ -751,8 +751,8 @@ export async function currentTime(): Promise<number> {
 
 const NOTIFY_FILE_PATH = "/data/storage/petal/siyuan-plugin-task-note-management/notify.json";
 
-// 读取通知记录数据 (仅存储最后一次已提醒的日期)
-export async function readNotifyData(): Promise<{ lastNotified?: string }> {
+// 读取通知记录数据
+export async function readNotifyData(): Promise<{ lastNotified?: string, notifiedKeys?: Record<string, boolean> }> {
     try {
         const content = await getFile(NOTIFY_FILE_PATH);
         if (!content || content?.code === 404) {
@@ -761,21 +761,21 @@ export async function readNotifyData(): Promise<{ lastNotified?: string }> {
         const parsed = typeof content === 'string' ? JSON.parse(content) : content;
         // Migration: if file contains old schema (date->bool mapping), convert to new schema
         if (parsed && typeof parsed === 'object') {
-            // If it already has lastNotified, just return
-            if (typeof parsed.lastNotified === 'string') {
-                return { lastNotified: parsed.lastNotified };
+            // Already new schema?
+            if (typeof parsed.lastNotified === 'string' || parsed.notifiedKeys) {
+                return {
+                    lastNotified: parsed.lastNotified,
+                    notifiedKeys: parsed.notifiedKeys || {}
+                };
             }
 
             // If parsed is a mapping of date -> boolean, find the (latest) date that was true
             const dateKeys = Object.keys(parsed).filter(k => /\d{4}-\d{2}-\d{2}/.test(k));
             if (dateKeys.length > 0) {
-                // Find the latest date key with truthy value
                 const validDates = dateKeys.filter(k => !!parsed[k]);
                 if (validDates.length > 0) {
-                    // Choose the latest date string (lexicographical sort works for YYYY-MM-DD)
                     const latest = validDates.sort().pop();
-                    const result = { lastNotified: latest };
-                    // Rewrite the file to the new schema to clean up old entries
+                    const result = { lastNotified: latest, notifiedKeys: {} };
                     try {
                         await writeNotifyData(result);
                     } catch (err) {
@@ -793,7 +793,7 @@ export async function readNotifyData(): Promise<{ lastNotified?: string }> {
 }
 
 // 写入通知记录数据
-export async function writeNotifyData(data: { lastNotified?: string }): Promise<void> {
+export async function writeNotifyData(data: { lastNotified?: string, notifiedKeys?: Record<string, boolean> }): Promise<void> {
     try {
         const content = JSON.stringify(data, null, 2);
         const blob = new Blob([content], { type: 'application/json' });
@@ -834,10 +834,49 @@ export async function hasNotifiedToday(date: string): Promise<boolean> {
 // 标记某日期已提醒全天事件
 export async function markNotifiedToday(date: string): Promise<void> {
     try {
-        // 仅存储最后一次已提醒日期，覆盖此前的数据
-        await writeNotifyData({ lastNotified: date });
+        const data = await readNotifyData();
+        data.lastNotified = date;
+        await writeNotifyData(data);
     } catch (error) {
         console.error('标记通知记录失败:', error);
+    }
+}
+
+// 检查特定的提醒Key是否已通知 (用于多窗口同步)
+export async function hasReminderNotified(key: string): Promise<boolean> {
+    try {
+        const data = await readNotifyData();
+        return !!data.notifiedKeys?.[key];
+    } catch (error) {
+        return false;
+    }
+}
+
+// 标记特定的提醒Key已通知
+export async function markReminderNotified(key: string): Promise<void> {
+    try {
+        const data = await readNotifyData();
+        if (!data.notifiedKeys) data.notifiedKeys = {};
+        data.notifiedKeys[key] = true;
+
+        // 清理旧日期 (只保留当天的通知记录，减少文件大小)
+        // 假设 key 包含日期格式 YYYY-MM-DD
+        const dateMatch = key.match(/\d{4}-\d{2}-\d{2}/);
+        if (dateMatch) {
+            const today = dateMatch[0];
+            const keys = Object.keys(data.notifiedKeys);
+            if (keys.length > 100) { // 稍微积累一点再清理
+                for (const k of keys) {
+                    if (!k.includes(today)) {
+                        delete data.notifiedKeys[k];
+                    }
+                }
+            }
+        }
+
+        await writeNotifyData(data);
+    } catch (error) {
+        console.error('标记提醒记录失败:', error);
     }
 }
 

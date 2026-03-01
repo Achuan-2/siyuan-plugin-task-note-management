@@ -28,7 +28,7 @@ import { ProjectKanbanView } from "./components/ProjectKanbanView";
 import { PomodoroManager } from "./utils/pomodoroManager";
 import SettingPanelComponent from "./SettingPanel.svelte";
 import { exportIcsFile, uploadIcsToCloud } from "./utils/icsUtils";
-import { getFileStat, getFile, hasNotifiedToday, markNotifiedToday, sendNotification } from "./api";
+import { getFileStat, getFile, hasNotifiedToday, markNotifiedToday, sendNotification, hasReminderNotified, markReminderNotified } from "./api";
 import { resolveAudioPath } from "./utils/audioUtils";
 import { showVipDialog } from "./components/VipDialog";
 
@@ -246,6 +246,9 @@ export default class ReminderPlugin extends Plugin {
     private notifiedReminders: Map<string, boolean> = new Map();
     // 格式: "habitId_date_time" -> true
     private notifiedHabits: Map<string, boolean> = new Map();
+
+    private instanceId: string = Math.random().toString(36).substring(2, 11);
+    private coordinatorChannel: BroadcastChannel;
 
     public settings: any;
     public vip: any = { vipKeys: [], isVip: false, expireDate: '', freeTrialUsed: false };
@@ -698,7 +701,10 @@ export default class ReminderPlugin extends Plugin {
             }
         };
         window.addEventListener('reminderSettingsUpdated', onSettingsUpdated);
-        this.addCleanup(() => window.removeEventListener('reminderSettingsUpdated', onSettingsUpdated));
+        this.addCleanup(() => {
+            window.removeEventListener('reminderSettingsUpdated', onSettingsUpdated);
+            this.coordinatorChannel?.close();
+        });
 
         // 监听文档树右键菜单事件
         const handleDocTreeMenu = this.handleDocumentTreeMenu.bind(this);
@@ -716,7 +722,10 @@ export default class ReminderPlugin extends Plugin {
 
         // 执行数据迁移
         await this.performDataMigration();
-        // 
+
+        // 初始化多窗口协调器
+        this.initCoordinator();
+
         const frontend = getFrontend();
         const isMobile = frontend.endsWith('mobile');
         const isBrowserDesktop = frontend === 'browser-desktop';
@@ -2484,16 +2493,79 @@ export default class ReminderPlugin extends Plugin {
         }
     }
 
+    private initCoordinator() {
+        this.coordinatorChannel = new BroadcastChannel('siyuan-plugin-task-note-management-coordinator');
+
+        // 监听来自其他窗口的消息
+        this.coordinatorChannel.onmessage = (event) => {
+            const type = event.data?.type;
+            if (type === 'reminderUpdated' || type === 'habitUpdated') {
+                // 转发给当前窗口的其他组件，附带标记避免循环发送
+                window.dispatchEvent(new CustomEvent(type, { detail: { _fromSync: true } }));
+                // 刷新徽章
+                this.updateBadges();
+                this.updateProjectBadges();
+                this.updateHabitBadges();
+            }
+        };
+
+        // 监听当前窗口的事件并广播
+        const broadcastEvent = (e: CustomEvent) => {
+            if (e.detail?._fromSync) return;
+            this.coordinatorChannel?.postMessage({ type: e.type });
+        };
+
+        window.addEventListener('reminderUpdated', broadcastEvent as any);
+        window.addEventListener('habitUpdated', broadcastEvent as any);
+
+        this.addCleanup(() => {
+            window.removeEventListener('reminderUpdated', broadcastEvent as any);
+            window.removeEventListener('habitUpdated', broadcastEvent as any);
+        });
+    }
+
+    /**
+     * 检查当前窗口是否为负责后台任务（如提醒、同步）的主窗口
+     */
+    private isPrimaryInstance(): boolean {
+        const now = Date.now();
+        const lockKey = `siyuan_task_note_coordinator_lock`;
+        const lockStr = localStorage.getItem(lockKey);
+
+        if (lockStr) {
+            try {
+                const lock = JSON.parse(lockStr);
+                // 如果锁被其他实例持有，且它是活跃的（45s内有更新，计时器每30s更新一次）
+                if (lock.instanceId !== this.instanceId && now - lock.timestamp < 45000) {
+                    return false;
+                }
+            } catch (e) {
+                // ignore
+            }
+        }
+
+        // 抢占或刷新锁
+        localStorage.setItem(lockKey, JSON.stringify({
+            instanceId: this.instanceId,
+            timestamp: now
+        }));
+        return true;
+    }
+
     private startReminderCheck() {
         // 每30秒检查一次提醒
         if (this.reminderCheckTimer) clearInterval(this.reminderCheckTimer);
         this.reminderCheckTimer = window.setInterval(() => {
-            this.checkReminders();
+            if (this.isPrimaryInstance()) {
+                this.checkReminders();
+            }
         }, 30000);
 
-        // 启动时立即检查一次
+        // 启动时延迟检查一次
         const initCheckTimer = setTimeout(() => {
-            this.checkReminders();
+            if (this.isPrimaryInstance()) {
+                this.checkReminders();
+            }
         }, 5000);
         this.addCleanup(() => clearTimeout(initCheckTimer));
     }
@@ -2833,9 +2905,15 @@ export default class ReminderPlugin extends Plugin {
                     if (reminderObj.time && inDateRange) {
                         const notifyKey = `${reminderObj.id}_${today}_${reminderObj.time}_time`;
                         if (!this.notifiedReminders.has(notifyKey) && this.shouldNotifyNow(reminderObj, today, currentTime, 'time')) {
-                            console.debug('checkTimeReminders - triggering time reminder', { id: reminderObj.id, date: reminderObj.date, time: reminderObj.time });
-                            await this.showTimeReminder(reminderObj, 'time');
-                            this.notifiedReminders.set(notifyKey, true);
+                            // 二次检查持久化记录，防止多窗口并发
+                            if (await hasReminderNotified(notifyKey)) {
+                                this.notifiedReminders.set(notifyKey, true);
+                            } else {
+                                console.debug('checkTimeReminders - triggering time reminder', { id: reminderObj.id, date: reminderObj.date, time: reminderObj.time });
+                                await this.showTimeReminder(reminderObj, 'time');
+                                this.notifiedReminders.set(notifyKey, true);
+                                await markReminderNotified(notifyKey);
+                            }
                         }
                     }
 
@@ -2848,9 +2926,15 @@ export default class ReminderPlugin extends Plugin {
                         if (shouldCheckRange) {
                             const notifyKey = `${reminderObj.id}_${today}_${reminderObj.customReminderTime}_custom`;
                             if (!this.notifiedReminders.has(notifyKey) && this.shouldNotifyNow(reminderObj, today, currentTime, 'customReminderTime')) {
-                                console.debug('checkTimeReminders - triggering customReminderTime reminder', { id: reminderObj.id, date: reminderObj.date, customReminderTime: reminderObj.customReminderTime });
-                                await this.showTimeReminder(reminderObj, 'customReminderTime');
-                                this.notifiedReminders.set(notifyKey, true);
+                                // 二次检查持久化记录
+                                if (await hasReminderNotified(notifyKey)) {
+                                    this.notifiedReminders.set(notifyKey, true);
+                                } else {
+                                    console.debug('checkTimeReminders - triggering customReminderTime reminder', { id: reminderObj.id, date: reminderObj.date, customReminderTime: reminderObj.customReminderTime });
+                                    await this.showTimeReminder(reminderObj, 'customReminderTime');
+                                    this.notifiedReminders.set(notifyKey, true);
+                                    await markReminderNotified(notifyKey);
+                                }
                             }
                         }
                     }
@@ -2871,10 +2955,16 @@ export default class ReminderPlugin extends Plugin {
                                 const reminderNum = this.timeStringToNumber(rt);
                                 // 只检测当前分钟，不检测过期提醒
                                 if (!this.notifiedReminders.has(notifyKey) && currentNum === reminderNum) {
-                                    console.debug('checkTimeReminders - triggering reminderTimes reminder', { id: reminderObj.id, rt });
-                                    const tempReminder = { ...reminderObj, customReminderTime: rt, note: note ? (reminderObj.note ? reminderObj.note + '\n' + note : note) : reminderObj.note };
-                                    await this.showTimeReminder(tempReminder, 'customReminderTime');
-                                    this.notifiedReminders.set(notifyKey, true);
+                                    // 二次检查持久化记录
+                                    if (await hasReminderNotified(notifyKey)) {
+                                        this.notifiedReminders.set(notifyKey, true);
+                                    } else {
+                                        console.debug('checkTimeReminders - triggering reminderTimes reminder', { id: reminderObj.id, rt });
+                                        const tempReminder = { ...reminderObj, customReminderTime: rt, note: note ? (reminderObj.note ? reminderObj.note + '\n' + note : note) : reminderObj.note };
+                                        await this.showTimeReminder(tempReminder, 'customReminderTime');
+                                        this.notifiedReminders.set(notifyKey, true);
+                                        await markReminderNotified(notifyKey);
+                                    }
                                 }
                             }
                         }
@@ -2940,9 +3030,15 @@ export default class ReminderPlugin extends Plugin {
                         if (instance.time) {
                             const notifyKey = `${instance.instanceId}_${today}_${instance.time}_time`;
                             if (!this.notifiedReminders.has(notifyKey) && this.shouldNotifyNow(instance, today, currentTime, 'time')) {
-                                console.debug('checkTimeReminders - triggering repeat instance time reminder', { id: instance.instanceId, date: instance.date, time: instance.time });
-                                await this.showTimeReminder(instance, 'time');
-                                this.notifiedReminders.set(notifyKey, true);
+                                // 二次检查持久化记录
+                                if (await hasReminderNotified(notifyKey)) {
+                                    this.notifiedReminders.set(notifyKey, true);
+                                } else {
+                                    console.debug('checkTimeReminders - triggering repeat instance time reminder', { id: instance.instanceId, date: instance.date, time: instance.time });
+                                    await this.showTimeReminder(instance, 'time');
+                                    this.notifiedReminders.set(notifyKey, true);
+                                    await markReminderNotified(notifyKey);
+                                }
                             }
                         }
 
@@ -2954,9 +3050,15 @@ export default class ReminderPlugin extends Plugin {
                             } else {
                                 const notifyKey = `${instance.instanceId}_${today}_${instance.customReminderTime}_custom`;
                                 if (!this.notifiedReminders.has(notifyKey) && this.shouldNotifyNow(instance, today, currentTime, 'customReminderTime')) {
-                                    console.debug('checkTimeReminders - triggering repeat instance customReminderTime reminder', { id: instance.instanceId, date: instance.date, customReminderTime: instance.customReminderTime });
-                                    await this.showTimeReminder(instance, 'customReminderTime');
-                                    this.notifiedReminders.set(notifyKey, true);
+                                    // 二次检查持久化记录
+                                    if (await hasReminderNotified(notifyKey)) {
+                                        this.notifiedReminders.set(notifyKey, true);
+                                    } else {
+                                        console.debug('checkTimeReminders - triggering repeat instance customReminderTime reminder', { id: instance.instanceId, date: instance.date, customReminderTime: instance.customReminderTime });
+                                        await this.showTimeReminder(instance, 'customReminderTime');
+                                        this.notifiedReminders.set(notifyKey, true);
+                                        await markReminderNotified(notifyKey);
+                                    }
                                 }
                             }
                         }
@@ -2976,10 +3078,16 @@ export default class ReminderPlugin extends Plugin {
                                 // 只检测当前分钟，不检测过期提醒
                                 const notifyKey = `${instance.instanceId}_${today}_${rt}_reminderTimes`;
                                 if (!this.notifiedReminders.has(notifyKey) && currentNum === reminderNum) {
-                                    console.debug('checkTimeReminders - triggering repeat instance reminderTimes reminder', { id: instance.instanceId, rt });
-                                    const tempInstance = { ...instance, customReminderTime: rt };
-                                    await this.showTimeReminder(tempInstance, 'customReminderTime');
-                                    this.notifiedReminders.set(notifyKey, true);
+                                    // 二次检查持久化记录
+                                    if (await hasReminderNotified(notifyKey)) {
+                                        this.notifiedReminders.set(notifyKey, true);
+                                    } else {
+                                        console.debug('checkTimeReminders - triggering repeat instance reminderTimes reminder', { id: instance.instanceId, rt });
+                                        const tempInstance = { ...instance, customReminderTime: rt };
+                                        await this.showTimeReminder(tempInstance, 'customReminderTime');
+                                        this.notifiedReminders.set(notifyKey, true);
+                                        await markReminderNotified(notifyKey);
+                                    }
                                 }
                             }
                         }
@@ -3259,6 +3367,12 @@ export default class ReminderPlugin extends Plugin {
                         const notifyKey = `${habit.id}_${today}_${parsed.time || rt}`;
                         if (this.notifiedHabits.has(notifyKey)) continue;
 
+                        // 二次检查持久化记录
+                        if (await hasReminderNotified(notifyKey)) {
+                            this.notifiedHabits.set(notifyKey, true);
+                            continue;
+                        }
+
                         // 触发通知（仅第一次触发时播放音效）
                         if (!playSoundOnce) {
                             await this.playNotificationSound();
@@ -3296,8 +3410,9 @@ export default class ReminderPlugin extends Plugin {
                             this.showReminderSystemNotification(title, message, reminderInfo);
                         }
 
-                        // 标记已通知（仅在内存中），避免重复通知
+                        // 标记已通知，避免重复通知
                         this.notifiedHabits.set(notifyKey, true);
+                        await markReminderNotified(notifyKey);
                     }
                 } catch (err) {
                     console.warn('处理单个习惯时出错', err);
@@ -4631,6 +4746,7 @@ export default class ReminderPlugin extends Plugin {
 
         // 启动短轮询，比较当前时间与 nextDue
         this.icsSyncTimer = window.setInterval(async () => {
+            if (!this.isPrimaryInstance()) return;
             try {
                 const now = Date.now();
                 if (now < nextDueMs) return;
@@ -4693,6 +4809,7 @@ export default class ReminderPlugin extends Plugin {
 
         const shortPollMs = 60 * 1000; // 每分钟检查一次是否需要同步
         this.icsSubscriptionSyncTimer = window.setInterval(async () => {
+            if (!this.isPrimaryInstance()) return;
             try {
                 await this.performIcsSubscriptionSync();
             } catch (error) {
