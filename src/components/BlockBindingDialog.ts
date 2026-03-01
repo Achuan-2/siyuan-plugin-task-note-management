@@ -172,6 +172,11 @@ export class BlockBindingDialog {
                                     <option value="append" selected>${i18n("insertAtEnd") || "插入到最后"}</option>
                                 </select>
                             </div>
+
+                            <div class="b3-form__group">
+                                <label class="b3-form__label">${i18n("headingContentOptional") || "标题下内容（可选）"}</label>
+                                <textarea id="headingSubContentInput" class="b3-text-field" placeholder="${i18n("inputHeadingSubContent") || "请输入标题下内容"}" style="width: 100%; margin-top: 8px; min-height: 80px; resize: vertical;"></textarea>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -368,6 +373,7 @@ export class BlockBindingDialog {
      */
     private async initDocumentTab() {
         const docTitleInput = this.dialog.element.querySelector('#docTitleInput') as HTMLInputElement;
+        const docContentInput = this.dialog.element.querySelector('#docContentInput') as HTMLTextAreaElement;
         const parentPathInput = this.dialog.element.querySelector('#docParentPathInput') as HTMLInputElement;
         const pathSearchResults = this.dialog.element.querySelector('#docPathSearchResults') as HTMLElement;
         const useParentDocPathBtn = this.dialog.element.querySelector('#useParentDocPathBtn') as HTMLButtonElement;
@@ -375,6 +381,11 @@ export class BlockBindingDialog {
         // 如果有reminder，设置默认标题，否则使用默认标题
         if (docTitleInput) {
             docTitleInput.value = (this.reminder?.title || this.defaultTitle) || '';
+        }
+
+        // 自动填充备注到内容域
+        if (docContentInput && this.reminder?.note) {
+            docContentInput.value = this.reminder.note;
         }
 
         // 加载笔记本列表
@@ -544,6 +555,7 @@ export class BlockBindingDialog {
      */
     private async initHeadingTab() {
         const headingContentInput = this.dialog.element.querySelector('#headingContentInput') as HTMLInputElement;
+        const headingSubContentInput = this.dialog.element.querySelector('#headingSubContentInput') as HTMLTextAreaElement;
         const headingParentInput = this.dialog.element.querySelector('#headingParentInput') as HTMLInputElement;
         const headingIncludeHeadingsCheckbox = this.dialog.element.querySelector('#headingIncludeHeadingsCheckbox') as HTMLInputElement;
         const headingSearchResults = this.dialog.element.querySelector('#headingSearchResults') as HTMLElement;
@@ -554,6 +566,11 @@ export class BlockBindingDialog {
         // 如果有reminder，设置默认标题内容，否则使用默认标题
         if (headingContentInput) {
             headingContentInput.value = (this.reminder?.title || this.defaultTitle) || '';
+        }
+
+        // 自动填充备注到标题下内容域
+        if (headingSubContentInput && this.reminder?.note) {
+            headingSubContentInput.value = this.reminder.note;
         }
 
         // 加载默认设置
@@ -1001,6 +1018,7 @@ export class BlockBindingDialog {
      */
     private async handleDocumentConfirm(): Promise<string> {
         const titleInput = this.dialog.element.querySelector('#docTitleInput') as HTMLInputElement;
+        const contentInput = this.dialog.element.querySelector('#docContentInput') as HTMLTextAreaElement;
         const parentPathInput = this.dialog.element.querySelector('#docParentPathInput') as HTMLInputElement;
 
         const title = titleInput?.value?.trim();
@@ -1096,7 +1114,8 @@ export class BlockBindingDialog {
         }
 
         // 最终调用 createDocWithMd，路径应为相对于笔记本的路径
-        const result = await createDocWithMd(targetNotebookId, relativePath, '');
+        const content = contentInput?.value || '';
+        const result = await createDocWithMd(targetNotebookId, relativePath, content);
 
         return result;
     }
@@ -1106,11 +1125,13 @@ export class BlockBindingDialog {
      */
     private async handleHeadingConfirm(): Promise<string> {
         const contentInput = this.dialog.element.querySelector('#headingContentInput') as HTMLInputElement;
+        const subContentInput = this.dialog.element.querySelector('#headingSubContentInput') as HTMLTextAreaElement;
         const parentInput = this.dialog.element.querySelector('#headingParentInput') as HTMLInputElement;
         const levelSelect = this.dialog.element.querySelector('#headingLevelSelect') as HTMLSelectElement;
         const positionSelect = this.dialog.element.querySelector('#headingPositionSelect') as HTMLSelectElement;
 
         const content = contentInput?.value?.trim();
+        const subContent = subContentInput?.value;
         const parentId = parentInput?.value?.trim();
         const level = parseInt(levelSelect?.value || '3');
         const position = positionSelect?.value as 'prepend' | 'append';
@@ -1131,7 +1152,7 @@ export class BlockBindingDialog {
         }
 
         // 创建标题
-        const blockId = await this.createHeading(content, parentId, level, position, parentBlock);
+        const blockId = await this.createHeading(content, parentId, level, position, parentBlock, subContent);
         return blockId;
     }
 
@@ -1143,12 +1164,16 @@ export class BlockBindingDialog {
         parentId: string,
         level: number,
         position: 'prepend' | 'append',
-        parentBlock: any
+        parentBlock: any,
+        subContent?: string
     ): Promise<string> {
         const { prependBlock, appendBlock, insertBlock, getHeadingChildrenDOM } = await import("../api");
 
         const hashes = '#'.repeat(level);
-        const markdownContent = `${hashes} ${content}`;
+        let markdownContent = `${hashes} ${content}`;
+        if (subContent) {
+            markdownContent += `\n${subContent}`;
+        }
 
         let response: any;
 
