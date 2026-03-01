@@ -1,0 +1,20 @@
+{
+  "name": "cf-workers-caldav",
+  "version": "1.0.0",
+  "description": "CalDAV server implementation using Cloudflare Workers, D1, KV, and R2",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "keywords": ["caldav", "cloudflare", "workers", "d1", "kv", "r2"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  },
+  "dependencies": {
+    "ical.js": "^1.5.0"
+  }
+}
