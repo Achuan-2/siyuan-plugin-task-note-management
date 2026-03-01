@@ -689,7 +689,7 @@ export class TaskSummaryDialog {
         const startDate = new Date(todayDate);
         startDate.setDate(diff);
         const endDate = new Date(startDate);
-        endDate.setDate(diff + 6);
+        endDate.setDate(startDate.getDate() + 6);
         start = getLocalDateString(startDate);
         end = getLocalDateString(endDate);
         label = `${i18n('thisWeek')} (${start} ~ ${end})`;
@@ -702,7 +702,7 @@ export class TaskSummaryDialog {
         const startDate = new Date(todayDate);
         startDate.setDate(diff);
         const endDate = new Date(startDate);
-        endDate.setDate(diff + 6);
+        endDate.setDate(startDate.getDate() + 6);
         start = getLocalDateString(startDate);
         end = getLocalDateString(endDate);
         label = `${i18n('nextWeek')} (${start} ~ ${end})`;
@@ -715,7 +715,7 @@ export class TaskSummaryDialog {
         const startDate = new Date(todayDate);
         startDate.setDate(diff);
         const endDate = new Date(startDate);
-        endDate.setDate(diff + 6);
+        endDate.setDate(startDate.getDate() + 6);
         start = getLocalDateString(startDate);
         end = getLocalDateString(endDate);
         label = `${i18n('lastWeek')} (${start} ~ ${end})`;
