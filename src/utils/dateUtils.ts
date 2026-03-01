@@ -228,39 +228,53 @@ export function parseNaturalDateTime(text: string): ParseResult {
                 if (sep === "-" && /^\d{4}-\d{2}-\d{2}$/.test(processedText)) continue;
 
                 const parts = processedText.split(sep);
-                if (parts.length === 2) {
-                    const startResult = parseNaturalDateTime(parts[0]);
-                    const endResult = parseNaturalDateTime(parts[1]);
+                // 允许出现多次分隔符（例如：明天8点到10点，到处走走），需尝试寻找最合适的分割点
+                if (parts.length >= 2) {
+                    for (let i = 1; i < parts.length; i++) {
+                        const left = parts.slice(0, i).join(sep);
+                        const right = parts.slice(i).join(sep);
 
-                    if (startResult.date || startResult.time || endResult.date || endResult.time) {
-                        // 补齐逻辑：如果结束部分没有显式日期只有时间，使用起始部分的日期
-                        let endDate = endResult.date;
-                        let hasEndDate = endResult.hasDate;
-                        if (!endResult.hasDate && endResult.time && startResult.date) {
-                            endDate = startResult.date;
-                            hasEndDate = true;
+                        const startResult = parseNaturalDateTimeInner(left);
+                        const endResult = parseNaturalDateTimeInner(right);
+
+                        if ((startResult.date || startResult.time) && (endResult.date || endResult.time)) {
+                            // 补齐逻辑：如果结束部分没有显式日期只有时间，使用起始部分的日期
+                            let endDate = endResult.date;
+                            let hasEndDate = endResult.hasDate;
+                            if (!endResult.hasDate && endResult.time && startResult.date) {
+                                endDate = startResult.date;
+                                hasEndDate = true;
+                            }
+
+                            return {
+                                date: startResult.date,
+                                time: startResult.time,
+                                hasTime: startResult.hasTime,
+                                hasDate: startResult.hasDate,
+                                endDate: endDate,
+                                endTime: endResult.time,
+                                hasEndTime: endResult.hasTime || !!endResult.time,
+                                hasEndDate: hasEndDate,
+                            };
                         }
-
-                        return {
-                            date: startResult.date,
-                            time: startResult.time,
-                            hasTime: startResult.hasTime,
-                            hasDate: startResult.hasDate,
-                            endDate: endDate,
-                            endTime: endResult.time,
-                            hasEndTime: endResult.hasTime || !!endResult.time,
-                            hasEndDate: hasEndDate,
-                            // 继承年份逻辑：如果结束日期识别到了但没有年份（或者识别为今年）而开始日期有不同年份
-                            // 实际场景：2025.12.30-01.02，需要把 endDate 改为 2026
-                            // 此处简化处理，由后续逻辑统一处理日期连贯性
-                        };
                     }
                 }
             }
         }
 
-        // 原有的单日期解析逻辑...
+        return parseNaturalDateTimeInner(processedText);
+    } catch (error) {
+        console.error('解析自然语言日期时间失败:', error);
+        return {};
+    }
+}
 
+/**
+ * 内部解析函数，不含范围切割逻辑
+ */
+function parseNaturalDateTimeInner(text: string): ParseResult {
+    try {
+        let processedText = text.trim();
         // --- 优先提取末尾时间 (针对 "任务0：14:20" 这种场景) ---
         // 匹配模式：(起始/空格/中英文冒号) + (1-2位数字) + (中英文冒号/点) + (2位数字) + (可选分) + 结尾
         const trailingTimePattern = /(?:^|[\s:：])(\d{1,2})[:：点](\d{2})(?:分)?$/;
@@ -402,7 +416,7 @@ export function parseNaturalDateTime(text: string): ParseResult {
 
         // 处理农历日期格式（例如：八月廿一、正月初一、农历七月十三）
         // 如果文本包含“农历”关键字，则强制以农历解析（例如“农历7月13”、“农历七月二十”等）
-        if (/农历/.test(text) || /农历/.test(processedText)) {
+        if (/农历/.test(processedText)) {
             const lunarDate = parseLunarDateText(processedText);
             if (lunarDate) {
                 // 如果只识别到日期（month === 0），使用当前月作为默认月
@@ -460,7 +474,7 @@ export function parseNaturalDateTime(text: string): ParseResult {
 
         return { date, time, hasTime, hasDate };
     } catch (error) {
-        console.error('解析自然语言日期时间失败:', error);
+        console.error('内部解析自然语言日期时间失败:', error);
         return {};
     }
 }
@@ -484,16 +498,19 @@ export function autoDetectDateTimeFromTitle(title: string): ParseResult & { clea
         /大后天/gi,
         /下?周[一二三四五六日天]/gi,
         /下?星期[一二三四五六日天]/gi,
-        /\d{4}年\d{1,2}月\d{1,2}[日号]/gi, // 新增年月日识别
-        /\d{1,2}月\d{1,2}[日号]/gi,
-        /\d{1,2}[点时]\d{0,2}[分]?/gi,
-        /\d+天[后以]后/gi,
-        /\d+小时[后以]后/gi,
-        /(?:\d{4}年\s*)?农历\s*[\u4e00-\u9fa5\d]+月[\u4e00-\u9fa5\d]+/gi, // 识别农历（含可选年份）
-        /\d{8}/gi, // 8位数字日期
-        /\d{4}[年\-\/\.]\d{1,2}[月日\-\/\.]\d{1,2}[日号]?/gi, // 标准日期格式
-        /\d{1,2}[月日]\d{1,2}[日号]/gi, // 月日识别 (含非标准日日格式)
-        /\d{1,2}:\d{2}(?::\d{2})?/gi, // HH:MM or HH:MM:SS
+        /早上|上午|中午|下午|晚上/gi, // 新增时间段描述
+        /\d{4}年\s*\d{1,2}月\s*\d{1,2}[日号]/gi,
+        /\d{1,2}月\s*\d{1,2}[日号]/gi,
+        /[\d一二三四五六七八九十]+\s*[点时]\s*\d{0,2}\s*分?半?/gi, // 允许空格
+        /\d+\s*天[后以]后/gi,
+        /\d+\s*小时[后以]后/gi,
+        /(?:\d{4}年\s*)?农历\s*[\u4e00-\u9fa5\d]+月[\u4e00-\u9fa5\d]+/gi,
+        /\d{8}/gi,
+        /\d{4}[年\-\/\.]\s*\d{1,2}[月日\-\/\.]\s*\d{1,2}[日号]?/gi,
+        /\d{1,2}[月日]\s*\d{1,2}[日号]/gi,
+        /\d{1,2}\s*:\s*\d{2}(?::\d{2})?/gi,
+        /[点时]\s*\d{1,2}\s*分?/gi,
+        /到|至|~|-/gi,
     ];
 
     timeExpressions.forEach(pattern => {
@@ -501,7 +518,7 @@ export function autoDetectDateTimeFromTitle(title: string): ParseResult & { clea
     });
 
     // 清理多余的空格和标点
-    cleanTitle = cleanTitle.replace(/\s+/g, ' ').replace(/^[，。、\s]+|[，。、\s]+$/g, '');
+    cleanTitle = cleanTitle.replace(/\s+/g, ' ').replace(/^[，。、,~至\- \s]+|[，。、,~至\- \s]+$/g, '');
 
     return {
         ...parseResult,

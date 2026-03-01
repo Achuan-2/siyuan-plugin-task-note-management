@@ -717,6 +717,7 @@ export class PasteTaskDialog {
 
         // 移除常见的 Markdown 列表标记
         title = title.replace(/^([-*+]\s+)|(\d+\.\s+)/, '');
+
         let priority: string | undefined;
         let startDate: string | undefined;
         let time: string | undefined;
@@ -747,6 +748,9 @@ export class PasteTaskDialog {
             completed = (leadingCheckboxMatch[1].toLowerCase() === 'x');
             title = leadingCheckboxMatch[2];
         }
+
+        // 处理 Markdown 转义字符（因内容来自编辑器 Markdown，~, *, _ 等符号会被转义为 \~, \*, \_）
+        title = title.replace(/\\([\\*_{}[\]()#+\-.!~])/g, '$1');
 
         if (autoDetect) {
             const detected = autoDetectDateTimeFromTitle(title);
