@@ -1493,6 +1493,8 @@ export class QuickReminderDialog {
                                 </div>
                                 <!-- 持续天数行: allow wrap when narrow -->
                                 <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                    <span style="font-size: 13px; color: var(--b3-theme-on-surface); white-space: nowrap; flex: 0 0 auto;">${i18n("durationLabel")}</span>
+                                    <input type="number" id="quickDurationDays" min="1" step="1" class="b3-text-field" value="1" style="width: 100px; min-width: 80px;">
                                     <span style="font-size: 13px; color: var(--b3-theme-on-surface-light);">${i18n("daysUnit")}</span>
                                 </div>
                                 <!-- 结束行: responsive, keep end time + clear button together -->
