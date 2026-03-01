@@ -28,7 +28,7 @@ import { ProjectKanbanView } from "./components/ProjectKanbanView";
 import { PomodoroManager } from "./utils/pomodoroManager";
 import SettingPanelComponent from "./SettingPanel.svelte";
 import { exportIcsFile, uploadIcsToCloud } from "./utils/icsUtils";
-import { getFileStat, getFile, hasNotifiedToday, markNotifiedToday } from "./api";
+import { getFileStat, getFile, hasNotifiedToday, markNotifiedToday, sendDeviceNotification } from "./api";
 import { resolveAudioPath } from "./utils/audioUtils";
 import { showVipDialog } from "./components/VipDialog";
 
@@ -3389,6 +3389,20 @@ export default class ReminderPlugin extends Plugin {
      * @param reminderInfo 提醒信息（可选，用于点击跳转）
      */
     private showReminderSystemNotification(title: string, message: string, reminderInfo?: any) {
+        // 判断是否是移动端
+        const frontend = getFrontend();
+        const isMobile = frontend.endsWith('mobile');
+
+        if (isMobile) {
+            // 手机端：使用内核接口进行系统通知
+            try {
+                sendDeviceNotification(title, message);
+            } catch (error) {
+                console.warn('手机端发送系统通知失败:', error);
+            }
+            return;
+        }
+
         try {
             if ('Notification' in window && Notification.permission === 'granted') {
                 // 使用浏览器通知

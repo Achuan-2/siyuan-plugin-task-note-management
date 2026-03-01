@@ -1,6 +1,6 @@
 import { showMessage, confirm, getFrontend, Dialog } from "siyuan";
 import { PomodoroRecordManager } from "../utils/pomodoroRecord";
-import { getBlockByID, openBlock } from "../api";
+import { getBlockByID, openBlock, sendDeviceNotification } from "../api";
 import { i18n } from "../pluginInstance";
 import { resolveAudioPath } from "../utils/audioUtils";
 
@@ -4707,6 +4707,20 @@ export class PomodoroTimer {
      */
     private showSystemNotification(title: string, message: string, autoCloseDelay?: number) {
         if (!this.systemNotificationEnabled) {
+            return;
+        }
+
+        // 判断是否是移动端
+        const frontend = getFrontend();
+        const isMobile = frontend.endsWith('mobile');
+
+        if (isMobile) {
+            // 手机端：使用内核接口进行系统通知
+            try {
+                sendDeviceNotification(title, message);
+            } catch (error) {
+                console.warn('手机端发送系统通知失败:', error);
+            }
             return;
         }
 

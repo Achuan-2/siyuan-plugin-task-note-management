@@ -701,6 +701,15 @@ export async function pushErrMsg(msg: string, timeout: number = 7000) {
     return request(url, payload);
 }
 
+export async function sendDeviceNotification(title: string, body: string) {
+    let payload = {
+        title: title,
+        body: body
+    };
+    let url = "/api/notification/sendDeviceNotification";
+    return request(url, payload);
+}
+
 // **************************************** Network ****************************************
 export async function forwardProxy(
     url: string, method: string = 'GET', payload: any = {},
