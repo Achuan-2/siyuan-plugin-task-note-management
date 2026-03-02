@@ -519,6 +519,14 @@ export class PasteTaskDialog {
 
         cancelBtn.addEventListener('click', () => dialog.destroy());
 
+        dialog.element.addEventListener('keydown', (e: KeyboardEvent) => {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                e.stopPropagation();
+                createBtn.click();
+            }
+        });
+
         createBtn.addEventListener('click', async () => {
             // 防止重复点击
             if ((createBtn as HTMLButtonElement).disabled) return;
