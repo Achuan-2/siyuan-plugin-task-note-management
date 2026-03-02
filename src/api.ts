@@ -701,10 +701,11 @@ export async function pushErrMsg(msg: string, timeout: number = 7000) {
     return request(url, payload);
 }
 
-export async function sendDeviceNotification(title: string, body: string) {
+export async function sendNotification(title: string, body: string, delayInSeconds: number = 0) {
     let payload = {
         title: title,
-        body: body
+        body: body,
+        delayInSeconds: delayInSeconds
     };
     let url = "/api/notification/sendDeviceNotification";
     return request(url, payload);

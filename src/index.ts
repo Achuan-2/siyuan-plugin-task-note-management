@@ -28,7 +28,7 @@ import { ProjectKanbanView } from "./components/ProjectKanbanView";
 import { PomodoroManager } from "./utils/pomodoroManager";
 import SettingPanelComponent from "./SettingPanel.svelte";
 import { exportIcsFile, uploadIcsToCloud } from "./utils/icsUtils";
-import { getFileStat, getFile, hasNotifiedToday, markNotifiedToday, sendDeviceNotification } from "./api";
+import { getFileStat, getFile, hasNotifiedToday, markNotifiedToday, sendNotification } from "./api";
 import { resolveAudioPath } from "./utils/audioUtils";
 import { showVipDialog } from "./components/VipDialog";
 
@@ -3400,7 +3400,7 @@ export default class ReminderPlugin extends Plugin {
         if (isMobile) {
             // 手机端：使用内核接口进行系统通知
             try {
-                sendDeviceNotification(title, message);
+                sendNotification(title, message);
             } catch (error) {
                 console.warn('手机端发送系统通知失败:', error);
             }
