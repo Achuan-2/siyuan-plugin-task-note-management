@@ -396,10 +396,6 @@ export class ReminderPanel {
             this.totalItems = 0;
             // 强制刷新，允许在 isLoading 为 true 时也能覆盖加载（例如快速切换时）
             this.loadReminders(true);
-            // 根据当前筛选显示或隐藏“显示已完成子任务”开关
-            if (this.showCompletedContainer) {
-                this.showCompletedContainer.style.display = this.currentTab === 'today' ? '' : 'none';
-            }
         });
         controls.appendChild(this.filterSelect);
 
@@ -462,8 +458,7 @@ export class ReminderPanel {
 
         showCompletedContainer.appendChild(this.showCompletedCheckbox);
         showCompletedContainer.appendChild(showCompletedText);
-        // 默认仅在当前筛选为 today 时显示，且单独一行
-        showCompletedContainer.style.display = (this.filterSelect && this.filterSelect.value === 'today') ? '' : 'none';
+        // 显示已完成子任务开关在所有筛选项下都可见
         showCompletedContainer.style.cssText += '\n            display: flex; width: 100%; margin-top: 8px;';
 
         header.appendChild(controls);
@@ -1543,8 +1538,8 @@ export class ReminderPanel {
             for (const parent of directlyMatchingReminders) {
                 const descendants = this.getAllDescendantIds(parent.id, reminderMap);
                 descendants.forEach(id => {
-                    // 在"今日任务"视图中，如果父任务未完成且开关关闭，不显示已完成的子任务
-                    if (this.currentTab === 'today' && !parent.completed && !this.showCompletedSubtasks) {
+                    // 如果父任务未完成且开关关闭，不显示已完成的子任务
+                    if (!parent.completed && !this.showCompletedSubtasks) {
                         const descendant = reminderMap.get(id);
                         if (descendant && descendant.completed) {
                             return; // 跳过已完成的子任务
