@@ -173,7 +173,7 @@
         const editDialog = new Dialog({
             title: isEdit ? i18n('editSubscription') : i18n('addSubscription'),
             content: `
-                <div class="b3-dialog__content" style="padding: 16px;">
+                <div class="b3-dialog__content" style="padding: 16px;flex: 1;overflow-y: auto;">
                     <div class="fn__flex-column" style="gap: 12px;">
                         <div class="b3-label">
                             <div class="b3-label__text">${i18n('subscriptionName')}</div>
@@ -270,13 +270,14 @@
                             </label>
                         </div>
                     </div>
-                    <div class="b3-dialog__action" style="margin-top: 16px;">
+                </div>
+                <div class="b3-dialog__action" style="margin-top: 16px; flex-shrink: 0; display: flex; justify-content: flex-end;">
                         <button class="b3-button b3-button--cancel">${i18n('cancel')}</button>
                         <button class="b3-button b3-button--text" id="confirm-sub">${i18n('save')}</button>
-                    </div>
                 </div>
             `,
             width: '500px',
+            height: "67vh"
         });
 
         const createProjectBtn = editDialog.element.querySelector(
