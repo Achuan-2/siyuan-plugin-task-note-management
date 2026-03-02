@@ -5371,11 +5371,11 @@ export class ReminderPanel {
 
             // 判断是否为重复实例
             // 优先使用 isRepeatInstance 属性，如果未设置则通过 originalId 判断（只有明确有 originalId 才是实例）
-            const isDraggedInstance = draggedReminder.isRepeatInstance !== undefined 
-                ? draggedReminder.isRepeatInstance 
+            const isDraggedInstance = draggedReminder.isRepeatInstance !== undefined
+                ? draggedReminder.isRepeatInstance
                 : !!draggedReminder.originalId;
-            const isTargetInstance = targetReminder.isRepeatInstance !== undefined 
-                ? targetReminder.isRepeatInstance 
+            const isTargetInstance = targetReminder.isRepeatInstance !== undefined
+                ? targetReminder.isRepeatInstance
                 : !!targetReminder.originalId;
 
             // 获取原始ID
@@ -5945,36 +5945,38 @@ export class ReminderPanel {
             items.push({ iconHTML: "📅", label: i18n("moveToDayAfterTomorrow") || "移至后天", click: () => apply(dayAfterStr) });
             items.push({ iconHTML: "📅", label: i18n("moveToNextWeek") || "移至下周", click: () => apply(nextWeekStr) });
             items.push({ iconHTML: "❌", label: i18n("clearDate") || "清除日期", click: () => apply(null) });
-            items.push({ iconHTML: "✏️", label: i18n("editDate") || "编辑日期", click: () => {
-                const isInstanceEdit = targetReminder.isRepeatInstance && onlyThisInstance;
-                const originalInstanceDate = (targetReminder.isRepeatInstance && targetReminder.id && targetReminder.id.includes('_'))
-                    ? targetReminder.id.split('_').pop()
-                    : targetReminder.date;
-                const dlg = new QuickReminderDialog(
-                    undefined, undefined, undefined, undefined,
-                    {
-                        mode: 'edit',
-                        reminder: isInstanceEdit ? {
-                            ...targetReminder,
-                            isInstance: true,
-                            originalId: targetReminder.originalId,
-                            instanceDate: originalInstanceDate
-                        } : targetReminder,
-                        isInstanceEdit: isInstanceEdit,
-                        plugin: this.plugin,
-                        dateOnly: true,
-                        onSaved: async (savedReminder) => {
-                            if (savedReminder && savedReminder.id) {
-                                await this.handleOptimisticSavedReminder(savedReminder);
-                            } else {
-                                await this.loadReminders();
+            items.push({
+                iconHTML: "✏️", label: i18n("editDate") || "编辑日期", click: () => {
+                    const isInstanceEdit = targetReminder.isRepeatInstance && onlyThisInstance;
+                    const originalInstanceDate = (targetReminder.isRepeatInstance && targetReminder.id && targetReminder.id.includes('_'))
+                        ? targetReminder.id.split('_').pop()
+                        : targetReminder.date;
+                    const dlg = new QuickReminderDialog(
+                        undefined, undefined, undefined, undefined,
+                        {
+                            mode: 'edit',
+                            reminder: isInstanceEdit ? {
+                                ...targetReminder,
+                                isInstance: true,
+                                originalId: targetReminder.originalId,
+                                instanceDate: originalInstanceDate
+                            } : targetReminder,
+                            isInstanceEdit: isInstanceEdit,
+                            plugin: this.plugin,
+                            dateOnly: true,
+                            onSaved: async (savedReminder) => {
+                                if (savedReminder && savedReminder.id) {
+                                    await this.handleOptimisticSavedReminder(savedReminder);
+                                } else {
+                                    await this.loadReminders();
+                                }
+                                window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
                             }
-                            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
                         }
-                    }
-                );
-                dlg.show();
-            }});
+                    );
+                    dlg.show();
+                }
+            });
             return items;
         };
 
