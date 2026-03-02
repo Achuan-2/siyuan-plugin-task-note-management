@@ -10333,6 +10333,32 @@ export class ProjectKanbanView {
             items.push({ iconHTML: "📅", label: i18n("moveToDayAfterTomorrow") || "移至后天", click: () => apply(dayAfterStr) });
             items.push({ iconHTML: "📅", label: i18n("moveToNextWeek") || "移至下周", click: () => apply(nextWeekStr) });
             items.push({ iconHTML: "❌", label: i18n('clearDate') || '清除日期', click: () => apply(null) });
+            items.push({ iconHTML: "✏️", label: i18n("editDate") || "编辑日期", click: () => {
+                const isInstanceEdit = targetTask.isRepeatInstance && onlyThisInstance;
+                const originalInstanceDate = (targetTask.isRepeatInstance && targetTask.id && targetTask.id.includes('_'))
+                    ? targetTask.id.split('_').pop()
+                    : targetTask.date;
+                const dlg = new QuickReminderDialog(
+                    undefined, undefined, undefined, undefined,
+                    {
+                        mode: 'edit',
+                        reminder: isInstanceEdit ? {
+                            ...targetTask,
+                            isInstance: true,
+                            originalId: targetTask.originalId,
+                            instanceDate: originalInstanceDate
+                        } : targetTask,
+                        isInstanceEdit: isInstanceEdit,
+                        plugin: this.plugin,
+                        dateOnly: true,
+                        onSaved: async () => {
+                            this.dispatchReminderUpdate(true);
+                            await this.queueLoadTasks();
+                        }
+                    }
+                );
+                dlg.show();
+            }});
             return items;
         };
 

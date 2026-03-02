@@ -187,6 +187,7 @@ export class QuickReminderDialog {
     private durationManuallyChanged: boolean = false; // 标记用户是否手动修改了持续天数
     private tempSubtasks: any[] = []; // 新建模式下的临时子任务列表
     private skipSave: boolean = false; // 是否跳过保存到数据库（用于临时子任务创建）
+    private dateOnly: boolean = false; // 是否只显示日期相关设置（用于快速编辑日期）
 
 
     constructor(
@@ -219,6 +220,7 @@ export class QuickReminderDialog {
             instanceDate?: string;
             defaultSort?: number;
             skipSave?: boolean; // 是否跳过保存到数据库
+            dateOnly?: boolean; // 是否只显示日期相关设置
         }
     ) {
         this.initialDate = date;
@@ -254,6 +256,7 @@ export class QuickReminderDialog {
             this.instanceDate = options.instanceDate;
             this.defaultSort = options.defaultSort;
             this.skipSave = options.skipSave || false;
+            this.dateOnly = options.dateOnly || false;
         }
 
         // 如果是编辑模式，确保有reminder
@@ -898,11 +901,106 @@ export class QuickReminderDialog {
             this.updateBlockPreview(this.reminder.blockId);
         }
 
-        // 如果是编辑模式，更新子任务入口显示
-        if (this.mode === 'edit' && this.reminder) {
+        // 如果是编辑模式，更新子任务入口显示（dateOnly 模式下跳过，避免异步覆盖隐藏状态）
+        if (this.mode === 'edit' && this.reminder && !this.dateOnly) {
             this.updateSubtasksDisplay();
             this.updatePomodorosDisplay();
             this.updateEditAllInstancesDisplay();
+        }
+    }
+
+    /**
+     * 仅显示日期相关设置，隐藏所有非日期表单组
+     * 用于"编辑日期"快捷入口
+     */
+    private applyDateOnlyMode() {
+        const dialog = this.dialog.element;
+
+        // 辅助：通过子元素选择器隐藏最近的 .b3-form__group 父级
+        const hideGroupOf = (selector: string) => {
+            const el = dialog.querySelector(selector);
+            if (el) {
+                const group = el.closest('.b3-form__group') as HTMLElement;
+                if (group) group.style.display = 'none';
+            }
+        };
+
+        // 隐藏父任务组
+        const parentGroup = dialog.querySelector('#quickParentTaskGroup') as HTMLElement;
+        if (parentGroup) parentGroup.style.display = 'none';
+
+        // 隐藏标题输入组
+        hideGroupOf('#quickReminderTitle');
+
+        // 隐藏自动识别/同步块标题复选框组
+        hideGroupOf('#quickPasteAutoDetect');
+
+        // 隐藏完成时间组
+        const completedGroup = dialog.querySelector('#quickCompletedTimeGroup') as HTMLElement;
+        if (completedGroup) completedGroup.style.display = 'none';
+
+        // 隐藏块绑定输入组
+        hideGroupOf('#quickBlockInput');
+
+        // 隐藏块预览
+        const blockPreview = dialog.querySelector('#quickBlockPreview') as HTMLElement;
+        if (blockPreview) blockPreview.style.display = 'none';
+
+        // 隐藏 URL 输入组
+        hideGroupOf('#quickUrlInput');
+
+        // 隐藏备注输入组
+        hideGroupOf('#quickReminderNote');
+
+        // 隐藏编辑所有实例组
+        const editAllGroup = dialog.querySelector('#quickEditAllInstancesGroup') as HTMLElement;
+        if (editAllGroup) editAllGroup.style.display = 'none';
+
+        // 隐藏子任务组
+        const subtasksGroup = dialog.querySelector('#quickSubtasksGroup') as HTMLElement;
+        if (subtasksGroup) subtasksGroup.style.display = 'none';
+
+        // 隐藏预计番茄时长组
+        hideGroupOf('#quickEstimatedPomodoroDuration');
+
+        // 隐藏番茄钟查看组
+        const pomodorosGroup = dialog.querySelector('#quickPomodorosGroup') as HTMLElement;
+        if (pomodorosGroup) pomodorosGroup.style.display = 'none';
+
+        // 隐藏分类选择器组
+        hideGroupOf('#quickManageCategoriesBtn');
+
+        // 隐藏项目选择器组
+        const projectGroup = dialog.querySelector('#quickProjectGroup') as HTMLElement;
+        if (projectGroup) projectGroup.style.display = 'none';
+
+        // 隐藏自定义分组
+        const customGroup = dialog.querySelector('#quickCustomGroup') as HTMLElement;
+        if (customGroup) customGroup.style.display = 'none';
+
+        // 隐藏里程碑
+        const milestoneGroup = dialog.querySelector('#quickMilestoneGroup') as HTMLElement;
+        if (milestoneGroup) milestoneGroup.style.display = 'none';
+
+        // 隐藏任务状态选择器组
+        hideGroupOf('#quickStatusSelector');
+
+        // 隐藏标签组
+        const tagsGroup = dialog.querySelector('#quickTagsGroup') as HTMLElement;
+        if (tagsGroup) tagsGroup.style.display = 'none';
+
+        // 隐藏优先级选择器组
+        hideGroupOf('#quickPrioritySelector');
+
+        // 隐藏展示设置组
+        hideGroupOf('#quickIsAvailableToday');
+
+        // dateOnly 模式对话框使用 auto 高度，但需要限制最大高度以便小屏上可滚动
+        const contentEl = dialog.querySelector('.b3-dialog__content') as HTMLElement;
+        if (contentEl) {
+            // 减去标题栏（约48px）和操作按钮栏（约56px）的高度
+            contentEl.style.maxHeight = 'calc(90vh - 110px)';
+            contentEl.style.overflowY = 'auto';
         }
     }
 
@@ -1421,7 +1519,7 @@ export class QuickReminderDialog {
         const langTag = (window as any).siyuan?.config?.lang?.replace('_', '-') || 'en-US';
 
         this.dialog = new Dialog({
-            title: this.mode === 'edit' ? i18n("editReminder") : (this.mode === 'note' ? i18n("editNote") : i18n("createQuickReminder")),
+            title: this.dateOnly ? i18n("editDate") : (this.mode === 'edit' ? i18n("editReminder") : (this.mode === 'note' ? i18n("editNote") : i18n("createQuickReminder"))),
             content: this.mode === 'note' ? `
                 <div class="quick-reminder-dialog">
                     <div class="b3-dialog__content">
@@ -1747,7 +1845,7 @@ export class QuickReminderDialog {
                 </div>
             `,
             width: "min(500px, 90%)",
-            height: this.mode === 'note' ? "auto" : "81vh"
+            height: (this.mode === 'note' || this.dateOnly) ? "auto" : "81vh"
         });
 
         // Initialize Vditor
@@ -2075,10 +2173,16 @@ export class QuickReminderDialog {
             // 如果是编辑模式或批量编辑模式，填充现有提醒数据
             if ((this.mode === 'edit' || this.mode === 'batch_edit') && this.reminder) {
                 await this.populateEditForm();
+                // 若为仅日期模式，隐藏所有非日期组件
+                if (this.dateOnly) {
+                    this.applyDateOnlyMode();
+                }
             }
 
-            // 初始化子任务按钮显示（新建模式也显示）
-            await this.updateSubtasksDisplay();
+            // 初始化子任务按钮显示（新建模式也显示；dateOnly 模式跳过，避免重新显示子任务）
+            if (!this.dateOnly) {
+                await this.updateSubtasksDisplay();
+            }
 
             // 自动聚焦标题输入框
             titleInput?.focus();

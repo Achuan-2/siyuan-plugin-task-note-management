@@ -1385,6 +1385,7 @@
     "pomodoroBreakEndSwitchWork": "Break ended! Switching to work time (not starting automatically)",
     "pomodoroCompletedLongBreak": "Work time ended! Completed ${count} pomodoros, starting long break",
     "clearDate": "Clear Date",
+    "editDate": "Edit Date",
     "multiDays": "Multi-Day",
     "togglePomodoroRecords": "Show/Hide Focus Records",
     "showHiddenTasks": "Show Hidden Tasks",

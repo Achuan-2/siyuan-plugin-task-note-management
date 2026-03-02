@@ -1385,6 +1385,7 @@
     "pomodoroBreakEndSwitchWork": "休息结束！切换到工作时间（不自动开始）",
     "pomodoroCompletedLongBreak": "工作时间结束！已完成${count}个番茄，开始长时休息",
     "clearDate": "清除日期",
+    "editDate": "编辑日期",
     "multiDays": "多日",
     "togglePomodoroRecords": "显示/隐藏专注记录",
     "showHiddenTasks": "显示隐藏任务",
