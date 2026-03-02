@@ -668,7 +668,7 @@ export class PasteTaskDialog {
 
             const isListItem = /^([-*+]|\d+\.|\[[ xX]\])/.test(cleanLine);
             if (!cleanLine || (!isListItem && level === 0)) {
-                if (cleanLine && level === 0) {
+                if (cleanLine && level === 0 && !this.isEmptyContent(cleanLine)) {
                     const taskData = this.parseTaskLine(cleanLine, autoDetect, removeMode);
                     const task: HierarchicalTask = {
                         ...taskData,
@@ -690,7 +690,7 @@ export class PasteTaskDialog {
 
             const combinedLevel = level + levelFromDashes;
             const taskContent = cleanLine.replace(/^([-*+]|\d+\.)\s*/, '').replace(/^(-{2,})\s*/, '');
-            if (!taskContent) continue;
+            if (!taskContent || this.isEmptyContent(taskContent)) continue;
 
             const taskData = this.parseTaskLine(taskContent, autoDetect, removeMode);
             const task: HierarchicalTask = {
@@ -714,6 +714,12 @@ export class PasteTaskDialog {
         }
 
         return tasks;
+    }
+
+    private isEmptyContent(content: string): boolean {
+        // 去除所有 <br /> / <br/> / <br> 后若为空则认为是空行
+        const cleaned = content.trim().replace(/<br\s*\/?>/gi, '').trim();
+        return cleaned === '';
     }
 
     private calculateIndentLevel(line: string): number {
@@ -761,6 +767,9 @@ export class PasteTaskDialog {
             completed = (leadingCheckboxMatch[1].toLowerCase() === 'x');
             title = leadingCheckboxMatch[2];
         }
+
+        // 清理 HTML 换行标签（编辑器可能插入 <br /> 作为空行占位）
+        title = title.replace(/<br\s*\/?>/gi, '').trim();
 
         // 处理 Markdown 转义字符（因内容来自编辑器 Markdown，~, *, _ 等符号会被转义为 \~, \*, \_）
         title = title.replace(/\\([\\*_{}[\]()#+\-.!~])/g, '$1');
