@@ -844,7 +844,12 @@
         border-color: var(--b3-theme-error-light);
     }
 
-
+    &--selected {
+        border-color: var(--b3-theme-primary) !important;
+        background-color: var(--b3-theme-primary-lightest) !important;
+        outline: 2px solid var(--b3-theme-primary);
+        outline-offset: -1px;
+    }
 
 
 
