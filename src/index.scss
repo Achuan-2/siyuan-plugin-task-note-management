@@ -2288,10 +2288,12 @@
     display: flex;
     flex-direction: column;
     position: relative;
+
     .milkdown-menu-wrapper,
     .slash-menu {
         display: none !important;
     }
+
     .ProseMirror {
         outline: none !important;
         padding: 8px 8px 8px 24px !important;
@@ -2306,6 +2308,7 @@
         /* 内部滚动 */
         box-sizing: border-box;
         white-space: pre-wrap;
+
         blockquote {
             border-left: 4px solid var(--b3-theme-primary-lightest) !important;
             padding-left: 12px !important;
@@ -2347,13 +2350,17 @@
         left: 2px !important;
     }
 }
-.reminder-panel, .reminder-calendar-view,.eisenhower-matrix-view,.project-kanban-view{
+
+.reminder-panel,
+.reminder-calendar-view,
+.eisenhower-matrix-view,
+.project-kanban-view {
     .vditor-task {
-            list-style: none !important;
-            word-break: break-word;
-            position: relative;
-            line-height: 1;
-        }
+        list-style: none !important;
+        word-break: break-word;
+        position: relative;
+        line-height: 1;
+    }
 
     .vditor-task input {
         left: -1.4em;
@@ -2365,8 +2372,10 @@
 }
 
 
-.reminder-panel,.project-panel,.habit-panel{
+.reminder-panel,
+.project-panel,
+.habit-panel {
     .b3-button svg.b3-button__icon {
-            margin-right: 0;
-        }
+        margin-right: 0;
+    }
 }
