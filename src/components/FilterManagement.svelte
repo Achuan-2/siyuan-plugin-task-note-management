@@ -556,7 +556,9 @@
         {#if isEditing}
             <div class="filter-editor-header-input">
                 <div class="b3-form__group" style="margin-bottom: 0;">
-                    <label class="b3-form__label" for="filter-name-input">{i18n('filterName')}</label>
+                    <label class="b3-form__label" for="filter-name-input">
+                        {i18n('filterName')}
+                    </label>
                     <input
                         id="filter-name-input"
                         type="text"
@@ -646,7 +648,9 @@
 
                 {#if selectedDateFilters.includes('custom_range')}
                     <div class="b3-form__group">
-                        <label class="b3-form__label" for="custom-range-start">{i18n('dateRange')}</label>
+                        <label class="b3-form__label" for="custom-range-start">
+                            {i18n('dateRange')}
+                        </label>
                         <div style="display: flex; gap: 8px; align-items: center;">
                             <input
                                 id="custom-range-start"

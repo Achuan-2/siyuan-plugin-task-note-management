@@ -928,7 +928,7 @@
                     key: 'calendarSubscribeHint',
                     value: '',
                     type: 'hint',
-                    title: '❓'+i18n('helpDocument'),
+                    title: '❓' + i18n('helpDocument'),
                     description: i18n('calendarSubscribeHintDesc'),
                 },
                 {
