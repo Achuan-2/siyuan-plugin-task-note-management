@@ -16469,19 +16469,61 @@ export class ProjectKanbanView {
         const selectedIds = Array.from(this.selectedTaskIds);
         if (selectedIds.length === 0) return;
 
-        // 创建日期选择对话框
+        const langTag = (window as any).siyuan?.config?.lang?.replace('_', '-') || 'en-US';
+        const _now = new Date();
+        const today = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
+
+        // 创建日期选择对话框（仿照 QuickReminderDialog 的日期区域）
         const dialog = new Dialog({
             title: i18n('batchSetDate') || '批量设置日期',
             content: `
-                <div class="b3-dialog__content">
-                    <div class="b3-form__group">
-                        <label class="b3-form__label">${i18n('selectDate') || '选择日期'}</label>
-                        <input type="date" id="batchDateInput" class="b3-text-field" style="width: 100%;">
+                <div class="b3-dialog__content" style="padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+                    <!-- 开始日期/时间行 -->
+                    <div class="b3-form__group" style="margin-bottom: 0;">
+                        <label class="b3-form__label">${i18n('startLabel') || '开始：'}</label>
+                        <div style="display: flex; flex-direction: column; gap: 8px;">
+                            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                <div style="display: flex; align-items: center; gap: 8px; flex: 1 1 140px; min-width: 120px;">
+                                    <input type="date" id="batchStartDate" class="b3-text-field" max="9999-12-31" style="flex: 1; min-width: 0;" lang="${langTag}">
+                                    <button type="button" id="batchClearStartDateBtn" class="b3-button b3-button--outline" title="${i18n('clearDate') || '清除日期'}" style="padding: 4px 8px; font-size: 12px; flex: 0 0 auto;">
+                                        <svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
+                                    </button>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 8px; flex: 0 0 auto; white-space: nowrap; min-width: 110px; margin-left: auto;">
+                                    <input type="time" id="batchStartTime" class="b3-text-field" style="flex: 0 0 auto; min-width: 100px;" lang="${langTag}">
+                                    <button type="button" id="batchClearStartTimeBtn" class="b3-button b3-button--outline" title="${i18n('clearTime') || '清除时间'}" style="padding: 4px 8px; font-size: 12px;">
+                                        <svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="b3-form__group">
-                        <label class="b3-form__label">${i18n('clearDate') || '清空日期'}</label>
-                        <input type="checkbox" id="clearDateCheck" style="margin-left: 8px;">
-                        <span style="color: var(--b3-theme-on-surface-light); font-size: 12px;">${i18n('clearDateHint') || '勾选后将清空所选任务的日期'}</span>
+                    <!-- 结束日期/时间行 -->
+                    <div class="b3-form__group" style="margin-bottom: 0;">
+                        <label class="b3-form__label">${i18n('endLabel') || '结束：'}</label>
+                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                            <div style="display: flex; align-items: center; gap: 8px; flex: 1 1 140px; min-width: 120px;">
+                                <input type="date" id="batchEndDate" class="b3-text-field" placeholder="${i18n('endDateOptional') || '结束日期（可选）'}" max="9999-12-31" style="flex: 1; min-width: 0;" lang="${langTag}">
+                                <button type="button" id="batchClearEndDateBtn" class="b3-button b3-button--outline" title="${i18n('clearDate') || '清除日期'}" style="padding: 4px 8px; font-size: 12px; flex: 0 0 auto;">
+                                    <svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
+                                </button>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px; flex: 0 0 auto; white-space: nowrap; min-width: 110px; margin-left: auto;">
+                                <input type="time" id="batchEndTime" class="b3-text-field" placeholder="${i18n('endTimeOptional') || '结束时间 (可选)'}" style="flex: 0 0 auto; min-width: 100px;" lang="${langTag}">
+                                <button type="button" id="batchClearEndTimeBtn" class="b3-button b3-button--outline" title="${i18n('clearTime') || '清除时间'}" style="padding: 4px 8px; font-size: 12px;">
+                                    <svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 清空所有日期选项 -->
+                    <div class="b3-form__group" style="margin-bottom: 0;">
+                        <label class="b3-checkbox" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" class="b3-switch" id="batchClearAllDatesCheck">
+                            <span class="b3-checkbox__graphic"></span>
+                            <span class="b3-checkbox__label" style="font-size: 13px;">${i18n('clearDate') || '清空日期'}</span>
+                            <span style="font-size: 12px; color: var(--b3-theme-on-surface-light);">${i18n('clearDateHint') || '勾选后将清空所选任务的日期'}</span>
+                        </label>
                     </div>
                 </div>
                 <div class="b3-dialog__action">
@@ -16489,29 +16531,76 @@ export class ProjectKanbanView {
                     <button class="b3-button b3-button--primary" id="batchDateConfirm">${i18n('confirm')}</button>
                 </div>
             `,
-            width: '360px'
+            width: '460px'
         });
 
-        const dateInput = dialog.element.querySelector('#batchDateInput') as HTMLInputElement;
-        const clearCheck = dialog.element.querySelector('#clearDateCheck') as HTMLInputElement;
+        const startDateInput = dialog.element.querySelector('#batchStartDate') as HTMLInputElement;
+        const startTimeInput = dialog.element.querySelector('#batchStartTime') as HTMLInputElement;
+        const endDateInput = dialog.element.querySelector('#batchEndDate') as HTMLInputElement;
+        const endTimeInput = dialog.element.querySelector('#batchEndTime') as HTMLInputElement;
+        const clearAllCheck = dialog.element.querySelector('#batchClearAllDatesCheck') as HTMLInputElement;
         const cancelBtn = dialog.element.querySelector('#batchDateCancel') as HTMLButtonElement;
         const confirmBtn = dialog.element.querySelector('#batchDateConfirm') as HTMLButtonElement;
 
-        // 设置今天为默认日期
-        dateInput.value = new Date().toISOString().split('T')[0];
+        // 设置今天为默认开始日期
+        startDateInput.value = today;
 
-        clearCheck.addEventListener('change', () => {
-            dateInput.disabled = clearCheck.checked;
+        // 清除开始日期按钮
+        dialog.element.querySelector('#batchClearStartDateBtn')?.addEventListener('click', () => {
+            startDateInput.value = '';
+        });
+
+        // 清除开始时间按钮
+        dialog.element.querySelector('#batchClearStartTimeBtn')?.addEventListener('click', () => {
+            startTimeInput.value = '';
+        });
+
+        // 清除结束日期按钮
+        dialog.element.querySelector('#batchClearEndDateBtn')?.addEventListener('click', () => {
+            endDateInput.value = '';
+        });
+
+        // 清除结束时间按钮
+        dialog.element.querySelector('#batchClearEndTimeBtn')?.addEventListener('click', () => {
+            endTimeInput.value = '';
+        });
+
+        // 结束日期变化时自动修正
+        endDateInput.addEventListener('change', () => {
+            if (startDateInput.value && endDateInput.value && endDateInput.value < startDateInput.value) {
+                showMessage(i18n('endDateAdjusted') || '结束日期已自动调整为开始日期');
+                endDateInput.value = startDateInput.value;
+            }
+        });
+
+        // 勾选"清空日期"时禁用所有日期/时间输入
+        clearAllCheck.addEventListener('change', () => {
+            const disabled = clearAllCheck.checked;
+            [startDateInput, startTimeInput, endDateInput, endTimeInput].forEach(el => {
+                el.disabled = disabled;
+                el.style.opacity = disabled ? '0.4' : '1';
+            });
+            ['#batchClearStartDateBtn', '#batchClearStartTimeBtn', '#batchClearEndDateBtn', '#batchClearEndTimeBtn'].forEach(sel => {
+                const btn = dialog.element.querySelector(sel) as HTMLButtonElement;
+                if (btn) {
+                    btn.disabled = disabled;
+                    btn.style.opacity = disabled ? '0.4' : '1';
+                }
+            });
         });
 
         cancelBtn.addEventListener('click', () => dialog.destroy());
 
         confirmBtn.addEventListener('click', async () => {
-            const clearDate = clearCheck.checked;
-            const dateValue = dateInput.value;
+            const clearAll = clearAllCheck.checked;
+            const startDate = startDateInput.value;
+            const startTime = startTimeInput.value;
+            const endDate = endDateInput.value;
+            const endTime = endTimeInput.value;
 
-            if (!clearDate && !dateValue) {
-                showMessage(i18n('pleaseSelectDate') || '请选择日期');
+            // 校验：结束日期不能早于开始日期
+            if (!clearAll && startDate && endDate && endDate < startDate) {
+                showMessage(i18n('endDateCannotBeEarlier') || '结束日期不能早于开始日期');
                 return;
             }
 
@@ -16524,7 +16613,17 @@ export class ProjectKanbanView {
                 for (const taskId of selectedIds) {
                     const task = this.tasks.find(t => t.id === taskId);
                     if (task) {
-                        task.date = clearDate ? undefined : dateValue;
+                        if (clearAll) {
+                            task.date = undefined;
+                            task.time = undefined;
+                            task.endDate = undefined;
+                            task.endTime = undefined;
+                        } else {
+                            if (startDate) task.date = startDate;
+                            task.time = startTime || undefined;
+                            task.endDate = endDate || undefined;
+                            task.endTime = endTime || undefined;
+                        }
                         tasksToUpdate.push(task);
                         successCount++;
                     }

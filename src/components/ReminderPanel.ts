@@ -9268,7 +9268,8 @@ export class ReminderPanel {
                 { iconHTML: '📅', label: i18n('moveToTomorrow') || '移至明天', click: () => this.panelBatchSetDate(tomorrowStr) },
                 { iconHTML: '📅', label: i18n('moveToDayAfterTomorrow') || '移至后天', click: () => this.panelBatchSetDate(dayAfterStr) },
                 { iconHTML: '📅', label: i18n('moveToNextWeek') || '移至下周', click: () => this.panelBatchSetDate(nextWeekStr) },
-                { iconHTML: '❌', label: i18n('clearDate') || '清除日期', click: () => this.panelBatchSetDate(null) }
+                { iconHTML: '❌', label: i18n('clearDate') || '清除日期', click: () => this.panelBatchSetDate(null) },
+                { iconHTML: '🗓', label: i18n('batchSetDate') || '批量设置日期…', click: () => this.panelBatchSetDateDialog() }
             ]
         });
 
@@ -9361,6 +9362,156 @@ export class ReminderPanel {
         } catch (e) {
             showMessage(i18n('operationFailed') || '操作失败');
         }
+    }
+
+    private async panelBatchSetDateDialog(): Promise<void> {
+        const ids = Array.from(this.selectedReminderIds);
+        if (ids.length === 0) return;
+
+        const langTag = (window as any).siyuan?.config?.lang?.replace('_', '-') || 'en-US';
+        const _now = new Date();
+        const today = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
+
+        const dialog = new Dialog({
+            title: i18n('batchSetDate') || '批量设置日期',
+            content: `
+                <div class="b3-dialog__content" style="padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+                    <!-- 开始日期/时间行 -->
+                    <div class="b3-form__group" style="margin-bottom: 0;">
+                        <label class="b3-form__label">${i18n('startLabel') || '开始：'}</label>
+                        <div style="display: flex; flex-direction: column; gap: 8px;">
+                            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                <div style="display: flex; align-items: center; gap: 8px; flex: 1 1 140px; min-width: 120px;">
+                                    <input type="date" id="panelBatchStartDate" class="b3-text-field" max="9999-12-31" style="flex: 1; min-width: 0;" lang="${langTag}">
+                                    <button type="button" id="panelClearStartDateBtn" class="b3-button b3-button--outline" title="${i18n('clearDate') || '清除日期'}" style="padding: 4px 8px; font-size: 12px; flex: 0 0 auto;">
+                                        <svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
+                                    </button>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 8px; flex: 0 0 auto; white-space: nowrap; min-width: 110px; margin-left: auto;">
+                                    <input type="time" id="panelBatchStartTime" class="b3-text-field" style="flex: 0 0 auto; min-width: 100px;" lang="${langTag}">
+                                    <button type="button" id="panelClearStartTimeBtn" class="b3-button b3-button--outline" title="${i18n('clearTime') || '清除时间'}" style="padding: 4px 8px; font-size: 12px;">
+                                        <svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 结束日期/时间行 -->
+                    <div class="b3-form__group" style="margin-bottom: 0;">
+                        <label class="b3-form__label">${i18n('endLabel') || '结束：'}</label>
+                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                            <div style="display: flex; align-items: center; gap: 8px; flex: 1 1 140px; min-width: 120px;">
+                                <input type="date" id="panelBatchEndDate" class="b3-text-field" placeholder="${i18n('endDateOptional') || '结束日期（可选）'}" max="9999-12-31" style="flex: 1; min-width: 0;" lang="${langTag}">
+                                <button type="button" id="panelClearEndDateBtn" class="b3-button b3-button--outline" title="${i18n('clearDate') || '清除日期'}" style="padding: 4px 8px; font-size: 12px; flex: 0 0 auto;">
+                                    <svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
+                                </button>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px; flex: 0 0 auto; white-space: nowrap; min-width: 110px; margin-left: auto;">
+                                <input type="time" id="panelBatchEndTime" class="b3-text-field" placeholder="${i18n('endTimeOptional') || '结束时间 (可选)'}" style="flex: 0 0 auto; min-width: 100px;" lang="${langTag}">
+                                <button type="button" id="panelClearEndTimeBtn" class="b3-button b3-button--outline" title="${i18n('clearTime') || '清除时间'}" style="padding: 4px 8px; font-size: 12px;">
+                                    <svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 清空所有日期选项 -->
+                    <div class="b3-form__group" style="margin-bottom: 0;">
+                        <label class="b3-checkbox" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" class="b3-switch" id="panelClearAllDatesCheck">
+                            <span class="b3-checkbox__graphic"></span>
+                            <span class="b3-checkbox__label" style="font-size: 13px;">${i18n('clearDate') || '清空日期'}</span>
+                            <span style="font-size: 12px; color: var(--b3-theme-on-surface-light);">${i18n('clearDateHint') || '勾选后将清空所选任务的日期'}</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="b3-dialog__action">
+                    <button class="b3-button b3-button--cancel" id="panelBatchDateCancel">${i18n('cancel')}</button>
+                    <button class="b3-button b3-button--primary" id="panelBatchDateConfirm">${i18n('confirm')}</button>
+                </div>
+            `,
+            width: '460px'
+        });
+
+        const startDateInput = dialog.element.querySelector('#panelBatchStartDate') as HTMLInputElement;
+        const startTimeInput = dialog.element.querySelector('#panelBatchStartTime') as HTMLInputElement;
+        const endDateInput = dialog.element.querySelector('#panelBatchEndDate') as HTMLInputElement;
+        const endTimeInput = dialog.element.querySelector('#panelBatchEndTime') as HTMLInputElement;
+        const clearAllCheck = dialog.element.querySelector('#panelClearAllDatesCheck') as HTMLInputElement;
+        const cancelBtn = dialog.element.querySelector('#panelBatchDateCancel') as HTMLButtonElement;
+        const confirmBtn = dialog.element.querySelector('#panelBatchDateConfirm') as HTMLButtonElement;
+
+        startDateInput.value = today;
+
+        dialog.element.querySelector('#panelClearStartDateBtn')?.addEventListener('click', () => { startDateInput.value = ''; });
+        dialog.element.querySelector('#panelClearStartTimeBtn')?.addEventListener('click', () => { startTimeInput.value = ''; });
+        dialog.element.querySelector('#panelClearEndDateBtn')?.addEventListener('click', () => { endDateInput.value = ''; });
+        dialog.element.querySelector('#panelClearEndTimeBtn')?.addEventListener('click', () => { endTimeInput.value = ''; });
+
+        endDateInput.addEventListener('change', () => {
+            if (startDateInput.value && endDateInput.value && endDateInput.value < startDateInput.value) {
+                showMessage(i18n('endDateAdjusted') || '结束日期已自动调整为开始日期');
+                endDateInput.value = startDateInput.value;
+            }
+        });
+
+        clearAllCheck.addEventListener('change', () => {
+            const disabled = clearAllCheck.checked;
+            [startDateInput, startTimeInput, endDateInput, endTimeInput].forEach(el => {
+                el.disabled = disabled;
+                el.style.opacity = disabled ? '0.4' : '1';
+            });
+            ['#panelClearStartDateBtn', '#panelClearStartTimeBtn', '#panelClearEndDateBtn', '#panelClearEndTimeBtn'].forEach(sel => {
+                const btn = dialog.element.querySelector(sel) as HTMLButtonElement;
+                if (btn) { btn.disabled = disabled; btn.style.opacity = disabled ? '0.4' : '1'; }
+            });
+        });
+
+        cancelBtn.addEventListener('click', () => dialog.destroy());
+
+        confirmBtn.addEventListener('click', async () => {
+            const clearAll = clearAllCheck.checked;
+            const startDate = startDateInput.value;
+            const startTime = startTimeInput.value;
+            const endDate = endDateInput.value;
+            const endTime = endTimeInput.value;
+
+            if (!clearAll && startDate && endDate && endDate < startDate) {
+                showMessage(i18n('endDateCannotBeEarlier') || '结束日期不能早于开始日期');
+                return;
+            }
+
+            dialog.destroy();
+
+            try {
+                const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
+                for (const id of ids) {
+                    const reminder = reminderData[id];
+                    if (!reminder) continue;
+                    if (clearAll) {
+                        delete reminder.date;
+                        delete reminder.time;
+                        delete reminder.endDate;
+                        delete reminder.endTime;
+                    } else {
+                        if (startDate) reminder.date = startDate;
+                        if (startTime) reminder.time = startTime; else delete reminder.time;
+                        if (endDate) reminder.endDate = endDate; else delete reminder.endDate;
+                        if (endTime) reminder.endTime = endTime; else delete reminder.endTime;
+                    }
+                    if (reminder.blockId) {
+                        try { await updateBindBlockAtrrs(reminder.blockId, this.plugin); } catch (e) { /* ignore */ }
+                    }
+                }
+                await saveReminders(this.plugin, reminderData);
+                showMessage(i18n('batchUpdateSuccess', { count: String(ids.length) }) || `成功更新 ${ids.length} 个任务`);
+                window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
+                this.exitPanelMultiSelectMode();
+                this.loadReminders();
+            } catch (e) {
+                console.error('批量设置日期失败:', e);
+                showMessage(i18n('operationFailed') || '操作失败');
+            }
+        });
     }
 
     private async panelBatchSetPriority(priority: string): Promise<void> {
