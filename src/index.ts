@@ -4703,7 +4703,7 @@ export default class ReminderPlugin extends Plugin {
 
     // 执行到期的订阅同步
     private async performIcsSubscriptionSync() {
-        const { loadSubscriptions, syncSubscription, getSyncIntervalMs, calculateNextDailySyncTime, saveSubscriptions } = await import('./utils/icsSubscription');
+        const { loadSubscriptions, syncSubscription, getSyncIntervalMs, saveSubscriptions } = await import('./utils/icsSubscription');
 
         let data;
         try {
@@ -4729,11 +4729,13 @@ export default class ReminderPlugin extends Plugin {
             if (sub.syncInterval === 'dailyAt') {
                 // dailyAt 模式：按指定时间点同步
                 const syncTime = sub.dailySyncTime || '08:00';
-                const nextSyncTime = calculateNextDailySyncTime(syncTime);
+                const [hours, minutes] = syncTime.split(':').map(Number);
+                const nowTime = new Date();
+                const todaySyncTime = new Date(nowTime.getFullYear(), nowTime.getMonth(), nowTime.getDate(), hours, minutes, 0, 0).getTime();
                 const lastSyncMs = sub.lastSync ? Date.parse(sub.lastSync) : 0;
 
-                // 如果已经过了下次同步时间，且上次同步是在这个时间之前
-                if (now >= nextSyncTime && lastSyncMs < nextSyncTime) {
+                // 如果已经过了今天的同步时间点，且上次同步是在这个时间点之前
+                if (now >= todaySyncTime && lastSyncMs < todaySyncTime) {
                     shouldSync = true;
                 }
             } else {

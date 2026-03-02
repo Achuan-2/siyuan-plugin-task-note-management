@@ -329,7 +329,7 @@ export async function syncSubscription(
 
         // Load existing tasks to merge with new data
         const existingTasks = await loadSubscriptionTasks(plugin, subscription.id);
-        
+
         // Build a map of existing tasks by UID for quick lookup
         const existingTasksByUid = new Map<string, any>();
         for (const task of Object.values(existingTasks) as any[]) {
@@ -343,13 +343,13 @@ export async function syncSubscription(
         for (const event of events) {
             // Check if there's an existing task with the same UID
             const existingTask = event.uid ? existingTasksByUid.get(event.uid) : undefined;
-            
+
             // Determine if we should preserve the completed status
             // If the existing task is completed, preserve completed and completedAt
             const preserveCompleted = existingTask?.completed === true;
-            
+
             const id = existingTask?.id || window.Lute?.NewNodeID?.() || `${subscription.id}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-            
+
             tasks[id] = {
                 id,
                 ...event,
@@ -460,9 +460,9 @@ export function calculateNextDailySyncTime(syncTime: string): number {
     const [hours, minutes] = syncTime.split(':').map(Number);
     const now = new Date();
     const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes, 0, 0);
-    
+
     // 如果今天的时间已过，设置为明天
-    if (target.getTime() <= now.getTime()) {
+    if (target.getTime() < now.getTime()) {
         target.setDate(target.getDate() + 1);
     }
     return target.getTime();
