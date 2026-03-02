@@ -1,3 +1,24 @@
+## v6.2.1 / 20260301
+- 🎨 任务侧栏支持多选：Ctrl+Click触发多选模式，Shift+Click可区域选择
+- 🎨 任务管理页面的「显示以完成子任务」需要在所有筛选项都显示和作用
+- 🎨 日历订阅：新建订阅弹窗优化，适配小屏幕
+- 🎨 日历订阅：订阅的日程支持时间提醒
+- 🎨 粘贴新建任务如果标题只为`<br />`，认为是空行需要跳过，而不创建任务
+- 🎨 粘贴新建子任务：支持Ctrl+Enter快速新建子任务
+- 🐛 日历摘要：当周跨月时，本周日期计算错误
+- 🐛 如果思源开了多个新窗口，任务提醒会错误提醒多次
+
+---
+
+- 🎨 Task sidebar supports multi-selection: Ctrl+Click triggers multi-select mode, Shift+Click enables area selection
+- 🎨 The "Show completed subtasks" option on the task management page should be displayed and functional across all filter conditions
+- 🎨 Calendar subscription: Optimized the new subscription pop-up window for better adaptation to small screens
+- 🎨 Calendar subscription: Subscribed events now support time reminders
+- 🎨 When pasting to create a new task, if the title is only `<br />`, it is considered an empty line and will be skipped without creating a task
+- 🎨 Pasting to create a new subtask: Supports Ctrl+Enter for quick creation of subtasks
+- 🐛 Calendar summary: Incorrect date calculation for the current week when it spans across months
+- 🐛 If multiple new windows of Siyuan are opened, task reminders may be triggered incorrectly multiple times
+
 ## v6.2.0 / 20260301
 - ✨ 日历上传：支持webdav服务器上传
 - 🐛 任务编辑：持续多少天丢失
