@@ -9710,6 +9710,15 @@ export class ProjectKanbanView {
         taskEl.addEventListener('contextmenu', async (e) => {
             e.preventDefault();
             e.stopPropagation();
+            // 多选模式下显示批量操作菜单
+            if (this.isMultiSelectMode) {
+                // 若右键的任务未被选中，先将其加入选择
+                if (!this.selectedTaskIds.has(task.id)) {
+                    this.toggleTaskSelection(task.id, true);
+                }
+                await this.showBatchContextMenu(e);
+                return;
+            }
             if (task.isSubscribed) {
                 this.showSubscribedTaskContextMenu(e, task);
                 return;
@@ -10144,6 +10153,94 @@ export class ProjectKanbanView {
         menu.open({
             x: event.clientX,
             y: event.clientY,
+        });
+    }
+
+    /**
+     * 多选模式下的右键菜单：显示批量操作
+     */
+    private async showBatchContextMenu(event: MouseEvent): Promise<void> {
+        const menu = new Menu("kanbanBatchContextMenu");
+        // 设置已完成
+        menu.addItem({
+            iconHTML: "✅",
+            label: i18n('setCompleted') || '设置已完成',
+            click: () => this.batchSetCompleted()
+        });
+
+        // 设置日期
+        menu.addItem({
+            iconHTML: "🗓",
+            label: i18n('setDate') || '设置日期',
+            click: () => this.batchSetDate()
+        });
+
+        // 设置状态
+        menu.addItem({
+            iconHTML: "🔀",
+            label: i18n('setStatus') || '设置状态',
+            click: () => this.batchSetStatus()
+        });
+
+        // 设置分组（仅在项目有自定义分组时显示）
+        try {
+            const hasActiveGroups = this.project?.customGroups?.some((g: any) => !g.archived);
+            if (hasActiveGroups) {
+                menu.addItem({
+                    iconHTML: "📂",
+                    label: i18n('setGroup'),
+                    click: () => this.batchSetGroup()
+                });
+            }
+        } catch (e) { /* ignore */ }
+
+        // 设置里程碑（工具栏中按钮由 updateBatchToolbar 控制，此处始终尝试展示）
+        try {
+            const projectData = await this.plugin.loadProjectData() || {};
+            const project = projectData[this.projectId];
+            const projectGroups = await this.projectManager.getProjectCustomGroups(this.projectId);
+            // 判断是否存在可用里程碑
+            const hasMilestones = (project?.milestones || []).some((m: any) => !m.archived)
+                || projectGroups.some((g: any) => (g.milestones || []).some((m: any) => !m.archived));
+            if (hasMilestones) {
+                menu.addItem({
+                    iconHTML: "🚩",
+                    label: i18n('setMilestone') || '设置里程碑',
+                    click: () => this.batchSetMilestone()
+                });
+            }
+        } catch (e) { /* ignore */ }
+
+        // 设置标签（仅在项目有标签时显示）
+        try {
+            if (this.project?.tags && this.project.tags.length > 0) {
+                menu.addItem({
+                    iconHTML: "🏷️",
+                    label: i18n('setTags') || '设置标签',
+                    click: () => this.batchSetTags()
+                });
+            }
+        } catch (e) { /* ignore */ }
+
+        // 设置优先级
+        menu.addItem({
+            iconHTML: "🎯",
+            label: i18n('setPriority') || '设置优先级',
+            click: () => this.batchSetPriority()
+        });
+
+        menu.addSeparator();
+
+        // 删除
+        menu.addItem({
+            iconHTML: "🗑️",
+            label: i18n('delete') || '删除',
+            click: () => this.batchDelete()
+        });
+
+        menu.open({
+            x: event.clientX,
+            y: event.clientY
         });
     }
 
@@ -16242,8 +16339,8 @@ export class ProjectKanbanView {
             align-items: center;
             gap: 16px;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-            z-index: 1000;
-            width: 55%;
+            z-index: 10;
+            width: auto;
         `;
 
         // 选择计数
@@ -16266,103 +16363,6 @@ export class ProjectKanbanView {
         `;
         this.batchToolbar.appendChild(divider);
 
-        // 按钮组
-        const buttonsGroup = document.createElement('div');
-        buttonsGroup.style.cssText = `
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-        `;
-        // 设置已完成按钮
-        const setCompletedBtn = document.createElement('button');
-        setCompletedBtn.className = 'b3-button b3-button--outline b3-button--small';
-        setCompletedBtn.innerHTML = `✅ ${i18n('setCompleted') || '设置已完成'}`;
-        setCompletedBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.batchSetCompleted();
-        });
-        buttonsGroup.appendChild(setCompletedBtn);
-        // 设置日期按钮
-        const setDateBtn = document.createElement('button');
-        setDateBtn.className = 'b3-button b3-button--outline b3-button--small';
-        setDateBtn.innerHTML = `🗓 ${i18n('setDate') || '设置日期'}`;
-        setDateBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.batchSetDate();
-        });
-        buttonsGroup.appendChild(setDateBtn);
-
-        // 设置状态按钮
-        const setStatusBtn = document.createElement('button');
-        setStatusBtn.className = 'b3-button b3-button--outline b3-button--small';
-        setStatusBtn.innerHTML = `🔀 ${i18n('setStatus') || '设置状态'}`;
-        setStatusBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.batchSetStatus();
-        });
-        buttonsGroup.appendChild(setStatusBtn);
-
-
-        // 设置分组按钮（只显示有未归档分组时）
-        const hasActiveGroups = this.project?.customGroups?.some((g: any) => !g.archived);
-        if (hasActiveGroups) {
-            const setGroupBtn = document.createElement('button');
-            setGroupBtn.className = 'b3-button b3-button--outline b3-button--small';
-            setGroupBtn.innerHTML = `📂 ${i18n('setGroup')}`;
-            setGroupBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.batchSetGroup();
-            });
-            buttonsGroup.appendChild(setGroupBtn);
-        }
-
-        // 设置里程碑按钮 (默认隐藏，由 updateBatchToolbar 控制显示)
-        const setMilestoneBtn = document.createElement('button');
-        setMilestoneBtn.id = 'batchSetMilestoneBtn';
-        setMilestoneBtn.className = 'b3-button b3-button--outline b3-button--small';
-        setMilestoneBtn.style.display = 'none';
-        setMilestoneBtn.innerHTML = `🚩 ${i18n('setMilestone') || '设置里程碑'}`;
-        setMilestoneBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.batchSetMilestone();
-        });
-        buttonsGroup.appendChild(setMilestoneBtn);
-
-        // 设置标签按钮
-        if (this.project?.tags && this.project.tags.length > 0) {
-            const setTagsBtn = document.createElement('button');
-            setTagsBtn.className = 'b3-button b3-button--outline b3-button--small';
-            setTagsBtn.innerHTML = `🏷️ ${i18n('setTags') || '设置标签'}`;
-            setTagsBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.batchSetTags();
-            });
-            buttonsGroup.appendChild(setTagsBtn);
-        }
-
-        // 设置优先级按钮
-        const setPriorityBtn = document.createElement('button');
-        setPriorityBtn.className = 'b3-button b3-button--outline b3-button--small';
-        setPriorityBtn.innerHTML = `🎯 ${i18n('setPriority') || '设置优先级'}`;
-        setPriorityBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.batchSetPriority();
-        });
-        buttonsGroup.appendChild(setPriorityBtn);
-
-        // 删除按钮
-        const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'b3-button b3-button--outline b3-button--small';
-        deleteBtn.style.color = 'var(--b3-card-error-color)';
-        deleteBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconTrashcan"></use></svg> ${i18n('delete') || '删除'}`;
-        deleteBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            e.preventDefault();
-            this.batchDelete();
-        });
-        buttonsGroup.appendChild(deleteBtn);
-
-        this.batchToolbar.appendChild(buttonsGroup);
 
         // 右侧：全选和取消按钮
         const rightGroup = document.createElement('div');

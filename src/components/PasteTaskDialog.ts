@@ -223,7 +223,7 @@ export class PasteTaskDialog {
                         ${i18n("supportHierarchy") || "支持多层级：使用缩进或多个<code>-</code>符号创建父子任务关系"}
                     </p>
                     ${selectorsHtml}
-                    <div id="taskList" style="height: 300px; border: 1px solid var(--b3-theme-surface-lighter); border-radius: 4px; overflow-y: auto;"></div>
+                    <div id="taskList" style="height: 300px; border: 1px solid var(--b3-theme-surface-lighter); border-radius: 4px;"></div>
                     <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
                         <label class="b3-checkbox" style="display: flex; align-items: center;">
                             <input id="autoDetectDate" type="checkbox" class="b3-switch">
