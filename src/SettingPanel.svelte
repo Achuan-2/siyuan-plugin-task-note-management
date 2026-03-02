@@ -1731,7 +1731,6 @@
                 class:b3-list-item--focus={group.name === focusGroup}
                 class="b3-list-item"
                 title={group.name}
-                role="button"
                 on:click={() => {
                     focusGroup = group.name;
                 }}

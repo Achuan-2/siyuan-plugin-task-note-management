@@ -977,13 +977,6 @@
         color: var(--b3-theme-on-surface);
         font-size: 13px;
     }
-    .benefits-info a {
-        color: var(--b3-theme-primary);
-        text-decoration: none;
-    }
-    .benefits-info a:hover {
-        text-decoration: underline;
-    }
 
     .in-dialog {
         max-height: 80vh;
