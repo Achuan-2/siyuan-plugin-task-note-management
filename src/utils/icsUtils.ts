@@ -340,6 +340,7 @@ export async function exportIcsFile(
                             let childMatches = true;
                             if (filterType === 'completed' && !child.completed) childMatches = false;
                             if (filterType === 'uncompleted' && child.completed) childMatches = false;
+                            if (child.hideInCalendar) childMatches = false;
 
                             if (!childMatches) continue;
 
@@ -438,6 +439,7 @@ export async function exportIcsFile(
             let parentMatches = true;
             if (filterType === 'completed' && !r.completed) parentMatches = false;
             if (filterType === 'uncompleted' && r.completed) parentMatches = false;
+            if (r.hideInCalendar) parentMatches = false;
 
             if (!parentMatches) continue;
 
