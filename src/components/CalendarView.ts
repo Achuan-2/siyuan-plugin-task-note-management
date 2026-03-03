@@ -4830,7 +4830,7 @@ export class CalendarView {
         const style = document.createElement('style');
         style.id = 'reminder-calendar-custom-styles';
         style.textContent = `
-            .fc-today-custom,
+            .fc-today-custom:not(..fc-popover),
             .fc-list-day-today-custom,
             .fc-col-header-cell.fc-today-custom {
                 background-color: transparent!important;
