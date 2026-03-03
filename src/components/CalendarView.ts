@@ -4879,7 +4879,7 @@ export class CalendarView {
             .fc-today-custom .fc-timegrid-col-frame{
                 border: 2px solid var(--b3-theme-primary) !important;
             }
-            .fc-today-custom:hover {
+            .fc-today-custom:not(.fc-popover):hover {
                 background-color: var(--b3-theme-primary-lightest) !important;
             }
             
