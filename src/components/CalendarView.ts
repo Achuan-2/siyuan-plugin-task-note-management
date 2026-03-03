@@ -1632,8 +1632,47 @@ export class CalendarView {
         });
 
         this.calendar.render();
+
+        // Fix fc-more-popover overflow: when the "+N more" popover appears near the right edge,
+        // FullCalendar may position it with a left value that causes it to overflow the container.
+        // We use a MutationObserver to detect when the popover appears and clamp its position.
+        const popoverObserver = new MutationObserver((mutations) => {
+            for (const mutation of mutations) {
+                for (const node of Array.from(mutation.addedNodes)) {
+                    if (node instanceof HTMLElement) {
+                        const popover = node.classList.contains('fc-popover')
+                            ? node
+                            : node.querySelector?.('.fc-popover');
+                        if (popover instanceof HTMLElement) {
+                            // Use requestAnimationFrame to ensure styles have been applied
+                            requestAnimationFrame(() => {
+                                const containerRect = calendarEl.getBoundingClientRect();
+                                const popoverRect = popover.getBoundingClientRect();
+                                // If popover overflows the right edge of the calendar container
+                                if (popoverRect.right > containerRect.right) {
+                                    const currentLeft = parseFloat(popover.style.left) || 0;
+                                    const overflow = popoverRect.right - containerRect.right;
+                                    const newLeft = Math.max(0, currentLeft - overflow - 4);
+                                    popover.style.left = `${newLeft}px`;
+                                }
+                                // Also ensure it doesn't overflow the left edge
+                                if (popoverRect.left < containerRect.left) {
+                                    popover.style.left = '4px';
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+        });
+        popoverObserver.observe(calendarEl, { childList: true, subtree: true });
+
+        // Store observer reference for cleanup
+        (this as any)._popoverObserver = popoverObserver;
+
         // Update Pomodoro button visibility after initial render
         this.updatePomodoroButtonVisibility();
+
 
         // 支持从提醒面板将任务拖拽到日历上以调整任务时间
         // 接受 mime-type: 'application/x-reminder' (JSON) 或纯文本 reminder id

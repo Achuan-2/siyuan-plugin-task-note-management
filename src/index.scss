@@ -1178,8 +1178,15 @@
 
 .reminder-calendar-container {
     flex: 1;
-    overflow: auto;
+    overflow-y: auto;
+    overflow-x: hidden; // 防止 fc-more-popover 超出右边界时产生水平滚动条
     background-color: var(--b3-theme-background);
+    position: relative; // 为弹出框提供定位上下文
+}
+
+// 修复 fc-more-popover 超出日历右边界的问题
+.reminder-calendar-container .fc-popover {
+    max-width: calc(100% - 8px); // 限制弹出框最大宽度不超出容器
 }
 
 // 修改日历样式以适应思源主题
