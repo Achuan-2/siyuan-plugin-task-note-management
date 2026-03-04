@@ -1878,5 +1878,6 @@
     "continueMoveRest": "继续移动其余任务（跳过这些）",
     "editFirstTaskTime": "编辑第一个任务时间",
     "andMoreTasks": "... 还有 ${count} 个任务",
-    "noMilestones": "暂无里程碑"
+    "noMilestones": "暂无里程碑",
+    "pleaseInputDateTimeDesc": "请输入日期时间描述"
 }
