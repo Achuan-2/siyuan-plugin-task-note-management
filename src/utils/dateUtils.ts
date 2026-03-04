@@ -505,32 +505,32 @@ function parseNaturalDateTimeInner(text: string): ParseResult {
         }
 
         // 处理农历日期格式（例如：八月廿一、正月初一、农历七月十三）
-        // 如果文本包含“农历”关键字，则强制以农历解析（例如“农历7月13”、“农历七月二十”等）
-        if (/农历/.test(processedText)) {
-            const lunarDate = parseLunarDateText(processedText);
-            if (lunarDate) {
-                // 如果只识别到日期（month === 0），使用当前月作为默认月
-                if (lunarDate.month === 0) {
-                    try {
-                        const cur = solarToLunar(getLogicalDateString());
-                        lunarDate.month = cur.month;
-                    } catch (e) {
-                        // ignore and fall back
-                    }
+        // 1. 如果文本包含"农历"关键字，强制以农历解析
+        // 2. 尝试直接解析纯农历格式（如"正月初一"、"腊月三十"、"大年二十九"等）
+        const hasLunarKeyword = /农历/.test(processedText);
+        const lunarDate = parseLunarDateText(processedText);
+        if (lunarDate && (hasLunarKeyword || lunarDate.month > 0)) {
+            // 如果只识别到日期（month === 0），使用当前月作为默认月
+            if (lunarDate.month === 0) {
+                try {
+                    const cur = solarToLunar(getLogicalDateString());
+                    lunarDate.month = cur.month;
+                } catch (e) {
+                    // ignore and fall back
                 }
+            }
 
-                if (lunarDate.month > 0) {
-                    const solarDate = lunarDate.year ?
-                        lunarToSolar(lunarDate.year, lunarDate.month, lunarDate.day) :
-                        getCurrentYearLunarToSolar(lunarDate.month, lunarDate.day);
+            if (lunarDate.month > 0) {
+                const solarDate = lunarDate.year ?
+                    lunarToSolar(lunarDate.year, lunarDate.month, lunarDate.day) :
+                    getCurrentYearLunarToSolar(lunarDate.month, lunarDate.day);
 
-                    if (solarDate) {
-                        return {
-                            date: solarDate,
-                            hasTime: false,
-                            hasDate: true
-                        };
-                    }
+                if (solarDate) {
+                    return {
+                        date: solarDate,
+                        hasTime: false,
+                        hasDate: true
+                    };
                 }
             }
         }
