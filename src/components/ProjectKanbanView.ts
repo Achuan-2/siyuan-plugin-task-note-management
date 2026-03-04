@@ -16860,21 +16860,23 @@ export class ProjectKanbanView {
 
                 if (offendingTasks.length > 0) {
                     // 弹窗提示：告知哪些任务为今天或已过。用户可选择：取消、继续移动其余任务（跳过这些任务）、编辑首个任务时间。
-                    const listHtml = offendingTasks.slice(0, 6).map(t => `<li style="margin-bottom:4px;">${(t.title || '（无标题）')}</li>`).join('');
-                    const moreNote = offendingTasks.length > 6 ? `<div style="margin-top:6px; color:var(--b3-theme-on-surface-light);">... 还有 ${offendingTasks.length - 6} 个任务</div>` : '';
+                    const untitledText = i18n('untitledTask') || '无标题';
+                    const listHtml = offendingTasks.slice(0, 6).map(t => `<li style="margin-bottom:4px;">${t.title || `（${untitledText}）`}</li>`).join('');
+                    const moreTasksText = i18n('andMoreTasks', { count: String(offendingTasks.length - 6) }) || `... 还有 ${offendingTasks.length - 6} 个任务`;
+                    const moreNote = offendingTasks.length > 6 ? `<div style="margin-top:6px; color:var(--b3-theme-on-surface-light);">${moreTasksText}</div>` : '';
                     const dialog = new Dialog({
-                        title: '警告：包含今日/已过任务',
+                        title: i18n('warnTodayOrPastTasks') || '警告：包含今日/已过任务',
                         content: `
                             <div class="b3-dialog__content">
-                                <p>所选任务中有 <strong>${offendingTasks.length}</strong> 个任务的日期为今天或已过，系统会将这些任务自动显示在“进行中”列。</p>
-                                <p>要将这些任务移出“进行中”，请先修改它们的日期或时间。</p>
+                                <p>${i18n('tasksDateTodayOrPast', { count: String(offendingTasks.length) }) || `所选任务中有 <strong>${offendingTasks.length}</strong> 个任务的日期为今天或已过，系统会将这些任务自动显示在“进行中”列。`}</p>
+                                <p>${i18n('moveOutDoingHint') || '要将这些任务移出“进行中”，请先修改它们的日期或时间。'}</p>
                                 <ul style="margin-top:8px; padding-left:16px;">${listHtml}</ul>
                                 ${moreNote}
                             </div>
                             <div class="b3-dialog__action">
-                                <button class="b3-button b3-button--cancel" id="cancelBtn">取消</button>
-                                <button class="b3-button b3-button--outline" id="continueBtn">继续移动其余任务（跳过这些）</button>
-                                <button class="b3-button b3-button--primary" id="editBtn">编辑第一个任务时间</button>
+                                <button class="b3-button b3-button--cancel" id="cancelBtn">${i18n('cancel')}</button>
+                                <button class="b3-button b3-button--outline" id="continueBtn">${i18n('continueMoveRest') || '继续移动其余任务（跳过这些）'}</button>
+                                <button class="b3-button b3-button--primary" id="editBtn">${i18n('editFirstTaskTime') || '编辑第一个任务时间'}</button>
                             </div>
                         `,
                         width: "520px"

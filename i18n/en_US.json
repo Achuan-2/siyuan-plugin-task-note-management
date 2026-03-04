@@ -1871,5 +1871,11 @@
     "vipOnlyFeature": "This feature is only available to VIP users",
     "upgradeToVipTip": "Upgrade to VIP to unlock more advanced features and make task management more efficient",
     "upgradeNow": "Upgrade Now",
-    "applyStatusToAll": "Apply Status"
+    "applyStatusToAll": "Apply Status",
+    "warnTodayOrPastTasks": "Warning: Contains Today/Past Tasks",
+    "tasksDateTodayOrPast": "Among selected tasks, <strong>${count}</strong> have dates today or in the past. The system handles these tasks by automatically displaying them in the 'Doing' column.",
+    "moveOutDoingHint": "To move these tasks out of 'Doing', please modify their date or time first.",
+    "continueMoveRest": "Continue moving remaining tasks (skip these)",
+    "editFirstTaskTime": "Edit first task time",
+    "andMoreTasks": "... and ${count} more tasks"
 }

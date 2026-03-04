@@ -1871,5 +1871,11 @@
     "vipOnlyFeature": "此功能仅限 VIP 用户使用",
     "upgradeToVipTip": "升级到 VIP 以解锁更多高级功能，让任务管理更高效",
     "upgradeNow": "立即升级",
-    "applyStatusToAll": "应用状态"
+    "applyStatusToAll": "应用状态",
+    "warnTodayOrPastTasks": "警告：包含今日/已过任务",
+    "tasksDateTodayOrPast": "所选任务中有 <strong>${count}</strong> 个任务的日期为今天或已过，系统会将这些任务自动显示在“进行中”列。",
+    "moveOutDoingHint": "要将这些任务移出“进行中”，请先修改它们的日期或时间。",
+    "continueMoveRest": "继续移动其余任务（跳过这些）",
+    "editFirstTaskTime": "编辑第一个任务时间",
+    "andMoreTasks": "... 还有 ${count} 个任务"
 }
