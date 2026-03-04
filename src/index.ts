@@ -63,7 +63,13 @@ export const STORAGE_NAME = "siyuan-plugin-task-note-management";
 
 // 默认设置
 export const DEFAULT_SETTINGS = {
-    backgroundVolume: 0.5,
+    workVolume: 0.5,
+    breakVolume: 1,
+    longBreakVolume: 1,
+    workEndVolume: 0.5,
+    breakEndVolume: 0.5,
+    randomRestVolume: 0.5,
+    randomRestEndVolume: 0.5,
     pomodoroWorkDuration: 45,
     pomodoroBreakDuration: 10,
     pomodoroLongBreakDuration: 30,
@@ -636,7 +642,8 @@ export default class ReminderPlugin extends Plugin {
                     const prev = this.lastPomodoroSettings || {};
                     const next = pomodoroSettings || {};
                     const relevantFields = [
-                        'workDuration', 'breakDuration', 'longBreakDuration', 'longBreakInterval', 'autoMode', 'backgroundVolume',
+                        'workDuration', 'breakDuration', 'longBreakDuration', 'longBreakInterval', 'autoMode',
+                        'workVolume', 'breakVolume', 'longBreakVolume',
                         'randomRestEnabled', 'randomRestMinInterval', 'randomRestMaxInterval', 'randomRestBreakDuration',
                         'randomRestSounds', 'randomRestEndSound', 'dailyFocusGoal'
                     ]; let relevantChanged = false;
@@ -936,7 +943,13 @@ export default class ReminderPlugin extends Plugin {
             longBreakSound: settings.audioSelected?.pomodoroLongBreakSound || '',
             workEndSound: settings.audioSelected?.pomodoroWorkEndSound || '',
             breakEndSound: settings.audioSelected?.pomodoroBreakEndSound || '',
-            backgroundVolume: Math.max(0, Math.min(1, settings.backgroundVolume)),
+            workVolume: Math.max(0, Math.min(1, settings.workVolume ?? 0.5)),
+            breakVolume: Math.max(0, Math.min(1, settings.breakVolume ?? 0.5)),
+            longBreakVolume: Math.max(0, Math.min(1, settings.longBreakVolume ?? 0.5)),
+            workEndVolume: Math.max(0, Math.min(1, settings.workEndVolume ?? 1)),
+            breakEndVolume: Math.max(0, Math.min(1, settings.breakEndVolume ?? 1)),
+            randomRestVolume: Math.max(0, Math.min(1, settings.randomRestVolume ?? 1)),
+            randomRestEndVolume: Math.max(0, Math.min(1, settings.randomRestEndVolume ?? 1)),
             systemNotification: settings.pomodoroSystemNotification, // 新增
             randomRestEnabled: settings.randomRestEnabled,
             randomRestMinInterval: Math.max(1, settings.randomRestMinInterval),

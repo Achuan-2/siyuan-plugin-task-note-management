@@ -196,7 +196,7 @@
         updateGroupItems();
     }
 
-    async function toggleAudio(path: string) {
+    async function toggleAudio(path: string, volume: number = 1) {
         // 同一音频：切换暂停 / 继续
         if (audioPreviewEl && playingPath === path) {
             if (isAudioPlaying) {
@@ -216,7 +216,7 @@
 
         const resolvedUrl = await resolveAudioPath(path);
         const audio = new Audio(resolvedUrl);
-        audio.volume = 0.4;
+        audio.volume = Math.max(0, Math.min(1, volume));
         audio.play().catch(() => {});
         audio.addEventListener('ended', () => {
             isAudioPlaying = false;
@@ -267,6 +267,24 @@
                 isUploadingAudio = false;
             });
         input.value = '';
+    }
+
+    /** 声音key → 音量设置key 映射表 */
+    const SOUND_VOLUME_MAP: Record<string, keyof typeof settings> = {
+        pomodoroWorkSound: 'workVolume',
+        pomodoroBreakSound: 'breakVolume',
+        pomodoroLongBreakSound: 'longBreakVolume',
+        pomodoroWorkEndSound: 'workEndVolume',
+        pomodoroBreakEndSound: 'breakEndVolume',
+        randomRestSounds: 'randomRestVolume',
+        randomRestEndSound: 'randomRestEndVolume',
+    };
+
+    /** 获取音频条目对应的试听音量 */
+    function getItemVolume(soundKey: string): number {
+        const volKey = SOUND_VOLUME_MAP[soundKey];
+        if (!volKey) return 1;
+        return (settings[volKey] as number) ?? 1;
     }
 
     interface ISettingGroup {
@@ -680,11 +698,11 @@
                     description: i18n('dailyFocusGoalDesc'),
                 },
                 {
-                    key: 'backgroundVolume',
-                    value: settings.backgroundVolume,
+                    key: 'workVolume',
+                    value: settings.workVolume ?? 0.5,
                     type: 'slider',
-                    title: i18n('backgroundVolume'),
-                    description: i18n('backgroundVolumeDesc'),
+                    title: i18n('workVolume'),
+                    description: i18n('workVolumeDesc'),
                     slider: {
                         min: 0,
                         max: 1,
@@ -699,11 +717,35 @@
                     description: i18n('pomodoroWorkSoundDesc') || '',
                 },
                 {
+                    key: 'breakVolume',
+                    value: settings.breakVolume ?? 0.5,
+                    type: 'slider',
+                    title: i18n('breakVolume'),
+                    description: i18n('breakVolumeDesc'),
+                    slider: {
+                        min: 0,
+                        max: 1,
+                        step: 0.1,
+                    },
+                },
+                {
                     key: 'pomodoroBreakSound',
                     value: settings.audioSelected?.pomodoroBreakSound || '',
                     type: 'custom-audio',
                     title: i18n('pomodoroBreakSound'),
                     description: i18n('pomodoroBreakSoundDesc') || '',
+                },
+                {
+                    key: 'longBreakVolume',
+                    value: settings.longBreakVolume ?? 0.5,
+                    type: 'slider',
+                    title: i18n('longBreakVolume'),
+                    description: i18n('longBreakVolumeDesc'),
+                    slider: {
+                        min: 0,
+                        max: 1,
+                        step: 0.1,
+                    },
                 },
                 {
                     key: 'pomodoroLongBreakSound',
@@ -713,11 +755,27 @@
                     description: i18n('pomodoroLongBreakSoundDesc') || '',
                 },
                 {
+                    key: 'workEndVolume',
+                    value: settings.workEndVolume ?? 1,
+                    type: 'slider',
+                    title: i18n('workEndVolume'),
+                    description: i18n('workEndVolumeDesc'),
+                    slider: { min: 0, max: 1, step: 0.1 },
+                },
+                {
                     key: 'pomodoroWorkEndSound',
                     value: settings.audioSelected?.pomodoroWorkEndSound || '',
                     type: 'custom-audio',
                     title: i18n('pomodoroWorkEndSound'),
                     description: i18n('pomodoroWorkEndSoundDesc') || '',
+                },
+                {
+                    key: 'breakEndVolume',
+                    value: settings.breakEndVolume ?? 1,
+                    type: 'slider',
+                    title: i18n('breakEndVolume'),
+                    description: i18n('breakEndVolumeDesc'),
+                    slider: { min: 0, max: 1, step: 0.1 },
                 },
                 {
                     key: 'pomodoroBreakEndSound',
@@ -774,11 +832,27 @@
                     description: i18n('randomRestBreakDurationDesc'),
                 },
                 {
+                    key: 'randomRestVolume',
+                    value: settings.randomRestVolume ?? 1,
+                    type: 'slider',
+                    title: i18n('randomRestVolume'),
+                    description: i18n('randomRestVolumeDesc'),
+                    slider: { min: 0, max: 1, step: 0.1 },
+                },
+                {
                     key: 'randomRestSounds',
                     value: settings.audioFileLists?.randomRestSounds || [],
                     type: 'custom-audio',
                     title: i18n('randomRestSounds'),
                     description: i18n('randomRestSoundsDesc') || '',
+                },
+                {
+                    key: 'randomRestEndVolume',
+                    value: settings.randomRestEndVolume ?? 1,
+                    type: 'slider',
+                    title: i18n('randomRestEndVolume'),
+                    description: i18n('randomRestEndVolumeDesc'),
+                    slider: { min: 0, max: 1, step: 0.1 },
                 },
                 {
                     key: 'randomRestEndSound',
@@ -1255,7 +1329,13 @@
         // 特殊逻辑：番茄钟设置变更
         if (
             key.startsWith('pomodoro') ||
-            key === 'backgroundVolume' ||
+            key === 'workVolume' ||
+            key === 'breakVolume' ||
+            key === 'longBreakVolume' ||
+            key === 'workEndVolume' ||
+            key === 'breakEndVolume' ||
+            key === 'randomRestVolume' ||
+            key === 'randomRestEndVolume' ||
             key === 'dailyFocusGoal' ||
             key.startsWith('randomRest')
         ) {
@@ -1816,7 +1896,10 @@
                                                             ? i18n('audioPause')
                                                             : i18n('audioPreview')}
                                                         on:click|stopPropagation={() =>
-                                                            toggleAudio(audio.path)}
+                                                            toggleAudio(
+                                                                audio.path,
+                                                                getItemVolume(item.key)
+                                                            )}
                                                     >
                                                         {#if playingPath === audio.path && isAudioPlaying}
                                                             <svg

@@ -44,8 +44,14 @@ export class PomodoroTimer {
     private isWorkPhase: boolean = true;
     private isLongBreak: boolean = false;
     private isCountUp: boolean = false;
-    private isBackgroundAudioMuted: boolean = false; // 新增：背景音静音状态
-    private backgroundVolume: number = 1; // 新增：背景音音量
+    private isBackgroundAudioMuted: boolean = false; // 背景音静音状态
+    private workVolume: number = 0.5; // 工作背景音音量
+    private breakVolume: number = 0.5; // 短休息背景音音量
+    private longBreakVolume: number = 0.5; // 长休息背景音音量
+    private workEndVolume: number = 1; // 工作结束提示音音量
+    private breakEndVolume: number = 1; // 休息结束提示音音量
+    private randomRestVolume: number = 1; // 随机微休息队始提示音音量
+    private randomRestEndVolume: number = 1; // 随机微休息结束提示音音量
     private timeLeft: number = 0; // 倒计时剩余时间
     private timeElapsed: number = 0; // 正计时已用时间
     private breakTimeLeft: number = 0; // 休息时间剩余
@@ -121,7 +127,13 @@ export class PomodoroTimer {
 
         // 初始化声音设置
         this.isBackgroundAudioMuted = settings.backgroundAudioMuted || false;
-        this.backgroundVolume = Math.max(0, Math.min(1, settings.backgroundVolume || 0.5));
+        this.workVolume = Math.max(0, Math.min(1, settings.workVolume ?? 0.5));
+        this.breakVolume = Math.max(0, Math.min(1, settings.breakVolume ?? 0.5));
+        this.longBreakVolume = Math.max(0, Math.min(1, settings.longBreakVolume ?? 0.5));
+        this.workEndVolume = Math.max(0, Math.min(1, settings.workEndVolume ?? 1));
+        this.breakEndVolume = Math.max(0, Math.min(1, settings.breakEndVolume ?? 1));
+        this.randomRestVolume = Math.max(0, Math.min(1, settings.randomRestVolume ?? 1));
+        this.randomRestEndVolume = Math.max(0, Math.min(1, settings.randomRestEndVolume ?? 1));
 
         // 初始化系统弹窗设置
         this.systemNotificationEnabled = settings.systemNotification !== false;
@@ -417,7 +429,7 @@ export class PomodoroTimer {
                 const resolved = await resolveAudioPath(this.settings.workSound);
                 this.workAudio = new Audio(resolved);
                 this.workAudio.loop = true;
-                this.workAudio.volume = this.isBackgroundAudioMuted ? 0 : this.backgroundVolume;
+                this.workAudio.volume = this.isBackgroundAudioMuted ? 0 : this.workVolume;
                 this.workAudio.preload = 'auto';
             } catch (error) {
                 console.warn('无法加载工作背景音:', error);
@@ -430,7 +442,7 @@ export class PomodoroTimer {
                 const resolved = await resolveAudioPath(this.settings.breakSound);
                 this.breakAudio = new Audio(resolved);
                 this.breakAudio.loop = true;
-                this.breakAudio.volume = this.isBackgroundAudioMuted ? 0 : this.backgroundVolume;
+                this.breakAudio.volume = this.isBackgroundAudioMuted ? 0 : this.breakVolume;
                 this.breakAudio.preload = 'auto';
             } catch (error) {
                 console.warn('无法加载短时休息背景音:', error);
@@ -443,7 +455,7 @@ export class PomodoroTimer {
                 const resolved = await resolveAudioPath(this.settings.longBreakSound);
                 this.longBreakAudio = new Audio(resolved);
                 this.longBreakAudio.loop = true;
-                this.longBreakAudio.volume = this.isBackgroundAudioMuted ? 0 : this.backgroundVolume;
+                this.longBreakAudio.volume = this.isBackgroundAudioMuted ? 0 : this.longBreakVolume;
                 this.longBreakAudio.preload = 'auto';
             } catch (error) {
                 console.warn('无法加载长时休息背景音:', error);
@@ -455,7 +467,7 @@ export class PomodoroTimer {
             try {
                 const resolved = await resolveAudioPath(this.settings.workEndSound);
                 this.workEndAudio = new Audio(resolved);
-                this.workEndAudio.volume = 1;
+                this.workEndAudio.volume = this.workEndVolume;
                 this.workEndAudio.preload = 'auto';
             } catch (error) {
                 console.warn('无法加载工作结束提示音:', error);
@@ -467,7 +479,7 @@ export class PomodoroTimer {
             try {
                 const resolved = await resolveAudioPath(this.settings.breakEndSound);
                 this.breakEndAudio = new Audio(resolved);
-                this.breakEndAudio.volume = 1;
+                this.breakEndAudio.volume = this.breakEndVolume;
                 this.breakEndAudio.preload = 'auto';
             } catch (error) {
                 console.warn('无法加载休息结束提示音:', error);
@@ -523,7 +535,7 @@ export class PomodoroTimer {
                 try {
                     const resolved = await resolveAudioPath(soundPath);
                     const audio = new Audio(resolved);
-                    audio.volume = 1; // 随机微休息固定音量，不受背景音静音影响
+                    audio.volume = this.randomRestVolume; // 随机微休息个人设置音量
                     audio.preload = 'auto';
 
                     // 监听加载事件
@@ -551,7 +563,7 @@ export class PomodoroTimer {
             if (path) {
                 const resolved = await resolveAudioPath(path);
                 this.randomRestEndSound = new Audio(resolved);
-                this.randomRestEndSound.volume = 1; // 固定音量，不受背景音静音影响
+                this.randomRestEndSound.volume = this.randomRestEndVolume; // 随机微休息结束提示音个人设置音量
                 this.randomRestEndSound.preload = 'auto';
 
 
@@ -3121,7 +3133,8 @@ export class PomodoroTimer {
         this.volumeSlider.min = '0';
         this.volumeSlider.max = '1';
         this.volumeSlider.step = '0.1';
-        this.volumeSlider.value = this.backgroundVolume.toString();
+        const currentVolume = this.isWorkPhase ? this.workVolume : (this.isLongBreak ? this.longBreakVolume : this.breakVolume);
+        this.volumeSlider.value = currentVolume.toString();
         this.volumeSlider.style.cssText = `
             flex: 1;
             height: 4px;
@@ -3167,13 +3180,19 @@ export class PomodoroTimer {
             min-width: 30px;
             text-align: right;
         `;
-        volumePercent.textContent = Math.round(this.backgroundVolume * 100) + '%';
+        volumePercent.textContent = Math.round(currentVolume * 100) + '%';
 
-        // 滑块事件
+        // 滑块事件：调整当前阶段的音量
         this.volumeSlider.addEventListener('input', (e) => {
             const target = e.target as HTMLInputElement;
             const volume = parseFloat(target.value);
-            this.backgroundVolume = volume;
+            if (this.isWorkPhase) {
+                this.workVolume = volume;
+            } else if (this.isLongBreak) {
+                this.longBreakVolume = volume;
+            } else {
+                this.breakVolume = volume;
+            }
             volumePercent.textContent = Math.round(volume * 100) + '%';
             this.updateAudioVolume();
         });
@@ -3252,12 +3271,12 @@ export class PomodoroTimer {
 
         if (isBrowserWindow) {
             // BrowserWindow 模式：更新窗口显示
-            // 在窗口中同步音量
             try {
                 if (this.isBackgroundAudioMuted) {
                     this.setBrowserWindowAudioVolume(0, false);
                 } else {
-                    this.setBrowserWindowAudioVolume(this.backgroundVolume, true);
+                    const curVol = this.isWorkPhase ? this.workVolume : (this.isLongBreak ? this.longBreakVolume : this.breakVolume);
+                    this.setBrowserWindowAudioVolume(curVol, true);
                 }
             } catch (e) { }
             this.updateBrowserWindowDisplay(this.container as any);
@@ -3276,20 +3295,21 @@ export class PomodoroTimer {
         try {
             const isBrowserWindow2 = !this.isTabMode && PomodoroTimer.browserWindowInstance;
             if (isBrowserWindow2) {
-                const vol = this.isBackgroundAudioMuted ? 0 : this.backgroundVolume;
+                const curVol = this.isWorkPhase ? this.workVolume : (this.isLongBreak ? this.longBreakVolume : this.breakVolume);
+                const vol = this.isBackgroundAudioMuted ? 0 : curVol;
                 this.setBrowserWindowAudioVolume(vol, !this.isBackgroundAudioMuted);
             }
         } catch (e) { }
 
         // 如果取消静音，确保音量控制事件正常工作
         if (!this.isBackgroundAudioMuted && !isBrowserWindow) {
-            // 重新更新音量滑块显示
+            const curVol = this.isWorkPhase ? this.workVolume : (this.isLongBreak ? this.longBreakVolume : this.breakVolume);
             const volumePercent = this.volumeContainer?.querySelector('span:last-child');
             if (volumePercent) {
-                volumePercent.textContent = Math.round(this.backgroundVolume * 100) + '%';
+                volumePercent.textContent = Math.round(curVol * 100) + '%';
             }
             if (this.volumeSlider) {
-                this.volumeSlider.value = this.backgroundVolume.toString();
+                this.volumeSlider.value = curVol.toString();
             }
         }
 
@@ -3303,16 +3323,14 @@ export class PomodoroTimer {
     }
 
     private updateAudioVolume() {
-        const volume = this.isBackgroundAudioMuted ? 0 : this.backgroundVolume;
-
         if (this.workAudio) {
-            this.workAudio.volume = volume;
+            this.workAudio.volume = this.isBackgroundAudioMuted ? 0 : this.workVolume;
         }
         if (this.breakAudio) {
-            this.breakAudio.volume = volume;
+            this.breakAudio.volume = this.isBackgroundAudioMuted ? 0 : this.breakVolume;
         }
         if (this.longBreakAudio) {
-            this.longBreakAudio.volume = volume;
+            this.longBreakAudio.volume = this.isBackgroundAudioMuted ? 0 : this.longBreakVolume;
         }
     }
     private createMinimizedView() {
@@ -5880,7 +5898,13 @@ export class PomodoroTimer {
         // 更新音频/随机提示相关设置
         try {
             this.isBackgroundAudioMuted = (settings.backgroundAudioMuted || false);
-            this.backgroundVolume = Math.max(0, Math.min(1, settings.backgroundVolume || 0.5));
+            this.workVolume = Math.max(0, Math.min(1, settings.workVolume ?? 0.5));
+            this.breakVolume = Math.max(0, Math.min(1, settings.breakVolume ?? 0.5));
+            this.longBreakVolume = Math.max(0, Math.min(1, settings.longBreakVolume ?? 0.5));
+            this.workEndVolume = Math.max(0, Math.min(1, settings.workEndVolume ?? 1));
+            this.breakEndVolume = Math.max(0, Math.min(1, settings.breakEndVolume ?? 1));
+            this.randomRestVolume = Math.max(0, Math.min(1, settings.randomRestVolume ?? 1));
+            this.randomRestEndVolume = Math.max(0, Math.min(1, settings.randomRestEndVolume ?? 1));
             this.systemNotificationEnabled = settings.pomodoroSystemNotification !== false;
             this.randomRestEnabled = settings.randomRestEnabled || false;
             this.randomRestSystemNotificationEnabled = settings.randomRestSystemNotification !== false;
@@ -5989,10 +6013,11 @@ export class PomodoroTimer {
         // 同步更新音量滑块UI（如果存在）
         if (this.volumeSlider) {
             try {
-                this.volumeSlider.value = (this.backgroundVolume || 0).toString();
+                const curVol = this.isWorkPhase ? this.workVolume : (this.isLongBreak ? this.longBreakVolume : this.breakVolume);
+                this.volumeSlider.value = curVol.toString();
                 const volumePercent = this.volumeContainer?.querySelector('span:last-child');
                 if (volumePercent) {
-                    volumePercent.textContent = Math.round((this.backgroundVolume || 0) * 100) + '%';
+                    volumePercent.textContent = Math.round(curVol * 100) + '%';
                 }
             } catch (e) {
                 console.warn('更新音量滑块UI失败:', e);
@@ -6635,13 +6660,14 @@ export class PomodoroTimer {
             // Resume background audio if needed (for fresh window)
             if (!this.isBackgroundAudioMuted && this.isRunning && !this.isPaused) {
                 let src = '';
-                if (this.isWorkPhase) src = this.settings.workSound;
-                else if (this.isLongBreak) src = this.settings.longBreakSound;
-                else src = this.settings.breakSound;
+                let vol = this.workVolume;
+                if (this.isWorkPhase) { src = this.settings.workSound; vol = this.workVolume; }
+                else if (this.isLongBreak) { src = this.settings.longBreakSound; vol = this.longBreakVolume; }
+                else { src = this.settings.breakSound; vol = this.breakVolume; }
 
                 if (src) {
                     setTimeout(async () => {
-                        await this.playSoundInBrowserWindow(src, { loop: true, volume: this.backgroundVolume });
+                        await this.playSoundInBrowserWindow(src, { loop: true, volume: vol });
                     }, 500);
                 }
             }
@@ -8039,14 +8065,15 @@ document.body.classList.remove('docked-mode');
             // Resume background audio if needed (because recreating window kills the audio)
             if (!this.isBackgroundAudioMuted && this.isRunning && !this.isPaused) {
                 let src = '';
-                if (this.isWorkPhase) src = this.settings.workSound;
-                else if (this.isLongBreak) src = this.settings.longBreakSound;
-                else src = this.settings.breakSound;
+                let vol = this.workVolume;
+                if (this.isWorkPhase) { src = this.settings.workSound; vol = this.workVolume; }
+                else if (this.isLongBreak) { src = this.settings.longBreakSound; vol = this.longBreakVolume; }
+                else { src = this.settings.breakSound; vol = this.breakVolume; }
 
                 if (src) {
                     // Slight delay to ensure DOM is ready, and resolve audio path before playing
                     setTimeout(async () => {
-                        await this.playSoundInBrowserWindow(src, { loop: true, volume: this.backgroundVolume });
+                        await this.playSoundInBrowserWindow(src, { loop: true, volume: vol });
                     }, 500);
                 }
             }
