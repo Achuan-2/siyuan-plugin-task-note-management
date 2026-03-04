@@ -569,12 +569,14 @@
         </div>
     {/if}
 
-    <div class="vip-section">
-        <h3>{i18n('vipExchangeAndQA')}</h3>
-        <div class="activation-notice">
-            {i18n('vipExchangeAndQADesc')}
+    {#if activeKeys.some(k => k.term !== '7d')}
+        <div class="vip-section">
+            <h3>{i18n('vipExchangeAndQA')}</h3>
+            <div class="activation-notice">
+                {i18n('vipExchangeAndQADesc')}
+            </div>
         </div>
-    </div>
+    {/if}
 </div>
 
 <style>
