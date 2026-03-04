@@ -1,3 +1,28 @@
+## v6.2.2 / 20260304
+- 🎨 日期智能识别优化：
+  - 输入下午11点半到1点，1点应该识别为13点
+  - 农历识别优化：输入正月初一，可以识别识别为农历日期，不需要再添加农历前缀
+- 🎨 日历上传：如果任务设置了不在日历显示"hideInCalendar": true,，导出ics也不显示
+- 🎨 日历上传：导出自定义提醒时间也会在日历软件提醒
+- 🎨 日历视图：+x弹窗位置调整，不超出日历视图外
+- 🎨 番茄钟：各个声音支持设置音量
+- 🐛 平板端不支持 rgb(from rgb(255, 0, 0) r g b / 0.15);这种语法来设置背景色透明度，需要兼容任务上色样式
+- 🐛 平板端无法长按触发右键菜单
+- 🐛 如果设置一天开始时间为03：00，凌晨不显示事项通知
+
+---
+
+- 🎨 Optimized Date Intelligent Recognition:
+  - Input "11:30 PM to 1:00" should recognize 1:00 as 13:00
+  - Optimized Lunar Calendar Recognition: Input "the first day of the first lunar month" can be recognized as a lunar date without needing to add the "lunar" prefix
+- 🎨 Calendar Upload: If a task is set to not display in the calendar with "hideInCalendar": true, it will also not show when exporting to ics
+- 🎨 Calendar Upload: Exported custom reminder times will also trigger reminders in calendar software
+- 🎨 Calendar View: Adjusted the position of the +x popup to not extend beyond the calendar view
+- 🎨 Pomodoro Timer: Each sound effect now supports volume settings
+- 🐛 Tablet devices do not support the syntax `rgb(from rgb(255, 0, 0) r g b / 0.15)` for setting background color transparency; compatibility with task coloring styles is required
+- 🐛 Tablet devices cannot trigger right-click menus via long press
+- 🐛 If the day start time is set to 03:00, task notifications are not displayed in the early morning hours
+
 ## v6.2.1 / 20260301
 - 🎨 任务侧栏支持多选：Ctrl+Click触发多选模式，Shift+Click可区域选择
 - 🎨 任务管理页面的「显示以完成子任务」需要在所有筛选项都显示和作用
