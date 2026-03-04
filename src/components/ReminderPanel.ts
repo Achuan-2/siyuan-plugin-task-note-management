@@ -1,3 +1,4 @@
+import { colorWithOpacity } from "../utils/uiUtils";
 import { showMessage, confirm, Dialog, Menu, Constants, getFrontend, getBackend } from "siyuan";
 import { refreshSql, sql, getBlockKramdown, getBlockByID, updateBindBlockAtrrs, openBlock } from "../api";
 import { getLocalDateString, compareDateStrings, getLocalDateTimeString, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../utils/dateUtils";
@@ -1996,19 +1997,19 @@ export class ReminderPanel {
         let borderColor = '';
         switch (priority) {
             case 'high':
-                backgroundColor = 'rgba(from var(--b3-card-error-background) r g b / .5)';
+                backgroundColor = colorWithOpacity('var(--b3-card-error-background)', 0.5);
                 borderColor = 'var(--b3-card-error-color)';
                 break;
             case 'medium':
-                backgroundColor = 'rgba(from var(--b3-card-warning-background) r g b / .5)';
+                backgroundColor = colorWithOpacity('var(--b3-card-warning-background)', 0.5);
                 borderColor = 'var(--b3-card-warning-color)';
                 break;
             case 'low':
-                backgroundColor = 'rgba(from var(--b3-card-info-background) r g b / .7)';
+                backgroundColor = colorWithOpacity('var(--b3-card-info-background)', 0.7);
                 borderColor = 'var(--b3-card-info-color)';
                 break;
             default:
-                backgroundColor = 'background-color: rgba(from var(--b3-theme-background-light) r g b / .1);';
+                backgroundColor = colorWithOpacity('var(--b3-theme-background-light)', 0.1);
                 borderColor = 'var(--b3-theme-surface-lighter)';
         }
         reminderEl.style.backgroundColor = backgroundColor;
@@ -7111,19 +7112,19 @@ export class ReminderPanel {
                         let borderColor = '';
                         switch (priority) {
                             case 'high':
-                                backgroundColor = 'rgba(from var(--b3-card-error-background) r g b / .5)';
+                                backgroundColor = colorWithOpacity('var(--b3-card-error-background)', 0.5);
                                 borderColor = 'var(--b3-card-error-color)';
                                 break;
                             case 'medium':
-                                backgroundColor = 'rgba(from var(--b3-card-warning-background) r g b / .5)';
+                                backgroundColor = colorWithOpacity('var(--b3-card-warning-background)', 0.5);
                                 borderColor = 'var(--b3-card-warning-color)';
                                 break;
                             case 'low':
-                                backgroundColor = 'rgba(from var(--b3-card-info-background) r g b / .7)';
+                                backgroundColor = colorWithOpacity('var(--b3-card-info-background)', 0.7);
                                 borderColor = 'var(--b3-card-info-color)';
                                 break;
                             default:
-                                backgroundColor = 'background-color: rgba(from var(--b3-theme-background-light) r g b / .1);';
+                                backgroundColor = colorWithOpacity('var(--b3-theme-background-light)', 0.1);
                                 borderColor = 'var(--b3-theme-surface-lighter)';
                         }
                         el.style.backgroundColor = backgroundColor;

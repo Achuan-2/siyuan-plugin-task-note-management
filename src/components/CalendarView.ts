@@ -4,6 +4,7 @@ import timeGridPlugin from '@fullcalendar/timegrid';
 import multiMonthPlugin from '@fullcalendar/multimonth';
 import listPlugin from '@fullcalendar/list';
 import interactionPlugin from '@fullcalendar/interaction';
+import { colorWithOpacity } from "../utils/uiUtils";
 import { showMessage, confirm, openTab, Menu, Dialog, Constants } from "siyuan";
 import { refreshSql, getBlockByID, sql, updateBlock, getBlockKramdown, updateBindBlockAtrrs, openBlock } from "../api";
 import { getLocalDateString, getLocalDateTime, getLocalDateTimeString, compareDateStrings, getLogicalDateString, getRelativeDateString, getDayStartAdjustedDate, getLocaleTag } from "../utils/dateUtils";
@@ -1382,7 +1383,7 @@ export class CalendarView {
                             holidaySpan.className = 'day-holiday';
                             holidaySpan.textContent = isWorkday ? i18n('workdayMarker') : i18n('holidayMarker');
                             holidaySpan.title = typeof holidayName === 'object' ? holidayName.title : holidayName;
-                            holidaySpan.style.cssText = `background-color: ${isWorkday ? 'var(--b3-theme-error)' : 'rgba(from var(--b3-card-success-color) r g b / .5);'}; color: var(--b3-theme-background); font-size: 0.75em; padding: 2px 4px; border-radius: 50%; cursor: help; font-weight: normal; line-height: 1; flex-shrink: 0;`;
+                            holidaySpan.style.cssText = `background-color: ${isWorkday ? 'var(--b3-theme-error)' : colorWithOpacity("var(--b3-card-success-color)", 0.5)}; color: var(--b3-theme-background); font-size: 0.75em; padding: 2px 4px; border-radius: 50%; cursor: help; font-weight: normal; line-height: 1; flex-shrink: 0;`;
                             extraInfoWrapper.appendChild(holidaySpan);
                         }
 
@@ -1440,7 +1441,7 @@ export class CalendarView {
                             holidaySpan.className = 'day-header-holiday';
                             holidaySpan.textContent = isWorkday ? i18n('workdayMarker') : i18n('holidayMarker');
                             holidaySpan.title = typeof holidayName === 'object' ? holidayName.title : holidayName;
-                            holidaySpan.style.cssText = `background-color: ${isWorkday ? 'var(--b3-theme-error)' : 'rgba(from var(--b3-card-success-color) r g b / .5);'}; color: var(--b3-theme-background); font-size: 0.75em; padding: 2px 4px; border-radius: 50%; cursor: help; font-weight: normal; line-height: 1; flex-shrink: 0;`;
+                            holidaySpan.style.cssText = `background-color: ${isWorkday ? 'var(--b3-theme-error)' : colorWithOpacity("var(--b3-card-success-color)", 0.5)}; color: var(--b3-theme-background); font-size: 0.75em; padding: 2px 4px; border-radius: 50%; cursor: help; font-weight: normal; line-height: 1; flex-shrink: 0;`;
                             extraInfoWrapper.appendChild(holidaySpan);
                         }
 
@@ -1608,7 +1609,7 @@ export class CalendarView {
                     // Adjust opacity based on theme mode
                     const themeMode = document.querySelector('html')?.getAttribute('data-theme-mode');
                     const opacity = themeMode === 'dark' ? '0.3' : '0.15';
-                    targetEl.style.backgroundColor = `rgba(from ${bgColor} r g b / ${opacity})`;
+                    targetEl.style.backgroundColor = colorWithOpacity(bgColor, parseFloat(opacity));
 
                     // Add thick left border (使用优先级颜色)
                     targetEl.style.borderLeft = `4px solid ${borderColor}`;
@@ -3496,7 +3497,7 @@ export class CalendarView {
             // 如果有项目颜色，应用颜色样式
             if (labelColor) {
                 labelEl.style.cssText = `
-                    background-color: rgba(from ${labelColor} r g b / .3);
+                    background-color: ${colorWithOpacity(labelColor, 0.3)};
                     color: white;
                     padding: 2px 6px;
                     border-radius: 3px;

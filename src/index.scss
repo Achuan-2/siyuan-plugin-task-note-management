@@ -757,7 +757,8 @@
 
 /* 习惯卡片：淡色渐变背景，更现代的视觉效果 */
 .habit-card {
-    background-color: rgba(from var(--b3-theme-background-light) r g b / .1);
+    background-color: var(--b3-theme-background-light);
+    background-color: color-mix(in srgb, var(--b3-theme-background-light), transparent 90%);
     border: 2px solid var(--b3-theme-primary-light);
     border-radius: 8px;
     padding: 12px;
@@ -839,7 +840,7 @@
     border-radius: 4px;
     margin-bottom: 8px;
     padding: 8px;
-    cursor:pointer;
+    cursor: pointer;
 
     &--overdue {
         border-color: var(--b3-theme-error-light);
@@ -1207,7 +1208,8 @@
 .fc-event-mirror,
 .fc-highlight {
     border-color: var(--b3-theme-surface-lighter) !important;
-    background-color: rgba(from var(--b3-theme-surface-lighter) r g b / .3) !important;
+    background-color: var(--b3-theme-surface-lighter) !important;
+    background-color: color-mix(in srgb, var(--b3-theme-surface-lighter), transparent 70%) !important;
     color: var(--b3-theme-on-background) !important;
 
     .fc-event-main {
