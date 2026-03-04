@@ -131,6 +131,54 @@ export function isValidDate(year: number, month: number, day: number): boolean {
         date.getDate() === day;
 }
 
+/**
+ * 预处理时间文本，规范化常见的歧义表达
+ * 1. 去除时间修饰词（下午/晚上等）与数字/中文数字之间的空格：「下午 1点」→「下午1点」
+ * 2. 去除「下午/晚上」与已是 24h 制时间（12-23）搭配时的冗余修饰：「下午13点」→「13：00」
+ * 3. 将「中午+1/2点」转为「下午+1/2点」，避免 chrono 解析为凌晨：「中午一点半」→「下午一点半」
+ * 4. 展开「X点半」（X=13-23）为标准时间字符串：「13点半」→「13:30」
+ */
+function preprocessTimeText(text: string): string {
+    let result = text;
+
+    // 1. 去除时间段修饰词与后续数字/中文数字之间的空格
+    result = result.replace(/(下午|上午|早上|晚上|中午|傍晚)\s+(\d)/g, '$1$2');
+    result = result.replace(/(下午|上午|早上|晚上|中午|傍晚)\s+([一二三四五六七八九十])/g, '$1$2');
+
+    // 2. 去除「下午/晚上/傍晚」与已是 12-23 的小时数搭配时的冗余前缀
+    //    「下午13点半」→「13:30」, 「晚上21点」→「21点」
+    result = result.replace(/(?:下午|晚上|傍晚)(1[2-9]|2[0-3])([点时:：])([0-5]\d)?(?:分)?/g, (_, h, _sep, min) => {
+        const hh = h.padStart(2, '0');
+        const mm = (min || '00').padStart(2, '0');
+        return `${hh}:${mm}`;
+    });
+
+    // 3. 将「中午」+一/1/两/2 点 转为「下午」，避免 chrono 解析成凌晨
+    result = result.replace(/中午([一1])/g, '下午$1');
+    result = result.replace(/中午([两2])/g, '下午$1');
+
+    // 4. 展开「X点半」（X=13..23）→「X:30」
+    result = result.replace(/\b(1[3-9]|2[0-3])点半\b/g, '$1:30');
+    // 展开「X点YY分」（X=13..23）→「X:YY」
+    result = result.replace(/\b(1[3-9]|2[0-3])点([0-5]\d)分?\b/g, '$1:$2');
+
+    return result;
+}
+
+/**
+ * 当没有明确日期时，根据时间是否已过推算日期（今天 or 明天）
+ */
+function getDateForTimeOrTomorrow(hour: number, minute: number): { date: string; hasDate: false } {
+    const now = new Date();
+    const todayWithTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute);
+    if (todayWithTime <= now) {
+        // 该时间今天已过，默认明天
+        const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+        return { date: formatDateString(tomorrow), hasDate: false };
+    }
+    return { date: getLogicalDateString(), hasDate: false };
+}
+
 // 初始化全局 chrono 解析器
 const chronoParser: any = chrono.zh.casual.clone();
 
@@ -246,13 +294,54 @@ export function parseNaturalDateTime(text: string): ParseResult {
                                 hasEndDate = true;
                             }
 
+                            // PM 上下文传播：若起始部分含下午/晚上修饰词，而结束部分没有时间段修饰词
+                            // （但凌晨/深夜等 AM 修饰词除外），尝试对结束时间应用 PM（小时 < 12 时 +12）
+                            // 仅当 PM 调整后结束时间仍大于起始时间（同一天内不跨午夜）时才应用，
+                            // 否则保持原样（视为 AM），由下方跨午夜逻辑处理。
+                            const pmIndicator = /下午|晚上|傍晚/;
+                            // 凌晨/深夜 明确表示 AM，不能被 PM 传播覆盖
+                            const anyTimeOfDay = /上午|下午|早上|晚上|中午|傍晚|凌晨|深夜/;
+                            let endTime = endResult.time;
+                            if (pmIndicator.test(left) && !anyTimeOfDay.test(right) && endTime) {
+                                const [endH, endM] = endTime.split(':').map(Number);
+                                if (endH < 12) {
+                                    const pmEndH = endH + 12;
+                                    // 只有 PM 版本不跨午夜（pmEnd > start）时才采用 PM
+                                    if (startResult.time) {
+                                        const [startH, startM] = startResult.time.split(':').map(Number);
+                                        const startMins = startH * 60 + startM;
+                                        const pmEndMins = pmEndH * 60 + endM;
+                                        if (pmEndMins > startMins) {
+                                            endTime = `${pmEndH.toString().padStart(2, '0')}:${endM.toString().padStart(2, '0')}`;
+                                        }
+                                        // 否则：保持 AM（如 01:00），跨午夜逻辑会处理次日
+                                    } else {
+                                        endTime = `${pmEndH.toString().padStart(2, '0')}:${endM.toString().padStart(2, '0')}`;
+                                    }
+                                }
+                            }
+
+                            // 跨午夜检测：若起止同一天，但开始时间 > 结束时间，说明跨越了午夜，结束日期 +1 天
+                            if (startResult.time && endTime && endDate) {
+                                const [startH, startM] = startResult.time.split(':').map(Number);
+                                const [endH2, endM2] = endTime.split(':').map(Number);
+                                const startMins = startH * 60 + startM;
+                                const endMins = endH2 * 60 + endM2;
+                                if (startMins > endMins) {
+                                    // 结束时间在次日
+                                    const endDateObj = new Date(endDate + 'T00:00:00');
+                                    endDateObj.setDate(endDateObj.getDate() + 1);
+                                    endDate = formatDateString(endDateObj);
+                                }
+                            }
+
                             return {
                                 date: startResult.date,
                                 time: startResult.time,
                                 hasTime: startResult.hasTime,
                                 hasDate: startResult.hasDate,
                                 endDate: endDate,
-                                endTime: endResult.time,
+                                endTime: endTime,
                                 hasEndTime: endResult.hasTime || !!endResult.time,
                                 hasEndDate: hasEndDate,
                             };
@@ -274,7 +363,7 @@ export function parseNaturalDateTime(text: string): ParseResult {
  */
 function parseNaturalDateTimeInner(text: string): ParseResult {
     try {
-        let processedText = text.trim();
+        let processedText = preprocessTimeText(text.trim());
         // --- 优先提取末尾时间 (针对 "任务0：14:20" 这种场景) ---
         // 匹配模式：(起始/空格/中英文冒号) + (1-2位数字) + (中英文冒号/点) + (2位数字) + (可选分) + 结尾
         const trailingTimePattern = /(?:^|[\s:：])(\d{1,2})[:：点](\d{2})(?:分)?$/;
@@ -302,12 +391,13 @@ function parseNaturalDateTimeInner(text: string): ParseResult {
                     }
                 }
 
-                // 没识别到日期，默认今天
+                // 没识别到日期：过期则默认明天，否则今天
+                const { date: inferredDate, hasDate: inferredHasDate } = getDateForTimeOrTomorrow(h, m);
                 return {
-                    date: getLogicalDateString(),
+                    date: inferredDate,
                     time: timeStr,
                     hasTime: true,
-                    hasDate: false
+                    hasDate: inferredHasDate
                 };
             }
         }
@@ -470,6 +560,13 @@ function parseNaturalDateTimeInner(text: string): ParseResult {
             const hours = parsedDate.getHours().toString().padStart(2, '0');
             const minutes = parsedDate.getMinutes().toString().padStart(2, '0');
             time = `${hours}:${minutes}`;
+        }
+
+        // 无明确日期但有时间：若该时间当天已过，则默认到明天
+        if (!hasDate && hasTime && time) {
+            const [h, m] = time.split(':').map(Number);
+            const { date: inferredDate } = getDateForTimeOrTomorrow(h, m);
+            return { date: inferredDate, time, hasTime: true, hasDate: false };
         }
 
         return { date, time, hasTime, hasDate };
