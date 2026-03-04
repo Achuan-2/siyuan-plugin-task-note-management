@@ -1412,10 +1412,6 @@ export class QuickReminderDialog {
         // 更新标题（如果识别并清理了）
         if (result.cleanTitle !== undefined && titleInput) {
             titleInput.value = result.cleanTitle;
-            // 如果使用了编辑器，需要同步
-            if (this.editor) {
-                this.editor.action(replaceAll(result.cleanTitle));
-            }
         }
 
         // 设置日期
