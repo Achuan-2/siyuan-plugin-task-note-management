@@ -5,6 +5,7 @@ import {
     Dialog,
     openTab,
     getFrontend,
+    getBackend,
 } from "siyuan";
 import { VipManager } from "./utils/vip";
 import "./index.scss";
@@ -572,6 +573,10 @@ export default class ReminderPlugin extends Plugin {
 
     async onload() {
         await this.loadSettings();
+
+        // 调试：显示当前 frontend / backend 环境
+        // new Dialog({ title: "getFrontend", content: `<div style="padding:16px">${getFrontend()}</div>`, width: "300px" });
+        // new Dialog({ title: "getBackend", content: `<div style="padding:16px">${getBackend()}</div>`, width: "300px" });
 
         // 添加自定义图标
         this.addIcons(`
@@ -2851,11 +2856,10 @@ export default class ReminderPlugin extends Plugin {
                 // 检查是否启用系统弹窗通知
                 const systemNotificationEnabled = await this.getReminderSystemNotificationEnabled();
                 const frontend = getFrontend();
-                const isMobile = frontend.endsWith('mobile');
-                const isBrowserDesktop = frontend === 'browser-desktop';
+                const isDesktop = frontend === 'desktop';
 
                 // 电脑端且开启了系统通知时，不显示思源内部通知；手机端始终显示内部通知
-                if (isMobile || isBrowserDesktop || !systemNotificationEnabled) {
+                if (!isDesktop || !systemNotificationEnabled) {
                     NotificationDialog.showAllDayReminders(sortedReminders);
                 }
 
@@ -3427,10 +3431,10 @@ export default class ReminderPlugin extends Plugin {
 
                         // 显示系统弹窗（如果启用）
                         const systemNotificationEnabled = await this.getReminderSystemNotificationEnabled();
-                        const isMobile = getFrontend().endsWith('mobile');
+                        const isAndroid = getBackend().endsWith('android');;
 
                         // 电脑端且开启了系统通知时，不显示思源内部通知；手机端始终显示内部通知
-                        if (isMobile || !systemNotificationEnabled) {
+                        if (isAndroid || !systemNotificationEnabled) {
                             NotificationDialog.show(reminderInfo as any);
                         }
 
@@ -3494,7 +3498,7 @@ export default class ReminderPlugin extends Plugin {
 
             // 检查是否启用系统弹窗通知
             const systemNotificationEnabled = await this.getReminderSystemNotificationEnabled();
-            const isMobile = getFrontend().endsWith('mobile');
+            const isAndroid = getBackend().endsWith('android');;
 
             // 记录触发字段，方便调试与后续显示一致性处理
             try { (reminderInfo as any)._triggerField = triggerField; } catch (e) { }
@@ -3506,7 +3510,7 @@ export default class ReminderPlugin extends Plugin {
             });
 
             // 电脑端且开启了系统通知时，不显示思源内部通知；手机端始终显示内部通知
-            if (isMobile || !systemNotificationEnabled) {
+            if (isAndroid || !systemNotificationEnabled) {
                 NotificationDialog.show(reminderInfo);
             }
 
@@ -3542,10 +3546,9 @@ export default class ReminderPlugin extends Plugin {
      */
     private showReminderSystemNotification(title: string, message: string, reminderInfo?: any) {
         // 判断是否是移动端
-        const frontend = getFrontend();
-        const isMobile = frontend.endsWith('mobile');
+        const isAndroid = getBackend().endsWith('android');
 
-        if (isMobile) {
+        if (isAndroid) {
             // 手机端：使用内核接口进行系统通知
             try {
                 sendNotification(title, message);

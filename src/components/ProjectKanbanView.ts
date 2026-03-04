@@ -17,7 +17,7 @@ import { VipManager } from "../utils/vip";
 
 import { PasteTaskDialog } from "./PasteTaskDialog";
 import { ProjectDialog } from "./ProjectDialog";
-
+import { getBackend } from "siyuan";
 
 export class ProjectKanbanView {
     private container: HTMLElement;
@@ -8694,7 +8694,7 @@ export class ProjectKanbanView {
 
         // 设置任务元素的背景色和边框
         taskEl.style.cssText = `
-            cursor: grab;
+            cursor: pointer;
             transition: all 0.2s ease;
             position: relative;
             background-color: ${backgroundColor};
@@ -9496,215 +9496,219 @@ export class ProjectKanbanView {
         }
 
         // 所有任务均启用拖拽（订阅任务也支持排序）
-        taskEl.draggable = true;
-        this.addTaskDragEvents(taskEl, task);
-        taskEl.addEventListener('dragover', (e) => {
-            const isExternalDrag = e.dataTransfer?.types.includes('application/x-reminder') || e.dataTransfer?.types.includes('text/plain');
-            if (this.isDragging && this.draggedElement && this.draggedElement !== taskEl) {
-                const targetTask = this.getTaskFromElement(taskEl);
-                if (!targetTask) return;
+        const isAndroid = getBackend().endsWith('android');
+        if (!isAndroid) {
+            taskEl.draggable = true;
+            this.addTaskDragEvents(taskEl, task);
+            taskEl.addEventListener('dragover', (e) => {
+                const isExternalDrag = e.dataTransfer?.types.includes('application/x-reminder') || e.dataTransfer?.types.includes('text/plain');
+                if (this.isDragging && this.draggedElement && this.draggedElement !== taskEl) {
+                    const targetTask = this.getTaskFromElement(taskEl);
+                    if (!targetTask) return;
 
-                const rect = taskEl.getBoundingClientRect();
-                const mouseY = e.clientY;
-                const taskTop = rect.top;
-                const taskBottom = rect.bottom;
-                const taskHeight = rect.height;
+                    const rect = taskEl.getBoundingClientRect();
+                    const mouseY = e.clientY;
+                    const taskTop = rect.top;
+                    const taskBottom = rect.bottom;
+                    const taskHeight = rect.height;
 
-                // 定义区域：上边缘20%和下边缘20%用于排序，中间60%用于父子关系
-                const sortZoneHeight = taskHeight * 0.2;
-                const isInTopSortZone = mouseY <= taskTop + sortZoneHeight;
-                const isInBottomSortZone = mouseY >= taskBottom - sortZoneHeight;
-                const isInParentChildZone = !isInTopSortZone && !isInBottomSortZone;
+                    // 定义区域：上边缘20%和下边缘20%用于排序，中间60%用于父子关系
+                    const sortZoneHeight = taskHeight * 0.2;
+                    const isInTopSortZone = mouseY <= taskTop + sortZoneHeight;
+                    const isInBottomSortZone = mouseY >= taskBottom - sortZoneHeight;
+                    const isInParentChildZone = !isInTopSortZone && !isInBottomSortZone;
 
-                // 排序检查 (支持现有同级排序和新的成为同级排序)
-                const canSort = this.canDropForSort(this.draggedTask, targetTask);
-                const canBecomeSibling = this.canBecomeSiblingOf(this.draggedTask, targetTask);
-                const canSetParentChild = this.canSetAsParentChild(this.draggedTask, targetTask);
+                    // 排序检查 (支持现有同级排序和新的成为同级排序)
+                    const canSort = this.canDropForSort(this.draggedTask, targetTask);
+                    const canBecomeSibling = this.canBecomeSiblingOf(this.draggedTask, targetTask);
+                    const canSetParentChild = this.canSetAsParentChild(this.draggedTask, targetTask);
 
-                // --- [新逻辑] ---
-                // 检查是否允许改变状态、分组或优先级
-                let isStructuralChange = false;
-                const draggedStatus = this.getTaskStatus(this.draggedTask);
-                const draggedGroup = this.draggedTask.customGroupId;
-                const draggedPriority = this.draggedTask.priority || 'none';
+                    // --- [新逻辑] ---
+                    // 检查是否允许改变状态、分组或优先级
+                    let isStructuralChange = false;
+                    const draggedStatus = this.getTaskStatus(this.draggedTask);
+                    const draggedGroup = this.draggedTask.customGroupId;
+                    const draggedPriority = this.draggedTask.priority || 'none';
 
-                const draggedParentId = this.draggedTask.parentId;
+                    const draggedParentId = this.draggedTask.parentId;
 
-                let targetStatus: string | undefined;
-                if (this.kanbanMode === 'custom') {
-                    const targetSubGroup = taskEl.closest('.custom-status-group') as HTMLElement;
-                    targetStatus = targetSubGroup?.dataset.status;
-                } else {
-                    targetStatus = this.getTaskStatus(targetTask);
-                }
-                const targetGroup = targetTask.customGroupId;
-                const targetPriority = targetTask.priority || 'none';
-                const targetParentId = targetTask.parentId;
-
-                if ((targetStatus && targetStatus !== draggedStatus) ||
-                    (targetGroup !== draggedGroup) ||
-                    (targetPriority !== draggedPriority) ||
-                    (targetParentId !== draggedParentId)) {
-                    if (!this.draggedTask.isSubscribed) {
-                        isStructuralChange = true;
-                    }
-                }
-                // --- [新逻辑结束] ---
-
-                if ((isInTopSortZone || isInBottomSortZone)) {
-                    // 排序操作
-                    // 如果可以排序、成为同级 或 改变结构，则允许放置
-                    if (canSort || canBecomeSibling || isStructuralChange) {
-                        e.preventDefault();
-                        if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-                        const position = isInTopSortZone ? 'top' : 'bottom';
-                        this.updateIndicator('sort', taskEl, position, e);
+                    let targetStatus: string | undefined;
+                    if (this.kanbanMode === 'custom') {
+                        const targetSubGroup = taskEl.closest('.custom-status-group') as HTMLElement;
+                        targetStatus = targetSubGroup?.dataset.status;
                     } else {
+                        targetStatus = this.getTaskStatus(targetTask);
+                    }
+                    const targetGroup = targetTask.customGroupId;
+                    const targetPriority = targetTask.priority || 'none';
+                    const targetParentId = targetTask.parentId;
+
+                    if ((targetStatus && targetStatus !== draggedStatus) ||
+                        (targetGroup !== draggedGroup) ||
+                        (targetPriority !== draggedPriority) ||
+                        (targetParentId !== draggedParentId)) {
+                        if (!this.draggedTask.isSubscribed) {
+                            isStructuralChange = true;
+                        }
+                    }
+                    // --- [新逻辑结束] ---
+
+                    if ((isInTopSortZone || isInBottomSortZone)) {
+                        // 排序操作
+                        // 如果可以排序、成为同级 或 改变结构，则允许放置
+                        if (canSort || canBecomeSibling || isStructuralChange) {
+                            e.preventDefault();
+                            if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+                            const position = isInTopSortZone ? 'top' : 'bottom';
+                            this.updateIndicator('sort', taskEl, position, e);
+                        } else {
+                            this.updateIndicator('none', null, null);
+                        }
+                    } else if (isInParentChildZone) {
+                        // 父子任务操作
+                        if (canSetParentChild || isStructuralChange) {
+                            e.preventDefault();
+                            if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+                            this.updateIndicator('parentChild', taskEl, 'middle');
+                        } else {
+                            this.updateIndicator('none', null, null);
+                        }
+                    } else {
+                        // 清除所有指示器
                         this.updateIndicator('none', null, null);
                     }
-                } else if (isInParentChildZone) {
-                    // 父子任务操作
-                    if (canSetParentChild || isStructuralChange) {
-                        e.preventDefault();
-                        if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-                        this.updateIndicator('parentChild', taskEl, 'middle');
-                    } else {
-                        this.updateIndicator('none', null, null);
-                    }
-                } else {
-                    // 清除所有指示器
+                } else if (isExternalDrag) {
+                    // 允许外部拖拽冒泡到列区域
+                    e.preventDefault();
+                    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
                     this.updateIndicator('none', null, null);
                 }
-            } else if (isExternalDrag) {
-                // 允许外部拖拽冒泡到列区域
-                e.preventDefault();
-                if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-                this.updateIndicator('none', null, null);
-            }
-        });
+            });
 
-        taskEl.addEventListener('dragleave', (_e) => {
-            // 检查是否真的离开了目标区域
-            if (!taskEl.contains((_e as any).relatedTarget as Node)) {
-                this.updateIndicator('none', null, null);
-            }
-        });
+            taskEl.addEventListener('dragleave', (_e) => {
+                // 检查是否真的离开了目标区域
+                if (!taskEl.contains((_e as any).relatedTarget as Node)) {
+                    this.updateIndicator('none', null, null);
+                }
+            });
 
-        taskEl.addEventListener('drop', (e) => {
-            const multiData = e.dataTransfer?.getData('application/vnd.siyuan.kanban-tasks');
-            if (this.isDragging || multiData || e.dataTransfer?.types.includes('application/x-reminder')) {
-                this.clearDropZoneHighlights();
-            }
-            // Check for batch data first
-            if (multiData) {
-                e.preventDefault();
-                e.stopPropagation();
+            taskEl.addEventListener('drop', (e) => {
+                const multiData = e.dataTransfer?.getData('application/vnd.siyuan.kanban-tasks');
+                if (this.isDragging || multiData || e.dataTransfer?.types.includes('application/x-reminder')) {
+                    this.clearDropZoneHighlights();
+                }
+                // Check for batch data first
+                if (multiData) {
+                    e.preventDefault();
+                    e.stopPropagation();
 
-                try {
-                    const taskIds = JSON.parse(multiData);
-                    if (Array.isArray(taskIds) && taskIds.length > 0) {
-                        const targetTask = this.getTaskFromElement(taskEl);
-                        if (!targetTask || taskIds.includes(targetTask.id)) {
-                            this.updateIndicator('none', null, null);
-                            return;
+                    try {
+                        const taskIds = JSON.parse(multiData);
+                        if (Array.isArray(taskIds) && taskIds.length > 0) {
+                            const targetTask = this.getTaskFromElement(taskEl);
+                            if (!targetTask || taskIds.includes(targetTask.id)) {
+                                this.updateIndicator('none', null, null);
+                                return;
+                            }
+
+                            const rect = taskEl.getBoundingClientRect();
+                            const mouseY = e.clientY;
+                            const taskTop = rect.top;
+                            const taskBottom = rect.bottom;
+                            const taskHeight = rect.height;
+                            const sortZoneHeight = taskHeight * 0.2;
+
+                            const isInTopSortZone = mouseY <= taskTop + sortZoneHeight;
+                            const isInBottomSortZone = mouseY >= taskBottom - sortZoneHeight;
+
+                            if (isInTopSortZone || isInBottomSortZone) {
+                                const insertBefore = isInTopSortZone;
+                                this.handleBatchSortDrop(taskIds, targetTask, insertBefore, e);
+                            }
                         }
+                    } catch (err) { console.error(err); }
 
-                        const rect = taskEl.getBoundingClientRect();
-                        const mouseY = e.clientY;
-                        const taskTop = rect.top;
-                        const taskBottom = rect.bottom;
-                        const taskHeight = rect.height;
-                        const sortZoneHeight = taskHeight * 0.2;
-
-                        const isInTopSortZone = mouseY <= taskTop + sortZoneHeight;
-                        const isInBottomSortZone = mouseY >= taskBottom - sortZoneHeight;
-
-                        if (isInTopSortZone || isInBottomSortZone) {
-                            const insertBefore = isInTopSortZone;
-                            this.handleBatchSortDrop(taskIds, targetTask, insertBefore, e);
-                        }
-                    }
-                } catch (err) { console.error(err); }
-
-                this.updateIndicator('none', null, null);
-                return;
-            }
-
-            if (this.isDragging && this.draggedElement && this.draggedElement !== taskEl) {
-                e.preventDefault();
-                e.stopPropagation(); // 阻止事件冒泡到列的 drop 区域
-
-                const targetTask = this.getTaskFromElement(taskEl);
-                if (!targetTask) {
                     this.updateIndicator('none', null, null);
                     return;
                 }
 
-                const rect = taskEl.getBoundingClientRect();
-                const mouseY = e.clientY;
-                const taskTop = rect.top;
-                const taskBottom = rect.bottom;
-                const taskHeight = rect.height;
+                if (this.isDragging && this.draggedElement && this.draggedElement !== taskEl) {
+                    e.preventDefault();
+                    e.stopPropagation(); // 阻止事件冒泡到列的 drop 区域
 
-                // 定义区域
-                const sortZoneHeight = taskHeight * 0.2;
-                const isInTopSortZone = mouseY <= taskTop + sortZoneHeight;
-                const isInBottomSortZone = mouseY >= taskBottom - sortZoneHeight;
-                const isInParentChildZone = !isInTopSortZone && !isInBottomSortZone;
+                    const targetTask = this.getTaskFromElement(taskEl);
+                    if (!targetTask) {
+                        this.updateIndicator('none', null, null);
+                        return;
+                    }
 
-                const canSort = this.canDropForSort(this.draggedTask, targetTask);
-                const canBecomeSibling = this.canBecomeSiblingOf(this.draggedTask, targetTask);
-                const canSetParentChild = this.canSetAsParentChild(this.draggedTask, targetTask);
+                    const rect = taskEl.getBoundingClientRect();
+                    const mouseY = e.clientY;
+                    const taskTop = rect.top;
+                    const taskBottom = rect.bottom;
+                    const taskHeight = rect.height;
 
-                // --- [新逻辑] ---
-                let isStructuralChange = false;
-                const draggedStatus = this.getTaskStatus(this.draggedTask);
-                const draggedGroup = this.draggedTask.customGroupId;
-                const draggedPriority = this.draggedTask.priority || 'none';
+                    // 定义区域
+                    const sortZoneHeight = taskHeight * 0.2;
+                    const isInTopSortZone = mouseY <= taskTop + sortZoneHeight;
+                    const isInBottomSortZone = mouseY >= taskBottom - sortZoneHeight;
+                    const isInParentChildZone = !isInTopSortZone && !isInBottomSortZone;
 
-                const draggedParentId = this.draggedTask.parentId;
+                    const canSort = this.canDropForSort(this.draggedTask, targetTask);
+                    const canBecomeSibling = this.canBecomeSiblingOf(this.draggedTask, targetTask);
+                    const canSetParentChild = this.canSetAsParentChild(this.draggedTask, targetTask);
 
-                let targetStatus: string | undefined;
-                if (this.kanbanMode === 'custom') {
-                    const targetSubGroup = taskEl.closest('.custom-status-group') as HTMLElement;
-                    targetStatus = targetSubGroup?.dataset.status;
-                } else {
-                    targetStatus = this.getTaskStatus(targetTask);
-                }
-                const targetGroup = targetTask.customGroupId;
-                const targetPriority = targetTask.priority || 'none';
-                const targetParentId = targetTask.parentId;
+                    // --- [新逻辑] ---
+                    let isStructuralChange = false;
+                    const draggedStatus = this.getTaskStatus(this.draggedTask);
+                    const draggedGroup = this.draggedTask.customGroupId;
+                    const draggedPriority = this.draggedTask.priority || 'none';
 
-                if ((targetStatus && targetStatus !== draggedStatus) ||
-                    (targetGroup !== draggedGroup) ||
-                    (targetPriority !== draggedPriority) ||
-                    (targetParentId !== draggedParentId)) {
-                    if (!this.draggedTask.isSubscribed) {
-                        isStructuralChange = true;
+                    const draggedParentId = this.draggedTask.parentId;
+
+                    let targetStatus: string | undefined;
+                    if (this.kanbanMode === 'custom') {
+                        const targetSubGroup = taskEl.closest('.custom-status-group') as HTMLElement;
+                        targetStatus = targetSubGroup?.dataset.status;
+                    } else {
+                        targetStatus = this.getTaskStatus(targetTask);
+                    }
+                    const targetGroup = targetTask.customGroupId;
+                    const targetPriority = targetTask.priority || 'none';
+                    const targetParentId = targetTask.parentId;
+
+                    if ((targetStatus && targetStatus !== draggedStatus) ||
+                        (targetGroup !== draggedGroup) ||
+                        (targetPriority !== draggedPriority) ||
+                        (targetParentId !== draggedParentId)) {
+                        if (!this.draggedTask.isSubscribed) {
+                            isStructuralChange = true;
+                        }
+                    }
+                    // --- [新逻辑结束] ---
+
+                    if ((isInTopSortZone || isInBottomSortZone)) {
+                        if (canSort || isStructuralChange) {
+                            // 执行排序
+                            this.handleSortDrop(targetTask, e);
+                        } else if (canBecomeSibling) {
+                            // 执行成为兄弟任务并排序的操作
+                            this.handleBecomeSiblingDrop(this.draggedTask, targetTask, e);
+                        }
+                    } else if (isInParentChildZone) {
+                        if (canSetParentChild) {
+                            // 执行父子任务设置
+                            this.handleParentChildDrop(targetTask);
+                        } else if (canSort || isStructuralChange) {
+                            // [Fallback] Cannot become child, but can sort (e.g. move across groups/status)
+                            this.handleSortDrop(targetTask, e);
+                        }
                     }
                 }
-                // --- [新逻辑结束] ---
+                this.updateIndicator('none', null, null);
+            });
+        }
 
-                if ((isInTopSortZone || isInBottomSortZone)) {
-                    if (canSort || isStructuralChange) {
-                        // 执行排序
-                        this.handleSortDrop(targetTask, e);
-                    } else if (canBecomeSibling) {
-                        // 执行成为兄弟任务并排序的操作
-                        this.handleBecomeSiblingDrop(this.draggedTask, targetTask, e);
-                    }
-                } else if (isInParentChildZone) {
-                    if (canSetParentChild) {
-                        // 执行父子任务设置
-                        this.handleParentChildDrop(targetTask);
-                    } else if (canSort || isStructuralChange) {
-                        // [Fallback] Cannot become child, but can sort (e.g. move across groups/status)
-                        this.handleSortDrop(targetTask, e);
-                    }
-                }
-            }
-            this.updateIndicator('none', null, null);
-        });
 
         // 添加右键菜单
         taskEl.addEventListener('contextmenu', async (e) => {
@@ -12415,7 +12419,6 @@ export class ProjectKanbanView {
                 border-radius: 6px;
                 padding: 12px;
                 margin-bottom: 8px;
-                cursor: grab;
                 transition: all 0.2s ease;
                 position: relative;
             }

@@ -1,4 +1,4 @@
-import { showMessage, confirm, Dialog, Menu, Constants } from "siyuan";
+import { showMessage, confirm, Dialog, Menu, Constants, getFrontend, getBackend } from "siyuan";
 import { refreshSql, sql, getBlockKramdown, getBlockByID, updateBindBlockAtrrs, openBlock } from "../api";
 import { getLocalDateString, compareDateStrings, getLocalDateTimeString, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../utils/dateUtils";
 import { loadSortConfig, saveSortConfig, getSortMethodName } from "../utils/sortConfig";
@@ -4397,8 +4397,11 @@ export class ReminderPanel {
 
     // 新增：添加拖拽功能
     private addDragFunctionality(element: HTMLElement, reminder: any) {
+        const isAndroid = getBackend().endsWith('android');
+
+        if (isAndroid) return; // 华为平板不能添加lement.draggable = true;
+
         element.draggable = true;
-        element.style.cursor = 'grab';
 
         element.addEventListener('dragstart', (e) => {
             this.isDragging = true;
@@ -4411,7 +4414,6 @@ export class ReminderPanel {
             }
             // 添加 dragging 类，作为保险（并覆盖任何样式冲突）
             try { element.classList.add('dragging'); } catch (e) { }
-            element.style.cursor = 'grabbing';
 
             if (e.dataTransfer) {
                 e.dataTransfer.effectAllowed = 'move';
@@ -4461,7 +4463,6 @@ export class ReminderPanel {
                 element.style.opacity = '';
             }
             try { element.classList.remove('dragging'); } catch (e) { }
-            element.style.cursor = 'grab';
         });
 
         element.addEventListener('dragover', (e) => {

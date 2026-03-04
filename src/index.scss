@@ -839,6 +839,7 @@
     border-radius: 4px;
     margin-bottom: 8px;
     padding: 8px;
+    cursor:pointer;
 
     &--overdue {
         border-color: var(--b3-theme-error-light);
