@@ -1362,8 +1362,13 @@
         }
         if (!emitEvent) return;
         // 通知其他组件（如日历视图）设置项已更新
+        // 携带 fromSettingPanel 标记，避免 settingsUpdateHandler 重复重载
         try {
-            window.dispatchEvent(new CustomEvent('reminderSettingsUpdated'));
+            window.dispatchEvent(
+                new CustomEvent('reminderSettingsUpdated', {
+                    detail: { fromSettingPanel: true },
+                })
+            );
         } catch (err) {
             console.warn('Dispatch settings updated event failed:', err);
         }
@@ -1381,7 +1386,9 @@
         })();
 
         // 监听外部设置变更事件，重新加载设置并刷新 UI
-        const settingsUpdateHandler = async () => {
+        const settingsUpdateHandler = async (e: Event) => {
+            // 忽略由本面板自身 saveSettings 发出的事件，避免重复重载
+            if ((e as CustomEvent)?.detail?.fromSettingPanel) return;
             const loadedSettings = await plugin.loadSettings();
             settings = { ...loadedSettings };
             // 确保 weekStartDay 在加载后是数字（可能以字符串形式保存）
