@@ -112,8 +112,8 @@ export const DEFAULT_SETTINGS = {
     showPomodoroInSummary: true,
     showHabitInSummary: true,
     // 排序配置
-    sortMethod: 'time',
-    sortOrder: 'asc',
+    sortMethod: "priority",
+    sortOrder: "desc",
     // 日历配置
     calendarShowCategoryAndProject: false, // 是否显示分类图标和项目信息
     calendarColorBy: 'priority',
