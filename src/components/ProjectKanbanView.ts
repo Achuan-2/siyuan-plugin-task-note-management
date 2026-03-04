@@ -1,5 +1,6 @@
 import { colorWithOpacity } from "../utils/uiUtils";
-import { showMessage, confirm, Menu, Dialog, Constants } from "siyuan";
+import { showMessage, confirm, Menu, Dialog, Constants, openEmoji } from "siyuan";
+
 
 import { refreshSql, getBlockByID, updateBindBlockAtrrs, openBlock, addBlockProjectId } from "../api";
 import { i18n } from "../pluginInstance";
@@ -2539,6 +2540,25 @@ export class ProjectKanbanView {
         const saveBtn = dialog.element.querySelector('#msSave') as HTMLButtonElement;
         const cancelBtn = dialog.element.querySelector('#msCancel') as HTMLButtonElement;
         const bindBlockBtn = dialog.element.querySelector('#msBindBlockBtn') as HTMLButtonElement;
+
+        // 图标选择事件
+        iconInput.addEventListener('click', (event: MouseEvent) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const rect = iconInput.getBoundingClientRect();
+            openEmoji({
+                position: {
+                    x: rect.left,
+                    y: rect.bottom
+                },
+                selectedCB: (emojiCode: string) => {
+                    // 将十六进制字符串转换为 Emoji 字符
+                    // 处理可能包含多个码点的情况（如国旗、肤色修饰符等，格式如 "1f1fa-1f1f8"）
+                    const codePoints = emojiCode.split(/[-\s]+/).map(cp => parseInt(cp, 16));
+                    iconInput.value = String.fromCodePoint(...codePoints);
+                }
+            });
+        });
 
         // 绑定块按钮点击事件
         bindBlockBtn?.addEventListener('click', async () => {
