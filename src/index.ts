@@ -17,7 +17,7 @@ import { BatchReminderDialog } from "./components/BatchReminderDialog";
 import { CalendarView } from "./components/CalendarView";
 import { EisenhowerMatrixView } from "./components/EisenhowerMatrixView";
 import { CategoryManager } from "./utils/categoryManager";
-import { getLocalTimeString, compareDateStrings, getLogicalDateString, setDayStartTime } from "./utils/dateUtils";
+import { getLocalTimeString, getLocalDateString, compareDateStrings, getLogicalDateString, setDayStartTime } from "./utils/dateUtils";
 import { i18n, setPluginInstance } from "./pluginInstance";
 import { SettingUtils } from "./libs/setting-utils";
 import { PomodoroRecordManager } from "./utils/pomodoroRecord";
@@ -29,7 +29,7 @@ import { ProjectKanbanView } from "./components/ProjectKanbanView";
 import { PomodoroManager } from "./utils/pomodoroManager";
 import SettingPanelComponent from "./SettingPanel.svelte";
 import { exportIcsFile, uploadIcsToCloud } from "./utils/icsUtils";
-import { getFileStat, getFile, hasNotifiedToday, markNotifiedToday, sendNotification, hasReminderNotified, markReminderNotified } from "./api";
+import { getFileStat, getFile, sendNotification } from "./api";
 import { resolveAudioPath } from "./utils/audioUtils";
 import { showVipDialog } from "./components/VipDialog";
 
@@ -571,12 +571,146 @@ export default class ReminderPlugin extends Plugin {
 
 
 
+    /**
+     * 读取通知记录数据
+     */
+    public async readNotifyData(): Promise<{ lastNotified?: string, notifiedKeys?: Record<string, boolean> }> {
+        try {
+            const data = await this.loadData(NOTIFY_DATA_FILE);
+            if (!data || typeof data !== 'object') {
+                return {};
+            }
+
+            // 兼容性处理
+            if (typeof data.lastNotified === 'string' || data.notifiedKeys) {
+                return {
+                    lastNotified: data.lastNotified,
+                    notifiedKeys: data.notifiedKeys || {}
+                };
+            }
+
+            // 旧数据格式迁移 (date -> boolean)
+            const dateKeys = Object.keys(data).filter(k => /\d{4}-\d{2}-\d{2}/.test(k));
+            if (dateKeys.length > 0) {
+                const validDates = dateKeys.filter(k => !!data[k]);
+                if (validDates.length > 0) {
+                    const latest = validDates.sort().pop();
+                    const result = { lastNotified: latest, notifiedKeys: {} };
+                    try {
+                        await this.writeNotifyData(result);
+                    } catch (err) {
+                        console.warn('迁移通知记录文件到新结构失败:', err);
+                    }
+                    return result;
+                }
+            }
+            return {};
+        } catch (error) {
+            console.warn('读取通知记录文件失败:', error);
+            return {};
+        }
+    }
+
+    /**
+     * 写入通知记录数据
+     */
+    public async writeNotifyData(data: { lastNotified?: string, notifiedKeys?: Record<string, boolean> }): Promise<void> {
+        try {
+            await this.saveData(NOTIFY_DATA_FILE, data);
+        } catch (error) {
+            console.error('写入通知记录文件失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 确保通知记录文件存在
+     */
+    public async ensureNotifyDataFile(): Promise<void> {
+        try {
+            const data = await this.loadData(NOTIFY_DATA_FILE);
+            if (!data) {
+                console.log('通知记录文件不存在，创建新文件');
+                await this.writeNotifyData({});
+            }
+        } catch (error) {
+            console.error('检查通知记录文件失败:', error);
+        }
+    }
+
+    /**
+     * 检查某日期是否已提醒过全天事件
+     */
+    public async hasNotifiedToday(date: string): Promise<boolean> {
+        try {
+            const notifyData = await this.readNotifyData();
+            return notifyData.lastNotified === date;
+        } catch (error) {
+            console.warn('检查通知记录失败:', error);
+            return false;
+        }
+    }
+
+    /**
+     * 标记某日期已提醒全天事件
+     */
+    public async markNotifiedToday(date: string): Promise<void> {
+        try {
+            const data = await this.readNotifyData();
+            data.lastNotified = date;
+            await this.writeNotifyData(data);
+        } catch (error) {
+            console.error('标记通知记录失败:', error);
+        }
+    }
+
+    /**
+     * 检查特定的提醒Key是否已通知 (用于多窗口同步)
+     */
+    public async hasReminderNotified(key: string): Promise<boolean> {
+        try {
+            const data = await this.readNotifyData();
+            return !!data.notifiedKeys?.[key];
+        } catch (error) {
+            return false;
+        }
+    }
+
+    /**
+     * 标记特定的提醒Key已通知
+     */
+    public async markReminderNotified(key: string): Promise<void> {
+        try {
+            const data = await this.readNotifyData();
+            if (!data.notifiedKeys) data.notifiedKeys = {};
+            data.notifiedKeys[key] = true;
+
+            // 清理旧日期 (只保留当天的通知记录，减少文件大小)
+            const dateMatch = key.match(/\d{4}-\d{2}-\d{2}/);
+            if (dateMatch) {
+                const today = dateMatch[0];
+                const keys = Object.keys(data.notifiedKeys);
+                if (keys.length > 100) {
+                    for (const k of keys) {
+                        if (!k.includes(today)) {
+                            delete data.notifiedKeys[k];
+                        }
+                    }
+                }
+            }
+
+            await this.writeNotifyData(data);
+        } catch (error) {
+            console.error('标记提醒记录失败:', error);
+        }
+    }
+
     async onload() {
         await this.loadSettings();
 
         // 调试：显示当前 frontend / backend 环境
-        // new Dialog({ title: "getFrontend", content: `<div style="padding:16px">${getFrontend()}</div>`, width: "300px" });
-        // new Dialog({ title: "getBackend", content: `<div style="padding:16px">${getBackend()}</div>`, width: "300px" });
+        new Dialog({ title: "getFrontend", content: `<div style="padding:16px">${getFrontend()}</div>`, width: "300px" });
+        new Dialog({ title: "getBackend", content: `<div style="padding:16px">${getBackend()}</div>`, width: "300px" });
 
         // 添加自定义图标
         this.addIcons(`
@@ -603,8 +737,7 @@ export default class ReminderPlugin extends Plugin {
         await this.loadHolidayData();
 
         try {
-            const { ensureNotifyDataFile } = await import("./api");
-            await ensureNotifyDataFile();
+            await this.ensureNotifyDataFile();
         } catch (error) {
             console.warn('初始化通知记录文件失败:', error);
         }
@@ -741,6 +874,25 @@ export default class ReminderPlugin extends Plugin {
         const frontend = getFrontend();
         const isMobile = frontend.endsWith('mobile');
         const isBrowserDesktop = frontend === 'browser-desktop';
+
+        // 为了测试NotificationDialog和showReminderSystemNotification能否在手机上显示，onload就显示测试数据
+        setTimeout(() => {
+            const testReminder = {
+                id: 'test-reminder-id',
+                blockId: 'test-block-id',
+                title: '测试提醒(用于手机端测试)',
+                note: '这是一条测试通知内容，验证在手机端是否能正常显示NotificationDialog。',
+                priority: 'high',
+                date: this.currentLogicalDate || new Date().toISOString().split('T')[0],
+                categoryName: '测试分类',
+                categoryColor: '#ff0000',
+                time: '12:00',
+                isAllDay: false
+            };
+            NotificationDialog.show(testReminder);
+            this.showReminderSystemNotification('测试系统通知标题', '测试系统通知内容，用于手机端测试', testReminder);
+        }, 3000);
+
         if (!isMobile && !isBrowserDesktop) {
             // 尝试恢复已存在的番茄钟已独立窗口
             import("./components/PomodoroTimer").then(async ({ PomodoroTimer }) => {
@@ -2640,7 +2792,7 @@ export default class ReminderPlugin extends Plugin {
             } catch (err) {
                 console.warn('加载订阅任务失败，跳过订阅提醒检查:', err);
             }
-            await this.checkTimeReminders(reminderDataForTimeCheck, today, currentTime);
+            await this.checkTimeReminders(reminderDataForTimeCheck, getLocalDateString(), currentTime);
 
             // 检查习惯提醒（当有习惯在今日设置了 reminderTime 时，也应触发提醒）
             try {
@@ -2663,7 +2815,7 @@ export default class ReminderPlugin extends Plugin {
             // 检查今天是否已经提醒过全天事件（先检查持久化记录，防止重启后重复通知）
             const dailyNotifyKey = `daily_${today}`;
             try {
-                const alreadyNotified = await hasNotifiedToday(today);
+                const alreadyNotified = await this.hasNotifiedToday(today);
                 if (alreadyNotified) {
                     return;
                 }
@@ -2900,7 +3052,7 @@ export default class ReminderPlugin extends Plugin {
                 if (remindersToShow.length > 0) {
                     this.notifiedReminders.set(dailyNotifyKey, true);
                     try {
-                        await markNotifiedToday(today);
+                        await this.markNotifiedToday(today);
                     } catch (err) {
                         console.warn('写入持久化通知记录失败:', err);
                     }
@@ -2943,13 +3095,13 @@ export default class ReminderPlugin extends Plugin {
                         const notifyKey = `${reminderObj.id}_${today}_${reminderObj.time}_time`;
                         if (!this.notifiedReminders.has(notifyKey) && this.shouldNotifyNow(reminderObj, today, currentTime, 'time')) {
                             // 二次检查持久化记录，防止多窗口并发
-                            if (await hasReminderNotified(notifyKey)) {
+                            if (await this.hasReminderNotified(notifyKey)) {
                                 this.notifiedReminders.set(notifyKey, true);
                             } else {
                                 console.debug('checkTimeReminders - triggering time reminder', { id: reminderObj.id, date: reminderObj.date, time: reminderObj.time });
                                 await this.showTimeReminder(reminderObj, 'time');
                                 this.notifiedReminders.set(notifyKey, true);
-                                await markReminderNotified(notifyKey);
+                                await this.markReminderNotified(notifyKey);
                             }
                         }
                     }
@@ -2964,13 +3116,13 @@ export default class ReminderPlugin extends Plugin {
                             const notifyKey = `${reminderObj.id}_${today}_${reminderObj.customReminderTime}_custom`;
                             if (!this.notifiedReminders.has(notifyKey) && this.shouldNotifyNow(reminderObj, today, currentTime, 'customReminderTime')) {
                                 // 二次检查持久化记录
-                                if (await hasReminderNotified(notifyKey)) {
+                                if (await this.hasReminderNotified(notifyKey)) {
                                     this.notifiedReminders.set(notifyKey, true);
                                 } else {
                                     console.debug('checkTimeReminders - triggering customReminderTime reminder', { id: reminderObj.id, date: reminderObj.date, customReminderTime: reminderObj.customReminderTime });
                                     await this.showTimeReminder(reminderObj, 'customReminderTime');
                                     this.notifiedReminders.set(notifyKey, true);
-                                    await markReminderNotified(notifyKey);
+                                    await this.markReminderNotified(notifyKey);
                                 }
                             }
                         }
@@ -2993,14 +3145,14 @@ export default class ReminderPlugin extends Plugin {
                                 // 只检测当前分钟，不检测过期提醒
                                 if (!this.notifiedReminders.has(notifyKey) && currentNum === reminderNum) {
                                     // 二次检查持久化记录
-                                    if (await hasReminderNotified(notifyKey)) {
+                                    if (await this.hasReminderNotified(notifyKey)) {
                                         this.notifiedReminders.set(notifyKey, true);
                                     } else {
                                         console.debug('checkTimeReminders - triggering reminderTimes reminder', { id: reminderObj.id, rt });
                                         const tempReminder = { ...reminderObj, customReminderTime: rt, note: note ? (reminderObj.note ? reminderObj.note + '\n' + note : note) : reminderObj.note };
                                         await this.showTimeReminder(tempReminder, 'customReminderTime');
                                         this.notifiedReminders.set(notifyKey, true);
-                                        await markReminderNotified(notifyKey);
+                                        await this.markReminderNotified(notifyKey);
                                     }
                                 }
                             }
@@ -3068,13 +3220,13 @@ export default class ReminderPlugin extends Plugin {
                             const notifyKey = `${instance.instanceId}_${today}_${instance.time}_time`;
                             if (!this.notifiedReminders.has(notifyKey) && this.shouldNotifyNow(instance, today, currentTime, 'time')) {
                                 // 二次检查持久化记录
-                                if (await hasReminderNotified(notifyKey)) {
+                                if (await this.hasReminderNotified(notifyKey)) {
                                     this.notifiedReminders.set(notifyKey, true);
                                 } else {
                                     console.debug('checkTimeReminders - triggering repeat instance time reminder', { id: instance.instanceId, date: instance.date, time: instance.time });
                                     await this.showTimeReminder(instance, 'time');
                                     this.notifiedReminders.set(notifyKey, true);
-                                    await markReminderNotified(notifyKey);
+                                    await this.markReminderNotified(notifyKey);
                                 }
                             }
                         }
@@ -3088,13 +3240,13 @@ export default class ReminderPlugin extends Plugin {
                                 const notifyKey = `${instance.instanceId}_${today}_${instance.customReminderTime}_custom`;
                                 if (!this.notifiedReminders.has(notifyKey) && this.shouldNotifyNow(instance, today, currentTime, 'customReminderTime')) {
                                     // 二次检查持久化记录
-                                    if (await hasReminderNotified(notifyKey)) {
+                                    if (await this.hasReminderNotified(notifyKey)) {
                                         this.notifiedReminders.set(notifyKey, true);
                                     } else {
                                         console.debug('checkTimeReminders - triggering repeat instance customReminderTime reminder', { id: instance.instanceId, date: instance.date, customReminderTime: instance.customReminderTime });
                                         await this.showTimeReminder(instance, 'customReminderTime');
                                         this.notifiedReminders.set(notifyKey, true);
-                                        await markReminderNotified(notifyKey);
+                                        await this.markReminderNotified(notifyKey);
                                     }
                                 }
                             }
@@ -3116,14 +3268,14 @@ export default class ReminderPlugin extends Plugin {
                                 const notifyKey = `${instance.instanceId}_${today}_${rt}_reminderTimes`;
                                 if (!this.notifiedReminders.has(notifyKey) && currentNum === reminderNum) {
                                     // 二次检查持久化记录
-                                    if (await hasReminderNotified(notifyKey)) {
+                                    if (await this.hasReminderNotified(notifyKey)) {
                                         this.notifiedReminders.set(notifyKey, true);
                                     } else {
                                         console.debug('checkTimeReminders - triggering repeat instance reminderTimes reminder', { id: instance.instanceId, rt });
                                         const tempInstance = { ...instance, customReminderTime: rt };
                                         await this.showTimeReminder(tempInstance, 'customReminderTime');
                                         this.notifiedReminders.set(notifyKey, true);
-                                        await markReminderNotified(notifyKey);
+                                        await this.markReminderNotified(notifyKey);
                                     }
                                 }
                             }
@@ -3405,7 +3557,7 @@ export default class ReminderPlugin extends Plugin {
                         if (this.notifiedHabits.has(notifyKey)) continue;
 
                         // 二次检查持久化记录
-                        if (await hasReminderNotified(notifyKey)) {
+                        if (await this.hasReminderNotified(notifyKey)) {
                             this.notifiedHabits.set(notifyKey, true);
                             continue;
                         }
@@ -3431,10 +3583,10 @@ export default class ReminderPlugin extends Plugin {
 
                         // 显示系统弹窗（如果启用）
                         const systemNotificationEnabled = await this.getReminderSystemNotificationEnabled();
-                        const isAndroid = getBackend().endsWith('android');;
+                        const isMobileDevice = getFrontend().endsWith('mobile') || getBackend().endsWith('android') || getBackend().endsWith('ios');
 
                         // 电脑端且开启了系统通知时，不显示思源内部通知；手机端始终显示内部通知
-                        if (isAndroid || !systemNotificationEnabled) {
+                        if (isMobileDevice || !systemNotificationEnabled) {
                             NotificationDialog.show(reminderInfo as any);
                         }
 
@@ -3449,7 +3601,7 @@ export default class ReminderPlugin extends Plugin {
 
                         // 标记已通知，避免重复通知
                         this.notifiedHabits.set(notifyKey, true);
-                        await markReminderNotified(notifyKey);
+                        await this.markReminderNotified(notifyKey);
                     }
                 } catch (err) {
                     console.warn('处理单个习惯时出错', err);
@@ -3498,7 +3650,7 @@ export default class ReminderPlugin extends Plugin {
 
             // 检查是否启用系统弹窗通知
             const systemNotificationEnabled = await this.getReminderSystemNotificationEnabled();
-            const isAndroid = getBackend().endsWith('android');;
+            const isMobileDevice = getFrontend().endsWith('mobile') || getBackend().endsWith('android') || getBackend().endsWith('ios');
 
             // 记录触发字段，方便调试与后续显示一致性处理
             try { (reminderInfo as any)._triggerField = triggerField; } catch (e) { }
@@ -3510,7 +3662,7 @@ export default class ReminderPlugin extends Plugin {
             });
 
             // 电脑端且开启了系统通知时，不显示思源内部通知；手机端始终显示内部通知
-            if (isAndroid || !systemNotificationEnabled) {
+            if (isMobileDevice || !systemNotificationEnabled) {
                 NotificationDialog.show(reminderInfo);
             }
 
@@ -3546,9 +3698,9 @@ export default class ReminderPlugin extends Plugin {
      */
     private showReminderSystemNotification(title: string, message: string, reminderInfo?: any) {
         // 判断是否是移动端
-        const isAndroid = getBackend().endsWith('android');
+        const isMobileDevice = getFrontend().endsWith('mobile') || getBackend().endsWith('android') || getBackend().endsWith('ios');
 
-        if (isAndroid) {
+        if (isMobileDevice) {
             // 手机端：使用内核接口进行系统通知
             try {
                 sendNotification(title, message);
