@@ -702,7 +702,9 @@ export async function pushErrMsg(msg: string, timeout: number = 7000) {
 }
 
 export async function sendNotification(title: string, body: string, delayInSeconds: number = 0) {
+    const plugin = getPluginInstance();
     let payload = {
+        channel: plugin.i18n('name'),
         title: title,
         body: body,
         delayInSeconds: delayInSeconds
