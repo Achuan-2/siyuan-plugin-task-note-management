@@ -5923,8 +5923,8 @@ export class CalendarView {
             // Add completed task times if enabled and in Day/Week view
             if (this.showCompletedTaskTime && this.calendar && this.calendar.view) {
                 const viewType = this.calendar.view.type;
-                if (viewType === 'timeGridDay' || viewType === 'timeGridWeek' || viewType === 'timeGridMultiDays' ||
-                    viewType === 'dayGridDay' || viewType === 'dayGridWeek' || viewType === 'dayGridMultiDays') {
+                if (viewType === 'timeGridDay' || viewType === 'timeGridWeek' || viewType === 'timeGridMultiDays' || viewType === 'dayGridDay') {
+                    //  || viewType === 'dayGridWeek' || viewType === 'dayGridMultiDays 周看板暂时不显示完成时间避免卡死
                     const completedTaskEvents = await this.getCompletedTaskTimeEvents(startDate, endDate, reminderData, projectData);
                     events.push(...completedTaskEvents);
                 }
