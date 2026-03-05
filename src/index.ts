@@ -875,23 +875,23 @@ export default class ReminderPlugin extends Plugin {
         const isMobile = frontend.endsWith('mobile');
         const isBrowserDesktop = frontend === 'browser-desktop';
 
-        // 为了测试NotificationDialog和showReminderSystemNotification能否在手机上显示，onload就显示测试数据
-        setTimeout(() => {
-            const testReminder = {
-                id: 'test-reminder-id',
-                blockId: 'test-block-id',
-                title: '测试提醒(用于手机端测试)',
-                note: '这是一条测试通知内容，验证在手机端是否能正常显示NotificationDialog。',
-                priority: 'high',
-                date: this.currentLogicalDate || new Date().toISOString().split('T')[0],
-                categoryName: '测试分类',
-                categoryColor: '#ff0000',
-                time: '12:00',
-                isAllDay: false
-            };
-            NotificationDialog.show(testReminder);
-            this.showReminderSystemNotification('测试系统通知标题', '测试系统通知内容，用于手机端测试', testReminder);
-        }, 3000);
+        // // 为了测试NotificationDialog和showReminderSystemNotification能否在手机上显示，onload就显示测试数据
+        // setTimeout(() => {
+        //     const testReminder = {
+        //         id: 'test-reminder-id',
+        //         blockId: 'test-block-id',
+        //         title: '测试提醒(用于手机端测试)',
+        //         note: '这是一条测试通知内容，验证在手机端是否能正常显示NotificationDialog。',
+        //         priority: 'high',
+        //         date: this.currentLogicalDate || new Date().toISOString().split('T')[0],
+        //         categoryName: '测试分类',
+        //         categoryColor: '#ff0000',
+        //         time: '12:00',
+        //         isAllDay: false
+        //     };
+        //     NotificationDialog.show(testReminder);
+        //     this.showReminderSystemNotification('测试系统通知标题', '测试系统通知内容，用于手机端测试', testReminder);
+        // }, 3000);
 
         if (!isMobile && !isBrowserDesktop) {
             // 尝试恢复已存在的番茄钟已独立窗口
