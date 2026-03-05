@@ -6,18 +6,8 @@ cd "$(dirname "$0")"
 # Get current branch
 current_branch=$(git rev-parse --abbrev-ref HEAD)
 
-# Ensure we're on private-branch
-if [ "$current_branch" != "private-branch" ]; then
-    echo "Current branch is $current_branch, switching to private-branch..."
-    git checkout private-branch || {
-        echo "Error: Failed to switch to private-branch"
-        exit 1
-    }
-fi
-
 # Get version from plugin.json
 version=v$(grep -oP '(?<="version": ")[^"]+' plugin.json) 
-
 # Check if version already exists
 if git rev-parse "$version" >/dev/null 2>&1 || gh release view "$version" >/dev/null 2>&1; then
     read -p "Version $version already exists. Overwrite? (y/n) " confirm
@@ -26,36 +16,13 @@ if git rev-parse "$version" >/dev/null 2>&1 || gh release view "$version" >/dev/
         exit 0
     fi
 fi
-
 echo "Preparing release for version: $version"
 
-# Commit changes in private-branch
-echo "Committing changes in private-branch..."
+# Commit changes
+echo "Committing changes..."
 git add .
-git commit -m "🔖 $version" || echo "No changes to commit in private-branch"
-git push private HEAD:main
-# Switch to main branch
-echo "Switching to main branch..."
-git checkout main
-git pull origin main
-
-# Copy CHANGELOG.md and plugin.json from private-branch
-echo "Copying CHANGELOG.md and plugin.json from private-branch..."
-git checkout private-branch -- CHANGELOG.md plugin.json README_en_US.md  README.md
-
-# Commit the updates in main branch
-echo "Committing updates in main branch..."
-git add CHANGELOG.md plugin.json README_en_US.md README.md
-git commit -m "📝 Update CHANGELOG and plugin.json for $version" || echo "No changes to commit"
-
-# Push main branch
-echo "Pushing main branch..."
+git commit -m "🔖 $version" || echo "No changes to commit"
 git push origin main
-
-# Switch back to private-branch
-echo "Switching back to private-branch..."
-git checkout private-branch
-
 
 echo "Creating release for version: $version"
 
