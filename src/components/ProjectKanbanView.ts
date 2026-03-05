@@ -2547,6 +2547,8 @@ export class ProjectKanbanView {
             event.stopPropagation();
             const rect = iconInput.getBoundingClientRect();
             openEmoji({
+                hideDynamicIcon: true,
+                hideCustomIcon: true, 
                 position: {
                     x: rect.left,
                     y: rect.bottom
