@@ -1,10 +1,3 @@
-![](https://fastly.jsdelivr.net/gh/Achuan-2/PicBed@pic/assets/17664627371481766462737091.png)
-
-
-## ✨Star History
-
-<img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Achuan-2/siyuan-plugin-task-note-management&type=Date" />
-
 ## 📒插件简介
 
 一款在思源笔记里实现任务管理功能的插件，为了践行防弹笔记法而开发。支持任务提醒、日历视图查看行事历、项目管理、四象限面板、番茄钟专注、习惯打卡等功能
@@ -14,6 +7,10 @@
 
 见: [CHANGELOG.md](https://cdn.jsdelivr.net/gh/Achuan-2/siyuan-plugin-task-note-management@main/CHANGELOG.md
 )
+
+## ✨Star History
+
+<img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Achuan-2/siyuan-plugin-task-note-management&type=Date" />
 
 ## 📺视频与博客介绍
 
