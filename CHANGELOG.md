@@ -1,5 +1,21 @@
+## v6.2.4 / 20260305
+- 🎨 适配思源v3.5.10 emoji弹窗
+- 🎨 适配思源安卓/鸿蒙v3.5.10手机端提醒
+- 🐛 日历视图：周看板和多日看板暂时不显示任务完成时间，目前有卡死问题，暂时找不到原因
+
+---
+
+- 🎨 Adapted to SiYuan v3.5.10 emoji pop-up window
+- 🎨 Adapted to SiYuan Android/HarmonyOS v3.5.10 mobile reminders
+- 🐛 Calendar view: Weekly board and multi-day board temporarily do not display task completion time; currently, there is a freezing issue, and the cause cannot be found for now
+
+
 ## v6.2.3 / 20260305
 - 🎨 日期智能识别：单个块右键设置任务识别结束时间
+
+---
+
+- 🎨 Smart Date Recognition: Right-click on a single block to set task recognition end time
 
 ## v6.2.2 / 20260304
 - 🎨 日期智能识别优化：
