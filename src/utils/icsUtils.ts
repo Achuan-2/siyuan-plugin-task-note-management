@@ -51,6 +51,80 @@ export async function exportIcsFile(
             return [parts[0], parts[1]];
         }
 
+        /**
+         * 辅助函数：根据 reminderTimes 或默认规则构建 alarms。
+         * - 有 reminderTimes：用 ics 库原生 trigger 数组格式，生成绝对时间 VALARM。
+         * - 无 reminderTimes 且有具体时间：返回默认 15 分钟相对提醒。
+         * - 已完成任务：返回 []。
+         *
+         * reminderTimes.time 格式为 "YYYY-MM-DDTHH:mm"，视为 UTC 时间。
+         * ics 库的 DateArray 默认按本地时间处理，因此：
+         *   1. 追加 ":00Z" 将 time 字符串强制按 UTC 解析。
+         *   2. 用 getFullYear/getMonth 等取本地时间分量传给库。
+         *   3. 库内部将本地时间转回 UTC，正好恢复原始 UTC 时间。
+         * 例："2026-03-03T10:05" (UTC+8 环境)
+         *   → new Date("2026-03-03T10:05:00Z") → 本地 18:05
+         *   → trigger: [2026, 3, 3, 18, 5] 传给库
+         *   → 库输出 TRIGGER;VALUE=DATE-TIME:20260303T100500Z ✅
+         *
+         * @param taskTitle      事件标题（用于 alarm description）
+         * @param completed      任务是否已完成
+         * @param startTimeArray 任务开始时间 [hour, minute]，全天事件为 null
+         * @param reminderTimes  任务的提醒时间数组，格式 [{time: 'YYYY-MM-DDTHH:mm', note: ''}]
+         */
+        function buildAlarms(
+            taskTitle: string,
+            completed: boolean,
+            startTimeArray: [number, number] | null,
+            reminderTimes?: Array<{ time: string; note: string }>
+        ): any[] {
+            if (completed) return [];
+
+            if (Array.isArray(reminderTimes) && reminderTimes.length > 0) {
+                const alarms: any[] = [];
+                for (const rt of reminderTimes) {
+                    if (!rt.time) continue;
+                    try {
+                        // reminderTimes.time 是本地时间（如 "2026-03-03T10:05"），
+                        // 直接 new Date() 在浏览器里按本地时间解析，
+                        // getHours/getMinutes 取本地分量传给 ics 库，
+                        // ics 库内部将本地时间转 UTC 输出到 ICS 文件。
+                        // 例（UTC+8）: "2026-03-03T10:05" → 本地 10:05 → UTC 02:05Z ✅
+                        const dt = new Date(rt.time);
+                        if (isNaN(dt.getTime())) continue;
+                        const trigger: [number, number, number, number, number] = [
+                            dt.getFullYear(),
+                            dt.getMonth() + 1,
+                            dt.getDate(),
+                            dt.getHours(),   // 本地小时，ics 库负责转 UTC
+                            dt.getMinutes(),
+                        ];
+                        alarms.push({
+                            action: 'display',
+                            description: rt.note || taskTitle,
+                            trigger,
+                        });
+                    } catch (e) {
+                        console.warn('构建 reminderTime VALARM 失败', e, rt);
+                    }
+                }
+                if (alarms.length > 0) return alarms;
+            }
+
+            // 默认：仅当有具体时间时添加 15 分钟提前提醒
+            if (startTimeArray) {
+                return [
+                    {
+                        action: 'display',
+                        description: taskTitle,
+                        trigger: { before: true, minutes: 15 },
+                    },
+                ];
+            }
+
+            return [];
+        }
+
         const events: any[] = [];
 
         function buildRRuleFromRepeat(repeat: any, startDateStr: string) {
@@ -266,6 +340,7 @@ export async function exportIcsFile(
                             let childMatches = true;
                             if (filterType === 'completed' && !child.completed) childMatches = false;
                             if (filterType === 'uncompleted' && child.completed) childMatches = false;
+                            if (child.hideInCalendar) childMatches = false;
 
                             if (!childMatches) continue;
 
@@ -323,14 +398,14 @@ export async function exportIcsFile(
                                 ];
                             }
 
-                            if (!child.completed && childStartTimeArray) {
-                                childEvent.alarms = [
-                                    {
-                                        action: 'display',
-                                        description: childTitle,
-                                        trigger: { before: true, minutes: 15 },
-                                    },
-                                ];
+                            const childAlarms = buildAlarms(
+                                childTitle,
+                                child.completed,
+                                childStartTimeArray,
+                                child.reminderTimes
+                            );
+                            if (childAlarms.length > 0) {
+                                childEvent.alarms = childAlarms;
                             }
 
                             if (child.repeat && child.repeat.enabled) {
@@ -364,6 +439,7 @@ export async function exportIcsFile(
             let parentMatches = true;
             if (filterType === 'completed' && !r.completed) parentMatches = false;
             if (filterType === 'uncompleted' && r.completed) parentMatches = false;
+            if (r.hideInCalendar) parentMatches = false;
 
             if (!parentMatches) continue;
 
@@ -556,14 +632,14 @@ export async function exportIcsFile(
                 ];
             }
 
-            if (!r.completed && startTimeArray) {
-                event.alarms = [
-                    {
-                        action: 'display',
-                        description: title,
-                        trigger: { before: true, minutes: 15 },
-                    },
-                ];
+            const parentAlarms = buildAlarms(
+                title,
+                r.completed,
+                startTimeArray,
+                r.reminderTimes
+            );
+            if (parentAlarms.length > 0) {
+                event.alarms = parentAlarms;
             }
 
             if (r.repeat && r.repeat.enabled) {
@@ -639,14 +715,14 @@ export async function exportIcsFile(
                                 ];
                             }
 
-                            if (!r.completed && startTimeArray) {
-                                occEvent.alarms = [
-                                    {
-                                        action: 'display',
-                                        description: title,
-                                        trigger: { before: true, minutes: 15 },
-                                    },
-                                ];
+                            const lunarYearlyAlarms = buildAlarms(
+                                title,
+                                r.completed,
+                                startTimeArray,
+                                r.reminderTimes
+                            );
+                            if (lunarYearlyAlarms.length > 0) {
+                                occEvent.alarms = lunarYearlyAlarms;
                             }
 
                             events.push(occEvent);
@@ -740,14 +816,14 @@ export async function exportIcsFile(
                                             ];
                                         }
 
-                                        if (!r.completed && startTimeArray) {
-                                            occEvent.alarms = [
-                                                {
-                                                    action: 'display',
-                                                    description: title,
-                                                    trigger: { before: true, minutes: 15 },
-                                                },
-                                            ];
+                                        const lunarMonthlyAlarms = buildAlarms(
+                                            title,
+                                            r.completed,
+                                            startTimeArray,
+                                            r.reminderTimes
+                                        );
+                                        if (lunarMonthlyAlarms.length > 0) {
+                                            occEvent.alarms = lunarMonthlyAlarms;
                                         }
 
                                         events.push(occEvent);
@@ -853,6 +929,9 @@ export async function uploadIcsToCloud(plugin: any, settings: any, silent: boole
         if (syncMethod === 's3') {
             // S3 同步方式
             await uploadToS3(settings, icsContent, fullFileName, plugin, silent);
+        } else if (syncMethod === 'webdav') {
+            // WebDAV 同步方式
+            await uploadToWebdav(settings, icsContent, fullFileName, plugin, silent);
         } else {
             // 思源服务器同步方式
             await uploadToSiyuan(settings, icsContent, plugin, silent);
@@ -860,6 +939,107 @@ export async function uploadIcsToCloud(plugin: any, settings: any, silent: boole
     } catch (err) {
         console.error('上传ICS到云端失败:', err);
         await pushErrMsg('上传ICS到云端失败: ' + (err.message || err));
+    }
+}
+
+/**
+ * 上传到WebDAV服务器
+ */
+async function uploadToWebdav(settings: any, icsContent: string, fileName: string, plugin: any, silent: boolean = false) {
+    try {
+        const url = settings.webdavUrl;
+        const username = settings.webdavUsername || '';
+        const password = settings.webdavPassword || '';
+
+        if (!url) {
+            await pushErrMsg('请先配置 WebDAV 网址');
+            return;
+        }
+
+        let targetUrl = url;
+        if (!targetUrl.endsWith('/')) {
+            targetUrl += '/';
+        }
+        const dirUrl = targetUrl;
+        targetUrl += fileName;
+
+        const credentials = btoa(unescape(encodeURIComponent(`${username}:${password}`)));
+
+        let response = await fetch(targetUrl, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'text/calendar; charset=utf-8',
+                'Authorization': `Basic ${credentials}`
+            },
+            body: icsContent
+        });
+
+        if (response.status === 409) {
+            // 可能是由于所在的目录不存在，尝试先创建该目录 (WebDAV: MKCOL)
+            // 兼容坚果云等普通 WebDAV 服务
+            try {
+                await fetch(dirUrl, {
+                    method: 'MKCOL',
+                    headers: {
+                        'Authorization': `Basic ${credentials}`
+                    }
+                });
+            } catch (e) {
+                console.warn('MKCOL 尝试创建目录失败 (可忽略):', e);
+            }
+
+            // 再次重试 PUT 请求
+            response = await fetch(targetUrl, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'text/calendar; charset=utf-8',
+                    'Authorization': `Basic ${credentials}`
+                },
+                body: icsContent
+            });
+        }
+
+        if (!response.ok) {
+            let errorMsg = `HTTP error! status: ${response.status} ${response.statusText}`;
+            if (response.status === 409) {
+                errorMsg += ` (冲突: 请先在 WebDAV/WebDAV 服务器中手动创建对应的文件夹)`;
+            }
+            throw new Error(errorMsg);
+        }
+
+        let displayUrl = targetUrl;
+        try {
+            const urlObj = new URL(targetUrl);
+            if (username) {
+                urlObj.username = encodeURIComponent(username);
+            }
+            if (password) {
+                urlObj.password = encodeURIComponent(password);
+            }
+            displayUrl = urlObj.toString();
+        } catch (e) {
+            console.warn('URL 解析失败，无法在URL中嵌入凭据', e);
+        }
+
+        settings.icsCloudUrl = displayUrl;
+        settings.icsLastSyncAt = new Date().toISOString();
+
+        // 保存设置到文件
+        await plugin.saveSettings(settings);
+
+        try {
+            window.dispatchEvent(new CustomEvent('reminderSettingsUpdated'));
+        } catch (e) {
+            console.warn('触发设置更新事件失败:', e);
+        }
+
+        if (!silent) {
+            await pushMsg(`ICS文件已上传到WebDAV`);
+        }
+        console.log('ICS 文件上传到 WebDAV 成功');
+    } catch (err) {
+        console.error('上传到WebDAV失败:', err);
+        throw new Error('上传到WebDAV失败: ' + (err.message || err));
     }
 }
 

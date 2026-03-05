@@ -6,7 +6,6 @@
     import { showMessage, confirm } from 'siyuan';
 
     export let plugin: any;
-    export let onClose: () => void;
     export let onFilterApplied: (filter: FilterConfig) => void;
 
     type DateFilterType =
@@ -557,8 +556,11 @@
         {#if isEditing}
             <div class="filter-editor-header-input">
                 <div class="b3-form__group" style="margin-bottom: 0;">
-                    <label class="b3-form__label">{i18n('filterName')}</label>
+                    <label class="b3-form__label" for="filter-name-input">
+                        {i18n('filterName')}
+                    </label>
                     <input
+                        id="filter-name-input"
                         type="text"
                         class="b3-text-field"
                         bind:value={filterName}
@@ -569,7 +571,7 @@
 
             <div class="filter-editor-content">
                 <div class="b3-form__group">
-                    <label class="b3-form__label">{i18n('dateFilters')}</label>
+                    <span class="b3-form__label">{i18n('dateFilters')}</span>
                     <div class="filter-options">
                         <div
                             class="filter-option"
@@ -646,9 +648,12 @@
 
                 {#if selectedDateFilters.includes('custom_range')}
                     <div class="b3-form__group">
-                        <label class="b3-form__label">{i18n('dateRange')}</label>
+                        <label class="b3-form__label" for="custom-range-start">
+                            {i18n('dateRange')}
+                        </label>
                         <div style="display: flex; gap: 8px; align-items: center;">
                             <input
+                                id="custom-range-start"
                                 type="date"
                                 class="b3-text-field"
                                 bind:value={customRangeStart}
@@ -668,7 +673,7 @@
                 {/if}
 
                 <div class="b3-form__group">
-                    <label class="b3-form__label">{i18n('statusFilters')}</label>
+                    <span class="b3-form__label">{i18n('statusFilters')}</span>
                     <div class="filter-options">
                         <div
                             class="filter-option"
@@ -695,7 +700,7 @@
                 </div>
 
                 <div class="b3-form__group">
-                    <label class="b3-form__label">{i18n('projectFilters')}</label>
+                    <span class="b3-form__label">{i18n('projectFilters')}</span>
                     <div class="filter-options">
                         <div
                             class="filter-option"
@@ -725,7 +730,7 @@
                 </div>
 
                 <div class="b3-form__group">
-                    <label class="b3-form__label">{i18n('categoryFilters')}</label>
+                    <span class="b3-form__label">{i18n('categoryFilters')}</span>
                     <div class="filter-options">
                         <div
                             class="filter-option"
@@ -759,7 +764,7 @@
                 </div>
 
                 <div class="b3-form__group">
-                    <label class="b3-form__label">{i18n('priorityFilters')}</label>
+                    <span class="b3-form__label">{i18n('priorityFilters')}</span>
                     <div class="filter-options">
                         <div
                             class="filter-option"

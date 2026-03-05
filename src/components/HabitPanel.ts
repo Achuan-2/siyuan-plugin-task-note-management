@@ -8,6 +8,7 @@ import { HabitEditDialog } from "./HabitEditDialog";
 import { HabitStatsDialog } from "./HabitStatsDialog";
 import { HabitGroupManageDialog } from "./HabitGroupManageDialog";
 import { HabitCheckInEmojiDialog } from "./HabitCheckInEmojiDialog";
+import { getBackend } from "siyuan";
 
 export interface HabitCheckInEmoji {
     emoji: string;
@@ -665,60 +666,62 @@ export class HabitPanel {
             const sortedHabits = this.sortHabitsInGroup(habits);
             sortedHabits.forEach(habit => {
                 const habitCard = this.createHabitCard(habit);
-
-                // 启用拖拽：仅在同一分组内按优先级排序时可拖拽调整
-                habitCard.draggable = true;
-                habitCard.dataset.habitId = habit.id;
-                habitCard.style.cursor = 'grab';
-
-                habitCard.addEventListener('dragstart', (e) => {
-                    this.draggingHabitId = habit.id;
-                    habitCard.style.opacity = '0.5';
-                    habitCard.style.cursor = 'grabbing';
-                    if (e.dataTransfer) {
-                        e.dataTransfer.effectAllowed = 'move';
-                        e.dataTransfer.setData('text/plain', habit.id);
-                    }
-                });
-
-                habitCard.addEventListener('dragend', () => {
-                    this.draggingHabitId = null;
-                    habitCard.style.opacity = '';
+                const isAndroid = getBackend().endsWith('android');
+                if (!isAndroid) {                // 启用拖拽：仅在同一分组内按优先级排序时可拖拽调整
+                    habitCard.draggable = true;
+                    habitCard.dataset.habitId = habit.id;
                     habitCard.style.cursor = 'grab';
-                    this.clearDragOver();
-                });
 
-                habitCard.addEventListener('dragover', (e) => {
-                    if (this.draggingHabitId && this.draggingHabitId !== habit.id) {
+                    habitCard.addEventListener('dragstart', (e) => {
+                        this.draggingHabitId = habit.id;
+                        habitCard.style.opacity = '0.5';
+                        habitCard.style.cursor = 'grabbing';
+                        if (e.dataTransfer) {
+                            e.dataTransfer.effectAllowed = 'move';
+                            e.dataTransfer.setData('text/plain', habit.id);
+                        }
+                    });
+
+                    habitCard.addEventListener('dragend', () => {
+                        this.draggingHabitId = null;
+                        habitCard.style.opacity = '';
+                        habitCard.style.cursor = 'grab';
+                        this.clearDragOver();
+                    });
+
+                    habitCard.addEventListener('dragover', (e) => {
+                        if (this.draggingHabitId && this.draggingHabitId !== habit.id) {
+                            e.preventDefault();
+                            const rect = habitCard.getBoundingClientRect();
+                            const pos = (e.clientY - rect.top) < (rect.height / 2) ? 'before' : 'after';
+                            this.setDragOverIndicator(habitCard, pos as 'before' | 'after');
+                        }
+                    });
+
+                    habitCard.addEventListener('dragleave', () => {
+                        this.clearDragOverOn(habitCard);
+                    });
+
+                    habitCard.addEventListener('drop', async (e) => {
                         e.preventDefault();
-                        const rect = habitCard.getBoundingClientRect();
-                        const pos = (e.clientY - rect.top) < (rect.height / 2) ? 'before' : 'after';
-                        this.setDragOverIndicator(habitCard, pos as 'before' | 'after');
-                    }
-                });
+                        if (!this.draggingHabitId || this.draggingHabitId === habit.id) return;
+                        const draggedId = this.draggingHabitId;
+                        const targetId = habit.id;
 
-                habitCard.addEventListener('dragleave', () => {
-                    this.clearDragOverOn(habitCard);
-                });
+                        try {
+                            // 支持跨优先级排序，自动更新优先级
+                            await this.reorderHabits(groupId, habit.priority, draggedId, targetId, this.dragOverPosition || 'after');
+                            await this.loadHabits();
+                            showMessage(i18n("sortUpdated"));
+                        } catch (err) {
+                            console.error('reorder failed:', err);
+                            showMessage(i18n("reorderFailed"), 3000, 'error');
+                        }
+                        this.draggingHabitId = null;
+                        this.clearDragOver();
+                    });
+                };
 
-                habitCard.addEventListener('drop', async (e) => {
-                    e.preventDefault();
-                    if (!this.draggingHabitId || this.draggingHabitId === habit.id) return;
-                    const draggedId = this.draggingHabitId;
-                    const targetId = habit.id;
-
-                    try {
-                        // 支持跨优先级排序，自动更新优先级
-                        await this.reorderHabits(groupId, habit.priority, draggedId, targetId, this.dragOverPosition || 'after');
-                        await this.loadHabits();
-                        showMessage(i18n("sortUpdated"));
-                    } catch (err) {
-                        console.error('reorder failed:', err);
-                        showMessage(i18n("reorderFailed"), 3000, 'error');
-                    }
-                    this.draggingHabitId = null;
-                    this.clearDragOver();
-                });
 
                 groupContent.appendChild(habitCard);
             });

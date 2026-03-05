@@ -701,6 +701,16 @@ export async function pushErrMsg(msg: string, timeout: number = 7000) {
     return request(url, payload);
 }
 
+export async function sendNotification(title: string, body: string, delayInSeconds: number = 0) {
+    let payload = {
+        title: title,
+        body: body,
+        delayInSeconds: delayInSeconds
+    };
+    let url = "/api/notification/sendDeviceNotification";
+    return request(url, payload);
+}
+
 // **************************************** Network ****************************************
 export async function forwardProxy(
     url: string, method: string = 'GET', payload: any = {},
@@ -738,98 +748,6 @@ export async function currentTime(): Promise<number> {
 
 
 // **************************************** Notification Record API ****************************************
-
-const NOTIFY_FILE_PATH = "/data/storage/petal/siyuan-plugin-task-note-management/notify.json";
-
-// 读取通知记录数据 (仅存储最后一次已提醒的日期)
-export async function readNotifyData(): Promise<{ lastNotified?: string }> {
-    try {
-        const content = await getFile(NOTIFY_FILE_PATH);
-        if (!content || content?.code === 404) {
-            return {};
-        }
-        const parsed = typeof content === 'string' ? JSON.parse(content) : content;
-        // Migration: if file contains old schema (date->bool mapping), convert to new schema
-        if (parsed && typeof parsed === 'object') {
-            // If it already has lastNotified, just return
-            if (typeof parsed.lastNotified === 'string') {
-                return { lastNotified: parsed.lastNotified };
-            }
-
-            // If parsed is a mapping of date -> boolean, find the (latest) date that was true
-            const dateKeys = Object.keys(parsed).filter(k => /\d{4}-\d{2}-\d{2}/.test(k));
-            if (dateKeys.length > 0) {
-                // Find the latest date key with truthy value
-                const validDates = dateKeys.filter(k => !!parsed[k]);
-                if (validDates.length > 0) {
-                    // Choose the latest date string (lexicographical sort works for YYYY-MM-DD)
-                    const latest = validDates.sort().pop();
-                    const result = { lastNotified: latest };
-                    // Rewrite the file to the new schema to clean up old entries
-                    try {
-                        await writeNotifyData(result);
-                    } catch (err) {
-                        console.warn('迁移通知记录文件到新结构失败:', err);
-                    }
-                    return result;
-                }
-            }
-        }
-        return {};
-    } catch (error) {
-        console.warn('读取通知记录文件失败:', error);
-        return {};
-    }
-}
-
-// 写入通知记录数据
-export async function writeNotifyData(data: { lastNotified?: string }): Promise<void> {
-    try {
-        const content = JSON.stringify(data, null, 2);
-        const blob = new Blob([content], { type: 'application/json' });
-        await putFile(NOTIFY_FILE_PATH, false, blob);
-    } catch (error) {
-        console.error('写入通知记录文件失败:', error);
-        throw error;
-    }
-}
-
-// 确保通知记录文件存在（仅创建空对象）
-export async function ensureNotifyDataFile(): Promise<void> {
-    try {
-        // 尝试读取文件
-        await readNotifyData();
-    } catch (error) {
-        console.log('通知记录文件不存在，创建新文件');
-        try {
-            await writeNotifyData({});
-        } catch (writeError) {
-            console.error('创建通知记录文件失败:', writeError);
-        }
-    }
-}
-
-// 检查某日期是否已提醒过全天事件
-export async function hasNotifiedToday(date: string): Promise<boolean> {
-    try {
-        const notifyData = await readNotifyData();
-        // 仅检查最后一次已提醒日期是否等于传入日期
-        return notifyData.lastNotified === date;
-    } catch (error) {
-        console.warn('检查通知记录失败:', error);
-        return false;
-    }
-}
-
-// 标记某日期已提醒全天事件
-export async function markNotifiedToday(date: string): Promise<void> {
-    try {
-        // 仅存储最后一次已提醒日期，覆盖此前的数据
-        await writeNotifyData({ lastNotified: date });
-    } catch (error) {
-        console.error('标记通知记录失败:', error);
-    }
-}
 
 // 检查某个习惯在特定日期是否已提醒
 export async function hasHabitNotified(habitId: string, date: string, time?: string): Promise<boolean> {

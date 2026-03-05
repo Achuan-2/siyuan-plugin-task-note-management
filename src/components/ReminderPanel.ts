@@ -1,4 +1,5 @@
-import { showMessage, confirm, Dialog, Menu, Constants } from "siyuan";
+import { colorWithOpacity } from "../utils/uiUtils";
+import { showMessage, confirm, Dialog, Menu, Constants, getFrontend, getBackend } from "siyuan";
 import { refreshSql, sql, getBlockKramdown, getBlockByID, updateBindBlockAtrrs, openBlock } from "../api";
 import { getLocalDateString, compareDateStrings, getLocalDateTimeString, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../utils/dateUtils";
 import { loadSortConfig, saveSortConfig, getSortMethodName } from "../utils/sortConfig";
@@ -56,6 +57,12 @@ export class ReminderPanel {
     private allRemindersMap: Map<string, any> = new Map(); // 存储所有任务的完整信息，用于计算进度
     private isLoading: boolean = false;
     private loadTimeoutId: number | null = null;
+
+    // 侧栏多选模式
+    private isMultiSelectMode: boolean = false;
+    private selectedReminderIds: Set<string> = new Set();
+    private lastClickedReminderId: string | null = null;
+    private _panelKeydownHandler: ((e: KeyboardEvent) => void) | null = null;
 
     // 分页相关状态
     private currentPage: number = 1;
@@ -145,6 +152,21 @@ export class ReminderPanel {
         await this.loadCustomFilters(); // 加载自定义过滤器配置
         this.loadReminders();
 
+        // Escape：如果右键菜单已打开则关闭菜单（不退出多选）；否则退出多选模式
+        this._panelKeydownHandler = (e: KeyboardEvent) => {
+            if (e.key !== 'Escape') return;
+            // 检测 SiYuan 菜单是否可见（b3-menu 且非隐藏）
+            const openMenu = document.querySelector<HTMLElement>('.b3-menu');
+            if (openMenu && openMenu.style.display !== 'none' && openMenu.offsetParent !== null) {
+                // 菜单已打开，让菜单自行处理 Escape，不干预多选状态
+                return;
+            }
+            if (this.isMultiSelectMode) {
+                this.exitPanelMultiSelectMode();
+            }
+        };
+        document.addEventListener('keydown', this._panelKeydownHandler);
+
         // 确保对话框样式已加载
         this.addReminderDialogStyles();
         this.reminderUpdatedHandler()
@@ -168,6 +190,10 @@ export class ReminderPanel {
         }
         if (this.sortConfigUpdatedHandler) {
             window.removeEventListener('sortConfigUpdated', this.sortConfigUpdatedHandler);
+        }
+        if (this._panelKeydownHandler) {
+            document.removeEventListener('keydown', this._panelKeydownHandler);
+            this._panelKeydownHandler = null;
         }
 
         // 清理当前番茄钟实例
@@ -371,10 +397,6 @@ export class ReminderPanel {
             this.totalItems = 0;
             // 强制刷新，允许在 isLoading 为 true 时也能覆盖加载（例如快速切换时）
             this.loadReminders(true);
-            // 根据当前筛选显示或隐藏“显示已完成子任务”开关
-            if (this.showCompletedContainer) {
-                this.showCompletedContainer.style.display = this.currentTab === 'today' ? '' : 'none';
-            }
         });
         controls.appendChild(this.filterSelect);
 
@@ -437,8 +459,7 @@ export class ReminderPanel {
 
         showCompletedContainer.appendChild(this.showCompletedCheckbox);
         showCompletedContainer.appendChild(showCompletedText);
-        // 默认仅在当前筛选为 today 时显示，且单独一行
-        showCompletedContainer.style.display = (this.filterSelect && this.filterSelect.value === 'today') ? '' : 'none';
+        // 显示已完成子任务开关在所有筛选项下都可见
         showCompletedContainer.style.cssText += '\n            display: flex; width: 100%; margin-top: 8px;';
 
         header.appendChild(controls);
@@ -1518,8 +1539,8 @@ export class ReminderPanel {
             for (const parent of directlyMatchingReminders) {
                 const descendants = this.getAllDescendantIds(parent.id, reminderMap);
                 descendants.forEach(id => {
-                    // 在"今日任务"视图中，如果父任务未完成且开关关闭，不显示已完成的子任务
-                    if (this.currentTab === 'today' && !parent.completed && !this.showCompletedSubtasks) {
+                    // 如果父任务未完成且开关关闭，不显示已完成的子任务
+                    if (!parent.completed && !this.showCompletedSubtasks) {
                         const descendant = reminderMap.get(id);
                         if (descendant && descendant.completed) {
                             return; // 跳过已完成的子任务
@@ -1976,19 +1997,19 @@ export class ReminderPanel {
         let borderColor = '';
         switch (priority) {
             case 'high':
-                backgroundColor = 'rgba(from var(--b3-card-error-background) r g b / .5)';
+                backgroundColor = colorWithOpacity('var(--b3-card-error-background)', 0.5);
                 borderColor = 'var(--b3-card-error-color)';
                 break;
             case 'medium':
-                backgroundColor = 'rgba(from var(--b3-card-warning-background) r g b / .5)';
+                backgroundColor = colorWithOpacity('var(--b3-card-warning-background)', 0.5);
                 borderColor = 'var(--b3-card-warning-color)';
                 break;
             case 'low':
-                backgroundColor = 'rgba(from var(--b3-card-info-background) r g b / .7)';
+                backgroundColor = colorWithOpacity('var(--b3-card-info-background)', 0.7);
                 borderColor = 'var(--b3-card-info-color)';
                 break;
             default:
-                backgroundColor = 'background-color: rgba(from var(--b3-theme-background-light) r g b / .1);';
+                backgroundColor = colorWithOpacity('var(--b3-theme-background-light)', 0.1);
                 borderColor = 'var(--b3-theme-surface-lighter)';
         }
         reminderEl.style.backgroundColor = backgroundColor;
@@ -2000,8 +2021,38 @@ export class ReminderPanel {
         // 所有任务均启用拖拽功能（支持排序）
         this.addDragFunctionality(reminderEl, reminder);
 
+        // Ctrl+Click 进入/切换多选模式；Shift+Click 范围选择
+        reminderEl.addEventListener('click', (e: MouseEvent) => {
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!this.isMultiSelectMode) {
+                    this.isMultiSelectMode = true;
+                }
+                this.togglePanelReminderSelection(reminder.id, reminderEl);
+                this.lastClickedReminderId = reminder.id;
+            } else if (e.shiftKey && this.isMultiSelectMode && this.lastClickedReminderId) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.selectRangeInPanel(this.lastClickedReminderId, reminder.id);
+            }
+        }, true);
+
+        // 如果当前已处于选中状态，应用选中样式
+        if (this.selectedReminderIds.has(reminder.id)) {
+            reminderEl.classList.add('reminder-item--selected');
+        }
+
         reminderEl.addEventListener('contextmenu', (e) => {
             e.preventDefault();
+            // 多选模式下显示批量操作菜单
+            if (this.isMultiSelectMode) {
+                if (!this.selectedReminderIds.has(reminder.id)) {
+                    this.togglePanelReminderSelection(reminder.id, reminderEl);
+                }
+                this.showPanelBatchContextMenu(e);
+                return;
+            }
             this.showReminderContextMenu(e, reminder);
         });
 
@@ -4347,8 +4398,11 @@ export class ReminderPanel {
 
     // 新增：添加拖拽功能
     private addDragFunctionality(element: HTMLElement, reminder: any) {
+        const isAndroid = getBackend().endsWith('android');
+
+        if (isAndroid) return; // 华为平板不能添加lement.draggable = true;
+
         element.draggable = true;
-        element.style.cursor = 'grab';
 
         element.addEventListener('dragstart', (e) => {
             this.isDragging = true;
@@ -4361,7 +4415,6 @@ export class ReminderPanel {
             }
             // 添加 dragging 类，作为保险（并覆盖任何样式冲突）
             try { element.classList.add('dragging'); } catch (e) { }
-            element.style.cursor = 'grabbing';
 
             if (e.dataTransfer) {
                 e.dataTransfer.effectAllowed = 'move';
@@ -4411,7 +4464,6 @@ export class ReminderPanel {
                 element.style.opacity = '';
             }
             try { element.classList.remove('dragging'); } catch (e) { }
-            element.style.cursor = 'grab';
         });
 
         element.addEventListener('dragover', (e) => {
@@ -5371,11 +5423,11 @@ export class ReminderPanel {
 
             // 判断是否为重复实例
             // 优先使用 isRepeatInstance 属性，如果未设置则通过 originalId 判断（只有明确有 originalId 才是实例）
-            const isDraggedInstance = draggedReminder.isRepeatInstance !== undefined 
-                ? draggedReminder.isRepeatInstance 
+            const isDraggedInstance = draggedReminder.isRepeatInstance !== undefined
+                ? draggedReminder.isRepeatInstance
                 : !!draggedReminder.originalId;
-            const isTargetInstance = targetReminder.isRepeatInstance !== undefined 
-                ? targetReminder.isRepeatInstance 
+            const isTargetInstance = targetReminder.isRepeatInstance !== undefined
+                ? targetReminder.isRepeatInstance
                 : !!targetReminder.originalId;
 
             // 获取原始ID
@@ -5945,6 +5997,38 @@ export class ReminderPanel {
             items.push({ iconHTML: "📅", label: i18n("moveToDayAfterTomorrow") || "移至后天", click: () => apply(dayAfterStr) });
             items.push({ iconHTML: "📅", label: i18n("moveToNextWeek") || "移至下周", click: () => apply(nextWeekStr) });
             items.push({ iconHTML: "❌", label: i18n("clearDate") || "清除日期", click: () => apply(null) });
+            items.push({
+                iconHTML: "✏️", label: i18n("editDate") || "编辑日期", click: () => {
+                    const isInstanceEdit = targetReminder.isRepeatInstance && onlyThisInstance;
+                    const originalInstanceDate = (targetReminder.isRepeatInstance && targetReminder.id && targetReminder.id.includes('_'))
+                        ? targetReminder.id.split('_').pop()
+                        : targetReminder.date;
+                    const dlg = new QuickReminderDialog(
+                        undefined, undefined, undefined, undefined,
+                        {
+                            mode: 'edit',
+                            reminder: isInstanceEdit ? {
+                                ...targetReminder,
+                                isInstance: true,
+                                originalId: targetReminder.originalId,
+                                instanceDate: originalInstanceDate
+                            } : targetReminder,
+                            isInstanceEdit: isInstanceEdit,
+                            plugin: this.plugin,
+                            dateOnly: true,
+                            onSaved: async (savedReminder) => {
+                                if (savedReminder && savedReminder.id) {
+                                    await this.handleOptimisticSavedReminder(savedReminder);
+                                } else {
+                                    await this.loadReminders();
+                                }
+                                window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
+                            }
+                        }
+                    );
+                    dlg.show();
+                }
+            });
             return items;
         };
 
@@ -7028,19 +7112,19 @@ export class ReminderPanel {
                         let borderColor = '';
                         switch (priority) {
                             case 'high':
-                                backgroundColor = 'rgba(from var(--b3-card-error-background) r g b / .5)';
+                                backgroundColor = colorWithOpacity('var(--b3-card-error-background)', 0.5);
                                 borderColor = 'var(--b3-card-error-color)';
                                 break;
                             case 'medium':
-                                backgroundColor = 'rgba(from var(--b3-card-warning-background) r g b / .5)';
+                                backgroundColor = colorWithOpacity('var(--b3-card-warning-background)', 0.5);
                                 borderColor = 'var(--b3-card-warning-color)';
                                 break;
                             case 'low':
-                                backgroundColor = 'rgba(from var(--b3-card-info-background) r g b / .7)';
+                                backgroundColor = colorWithOpacity('var(--b3-card-info-background)', 0.7);
                                 borderColor = 'var(--b3-card-info-color)';
                                 break;
                             default:
-                                backgroundColor = 'background-color: rgba(from var(--b3-theme-background-light) r g b / .1);';
+                                backgroundColor = colorWithOpacity('var(--b3-theme-background-light)', 0.1);
                                 borderColor = 'var(--b3-theme-surface-lighter)';
                         }
                         el.style.backgroundColor = backgroundColor;
@@ -8278,7 +8362,7 @@ export class ReminderPanel {
             const maxSort = allReminders.reduce((max, r) => Math.max(max, r.sort || 0), 0);
             const defaultSort = maxSort + 10000;
 
-            const today = getLogicalDateString();
+            const today = getLocalDateString();
             const quickDialog = new QuickReminderDialog(
                 today, // 初始日期为今天
                 undefined, // 不指定初始时间
@@ -9105,6 +9189,395 @@ export class ReminderPanel {
 
         return html;
     }
+
+    // ===================== 侧栏多选模式 =====================
+
+    private togglePanelReminderSelection(reminderId: string, el: HTMLElement): void {
+        if (this.selectedReminderIds.has(reminderId)) {
+            this.selectedReminderIds.delete(reminderId);
+            el.classList.remove('reminder-item--selected');
+        } else {
+            this.selectedReminderIds.add(reminderId);
+            el.classList.add('reminder-item--selected');
+        }
+    }
+
+    private exitPanelMultiSelectMode(): void {
+        this.isMultiSelectMode = false;
+        this.selectedReminderIds.clear();
+        this.lastClickedReminderId = null;
+        // 清除所有选中样式
+        this.container.querySelectorAll('.reminder-item--selected').forEach(el => {
+            el.classList.remove('reminder-item--selected');
+        });
+        showMessage(i18n('batchSelectModeOff') || '已退出多选模式');
+    }
+
+    /**
+     * Shift+Click 范围选择：从 lastId 到 currentId 之间的所有可见任务全部选中
+     */
+    private selectRangeInPanel(lastId: string, currentId: string): void {
+        // 从 DOM 按渲染顺序获取所有任务元素
+        const allEls = Array.from(
+            this.container.querySelectorAll<HTMLElement>('.reminder-item[data-reminder-id]')
+        );
+        const ids = allEls.map(el => el.dataset.reminderId!);
+        const lastIdx = ids.indexOf(lastId);
+        const curIdx = ids.indexOf(currentId);
+        if (lastIdx === -1 || curIdx === -1) return;
+        const start = Math.min(lastIdx, curIdx);
+        const end = Math.max(lastIdx, curIdx);
+        for (let i = start; i <= end; i++) {
+            const id = ids[i];
+            const el = allEls[i];
+            if (id && el) {
+                this.selectedReminderIds.add(id);
+                el.classList.add('reminder-item--selected');
+            }
+        }
+        this.lastClickedReminderId = currentId;
+    }
+
+    private showPanelBatchContextMenu(event: MouseEvent): void {
+        const menu = new Menu('panelBatchContextMenu');
+        const selectedCount = this.selectedReminderIds.size;
+
+        // 提示行
+        menu.addItem({
+            iconHTML: '☑️',
+            label: `${selectedCount} ${i18n('tasksSelected') || '个任务已选择'}`,
+            click: () => { }
+        });
+        menu.addSeparator();
+
+        // 设置已完成
+        menu.addItem({
+            iconHTML: '✅',
+            label: i18n('setCompleted') || '设置已完成',
+            click: () => this.panelBatchSetCompleted()
+        });
+
+        // 设置日期子菜单
+        const todayStr = getLogicalDateString();
+        const tomorrowStr = getRelativeDateString(1);
+        const dayAfterStr = getRelativeDateString(2);
+        const nextWeekStr = getRelativeDateString(7);
+        menu.addItem({
+            iconHTML: '🗓',
+            label: i18n('setDate') || '设置日期',
+            submenu: [
+                { iconHTML: '📅', label: i18n('moveToToday') || '移至今天', click: () => this.panelBatchSetDate(todayStr) },
+                { iconHTML: '📅', label: i18n('moveToTomorrow') || '移至明天', click: () => this.panelBatchSetDate(tomorrowStr) },
+                { iconHTML: '📅', label: i18n('moveToDayAfterTomorrow') || '移至后天', click: () => this.panelBatchSetDate(dayAfterStr) },
+                { iconHTML: '📅', label: i18n('moveToNextWeek') || '移至下周', click: () => this.panelBatchSetDate(nextWeekStr) },
+                { iconHTML: '❌', label: i18n('clearDate') || '清除日期', click: () => this.panelBatchSetDate(null) },
+                { iconHTML: '🗓', label: i18n('batchSetDate') || '批量设置日期…', click: () => this.panelBatchSetDateDialog() }
+            ]
+        });
+
+        // 设置优先级子菜单
+        const priorities = [
+            { key: 'high', label: i18n('priorityHigh') || '高', icon: '🔴' },
+            { key: 'medium', label: i18n('priorityMedium') || '中', icon: '🟡' },
+            { key: 'low', label: i18n('priorityLow') || '低', icon: '🔵' },
+            { key: 'none', label: i18n('none') || '无', icon: '⚫' }
+        ];
+        menu.addItem({
+            iconHTML: '🎯',
+            label: i18n('setPriority') || '设置优先级',
+            submenu: priorities.map(p => ({
+                iconHTML: p.icon,
+                label: p.label,
+                click: () => this.panelBatchSetPriority(p.key)
+            }))
+        });
+
+        // 设置分类子菜单
+        const categories = this.categoryManager.getCategories();
+        if (categories.length > 0) {
+            const catItems: any[] = [{
+                iconHTML: '❌',
+                label: i18n('noCategory') || '无分类',
+                click: () => this.panelBatchSetCategory(null)
+            }];
+            categories.forEach((cat: any) => {
+                catItems.push({
+                    iconHTML: cat.icon || '📁',
+                    label: cat.name,
+                    click: () => this.panelBatchSetCategory(cat.id)
+                });
+            });
+            menu.addItem({
+                iconHTML: '📁',
+                label: i18n('setCategory') || '设置分类',
+                submenu: catItems
+            });
+        }
+
+        menu.addSeparator();
+
+
+        // 退出多选
+        menu.addItem({
+            iconHTML: '❌',
+            label: i18n('exitBatchSelect') || '退出多选',
+            click: () => this.exitPanelMultiSelectMode()
+        });
+
+        menu.addSeparator();
+
+        // 删除
+        menu.addItem({
+            iconHTML: '🗑️',
+            label: i18n('delete') || '删除',
+            click: () => this.panelBatchDelete()
+        });
+
+        menu.open({ x: event.clientX, y: event.clientY });
+    }
+
+    private async panelBatchSetCompleted(): Promise<void> {
+        const ids = Array.from(this.selectedReminderIds);
+        if (ids.length === 0) return;
+        try {
+            for (const id of ids) {
+                await this.toggleReminder(id, true);
+            }
+            showMessage(i18n('operationSuccessful') || '操作成功');
+            this.exitPanelMultiSelectMode();
+            this.loadReminders();
+        } catch (e) {
+            showMessage(i18n('operationFailed') || '操作失败');
+        }
+    }
+
+    private async panelBatchSetDate(newDate: string | null): Promise<void> {
+        const ids = Array.from(this.selectedReminderIds);
+        if (ids.length === 0) return;
+        try {
+            for (const id of ids) {
+                await this.setReminderBaseDate(id, newDate);
+            }
+            showMessage(i18n('operationSuccessful') || '操作成功');
+            this.exitPanelMultiSelectMode();
+            this.loadReminders();
+        } catch (e) {
+            showMessage(i18n('operationFailed') || '操作失败');
+        }
+    }
+
+    private async panelBatchSetDateDialog(): Promise<void> {
+        const ids = Array.from(this.selectedReminderIds);
+        if (ids.length === 0) return;
+
+        const langTag = (window as any).siyuan?.config?.lang?.replace('_', '-') || 'en-US';
+        const _now = new Date();
+        const today = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
+
+        const dialog = new Dialog({
+            title: i18n('batchSetDate') || '批量设置日期',
+            content: `
+                <div class="b3-dialog__content" style="padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+                    <!-- 开始日期/时间行 -->
+                    <div class="b3-form__group" style="margin-bottom: 0;">
+                        <label class="b3-form__label">${i18n('startLabel') || '开始：'}</label>
+                        <div style="display: flex; flex-direction: column; gap: 8px;">
+                            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                <div style="display: flex; align-items: center; gap: 8px; flex: 1 1 140px; min-width: 120px;">
+                                    <input type="date" id="panelBatchStartDate" class="b3-text-field" max="9999-12-31" style="flex: 1; min-width: 0;" lang="${langTag}">
+                                    <button type="button" id="panelClearStartDateBtn" class="b3-button b3-button--outline" title="${i18n('clearDate') || '清除日期'}" style="padding: 4px 8px; font-size: 12px; flex: 0 0 auto;">
+                                        <svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
+                                    </button>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 8px; flex: 0 0 auto; white-space: nowrap; min-width: 110px; margin-left: auto;">
+                                    <input type="time" id="panelBatchStartTime" class="b3-text-field" style="flex: 0 0 auto; min-width: 100px;" lang="${langTag}">
+                                    <button type="button" id="panelClearStartTimeBtn" class="b3-button b3-button--outline" title="${i18n('clearTime') || '清除时间'}" style="padding: 4px 8px; font-size: 12px;">
+                                        <svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 结束日期/时间行 -->
+                    <div class="b3-form__group" style="margin-bottom: 0;">
+                        <label class="b3-form__label">${i18n('endLabel') || '结束：'}</label>
+                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                            <div style="display: flex; align-items: center; gap: 8px; flex: 1 1 140px; min-width: 120px;">
+                                <input type="date" id="panelBatchEndDate" class="b3-text-field" placeholder="${i18n('endDateOptional') || '结束日期（可选）'}" max="9999-12-31" style="flex: 1; min-width: 0;" lang="${langTag}">
+                                <button type="button" id="panelClearEndDateBtn" class="b3-button b3-button--outline" title="${i18n('clearDate') || '清除日期'}" style="padding: 4px 8px; font-size: 12px; flex: 0 0 auto;">
+                                    <svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
+                                </button>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px; flex: 0 0 auto; white-space: nowrap; min-width: 110px; margin-left: auto;">
+                                <input type="time" id="panelBatchEndTime" class="b3-text-field" placeholder="${i18n('endTimeOptional') || '结束时间 (可选)'}" style="flex: 0 0 auto; min-width: 100px;" lang="${langTag}">
+                                <button type="button" id="panelClearEndTimeBtn" class="b3-button b3-button--outline" title="${i18n('clearTime') || '清除时间'}" style="padding: 4px 8px; font-size: 12px;">
+                                    <svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 清空所有日期选项 -->
+                    <div class="b3-form__group" style="margin-bottom: 0;">
+                        <label class="b3-checkbox" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" class="b3-switch" id="panelClearAllDatesCheck">
+                            <span class="b3-checkbox__graphic"></span>
+                            <span class="b3-checkbox__label" style="font-size: 13px;">${i18n('clearDate') || '清空日期'}</span>
+                            <span style="font-size: 12px; color: var(--b3-theme-on-surface-light);">${i18n('clearDateHint') || '勾选后将清空所选任务的日期'}</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="b3-dialog__action">
+                    <button class="b3-button b3-button--cancel" id="panelBatchDateCancel">${i18n('cancel')}</button>
+                    <button class="b3-button b3-button--primary" id="panelBatchDateConfirm">${i18n('confirm')}</button>
+                </div>
+            `,
+            width: '460px'
+        });
+
+        const startDateInput = dialog.element.querySelector('#panelBatchStartDate') as HTMLInputElement;
+        const startTimeInput = dialog.element.querySelector('#panelBatchStartTime') as HTMLInputElement;
+        const endDateInput = dialog.element.querySelector('#panelBatchEndDate') as HTMLInputElement;
+        const endTimeInput = dialog.element.querySelector('#panelBatchEndTime') as HTMLInputElement;
+        const clearAllCheck = dialog.element.querySelector('#panelClearAllDatesCheck') as HTMLInputElement;
+        const cancelBtn = dialog.element.querySelector('#panelBatchDateCancel') as HTMLButtonElement;
+        const confirmBtn = dialog.element.querySelector('#panelBatchDateConfirm') as HTMLButtonElement;
+
+        startDateInput.value = today;
+
+        dialog.element.querySelector('#panelClearStartDateBtn')?.addEventListener('click', () => { startDateInput.value = ''; });
+        dialog.element.querySelector('#panelClearStartTimeBtn')?.addEventListener('click', () => { startTimeInput.value = ''; });
+        dialog.element.querySelector('#panelClearEndDateBtn')?.addEventListener('click', () => { endDateInput.value = ''; });
+        dialog.element.querySelector('#panelClearEndTimeBtn')?.addEventListener('click', () => { endTimeInput.value = ''; });
+
+        endDateInput.addEventListener('change', () => {
+            if (startDateInput.value && endDateInput.value && endDateInput.value < startDateInput.value) {
+                showMessage(i18n('endDateAdjusted') || '结束日期已自动调整为开始日期');
+                endDateInput.value = startDateInput.value;
+            }
+        });
+
+        clearAllCheck.addEventListener('change', () => {
+            const disabled = clearAllCheck.checked;
+            [startDateInput, startTimeInput, endDateInput, endTimeInput].forEach(el => {
+                el.disabled = disabled;
+                el.style.opacity = disabled ? '0.4' : '1';
+            });
+            ['#panelClearStartDateBtn', '#panelClearStartTimeBtn', '#panelClearEndDateBtn', '#panelClearEndTimeBtn'].forEach(sel => {
+                const btn = dialog.element.querySelector(sel) as HTMLButtonElement;
+                if (btn) { btn.disabled = disabled; btn.style.opacity = disabled ? '0.4' : '1'; }
+            });
+        });
+
+        cancelBtn.addEventListener('click', () => dialog.destroy());
+
+        confirmBtn.addEventListener('click', async () => {
+            const clearAll = clearAllCheck.checked;
+            const startDate = startDateInput.value;
+            const startTime = startTimeInput.value;
+            const endDate = endDateInput.value;
+            const endTime = endTimeInput.value;
+
+            if (!clearAll && startDate && endDate && endDate < startDate) {
+                showMessage(i18n('endDateCannotBeEarlier') || '结束日期不能早于开始日期');
+                return;
+            }
+
+            dialog.destroy();
+
+            try {
+                const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
+                for (const id of ids) {
+                    const reminder = reminderData[id];
+                    if (!reminder) continue;
+                    if (clearAll) {
+                        delete reminder.date;
+                        delete reminder.time;
+                        delete reminder.endDate;
+                        delete reminder.endTime;
+                    } else {
+                        if (startDate) reminder.date = startDate;
+                        if (startTime) reminder.time = startTime; else delete reminder.time;
+                        if (endDate) reminder.endDate = endDate; else delete reminder.endDate;
+                        if (endTime) reminder.endTime = endTime; else delete reminder.endTime;
+                    }
+                    if (reminder.blockId) {
+                        try { await updateBindBlockAtrrs(reminder.blockId, this.plugin); } catch (e) { /* ignore */ }
+                    }
+                }
+                await saveReminders(this.plugin, reminderData);
+                showMessage(i18n('batchUpdateSuccess', { count: String(ids.length) }) || `成功更新 ${ids.length} 个任务`);
+                window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
+                this.exitPanelMultiSelectMode();
+                this.loadReminders();
+            } catch (e) {
+                console.error('批量设置日期失败:', e);
+                showMessage(i18n('operationFailed') || '操作失败');
+            }
+        });
+    }
+
+    private async panelBatchSetPriority(priority: string): Promise<void> {
+        const ids = Array.from(this.selectedReminderIds);
+        if (ids.length === 0) return;
+        try {
+            for (const id of ids) {
+                await this.setPriority(id, priority);
+            }
+            showMessage(i18n('operationSuccessful') || '操作成功');
+            this.exitPanelMultiSelectMode();
+            this.loadReminders();
+        } catch (e) {
+            showMessage(i18n('operationFailed') || '操作失败');
+        }
+    }
+
+    private async panelBatchSetCategory(categoryId: string | null): Promise<void> {
+        const ids = Array.from(this.selectedReminderIds);
+        if (ids.length === 0) return;
+        try {
+            for (const id of ids) {
+                await this.setCategory(id, categoryId);
+            }
+            showMessage(i18n('operationSuccessful') || '操作成功');
+            this.exitPanelMultiSelectMode();
+            this.loadReminders();
+        } catch (e) {
+            showMessage(i18n('operationFailed') || '操作失败');
+        }
+    }
+
+    private panelSelectAll(): void {
+        this.currentRemindersCache.forEach(r => {
+            if (!r.isSubscribed) {
+                this.selectedReminderIds.add(r.id);
+                const el = this.container.querySelector(`[data-reminder-id="${r.id}"]`) as HTMLElement;
+                if (el) el.classList.add('reminder-item--selected');
+            }
+        });
+    }
+
+    private panelBatchDelete(): void {
+        const ids = Array.from(this.selectedReminderIds);
+        if (ids.length === 0) return;
+        confirm(
+            i18n('confirmBatchDelete') || '确认批量删除',
+            i18n('confirmBatchDeleteMessage', { count: String(ids.length) }) || `确定要删除选中的 ${ids.length} 个任务吗？此操作不可恢复。`,
+            async () => {
+                try {
+                    for (const id of ids) {
+                        await this.performDeleteReminder(id);
+                    }
+                    showMessage(i18n('batchDeleteSuccess', { count: String(ids.length) }) || `成功删除 ${ids.length} 个任务`);
+                    this.exitPanelMultiSelectMode();
+                    this.loadReminders();
+                } catch (e) {
+                    showMessage(i18n('batchDeleteFailed') || '批量删除失败');
+                }
+            }
+        );
+    }
+
+    // ===================== 侧栏多选模式结束 =====================
 
     /**
      * 显示任务的番茄钟会话记录

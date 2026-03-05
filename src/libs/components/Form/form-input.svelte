@@ -20,6 +20,7 @@
     export let style: string = ''; // Custom style
     export let disabled: boolean = false;
 
+    let showPassword = false;
     const dispatch = createEventDispatcher();
 
     function click() {
@@ -55,6 +56,48 @@
         on:change={changed}
         {style}
     />
+{:else if type === 'password'}
+    <!-- Password Input -->
+    <div style="position: relative; display: flex; align-items: center;" class:fn__size200={fnSize}>
+        {#if showPassword}
+            <input
+                class:b3-text-field={true}
+                style="width: 100%; padding-right: 28px; {style}"
+                id={key}
+                type="text"
+                {placeholder}
+                {disabled}
+                bind:value
+                on:change={changed}
+            />
+        {:else}
+            <input
+                class:b3-text-field={true}
+                style="width: 100%; padding-right: 28px; {style}"
+                id={key}
+                type="password"
+                {placeholder}
+                {disabled}
+                bind:value
+                on:change={changed}
+            />
+        {/if}
+        <svg
+            class="b3-tooltips b3-tooltips__nw"
+            aria-label={showPassword ? '隐藏密码' : '显示密码'}
+            on:click={() => (showPassword = !showPassword)}
+            on:keydown={e => e.key === 'Enter' && (showPassword = !showPassword)}
+            tabindex="0"
+            role="button"
+            style="position: absolute; right: 8px; cursor: pointer; opacity: 0.5; width: 14px; height: 14px; outline: none;"
+        >
+            {#if showPassword}
+                <use xlink:href="#iconEyeoff"></use>
+            {:else}
+                <use xlink:href="#iconEye"></use>
+            {/if}
+        </svg>
+    </div>
 {:else if type === 'textarea'}
     <textarea
         class="b3-text-field fn__block"

@@ -6,6 +6,7 @@ import { QuickReminderDialog } from "./QuickReminderDialog";
 import { BlockBindingDialog } from "./BlockBindingDialog";
 import { PomodoroTimer } from "./PomodoroTimer";
 import { PomodoroManager } from "../utils/pomodoroManager";
+import { colorWithOpacity } from "../utils/uiUtils";
 import { showMessage, confirm, Menu, Dialog } from "siyuan";
 import { i18n } from "../pluginInstance";
 import { getLocalDateTimeString, getLocalDateString, compareDateStrings, getLogicalDateString, getLocaleTag } from "../utils/dateUtils";
@@ -1061,19 +1062,19 @@ export class EisenhowerMatrixView {
         let borderColor = '';
         switch (task.priority) {
             case 'high':
-                backgroundColor = 'rgba(from var(--b3-card-error-background) r g b / .5)';
+                backgroundColor = colorWithOpacity('var(--b3-card-error-background)', 0.5);
                 borderColor = 'var(--b3-card-error-color)';
                 break;
             case 'medium':
-                backgroundColor = 'rgba(from var(--b3-card-warning-background) r g b / .5)';
+                backgroundColor = colorWithOpacity('var(--b3-card-warning-background)', 0.5);
                 borderColor = 'var(--b3-card-warning-color)';
                 break;
             case 'low':
-                backgroundColor = 'rgba(from var(--b3-card-info-background) r g b / .7)';
+                backgroundColor = colorWithOpacity('var(--b3-card-info-background)', 0.7);
                 borderColor = 'var(--b3-card-info-color)';
                 break;
             default:
-                backgroundColor = 'rgba(from var(--b3-theme-background-light) r g b / .1)';
+                backgroundColor = colorWithOpacity('var(--b3-theme-background-light)', 0.1);
                 borderColor = 'var(--b3-theme-background-light)';
         }
 

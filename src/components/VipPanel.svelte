@@ -301,6 +301,12 @@
     </div>
 
     <div class="vip-section">
+        <div class="activation-notice">
+            {@html i18n('vipTutorial')}
+        </div>
+    </div>
+
+    <div class="vip-section">
         <h3>{i18n('vipUserInfo')}</h3>
         <div class="user-info">
             <div class="user-id">
@@ -563,12 +569,14 @@
         </div>
     {/if}
 
-    <div class="vip-section">
-        <h3>{i18n('vipExchangeAndQA')}</h3>
-        <div class="activation-notice">
-            {i18n('vipExchangeAndQADesc')}
+    {#if activeKeys.some(k => k.term !== '7d')}
+        <div class="vip-section">
+            <h3>{i18n('vipExchangeAndQA')}</h3>
+            <div class="activation-notice">
+                {i18n('vipExchangeAndQADesc')}
+            </div>
         </div>
-    </div>
+    {/if}
 </div>
 
 <style>
@@ -899,6 +907,10 @@
     .activation-notice li {
         color: var(--b3-theme-on-surface-light);
     }
+    .activation-notice :global(a) {
+        color: var(--b3-theme-primary);
+        text-decoration: underline;
+    }
 
     .activation-box {
         display: flex;
@@ -966,13 +978,6 @@
         margin-bottom: 4px;
         color: var(--b3-theme-on-surface);
         font-size: 13px;
-    }
-    .benefits-info a {
-        color: var(--b3-theme-primary);
-        text-decoration: none;
-    }
-    .benefits-info a:hover {
-        text-decoration: underline;
     }
 
     .in-dialog {

@@ -34,7 +34,7 @@
         {i18n('helpDocumentDesc')}
     </div>
     <a
-        href="https://www.yuque.com/achuan-2/im3en6"
+        href="https://www.zhihu.com/column/c_1998349446233202806"
         target="_blank"
         style="display: flex; align-items: center; gap: 8px; color: #fff; background: var(--b3-theme-primary); padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; transition: all 0.2s ease; box-shadow: 0 4px 12px rgba(var(--b3-theme-primary-rgb), 0.2);"
         on:mouseenter={e => {

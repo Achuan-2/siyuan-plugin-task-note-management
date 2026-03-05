@@ -47,6 +47,20 @@ export function lunarToSolar(year: number, lunarMonth: number, lunarDay: number,
 
         return `${solarYear}-${solarMonth}-${solarDay}`;
     } catch (error) {
+        // 特殊处理腊月三十：如果当年腊月只有29天（小月），则使用腊月廿九（除夕）
+        if (lunarMonth === 12 && lunarDay === 30 && !isLeapMonth) {
+            try {
+                const lunar = Lunar.fromYmd(year, 12, 29);
+                const solar = lunar.getSolar();
+                const solarYear = solar.getYear();
+                const solarMonth = solar.getMonth().toString().padStart(2, '0');
+                const solarDay = solar.getDay().toString().padStart(2, '0');
+                return `${solarYear}-${solarMonth}-${solarDay}`;
+            } catch {
+                console.error('Invalid lunar date:', error);
+                return null;
+            }
+        }
         console.error('Invalid lunar date:', error);
         return null;
     }
@@ -111,7 +125,7 @@ export function getNextLunarYearlyDate(currentDate: string, lunarMonth: number, 
 }
 
 /**
- * 解析农历日期文本，例如 "八月廿一"、"正月初一"、"农历七月十三"、"2000年 农历 七月初三"
+ * 解析农历日期文本，例如 "八月廿一"、"大年初一","正月初一"、"农历七月十三"、"2000年 农历 七月初三"
  * @param text 农历日期文本
  * @returns {month: number, day: number, year?: number} 或 null
  */
@@ -169,6 +183,25 @@ export function parseLunarDateText(text: string): { month: number; day: number; 
 
         if (!isNaN(month) && !isNaN(day)) {
             return { month, day, year };
+        }
+    }
+
+    // 特殊处理"大年"：大年三十是腊月三十，大年初一是正月初一
+    const daNianMatch = processedText.match(/^大年(.+)$/);
+    if (daNianMatch) {
+        const dayText = daNianMatch[1];
+        const day = lunarDayMap[dayText];
+        if (day) {
+            // 大年三十（除夕）是腊月三十
+            if (day === 30) {
+                return { month: 12, day: 30, year };
+            }
+            // 大年初一（春节）是正月初一
+            if (day === 1) {
+                return { month: 1, day: 1, year };
+            }
+            // 其他情况默认按正月处理
+            return { month: 1, day, year };
         }
     }
 

@@ -146,7 +146,8 @@
     margin-top: 4px;
     line-height: 1.4;
     padding: 4px 8px;
-    background: rgba(from var(--b3-theme-surface-lighter) r g b / .1);
+    background: var(--b3-theme-surface-lighter);
+    background: color-mix(in srgb, var(--b3-theme-surface-lighter), transparent 90%);
     border-radius: 4px;
     white-space: pre-wrap;
     word-break: break-word;
@@ -162,41 +163,48 @@
 // 优先级颜色样式
 .project-priority-high {
     border-left: 4px solid var(--b3-card-error-color) !important;
-    background-color: rgba(from var(--b3-card-error-background) r g b / .5) !important;
+    background-color: var(--b3-card-error-background) !important;
+    background-color: color-mix(in srgb, var(--b3-card-error-background), transparent 50%) !important;
 }
 
 .project-priority-high .project-item__note {
     border: 2px solid var(--b3-card-error-color) !important;
     color: var(--b3-card-error-color) !important;
-    background-color: rgba(from var(--b3-card-error-background) r g b / .5) !important;
+    background-color: var(--b3-card-error-background) !important;
+    background-color: color-mix(in srgb, var(--b3-card-error-background), transparent 50%) !important;
 }
 
 .project-priority-medium {
     border-left: 4px solid var(--b3-card-warning-color) !important;
-    background-color: rgba(from var(--b3-card-warning-background) r g b / .5) !important;
+    background-color: var(--b3-card-warning-background) !important;
+    background-color: color-mix(in srgb, var(--b3-card-warning-background), transparent 50%) !important;
 }
 
 .project-priority-medium .project-item__note {
     color: var(--b3-card-warning-color) !important;
-    background-color: rgba(from var(--b3-card-warning-background) r g b / .5) !important;
+    background-color: var(--b3-card-warning-background) !important;
+    background-color: color-mix(in srgb, var(--b3-card-warning-background), transparent 50%) !important;
     border: 2px solid var(--b3-card-warning-color) !important;
 }
 
 .project-priority-low {
     border-left: 4px solid var(--b3-card-info-color) !important;
-    background-color: rgba(from var(--b3-card-info-background) r g b / .5) !important;
+    background-color: var(--b3-card-info-background) !important;
+    background-color: color-mix(in srgb, var(--b3-card-info-background), transparent 50%) !important;
 }
 
 .project-priority-low .project-item__note {
     color: var(--b3-card-info-color) !important;
-    background-color: rgba(from var(--b3-card-info-background) r g b / .5) !important;
+    background-color: var(--b3-card-info-background) !important;
+    background-color: color-mix(in srgb, var(--b3-card-info-background), transparent 50%) !important;
     border: 2px solid var(--b3-card-info-color) !important;
 
 }
 
 .project-priority-none .project-item__note {
     color: var(--b3-theme-on-background) !important;
-    background-color: rgba(from var(--b3-theme-surface-lighter) r g b / .1) !important;
+    background-color: var(--b3-theme-surface-lighter) !important;
+    background-color: color-mix(in srgb, var(--b3-theme-surface-lighter), transparent 90%) !important;
     border: 2px solid var(--b3-border-color) !important;
 }
 

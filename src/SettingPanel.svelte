@@ -196,7 +196,7 @@
         updateGroupItems();
     }
 
-    async function toggleAudio(path: string) {
+    async function toggleAudio(path: string, volume: number = 1) {
         // 同一音频：切换暂停 / 继续
         if (audioPreviewEl && playingPath === path) {
             if (isAudioPlaying) {
@@ -216,7 +216,7 @@
 
         const resolvedUrl = await resolveAudioPath(path);
         const audio = new Audio(resolvedUrl);
-        audio.volume = 0.4;
+        audio.volume = Math.max(0, Math.min(1, volume));
         audio.play().catch(() => {});
         audio.addEventListener('ended', () => {
             isAudioPlaying = false;
@@ -267,6 +267,24 @@
                 isUploadingAudio = false;
             });
         input.value = '';
+    }
+
+    /** 声音key → 音量设置key 映射表 */
+    const SOUND_VOLUME_MAP: Record<string, keyof typeof settings> = {
+        pomodoroWorkSound: 'workVolume',
+        pomodoroBreakSound: 'breakVolume',
+        pomodoroLongBreakSound: 'longBreakVolume',
+        pomodoroWorkEndSound: 'workEndVolume',
+        pomodoroBreakEndSound: 'breakEndVolume',
+        randomRestSounds: 'randomRestVolume',
+        randomRestEndSound: 'randomRestEndVolume',
+    };
+
+    /** 获取音频条目对应的试听音量 */
+    function getItemVolume(soundKey: string): number {
+        const volKey = SOUND_VOLUME_MAP[soundKey];
+        if (!volKey) return 1;
+        return (settings[volKey] as number) ?? 1;
     }
 
     interface ISettingGroup {
@@ -504,10 +522,15 @@
                 },
                 {
                     key: 'removeDateAfterDetection',
-                    value: settings.removeDateAfterDetection,
-                    type: 'checkbox',
+                    value: settings.removeDateAfterDetection || 'all',
+                    type: 'select',
                     title: i18n('removeDateAfterDetection'),
                     description: i18n('removeDateAfterDetectionDesc'),
+                    options: {
+                        none: i18n('removeNone') || '不去除',
+                        date: i18n('removeDateOnly') || '仅去除日期',
+                        all: i18n('removeDateAndTime') || '去除日期和时间',
+                    },
                 },
                 {
                     key: 'newDocNotebook',
@@ -675,11 +698,11 @@
                     description: i18n('dailyFocusGoalDesc'),
                 },
                 {
-                    key: 'backgroundVolume',
-                    value: settings.backgroundVolume,
+                    key: 'workVolume',
+                    value: settings.workVolume ?? 0.5,
                     type: 'slider',
-                    title: i18n('backgroundVolume'),
-                    description: i18n('backgroundVolumeDesc'),
+                    title: i18n('workVolume'),
+                    description: i18n('workVolumeDesc'),
                     slider: {
                         min: 0,
                         max: 1,
@@ -694,11 +717,35 @@
                     description: i18n('pomodoroWorkSoundDesc') || '',
                 },
                 {
+                    key: 'breakVolume',
+                    value: settings.breakVolume ?? 0.5,
+                    type: 'slider',
+                    title: i18n('breakVolume'),
+                    description: i18n('breakVolumeDesc'),
+                    slider: {
+                        min: 0,
+                        max: 1,
+                        step: 0.1,
+                    },
+                },
+                {
                     key: 'pomodoroBreakSound',
                     value: settings.audioSelected?.pomodoroBreakSound || '',
                     type: 'custom-audio',
                     title: i18n('pomodoroBreakSound'),
                     description: i18n('pomodoroBreakSoundDesc') || '',
+                },
+                {
+                    key: 'longBreakVolume',
+                    value: settings.longBreakVolume ?? 0.5,
+                    type: 'slider',
+                    title: i18n('longBreakVolume'),
+                    description: i18n('longBreakVolumeDesc'),
+                    slider: {
+                        min: 0,
+                        max: 1,
+                        step: 0.1,
+                    },
                 },
                 {
                     key: 'pomodoroLongBreakSound',
@@ -708,11 +755,27 @@
                     description: i18n('pomodoroLongBreakSoundDesc') || '',
                 },
                 {
+                    key: 'workEndVolume',
+                    value: settings.workEndVolume ?? 1,
+                    type: 'slider',
+                    title: i18n('workEndVolume'),
+                    description: i18n('workEndVolumeDesc'),
+                    slider: { min: 0, max: 1, step: 0.1 },
+                },
+                {
                     key: 'pomodoroWorkEndSound',
                     value: settings.audioSelected?.pomodoroWorkEndSound || '',
                     type: 'custom-audio',
                     title: i18n('pomodoroWorkEndSound'),
                     description: i18n('pomodoroWorkEndSoundDesc') || '',
+                },
+                {
+                    key: 'breakEndVolume',
+                    value: settings.breakEndVolume ?? 1,
+                    type: 'slider',
+                    title: i18n('breakEndVolume'),
+                    description: i18n('breakEndVolumeDesc'),
+                    slider: { min: 0, max: 1, step: 0.1 },
                 },
                 {
                     key: 'pomodoroBreakEndSound',
@@ -769,11 +832,27 @@
                     description: i18n('randomRestBreakDurationDesc'),
                 },
                 {
+                    key: 'randomRestVolume',
+                    value: settings.randomRestVolume ?? 1,
+                    type: 'slider',
+                    title: i18n('randomRestVolume'),
+                    description: i18n('randomRestVolumeDesc'),
+                    slider: { min: 0, max: 1, step: 0.1 },
+                },
+                {
                     key: 'randomRestSounds',
                     value: settings.audioFileLists?.randomRestSounds || [],
                     type: 'custom-audio',
                     title: i18n('randomRestSounds'),
                     description: i18n('randomRestSoundsDesc') || '',
+                },
+                {
+                    key: 'randomRestEndVolume',
+                    value: settings.randomRestEndVolume ?? 1,
+                    type: 'slider',
+                    title: i18n('randomRestEndVolume'),
+                    description: i18n('randomRestEndVolumeDesc'),
+                    slider: { min: 0, max: 1, step: 0.1 },
                 },
                 {
                     key: 'randomRestEndSound',
@@ -920,6 +999,13 @@
             name: '☁️' + i18n('calendarUpload'),
             items: [
                 {
+                    key: 'calendarSubscribeHint',
+                    value: '',
+                    type: 'hint',
+                    title: '❓' + i18n('helpDocument'),
+                    description: i18n('calendarSubscribeHintDesc'),
+                },
+                {
                     key: 'icsSyncHint',
                     value: '',
                     type: 'hint',
@@ -955,6 +1041,7 @@
                     options: {
                         siyuan: i18n('siyuanServer'),
                         s3: i18n('s3Storage'),
+                        webdav: i18n('webdavServer'),
                     },
                 },
                 {
@@ -977,7 +1064,17 @@
                         '4hour': i18n('every4Hours'),
                         '12hour': i18n('every12Hours'),
                         daily: i18n('everyDay'),
+                        dailyAt: i18n('dailyAt') || '每天指定时间',
                     },
+                },
+                {
+                    key: 'icsDailySyncTime',
+                    value: settings.icsDailySyncTime || '08:00',
+                    type: 'textinput',
+                    title: i18n('icsDailySyncTime') || '每天同步时间',
+                    description:
+                        i18n('icsDailySyncTimeDesc') || '设置每天几点同步，格式 HH:MM（如 08:00）',
+                    placeholder: '08:00',
                 },
                 {
                     key: 'icsSilentUpload',
@@ -1107,6 +1204,28 @@
                     description: i18n('s3CustomDomainDesc'),
                     placeholder: 'cdn.example.com',
                 },
+                {
+                    key: 'webdavUrl',
+                    value: settings.webdavUrl,
+                    type: 'textinput',
+                    title: i18n('webdavUrl'),
+                    description: i18n('webdavUrlDesc'),
+                    placeholder: '',
+                },
+                {
+                    key: 'webdavUsername',
+                    value: settings.webdavUsername,
+                    type: 'textinput',
+                    title: i18n('webdavUsername'),
+                    description: i18n('webdavUsernameDesc'),
+                },
+                {
+                    key: 'webdavPassword',
+                    value: settings.webdavPassword,
+                    type: 'password',
+                    title: i18n('webdavPassword'),
+                    description: i18n('webdavPasswordDesc'),
+                },
             ],
         },
         {
@@ -1210,7 +1329,13 @@
         // 特殊逻辑：番茄钟设置变更
         if (
             key.startsWith('pomodoro') ||
-            key === 'backgroundVolume' ||
+            key === 'workVolume' ||
+            key === 'breakVolume' ||
+            key === 'longBreakVolume' ||
+            key === 'workEndVolume' ||
+            key === 'breakEndVolume' ||
+            key === 'randomRestVolume' ||
+            key === 'randomRestEndVolume' ||
             key === 'dailyFocusGoal' ||
             key.startsWith('randomRest')
         ) {
@@ -1237,8 +1362,13 @@
         }
         if (!emitEvent) return;
         // 通知其他组件（如日历视图）设置项已更新
+        // 携带 fromSettingPanel 标记，避免 settingsUpdateHandler 重复重载
         try {
-            window.dispatchEvent(new CustomEvent('reminderSettingsUpdated'));
+            window.dispatchEvent(
+                new CustomEvent('reminderSettingsUpdated', {
+                    detail: { fromSettingPanel: true },
+                })
+            );
         } catch (err) {
             console.warn('Dispatch settings updated event failed:', err);
         }
@@ -1256,7 +1386,9 @@
         })();
 
         // 监听外部设置变更事件，重新加载设置并刷新 UI
-        const settingsUpdateHandler = async () => {
+        const settingsUpdateHandler = async (e: Event) => {
+            // 忽略由本面板自身 saveSettings 发出的事件，避免重复重载
+            if ((e as CustomEvent)?.detail?.fromSettingPanel) return;
             const loadedSettings = await plugin.loadSettings();
             settings = { ...loadedSettings };
             // 确保 weekStartDay 在加载后是数字（可能以字符串形式保存）
@@ -1353,6 +1485,11 @@
                 updated.disabled = !settings.icsSyncEnabled;
             }
 
+            // 每天同步时间设置，仅在启用同步且选择 dailyAt 模式时显示
+            if (item.key === 'icsDailySyncTime') {
+                updated.hidden = !settings.icsSyncEnabled || settings.icsSyncInterval !== 'dailyAt';
+            }
+
             // S3专用设置 - s3UseSiyuanConfig仅在启用同步且选择S3存储时显示
             if (item.key === 's3UseSiyuanConfig') {
                 updated.hidden = settings.icsSyncMethod !== 's3';
@@ -1376,6 +1513,11 @@
             ) {
                 updated.hidden =
                     settings.icsSyncMethod !== 's3' || settings.s3UseSiyuanConfig === true;
+            }
+
+            // WebDAV 配置显示条件
+            if (['webdavUrl', 'webdavUsername', 'webdavPassword'].includes(item.key)) {
+                updated.hidden = settings.icsSyncMethod !== 'webdav';
             }
 
             return updated;
@@ -1676,7 +1818,6 @@
                 class:b3-list-item--focus={group.name === focusGroup}
                 class="b3-list-item"
                 title={group.name}
-                role="button"
                 on:click={() => {
                     focusGroup = group.name;
                 }}
@@ -1762,7 +1903,10 @@
                                                             ? i18n('audioPause')
                                                             : i18n('audioPreview')}
                                                         on:click|stopPropagation={() =>
-                                                            toggleAudio(audio.path)}
+                                                            toggleAudio(
+                                                                audio.path,
+                                                                getItemVolume(item.key)
+                                                            )}
                                                     >
                                                         {#if playingPath === audio.path && isAudioPlaying}
                                                             <svg

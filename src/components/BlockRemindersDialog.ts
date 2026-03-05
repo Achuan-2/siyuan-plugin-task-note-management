@@ -533,10 +533,19 @@ export class BlockRemindersDialog {
             timeStr = time;
         }
 
-        if (endDate && endDate !== date) {
-            const endDateStr = endDate === today ? (i18n("today") || '今天') : endDate;
+        // 显示结束时间：跨日期或有结束时间
+        if (endDate && (endDate !== date || endTime)) {
+            const isEndToday = endDate === today;
+            const isEndSameDay = endDate === date;
+            let endDateStr = isEndToday ? (i18n("today") || '今天') : endDate;
             const endTimeStr = endTime || '';
-            return `${dateStr} ${timeStr} - ${endDateStr} ${endTimeStr}`.trim();
+            
+            // 同一天只显示结束时间，跨日期显示结束日期+时间
+            if (isEndSameDay) {
+                return `${dateStr} ${timeStr} - ${endTimeStr}`.trim();
+            } else {
+                return `${dateStr} ${timeStr} - ${endDateStr} ${endTimeStr}`.trim();
+            }
         }
 
         return `${dateStr} ${timeStr}`.trim();

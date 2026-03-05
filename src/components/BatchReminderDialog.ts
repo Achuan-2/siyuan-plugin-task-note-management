@@ -157,21 +157,21 @@ export class BatchReminderDialog {
                     }
 
 
-                    const removeEnabled = await this.plugin.getRemoveDateAfterDetectionEnabled();
+                    const removeMode = await this.plugin.getRemoveDateAfterDetectionMode();
                     // 从标题中识别日期
-                    const titleAuto = autoDetectDateTimeFromTitle(content);
+                    const titleAuto = autoDetectDateTimeFromTitle(content, removeMode);
                     // 从备注中识别日期，如果标题没有
                     let date = titleAuto.date;
                     let time = titleAuto.time;
                     let hasTime = titleAuto.hasTime;
                     if (!date) {
-                        const contentAuto = autoDetectDateTimeFromTitle(note);
+                        const contentAuto = autoDetectDateTimeFromTitle(note, removeMode);
                         date = contentAuto.date;
                         time = contentAuto.time;
                         hasTime = contentAuto.hasTime;
                     }
 
-                    const cleanTitle = removeEnabled ? (titleAuto.cleanTitle || content) : content;
+                    const cleanTitle = titleAuto.cleanTitle || content;
 
                     results.push({
                         blockId,
@@ -1212,7 +1212,7 @@ class SmartBatchDialog {
             title: "Processing",
             content: `<div id="loadingDialogContent"></div>`,
             width: "350px",
-            height: "230px",
+            height: "auto",
             disableClose: true,
             destroyCallback: null
         });

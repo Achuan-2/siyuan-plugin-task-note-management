@@ -173,7 +173,7 @@
         const editDialog = new Dialog({
             title: isEdit ? i18n('editSubscription') : i18n('addSubscription'),
             content: `
-                <div class="b3-dialog__content" style="padding: 16px;">
+                <div class="b3-dialog__content" style="padding: 16px;flex: 1;overflow-y: auto;">
                     <div class="fn__flex-column" style="gap: 12px;">
                         <div class="b3-label">
                             <div class="b3-label__text">${i18n('subscriptionName')}</div>
@@ -185,15 +185,20 @@
                         </div>
                         <div class="b3-label">
                             <div class="b3-label__text">${i18n('subscriptionSyncInterval')}</div>
-                            <select class="b3-select fn__block" id="sub-interval">
+                            <select class="b3-select fn__block" id="sub-interval" onchange="this.value === 'dailyAt' ? document.getElementById('sub-daily-time-container').style.display = 'block' : document.getElementById('sub-daily-time-container').style.display = 'none'">
                                 <option value="manual" ${subscription?.syncInterval === 'manual' ? 'selected' : ''}>${i18n('manual')}</option>
                                 <option value="15min" ${subscription?.syncInterval === '15min' ? 'selected' : ''}>${i18n('every15Minutes')}</option>
                                 <option value="30min" ${subscription?.syncInterval === '30min' ? 'selected' : ''}>${i18n('every30Minutes')}</option>
                                 <option value="hourly" ${subscription?.syncInterval === 'hourly' ? 'selected' : ''}>${i18n('everyHour')}</option>
                                 <option value="4hour" ${subscription?.syncInterval === '4hour' ? 'selected' : ''}>${i18n('every4Hours')}</option>
                                 <option value="12hour" ${subscription?.syncInterval === '12hour' ? 'selected' : ''}>${i18n('every12Hours')}</option>
-                                <option value="daily" ${subscription?.syncInterval === 'daily' || !subscription?.syncInterval ? 'selected' : ''}>${i18n('everyDay')}</option>
+                                <option value="daily" ${subscription?.syncInterval === 'daily' ? 'selected' : ''}>${i18n('everyDay')}</option>
+                                <option value="dailyAt" ${subscription?.syncInterval === 'dailyAt' ? 'selected' : ''}>${i18n('dailyAt') || '每天指定时间'}</option>
                             </select>
+                        </div>
+                        <div class="b3-label" id="sub-daily-time-container" style="display: ${subscription?.syncInterval === 'dailyAt' ? 'block' : 'none'};">
+                            <div class="b3-label__text">${i18n('dailySyncTime') || '同步时间'}</div>
+                            <input class="b3-text-field fn__block" id="sub-daily-time" type="time" value="${subscription?.dailySyncTime || '08:00'}">
                         </div>
                         <div class="b3-label">
                             <div class="b3-label__text">${i18n('subscriptionProject')} *</div>
@@ -265,13 +270,14 @@
                             </label>
                         </div>
                     </div>
-                    <div class="b3-dialog__action" style="margin-top: 16px;">
+                </div>
+                <div class="b3-dialog__action" style="margin-top: 16px; flex-shrink: 0; display: flex; justify-content: flex-end;">
                         <button class="b3-button b3-button--cancel">${i18n('cancel')}</button>
                         <button class="b3-button b3-button--text" id="confirm-sub">${i18n('save')}</button>
-                    </div>
                 </div>
             `,
             width: '500px',
+            height: "67vh"
         });
 
         const createProjectBtn = editDialog.element.querySelector(
@@ -365,11 +371,16 @@
                 return;
             }
 
+            const dailySyncTime = syncInterval === 'dailyAt' 
+                ? (editDialog.element.querySelector('#sub-daily-time') as HTMLInputElement)?.value || '08:00'
+                : undefined;
+
             const subData = {
                 id: subscription?.id || (window as any).Lute?.NewNodeID?.() || `sub-${Date.now()}`,
                 name,
                 url,
                 syncInterval,
+                dailySyncTime,
                 projectId,
                 priority,
                 categoryId,
@@ -445,19 +456,26 @@
                             <div class="sub-name">{sub.name}</div>
                             <div class="sub-url" title={sub.url}>{sub.url}</div>
                             <div class="sub-meta">
-                                {i18n('subscriptionSyncInterval')}: {i18n(
-                                    sub.syncInterval === '15min'
-                                        ? 'every15Minutes'
-                                        : sub.syncInterval === '30min'
-                                          ? 'every30Minutes'
-                                          : sub.syncInterval === 'hourly'
-                                            ? 'everyHour'
-                                            : sub.syncInterval === '4hour'
-                                              ? 'every4Hours'
-                                              : sub.syncInterval === '12hour'
-                                                ? 'every12Hours'
-                                                : 'everyDay'
-                                )}
+                                {i18n('subscriptionSyncInterval')}: 
+                                {#if sub.syncInterval === 'dailyAt' && sub.dailySyncTime}
+                                    {i18n('dailyAt') || '每天指定时间'} ({sub.dailySyncTime})
+                                {:else}
+                                    {i18n(
+                                        sub.syncInterval === '15min'
+                                            ? 'every15Minutes'
+                                            : sub.syncInterval === '30min'
+                                              ? 'every30Minutes'
+                                              : sub.syncInterval === 'hourly'
+                                                ? 'everyHour'
+                                                : sub.syncInterval === '4hour'
+                                                  ? 'every4Hours'
+                                                  : sub.syncInterval === '12hour'
+                                                    ? 'every12Hours'
+                                                    : sub.syncInterval === 'daily'
+                                                      ? 'everyDay'
+                                                      : 'manual'
+                                    )}
+                                {/if}
                                 {#if sub.lastSync}
                                     | {i18n('subscriptionLastSync')}: {new Date(
                                         sub.lastSync

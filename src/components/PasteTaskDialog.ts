@@ -223,18 +223,21 @@ export class PasteTaskDialog {
                         ${i18n("supportHierarchy") || "支持多层级：使用缩进或多个<code>-</code>符号创建父子任务关系"}
                     </p>
                     ${selectorsHtml}
-                    <div id="taskList" style="height: 300px; border: 1px solid var(--b3-theme-surface-lighter); border-radius: 4px; overflow-y: auto;"></div>
+                    <div id="taskList" style="height: 300px; border: 1px solid var(--b3-theme-surface-lighter); border-radius: 4px;"></div>
                     <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
                         <label class="b3-checkbox" style="display: flex; align-items: center;">
                             <input id="autoDetectDate" type="checkbox" class="b3-switch">
                             <span class="b3-checkbox__graphic"></span>
                             <span class="b3-checkbox__label">${i18n("autoDetectDateTime")}</span>
                         </label>
-                        <label id="removeDateLabel" class="b3-checkbox" style="display: flex; align-items: center; margin-left: 24px;">
-                            <input id="removeDate" type="checkbox" class="b3-switch">
-                            <span class="b3-checkbox__graphic"></span>
-                            <span class="b3-checkbox__label">${i18n("removeDateAfterDetection")}</span>
-                        </label>
+                        <div id="removeDateContainer" style="display: flex; align-items: center; gap: 8px; margin-left: 24px;">
+                            <span style="font-size: 14px; color: var(--b3-theme-on-surface); cursor: default;">${i18n("removeDateAfterDetection")}</span>
+                            <select id="removeDateMode" class="b3-select" style="padding: 2px 8px; height: 28px;">
+                                <option value="none">${i18n('removeNone') || '不去除'}</option>
+                                <option value="date">${i18n('removeDateOnly') || '仅去除日期'}</option>
+                                <option value="all" selected>${i18n('removeDateAndTime') || '去除日期和时间'}</option>
+                            </select>
+                        </div>
                         <div style="display: flex; align-items: center; gap: 8px;">
                             <label class="b3-checkbox" style="display: flex; align-items: center;">
                                 <input id="unifiedDateCheckbox" type="checkbox" class="b3-switch" ${this.config.defaultSetDate ? 'checked' : ''}>
@@ -262,8 +265,8 @@ export class PasteTaskDialog {
         const cancelBtn = dialog.element.querySelector('#cancelBtn') as HTMLButtonElement;
         const createBtn = dialog.element.querySelector('#createBtn') as HTMLButtonElement;
         const autoDetectCheckbox = dialog.element.querySelector('#autoDetectDate') as HTMLInputElement;
-        const removeDateCheckbox = dialog.element.querySelector('#removeDate') as HTMLInputElement;
-        const removeDateLabel = dialog.element.querySelector('#removeDateLabel') as HTMLElement;
+        const removeDateModeSelect = dialog.element.querySelector('#removeDateMode') as HTMLSelectElement;
+        const removeDateContainer = dialog.element.querySelector('#removeDateContainer') as HTMLElement;
         const groupSelect = dialog.element.querySelector('#pasteTaskGroup') as HTMLSelectElement;
         const milestoneSelect = dialog.element.querySelector('#pasteTaskMilestone') as HTMLSelectElement;
         const milestoneContainer = dialog.element.querySelector('#pasteTaskMilestoneContainer') as HTMLElement;
@@ -304,19 +307,19 @@ export class PasteTaskDialog {
             autoDetectCheckbox.checked = enabled;
             updateRemoveDateVisibility();
         });
-        this.config.plugin.getRemoveDateAfterDetectionEnabled().then((enabled: boolean) => {
-            removeDateCheckbox.checked = enabled;
+        this.config.plugin.getRemoveDateAfterDetectionMode().then((mode: 'none' | 'date' | 'all') => {
+            removeDateModeSelect.value = mode;
         });
 
         function updateRemoveDateVisibility() {
             if (autoDetectCheckbox.checked) {
-                removeDateLabel.style.opacity = "1";
-                removeDateLabel.style.pointerEvents = "auto";
-                removeDateCheckbox.disabled = false;
+                removeDateContainer.style.opacity = "1";
+                removeDateContainer.style.pointerEvents = "auto";
+                removeDateModeSelect.disabled = false;
             } else {
-                removeDateLabel.style.opacity = "0.5";
-                removeDateLabel.style.pointerEvents = "none";
-                removeDateCheckbox.disabled = true;
+                removeDateContainer.style.opacity = "0.5";
+                removeDateContainer.style.pointerEvents = "none";
+                removeDateModeSelect.disabled = true;
             }
         }
 
@@ -356,28 +359,38 @@ export class PasteTaskDialog {
                                         text = text.replace(/^\n+|\n+$/g, '');
                                         if (!text) return false;
 
+                                        // 关键修复：确保单换行符被视为分段（即每个任务一行）
+                                        // 在 Markdown 中，单个换行符会被解析为软换行，合并到同一段落
+                                        // 我们将其转换为双换行符以强制分段，从而使 parseHierarchicalTaskList 能够正确按行切分
+                                        if (text.includes('\n')) {
+                                            text = text.replace(/(?<!\n)\n(?!\n)/g, '\n\n');
+                                        }
+
                                         const { tr, doc } = view.state;
                                         const isEmpty = doc.childCount === 1 &&
                                             doc.firstChild?.type.name === 'paragraph' &&
                                             doc.firstChild.content.size === 0;
 
+                                        const parser = ctx.get(parserCtx);
+                                        const node = parser(text);
+                                        if (!node) return false;
+
                                         if (isEmpty) {
-                                            const parser = ctx.get(parserCtx);
-                                            const node = parser(text);
-                                            if (node) {
-                                                const content = node.type.name === 'doc' ? node.content : node;
-                                                // 彻底替换初始的空段落
-                                                view.dispatch(tr.replaceWith(0, doc.content.size, content).scrollIntoView());
-                                                return true;
-                                            }
+                                            const content = node.type.name === 'doc' ? node.content : node;
+                                            // 彻底替换初始的空段落
+                                            view.dispatch(tr.replaceWith(0, doc.content.size, content).scrollIntoView());
+                                            return true;
                                         } else {
                                             // 非空文档下，如果不含换行符，证明是行内粘贴，直接 insertText 以避免被切分为新段落
                                             if (!text.includes('\n')) {
                                                 view.dispatch(tr.insertText(text).scrollIntoView());
                                                 return true;
                                             }
-                                            // 如果有多行，则交由编辑器原生的剪贴板插件进行切片（Slice）合并，维持正确的嵌套和行内继承
-                                            return false;
+                                            // 如果有多行，我们也手动处理以确保刚才的换行符转换生效
+                                            // 使用 Node.slice(0) 将文档内容转为 Slice 以便 replaceSelection
+                                            const slice = (node as any).slice(0);
+                                            view.dispatch(tr.replaceSelection(slice).scrollIntoView());
+                                            return true;
                                         }
                                     }
                                     return false;
@@ -506,6 +519,14 @@ export class PasteTaskDialog {
 
         cancelBtn.addEventListener('click', () => dialog.destroy());
 
+        dialog.element.addEventListener('keydown', (e: KeyboardEvent) => {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                e.stopPropagation();
+                createBtn.click();
+            }
+        });
+
         createBtn.addEventListener('click', async () => {
             // 防止重复点击
             if ((createBtn as HTMLButtonElement).disabled) return;
@@ -525,8 +546,8 @@ export class PasteTaskDialog {
             this.showLoadingDialog(i18n('creatingTask') || "创建任务中...");
 
             const autoDetect = autoDetectCheckbox.checked;
-            const removeDate = removeDateCheckbox.checked;
-            const hierarchicalTasks = this.parseHierarchicalTaskList(text, autoDetect, removeDate);
+            const removeMode = removeDateModeSelect.value as 'none' | 'date' | 'all';
+            const hierarchicalTasks = this.parseHierarchicalTaskList(text, autoDetect, removeMode);
 
             const useUnifiedDate = unifiedDateCheckbox?.checked;
             const unifiedDateVal = unifiedDateInput?.value;
@@ -642,7 +663,7 @@ export class PasteTaskDialog {
         }
     }
 
-    private parseHierarchicalTaskList(text: string, autoDetect: boolean = false, removeDate: boolean = true): HierarchicalTask[] {
+    private parseHierarchicalTaskList(text: string, autoDetect: boolean = false, removeMode: 'none' | 'date' | 'all' = 'all'): HierarchicalTask[] {
         const lines = text.split('\n');
         const tasks: HierarchicalTask[] = [];
         const stack: Array<{ task: HierarchicalTask; level: number }> = [];
@@ -655,8 +676,8 @@ export class PasteTaskDialog {
 
             const isListItem = /^([-*+]|\d+\.|\[[ xX]\])/.test(cleanLine);
             if (!cleanLine || (!isListItem && level === 0)) {
-                if (cleanLine && level === 0) {
-                    const taskData = this.parseTaskLine(cleanLine, autoDetect, removeDate);
+                if (cleanLine && level === 0 && !this.isEmptyContent(cleanLine)) {
+                    const taskData = this.parseTaskLine(cleanLine, autoDetect, removeMode);
                     const task: HierarchicalTask = {
                         ...taskData,
                         level: 0,
@@ -677,9 +698,9 @@ export class PasteTaskDialog {
 
             const combinedLevel = level + levelFromDashes;
             const taskContent = cleanLine.replace(/^([-*+]|\d+\.)\s*/, '').replace(/^(-{2,})\s*/, '');
-            if (!taskContent) continue;
+            if (!taskContent || this.isEmptyContent(taskContent)) continue;
 
-            const taskData = this.parseTaskLine(taskContent, autoDetect, removeDate);
+            const taskData = this.parseTaskLine(taskContent, autoDetect, removeMode);
             const task: HierarchicalTask = {
                 ...taskData,
                 level: combinedLevel,
@@ -703,6 +724,12 @@ export class PasteTaskDialog {
         return tasks;
     }
 
+    private isEmptyContent(content: string): boolean {
+        // 去除所有 <br /> / <br/> / <br> 后若为空则认为是空行
+        const cleaned = content.trim().replace(/<br\s*\/?>/gi, '').trim();
+        return cleaned === '';
+    }
+
     private calculateIndentLevel(line: string): number {
         const match = line.match(/^(\s*)/);
         if (!match) return 0;
@@ -711,12 +738,13 @@ export class PasteTaskDialog {
         return Math.floor(spaces / 2);
     }
 
-    private parseTaskLine(line: string, autoDetect: boolean = false, removeDate: boolean = true): Omit<HierarchicalTask, 'level' | 'children'> {
+    private parseTaskLine(line: string, autoDetect: boolean = false, removeMode: 'none' | 'date' | 'all' = 'all'): Omit<HierarchicalTask, 'level' | 'children'> {
         const paramMatch = line.match(/@(.*)$/);
         let title = line.trim();
 
         // 移除常见的 Markdown 列表标记
         title = title.replace(/^([-*+]\s+)|(\d+\.\s+)/, '');
+
         let priority: string | undefined;
         let startDate: string | undefined;
         let time: string | undefined;
@@ -748,12 +776,16 @@ export class PasteTaskDialog {
             title = leadingCheckboxMatch[2];
         }
 
+        // 清理 HTML 换行标签（编辑器可能插入 <br /> 作为空行占位）
+        title = title.replace(/<br\s*\/?>/gi, '').trim();
+
+        // 处理 Markdown 转义字符（因内容来自编辑器 Markdown，~, *, _ 等符号会被转义为 \~, \*, \_）
+        title = title.replace(/\\([\\*_{}[\]()#+\-.!~])/g, '$1');
+
         if (autoDetect) {
-            const detected = autoDetectDateTimeFromTitle(title);
+            const detected = autoDetectDateTimeFromTitle(title, removeMode);
             if (detected.date || detected.endDate) {
-                if (removeDate) {
-                    title = detected.cleanTitle || title;
-                }
+                title = detected.cleanTitle || title;
                 startDate = detected.date;
                 time = detected.time;
                 endDate = detected.endDate;
