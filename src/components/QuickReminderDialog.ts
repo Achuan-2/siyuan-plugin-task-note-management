@@ -2120,19 +2120,8 @@ export class QuickReminderDialog {
                 if (this.autoDetectDateTime) {
                     try {
                         const detected = autoDetectDateTimeFromTitle(this.blockContent);
-                        if (detected && detected.date) {
-                            const dateInput = this.dialog.element.querySelector('#quickReminderDate') as HTMLInputElement;
-                            const timeInput = this.dialog.element.querySelector('#quickReminderTime') as HTMLInputElement;
-
-                            // 设置日期
-                            if (dateInput) {
-                                dateInput.value = detected.date;
-                            }
-
-                            // 设置时间（如果有）
-                            if (detected.hasTime && detected.time && timeInput) {
-                                timeInput.value = detected.time;
-                            }
+                        if (detected && (detected.date || detected.endDate)) {
+                            this.applyNaturalLanguageResult(detected);
 
                             // 如果启用了识别后移除日期设置，更新标题
                             this.plugin.getRemoveDateAfterDetectionMode().then((mode: 'none' | 'date' | 'all') => {
