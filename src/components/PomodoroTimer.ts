@@ -1,4 +1,4 @@
-import { showMessage, confirm, getFrontend, Dialog } from "siyuan";
+import { showMessage, confirm, getFrontend, getBackend, Dialog } from "siyuan";
 import { PomodoroRecordManager } from "../utils/pomodoroRecord";
 import { getBlockByID, openBlock, sendNotification } from "../api";
 import { i18n } from "../pluginInstance";
@@ -4729,10 +4729,10 @@ export class PomodoroTimer {
         }
 
         // 判断是否是移动端
-        const frontend = getFrontend();
-        const isMobile = frontend.endsWith('mobile');
+        const isMobileDevice = getFrontend().endsWith('mobile') || getBackend().endsWith('android') || getBackend().endsWith('ios') || getBackend().endsWith('harmony');
+        
 
-        if (isMobile) {
+        if (isMobileDevice) {
             // 手机端：使用内核接口进行系统通知
             try {
                 sendNotification(title, message);

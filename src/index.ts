@@ -3698,7 +3698,7 @@ export default class ReminderPlugin extends Plugin {
      */
     private showReminderSystemNotification(title: string, message: string, reminderInfo?: any) {
         // 判断是否是移动端
-        const isMobileDevice = getFrontend().endsWith('mobile') || getBackend().endsWith('android') || getBackend().endsWith('ios');
+        const isMobileDevice = getFrontend().endsWith('mobile') || getBackend().endsWith('android') || getBackend().endsWith('ios') || getBackend().endsWith('harmony');
 
         if (isMobileDevice) {
             // 手机端：使用内核接口进行系统通知
