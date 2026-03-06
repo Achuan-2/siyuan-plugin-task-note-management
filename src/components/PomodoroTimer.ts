@@ -2358,7 +2358,7 @@ export class PomodoroTimer {
         closeBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            this.close();
+            this.handleClose();
         });
 
         // 创建吸附模式按钮（DOM窗口专用）
@@ -4730,7 +4730,7 @@ export class PomodoroTimer {
 
         // 判断是否是移动端
         const isMobileDevice = getFrontend().endsWith('mobile') || getBackend().endsWith('android') || getBackend().endsWith('ios') || getBackend().endsWith('harmony');
-        
+
 
         if (isMobileDevice) {
             // 手机端：使用内核接口进行系统通知
@@ -5821,6 +5821,76 @@ export class PomodoroTimer {
     }
 
     /**
+     * 处理由用户触发的关闭操作，在专注中途时询问是否保存记录
+     */
+    public handleClose() {
+        if (this.isWorkPhase) {
+            const elapsedSeconds = this.isCountUp ? this.timeElapsed : (this.totalTime - this.timeLeft);
+            if (elapsedSeconds > 0) {
+                const minutes = Math.floor(elapsedSeconds / 60);
+                const eventId = this.reminder.id;
+                const eventTitle = this.reminder.title || '番茄专注';
+                const originalDuration = this.currentPhaseOriginalDuration;
+
+                // 检查是否是 BrowserWindow 模式
+                const isBrowserWindow = !this.isTabMode && this.container && typeof (this.container as any).webContents !== 'undefined';
+
+                const saveRecord = async () => {
+                    try {
+                        await this.recordManager.recordWorkSession(
+                            Math.max(1, minutes),
+                            eventId,
+                            eventTitle,
+                            originalDuration,
+                            this.isCountUp,
+                            this.isCountUp
+                        );
+                        this.updateStatsDisplay();
+                        showMessage(i18n('pomodoroRecorded') || '已记录此次专注', 2000);
+                        // 触发 reminderUpdated 事件
+                        window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                    } catch (err) {
+                        console.error('记录番茄专注失败:', err);
+                        showMessage(i18n('pomodoroRecordFailed') || '记录失败', 3000);
+                    }
+                };
+
+                if (isBrowserWindow) {
+                    this.openConfirmWindow(
+                        i18n('pomodoroStopConfirmTitle') || '中断番茄钟',
+                        String(i18n('pomodoroStopConfirmContent', { minutes: minutes.toString() }) || `检测到你已专注 ${minutes} 分钟，是否将此次专注记录为番茄？`),
+                        async () => {
+                            await saveRecord();
+                            this.destroy(); // 确认保存则保存并关闭
+                        },
+                        () => {
+                            this.destroy(); // 取消则直接关闭
+                        }
+                    );
+                    return; // 异步等待用户选择
+                } else {
+                    // 普通模式：使用思源 confirm 弹窗
+                    confirm(
+                        i18n('pomodoroStopConfirmTitle') || '中断番茄钟',
+                        String(i18n('pomodoroStopConfirmContent', { minutes: minutes.toString() }) || `检测到你已专注 ${minutes} 分钟，是否将此次专注记录为番茄？`),
+                        async () => {
+                            await saveRecord();
+                            this.destroy(); // 确认保存则保存并关闭
+                        },
+                        () => {
+                            this.destroy(); // 取消则直接关闭
+                        }
+                    );
+                    return; // 异步等待用户选择
+                }
+            }
+        }
+
+        // 如果不在工作阶段，或者没有已用时间，直接清理关闭
+        this.destroy();
+    }
+
+    /**
      * 检查番茄钟窗口是否仍然存在
      * @returns 如果窗口存在且未被关闭返回true，否则返回false
      */
@@ -6693,7 +6763,7 @@ export class PomodoroTimer {
                         pomodoroWindow.minimize();
                         break;
                     case 'close':
-                        pomodoroWindow.destroy();
+                        this.handleClose();
                         break;
                     // heartbeat 已移除以避免向已销毁对象发送 IPC
                     case 'toggleMiniMode':
