@@ -872,7 +872,8 @@ export default class ReminderPlugin extends Plugin {
         this.initCoordinator();
 
         const frontend = getFrontend();
-        const isMobile = frontend.endsWith('mobile');
+        const isMobileDevice = getFrontend().endsWith('mobile') || getBackend().endsWith('android') || getBackend().endsWith('ios') || getBackend().endsWith('harmony');
+
         const isBrowserDesktop = frontend === 'browser-desktop';
 
         // // 为了测试NotificationDialog和showReminderSystemNotification能否在手机上显示，onload就显示测试数据
@@ -893,7 +894,7 @@ export default class ReminderPlugin extends Plugin {
         //     this.showReminderSystemNotification('测试系统通知标题', '测试系统通知内容，用于手机端测试', testReminder);
         // }, 3000);
 
-        if (!isMobile && !isBrowserDesktop) {
+        if (!isMobileDevice && !isBrowserDesktop) {
             // 尝试恢复已存在的番茄钟已独立窗口
             import("./components/PomodoroTimer").then(async ({ PomodoroTimer }) => {
                 try {
