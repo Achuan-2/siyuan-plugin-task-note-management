@@ -132,6 +132,41 @@ export function isValidDate(year: number, month: number, day: number): boolean {
 }
 
 /**
+ * 将中文时间数字转换为阿拉伯数字，以解决 chrono-node 的解析 Bug (如 "十二点十五" 会错误解析为 "2:15")
+ */
+function zhTimeToArabic(text: string): string {
+    const zhNumMap: Record<string, number> = { '零': 0, '〇': 0, '一': 1, '二': 2, '两': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10 };
+
+    const convert = (numStr: string) => {
+        if (numStr === '十') return 10;
+        if (numStr.length === 1) return zhNumMap[numStr];
+        if (numStr.length === 2) {
+            if (numStr[0] === '十') return 10 + zhNumMap[numStr[1]];
+            if (numStr[1] === '十') return zhNumMap[numStr[0]] * 10;
+        }
+        if (numStr.length === 3 && numStr[1] === '十') {
+            return zhNumMap[numStr[0]] * 10 + zhNumMap[numStr[2]];
+        }
+        return numStr;
+    };
+
+    let result = text;
+    // 处理带单位的时间，如 "十二点", "十五分", "十二小时"
+    result = result.replace(/([零〇一二两三四五六七八九十]+)(点|时|分|个?小时)/g, (_match, numStr, unit) => {
+        const arab = convert(numStr);
+        return (typeof arab === 'number' ? arab.toString() : numStr) + unit;
+    });
+
+    // 处理无单位的分钟，如 "十二点十五"
+    result = result.replace(/(\d{1,2})[点时]([零〇一二两三四五六七八九十]{1,3})(?=(?:[^零〇一二两三四五六七八九十]|$))/g, (_match, h, mStr) => {
+        const mArab = convert(mStr);
+        return h + '点' + (typeof mArab === 'number' ? mArab.toString() : mStr);
+    });
+
+    return result;
+}
+
+/**
  * 预处理时间文本，规范化常见的歧义表达
  * 1. 去除时间修饰词（下午/晚上等）与数字/中文数字之间的空格：「下午 1点」→「下午1点」
  * 2. 去除「下午/晚上」与已是 24h 制时间（12-23）搭配时的冗余修饰：「下午13点」→「13：00」
@@ -139,7 +174,7 @@ export function isValidDate(year: number, month: number, day: number): boolean {
  * 4. 展开「X点半」（X=13-23）为标准时间字符串：「13点半」→「13:30」
  */
 function preprocessTimeText(text: string): string {
-    let result = text;
+    let result = zhTimeToArabic(text);
 
     // 1. 去除时间段修饰词与后续数字/中文数字之间的空格
     result = result.replace(/(下午|上午|早上|晚上|中午|傍晚)\s+(\d)/g, '$1$2');
@@ -592,10 +627,10 @@ export function autoDetectDateTimeFromTitle(title: string, removeMode: 'none' | 
     // 时间相关的表达式
     const timeOnlyExpressions = [
         /早上|上午|中午|下午|晚上/gi,
-        /[\d一二三四五六七八九十]+\s*[点时]\s*\d{0,2}\s*分?半?/gi,
+        /[\d一二三四五六七八九十两零〇]+\s*[点时]\s*[\d一二三四五六七八九十两零〇]*\s*分?半?/gi,
         /\d{1,2}\s*:\s*\d{2}(?::\d{2})?/gi,
-        /[点时]\s*\d{1,2}\s*分?/gi,
-        /\d+\s*小时[后以]后/gi,
+        /[点时]\s*[\d一二三四五六七八九十两零〇]+\s*分?/gi,
+        /[\d一二三四五六七八九十两零〇半]+\s*个?小时[后以]后/gi,
     ];
 
     // 日期相关的表达式
