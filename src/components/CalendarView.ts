@@ -2606,9 +2606,23 @@ export class CalendarView {
             menu.addItem({
                 iconHTML: "🔗",
                 label: i18n("bindToBlock"),
-                click: () => {
-                    this.showBindToBlockDialog(calendarEvent);
-                }
+                submenu: [
+                    {
+                        iconHTML: "🔗",
+                        label: i18n("bindToBlock"),
+                        click: () => this.showBindToBlockDialog(calendarEvent, 'bind')
+                    },
+                    {
+                        iconHTML: "📑",
+                        label: i18n("newHeading"),
+                        click: () => this.showBindToBlockDialog(calendarEvent, 'heading')
+                    },
+                    {
+                        iconHTML: "📄",
+                        label: i18n("newDocument"),
+                        click: () => this.showBindToBlockDialog(calendarEvent, 'document')
+                    }
+                ]
             });
             menu.addSeparator();
         } else {
@@ -7516,7 +7530,7 @@ export class CalendarView {
     /**
      * 显示绑定到块的对话框
      */
-    private showBindToBlockDialog(calendarEvent: any) {
+    private showBindToBlockDialog(calendarEvent: any, defaultTab: 'bind' | 'document' | 'heading' = 'bind') {
         const dialog = new BlockBindingDialog(
             this.plugin,
             async (blockId: string) => {
@@ -7532,7 +7546,7 @@ export class CalendarView {
             },
             {
                 title: i18n("bindReminderToBlock"),
-                defaultTab: 'bind',
+                defaultTab: defaultTab,
                 reminder: calendarEvent,
                 defaultTitle: calendarEvent.title || ''
             }

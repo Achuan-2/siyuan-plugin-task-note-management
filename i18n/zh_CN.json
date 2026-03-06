@@ -1838,7 +1838,7 @@
     "searchIncludesHeadings": "搜索包含标题",
     "currentSelection": "当前选择：",
     "inputDocumentTitle": "请输入文档标题",
-    "savePathRelativeToNotebook": "保存路径（相对于所选笔记本）",
+    "savePathRelativeToNotebook": "保存路径",
     "inputOrSearchPathDesc": "输入或搜索路径，例如 /项目/子页",
     "useParentBlockDocPath": "使用父块文档路径",
     "inputDocumentContent": "请输入文档内容",

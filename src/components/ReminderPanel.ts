@@ -6046,7 +6046,23 @@ export class ReminderPanel {
                 menu.addItem({
                     iconHTML: "🔗",
                     label: i18n("bindToBlock"),
-                    click: () => this.showBindToBlockDialog(reminder)
+                    submenu: [
+                        {
+                            iconHTML: "🔗",
+                            label: i18n("bindToBlock"),
+                            click: () => this.showBindToBlockDialog(reminder, 'bind')
+                        },
+                        {
+                            iconHTML: "📑",
+                            label: i18n("newHeading"),
+                            click: () => this.showBindToBlockDialog(reminder, 'heading')
+                        },
+                        {
+                            iconHTML: "📄",
+                            label: i18n("newDocument"),
+                            click: () => this.showBindToBlockDialog(reminder, 'document')
+                        }
+                    ]
                 });
             }
 
@@ -6130,7 +6146,23 @@ export class ReminderPanel {
                 menu.addItem({
                     iconHTML: "🔗",
                     label: i18n("bindToBlock"),
-                    click: () => this.showBindToBlockDialog(reminder)
+                    submenu: [
+                        {
+                            iconHTML: "🔗",
+                            label: i18n("bindToBlock"),
+                            click: () => this.showBindToBlockDialog(reminder, 'bind')
+                        },
+                        {
+                            iconHTML: "📑",
+                            label: i18n("newHeading"),
+                            click: () => this.showBindToBlockDialog(reminder, 'heading')
+                        },
+                        {
+                            iconHTML: "📄",
+                            label: i18n("newDocument"),
+                            click: () => this.showBindToBlockDialog(reminder, 'document')
+                        }
+                    ]
                 });
             }
 
@@ -7883,7 +7915,7 @@ export class ReminderPanel {
     /**
      * 显示绑定到块的对话框
      */
-    private showBindToBlockDialog(reminder: any) {
+    private showBindToBlockDialog(reminder: any, defaultTab: 'bind' | 'document' | 'heading' = 'heading') {
         const blockBindingDialog = new BlockBindingDialog(this.plugin, async (blockId: string) => {
             try {
                 console.log('选择绑定到块ID:', blockId);
@@ -7896,7 +7928,7 @@ export class ReminderPanel {
                 showMessage(i18n("bindToBlockFailed"));
             }
         }, {
-            defaultTab: 'heading',
+            defaultTab: defaultTab,
             defaultParentId: reminder.parentId,
             defaultProjectId: reminder.projectId,
             defaultCustomGroupId: reminder.customGroupId,

@@ -3096,7 +3096,23 @@ export class EisenhowerMatrixView {
             menu.addItem({
                 iconHTML: "🔗",
                 label: i18n("bindToBlock"),
-                click: () => this.showBindToBlockDialog(task)
+                submenu: [
+                    {
+                        iconHTML: "🔗",
+                        label: i18n("bindToBlock"),
+                        click: () => this.showBindToBlockDialog(task, 'bind')
+                    },
+                    {
+                        iconHTML: "📑",
+                        label: i18n("newHeading"),
+                        click: () => this.showBindToBlockDialog(task, 'heading')
+                    },
+                    {
+                        iconHTML: "📄",
+                        label: i18n("newDocument"),
+                        click: () => this.showBindToBlockDialog(task, 'document')
+                    }
+                ]
             });
         }
         menu.addSeparator();
@@ -5014,7 +5030,7 @@ export class EisenhowerMatrixView {
     }
 
     // 显示绑定到块的对话框
-    private showBindToBlockDialog(task: QuadrantTask) {
+    private showBindToBlockDialog(task: QuadrantTask, defaultTab: 'bind' | 'document' | 'heading' = 'bind') {
         const blockBindingDialog = new BlockBindingDialog(this.plugin, async (blockId: string) => {
             try {
                 await this.bindTaskToBlock(task, blockId);
@@ -5024,7 +5040,7 @@ export class EisenhowerMatrixView {
                 showMessage(i18n('bindToBlockFailed'));
             }
         }, {
-            defaultTab: 'bind',
+            defaultTab: defaultTab,
             reminder: task
         });
         blockBindingDialog.show();

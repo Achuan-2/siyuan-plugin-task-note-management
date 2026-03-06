@@ -10314,7 +10314,23 @@ export class ProjectKanbanView {
                 menu.addItem({
                     iconHTML: "🔗",
                     label: i18n('bindToBlock'),
-                    click: () => this.showBindToBlockDialog(task)
+                    submenu: [
+                        {
+                            iconHTML: "🔗",
+                            label: i18n('bindToBlock'),
+                            click: () => this.showBindToBlockDialog(task, 'bind')
+                        },
+                        {
+                            iconHTML: "📑",
+                            label: i18n('newHeading'),
+                            click: () => this.showBindToBlockDialog(task, 'heading')
+                        },
+                        {
+                            iconHTML: "📄",
+                            label: i18n('newDocument'),
+                            click: () => this.showBindToBlockDialog(task, 'document')
+                        }
+                    ]
                 });
             }
         }
@@ -13334,7 +13350,7 @@ export class ProjectKanbanView {
     }
 
     // 显示绑定到块的对话框（支持绑定现有块或创建新文档并绑定）
-    private showBindToBlockDialog(reminder: any) {
+    private showBindToBlockDialog(reminder: any, defaultTab: 'bind' | 'document' | 'heading' = 'heading') {
         const blockBindingDialog = new BlockBindingDialog(this.plugin, async (blockId: string) => {
             try {
                 await this.bindReminderToBlock(reminder, blockId);
@@ -13345,7 +13361,7 @@ export class ProjectKanbanView {
                 showMessage(i18n("bindToBlockFailed"));
             }
         }, {
-            defaultTab: 'heading',
+            defaultTab: defaultTab,
             defaultParentId: reminder.parentId,
             defaultProjectId: this.projectId, // 使用当前项目ID
             defaultCustomGroupId: reminder.customGroupId,
