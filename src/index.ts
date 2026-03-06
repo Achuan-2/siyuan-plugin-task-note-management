@@ -895,9 +895,26 @@ export default class ReminderPlugin extends Plugin {
         // }, 3000);
 
         if (!isMobileDevice && !isBrowserDesktop) {
-            // 尝试恢复已存在的番茄钟已独立窗口
+            // 尝试恢复已存在的番茄钟独立窗口
+            // 先询问其他窗口是否已有活跃番茄钟，避免多窗口同时恢复导致重复计时
             import("./components/PomodoroTimer").then(async ({ PomodoroTimer }) => {
                 try {
+                    const hasActiveInOtherWindow = await new Promise<boolean>(resolve => {
+                        const timeout = setTimeout(() => resolve(false), 500);
+                        const handler = (event: MessageEvent) => {
+                            if (event.data?.type === 'pomodoroActiveConfirm') {
+                                clearTimeout(timeout);
+                                this.coordinatorChannel.removeEventListener('message', handler);
+                                resolve(true);
+                            }
+                        };
+                        this.coordinatorChannel.addEventListener('message', handler);
+                        this.coordinatorChannel.postMessage({ type: 'pomodoroQueryActive' });
+                    });
+                    if (hasActiveInOtherWindow) {
+                        console.log('[PomodoroRecovery] 其他窗口已有活跃番茄钟，跳过本窗口恢复');
+                        return;
+                    }
                     const settings = await this.getPomodoroSettings();
                     const timer = await PomodoroTimer.recoverOrphanedWindow(this, settings);
                     if (timer) {
@@ -2677,6 +2694,11 @@ export default class ReminderPlugin extends Plugin {
                 this.updateBadges();
                 this.updateProjectBadges();
                 this.updateHabitBadges();
+            } else if (type === 'pomodoroQueryActive') {
+                // 若本窗口有活跃的番茄钟，通知询问方无需再次恢复
+                if (PomodoroManager.getInstance().hasActivePomodoroTimer()) {
+                    this.coordinatorChannel.postMessage({ type: 'pomodoroActiveConfirm', instanceId: this.instanceId });
+                }
             }
         };
 
