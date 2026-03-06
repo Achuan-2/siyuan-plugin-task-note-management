@@ -74,8 +74,8 @@ export class BlockBindingDialog {
                 <!-- 按钮切换 -->
                 <div style="margin-bottom: 16px; flex-shrink: 0; display: flex; gap: 8px; justify-content: center;">
                     <button class="b3-button b3-button--outline tab-switch-btn" data-tab="bind">${i18n("bindBlock") || "绑定块"}</button>
-                    <button class="b3-button b3-button--outline tab-switch-btn" data-tab="document">${i18n("newDocument") || "新建文档"}</button>
-                    <button class="b3-button tab-switch-btn" data-tab="heading">${i18n("newHeading") || "新建标题"}</button>
+                    <button class="b3-button b3-button--outline tab-switch-btn" data-tab="heading">${i18n("newHeading") || "新建标题"}</button>
+                    <button class="b3-button tab-switch-btn" data-tab="document">${i18n("newDocument") || "新建文档"}</button>
                 </div>
 
                 <!-- 内容区域 -->
@@ -479,11 +479,29 @@ export class BlockBindingDialog {
                         const boundBlock = await getBlockByID(boundDocBlockId);
                         if (boundBlock && boundBlock.type === 'd') {
                             const rawHPath = boundBlock.hpath || boundBlock.hPath || '';
-                            // 使用完整的 hPath（包含笔记本名）填充输入框，并记录 notebook id
+                            const defaultPath = parentPathInput.value;
+                            const defaultNotebookId: string | undefined = undefined;
+
+                            // 自动填充父块文档路径
+                            parentPathInput.value = rawHPath || '/';
+                            this.selectedPathNotebookId = boundBlock.box || undefined;
+
+                            // 按钮改为"使用默认路径"，支持在父块路径与默认路径之间切换
+                            useParentDocPathBtn.textContent = i18n('useDefaultPath') || '使用默认路径';
                             useParentDocPathBtn.style.display = 'inline-block';
+                            let usingParentPath = true;
                             useParentDocPathBtn.addEventListener('click', () => {
-                                parentPathInput.value = rawHPath || '/';
-                                this.selectedPathNotebookId = boundBlock.box || undefined;
+                                if (usingParentPath) {
+                                    parentPathInput.value = defaultPath;
+                                    this.selectedPathNotebookId = defaultNotebookId;
+                                    useParentDocPathBtn.textContent = i18n('useParentBlockDocPath') || '使用父块文档路径';
+                                    usingParentPath = false;
+                                } else {
+                                    parentPathInput.value = rawHPath || '/';
+                                    this.selectedPathNotebookId = boundBlock.box || undefined;
+                                    useParentDocPathBtn.textContent = i18n('useDefaultPath') || '使用默认路径';
+                                    usingParentPath = true;
+                                }
                             });
                         }
                     }

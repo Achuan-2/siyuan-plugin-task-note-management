@@ -1841,6 +1841,7 @@
     "savePathRelativeToNotebook": "Save Path (relative to selected notebook)",
     "inputOrSearchPathDesc": "Enter or search path, e.g., /Project/Subpage",
     "useParentBlockDocPath": "Use Parent Block Doc Path",
+    "useDefaultPath": "Use Default Path",
     "inputDocumentContent": "Please enter document content",
     "headingContent": "Heading Content",
     "inputHeadingContent": "Please enter heading content",
