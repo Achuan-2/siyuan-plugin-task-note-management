@@ -295,7 +295,10 @@
                     plugin.vip.expireDate = vipStatus.expireDate;
                     await plugin.saveVipData(plugin.vip);
                     window.dispatchEvent(new CustomEvent('reminderSettingsUpdated'));
-                    autoFillMessage = i18n('vipAutoFillSuccess').replace('${count}', String(addedCount));
+                    autoFillMessage = i18n('vipAutoFillSuccess').replace(
+                        '${count}',
+                        String(addedCount)
+                    );
                     autoFillError = false;
                 } else {
                     autoFillMessage = i18n('vipKeyAlreadyAdded');
