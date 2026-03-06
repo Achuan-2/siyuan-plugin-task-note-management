@@ -258,6 +258,61 @@
         navigator.clipboard.writeText(key);
         pushMsg(i18n('vipKeyCopied'));
     }
+
+    let isAutoFilling = false;
+    let autoFillMessage = '';
+    let autoFillError = false;
+
+    async function handleAutoFillKeys() {
+        if (isAutoFilling || userId === 'unknown' || !userId) return;
+        isAutoFilling = true;
+        autoFillMessage = i18n('vipAutoFillFetching');
+        autoFillError = false;
+
+        try {
+            const response = await fetch(
+                `${API_PREFIX}/api/subscription?userId=${encodeURIComponent(userId)}`
+            );
+            const result = await response.json();
+
+            if (result.subscribed && result.keys && result.keys.length > 0) {
+                let addedCount = 0;
+                for (const key of result.keys) {
+                    if (plugin.vip.vipKeys.includes(key)) continue;
+                    const parseResult = VipManager.parseVIPKey(userId, key);
+                    if (!parseResult.valid) continue;
+                    if (parseResult.term === '7d') {
+                        plugin.vip.freeTrialUsed = true;
+                    }
+                    plugin.vip.vipKeys = [...plugin.vip.vipKeys, key];
+                    addedCount++;
+                }
+
+                if (addedCount > 0) {
+                    plugin = plugin;
+                    vipStatus = await VipManager.checkAndUpdateVipStatus(plugin);
+                    plugin.vip.isVip = vipStatus.isVip;
+                    plugin.vip.expireDate = vipStatus.expireDate;
+                    await plugin.saveVipData(plugin.vip);
+                    window.dispatchEvent(new CustomEvent('reminderSettingsUpdated'));
+                    autoFillMessage = i18n('vipAutoFillSuccess').replace('${count}', String(addedCount));
+                    autoFillError = false;
+                } else {
+                    autoFillMessage = i18n('vipKeyAlreadyAdded');
+                    autoFillError = false;
+                }
+            } else {
+                autoFillMessage = i18n('vipAutoFillNoSubscription');
+                autoFillError = true;
+            }
+        } catch (error) {
+            console.error('Auto fill keys failed', error);
+            autoFillMessage = i18n('vipAutoFillFailed');
+            autoFillError = true;
+        } finally {
+            isAutoFilling = false;
+        }
+    }
 </script>
 
 <div class="vip-container {isDialog ? 'in-dialog' : ''}">
@@ -519,6 +574,18 @@
                     </li>
                 </ol>
             </div>
+            {#if !vipStatus.isVip}
+                <button
+                    class="b3-button b3-button--outline auto-fill-btn"
+                    disabled={isAutoFilling || userId === 'unknown' || !userId}
+                    on:click={handleAutoFillKeys}
+                >
+                    {isAutoFilling ? i18n('vipAutoFillFetching') : i18n('vipAutoFillBtn')}
+                </button>
+                {#if autoFillMessage}
+                    <p class="msg {autoFillError ? 'error' : 'success'}">{autoFillMessage}</p>
+                {/if}
+            {/if}
             <div class="activation-box">
                 <input
                     class="b3-text-field fn__block"
@@ -919,6 +986,12 @@
 
     .activate-btn {
         white-space: nowrap;
+    }
+
+    .auto-fill-btn {
+        width: 100%;
+        margin-bottom: 8px;
+        font-size: 13px;
     }
 
     .msg {
