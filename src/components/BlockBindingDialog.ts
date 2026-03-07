@@ -983,14 +983,9 @@ export class BlockBindingDialog {
 
             if (parentBlock.type === 'h') {
                 const parentLevel = parseInt(parentBlock.subtype.replace('h', ''));
-                // 只有当默认层级高于父块（数字更小，例如 H2 高于 H3）时，才调整为父块层级 + 1
-                if (defaultLevel < parentLevel) {
-                    const newLevel = Math.min(parentLevel + 1, 6);
-                    levelSelect.value = newLevel.toString();
-                } else {
-                    // 否则（默认层级低于或等于父块）不调整，保持默认层级
-                    levelSelect.value = defaultLevel.toString();
-                }
+                // 父块是标题块时，自动降一级
+                const newLevel = Math.min(parentLevel + 1, 6);
+                levelSelect.value = newLevel.toString();
             } else {
                 // 父块是文档，使用默认层级
                 levelSelect.value = defaultLevel.toString();
