@@ -1615,7 +1615,23 @@ export class ProjectPanel {
             menu.addItem({
                 iconHTML: "🔗",
                 label: i18n("bindToBlock") || "绑定到块",
-                click: () => this.showBindToBlockDialog(project)
+                submenu: [
+                    {
+                        iconHTML: "🔗",
+                        label: i18n("bindToBlock") || "绑定到块",
+                        click: () => this.showBindToBlockDialog(project, 'bind')
+                    },
+                    {
+                        iconHTML: "📑",
+                        label: i18n("newHeading") || "新建标题",
+                        click: () => this.showBindToBlockDialog(project, 'heading')
+                    },
+                    {
+                        iconHTML: "📄",
+                        label: i18n("newDocument") || "新建文档",
+                        click: () => this.showBindToBlockDialog(project, 'document')
+                    }
+                ]
             });
             menu.addSeparator();
             // 打开项目看板
@@ -2245,7 +2261,7 @@ export class ProjectPanel {
         dialog.show();
     }
 
-    private showBindToBlockDialog(project: any) {
+    private showBindToBlockDialog(project: any, mode: string = 'bind') {
         const blockBindingDialog = new BlockBindingDialog(this.plugin, async (blockId: string) => {
             try {
                 await this.bindProjectToBlock(project, blockId);
@@ -2255,7 +2271,7 @@ export class ProjectPanel {
                 console.error(error);
             }
         }, {
-            defaultTab: 'bind'
+            defaultTab: mode
         });
         blockBindingDialog.show();
     }
