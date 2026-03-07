@@ -102,6 +102,7 @@ export const DEFAULT_SETTINGS = {
     enableReminderDock: true, // 侧边栏：提醒（任务管理）
     enableProjectDock: true, // 侧边栏：项目管理
     enableHabitDock: true, // 侧边栏：习惯管理
+    enableCalendarDock: true, // 侧边栏：日历视图
     // 停靠栏徽章显示控制
     enableDockBadge: true, // 是否在停靠栏显示数字徽章
     // 单独控制每个侧栏是否显示徽章（优先级高于 enableDockBadge）
@@ -773,6 +774,7 @@ export default class ReminderPlugin extends Plugin {
                 this.toggleDockVisibility('project_dock', settings.enableProjectDock !== false);
                 this.toggleDockVisibility('reminder_dock', settings.enableReminderDock !== false);
                 this.toggleDockVisibility('habit_dock', settings.enableHabitDock !== false);
+                this.toggleDockVisibility('calendar_dock', settings.enableCalendarDock !== false);
                 // 同步刷新徽章（显示/隐藏数字）
                 this.updateBadges();
                 this.updateProjectBadges();
@@ -1301,6 +1303,28 @@ export default class ReminderPlugin extends Plugin {
             }
         });
 
+        // 创建日历视图 Dock 面板
+        this.addDock({
+            config: {
+                position: "LeftTop",
+                size: { width: 300, height: 0 },
+                icon: "iconCalendar",
+                title: i18n("calendarDockTitle"),
+                hotkey: ""
+            },
+            data: {
+                text: "Calendar view dock"
+            },
+            resize() {
+            },
+            update() {
+            },
+            type: "calendar_dock",
+            init: (dock) => {
+                new CalendarView(dock.element, this, { isDockMode: true });
+            }
+        });
+
 
 
         // 注册日历视图标签页
@@ -1384,6 +1408,7 @@ export default class ReminderPlugin extends Plugin {
             this.toggleDockVisibility('project_dock', settings.enableProjectDock !== false);
             this.toggleDockVisibility('reminder_dock', settings.enableReminderDock !== false);
             this.toggleDockVisibility('habit_dock', settings.enableHabitDock !== false);
+            this.toggleDockVisibility('calendar_dock', settings.enableCalendarDock !== false);
         } catch (err) {
             console.warn('初始化停靠栏可见性失败:', err);
         }

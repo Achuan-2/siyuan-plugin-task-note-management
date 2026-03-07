@@ -7,6 +7,8 @@ export interface CalendarConfig {
     colorBy: 'category' | 'priority' | 'project';
     viewMode: 'multiMonthYear' | 'dayGridMonth' | 'timeGridWeek' | 'timeGridDay' | 'dayGridWeek' | 'dayGridDay' | 'listDay' | 'listWeek' | 'listMonth' | 'listYear' | 'timeGridMultiDays' | 'dayGridMultiDays' | 'listMultiDays';
     viewType: 'timeline' | 'kanban' | 'list';
+    dockViewMode: 'multiMonthYear' | 'dayGridMonth' | 'timeGridWeek' | 'timeGridDay' | 'dayGridWeek' | 'dayGridDay' | 'listDay' | 'listWeek' | 'listMonth' | 'listYear' | 'timeGridMultiDays' | 'dayGridMultiDays' | 'listMultiDays';
+    dockViewType: 'timeline' | 'kanban' | 'list';
     showLunar: boolean;
     showPomodoro: boolean;
     completionFilter: 'all' | 'completed' | 'incomplete';
@@ -32,6 +34,8 @@ export class CalendarConfigManager {
             colorBy: 'priority', // 默认按优先级上色
             viewMode: 'timeGridWeek', // 默认周视图
             viewType: 'timeline', // 默认视图类型
+            dockViewMode: 'timeGridDay', // Dock 默认日视图
+            dockViewType: 'timeline', // Dock 默认视图类型
             showLunar: true, // 默认显示农历
             showPomodoro: true, // 默认显示番茄专注时间
             completionFilter: 'all', // 默认显示全部状态
@@ -64,6 +68,8 @@ export class CalendarConfigManager {
             settings.calendarColorBy = this.config.colorBy;
             settings.calendarViewMode = this.config.viewMode;
             settings.calendarViewType = this.config.viewType;
+            settings.calendarDockViewMode = this.config.dockViewMode;
+            settings.calendarDockViewType = this.config.dockViewType;
             settings.calendarShowLunar = this.config.showLunar;
             settings.calendarShowPomodoro = this.config.showPomodoro;
             settings.calendarCompletionFilter = this.config.completionFilter;
@@ -117,6 +123,8 @@ export class CalendarConfigManager {
                 colorBy: settings.calendarColorBy || 'project',
                 viewMode: viewMode as any,
                 viewType: settings.calendarViewType || 'timeline',
+                dockViewMode: (settings.calendarDockViewMode || 'timeGridDay') as any,
+                dockViewType: settings.calendarDockViewType || 'timeline',
                 showLunar: settings.calendarShowLunar !== false, // 默认为 true
                 showPomodoro: settings.calendarShowPomodoro !== false, // 默认为 true
                 completionFilter: (settings.calendarCompletionFilter as any) || 'all',
@@ -136,6 +144,8 @@ export class CalendarConfigManager {
                 colorBy: 'priority',
                 viewMode: 'timeGridWeek',
                 viewType: 'timeline',
+                dockViewMode: 'timeGridDay',
+                dockViewType: 'timeline',
                 showLunar: true,
                 showPomodoro: true,
                 completionFilter: 'all',
@@ -187,6 +197,25 @@ export class CalendarConfigManager {
 
     public getViewType(): 'timeline' | 'kanban' | 'list' {
         return this.config.viewType;
+    }
+
+    // Dock 侧边栏独立的视图模式
+    public async setDockViewMode(viewMode: CalendarConfig['viewMode']) {
+        this.config.dockViewMode = viewMode;
+        await this.saveConfig();
+    }
+
+    public getDockViewMode(): CalendarConfig['viewMode'] {
+        return this.config.dockViewMode;
+    }
+
+    public async setDockViewType(viewType: 'timeline' | 'kanban' | 'list') {
+        this.config.dockViewType = viewType;
+        await this.saveConfig();
+    }
+
+    public getDockViewType(): 'timeline' | 'kanban' | 'list' {
+        return this.config.dockViewType;
     }
 
     public getCompletionFilter(): 'all' | 'completed' | 'incomplete' {

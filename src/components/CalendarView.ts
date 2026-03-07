@@ -95,12 +95,39 @@ export class CalendarView {
     private yearBtn: HTMLButtonElement;
     private multiDaysBtn: HTMLButtonElement;
     private viewTypeButton: HTMLButtonElement;
+    private isDockMode: boolean = false; // 是否在 Dock 面板中显示
 
 
     // 使用全局番茄钟管理器
     private pomodoroManager: PomodoroManager = PomodoroManager.getInstance();
     private pomodoroRecordManager: PomodoroRecordManager;
     private lute: any; // Markdown 渲染器
+
+    // Dock 和 Tab 独立的视图配置代理方法
+    private _getViewMode(): ReturnType<typeof this.calendarConfigManager.getViewMode> {
+        return this.isDockMode
+            ? this.calendarConfigManager.getDockViewMode()
+            : this.calendarConfigManager.getViewMode();
+    }
+    private async _setViewMode(viewMode: Parameters<typeof this.calendarConfigManager.setViewMode>[0]) {
+        if (this.isDockMode) {
+            await this.calendarConfigManager.setDockViewMode(viewMode);
+        } else {
+            await this.calendarConfigManager.setViewMode(viewMode);
+        }
+    }
+    private _getViewType(): ReturnType<typeof this.calendarConfigManager.getViewType> {
+        return this.isDockMode
+            ? this.calendarConfigManager.getDockViewType()
+            : this.calendarConfigManager.getViewType();
+    }
+    private async _setViewType(viewType: Parameters<typeof this.calendarConfigManager.setViewType>[0]) {
+        if (this.isDockMode) {
+            await this.calendarConfigManager.setDockViewType(viewType);
+        } else {
+            await this.calendarConfigManager.setViewType(viewType);
+        }
+    }
 
     private async updateSettings() {
         const settings = await this.plugin.loadSettings();
@@ -149,7 +176,7 @@ export class CalendarView {
 
         // 更新视图类型按钮文本
         if (this.viewTypeButton && this.calendarConfigManager) {
-            const currentViewType = this.calendarConfigManager.getViewType();
+            const currentViewType = this._getViewType();
             const viewTypeOptions = [
                 { value: 'timeline', text: i18n("viewTypeTimeline") },
                 { value: 'kanban', text: i18n("viewTypeKanban") },
@@ -164,7 +191,7 @@ export class CalendarView {
             }
 
             // 同步视图模式
-            const savedViewMode = this.calendarConfigManager.getViewMode();
+            const savedViewMode = this._getViewMode();
             if (this.calendar.view.type !== savedViewMode) {
                 this.calendar.changeView(savedViewMode);
                 this.updateViewButtonStates();
@@ -190,9 +217,10 @@ export class CalendarView {
         this.checkVip();
     }
 
-    constructor(container: HTMLElement, plugin: any, data?: { projectFilter?: string }) {
+    constructor(container: HTMLElement, plugin: any, data?: { projectFilter?: string, isDockMode?: boolean }) {
         this.container = container;
         this.plugin = plugin;
+        this.isDockMode = data?.isDockMode || false;
         this.pomodoroRecordManager = PomodoroRecordManager.getInstance(plugin);
         this.categoryManager = CategoryManager.getInstance(plugin); // 初始化分类管理器
         this.projectManager = ProjectManager.getInstance(this.plugin);
@@ -476,17 +504,60 @@ export class CalendarView {
         toolbar.className = 'reminder-calendar-toolbar';
         this.container.appendChild(toolbar);
 
+        // Dock 模式：添加“在标签页打开”按钮和折叠按钮
+        let collapsibleContent: HTMLDivElement | null = null;
+        if (this.isDockMode) {
+            toolbar.classList.add('reminder-calendar-toolbar--dock');
+
+            // 在标签页打开按钮（始终显示）
+            const openTabBtn = document.createElement('button');
+            openTabBtn.className = 'b3-button b3-button--outline';
+            openTabBtn.style.padding = '4px 8px';
+            openTabBtn.innerHTML = '<svg class="b3-button__icon" style="margin-right: 0;"><use xlink:href="#iconOpen"></use></svg>';
+            openTabBtn.title = i18n("openCalendarInTab") || "在标签页中打开";
+            openTabBtn.addEventListener('click', () => {
+                this.plugin.openCalendarTab();
+            });
+            toolbar.appendChild(openTabBtn);
+
+            // 折叠切换按钮
+            const toggleBtn = document.createElement('button');
+            toggleBtn.className = 'b3-button b3-button--outline reminder-calendar-toolbar-toggle';
+            toggleBtn.style.padding = '4px 8px';
+            toggleBtn.innerHTML = '<svg class="b3-button__icon" style="margin-right: 0;"><use xlink:href="#iconDown"></use></svg>';
+            toggleBtn.title = i18n("toggleToolbar") || "展开/收起工具栏";
+            toolbar.appendChild(toggleBtn);
+
+            // 可折叠内容容器
+            collapsibleContent = document.createElement('div');
+            collapsibleContent.className = 'reminder-calendar-toolbar-collapsible';
+            collapsibleContent.style.display = 'none';
+            this.container.insertBefore(collapsibleContent, toolbar.nextSibling);
+
+            toggleBtn.addEventListener('click', () => {
+                const isCollapsed = collapsibleContent.style.display === 'none';
+                collapsibleContent.style.display = isCollapsed ? 'flex' : 'none';
+                toggleBtn.innerHTML = isCollapsed
+                    ? '<svg class="b3-button__icon" style="margin-right: 0;"><use xlink:href="#iconUp"></use></svg>'
+                    : '<svg class="b3-button__icon" style="margin-right: 0;"><use xlink:href="#iconDown"></use></svg>';
+            });
+        }
+
+        // 工具栏内容的实际父容器（dock模式下放入可折叠区域，否则放入toolbar本身）
+        const toolbarViewParent = collapsibleContent || toolbar;
+        const toolbarFilterParent = collapsibleContent || toolbar;
+
 
 
         // 视图切换按钮
         const viewGroup = document.createElement('div');
         viewGroup.className = 'reminder-calendar-view-group';
-        toolbar.appendChild(viewGroup);
+        toolbarViewParent.appendChild(viewGroup);
         this.yearBtn = document.createElement('button');
         this.yearBtn.className = 'b3-button b3-button--outline';
         this.yearBtn.textContent = i18n("year");
         this.yearBtn.addEventListener('click', async () => {
-            const viewType = this.calendarConfigManager.getViewType();
+            const viewType = this._getViewType();
             let viewMode: string;
             if (viewType === 'list') {
                 viewMode = 'listYear';
@@ -494,7 +565,7 @@ export class CalendarView {
                 // timeline and kanban both use multiMonthYear
                 viewMode = 'multiMonthYear';
             }
-            await this.calendarConfigManager.setViewMode(viewMode as any);
+            await this._setViewMode(viewMode as any);
             this.calendar.changeView(viewMode);
             this.updateViewButtonStates();
             this.updatePomodoroButtonVisibility();
@@ -504,7 +575,7 @@ export class CalendarView {
         this.monthBtn.className = 'b3-button b3-button--outline';
         this.monthBtn.textContent = i18n("month");
         this.monthBtn.addEventListener('click', async () => {
-            const viewType = this.calendarConfigManager.getViewType();
+            const viewType = this._getViewType();
             let viewMode: string;
             if (viewType === 'list') {
                 viewMode = 'listMonth';
@@ -512,7 +583,7 @@ export class CalendarView {
                 // timeline and kanban both use dayGridMonth
                 viewMode = 'dayGridMonth';
             }
-            await this.calendarConfigManager.setViewMode(viewMode as any);
+            await this._setViewMode(viewMode as any);
             this.calendar.changeView(viewMode);
             this.updateViewButtonStates();
             this.updatePomodoroButtonVisibility();
@@ -523,7 +594,7 @@ export class CalendarView {
         this.weekBtn.className = 'b3-button b3-button--outline';
         this.weekBtn.textContent = i18n("week");
         this.weekBtn.addEventListener('click', async () => {
-            const viewType = this.calendarConfigManager.getViewType();
+            const viewType = this._getViewType();
             let viewMode: string;
             if (viewType === 'timeline') {
                 viewMode = 'timeGridWeek';
@@ -532,7 +603,7 @@ export class CalendarView {
             } else { // list
                 viewMode = 'listWeek';
             }
-            await this.calendarConfigManager.setViewMode(viewMode as any);
+            await this._setViewMode(viewMode as any);
             this.calendar.changeView(viewMode);
             this.updateViewButtonStates();
             this.updatePomodoroButtonVisibility();
@@ -544,7 +615,7 @@ export class CalendarView {
         this.multiDaysBtn.className = 'b3-button b3-button--outline';
         this.multiDaysBtn.textContent = i18n("multiDays") || "多天";
         this.multiDaysBtn.addEventListener('click', async () => {
-            const viewType = this.calendarConfigManager.getViewType();
+            const viewType = this._getViewType();
             const multiDaysCount = this.calendarConfigManager.getMultiDaysCount();
             let viewMode: string;
             if (viewType === 'timeline') {
@@ -558,7 +629,7 @@ export class CalendarView {
             // 计算多天视图的起始日期（今天的前一天），使今天显示为第二天
             const startDate = getRelativeDateString(-1);
 
-            await this.calendarConfigManager.setViewMode(viewMode as any);
+            await this._setViewMode(viewMode as any);
             this.calendar.changeView(viewMode, startDate);
             this.updateViewButtonStates();
             this.updatePomodoroButtonVisibility();
@@ -569,7 +640,7 @@ export class CalendarView {
         this.dayBtn.className = 'b3-button b3-button--outline';
         this.dayBtn.textContent = i18n("day");
         this.dayBtn.addEventListener('click', async () => {
-            const viewType = this.calendarConfigManager.getViewType();
+            const viewType = this._getViewType();
             let viewMode: string;
             if (viewType === 'timeline') {
                 viewMode = 'timeGridDay';
@@ -578,7 +649,7 @@ export class CalendarView {
             } else { // list
                 viewMode = 'listDay';
             }
-            await this.calendarConfigManager.setViewMode(viewMode as any);
+            await this._setViewMode(viewMode as any);
             this.calendar.changeView(viewMode);
             this.updateViewButtonStates();
             this.updatePomodoroButtonVisibility();
@@ -594,7 +665,7 @@ export class CalendarView {
         viewTypeContainer.style.display = 'inline-block';
         viewTypeContainer.style.marginLeft = '8px';
 
-        const currentViewType = this.calendarConfigManager.getViewType();
+        const currentViewType = this._getViewType();
         const viewTypeOptions = [
             { value: 'timeline', text: i18n("viewTypeTimeline") },
             { value: 'kanban', text: i18n("viewTypeKanban") },
@@ -637,7 +708,7 @@ export class CalendarView {
             optionItem.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 const selectedViewType = option.value as 'timeline' | 'kanban' | 'list';
-                const currentViewMode = this.calendarConfigManager.getViewMode();
+                const currentViewMode = this._getViewMode();
 
                 // Determine the new view mode based on current view mode and new view type
                 let newViewMode: string;
@@ -709,8 +780,8 @@ export class CalendarView {
                     }
                 }
 
-                await this.calendarConfigManager.setViewType(selectedViewType);
-                await this.calendarConfigManager.setViewMode(newViewMode as any);
+                await this._setViewType(selectedViewType);
+                await this._setViewMode(newViewMode as any);
                 this.calendar.changeView(newViewMode);
                 this.updateViewButtonStates();
                 this.updatePomodoroButtonVisibility();
@@ -754,7 +825,7 @@ export class CalendarView {
         filterGroup.style.alignItems = 'center';
         filterGroup.style.flexWrap = 'wrap';
         filterGroup.style.gap = '8px';
-        toolbar.appendChild(filterGroup);
+        toolbarFilterParent.appendChild(filterGroup);
 
         // 筛选图标
         const filterIcon = document.createElement('span');
@@ -1218,7 +1289,7 @@ export class CalendarView {
         this.container.appendChild(calendarEl);
 
         // 初始化日历 - 使用用户设置的周开始日
-        const initialViewMode = this.calendarConfigManager.getViewMode();
+        const initialViewMode = this._getViewMode();
         const multiDaysCount = this.calendarConfigManager.getMultiDaysCount();
         const multiDaysStartDate = getRelativeDateString(-1);
         this.calendar = new Calendar(calendarEl, {
@@ -1271,7 +1342,7 @@ export class CalendarView {
                     }
                 },
                 jumpTo: {
-                    text: i18n("jumpToDate") || "跳转到",
+                    text: ' ',
                     click: () => {
                         const activeDate = getLocalDateString(this.calendar.getDate());
                         const inputContainer = document.createElement('div');
@@ -1633,6 +1704,13 @@ export class CalendarView {
         });
 
         this.calendar.render();
+
+        // 将跳转到日期按钮替换为日历图标
+        const jumpToBtn = calendarEl.querySelector('.fc-jumpTo-button') as HTMLButtonElement;
+        if (jumpToBtn) {
+            jumpToBtn.innerHTML = '<svg class="b3-button__icon" style="width: 14px; height: 14px; margin-right: 0;"><use xlink:href="#iconCalendar"></use></svg>';
+            jumpToBtn.title = i18n("jumpToDate") || "跳转到日期";
+        }
 
         // Fix fc-more-popover overflow: when the "+N more" popover appears near the right edge,
         // FullCalendar may position it with a left value that causes it to overflow the container.
@@ -7931,7 +8009,7 @@ export class CalendarView {
      * 更新视图按钮的激活状态
      */
     private updateViewButtonStates() {
-        const currentViewMode = this.calendarConfigManager.getViewMode();
+        const currentViewMode = this._getViewMode();
 
         // 重置所有按钮样式
         this.monthBtn.classList.remove('b3-button--primary');

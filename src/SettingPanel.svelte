@@ -335,6 +335,13 @@
                     description: i18n('enableHabitDockDesc'),
                 },
                 {
+                    key: 'enableCalendarDock',
+                    value: settings.enableCalendarDock,
+                    type: 'checkbox',
+                    title: i18n('enableCalendarDock'),
+                    description: i18n('enableCalendarDockDesc'),
+                },
+                {
                     key: 'enableDockBadge',
                     value: settings.enableDockBadge,
                     type: 'checkbox',
