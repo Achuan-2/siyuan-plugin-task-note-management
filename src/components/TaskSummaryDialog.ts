@@ -1,4 +1,5 @@
-import { Dialog, showMessage, Menu } from "siyuan";
+import { Dialog, showMessage, Menu, platformUtils } from "siyuan";
+
 import { i18n } from "../pluginInstance";
 import { getLocalDateString, getLogicalDateString, getLocaleTag } from "../utils/dateUtils";
 import { ProjectManager } from "../utils/projectManager";
@@ -1785,10 +1786,9 @@ export class TaskSummaryDialog {
 
       // 复制到剪贴板
       if (format === 'html') {
-        this.copyHTMLToClipboard(content);
+        await this.copyHTMLToClipboard(content, this.htmlToPlainText(container as HTMLElement));
       } else {
-        await navigator.clipboard.writeText(content);
-        showMessage(i18n("copiedToClipboard"));
+        this.copyTextToClipboard(content);
       }
     } catch (error) {
       console.error('复制失败:', error);
@@ -1986,15 +1986,26 @@ export class TaskSummaryDialog {
     return text;
   }
 
-  private copyHTMLToClipboard(html: string) {
-    const blob = new Blob([html], { type: 'text/html' });
-    const clipboardItem = new ClipboardItem({ 'text/html': blob });
-    navigator.clipboard.write([clipboardItem]).then(() => {
+  private copyTextToClipboard(text: string) {
+    platformUtils.writeText(text);
+    showMessage(i18n("copiedToClipboard"));
+  }
+
+  private async copyHTMLToClipboard(html: string, fallbackText: string) {
+    try {
+      if (typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write) {
+        this.copyTextToClipboard(fallbackText);
+        return;
+      }
+
+      const blob = new Blob([html], { type: 'text/html' });
+      const clipboardItem = new ClipboardItem({ 'text/html': blob });
+      await navigator.clipboard.write([clipboardItem]);
       showMessage(i18n("copiedToClipboard"));
-    }).catch(error => {
-      console.error('复制富文本失败:', error);
-      showMessage(i18n("copyFailed"));
-    });
+    } catch (error) {
+      console.error('复制富文本失败，回退为纯文本复制:', error);
+      this.copyTextToClipboard(fallbackText);
+    }
   }
 
 }
