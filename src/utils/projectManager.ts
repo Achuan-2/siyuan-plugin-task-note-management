@@ -40,6 +40,7 @@ export interface Project {
     sort?: number;
     startDate?: string;
     createdTime?: string;
+    categoryId?: string;
 }
 
 /**
@@ -147,7 +148,8 @@ export class ProjectManager {
                         priority: project.priority || 'none',
                         sort: project.sort || 0,
                         startDate: project.startDate,
-                        createdTime: project.createdTime
+                        createdTime: project.createdTime,
+                        categoryId: project.categoryId
                     }));
 
                 // 从项目中提取颜色到 projectColors

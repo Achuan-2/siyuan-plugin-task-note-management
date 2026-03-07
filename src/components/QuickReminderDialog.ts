@@ -1862,7 +1862,7 @@ export class QuickReminderDialog {
                     <div class="b3-dialog__action" style="display: flex; justify-content: space-between; align-items: center;">
                         <div id="quickSubtasksGroup" style="display: none;">
                             <button type="button" id="quickViewSubtasksBtn" class="b3-button b3-button--text" style="display: flex; align-items: center; gap: 4px; padding: 4px 8px;">
-                                <svg class="b3-button__icon"><use xlink:href="#iconBulletedList"></use></svg>
+                                <svg class="b3-button__icon"><use xlink:href="#iconEye"></use></svg>
                                 <span id="quickSubtasksCountText">${i18n("viewSubtasks")}</span>
                             </button>
                         </div>
@@ -3632,6 +3632,34 @@ export class QuickReminderDialog {
         if (!customGroupContainer) return;
 
         if (projectId) {
+            // 新建任务时，自动填充项目所属分类
+            if (this.mode !== 'edit' && this.mode !== 'batch_edit') {
+                const project = this.projectManager.getProjectById(projectId);
+                if (project && project.categoryId) {
+                    this.selectedCategoryIds = project.categoryId.split(',')
+                        .map(id => id.trim())
+                        .filter(id => id);
+
+                    const categorySelector = this.dialog.element.querySelector('.category-selector') as HTMLElement;
+                    if (categorySelector) {
+                        const buttons = categorySelector.querySelectorAll('.category-option');
+                        buttons.forEach(btn => {
+                            const id = btn.getAttribute('data-category');
+                            if (this.selectedCategoryIds.length === 0) {
+                                if (!id) btn.classList.add('selected');
+                                else btn.classList.remove('selected');
+                            } else {
+                                if (id && this.selectedCategoryIds.includes(id)) {
+                                    btn.classList.add('selected');
+                                } else {
+                                    btn.classList.remove('selected');
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+
             // 检查项目是否有自定义分组
             try {
                 const { ProjectManager } = await import('../utils/projectManager');
