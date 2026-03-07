@@ -95,6 +95,7 @@ export class PomodoroTimer {
     private randomRestCheckTimer: number = null; // 定期检查定时器
     private randomRestNextTriggerTime: number = 0; // 下次触发时间
     private randomRestWindow: any = null; // 新增：随机微休息弹窗
+    private randomRestWindowAutoCloseTimer: number = null; // 随机微休息弹窗自动关闭定时器
     private pomodoroEndWindow: any = null; // 新增：番茄钟结束弹窗
 
     private systemNotificationEnabled: boolean = true; // 新增：系统弹窗开关
@@ -671,65 +672,42 @@ export class PomodoroTimer {
             }
 
             // 使用设置中的微休息时间播放结束声音
-            if (this.randomRestEndSound) {
-                const breakDurationSeconds = Number(this.settings.randomRestBreakDuration) || 0;
-                const breakDuration = Math.max(0, breakDurationSeconds * 1000);
+            const breakDurationSeconds = Number(this.settings.randomRestBreakDuration) || 0;
+            const breakDuration = Math.max(0, breakDurationSeconds * 1000);
 
-                this.randomRestEndSoundTimer = window.setTimeout(async () => {
-                    try {
-                        // 使用 safePlayAudio 播放结束声音，保证在权限允许时能播放
-                        const playedEnd = await this.safePlayAudio(this.randomRestEndSound);
-                        if (playedEnd) {
-                        } else {
-                            console.warn('随机微休息结束声音被阻止或播放失败（等待用户交互以解锁）');
+            this.randomRestEndSoundTimer = window.setTimeout(() => {
+                // 播放结束声音（fire-and-forget，不阻塞关闭和通知）
+                if (this.randomRestEndSound) {
+                    this.safePlayAudio(this.randomRestEndSound).then(played => {
+                        if (!played) {
+                            console.warn('随机微休息结束声音被阻止或播放失败');
                         }
-                    } catch (error) {
-                        // safePlayAudio 应不会抛出，但以防万一记录警告
-                        console.warn('播放随机微休息结束声音时发生异常:', error);
-                    } finally {
-                        this.closeRandomRestWindow();
-                        // 随机微休息微休息结束，增加计数并持久化
-                        try {
-                            // 随机微休息计数仅在内存中维护
-                            this.randomRestCount++;
-                            this.updateDisplay();
-                        } catch (err) {
-                            console.warn('更新随机微休息计数失败:', err);
-                        }
-                        // 无论音频是否播放成功，都显示系统通知
-                        if (this.randomRestSystemNotificationEnabled) {
-                            this.showSystemNotification(
-                                i18n('randomRestSettings'),
-                                i18n('randomRestComplete') || '微休息时间结束，可以继续专注工作了！',
-                                this.randomRestAutoClose ? this.randomRestAutoCloseDelay : undefined
-                            );
-                        }
-                        this.randomRestEndSoundTimer = null;
-                    }
-                }, breakDuration);
-            } else {
-                const breakDurationSeconds = Number(this.settings.randomRestBreakDuration) || 0;
-                const breakDuration = Math.max(0, breakDurationSeconds * 1000);
+                    }).catch(err => {
+                        console.warn('播放随机微休息结束声音时发生异常:', err);
+                    });
+                }
 
-                this.randomRestEndSoundTimer = window.setTimeout(() => {
-                    this.closeRandomRestWindow();
-                    // 随机微休息微休息结束，增加计数并持久化
-                    try {
-                        // 随机微休息计数仅在内存中维护
-                        this.randomRestCount++;
-                        this.updateDisplay();
-                    } catch (err) {
-                        console.warn('更新随机微休息计数失败:', err);
-                    }
-                    if (this.randomRestSystemNotificationEnabled) {
-                        this.showSystemNotification(
-                            i18n('randomRestSettings'),
-                            i18n('randomRestComplete') || '微休息时间结束，可以继续专注工作了！'
-                        );
-                    }
-                    this.randomRestEndSoundTimer = null;
-                }, breakDuration);
-            }
+                // 立即关闭弹窗（不等待音频播放完成）
+                this.closeRandomRestWindow();
+
+                // 随机微休息结束，增加计数
+                try {
+                    this.randomRestCount++;
+                    this.updateDisplay();
+                } catch (err) {
+                    console.warn('更新随机微休息计数失败:', err);
+                }
+
+                // 显示系统通知
+                if (this.randomRestSystemNotificationEnabled) {
+                    this.showSystemNotification(
+                        i18n('randomRestSettings'),
+                        i18n('randomRestComplete') || '微休息时间结束，可以继续专注工作了！',
+                        this.randomRestAutoClose ? this.randomRestAutoCloseDelay : undefined
+                    );
+                }
+                this.randomRestEndSoundTimer = null;
+            }, breakDuration);
 
         } catch (error) {
             console.error('播放随机微休息失败:', error);
@@ -823,6 +801,11 @@ export class PomodoroTimer {
 
 
     private closeRandomRestWindow() {
+        // 清理自动关闭定时器
+        if (this.randomRestWindowAutoCloseTimer) {
+            clearTimeout(this.randomRestWindowAutoCloseTimer);
+            this.randomRestWindowAutoCloseTimer = null;
+        }
         if (this.randomRestWindow) {
             try {
                 this.randomRestWindow.destroy();
@@ -1505,10 +1488,14 @@ export class PomodoroTimer {
 
             this.randomRestWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(htmlContent));
 
+            // 安全网：用独立定时器确保弹窗最终关闭（比主定时器多2秒余量）
             if (autoCloseDelay) {
-                setTimeout(() => {
+                if (this.randomRestWindowAutoCloseTimer) {
+                    clearTimeout(this.randomRestWindowAutoCloseTimer);
+                }
+                this.randomRestWindowAutoCloseTimer = window.setTimeout(() => {
                     this.closeRandomRestWindow();
-                }, (autoCloseDelay + 1) * 1000); // 增加1秒延迟，让倒计时显示为0
+                }, (autoCloseDelay + 2) * 1000);
             }
 
 
