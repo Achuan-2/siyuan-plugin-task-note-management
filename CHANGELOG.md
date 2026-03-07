@@ -14,6 +14,23 @@
 - 🐛 番茄钟：电脑端使用全局番茄钟，思源新建窗口会错误启动一个新番茄钟实例
 - 🐛 番茄钟：BrowserWindow随机微休息有时候不会自动关闭，并且需要手动关闭才会弹出系统通知
 
+---
+
+- 🎨 Updated plugin icon, thanks to Forrest for designing the icon for the plugin
+- 🎨 Calendar view now supports display in the sidebar
+- 🎨 Project Kanban: Supports hiding completed subtasks
+- 🎨 Task management sidebar: Filters support setting future x days and specific annual dates
+- 🎨 Task management sidebar: Supports deleting built-in filters
+- 🎨 Task editing/viewing: Optimized the experience for creating and viewing subtasks; creating/viewing subtasks is placed in the lower-left corner for easy visibility of the number of subtasks without scrolling
+- 🎨 Creating tasks: Automatically fills in the selected project category
+- 🎨 Task notes: Pasted images are stored separately as files to avoid increasing the size of the task data file
+- 🎨 Improved date intelligent recognition
+- 🎨 Subscribed members can retrieve existing activation codes online on new devices
+- 🎨 Task editing: Binding to blocks changed to a submenu format for easier selection of binding existing blocks, creating new headings, or creating new documents
+- 🐛 Task management sidebar: Unable to complete recurring instances with modified dates
+- 🐛 Pomodoro Timer: Using the global Pomodoro Timer on the desktop, creating a new window in SiYuan incorrectly starts a new Pomodoro instance
+- 🐛 Pomodoro Timer: BrowserWindow random micro-breaks sometimes do not close automatically and require manual closure to trigger system notifications
+
 ## v6.2.4 / 20260305
 - 🎨 适配思源v3.5.10 emoji弹窗
 - 🎨 适配思源安卓/鸿蒙v3.5.10手机端提醒
