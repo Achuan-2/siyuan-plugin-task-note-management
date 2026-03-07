@@ -8074,6 +8074,10 @@ document.body.classList.remove('docked-mode');
         setInterval(() => {
             if (localState.isRunning && !localState.isPaused) {
                 const now = Date.now();
+                // FIX: 检查 startTime 是否有效（避免刚开始或窗口重建时进度条瞬间跳跃）
+                if (!localState.startTime || localState.startTime <= 0 || localState.startTime > now) {
+                    return; // 跳过无效的时间计算，等待主进程同步正确的 startTime
+                }
                 // startTime is the timestamp when the timer logic says "start"
                 // elapsed = now - startTime (in seconds)
                 const elapsed = Math.floor((now - localState.startTime) / 1000);
