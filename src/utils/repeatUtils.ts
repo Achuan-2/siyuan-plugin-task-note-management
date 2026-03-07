@@ -354,7 +354,7 @@ export function getRepeatDescription(repeatConfig: RepeatConfig): string {
 
     switch (repeatConfig.type) {
         case 'daily':
-            description = interval === 1 ? i18n("everyDay") : i18n("everyNDays", { n: interval.toString() });
+            description = interval === 1 ? i18n("freqDaily") : i18n("everyNDays", { n: interval.toString() });
             break;
         case 'weekly':
             if (repeatConfig.weekDays && repeatConfig.weekDays.length > 0) {
