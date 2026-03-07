@@ -743,11 +743,6 @@ export class ReminderPanel {
                 target: dialog.element.querySelector('#filterManagementContent'),
                 props: {
                     plugin: this.plugin,
-                    onClose: () => {
-                        // 关闭时更新filterSelect
-                        this.updateFilterSelect();
-                        dialog.destroy();
-                    },
                     onFilterApplied: async (filter: any) => {
                         // 应用过滤器逻辑
                         console.log('应用过滤器:', filter);
