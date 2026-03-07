@@ -595,6 +595,112 @@ export class QuickReminderDialog {
         return diffDays + 1;
     }
 
+    private parseEstimatedPomodoroDurationToMinutes(value: any): number {
+        if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+            return Math.round(value);
+        }
+
+        if (typeof value !== 'string') {
+            return 0;
+        }
+
+        const normalized = value.trim().toLowerCase().replace(/\s+/g, '');
+        if (!normalized) {
+            return 0;
+        }
+
+        if (/^\d+(?:\.\d+)?$/.test(normalized)) {
+            const minutes = Number(normalized);
+            return minutes > 0 ? Math.round(minutes) : 0;
+        }
+
+        let totalMinutes = 0;
+        let matched = false;
+        const durationRegex = /(\d+(?:\.\d+)?)(h(?:ours?)?|hr|hrs|小时|时|m(?:in(?:ute)?s?)?|分钟|分)/g;
+        let match: RegExpExecArray | null;
+
+        while ((match = durationRegex.exec(normalized)) !== null) {
+            const amount = Number(match[1]);
+            if (!Number.isFinite(amount) || amount <= 0) {
+                continue;
+            }
+
+            matched = true;
+            const unit = match[2];
+            if (/^(h|hr|hrs|hour|hours|小时|时)/.test(unit)) {
+                totalMinutes += amount * 60;
+            } else {
+                totalMinutes += amount;
+            }
+        }
+
+        return matched && totalMinutes > 0 ? Math.round(totalMinutes) : 0;
+    }
+
+    private splitEstimatedPomodoroDuration(value: any): { hours: number; minutes: number } {
+        const totalMinutes = this.parseEstimatedPomodoroDurationToMinutes(value);
+        return {
+            hours: Math.floor(totalMinutes / 60),
+            minutes: totalMinutes % 60,
+        };
+    }
+
+    private formatEstimatedPomodoroDuration(hours: number, minutes: number): string | undefined {
+        const normalizedHours = Math.max(0, Math.floor(hours || 0));
+        const normalizedMinutes = Math.max(0, Math.floor(minutes || 0));
+        const totalMinutes = normalizedHours * 60 + normalizedMinutes;
+
+        if (totalMinutes <= 0) {
+            return undefined;
+        }
+
+        const finalHours = Math.floor(totalMinutes / 60);
+        const finalMinutes = totalMinutes % 60;
+        let result = '';
+
+        if (finalHours > 0) {
+            result += `${finalHours}h`;
+        }
+        if (finalMinutes > 0) {
+            result += `${finalMinutes}m`;
+        }
+
+        return result || undefined;
+    }
+
+    private normalizeEstimatedPomodoroDurationInputs() {
+        const hoursInput = this.dialog.element.querySelector('#quickEstimatedPomodoroHours') as HTMLInputElement;
+        const minutesInput = this.dialog.element.querySelector('#quickEstimatedPomodoroMinutes') as HTMLInputElement;
+
+        if (!hoursInput || !minutesInput) return;
+
+        const rawHours = Number(hoursInput.value || 0);
+        const rawMinutes = Number(minutesInput.value || 0);
+        const hours = Number.isFinite(rawHours) ? Math.max(0, Math.floor(rawHours)) : 0;
+        const minutes = Number.isFinite(rawMinutes) ? Math.max(0, Math.floor(rawMinutes)) : 0;
+        const totalMinutes = hours * 60 + minutes;
+        const normalizedHours = Math.floor(totalMinutes / 60);
+        const normalizedMinutes = totalMinutes % 60;
+
+        hoursInput.value = normalizedHours > 0 ? String(normalizedHours) : '';
+        minutesInput.value = normalizedMinutes > 0 ? String(normalizedMinutes) : '';
+    }
+
+    private getEstimatedPomodoroDurationValue(): string | undefined {
+        const hoursInput = this.dialog.element.querySelector('#quickEstimatedPomodoroHours') as HTMLInputElement;
+        const minutesInput = this.dialog.element.querySelector('#quickEstimatedPomodoroMinutes') as HTMLInputElement;
+
+        if (!hoursInput || !minutesInput) {
+            return undefined;
+        }
+
+        this.normalizeEstimatedPomodoroDurationInputs();
+
+        const hours = Number(hoursInput.value || 0);
+        const minutes = Number(minutesInput.value || 0);
+        return this.formatEstimatedPomodoroDuration(hours, minutes);
+    }
+
     // 填充编辑表单数据
     private async populateEditForm() {
         if (!this.reminder) return;
@@ -688,9 +794,16 @@ export class QuickReminderDialog {
         }
 
         // 填充预计番茄时长
-        const estimatedPomodoroDurationInput = this.dialog.element.querySelector('#quickEstimatedPomodoroDuration') as HTMLInputElement;
-        if (estimatedPomodoroDurationInput && this.reminder.estimatedPomodoroDuration) {
-            estimatedPomodoroDurationInput.value = this.reminder.estimatedPomodoroDuration;
+        const estimatedPomodoroHoursInput = this.dialog.element.querySelector('#quickEstimatedPomodoroHours') as HTMLInputElement;
+        const estimatedPomodoroMinutesInput = this.dialog.element.querySelector('#quickEstimatedPomodoroMinutes') as HTMLInputElement;
+        if ((estimatedPomodoroHoursInput || estimatedPomodoroMinutesInput) && this.reminder.estimatedPomodoroDuration) {
+            const { hours, minutes } = this.splitEstimatedPomodoroDuration(this.reminder.estimatedPomodoroDuration);
+            if (estimatedPomodoroHoursInput) {
+                estimatedPomodoroHoursInput.value = hours > 0 ? String(hours) : '';
+            }
+            if (estimatedPomodoroMinutesInput) {
+                estimatedPomodoroMinutesInput.value = minutes > 0 ? String(minutes) : '';
+            }
         }
 
         // 填充日期和时间（使用独立的日期和时间输入框）
@@ -994,7 +1107,7 @@ export class QuickReminderDialog {
         if (subtasksGroup) subtasksGroup.style.display = 'none';
 
         // 隐藏预计番茄时长组
-        hideGroupOf('#quickEstimatedPomodoroDuration');
+        hideGroupOf('#quickEstimatedPomodoroHours');
 
         // 隐藏番茄钟查看组
         const pomodorosGroup = dialog.querySelector('#quickPomodorosGroup') as HTMLElement;
@@ -1751,7 +1864,16 @@ export class QuickReminderDialog {
 
                         <div class="b3-form__group">
                             <label class="b3-form__label">${i18n("estimatedPomodoroDuration")}</label>
-                            <input type="text" id="quickEstimatedPomodoroDuration" class="b3-text-field" placeholder="${i18n("estimatedPomodoroDurationPlaceholder")}" style="width: 100%;" spellcheck="false">
+                            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                                <div style="display: flex; align-items: center; gap: 6px; flex: 1 1 150px; min-width: 140px;">
+                                    <input type="number" id="quickEstimatedPomodoroHours" class="b3-text-field" min="0" step="1" placeholder="0" style="width: 100%;">
+                                    <span style="white-space: nowrap; color: var(--b3-theme-on-surface-light);">h</span>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 6px; flex: 1 1 150px; min-width: 140px;">
+                                    <input type="number" id="quickEstimatedPomodoroMinutes" class="b3-text-field" min="0" step="1" placeholder="0" style="width: 100%;">
+                                    <span style="white-space: nowrap; color: var(--b3-theme-on-surface-light);">m</span>
+                                </div>
+                            </div>
                         </div>
                         <div class="b3-form__group" id="quickPomodorosGroup" style="display: none;">
                             <label class="b3-form__label">${i18n("pomodoros")}</label>
@@ -2710,6 +2832,8 @@ export class QuickReminderDialog {
         const editAllInstancesBtn = this.dialog.element.querySelector('#quickEditAllInstancesBtn') as HTMLButtonElement;
         const viewPomodorosBtn = this.dialog.element.querySelector('#quickViewPomodorosBtn') as HTMLButtonElement;
         const durationInput = this.dialog.element.querySelector('#quickDurationDays') as HTMLInputElement;
+        const estimatedPomodoroHoursInput = this.dialog.element.querySelector('#quickEstimatedPomodoroHours') as HTMLInputElement;
+        const estimatedPomodoroMinutesInput = this.dialog.element.querySelector('#quickEstimatedPomodoroMinutes') as HTMLInputElement;
         const syncBlockTitleBtn = this.dialog.element.querySelector('#quickSyncBlockTitleBtn') as HTMLButtonElement;
         const syncTitleToBlockBtn = this.dialog.element.querySelector('#quickSyncTitleToBlockBtn') as HTMLButtonElement;
 
@@ -2812,6 +2936,17 @@ export class QuickReminderDialog {
         durationInput?.addEventListener('keydown', (e) => {
             if (e.key === 'ArrowUp' || e.key === 'ArrowDown') setTimeout(normalizeDuration, 0);
         });
+
+        const normalizeEstimatedPomodoroDuration = () => {
+            this.normalizeEstimatedPomodoroDurationInputs();
+        };
+
+        estimatedPomodoroHoursInput?.addEventListener('input', normalizeEstimatedPomodoroDuration);
+        estimatedPomodoroHoursInput?.addEventListener('change', normalizeEstimatedPomodoroDuration);
+        estimatedPomodoroHoursInput?.addEventListener('blur', normalizeEstimatedPomodoroDuration);
+        estimatedPomodoroMinutesInput?.addEventListener('input', normalizeEstimatedPomodoroDuration);
+        estimatedPomodoroMinutesInput?.addEventListener('change', normalizeEstimatedPomodoroDuration);
+        estimatedPomodoroMinutesInput?.addEventListener('blur', normalizeEstimatedPomodoroDuration);
 
         // 当结束日期变化，基于开始日期计算持续天数
         endDateInput?.addEventListener('change', () => {
@@ -4061,7 +4196,7 @@ export class QuickReminderDialog {
         const milestoneId = milestoneSelector?.value || undefined;
 
         const customReminderPreset = (this.dialog.element.querySelector('#quickCustomReminderPreset') as HTMLSelectElement)?.value || undefined;
-        const estimatedPomodoroDuration = (this.dialog.element.querySelector('#quickEstimatedPomodoroDuration') as HTMLInputElement)?.value.trim() || undefined;
+        const estimatedPomodoroDuration = this.getEstimatedPomodoroDurationValue();
 
         // 每日可做
         const isAvailableToday = (this.dialog.element.querySelector('#quickIsAvailableToday') as HTMLInputElement)?.checked || false;
