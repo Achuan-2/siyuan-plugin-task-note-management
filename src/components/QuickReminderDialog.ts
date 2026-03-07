@@ -20,7 +20,7 @@ import { cursor } from "@milkdown/kit/plugin/cursor";
 import { clipboard } from "@milkdown/kit/plugin/clipboard";
 import { listener, listenerCtx } from "@milkdown/kit/plugin/listener";
 import { replaceAll, $view } from "@milkdown/utils";
-import { listItemSchema } from "@milkdown/kit/preset/commonmark";
+import { listItemSchema, imageSchema } from "@milkdown/kit/preset/commonmark";
 
 export class QuickReminderDialog {
     private dialog: Dialog;
@@ -146,6 +146,39 @@ export class QuickReminderDialog {
             }
             dialog.destroy();
         };
+    }
+
+    private async handleImagePaste(view: any, file: File) {
+        try {
+            const ext = file.name.split('.').pop() || 'png';
+            const baseName = file.name.replace(/\.[^/.]+$/, "") || 'image';
+
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const hours = String(now.getHours()).padStart(2, '0');
+            const mins = String(now.getMinutes()).padStart(2, '0');
+            const secs = String(now.getSeconds()).padStart(2, '0');
+            const dateStr = `${year}${month}${day}${hours}${mins}${secs}`;
+
+            const randomStr = Math.random().toString(36).substring(2, 9);
+            const fileName = `${baseName}-${dateStr}-${randomStr}.${ext}`;
+            const targetPath = `/data/storage/petal/siyuan-plugin-task-note-management/assets/${fileName}`;
+
+            const { putFile } = await import('../api');
+            await putFile(targetPath, false, file);
+
+            const { state } = view;
+            const { tr, schema } = state;
+            const imageNode = schema.nodes.image.create({
+                src: targetPath,
+                alt: fileName
+            });
+            view.dispatch(tr.replaceSelectionWith(imageNode).scrollIntoView());
+        } catch (e) {
+            console.error("Paste image error", e);
+        }
     }
     private blockContent: string = '';
     private reminderUpdatedHandler: () => void;
@@ -1881,6 +1914,15 @@ export class QuickReminderDialog {
                         new Plugin({
                             props: {
                                 handlePaste: (view, event) => {
+                                    if (event.clipboardData && event.clipboardData.files && event.clipboardData.files.length > 0) {
+                                        const file = event.clipboardData.files[0];
+                                        if (file.type.startsWith('image/')) {
+                                            event.preventDefault();
+                                            this.handleImagePaste(view, file);
+                                            return true;
+                                        }
+                                    }
+
                                     let text = event.clipboardData?.getData('text/plain');
                                     if (text) {
                                         // 统一换行符并将\r替换为\n，同时移除首尾多余的空行
@@ -1966,6 +2008,52 @@ export class QuickReminderDialog {
                 .use(clipboard)
                 .use(cursor)
                 .use(listener)
+                .use($view(imageSchema.node, () => (node, view, getPos) => {
+                    const dom = document.createElement("img");
+                    if (node.attrs.alt) dom.alt = node.attrs.alt;
+                    if (node.attrs.title) dom.title = node.attrs.title;
+                    dom.style.maxWidth = "100%";
+
+                    const src = node.attrs.src;
+                    if (src && src.startsWith("/data/storage/petal/siyuan-plugin-task-note-management/assets/")) {
+                        import('../api').then(({ getFileBlob }) => {
+                            getFileBlob(src).then(blob => {
+                                if (blob) {
+                                    dom.src = URL.createObjectURL(blob);
+                                } else {
+                                    dom.src = src;
+                                }
+                            });
+                        });
+                    } else {
+                        dom.src = src;
+                    }
+
+                    return {
+                        dom,
+                        update: (updatedNode) => {
+                            if (updatedNode.type.name !== 'image') return false;
+                            const newSrc = updatedNode.attrs.src;
+                            if (newSrc && newSrc.startsWith("/data/storage/petal/siyuan-plugin-task-note-management/assets/")) {
+                                if (updatedNode.attrs.src !== node.attrs.src) {
+                                    import('../api').then(({ getFileBlob }) => {
+                                        getFileBlob(newSrc).then(blob => {
+                                            if (blob) {
+                                                dom.src = URL.createObjectURL(blob);
+                                            }
+                                        });
+                                    });
+                                }
+                            } else {
+                                dom.src = newSrc;
+                            }
+                            if (updatedNode.attrs.alt) dom.alt = updatedNode.attrs.alt;
+                            if (updatedNode.attrs.title) dom.title = updatedNode.attrs.title;
+                            else dom.removeAttribute('title');
+                            return true;
+                        }
+                    };
+                }))
                 .use($view(listItemSchema.node, () => (node, view, getPos) => {
                     const dom = document.createElement("li");
                     const contentDOM = document.createElement("div");

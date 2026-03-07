@@ -3543,6 +3543,22 @@ export class CalendarView {
             const noteEl = document.createElement('div');
             noteEl.className = 'reminder-event-note';
             noteEl.innerHTML = this.lute ? this.lute.Md2HTML(props.note) : props.note;
+
+            // 处理私有图片路径渲染
+            const imgTags = noteEl.querySelectorAll('img');
+            imgTags.forEach(img => {
+                const src = img.getAttribute('src');
+                if (src && src.startsWith('/data/storage/petal/siyuan-plugin-task-note-management/assets/')) {
+                    import('../api').then(({ getFileBlob }) => {
+                        getFileBlob(src).then(blob => {
+                            if (blob) {
+                                img.src = URL.createObjectURL(blob);
+                            }
+                        });
+                    });
+                }
+            });
+
             mainFrame.appendChild(noteEl);
         }
 
@@ -6605,6 +6621,21 @@ export class CalendarView {
             if (this.tooltip && this.tooltip.style.display !== 'none') {
                 this.tooltip.innerHTML = tooltipContent;
                 this.tooltip.style.opacity = '1';
+
+                // 处理私有图片路径渲染
+                const imgTags = this.tooltip.querySelectorAll('img');
+                imgTags.forEach(img => {
+                    const src = img.getAttribute('src');
+                    if (src && src.startsWith('/data/storage/petal/siyuan-plugin-task-note-management/assets/')) {
+                        import('../api').then(({ getFileBlob }) => {
+                            getFileBlob(src).then(blob => {
+                                if (blob) {
+                                    img.src = URL.createObjectURL(blob);
+                                }
+                            });
+                        });
+                    }
+                });
             }
 
         } catch (error) {

@@ -1430,6 +1430,20 @@ export class EisenhowerMatrixView {
                     (quote as HTMLElement).style.borderLeft = '2px solid var(--b3-theme-on-surface-light)';
                     (quote as HTMLElement).style.opacity = '0.8';
                 });
+                // 处理私有图片路径渲染
+                const imgTags = noteDiv.querySelectorAll('img');
+                imgTags.forEach(img => {
+                    const src = img.getAttribute('src');
+                    if (src && src.startsWith('/data/storage/petal/siyuan-plugin-task-note-management/assets/')) {
+                        import('../api').then(({ getFileBlob }) => {
+                            getFileBlob(src).then(blob => {
+                                if (blob) {
+                                    img.src = URL.createObjectURL(blob);
+                                }
+                            });
+                        });
+                    }
+                });
             } else {
                 noteDiv.textContent = task.note;
             }

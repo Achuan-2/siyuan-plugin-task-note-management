@@ -478,7 +478,7 @@ export class BlockBindingDialog {
                     if (boundDocBlockId) {
                         const boundBlock = await getBlockByID(boundDocBlockId);
                         if (boundBlock && boundBlock.type === 'd') {
-                            const rawHPath = boundBlock.hpath || boundBlock.hPath || '';
+                            const rawHPath = boundBlock.hpath || (boundBlock as any).hPath || '';
                             const defaultPath = parentPathInput.value;
                             const defaultNotebookId: string | undefined = undefined;
 
@@ -1039,12 +1039,47 @@ export class BlockBindingDialog {
         const contentInput = this.dialog.element.querySelector('#docContentInput') as HTMLTextAreaElement;
         const parentPathInput = this.dialog.element.querySelector('#docParentPathInput') as HTMLInputElement;
 
-        const title = titleInput?.value?.trim();
+        let title = titleInput?.value?.trim();
         let notebookId: string | undefined;
         let parentPath = parentPathInput?.value?.trim();
 
         if (!title) {
             throw new Error(i18n("pleaseInputDocumentTitle") || '请输入文档标题');
+        }
+
+        let content = contentInput?.value || '';
+
+        // 处理/data/storage/petal/siyuan-plugin-task-note-management/assets到/data/assets的转换
+        if (content.includes('/data/storage/petal/siyuan-plugin-task-note-management/assets/')) {
+            try {
+                const { putFile } = await import('../api');
+                const assetRegex = /\/data\/storage\/petal\/siyuan-plugin-task-note-management\/assets\/([^)"\s]+)/g;
+                let match;
+                while ((match = assetRegex.exec(content)) !== null) {
+                    const fileName = match[1];
+                    const sourcePath = match[0];
+                    const targetPath = `/data/assets/${fileName}`;
+
+                    try {
+                        let response = await fetch('/api/file/getFile', {
+                            method: 'POST',
+                            body: JSON.stringify({ path: sourcePath })
+                        });
+
+                        if (response.ok) {
+                            const blob = await response.blob();
+                            await putFile(targetPath, false, blob);
+                            // 替换内容中的路径为思源标准资源路径 assets/xxxx
+                            content = content.replace(sourcePath, `assets/${fileName}`);
+                            // 可选：删除原文件或者不保留
+                        }
+                    } catch (e) {
+                        console.error('转移图片资源失败', sourcePath, e);
+                    }
+                }
+            } catch (error) {
+                console.error('处理资源图片失败', error);
+            }
         }
 
         // 如果没有选择笔记本，尝试使用插件设置中的默认值
@@ -1132,7 +1167,6 @@ export class BlockBindingDialog {
         }
 
         // 最终调用 createDocWithMd，路径应为相对于笔记本的路径
-        const content = contentInput?.value || '';
         const result = await createDocWithMd(targetNotebookId, relativePath, content);
 
         return result;
@@ -1188,9 +1222,42 @@ export class BlockBindingDialog {
         const { prependBlock, appendBlock, insertBlock, getHeadingChildrenDOM } = await import("../api");
 
         const hashes = '#'.repeat(level);
+
+        // 处理/data/storage/petal/siyuan-plugin-task-note-management/assets到/data/assets的转换
+        let processedSubContent = subContent || '';
+        if (processedSubContent.includes('/data/storage/petal/siyuan-plugin-task-note-management/assets/')) {
+            try {
+                const { putFile } = await import('../api');
+                const assetRegex = /\/data\/storage\/petal\/siyuan-plugin-task-note-management\/assets\/([^)"\s]+)/g;
+                let match;
+                while ((match = assetRegex.exec(processedSubContent)) !== null) {
+                    const fileName = match[1];
+                    const sourcePath = match[0];
+                    const targetPath = `/data/assets/${fileName}`;
+
+                    try {
+                        let response = await fetch('/api/file/getFile', {
+                            method: 'POST',
+                            body: JSON.stringify({ path: sourcePath })
+                        });
+
+                        if (response.ok) {
+                            const blob = await response.blob();
+                            await putFile(targetPath, false, blob);
+                            processedSubContent = processedSubContent.replace(sourcePath, `assets/${fileName}`);
+                        }
+                    } catch (e) {
+                        console.error('转移图片资源失败', sourcePath, e);
+                    }
+                }
+            } catch (error) {
+                console.error('处理资源图片失败', error);
+            }
+        }
+
         let markdownContent = `${hashes} ${content}`;
-        if (subContent) {
-            markdownContent += `\n${subContent}`;
+        if (processedSubContent) {
+            markdownContent += `\n${processedSubContent}`;
         }
 
         let response: any;

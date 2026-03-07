@@ -2431,6 +2431,24 @@ export class ProjectKanbanView {
                         overflow-y: auto;
                     `;
                     noteEl.innerHTML = this.lute ? this.lute.Md2HTML(task.note) : task.note;
+
+                    // 处理私有图片路径渲染
+                    if (this.lute) {
+                        const imgTags = noteEl.querySelectorAll('img');
+                        imgTags.forEach(img => {
+                            const src = img.getAttribute('src');
+                            if (src && src.startsWith('/data/storage/petal/siyuan-plugin-task-note-management/assets/')) {
+                                import('../api').then(({ getFileBlob }) => {
+                                    getFileBlob(src).then(blob => {
+                                        if (blob) {
+                                            img.src = URL.createObjectURL(blob);
+                                        }
+                                    });
+                                });
+                            }
+                        });
+                    }
+
                     taskContentContainer.appendChild(noteEl);
                 }
 
@@ -9260,11 +9278,27 @@ export class ProjectKanbanView {
                 const listTags = noteEl.querySelectorAll('ul, ol');
                 listTags.forEach(list => {
                     (list as HTMLElement).style.margin = '0';
-                    (list as HTMLElement).style.paddingLeft = '20px';
+                    (list as HTMLElement).style.paddingLeft = '20px'; // 保持缩进
+                    (list as HTMLElement).style.listStylePosition = 'outside'; // 保持列表符号在外侧
                 });
                 const liTags = noteEl.querySelectorAll('li');
                 liTags.forEach(li => {
-                    (li as HTMLElement).style.margin = '0';
+                    (li as HTMLElement).style.display = 'list-item'; // 强制使用 list-item 显示
+                });
+
+                // 处理私有图片路径渲染
+                const imgTags = noteEl.querySelectorAll('img');
+                imgTags.forEach(img => {
+                    const src = img.getAttribute('src');
+                    if (src && src.startsWith('/data/storage/petal/siyuan-plugin-task-note-management/assets/')) {
+                        import('../api').then(({ getFileBlob }) => {
+                            getFileBlob(src).then(blob => {
+                                if (blob) {
+                                    img.src = URL.createObjectURL(blob);
+                                }
+                            });
+                        });
+                    }
                 });
                 // 处理引用样式
                 const quoteTags = noteEl.querySelectorAll('blockquote');
@@ -9310,6 +9344,23 @@ export class ProjectKanbanView {
                             // 乐观更新 UI
                             task.note = updatedReminder.note;
                             noteEl.innerHTML = this.lute ? this.lute.Md2HTML(task.note) : task.note;
+
+                            // 处理私有图片路径渲染
+                            if (this.lute) {
+                                const imgTags = noteEl.querySelectorAll('img');
+                                imgTags.forEach(img => {
+                                    const src = img.getAttribute('src');
+                                    if (src && src.startsWith('/data/storage/petal/siyuan-plugin-task-note-management/assets/')) {
+                                        import('../api').then(({ getFileBlob }) => {
+                                            getFileBlob(src).then(blob => {
+                                                if (blob) {
+                                                    img.src = URL.createObjectURL(blob);
+                                                }
+                                            });
+                                        });
+                                    }
+                                });
+                            }
 
                             // 触发全局更新事件（这会通知其他视图，比如 ReminderPanel）
                             window.dispatchEvent(new CustomEvent('reminderUpdated', {
