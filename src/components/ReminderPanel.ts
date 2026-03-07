@@ -1,5 +1,5 @@
 import { colorWithOpacity } from "../utils/uiUtils";
-import { showMessage, confirm, Dialog, Menu, Constants, getFrontend, getBackend } from "siyuan";
+import { showMessage, confirm, Dialog, Menu, Constants, getFrontend, getBackend, platformUtils } from "siyuan";
 import { refreshSql, sql, getBlockKramdown, getBlockByID, updateBindBlockAtrrs, openBlock } from "../api";
 import { getLocalDateString, compareDateStrings, getLocalDateTimeString, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../utils/dateUtils";
 import { loadSortConfig, saveSortConfig, getSortMethodName } from "../utils/sortConfig";
@@ -7947,7 +7947,7 @@ export class ReminderPanel {
             const blockRef = `((${blockId} "${title}"))`;
 
             // 复制到剪贴板
-            await navigator.clipboard.writeText(blockRef);
+            await platformUtils.writeText(blockRef);
 
         } catch (error) {
             console.error('复制块引失败:', error);

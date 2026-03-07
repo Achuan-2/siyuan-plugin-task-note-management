@@ -7,7 +7,7 @@ import { BlockBindingDialog } from "./BlockBindingDialog";
 import { PomodoroTimer } from "./PomodoroTimer";
 import { PomodoroManager } from "../utils/pomodoroManager";
 import { colorWithOpacity } from "../utils/uiUtils";
-import { showMessage, confirm, Menu, Dialog } from "siyuan";
+import { showMessage, confirm, Menu, Dialog, platformUtils } from "siyuan";
 import { i18n } from "../pluginInstance";
 import { getLocalDateTimeString, getLocalDateString, compareDateStrings, getLogicalDateString, getLocaleTag } from "../utils/dateUtils";
 import { getSolarDateLunarString } from "../utils/lunarUtils";
@@ -5035,7 +5035,7 @@ export class EisenhowerMatrixView {
             }
 
             const blockRef = `((${task.blockId} '${task.title}'))`;
-            await navigator.clipboard.writeText(blockRef);
+            await platformUtils.writeText(blockRef);
             showMessage(i18n('copiedBlockRef'));
         } catch (error) {
             console.error('复制块引用失败:', error);

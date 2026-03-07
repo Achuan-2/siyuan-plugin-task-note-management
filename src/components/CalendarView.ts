@@ -5,7 +5,7 @@ import multiMonthPlugin from '@fullcalendar/multimonth';
 import listPlugin from '@fullcalendar/list';
 import interactionPlugin from '@fullcalendar/interaction';
 import { colorWithOpacity } from "../utils/uiUtils";
-import { showMessage, confirm, openTab, Menu, Dialog, Constants } from "siyuan";
+import { showMessage, confirm, openTab, Menu, Dialog, Constants, platformUtils } from "siyuan";
 import { refreshSql, getBlockByID, sql, updateBlock, getBlockKramdown, updateBindBlockAtrrs, openBlock } from "../api";
 import { getLocalDateString, getLocalDateTime, getLocalDateTimeString, compareDateStrings, getLogicalDateString, getRelativeDateString, getDayStartAdjustedDate, getLocaleTag } from "../utils/dateUtils";
 import { QuickReminderDialog } from "./QuickReminderDialog";
@@ -3102,7 +3102,7 @@ export class CalendarView {
             const blockRef = `((${blockId} "${title}"))`;
 
             // 复制到剪贴板
-            await navigator.clipboard.writeText(blockRef);
+            await platformUtils.writeText(blockRef);
             // showMessage("块引已复制到剪贴板");
 
         } catch (error) {
@@ -3134,7 +3134,7 @@ export class CalendarView {
             }
 
             // 复制到剪贴板
-            await navigator.clipboard.writeText(title);
+            await platformUtils.writeText(title);
             showMessage(i18n("eventTitleCopied") || "事件标题已复制到剪贴板");
 
         } catch (error) {

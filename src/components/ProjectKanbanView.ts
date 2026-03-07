@@ -1,5 +1,5 @@
 import { colorWithOpacity } from "../utils/uiUtils";
-import { showMessage, confirm, Menu, Dialog, Constants, openEmoji } from "siyuan";
+import { showMessage, confirm, Menu, Dialog, Constants, openEmoji, platformUtils } from "siyuan";
 
 
 import { refreshSql, getBlockByID, updateBindBlockAtrrs, openBlock, addBlockProjectId } from "../api";
@@ -2103,7 +2103,7 @@ export class ProjectKanbanView {
             const markdown = generateMarkdown(sortedRootTasks);
 
             try {
-                await navigator.clipboard.writeText(markdown);
+                await platformUtils.writeText(markdown);
                 showMessage(i18n('copiedToClipboard'));
             } catch (err) {
                 console.error(i18n('copyFailed'), err);
@@ -10522,24 +10522,13 @@ export class ProjectKanbanView {
             menu.addItem({
                 iconHTML: "📋",
                 label: i18n('copySubtasksAsList'),
-                click: () => {
+                click: async () => {
                     const childLines = this.buildMarkdownListFromChildren(task.id);
                     if (childLines && childLines.length > 0) {
                         const text = childLines.join('\n');
                         // 复制到剪贴板
-                        try {
-                            navigator.clipboard.writeText(text);
-                            showMessage(i18n('copiedSubtasksList'));
-                        } catch (err) {
-                            // 备用：使用临时 textarea
-                            const ta = document.createElement('textarea');
-                            ta.value = text;
-                            document.body.appendChild(ta);
-                            ta.select();
-                            document.execCommand('copy');
-                            document.body.removeChild(ta);
-                            showMessage(i18n('copiedSubtasksList'));
-                        }
+                        await platformUtils.writeText(text);
+                        showMessage(i18n('copiedSubtasksList'));
                     } else {
                         showMessage(i18n('noSubtasksToCopy'));
                     }
@@ -13502,7 +13491,7 @@ export class ProjectKanbanView {
             const title = task.title || "未命名任务";
             const blockRef = `((${blockId} "${title}"))`;
 
-            await navigator.clipboard.writeText(blockRef);
+            await platformUtils.writeText(blockRef);
             showMessage("块引用已复制到剪贴板");
         } catch (error) {
             console.error('复制块引用失败:', error);

@@ -1,4 +1,4 @@
-import { showMessage, confirm, Menu, Dialog, getAllModels } from "siyuan";
+import { showMessage, confirm, Menu, Dialog, getAllModels, platformUtils } from "siyuan";
 import { PomodoroStatsView, getLastStatsMode } from "./PomodoroStatsView";
 import { TaskStatsView } from "./TaskStatsView";
 
@@ -1761,7 +1761,7 @@ export class ProjectPanel {
             const blockId = project.blockId || project.id;
             const title = project.title || i18n("unnamedNote") || '未命名项目';
             const blockRef = `((${blockId} "${title}"))`;
-            await navigator.clipboard.writeText(blockRef);
+            await platformUtils.writeText(blockRef);
             showMessage(i18n("copyBlockRef") + i18n("success") || "块引用已复制到剪贴板");
         } catch (error) {
             console.error('复制块引失败:', error);

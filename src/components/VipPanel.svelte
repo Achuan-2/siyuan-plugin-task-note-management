@@ -1,5 +1,6 @@
 <script lang="ts">
     import { VipManager, type VIPStatus } from '../utils/vip';
+    import { platformUtils } from 'siyuan';
     import { pushMsg } from '../api';
     import { i18n } from '../pluginInstance';
 
@@ -201,8 +202,8 @@
         isError = false;
     }
 
-    function handleCopyUserId() {
-        navigator.clipboard.writeText(userId);
+    async function handleCopyUserId() {
+        await platformUtils.writeText(userId);
         pushMsg(i18n('vipUserIdCopied'));
     }
 
@@ -254,8 +255,8 @@
         return results;
     })();
 
-    function handleCopyKey(key: string) {
-        navigator.clipboard.writeText(key);
+    async function handleCopyKey(key: string) {
+        await platformUtils.writeText(key);
         pushMsg(i18n('vipKeyCopied'));
     }
 
