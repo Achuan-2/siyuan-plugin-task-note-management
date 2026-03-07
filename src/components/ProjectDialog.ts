@@ -3,6 +3,7 @@ import { getBlockByID } from "../api";
 import { getLogicalDateString } from "../utils/dateUtils";
 import { CategoryManager } from "../utils/categoryManager";
 import { StatusManager } from "../utils/statusManager";
+import { BlockBindingDialog } from "./BlockBindingDialog";
 import { i18n } from "../pluginInstance";
 
 export class ProjectDialog {
@@ -81,6 +82,9 @@ export class ProjectDialog {
                             <input type="text" id="projectBlockInput" class="b3-text-field" value="${existingProject ? (existingProject.blockId || '') : (this.blockId || '')}" placeholder="${i18n("enterBlockId") || '请输入块或文档 ID'}" style="flex: 1;">
                             <button type="button" id="projectPasteBlockRefBtn" class="b3-button b3-button--outline" title="${i18n("pasteBlockRef")}">
                                 <svg class="b3-button__icon"><use xlink:href="#iconPaste"></use></svg>
+                            </button>
+                            <button type="button" id="projectBindBlockBtn" class="b3-button b3-button--outline" title="${i18n("newDocument") || '新建文档'}">
+                                <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
                             </button>
                         </div>
                     </div>
@@ -166,6 +170,7 @@ export class ProjectDialog {
         const saveBtn = this.dialog.element.querySelector('#saveBtn') as HTMLButtonElement;
         const cancelBtn = this.dialog.element.querySelector('#cancelBtn') as HTMLButtonElement;
         const pasteBlockRefBtn = this.dialog.element.querySelector('#projectPasteBlockRefBtn') as HTMLButtonElement;
+        const bindBlockBtn = this.dialog.element.querySelector('#projectBindBlockBtn') as HTMLButtonElement;
         const blockInput = this.dialog.element.querySelector('#projectBlockInput') as HTMLInputElement;
 
         saveBtn?.addEventListener('click', () => {
@@ -191,6 +196,20 @@ export class ProjectDialog {
                 console.error('读取剪贴板失败:', error);
                 showMessage(i18n("pasteBlockRefFailed") || "粘贴失败");
             }
+        });
+
+        // 新建文档/绑定块按钮
+        bindBlockBtn?.addEventListener('click', () => {
+            const titleEl = this.dialog.element.querySelector('#projectTitle') as HTMLInputElement;
+            const blockBindingDialog = new BlockBindingDialog(this.plugin, (blockId: string) => {
+                if (blockInput) {
+                    blockInput.value = blockId;
+                }
+            }, {
+                defaultTab: 'document',
+                defaultTitle: titleEl?.value?.trim() || ''
+            });
+            blockBindingDialog.show();
         });
 
         // 回车键保存
