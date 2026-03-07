@@ -3521,6 +3521,35 @@ export class ReminderPanel {
                         const rangeEnd = this.getReminderLogicalDate(r.endDate || r.date, r.endTime || r.time);
                         return compareDateStrings(rangeStart, df.endDate) <= 0 && compareDateStrings(rangeEnd, df.startDate) >= 0;
                     }
+                    case 'future_x_days': {
+                        const hasDate = r.date || r.endDate;
+                        if (!hasDate) return false;
+                        const days = df.futureDays || 14;
+                        const futureXEnd = getRelativeDateString(days);
+                        const fxStart = this.getReminderLogicalDate(r.date || r.endDate, r.time || r.endTime);
+                        return compareDateStrings(fxStart, today) >= 0 && compareDateStrings(fxStart, futureXEnd) <= 0;
+                    }
+                    case 'yearly_date_range': {
+                        const hasDate = r.date || r.endDate;
+                        if (!hasDate) return false;
+                        const sm = df.yearlyStartMonth || 1;
+                        const sd = df.yearlyStartDay || 1;
+                        const em = df.yearlyEndMonth || 12;
+                        const ed = df.yearlyEndDay || 31;
+                        const rDate = this.getReminderLogicalDate(r.date || r.endDate, r.time || r.endTime);
+                        const rDateObj = new Date(rDate + 'T00:00:00');
+                        const rMonth = rDateObj.getMonth() + 1;
+                        const rDay = rDateObj.getDate();
+                        const rMD = rMonth * 100 + rDay;
+                        const startMD = sm * 100 + sd;
+                        const endMD = em * 100 + ed;
+                        if (startMD <= endMD) {
+                            return rMD >= startMD && rMD <= endMD;
+                        } else {
+                            // 跨年范围，如 11/01 - 02/28
+                            return rMD >= startMD || rMD <= endMD;
+                        }
+                    }
                     default:
                         return false;
                 }
