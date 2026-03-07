@@ -72,6 +72,7 @@ export const DEFAULT_SETTINGS = {
     randomRestVolume: 0.5,
     randomRestEndVolume: 0.5,
     pomodoroWorkDuration: 45,
+    pomodoroDurationPresets: [5, 10, 15, 25],
     pomodoroBreakDuration: 10,
     pomodoroLongBreakDuration: 30,
     pomodoroLongBreakInterval: 4,
@@ -1064,6 +1065,19 @@ export default class ReminderPlugin extends Plugin {
             } else {
                 settings.todayStartTime = DEFAULT_SETTINGS.todayStartTime as any;
             }
+        }
+        if (Array.isArray(settings.pomodoroDurationPresets)) {
+            const seen = new Set<number>();
+            settings.pomodoroDurationPresets = settings.pomodoroDurationPresets
+                .map((item: any) => Number(item))
+                .filter((item: number) => Number.isInteger(item) && item > 0)
+                .filter((item: number) => {
+                    if (seen.has(item)) return false;
+                    seen.add(item);
+                    return true;
+                });
+        } else {
+            settings.pomodoroDurationPresets = [...DEFAULT_SETTINGS.pomodoroDurationPresets];
         }
         setDayStartTime(settings.todayStartTime);
         this.settings = settings;

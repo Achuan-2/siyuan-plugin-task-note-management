@@ -27,6 +27,7 @@ import { BlockBindingDialog } from "./BlockBindingDialog";
 import { PomodoroRecordManager } from "../utils/pomodoroRecord";
 import { Solar } from 'lunar-typescript';
 import { VipManager } from "../utils/vip";
+import { createPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
 export class CalendarView {
     private container: HTMLElement;
     private calendar: Calendar;
@@ -2659,9 +2660,7 @@ export class CalendarView {
             menu.addItem({
                 iconHTML: "🍅",
                 label: i18n("startPomodoro"),
-                click: () => {
-                    this.startPomodoro(calendarEvent);
-                }
+                submenu: this.createPomodoroStartSubmenu(calendarEvent)
             });
 
             menu.addItem({
@@ -2871,9 +2870,7 @@ export class CalendarView {
         menu.addItem({
             iconHTML: "🍅",
             label: i18n("startPomodoro"),
-            click: () => {
-                this.startPomodoro(calendarEvent);
-            }
+            submenu: this.createPomodoroStartSubmenu(calendarEvent)
         });
 
         menu.addItem({
@@ -7709,7 +7706,15 @@ export class CalendarView {
     }
 
     // 添加番茄钟相关方法
-    private startPomodoro(calendarEvent: any) {
+    private createPomodoroStartSubmenu(calendarEvent: any): any[] {
+        return createPomodoroStartSubmenu({
+            source: calendarEvent,
+            plugin: this.plugin,
+            startPomodoro: (workDurationOverride?: number) => this.startPomodoro(calendarEvent, workDurationOverride)
+        });
+    }
+
+    private startPomodoro(calendarEvent: any, workDurationOverride?: number) {
         if (!this.plugin) {
             showMessage("无法启动番茄钟：插件实例不可用");
             return;
@@ -7744,7 +7749,7 @@ export class CalendarView {
                 confirmMessage,
                 () => {
                     // 用户确认替换，传递当前状态
-                    this.performStartPomodoro(calendarEvent, currentState);
+                    this.performStartPomodoro(calendarEvent, currentState, workDurationOverride);
                 },
                 () => {
                     // 用户取消，尝试恢复原番茄钟的运行状态
@@ -7758,7 +7763,7 @@ export class CalendarView {
         } else {
             // 没有活动番茄钟或窗口已关闭，清理引用并直接启动
             this.pomodoroManager.cleanupInactiveTimer();
-            this.performStartPomodoro(calendarEvent);
+            this.performStartPomodoro(calendarEvent, undefined, workDurationOverride);
         }
     }
 
@@ -7811,8 +7816,11 @@ export class CalendarView {
         }
     }
 
-    private async performStartPomodoro(calendarEvent: any, inheritState?: any) {
+    private async performStartPomodoro(calendarEvent: any, inheritState?: any, workDurationOverride?: number) {
         const settings = await this.plugin.getPomodoroSettings();
+        const runtimeSettings = workDurationOverride && workDurationOverride > 0
+            ? { ...settings, workDuration: workDurationOverride }
+            : settings;
 
         // 检查是否已有独立窗口存在
         const hasStandaloneWindow = this.plugin && this.plugin.pomodoroWindowId;
@@ -7831,7 +7839,7 @@ export class CalendarView {
             };
 
             if (typeof this.plugin.openPomodoroWindow === 'function') {
-                await this.plugin.openPomodoroWindow(reminder, settings, false, inheritState);
+                await this.plugin.openPomodoroWindow(reminder, runtimeSettings, false, inheritState);
 
                 // 如果继承了状态且原来正在运行，显示继承信息
                 if (inheritState && inheritState.isRunning && !inheritState.isPaused) {
@@ -7854,7 +7862,7 @@ export class CalendarView {
                 originalId: calendarEvent.extendedProps.originalId
             };
 
-            const pomodoroTimer = new PomodoroTimer(reminder, settings, false, inheritState, this.plugin);
+            const pomodoroTimer = new PomodoroTimer(reminder, runtimeSettings, false, inheritState, this.plugin);
 
             // 设置当前活动的番茄钟实例
             this.pomodoroManager.setCurrentPomodoroTimer(pomodoroTimer);

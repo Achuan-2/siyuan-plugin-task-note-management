@@ -18,6 +18,7 @@ import { getSolarDateLunarString, getNextLunarMonthlyDate, getNextLunarYearlyDat
 import { getAllReminders, saveReminders } from "../utils/icsSubscription";
 import { isEventPast } from "../utils/icsImport";
 import { PasteTaskDialog } from "./PasteTaskDialog";
+import { createPomodoroStartSubmenu as createSharedPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
 
 export class ReminderPanel {
     private container: HTMLElement;
@@ -5785,7 +5786,7 @@ export class ReminderPanel {
             menu.addItem({
                 iconHTML: "🍅",
                 label: i18n("startPomodoro") || "开始番茄钟",
-                click: () => this.startPomodoro(reminder)
+                submenu: this.createPomodoroStartSubmenu(reminder)
             });
             menu.addItem({
                 iconHTML: "⏱️",
@@ -6162,7 +6163,7 @@ export class ReminderPanel {
             menu.addItem({
                 iconHTML: "🍅",
                 label: i18n("startPomodoro"),
-                click: () => this.startPomodoro(reminder)
+                submenu: this.createPomodoroStartSubmenu(reminder)
             });
             menu.addItem({
                 iconHTML: "⏱️",
@@ -6258,7 +6259,7 @@ export class ReminderPanel {
             menu.addItem({
                 iconHTML: "🍅",
                 label: i18n("startPomodoro"),
-                click: () => this.startPomodoro(reminder)
+                submenu: this.createPomodoroStartSubmenu(reminder)
             });
             menu.addItem({
                 iconHTML: "⏱️",
@@ -6280,6 +6281,14 @@ export class ReminderPanel {
         menu.open({
             x: event.clientX,
             y: event.clientY
+        });
+    }
+
+    private createPomodoroStartSubmenu(reminder: any): any[] {
+        return createSharedPomodoroStartSubmenu({
+            source: reminder,
+            plugin: this.plugin,
+            startPomodoro: (workDurationOverride?: number) => this.startPomodoro(reminder, workDurationOverride)
         });
     }
 
@@ -6376,7 +6385,7 @@ export class ReminderPanel {
         }
     }
 
-    private startPomodoro(reminder: any) {
+    private startPomodoro(reminder: any, workDurationOverride?: number) {
         if (!this.plugin) {
             showMessage("无法启动番茄钟：插件实例不可用");
             return;
@@ -6411,7 +6420,7 @@ export class ReminderPanel {
                 confirmMessage,
                 () => {
                     // 用户确认替换，传递当前状态
-                    this.performStartPomodoro(reminder, currentState);
+                    this.performStartPomodoro(reminder, currentState, workDurationOverride);
                 },
                 () => {
                     // 用户取消，尝试恢复原番茄钟的运行状态
@@ -6425,7 +6434,7 @@ export class ReminderPanel {
         } else {
             // 没有活动番茄钟或窗口已关闭，清理引用并直接启动
             this.pomodoroManager.cleanupInactiveTimer();
-            this.performStartPomodoro(reminder);
+            this.performStartPomodoro(reminder, undefined, workDurationOverride);
         }
     }
 
@@ -6537,8 +6546,11 @@ export class ReminderPanel {
         }
     }
 
-    private async performStartPomodoro(reminder: any, inheritState?: any) {
+    private async performStartPomodoro(reminder: any, inheritState?: any, workDurationOverride?: number) {
         const settings = await this.plugin.getPomodoroSettings();
+        const runtimeSettings = workDurationOverride && workDurationOverride > 0
+            ? { ...settings, workDuration: workDurationOverride }
+            : settings;
 
         // 检查是否已有独立窗口存在
         const hasStandaloneWindow = this.plugin && this.plugin.pomodoroWindowId;
@@ -6547,7 +6559,7 @@ export class ReminderPanel {
             // 如果存在独立窗口，更新独立窗口中的番茄钟
             console.log('检测到独立窗口，更新独立窗口中的番茄钟');
             if (typeof this.plugin.openPomodoroWindow === 'function') {
-                await this.plugin.openPomodoroWindow(reminder, settings, false, inheritState);
+                await this.plugin.openPomodoroWindow(reminder, runtimeSettings, false, inheritState);
 
                 // 如果继承了状态且原来正在运行，显示继承信息
                 if (inheritState && inheritState.isRunning && !inheritState.isPaused) {
@@ -6561,7 +6573,7 @@ export class ReminderPanel {
             // 如果已经有活动的番茄钟，先关闭它
             this.pomodoroManager.closeCurrentTimer();
 
-            const pomodoroTimer = new PomodoroTimer(reminder, settings, false, inheritState, this.plugin);
+            const pomodoroTimer = new PomodoroTimer(reminder, runtimeSettings, false, inheritState, this.plugin);
 
             // 设置当前活动的番茄钟实例
             this.pomodoroManager.setCurrentPomodoroTimer(pomodoroTimer);

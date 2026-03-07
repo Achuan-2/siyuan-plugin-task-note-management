@@ -12,6 +12,7 @@ import { i18n } from "../pluginInstance";
 import { getLocalDateTimeString, getLocalDateString, compareDateStrings, getLogicalDateString, getLocaleTag } from "../utils/dateUtils";
 import { getSolarDateLunarString } from "../utils/lunarUtils";
 import { generateRepeatInstances, getRepeatDescription, generateSubtreeInstances } from "../utils/repeatUtils";
+import { createPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
 interface QuadrantTask {
     id: string;
     title: string;
@@ -3051,7 +3052,7 @@ export class EisenhowerMatrixView {
             menu.addItem({
                 iconHTML: "🍅",
                 label: i18n("startPomodoro"),
-                click: () => this.startPomodoro(task)
+                submenu: this.createPomodoroStartSubmenu(task)
             });
 
             menu.addItem({
@@ -3200,7 +3201,7 @@ export class EisenhowerMatrixView {
         menu.addItem({
             iconHTML: "🍅",
             label: i18n("startPomodoro"),
-            click: () => this.startPomodoro(task)
+            submenu: this.createPomodoroStartSubmenu(task)
         });
 
         menu.addItem({
@@ -4870,7 +4871,15 @@ export class EisenhowerMatrixView {
 
 
 
-    private startPomodoro(task: QuadrantTask) {
+    private createPomodoroStartSubmenu(task: QuadrantTask): any[] {
+        return createPomodoroStartSubmenu({
+            source: task,
+            plugin: this.plugin,
+            startPomodoro: (workDurationOverride?: number) => this.startPomodoro(task, workDurationOverride)
+        });
+    }
+
+    private startPomodoro(task: QuadrantTask, workDurationOverride?: number) {
         if (!this.plugin) {
             showMessage(i18n('pluginInstanceUnavailable'));
             return;
@@ -4885,11 +4894,11 @@ export class EisenhowerMatrixView {
                 () => {
                     const currentState = currentTimer.getCurrentState();
                     this.pomodoroManager.closeCurrentTimer();
-                    this.performStartPomodoro(task, currentState);
+                    this.performStartPomodoro(task, currentState, workDurationOverride);
                 }
             );
         } else {
-            this.performStartPomodoro(task);
+            this.performStartPomodoro(task, undefined, workDurationOverride);
         }
     }
 
@@ -4916,8 +4925,11 @@ export class EisenhowerMatrixView {
         }
     }
 
-    private async performStartPomodoro(task: QuadrantTask, inheritState?: any) {
+    private async performStartPomodoro(task: QuadrantTask, inheritState?: any, workDurationOverride?: number) {
         const settings = await this.plugin.getPomodoroSettings();
+        const runtimeSettings = workDurationOverride && workDurationOverride > 0
+            ? { ...settings, workDuration: workDurationOverride }
+            : settings;
 
         // 检查是否已有独立窗口存在
         const hasStandaloneWindow = this.plugin && this.plugin.pomodoroWindowId;
@@ -4935,7 +4947,7 @@ export class EisenhowerMatrixView {
             };
 
             if (typeof this.plugin.openPomodoroWindow === 'function') {
-                await this.plugin.openPomodoroWindow(reminder, settings, false, inheritState);
+                await this.plugin.openPomodoroWindow(reminder, runtimeSettings, false, inheritState);
 
                 // 如果继承了状态且原来正在运行，显示继承信息
                 if (inheritState && inheritState.isRunning && !inheritState.isPaused) {
@@ -4957,7 +4969,7 @@ export class EisenhowerMatrixView {
                 originalId: task.id
             };
 
-            const pomodoroTimer = new PomodoroTimer(reminder, settings, false, inheritState, this.plugin);
+            const pomodoroTimer = new PomodoroTimer(reminder, runtimeSettings, false, inheritState, this.plugin);
             this.pomodoroManager.setCurrentPomodoroTimer(pomodoroTimer);
             pomodoroTimer.show();
 

@@ -20,6 +20,7 @@ import { VipManager } from "../utils/vip";
 import { PasteTaskDialog } from "./PasteTaskDialog";
 import { ProjectDialog } from "./ProjectDialog";
 import { getBackend } from "siyuan";
+import { createPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
 
 export class ProjectKanbanView {
     private container: HTMLElement;
@@ -10330,7 +10331,7 @@ export class ProjectKanbanView {
         menu.addItem({
             iconHTML: "🍅",
             label: i18n("startPomodoro") || "开始番茄钟",
-            click: () => this.startPomodoro(task)
+            submenu: this.createPomodoroStartSubmenu(task)
         });
         menu.addItem({
             iconHTML: "⏱️",
@@ -10864,7 +10865,7 @@ export class ProjectKanbanView {
         menu.addItem({
             iconHTML: "🍅",
             label: i18n('startPomodoro'),
-            click: () => this.startPomodoro(task)
+            submenu: this.createPomodoroStartSubmenu(task)
         });
 
         menu.addItem({
@@ -12245,7 +12246,15 @@ export class ProjectKanbanView {
         );
     }
 
-    private startPomodoro(task: any) {
+    private createPomodoroStartSubmenu(task: any): any[] {
+        return createPomodoroStartSubmenu({
+            source: task,
+            plugin: this.plugin,
+            startPomodoro: (workDurationOverride?: number) => this.startPomodoro(task, workDurationOverride)
+        });
+    }
+
+    private startPomodoro(task: any, workDurationOverride?: number) {
         if (!this.plugin) {
             showMessage(i18n('pomodoroUnavailable'));
             return;
@@ -12274,7 +12283,7 @@ export class ProjectKanbanView {
                 i18n('switchPomodoroTask'),
                 confirmMessage,
                 () => {
-                    this.performStartPomodoro(task, currentState);
+                    this.performStartPomodoro(task, currentState, workDurationOverride);
                 },
                 () => {
                     if (currentState.isRunning && !currentState.isPaused) {
@@ -12287,7 +12296,7 @@ export class ProjectKanbanView {
                 }
             );
         } else {
-            this.performStartPomodoro(task);
+            this.performStartPomodoro(task, undefined, workDurationOverride);
         }
     }
 
@@ -12337,8 +12346,11 @@ export class ProjectKanbanView {
         }
     }
 
-    private async performStartPomodoro(task: any, inheritState?: any) {
+    private async performStartPomodoro(task: any, inheritState?: any, workDurationOverride?: number) {
         const settings = await this.plugin.getPomodoroSettings();
+        const runtimeSettings = workDurationOverride && workDurationOverride > 0
+            ? { ...settings, workDuration: workDurationOverride }
+            : settings;
 
         // 检查是否已有独立窗口存在
         const hasStandaloneWindow = this.plugin && this.plugin.pomodoroWindowId;
@@ -12355,7 +12367,7 @@ export class ProjectKanbanView {
             };
 
             if (typeof this.plugin.openPomodoroWindow === 'function') {
-                await this.plugin.openPomodoroWindow(reminder, settings, false, inheritState);
+                await this.plugin.openPomodoroWindow(reminder, runtimeSettings, false, inheritState);
 
                 // 如果继承了状态且原来正在运行，显示继承信息
                 if (inheritState && inheritState.isRunning && !inheritState.isPaused) {
@@ -12377,7 +12389,7 @@ export class ProjectKanbanView {
                 originalId: task.id
             };
 
-            const pomodoroTimer = new PomodoroTimer(reminder, settings, false, inheritState, this.plugin);
+            const pomodoroTimer = new PomodoroTimer(reminder, runtimeSettings, false, inheritState, this.plugin);
             this.pomodoroManager.setCurrentPomodoroTimer(pomodoroTimer);
             pomodoroTimer.show();
 
