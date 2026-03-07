@@ -1715,15 +1715,7 @@ export class QuickReminderDialog {
                                 </button>
                             </div>
                         </div>
-                        <div class="b3-form__group" id="quickSubtasksGroup" style="display: none; margin-top: 8px;">
-                            <label class="b3-form__label">${i18n("subtasks")}</label>
-                            <div style="display: flex; gap: 8px; align-items: center;">
-                                <button type="button" id="quickViewSubtasksBtn" class="b3-button b3-button--outline" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;">
-                                    <svg class="b3-button__icon"><use xlink:href="#iconBulletedList"></use></svg>
-                                    <span id="quickSubtasksCountText">${i18n("viewSubtasks")}</span>
-                                </button>
-                            </div>
-                        </div>
+
                         <div class="b3-form__group">
                             <label class="b3-form__label">${i18n("estimatedPomodoroDuration")}</label>
                             <input type="text" id="quickEstimatedPomodoroDuration" class="b3-text-field" placeholder="${i18n("estimatedPomodoroDurationPlaceholder")}" style="width: 100%;" spellcheck="false">
@@ -1834,9 +1826,17 @@ export class QuickReminderDialog {
 
                         
                     </div>
-                    <div class="b3-dialog__action">
-                        <button class="b3-button b3-button--cancel" id="quickCancelBtn">${i18n("cancel")}</button>
-                        <button class="b3-button b3-button--primary" id="quickConfirmBtn">${this.mode === 'edit' ? i18n("save") : i18n("save")}</button>
+                    <div class="b3-dialog__action" style="display: flex; justify-content: space-between; align-items: center;">
+                        <div id="quickSubtasksGroup" style="display: none;">
+                            <button type="button" id="quickViewSubtasksBtn" class="b3-button b3-button--text" style="display: flex; align-items: center; gap: 4px; padding: 4px 8px;">
+                                <svg class="b3-button__icon"><use xlink:href="#iconBulletedList"></use></svg>
+                                <span id="quickSubtasksCountText">${i18n("viewSubtasks")}</span>
+                            </button>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="b3-button b3-button--cancel" id="quickCancelBtn">${i18n("cancel")}</button>
+                            <button class="b3-button b3-button--primary" id="quickConfirmBtn">${this.mode === 'edit' ? i18n("save") : i18n("save")}</button>
+                        </div>
                     </div>
                 </div>
             `,
