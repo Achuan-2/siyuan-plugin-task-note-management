@@ -135,6 +135,7 @@ export class ProjectKanbanView {
     private _statusMilestonesInView: Map<string, Set<string>> = new Map();
 
     private lute: any;
+    private showCompletedSubtasks: boolean = true; // 是否显示已完成的子任务
 
     constructor(container: HTMLElement, plugin: any, projectId: string) {
         this.container = container;
@@ -384,6 +385,12 @@ export class ProjectKanbanView {
         try {
             const projectData = await this.plugin.loadProjectData();
             this.project = projectData[this.projectId];
+            // 加载显示已完成子任务设置，默认为true
+            if (this.project && typeof this.project.showCompletedSubtasks === 'boolean') {
+                this.showCompletedSubtasks = this.project.showCompletedSubtasks;
+            } else {
+                this.showCompletedSubtasks = true;
+            }
             if (!this.project) {
                 throw new Error(i18n('projectNotExist'));
             }
@@ -2265,9 +2272,12 @@ export class ProjectKanbanView {
                 titleEl.textContent = task.title || i18n('noContentHint');
                 titleEl.title = (task.blockId || task.docId) ? i18n('clickToOpenBoundBlock', { title: task.title || i18n('noContentHint') }) : (task.title || i18n('noContentHint'));
 
-                // 子任务数量
-                const children = childMap.get(task.id);
-                if (children && children.length > 0) {
+                // 子任务数量（根据设置过滤已完成的子任务）
+                let children = childMap.get(task.id) || [];
+                if (!this.showCompletedSubtasks) {
+                    children = children.filter((t: any) => !t.completed);
+                }
+                if (children.length > 0) {
                     const subtaskIndicator = document.createElement('span');
                     subtaskIndicator.className = 'subtask-indicator';
                     subtaskIndicator.textContent = ` (${children.length})`;
@@ -3558,6 +3568,78 @@ export class ProjectKanbanView {
             this.filterButton.classList.remove('b3-button--outline');
         }
         controlsGroup.appendChild(this.filterButton);
+
+        // 显示设置按钮
+        const displaySettingsContainer = document.createElement('div');
+        displaySettingsContainer.className = 'filter-dropdown-container';
+        displaySettingsContainer.style.position = 'relative';
+        displaySettingsContainer.style.display = 'inline-block';
+
+        const displaySettingsButton = document.createElement('button');
+        displaySettingsButton.className = 'b3-button b3-button--outline';
+        displaySettingsButton.style.padding = '6px';
+        displaySettingsButton.innerHTML = '<svg class="b3-button__icon" style="margin-right: 0;"><use xlink:href="#iconEye"></use></svg>';
+        displaySettingsButton.title = i18n("displaySettings") || "显示设置";
+        displaySettingsContainer.appendChild(displaySettingsButton);
+
+        const displaySettingsDropdown = document.createElement('div');
+        displaySettingsDropdown.className = 'filter-dropdown-menu';
+        displaySettingsDropdown.style.display = 'none';
+        displaySettingsDropdown.style.position = 'absolute';
+        displaySettingsDropdown.style.top = '100%';
+        displaySettingsDropdown.style.right = '0';
+        displaySettingsDropdown.style.zIndex = '1000';
+        displaySettingsDropdown.style.backgroundColor = 'var(--b3-theme-background)';
+        displaySettingsDropdown.style.border = '1px solid var(--b3-border-color)';
+        displaySettingsDropdown.style.borderRadius = '4px';
+        displaySettingsDropdown.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
+        displaySettingsDropdown.style.minWidth = '220px';
+        displaySettingsDropdown.style.padding = '8px';
+
+        // 创建开关项的辅助函数
+        const createSwitchItem = (label: string, value: boolean, onChange: (checked: boolean) => void) => {
+            const item = document.createElement('div');
+            item.className = 'fn__flex fn__flex-center';
+            item.style.padding = '6px 12px';
+            item.style.gap = '8px';
+            item.innerHTML = `
+                <div class="fn__flex-1">${label}</div>
+                <input class="b3-switch" type="checkbox" ${value ? 'checked' : ''}>
+            `;
+            const checkbox = item.querySelector('input') as HTMLInputElement;
+            checkbox.addEventListener('change', () => onChange(checkbox.checked));
+            return item;
+        };
+
+        // 显示已完成子任务设置
+        displaySettingsDropdown.appendChild(createSwitchItem(i18n("showCompletedSubtasks") || "显示已完成的子任务", this.showCompletedSubtasks, async (checked) => {
+            this.showCompletedSubtasks = checked;
+            // 保存到项目数据
+            const projectData = await this.plugin.loadProjectData() || {};
+            if (projectData[this.projectId]) {
+                projectData[this.projectId].showCompletedSubtasks = checked;
+                await this.plugin.saveProjectData(projectData);
+            }
+            await this.queueLoadTasks();
+        }));
+
+        displaySettingsContainer.appendChild(displaySettingsDropdown);
+        controlsGroup.appendChild(displaySettingsContainer);
+
+        // 点击按钮切换下拉菜单显示
+        displaySettingsButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isVisible = displaySettingsDropdown.style.display === 'block';
+            displaySettingsDropdown.style.display = isVisible ? 'none' : 'block';
+        });
+
+        // 点击外部关闭下拉菜单
+        document.addEventListener('click', () => {
+            displaySettingsDropdown.style.display = 'none';
+        });
+
+        // 防止下拉菜单内部点击触发全局关闭
+        displaySettingsDropdown.addEventListener('click', (e) => e.stopPropagation());
 
         // 搜索按钮和输入框
         const searchContainer = document.createElement('div');
@@ -7884,6 +7966,10 @@ export class ProjectKanbanView {
             content.appendChild(taskEl);
 
             let children = childTasks.filter(t => t.parentId === task.id);
+            // 如果不显示已完成的子任务，则过滤掉已完成的子任务
+            if (!this.showCompletedSubtasks) {
+                children = children.filter(t => !t.completed);
+            }
             const isCollapsed = this.collapsedTasks.has(task.id);
 
             if (children.length > 0 && !isCollapsed) {
@@ -8454,6 +8540,10 @@ export class ProjectKanbanView {
             content.appendChild(taskEl);
 
             let children = childTasks.filter(t => t.parentId === task.id);
+            // 如果不显示已完成的子任务，则过滤掉已完成的子任务
+            if (!this.showCompletedSubtasks) {
+                children = children.filter(t => !t.completed);
+            }
             const isCollapsed = this.collapsedTasks.has(task.id);
 
             if (children.length > 0 && !isCollapsed) {
@@ -9013,12 +9103,13 @@ export class ProjectKanbanView {
         titleEl.textContent = task.title || i18n('noContentHint');
         titleEl.title = (task.blockId || task.docId) ? i18n('clickToOpenBoundBlock', { title: task.title || i18n('noContentHint') }) : (task.title || i18n('noContentHint'));
 
-        // 如果有子任务，添加数量指示器
-        if (childTasks.length > 0) {
+        // 如果有子任务，添加数量指示器（根据设置过滤已完成的子任务）
+        const visibleChildTasks = this.showCompletedSubtasks ? childTasks : childTasks.filter(t => !t.completed);
+        if (visibleChildTasks.length > 0) {
             const subtaskIndicator = document.createElement('span');
             subtaskIndicator.className = 'subtask-indicator';
-            subtaskIndicator.textContent = ` (${childTasks.length})`;
-            subtaskIndicator.title = i18n('containsNSubtasks', { count: String(childTasks.length) });
+            subtaskIndicator.textContent = ` (${visibleChildTasks.length})`;
+            subtaskIndicator.title = i18n('containsNSubtasks', { count: String(visibleChildTasks.length) });
             subtaskIndicator.style.cssText = `
                 font-size: 12px;
                 color: var(--b3-theme-on-surface);
