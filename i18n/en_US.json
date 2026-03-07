@@ -1889,5 +1889,6 @@
     "editFirstTaskTime": "Edit first task time",
     "andMoreTasks": "... and ${count} more tasks",
     "noMilestones": "No Milestones",
-    "pleaseInputDateTimeDesc": "Please enter the date and time description"
+    "pleaseInputDateTimeDesc": "Please enter the date and time description",
+    "mergeProject": "Merge Project"
 }

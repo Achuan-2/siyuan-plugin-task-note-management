@@ -279,7 +279,12 @@ export class ProjectKanbanView {
                     </div>
                     <div class="b3-form__group">
                         <label class="b3-form__label">${i18n('bindBlockId')} (${i18n('optional')})</label>
-                        <input type="text" id="newGroupBlockId" class="b3-text-field" placeholder="${i18n('pleaseEnterBlockId')}" style="width: 100%;">
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" id="newGroupBlockId" class="b3-text-field" placeholder="${i18n('pleaseEnterBlockId')}" style="flex: 1;">
+                            <button class="b3-button b3-button--outline" id="editGroupBindBlockBtn" title="${i18n('bindBlock')}">
+                                <svg class="b3-button__icon" style="width: 16px; height: 16px;"><use xlink:href="#iconAdd"></use></svg>
+                            </button>
+                        </div>
                         <div class="b3-label__text" style="margin-top: 4px; color: var(--b3-theme-on-surface-light);">${i18n('bindBlockIdHint')}</div>
                     </div>
                     <div class="b3-form__group">
@@ -303,8 +308,22 @@ export class ProjectKanbanView {
         const colorInput = dialog.element.querySelector('#newGroupColor') as HTMLInputElement;
         const iconInput = dialog.element.querySelector('#newGroupIcon') as HTMLInputElement;
         const blockIdInput = dialog.element.querySelector('#newGroupBlockId') as HTMLInputElement;
+        const bindBlockBtn = dialog.element.querySelector('#editGroupBindBlockBtn') as HTMLButtonElement;
         const cancelBtn = dialog.element.querySelector('#newGroupCancel') as HTMLButtonElement;
         const saveBtn = dialog.element.querySelector('#newGroupSave') as HTMLButtonElement;
+
+        // 绑定块按钮：打开 BlockBindingDialog
+        bindBlockBtn?.addEventListener('click', () => {
+            const blockBindingDialog = new BlockBindingDialog(this.plugin, (blockId: string) => {
+                blockIdInput.value = blockId;
+            }, {
+                defaultTab: 'document',
+                defaultProjectId: this.projectId,
+                defaultTitle: nameInput.value.trim(),
+                forGroup: true
+            });
+            blockBindingDialog.show();
+        });
 
         cancelBtn.addEventListener('click', () => dialog.destroy());
 

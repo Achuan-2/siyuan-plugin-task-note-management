@@ -459,6 +459,7 @@ export class BlockBindingDialog {
                         try {
                             const { ProjectManager } = await import('../utils/projectManager');
                             const projectManager = ProjectManager.getInstance(this.plugin);
+                            await projectManager.initialize();
 
                             if (this.defaultCustomGroupId) {
                                 const groups = await projectManager.getProjectCustomGroups(this.defaultProjectId);
@@ -477,32 +478,55 @@ export class BlockBindingDialog {
 
                     if (boundDocBlockId) {
                         const boundBlock = await getBlockByID(boundDocBlockId);
-                        if (boundBlock && boundBlock.type === 'd') {
-                            const rawHPath = boundBlock.hpath || (boundBlock as any).hPath || '';
-                            const defaultPath = parentPathInput.value;
-                            const defaultNotebookId: string | undefined = undefined;
-
-                            // 自动填充父块文档路径
-                            parentPathInput.value = rawHPath || '/';
-                            this.selectedPathNotebookId = boundBlock.box || undefined;
-
-                            // 按钮改为"使用默认路径"，支持在父块路径与默认路径之间切换
-                            useParentDocPathBtn.textContent = i18n('useDefaultPath') || '使用默认路径';
-                            useParentDocPathBtn.style.display = 'inline-block';
-                            let usingParentPath = true;
-                            useParentDocPathBtn.addEventListener('click', () => {
-                                if (usingParentPath) {
-                                    parentPathInput.value = defaultPath;
-                                    this.selectedPathNotebookId = defaultNotebookId;
-                                    useParentDocPathBtn.textContent = i18n('useParentBlockDocPath') || '使用父块文档路径';
-                                    usingParentPath = false;
-                                } else {
-                                    parentPathInput.value = rawHPath || '/';
-                                    this.selectedPathNotebookId = boundBlock.box || undefined;
-                                    useParentDocPathBtn.textContent = i18n('useDefaultPath') || '使用默认路径';
-                                    usingParentPath = true;
+                        if (boundBlock) {
+                            // 对于非文档块，通过 root_id 获取所在文档的 hpath
+                            let rawHPath = '';
+                            let pathBox = boundBlock.box || undefined;
+                            if (boundBlock.type === 'd') {
+                                rawHPath = boundBlock.hpath || (boundBlock as any).hPath || '';
+                            } else if (boundBlock.root_id) {
+                                // 非文档块：获取其所在文档的路径
+                                const rootBlock = await getBlockByID(boundBlock.root_id);
+                                if (rootBlock) {
+                                    rawHPath = rootBlock.hpath || (rootBlock as any).hPath || '';
+                                    pathBox = rootBlock.box || pathBox;
                                 }
-                            });
+                            }
+                            if (rawHPath) {
+                                const defaultPath = parentPathInput.value;
+                                const defaultNotebookId: string | undefined = undefined;
+
+                                // 拼接笔记本名称到路径前面
+                                let fullHPath = rawHPath;
+                                if (pathBox && this.notebooks?.notebooks) {
+                                    const nb = this.notebooks.notebooks.find((n: any) => n.id === pathBox);
+                                    if (nb?.name) {
+                                        fullHPath = '/' + nb.name + (rawHPath.startsWith('/') ? rawHPath : '/' + rawHPath);
+                                    }
+                                }
+
+                                // 自动填充父块文档路径
+                                parentPathInput.value = fullHPath;
+                                this.selectedPathNotebookId = pathBox;
+
+                                // 按钮改为"使用默认路径"，支持在父块路径与默认路径之间切换
+                                useParentDocPathBtn.textContent = i18n('useDefaultPath') || '使用默认路径';
+                                useParentDocPathBtn.style.display = 'inline-block';
+                                let usingParentPath = true;
+                                useParentDocPathBtn.addEventListener('click', () => {
+                                    if (usingParentPath) {
+                                        parentPathInput.value = defaultPath;
+                                        this.selectedPathNotebookId = defaultNotebookId;
+                                        useParentDocPathBtn.textContent = i18n('useParentBlockDocPath') || '使用父块文档路径';
+                                        usingParentPath = false;
+                                    } else {
+                                        parentPathInput.value = fullHPath;
+                                        this.selectedPathNotebookId = pathBox;
+                                        useParentDocPathBtn.textContent = i18n('useDefaultPath') || '使用默认路径';
+                                        usingParentPath = true;
+                                    }
+                                });
+                            }
                         }
                     }
                 } catch (err) {
@@ -743,6 +767,7 @@ export class BlockBindingDialog {
             if (!autoFillBlockId && this.defaultProjectId) {
                 const { ProjectManager } = await import('../utils/projectManager');
                 const projectManager = ProjectManager.getInstance(this.plugin);
+                await projectManager.initialize();
 
                 // 检查是否有自定义分组
                 if (this.defaultCustomGroupId) {
