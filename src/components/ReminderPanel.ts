@@ -143,6 +143,9 @@ export class ReminderPanel {
             if (settings.showCompletedSubtasks !== undefined) {
                 this.showCompletedSubtasks = !!settings.showCompletedSubtasks;
             }
+            if (Array.isArray(settings.reminderPanelSelectedCategories)) {
+                this.selectedCategories = settings.reminderPanelSelectedCategories;
+            }
         } catch (e) {
             // ignore
         }
@@ -685,6 +688,16 @@ export class ReminderPanel {
 
         // 普通任务或没有 instanceModifications 的实例
         return reminder.sort || 0;
+    }
+
+    private async saveSelectedCategories() {
+        try {
+            const settings = await this.plugin.loadSettings();
+            settings.reminderPanelSelectedCategories = this.selectedCategories;
+            await this.plugin.saveSettings(settings);
+        } catch (error) {
+            console.error('保存任务分类筛选设置失败:', error);
+        }
     }
 
     private updateCategoryFilterButtonText() {
@@ -9174,6 +9187,7 @@ export class ReminderPanel {
             }
             this.selectedCategories = selected;
             this.updateCategoryFilterButtonText();
+            this.saveSelectedCategories();
             this.loadReminders();
             dialog.destroy();
         });

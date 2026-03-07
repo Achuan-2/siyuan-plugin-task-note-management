@@ -94,6 +94,7 @@ export class HabitPanel {
     private async initializeAsync() {
         await this.groupManager.initialize();
         await this.loadCollapseStates();
+        await this.restorePanelSettings();
 
         this.initUI();
         this.updateSortButtonTitle();
@@ -106,6 +107,31 @@ export class HabitPanel {
         this.saveCollapseStates();
         if (this.habitUpdatedHandler) {
             window.removeEventListener('habitUpdated', this.habitUpdatedHandler);
+        }
+    }
+
+    private async restorePanelSettings() {
+        try {
+            const settings = await this.plugin.loadSettings();
+            this.sortKey = settings.habitPanelSortKey || 'priority';
+            this.sortOrder = settings.habitPanelSortOrder || 'desc';
+            if (Array.isArray(settings.habitPanelSelectedGroups)) {
+                this.selectedGroups = settings.habitPanelSelectedGroups;
+            }
+        } catch (error) {
+            console.error('恢复习惯面板设置失败:', error);
+        }
+    }
+
+    private async savePanelSettings() {
+        try {
+            const settings = await this.plugin.loadSettings();
+            settings.habitPanelSortKey = this.sortKey;
+            settings.habitPanelSortOrder = this.sortOrder;
+            settings.habitPanelSelectedGroups = this.selectedGroups;
+            await this.plugin.saveSettings(settings);
+        } catch (error) {
+            console.error('保存习惯面板设置失败:', error);
         }
     }
 
@@ -386,6 +412,7 @@ export class HabitPanel {
         this.sortKey = key;
         this.sortOrder = order;
         this.updateSortButtonTitle();
+        this.savePanelSettings();
         this.loadHabits();
     }
 
@@ -1510,6 +1537,7 @@ export class HabitPanel {
         confirmBtn.style.cssText = 'margin-top: 16px; width: 100%;';
         confirmBtn.addEventListener('click', () => {
             this.updateGroupFilterButtonText();
+            this.savePanelSettings();
             this.loadHabits();
             dialog.destroy();
         });

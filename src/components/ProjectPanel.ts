@@ -91,6 +91,7 @@ export class ProjectPanel {
     private async initializeAsync() {
         await this.categoryManager.initialize();
         await this.statusManager.initialize();
+        await this.restorePanelSettings();
         this.initUI();
         this.loadProjects();
 
@@ -256,7 +257,7 @@ export class ProjectPanel {
         this.categoryFilterButton.className = 'b3-button b3-button--outline';
         this.categoryFilterButton.style.cssText = `
             display: inline-block;
-            max-width: 200px;
+            max-width: 30%;
             box-sizing: border-box;
             padding: 0 8px;
             overflow: hidden;
@@ -287,6 +288,7 @@ export class ProjectPanel {
         this.showOnlyWithDoingCheckbox.checked = this.showOnlyWithDoingTasks;
         this.showOnlyWithDoingCheckbox.addEventListener('change', () => {
             this.showOnlyWithDoingTasks = this.showOnlyWithDoingCheckbox.checked;
+            this.savePanelSettings();
             this.loadProjects();
         });
 
@@ -413,6 +415,7 @@ export class ProjectPanel {
                         this.currentSort = option.key;
                         this.currentSortOrder = 'asc';
                         this.updateSortButtonTitle();
+                        this.savePanelSettings();
                         this.loadProjects();
                     }
                 });
@@ -426,6 +429,7 @@ export class ProjectPanel {
                         this.currentSort = option.key;
                         this.currentSortOrder = 'desc';
                         this.updateSortButtonTitle();
+                        this.savePanelSettings();
                         this.loadProjects();
                     }
                 });
@@ -2510,11 +2514,37 @@ export class ProjectPanel {
             }
             this.selectedCategories = selected;
             this.updateCategoryFilterButtonText();
+            this.savePanelSettings();
             this.loadProjects();
             dialog.destroy();
         });
 
         cancelBtn.addEventListener('click', () => dialog.destroy());
+    }
+
+    private async restorePanelSettings() {
+        try {
+            const settings = await this.plugin.loadSettings();
+            this.currentSort = settings.projectPanelSort || 'priority';
+            this.currentSortOrder = settings.projectPanelSortOrder || 'desc';
+            this.showOnlyWithDoingTasks = settings.projectPanelShowOnlyDoing || false;
+            this.selectedCategories = settings.projectPanelSelectedCategories || [];
+        } catch (error) {
+            console.error('恢复项目面板设置失败:', error);
+        }
+    }
+
+    private async savePanelSettings() {
+        try {
+            const settings = await this.plugin.loadSettings();
+            settings.projectPanelSort = this.currentSort;
+            settings.projectPanelSortOrder = this.currentSortOrder;
+            settings.projectPanelShowOnlyDoing = this.showOnlyWithDoingTasks;
+            settings.projectPanelSelectedCategories = this.selectedCategories;
+            await this.plugin.saveSettings(settings);
+        } catch (error) {
+            console.error('保存项目面板设置失败:', error);
+        }
     }
 
     private createCategorySelectContent(categories: any[]): string {

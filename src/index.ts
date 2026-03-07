@@ -127,6 +127,16 @@ export const DEFAULT_SETTINGS = {
     // 项目排序配置
     projectSortOrder: [],
     projectSortMode: 'custom',
+    // 项目面板筛选与排序
+    projectPanelSort: 'priority',
+    projectPanelSortOrder: 'desc',
+    projectPanelShowOnlyDoing: false,
+    projectPanelSelectedCategories: [] as string[],
+    reminderPanelSelectedCategories: [] as string[],
+    // 习惯面板筛选与排序
+    habitPanelSortKey: 'priority',
+    habitPanelSortOrder: 'desc',
+    habitPanelSelectedGroups: [] as string[],
     // 日历上传：ICS云端同步配置
     icsSyncInterval: 'daily', // 'manual' | '15min' | 'hourly' | '4hour' | '12hour' | 'daily' | 'dailyAt'
     icsDailySyncTime: '08:00', // 每天同步时间点（当 syncInterval 为 'dailyAt' 时使用），格式 HH:MM
