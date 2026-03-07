@@ -773,6 +773,7 @@ export class ReminderPanel {
         const settings = await this.plugin.loadData('settings.json');
         const customFilters = settings?.customFilters || [];
         const filterOrder = settings?.filterOrder || [];
+        const hiddenBuiltInFilters: string[] = settings?.hiddenBuiltInFilters || [];
 
         // 重新加载自定义过滤器缓存
         await this.loadCustomFilters();
@@ -802,7 +803,7 @@ export class ReminderPanel {
         // 如果 filter.id 已经是 custom_123，那 value 就是 custom_custom_123
         // 我们这里暂且构造一个统一的列表
         let allFilters = [
-            ...builtInFilters.map(f => ({ ...f, isAppended: false })),
+            ...builtInFilters.filter(f => !hiddenBuiltInFilters.includes(f.id)).map(f => ({ ...f, isAppended: false })),
             ...customFilters.map((f: any) => ({
                 id: f.id,
                 value: `custom_${f.id}`,

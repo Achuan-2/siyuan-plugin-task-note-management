@@ -40,6 +40,7 @@
     let filters: FilterConfig[] = [];
     let selectedFilter: FilterConfig | null = null;
     let isEditing = false;
+    let hiddenBuiltInFilters: string[] = [];
 
     // Drag and drop state
     let draggedFilterId: string | null = null;
@@ -112,6 +113,7 @@
         const settings = await plugin.loadData('settings.json');
         const customFilters = settings?.customFilters || [];
         const filterOrder = settings?.filterOrder || [];
+        hiddenBuiltInFilters = settings?.hiddenBuiltInFilters || [];
 
         const builtInFilters: FilterConfig[] = [
             {
@@ -236,7 +238,7 @@
             },
         ];
 
-        let allFilters = [...builtInFilters, ...customFilters];
+        let allFilters = [...builtInFilters.filter(f => !hiddenBuiltInFilters.includes(f.id)), ...customFilters];
 
         if (filterOrder && filterOrder.length > 0) {
             const filterMap = new Map(allFilters.map(f => [f.id, f]));
@@ -266,6 +268,7 @@
         const customFilters = filters.filter(f => !f.isBuiltIn);
         settings.customFilters = customFilters;
         settings.filterOrder = filters.map(f => f.id);
+        settings.hiddenBuiltInFilters = hiddenBuiltInFilters;
         await plugin.saveData('settings.json', settings);
         // 通知父组件更新filterSelect
         onFilterApplied(null);
@@ -351,7 +354,9 @@
             i18n('confirmDeleteFilter')?.replace('${name}', filter.name) ||
                 `确定要删除过滤器"${filter.name}"吗？`,
             async () => {
-                // 用户确认删除
+                if (filter.isBuiltIn) {
+                    hiddenBuiltInFilters = [...hiddenBuiltInFilters, filter.id];
+                }
                 filters = filters.filter(f => f.id !== filter.id);
                 await saveFilters();
                 showMessage(i18n('filterDeleted'));
@@ -362,6 +367,8 @@
             }
         );
     }
+
+
 
     function toggleDateFilter(type: DateFilterType) {
         if (type === 'all') {
@@ -534,19 +541,17 @@
                             {/if}
                         </div>
                     </div>
-                    {#if !filter.isBuiltIn}
-                        <div class="filter-item-actions">
-                            <button
-                                class="b3-button b3-button--outline"
-                                on:click|stopPropagation={() => deleteFilter(filter)}
-                                title={i18n('deleteFilter')}
-                            >
-                                <svg class="b3-button__icon">
-                                    <use xlink:href="#iconTrashcan"></use>
-                                </svg>
-                            </button>
-                        </div>
-                    {/if}
+                    <div class="filter-item-actions">
+                        <button
+                            class="b3-button b3-button--outline"
+                            on:click|stopPropagation={() => deleteFilter(filter)}
+                            title={i18n('deleteFilter')}
+                        >
+                            <svg class="b3-button__icon">
+                                <use xlink:href="#iconTrashcan"></use>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
             {/each}
         </div>
