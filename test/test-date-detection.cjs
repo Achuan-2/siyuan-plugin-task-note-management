@@ -19,6 +19,10 @@ function isValidDate(year, month, day) {
         date.getDate() === day;
 }
 
+function getLeadingTimeClause(text) {
+    return text.split(/[，。,.；;！!？?\n]/, 1)[0].trim();
+}
+
 function parseNaturalDateTime(text) {
     try {
         let processedText = text.trim();
@@ -40,13 +44,35 @@ function parseNaturalDateTime(text) {
                                 endDate = startResult.date;
                                 hasEndDate = true;
                             }
+
+                            const pmIndicator = /下午|晚上|傍晚/;
+                            const anyTimeOfDay = /上午|下午|早上|晚上|中午|傍晚|凌晨|深夜/;
+                            const rightLeadingClause = getLeadingTimeClause(right);
+                            let endTime = endResult.time;
+                            if (pmIndicator.test(left) && !anyTimeOfDay.test(rightLeadingClause) && endTime) {
+                                const [endH, endM] = endTime.split(':').map(Number);
+                                if (endH < 12) {
+                                    const pmEndH = endH + 12;
+                                    if (startResult.time) {
+                                        const [startH, startM] = startResult.time.split(':').map(Number);
+                                        const startMins = startH * 60 + startM;
+                                        const pmEndMins = pmEndH * 60 + endM;
+                                        if (pmEndMins > startMins) {
+                                            endTime = `${pmEndH.toString().padStart(2, '0')}:${endM.toString().padStart(2, '0')}`;
+                                        }
+                                    } else {
+                                        endTime = `${pmEndH.toString().padStart(2, '0')}:${endM.toString().padStart(2, '0')}`;
+                                    }
+                                }
+                            }
+
                             return {
                                 date: startResult.date,
                                 time: startResult.time,
                                 hasTime: startResult.hasTime,
                                 hasDate: startResult.hasDate,
                                 endDate: endDate,
-                                endTime: endResult.time,
+                                endTime: endTime,
                                 hasEndTime: endResult.hasTime || !!endResult.time,
                                 hasEndDate: hasEndDate,
                             };
@@ -128,7 +154,8 @@ const testCases = [
     "明天晚上7 点到 明天晚上8 点。准备习概和形势与政策 3 周的教案。",
     "明天晚上 8 点到明天晚上 8:30，搜 监利市人才引进。筛选岗位。",
     "明天晚上 8:30 到明天晚上 9 点，半小时政治理论的学习。100 张卡片，理想情况下。",
-    "明天晚上 9 点到明天晚上 9:30，做今日总结并设置好明日计划。"
+    "明天晚上 9 点到明天晚上 9:30，做今日总结并设置好明日计划。",
+    "下午一点二十到两点 缓冲时间，如果上午的任务有没完成的，那么就顺延到这里。如果都完成了，可以看看公共基础的蒙题技巧，练习一下舒尔特训练。或者刷一刷复习卡片。"
 ];
 
 console.log(`Running tests (Current Date: ${new Date().toLocaleDateString()})\n`);

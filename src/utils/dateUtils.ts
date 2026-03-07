@@ -214,6 +214,10 @@ function getDateForTimeOrTomorrow(hour: number, minute: number): { date: string;
     return { date: getLogicalDateString(), hasDate: false };
 }
 
+function getLeadingTimeClause(text: string): string {
+    return text.split(/[，。,.；;！!？?\n]/, 1)[0].trim();
+}
+
 // 初始化全局 chrono 解析器
 const chronoParser: any = chrono.zh.casual.clone();
 
@@ -336,8 +340,9 @@ export function parseNaturalDateTime(text: string): ParseResult {
                             const pmIndicator = /下午|晚上|傍晚/;
                             // 凌晨/深夜 明确表示 AM，不能被 PM 传播覆盖
                             const anyTimeOfDay = /上午|下午|早上|晚上|中午|傍晚|凌晨|深夜/;
+                            const rightLeadingClause = getLeadingTimeClause(right);
                             let endTime = endResult.time;
-                            if (pmIndicator.test(left) && !anyTimeOfDay.test(right) && endTime) {
+                            if (pmIndicator.test(left) && !anyTimeOfDay.test(rightLeadingClause) && endTime) {
                                 const [endH, endM] = endTime.split(':').map(Number);
                                 if (endH < 12) {
                                     const pmEndH = endH + 12;
