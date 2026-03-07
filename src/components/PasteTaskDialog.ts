@@ -837,7 +837,7 @@ export class PasteTaskDialog {
         }
 
         let result = { title: title.trim() || i18n('noContentHint') || '未命名任务', priority, startDate, time, endDate, endTime, reminderTimes, blockId, completed };
-        console.log('Parsed task line:', { line, result });
+        // console.log('Parsed task line:', { line, result });
         return result
     }
 
