@@ -12051,31 +12051,44 @@ export class ProjectKanbanView {
                     if (taskIndex >= 0) {
                         // 保留原有的 status、pomodoroCount、focusTime 等衍生字段
                         const oldTask = this.tasks[taskIndex];
-                        this.tasks[taskIndex] = {
-                            ...savedTask,
-                            status: oldTask.status || this.getTaskStatus(savedTask),
-                            pomodoroCount: oldTask.pomodoroCount || 0,
-                            focusTime: oldTask.focusTime || 0,
-                            totalRepeatingPomodoroCount: oldTask.totalRepeatingPomodoroCount || 0,
-                            totalRepeatingFocusTime: oldTask.totalRepeatingFocusTime || 0
-                        };
+                        if (savedTask.projectId !== this.projectId) {
+                            this.tasks.splice(taskIndex, 1);
+                        } else {
+                            this.tasks[taskIndex] = {
+                                ...savedTask,
+                                status: oldTask.status || this.getTaskStatus(savedTask),
+                                pomodoroCount: oldTask.pomodoroCount || 0,
+                                focusTime: oldTask.focusTime || 0,
+                                totalRepeatingPomodoroCount: oldTask.totalRepeatingPomodoroCount || 0,
+                                totalRepeatingFocusTime: oldTask.totalRepeatingFocusTime || 0
+                            };
+                        }
                     } else {
                         // 理论上编辑任务不应该走到这里，但以防万一
-                        this.tasks.push({
-                            ...savedTask,
-                            status: this.getTaskStatus(savedTask),
-                            pomodoroCount: 0,
-                            focusTime: 0
-                        });
+                        if (savedTask.projectId === this.projectId) {
+                            this.tasks.push({
+                                ...savedTask,
+                                status: this.getTaskStatus(savedTask),
+                                pomodoroCount: 0,
+                                focusTime: 0
+                            });
+                        }
+                    }
+
+                    if (this.reminderData) {
+                        if (savedTask.projectId === this.projectId) {
+                            this.reminderData[savedTask.id] = {
+                                ...(this.reminderData[savedTask.id] || {}),
+                                ...savedTask
+                            };
+                        } else {
+                            delete this.reminderData[savedTask.id];
+                        }
                     }
 
                     // 2. 立即重新排序和渲染（无延迟）
                     this.sortTasks();
                     this.renderKanban();
-
-                    // 3. 清除缓存，触发后台防抖刷新以确保数据一致性
-                    this.reminderData = null;
-                    this.queueLoadTasks();
                 }
 
                 this.dispatchReminderUpdate(true);
