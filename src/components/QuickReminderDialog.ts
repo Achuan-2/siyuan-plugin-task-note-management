@@ -1866,7 +1866,7 @@ export class QuickReminderDialog {
                                 <span id="quickSubtasksCountText">${i18n("viewSubtasks")}</span>
                             </button>
                         </div>
-                        <div style="display: flex; gap: 8px;">
+                        <div style="display: flex; gap: 8px; margin-left: auto;">
                             <button class="b3-button b3-button--cancel" id="quickCancelBtn">${i18n("cancel")}</button>
                             <button class="b3-button b3-button--primary" id="quickConfirmBtn">${this.mode === 'edit' ? i18n("save") : i18n("save")}</button>
                         </div>
