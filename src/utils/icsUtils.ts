@@ -10,7 +10,7 @@
 import * as ics from 'ics';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { lunarToSolar, solarToLunar } from './lunarUtils';
-import { pushErrMsg, pushMsg, putFile, getBlockKramdown, uploadCloud, getFileBlob } from '../api';
+import { pushErrMsg, pushMsg, putFile, getBlockKramdown, uploadCloud, getFileBlob, forwardProxy } from '../api';
 import { Constants } from 'siyuan';
 
 const useShell = async (cmd: 'showItemInFolder' | 'openPath', filePath: string) => {
@@ -944,6 +944,7 @@ export async function uploadIcsToCloud(plugin: any, settings: any, silent: boole
 
 /**
  * 上传到WebDAV服务器
+ * 使用 forwardProxy 通过思源后端代理请求，避免浏览器 CORS 限制
  */
 async function uploadToWebdav(settings: any, icsContent: string, fileName: string, plugin: any, silent: boolean = false) {
     try {
@@ -956,60 +957,93 @@ async function uploadToWebdav(settings: any, icsContent: string, fileName: strin
             return;
         }
 
-        let targetUrl = url;
-        if (!targetUrl.endsWith('/')) {
-            targetUrl += '/';
+        console.log('WebDAV 上传:', { url, fileName, username: username ? '已设置' : '未设置' });
+        
+        let baseUrl = url;
+        if (!baseUrl.endsWith('/')) {
+            baseUrl += '/';
         }
-        const dirUrl = targetUrl;
-        targetUrl += fileName;
+        
+        // 在 URL 中嵌入凭证
+        let urlWithAuth: string;
+        try {
+            const urlObj = new URL(baseUrl);
+            urlObj.username = encodeURIComponent(username);
+            urlObj.password = encodeURIComponent(password);
+            urlWithAuth = urlObj.toString();
+        } catch (e) {
+            console.warn('URL 编码失败，使用原始 URL:', e);
+            urlWithAuth = baseUrl;
+        }
+        
+        const targetUrl = urlWithAuth + fileName;
+        const dirUrl = urlWithAuth;
 
-        const credentials = btoa(unescape(encodeURIComponent(`${username}:${password}`)));
+        // Basic Auth Header
+        const credentials = typeof window !== 'undefined' && window.btoa 
+            ? window.btoa(unescape(encodeURIComponent(`${username}:${password}`)))
+            : Buffer.from(`${username}:${password}`).toString('base64');
+        
+        const headers = [
+            { 'Content-Type': 'text/calendar; charset=utf-8' },
+            { 'Authorization': `Basic ${credentials}` }
+        ];
 
-        let response = await fetch(targetUrl, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'text/calendar; charset=utf-8',
-                'Authorization': `Basic ${credentials}`
-            },
-            body: icsContent
-        });
+        console.log('发送 PUT 请求到:', targetUrl.replace(/\/\/[^@]+@/, '//***@'));
+        let response = await forwardProxy(
+            targetUrl,
+            'PUT',
+            icsContent,
+            headers,
+            30000,
+            'text/calendar; charset=utf-8'
+        );
+        
+        console.log('PUT 响应状态:', response.status);
 
         if (response.status === 409) {
-            // 可能是由于所在的目录不存在，尝试先创建该目录 (WebDAV: MKCOL)
-            // 兼容坚果云等普通 WebDAV 服务
+            // 尝试创建目录
+            console.log('目录不存在，尝试创建:', dirUrl.replace(/\/\/[^@]+@/, '//***@'));
             try {
-                await fetch(dirUrl, {
-                    method: 'MKCOL',
-                    headers: {
-                        'Authorization': `Basic ${credentials}`
-                    }
-                });
+                const mkdirResponse = await forwardProxy(
+                    dirUrl,
+                    'MKCOL',
+                    '',
+                    [{ 'Authorization': `Basic ${credentials}` }],
+                    30000
+                );
+                console.log('MKCOL 响应状态:', mkdirResponse.status);
             } catch (e) {
-                console.warn('MKCOL 尝试创建目录失败 (可忽略):', e);
+                console.warn('MKCOL 创建目录失败 (可忽略):', e);
             }
 
-            // 再次重试 PUT 请求
-            response = await fetch(targetUrl, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'text/calendar; charset=utf-8',
-                    'Authorization': `Basic ${credentials}`
-                },
-                body: icsContent
-            });
+            // 重试上传
+            console.log('重试 PUT 请求...');
+            response = await forwardProxy(
+                targetUrl,
+                'PUT',
+                icsContent,
+                headers,
+                30000,
+                'text/calendar; charset=utf-8'
+            );
+            console.log('重试 PUT 响应状态:', response.status);
         }
 
-        if (!response.ok) {
-            let errorMsg = `HTTP error! status: ${response.status} ${response.statusText}`;
-            if (response.status === 409) {
-                errorMsg += ` (冲突: 请先在 WebDAV/WebDAV 服务器中手动创建对应的文件夹)`;
-            }
-            throw new Error(errorMsg);
+        if (response.status < 200 || response.status >= 300) {
+            console.error('WebDAV 上传失败，响应:', response);
+            throw { status: response.status, message: `HTTP error! status: ${response.status}` };
         }
 
-        let displayUrl = targetUrl;
+        // 构建带凭据的URL用于显示
+        let displayUrl = url;
+        if (!displayUrl.endsWith('/')) {
+            displayUrl += '/';
+        }
+        displayUrl += fileName;
+        
         try {
-            const urlObj = new URL(targetUrl);
+            const urlObj = new URL(displayUrl);
             if (username) {
                 urlObj.username = encodeURIComponent(username);
             }
@@ -1037,9 +1071,21 @@ async function uploadToWebdav(settings: any, icsContent: string, fileName: strin
             await pushMsg(`ICS文件已上传到WebDAV`);
         }
         console.log('ICS 文件上传到 WebDAV 成功');
-    } catch (err) {
+    } catch (err: any) {
         console.error('上传到WebDAV失败:', err);
-        throw new Error('上传到WebDAV失败: ' + (err.message || err));
+        // 提取详细的错误信息
+        let errorMsg = err.message || err;
+        if (err?.status) {
+            errorMsg = `HTTP error! status: ${err.status}`;
+            if (err.status === 401) {
+                errorMsg += ' (认证失败: 请检查用户名和密码。坚果云用户注意：用户名是邮箱，密码是第三方应用密码)';
+            } else if (err.status === 403) {
+                errorMsg += ' (禁止访问: 请检查权限设置)';
+            } else if (err.status === 409) {
+                errorMsg += ' (冲突: 请先在 WebDAV 服务器中手动创建对应的文件夹)';
+            }
+        }
+        throw new Error('上传到WebDAV失败: ' + errorMsg);
     }
 }
 
