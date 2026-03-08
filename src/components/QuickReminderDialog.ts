@@ -2059,6 +2059,10 @@ export class QuickReminderDialog {
                                             text = text.replace(/(?<!\n)\n(?!\n)/g, '\n\n');
                                         }
 
+                                        // 禁用代码块解析：将行首的4个空格替换为2个全角空格
+                                        // 这样可以避免被 Markdown 解析为代码块
+                                        text = text.replace(/^( {4})/gm, '\u3000\u3000');
+
                                         const { tr, doc } = view.state;
                                         const isEmpty = doc.childCount === 1 &&
                                             doc.firstChild?.type.name === 'paragraph' &&
