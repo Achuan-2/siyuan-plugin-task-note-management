@@ -92,7 +92,7 @@
     "confirmDeleteSession": "确定要删除这个番茄钟记录吗？",
     "confirm": "确定",
     "deleteReminder": "删除任务",
-    "confirmDelete": "确定要删除吗？此操作无法撤销。",
+    "confirmDelete": "确定要删除任务“{title}”吗？此操作无法撤销。",
     "batchSetReminder": "批量设置任务",
     "batchSetReminderBlocks": "批量设置任务 (${count}个块)",
     "batchSetReminderDesc": "将为以下 ${count} 个块设置相同的提醒时间",
