@@ -165,6 +165,57 @@ export class CategoryManageDialog {
                     display: flex;
                     gap: 4px;
                 }
+                
+                .category-move-actions {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 2px;
+                    margin-left: 8px;
+                }
+                
+                .category-move-actions .b3-button {
+                    padding: 2px 6px;
+                    min-height: 24px;
+                    line-height: 1;
+                }
+                
+                .category-move-actions .b3-button__icon {
+                    width: 14px;
+                    height: 14px;
+                }
+                
+                /* 移动端适配 */
+                @media (max-width: 768px) {
+                    .category-item {
+                        padding: 10px 12px;
+                    }
+                    
+                    .category-drag-handle {
+                        margin-right: 8px;
+                    }
+                    
+                    .category-move-actions {
+                        margin-left: 4px;
+                    }
+                    
+                    .category-move-actions .b3-button {
+                        padding: 4px 8px;
+                        min-height: 28px;
+                    }
+                }
+                
+                /* 触摸设备优化 */
+                @media (pointer: coarse) {
+                    .category-move-actions .b3-button {
+                        min-width: 32px;
+                        min-height: 32px;
+                    }
+                    
+                    .category-move-actions .b3-button__icon {
+                        width: 16px;
+                        height: 16px;
+                    }
+                }
             </style>
         `;
     }
@@ -232,6 +283,14 @@ export class CategoryManageDialog {
                     <svg class="b3-button__icon"><use xlink:href="#iconTrashcan"></use></svg>
                 </button>
             </div>
+            <div class="category-move-actions">
+                <button class="b3-button b3-button--text category-move-up-btn" data-action="moveUp" data-id="${category.id}" title="上移">
+                    <svg class="b3-button__icon"><use xlink:href="#iconUp"></use></svg>
+                </button>
+                <button class="b3-button b3-button--text category-move-down-btn" data-action="moveDown" data-id="${category.id}" title="下移">
+                    <svg class="b3-button__icon"><use xlink:href="#iconDown"></use></svg>
+                </button>
+            </div>
         `;
 
         // 绑定拖拽事件
@@ -240,6 +299,8 @@ export class CategoryManageDialog {
         // 绑定操作事件
         const editBtn = categoryEl.querySelector('[data-action="edit"]') as HTMLButtonElement;
         const deleteBtn = categoryEl.querySelector('[data-action="delete"]') as HTMLButtonElement;
+        const moveUpBtn = categoryEl.querySelector('[data-action="moveUp"]') as HTMLButtonElement;
+        const moveDownBtn = categoryEl.querySelector('[data-action="moveDown"]') as HTMLButtonElement;
 
         editBtn?.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -249,6 +310,16 @@ export class CategoryManageDialog {
         deleteBtn?.addEventListener('click', (e) => {
             e.stopPropagation();
             this.deleteCategory(category);
+        });
+
+        moveUpBtn?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.moveCategoryUp(category);
+        });
+
+        moveDownBtn?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.moveCategoryDown(category);
         });
 
         return categoryEl;
@@ -327,6 +398,46 @@ export class CategoryManageDialog {
                 await this.handleCategoryReorder(this.draggedCategory, category, insertBefore);
             }
         });
+    }
+
+    private async moveCategoryUp(category: Category) {
+        try {
+            const categories = await this.categoryManager.loadCategories();
+            const index = categories.findIndex(c => c.id === category.id);
+            
+            if (index <= 0) return; // 已经是第一个，无法再上移
+            
+            // 与前一个分类交换位置
+            const reorderedCategories = [...categories];
+            [reorderedCategories[index - 1], reorderedCategories[index]] = [reorderedCategories[index], reorderedCategories[index - 1]];
+            
+            await this.categoryManager.reorderCategories(reorderedCategories);
+            this.renderCategories();
+            showMessage(i18n("categoryMovedUp") || "分类已上移");
+        } catch (error) {
+            console.error('上移分类失败:', error);
+            showMessage(i18n("moveCategoryFailed") || "移动分类失败");
+        }
+    }
+
+    private async moveCategoryDown(category: Category) {
+        try {
+            const categories = await this.categoryManager.loadCategories();
+            const index = categories.findIndex(c => c.id === category.id);
+            
+            if (index === -1 || index >= categories.length - 1) return; // 已经是最后一个，无法再下移
+            
+            // 与后一个分类交换位置
+            const reorderedCategories = [...categories];
+            [reorderedCategories[index], reorderedCategories[index + 1]] = [reorderedCategories[index + 1], reorderedCategories[index]];
+            
+            await this.categoryManager.reorderCategories(reorderedCategories);
+            this.renderCategories();
+            showMessage(i18n("categoryMovedDown") || "分类已下移");
+        } catch (error) {
+            console.error('下移分类失败:', error);
+            showMessage(i18n("moveCategoryFailed") || "移动分类失败");
+        }
     }
 
     private async handleCategoryReorder(draggedCategory: Category, targetCategory: Category, insertBefore: boolean = false) {

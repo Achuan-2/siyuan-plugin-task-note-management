@@ -2,7 +2,8 @@ import { colorWithOpacity } from "../utils/uiUtils";
 import { showMessage, confirm, Dialog, Menu, Constants, getFrontend, getBackend, platformUtils } from "siyuan";
 import { refreshSql, sql, getBlockKramdown, getBlockByID, updateBindBlockAtrrs, openBlock } from "../api";
 import { getLocalDateString, compareDateStrings, getLocalDateTimeString, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../utils/dateUtils";
-import { loadSortConfig, saveSortConfig, getSortMethodName } from "../utils/sortConfig";
+import { loadSortConfig, saveSortConfig, getSortConfigSummary, SortCriterion } from "../utils/sortConfig";
+import { SortMenuDialog } from "./SortMenuDialog";
 import { QuickReminderDialog } from "./QuickReminderDialog";
 import { CategoryManager } from "../utils/categoryManager";
 import { CategoryManageDialog } from "./CategoryManageDialog";
@@ -32,8 +33,8 @@ export class ReminderPanel {
     private currentCategoryFilter: string = 'all'; // 添加当前分类过滤
     private selectedCategories: string[] = [];
     private currentSearchQuery: string = '';
-    private currentSort: string = 'time';
-    private currentSortOrder: 'asc' | 'desc' = 'asc';
+    // 排序条件数组（支持多选和拖拽排序）
+    private currentSortCriteria: SortCriterion[] = [{ method: 'time', order: 'asc' }];
     private reminderUpdatedHandler: (event?: CustomEvent) => void;
     private sortConfigUpdatedHandler: (event: CustomEvent) => void;
     private categoryManager: CategoryManager; // 添加分类管理器
@@ -124,10 +125,9 @@ export class ReminderPanel {
         };
 
         this.sortConfigUpdatedHandler = (event: CustomEvent) => {
-            const { method, order } = event.detail;
-            if (method !== this.currentSort || order !== this.currentSortOrder) {
-                this.currentSort = method;
-                this.currentSortOrder = order;
+            const { criteria } = event.detail;
+            if (JSON.stringify(criteria) !== JSON.stringify(this.currentSortCriteria)) {
+                this.currentSortCriteria = criteria || [{ method: 'time', order: 'asc' }];
                 this.updateSortButtonTitle();
                 this.loadReminders();
             }
@@ -214,13 +214,11 @@ export class ReminderPanel {
     private async loadSortConfig() {
         try {
             const config = await loadSortConfig(this.plugin);
-            this.currentSort = config.method;
-            this.currentSortOrder = config.order;
+            this.currentSortCriteria = config.criteria || [{ method: 'time', order: 'asc' }];
             this.updateSortButtonTitle();
         } catch (error) {
             console.error('加载排序配置失败:', error);
-            this.currentSort = 'time';
-            this.currentSortOrder = 'asc';
+            this.currentSortCriteria = [{ method: 'time', order: 'asc' }];
         }
     }
 
@@ -535,18 +533,16 @@ export class ReminderPanel {
         // 初始化自定义过滤器
         this.updateFilterSelect();
     }
-    // 修改排序方法以支持手动排序
+    // 修改排序方法以支持多条件排序
     private sortReminders(reminders: any[]) {
-        const sortType = this.currentSort;
-        const sortOrder = this.currentSortOrder;
-        // console.log('应用排序方式:', sortType, sortOrder, '提醒数量:', reminders.length);
+        const criteria = this.currentSortCriteria;
+        // console.log('应用排序方式:', criteria, '提醒数量:', reminders.length);
 
         // 特殊处理已完成相关的筛选器（包括昨日已完成）
         const isCompletedFilter = this.currentTab === 'completed' || this.currentTab === 'todayCompleted' || this.currentTab === 'yesterdayCompleted';
         const isPast7Filter = this.currentTab === 'all';
 
-        // 如果当前视图是“今日已完成”或“全部已完成”，始终按完成时间降序显示
-        // 不受用户选择的排序方式（如按优先级）影响，也不受升降序切换影响
+        // 如果当前视图是"今日已完成"或"全部已完成"，始终按完成时间降序显示
         if (isCompletedFilter) {
             reminders.sort((a: any, b: any) => {
                 const today = getLogicalDateString();
@@ -566,97 +562,187 @@ export class ReminderPanel {
             return;
         }
 
-        reminders.sort((a: any, b: any) => {
-            let result = 0;
-
-            // 对于"过去七天"筛选器，未完成事项优先显示
-            if (isPast7Filter) {
-                const aCompleted = a.completed || false;
-                const bCompleted = b.completed || false;
-
-                if (aCompleted !== bCompleted) {
-                    return aCompleted ? 1 : -1; // 未完成的排在前面
+        // 特殊处理：今日任务视图下，每日可做任务始终放在最后，不参与其他排序
+        if (this.currentTab === 'today') {
+            const todayStr = getLogicalDateString();
+            
+            // 定义分组：0-普通任务, 1-订阅任务, 2-每日可做(Dessert)
+            const getGroupOrder = (item: any) => {
+                const isDessert = item.isAvailableToday && (!item.date && !item.endDate || (item.date || item.endDate) !== todayStr);
+                if (isDessert) return 2;
+                if (item.isSubscribed) return 1;
+                return 0;
+            };
+            
+            // 先按分组排序（普通任务在前，每日可做最后）
+            reminders.sort((a: any, b: any) => {
+                const orderA = getGroupOrder(a);
+                const orderB = getGroupOrder(b);
+                
+                // 如果分组不同，直接按分组排序
+                if (orderA !== orderB) {
+                    return orderA - orderB;
                 }
-            }
+                
+                // 同组内再按排序条件排序
+                return this.sortByCriteria(a, b, criteria, isPast7Filter);
+            });
+        } else {
+            reminders.sort((a: any, b: any) => {
+                return this.sortByCriteria(a, b, criteria, isPast7Filter);
+            });
+        }
 
-            // 特殊处理：按时间排序时，无日期任务始终排在最后（不受升降序影响）
-            if (sortType === 'time') {
+        // console.log('排序完成，排序方式:', criteria);
+    }
+
+    // 根据单个排序条件比较两个任务
+    private compareByCriterion(a: any, b: any, criterion: SortCriterion): number {
+        let result = 0;
+
+        switch (criterion.method) {
+            case 'time':
+                // 特殊处理：按时间排序时，无日期任务始终排在最后
                 const hasDateA = !!(a.date || a.endDate);
                 const hasDateB = !!(b.date || b.endDate);
 
                 if (!hasDateA && !hasDateB) {
-                    // 两个都没有日期，按优先级排序
-                    return this.compareByPriorityValue(a, b);
-                }
-                if (!hasDateA) return 1;  // a 无日期，排在后面
-                if (!hasDateB) return -1; // b 无日期，排在后面
-            }
-
-            // 应用用户选择的排序方式
-            switch (sortType) {
-                case 'time':
-                    // 对于已完成相关的筛选器，如果都是已完成状态，优先按完成时间排序
-                    if ((isCompletedFilter || (isPast7Filter && a.completed && b.completed)) &&
-                        a.completed && b.completed) {
-                        result = this.compareByCompletedTime(a, b);
-                        // 如果完成时间相同，再按设置时间排序
-                        if (result === 0) {
-                            result = this.compareByTime(a, b);
-                        }
-                    } else {
-                        result = this.compareByTime(a, b);
-                    }
-                    break;
-
-                case 'priority':
-                    result = this.compareByPriorityWithManualSort(a, b);
-                    break;
-
-                case 'title':
-                    result = this.compareByTitle(a, b);
-                    break;
-
-                default:
-                    console.warn('未知的排序类型:', sortType, '默认使用时间排序');
+                    result = this.compareByPriorityValue(a, b);
+                } else if (!hasDateA) {
+                    result = 1;  // a 无日期，排在后面
+                } else if (!hasDateB) {
+                    result = -1; // b 无日期，排在后面
+                } else {
                     result = this.compareByTime(a, b);
+                }
+                break;
+
+            case 'priority':
+                result = this.compareByPriorityValue(a, b);
+                // 优先级相同时按手动排序
+                if (result === 0) {
+                    const sortA = this.getReminderSortValue(a);
+                    const sortB = this.getReminderSortValue(b);
+                    result = sortA - sortB;
+                }
+                break;
+
+            case 'title':
+                result = this.compareByTitle(a, b);
+                break;
+
+            case 'created':
+                result = this.compareByCreatedTime(a, b);
+                break;
+
+            case 'category':
+                result = this.compareByCategory(a, b);
+                break;
+
+            default:
+                result = 0;
+        }
+
+        // 应用升降序
+        return criterion.order === 'desc' ? -result : result;
+    }
+
+    // 按排序条件数组比较两个任务
+    private sortByCriteria(a: any, b: any, criteria: SortCriterion[], isPast7Filter: boolean): number {
+        // 对于"过去七天"筛选器，未完成事项优先显示
+        if (isPast7Filter) {
+            const aCompleted = a.completed || false;
+            const bCompleted = b.completed || false;
+
+            if (aCompleted !== bCompleted) {
+                return aCompleted ? 1 : -1; // 未完成的排在前面
             }
+        }
 
-            // 特殊处理：今日可做任务 (Desserts) 和 订阅日历任务 排在最后
-            if (this.currentTab === 'today') {
-                const todayStr = getLogicalDateString();
-
-                // 定义分组顺序：0-普通任务, 1-订阅任务, 2-每日可做(Dessert)
-                const getGroupOrder = (item: any) => {
-                    const isDessert = item.isAvailableToday && (!item.date && !item.endDate || (item.date || item.endDate) !== todayStr);
-                    if (isDessert) return 2;
-                    if (item.isSubscribed) return 1;
-                    return 0;
-                };
-
-                const orderA = getGroupOrder(a);
-                const orderB = getGroupOrder(b);
-
-                if (orderA !== orderB) return orderA - orderB;
+        // 依次应用每个排序条件
+        for (const criterion of criteria) {
+            const result = this.compareByCriterion(a, b, criterion);
+            if (result !== 0) {
+                // 调试日志：记录哪个排序条件决定了顺序
+                // console.log(`[排序] ${a.title?.substring(0, 20)} vs ${b.title?.substring(0, 20)}: 按 ${criterion.method}(${criterion.order}) = ${result}`);
+                return result;
             }
+        }
 
-            // 在已完成视图中，优先展示子任务（子任务靠前），以满足父未完成时只展示子任务的需求
-            if (isCompletedFilter) {
-                const aIsChild = !!a.parentId;
-                const bIsChild = !!b.parentId;
-                if (aIsChild && !bIsChild) return -1; // 子任务在前
-                if (!aIsChild && bIsChild) return 1;
-            }
+        // 所有排序条件都相同时，按创建时间作为兜底排序（确保排序的稳定性）
+        return this.compareByCreatedTime(a, b);
+    }
 
-            // 优先级升降序的结果相反
-            if (sortType === 'priority') {
-                result = -result;
-            }
+    // 按创建时间比较
+    private compareByCreatedTime(a: any, b: any): number {
+        const timeA = a.createdTime ? new Date(a.createdTime).getTime() : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+        const timeB = b.createdTime ? new Date(b.createdTime).getTime() : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
+        return timeA - timeB; // 旧到新（升序），降序会在 compareByCriterion 中取反
+    }
 
-            // 应用升降序
-            return sortOrder === 'desc' ? -result : result;
+    // 按分类比较（按照分类管理器中的排序顺序）
+    private compareByCategory(a: any, b: any): number {
+        const categories = this.categoryManager.getCategories();
+        const categoryOrder = new Map<string, number>();
+        
+        // 构建分类ID到排序索引的映射
+        categories.forEach((cat, index) => {
+            categoryOrder.set(cat.id, index);
         });
-
-        // console.log('排序完成，排序方式:', sortType, sortOrder);
+        
+        // 获取任务的排序最靠前的分类ID（支持重复任务实例）
+        const getHighestPriorityCategoryId = (reminder: any): string => {
+            // 对于重复任务实例，优先使用自身的 categoryId，如果没有则从原始任务获取
+            let categoryId = reminder.categoryId;
+            
+            // 如果没有 categoryId 且有 originalId，尝试从原始任务获取
+            if (!categoryId && reminder.isRepeatInstance && reminder.originalId && this.originalRemindersCache) {
+                const original = this.originalRemindersCache[reminder.originalId];
+                if (original) {
+                    categoryId = original.categoryId;
+                }
+            }
+            
+            if (!categoryId) return 'none';
+            const ids = String(categoryId).split(',').map((id: string) => id.trim()).filter((id: string) => id);
+            
+            if (ids.length === 0) return 'none';
+            if (ids.length === 1) return ids[0];
+            
+            // 有多个分类时，返回排序最靠前的那个（在 categoryOrder 中索引最小的）
+            let bestId = ids[0];
+            let bestOrder = categoryOrder.get(bestId) ?? Number.MAX_SAFE_INTEGER;
+            
+            for (let i = 1; i < ids.length; i++) {
+                const id = ids[i];
+                const order = categoryOrder.get(id) ?? Number.MAX_SAFE_INTEGER;
+                if (order < bestOrder) {
+                    bestOrder = order;
+                    bestId = id;
+                }
+            }
+            
+            return bestId;
+        };
+        
+        const catA = getHighestPriorityCategoryId(a);
+        const catB = getHighestPriorityCategoryId(b);
+        
+        // 调试日志
+        // if (a.categoryId?.includes(',') || b.categoryId?.includes(',')) {
+        //     console.log('[分类排序]', a.title?.substring(0, 20), `(${a.categoryId || 'none'})`, '=>', catA, 'vs', b.title?.substring(0, 20), `(${b.categoryId || 'none'})`, '=>', catB);
+        // }
+        
+        // 无分类的任务排在最后
+        if (catA === 'none' && catB === 'none') return 0;
+        if (catA === 'none') return 1;
+        if (catB === 'none') return -1;
+        
+        // 按照分类的排序索引比较
+        const orderA = categoryOrder.get(catA) ?? Number.MAX_SAFE_INTEGER;
+        const orderB = categoryOrder.get(catB) ?? Number.MAX_SAFE_INTEGER;
+        
+        return orderA - orderB;
     }
     // 新增：优先级排序与手动排序结合（支持重复实例）
     private compareByPriorityWithManualSort(a: any, b: any): number {
@@ -880,7 +966,8 @@ export class ReminderPanel {
     // 更新排序按钮的提示文本
     private updateSortButtonTitle() {
         if (this.sortButton) {
-            this.sortButton.title = `${i18n("sortBy")}: ${getSortMethodName(this.currentSort, this.currentSortOrder)}`;
+            const summary = getSortConfigSummary({ criteria: this.currentSortCriteria });
+            this.sortButton.title = `${i18n("sortBy")}: ${summary}`;
         }
     }
 
@@ -1159,90 +1246,41 @@ export class ReminderPanel {
     }
 
 
-    // 修复排序菜单方法
+    // 显示排序菜单对话框（支持多选和拖拽排序）
     private showSortMenu(event: MouseEvent) {
         try {
-            const menu = new Menu("reminderSortMenu");
-
-            const sortOptions = [
-                { key: 'priority', label: i18n("sortByPriority"), icon: '🎯' },
-                { key: 'time', label: i18n("sortByTime"), icon: '🗓' },
-                { key: 'title', label: i18n("sortByTitle"), icon: '📝' }
-            ];
-
-            sortOptions.forEach(option => {
-                menu.addItem({
-                    iconHTML: option.icon,
-                    label: `${option.label} (${i18n("descendingOrder")})`,
-                    current: this.currentSort === option.key && this.currentSortOrder === 'desc',
-                    click: async () => {
-                        try {
-                            this.currentSort = option.key;
-                            this.currentSortOrder = 'desc';
-                            this.updateSortButtonTitle();
-                            await saveSortConfig(this.plugin, option.key, 'desc');
-                            // 重置分页状态
-                            this.currentPage = 1;
-                            this.totalPages = 1;
-                            this.totalItems = 0;
-                            await this.loadReminders();
-                            // console.log('排序已更新为:', option.key, 'desc');
-                        } catch (error) {
-                            console.error('保存排序配置失败:', error);
-                            await this.loadReminders();
-                        }
+            const dialog = new SortMenuDialog({
+                plugin: this.plugin,
+                currentCriteria: this.currentSortCriteria,
+                onSave: async (criteria) => {
+                    // 点击关闭时也会触发，确保配置已保存
+                    try {
+                        this.currentSortCriteria = criteria;
+                        this.updateSortButtonTitle();
+                        await saveSortConfig(this.plugin, criteria);
+                    } catch (error) {
+                        console.error('保存排序配置失败:', error);
                     }
-                });
-
-                // 为每个排序方式添加升序和降序选项
-                menu.addItem({
-                    iconHTML: option.icon,
-                    label: `${option.label} (${i18n("ascendingOrder")})`,
-                    current: this.currentSort === option.key && this.currentSortOrder === 'asc',
-                    click: async () => {
-                        try {
-                            this.currentSort = option.key;
-                            this.currentSortOrder = 'asc';
-                            this.updateSortButtonTitle();
-                            await saveSortConfig(this.plugin, option.key, 'asc');
-                            // 重置分页状态
-                            this.currentPage = 1;
-                            this.totalPages = 1;
-                            this.totalItems = 0;
-                            await this.loadReminders();
-                            // console.log('排序已更新为:', option.key, 'asc');
-                        } catch (error) {
-                            console.error('保存排序配置失败:', error);
-                            await this.loadReminders();
-                        }
+                },
+                onChange: async (criteria) => {
+                    // 实时更新排序
+                    try {
+                        this.currentSortCriteria = criteria;
+                        this.updateSortButtonTitle();
+                        await saveSortConfig(this.plugin, criteria);
+                        // 重置分页状态
+                        this.currentPage = 1;
+                        this.totalPages = 1;
+                        this.totalItems = 0;
+                        await this.loadReminders();
+                    } catch (error) {
+                        console.error('实时更新排序失败:', error);
                     }
-                });
+                }
             });
-
-            // 使用按钮的位置信息来定位菜单
-            if (this.sortButton) {
-                const rect = this.sortButton.getBoundingClientRect();
-                const menuX = rect.left;
-                const menuY = rect.bottom + 4;
-
-                // 确保菜单在可视区域内
-                const maxX = window.innerWidth - 200;
-                const maxY = window.innerHeight - 200;
-
-                menu.open({
-                    x: Math.min(menuX, maxX),
-                    y: Math.min(menuY, maxY)
-                });
-            } else {
-                menu.open({
-                    x: event.clientX,
-                    y: event.clientY
-                });
-            }
+            dialog.show();
         } catch (error) {
             console.error('显示排序菜单失败:', error);
-            const currentName = getSortMethodName(this.currentSort, this.currentSortOrder);
-            // console.log(`当前排序方式: ${currentName}`);
         }
     }
     /**
@@ -3960,7 +3998,7 @@ export class ReminderPanel {
         const priorityOrder = { 'high': 3, 'medium': 2, 'low': 1, 'none': 0 };
         const priorityA = priorityOrder[a.priority || 'none'] || 0;
         const priorityB = priorityOrder[b.priority || 'none'] || 0;
-        return priorityB - priorityA; // 高优先级在前
+        return priorityA - priorityB; // 低到高（升序），降序会在 compareByCriterion 中取反
     }
 
     // 按标题比较
