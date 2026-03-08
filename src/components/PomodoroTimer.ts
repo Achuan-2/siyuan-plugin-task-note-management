@@ -1772,14 +1772,14 @@ export class PomodoroTimer {
         if (!src) return false;
         try {
             const win = PomodoroTimer.browserWindowInstance;
-            if (!win || win.isDestroyed && win.isDestroyed()) {
+            if (!win || (win.isDestroyed && win.isDestroyed())) {
                 console.warn('[PomodoroTimer] BrowserWindow 不存在或已销毁');
                 return false;
             }
 
             // 使用 resolveAudioPath 解析路径，支持 petal 文件夹中的文件
             let resolvedSrc = src;
-            if (!src.startsWith('blob:') && !src.startsWith('file:')) {
+            if (!src.startsWith('blob:') && !src.startsWith('file:') && !src.startsWith('data:')) {
                 resolvedSrc = await resolveAudioPath(src);
             }
 
@@ -1788,10 +1788,10 @@ export class PomodoroTimer {
                 return false;
             }
 
-            // 在主进程中获取音频并转为 data URL，避免 BW 直接访问 blob:/http: 时的跨源/权限失败
+            // 在主进程中获取音频并转为 data URL
             const bwAudioSrc = await this.getAudioDataUrlForBW(resolvedSrc);
 
-            // ID 基于原始解析路径（data URL 太长不适合做 ID）
+            // ID 基于原始解析路径
             const safeIdKey = resolvedSrc.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/`/g, '\\`');
             const safeSrc = bwAudioSrc.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/`/g, '\\`');
             const loop = !!(opts && opts.loop);
@@ -1804,26 +1804,27 @@ export class PomodoroTimer {
                     if (!a) {
                         a = document.createElement('audio');
                         a.id = id;
-                        a.preload = 'auto';
-                        a.style.display = 'none';
                         document.body.appendChild(a);
                     }
+                    
+                    // 如果音频正在播放且不是循环音频，且本次也是请求非循环播放，则先停止重置
+                    if (!a.paused && !a.loop && !${loop}) {
+                        a.pause();
+                        a.currentTime = 0;
+                    }
+
                     a.loop = ${loop};
                     a.volume = ${volume};
                     
-                    // 为循环音频添加 ended 事件恢复（防止浏览器引擎在循环点意外停止）
+                    // 为循环音频添加守护机制
                     if (${loop} && !a._loopGuardAttached) {
                         a._loopGuardAttached = true;
                         a.addEventListener('ended', function() {
-                            if (a.loop && !a.paused) {
-                                try { a.currentTime = 0; a.play().catch(function(){}); } catch(e) {}
-                            } else if (a.loop) {
-                                // loop 为 true 但 paused，说明被意外暂停后触发了 ended
+                            if (a.loop) {
                                 try { a.currentTime = 0; a.play().catch(function(){}); } catch(e) {}
                             }
                         });
                         a.addEventListener('pause', function() {
-                            // 如果是循环音频被意外暂停（非用户主动操作），自动恢复
                             if (a.loop && a.volume > 0 && !a._userPaused) {
                                 setTimeout(function() {
                                     if (a.loop && a.paused && a.volume > 0 && !a._userPaused) {
@@ -1832,79 +1833,45 @@ export class PomodoroTimer {
                                 }, 200);
                             }
                         });
-                        a.addEventListener('error', function() {
-                            // 音频加载/解码错误时尝试重新加载并播放
-                            if (a.loop && a.volume > 0 && !a._userPaused) {
-                                setTimeout(function() {
-                                    try { a.load(); a.play().catch(function(){}); } catch(e) {}
-                                }, 1000);
-                            }
-                        });
+                    } else if (!${loop}) {
+                        // 非循环音频：播放结束后确保重置位置，以便下次触发
+                        a.onended = function() {
+                            try { a.currentTime = 0; } catch(e) {}
+                        };
                     }
-                    // 重置用户暂停标记
+
                     a._userPaused = false;
                     
-                    // 如果已经在播放，不打断
-                    if (!a.paused && a.readyState >= 2) {
-                        return {ok:true};
-                    }
-                    
-                    // 如果 src 已设置且可以播放，直接播放
-                    if (a.readyState >= 2 && a.src && a.src.length > 0) {
-                        await a.play();
-                        return {ok:true};
-                    }
-                    
-                    // 首次加载或 src 未设置
-                    return new Promise((resolve) => {
-                        const onCanPlay = async () => {
-                            a.removeEventListener('canplaythrough', onCanPlay);
-                            a.removeEventListener('error', onError);
-                            try {
-                                await a.play();
-                                resolve({ok:true});
-                            } catch (playErr) {
-                                resolve({ok:false, err: playErr.name || playErr.message || 'play failed'});
-                            }
-                        };
-                        const onError = (e) => {
-                            a.removeEventListener('canplaythrough', onCanPlay);
-                            a.removeEventListener('error', onError);
-                            const errMsg = a.error ? \`\${a.error.code}:\${a.error.message || 'unknown'}\` : 'load error';
-                            resolve({ok:false, err: errMsg});
-                        };
-                        
-                        a.addEventListener('canplaythrough', onCanPlay);
-                        a.addEventListener('error', onError);
-                        
-                        setTimeout(() => {
-                            a.removeEventListener('canplaythrough', onCanPlay);
-                            a.removeEventListener('error', onError);
-                            if (a.readyState >= 2) {
-                                a.play().then(() => resolve({ok:true})).catch(() => resolve({ok:false, err: 'timeout-play-failed'}));
-                            } else {
-                                resolve({ok:false, err: 'timeout'});
-                            }
-                        }, 8000);
-                        
+                    // 设置 src 如果不同
+                    if (a.src !== '${safeSrc}') {
                         a.src = '${safeSrc}';
                         a.load();
-                    });
-                } catch (e) { 
-                    return {ok:false, err: (e && e.name) ? e.name : (e && e.message) ? e.message : String(e)}; 
+                    }
+                    
+                    // 对于已经在播放且状态就绪的循环音频，直接返回成功
+                    if (${loop} && !a.paused && a.readyState >= 2) {
+                        return {ok:true};
+                    }
+                    
+                    try {
+                        // 非循环音频或未开始播放的循环音频：重置并播放
+                        if (!${loop} || a.paused) {
+                            a.currentTime = 0;
+                        }
+                        await a.play();
+                        return {ok:true};
+                    } catch(e) {
+                         return {ok:false, err: String(e)};
+                    }
+                } catch(e) {
+                    return {ok:false, err: String(e)};
                 }
-            })()`;
+            })();`;
 
             const res = await win.webContents.executeJavaScript(script, true);
-            if (res && res.ok) {
-                return true;
-            }
-            if (res && res.err) {
-                console.warn('[PomodoroTimer] BrowserWindow 音频播放失败:', res.err, 'src:', src);
-            }
-            return false;
-        } catch (e) {
-            console.warn('[PomodoroTimer] playSoundInBrowserWindow failed', e);
+            return !!(res && res.ok);
+        } catch (error) {
+            console.warn('[PomodoroTimer] playSoundInBrowserWindow error:', error);
             return false;
         }
     }
@@ -1985,25 +1952,44 @@ export class PomodoroTimer {
         }
     }
 
+    // 静态锁定集合，用于防止多个实例在短时间内同时在 BW 中触发同一个音频
+    private static bwPlayingLock: Set<string> = new Set();
+
     private async safePlayAudio(audio: HTMLAudioElement): Promise<boolean> {
         if (!audio) return false;
 
         try {
-            // 如果在 BrowserWindow 模式，优先在窗口内播放音频以避开主窗口的 autoplay 限制
-            // 这样可以利用 BrowserWindow 的 autoplayPolicy: 'no-user-gesture-required' 设置
-            const isBrowserWindow = !this.isTabMode && PomodoroTimer.browserWindowInstance;
-            if (isBrowserWindow) {
+            // 判定是否为背景音（需要循环），仅限 work/break 背景音
+            const isBackgroundAudio = audio === this.workAudio || audio === this.breakAudio || audio === this.longBreakAudio;
+
+            // 强制规则：非背景音不得循环
+            if (!isBackgroundAudio) {
+                audio.loop = false;
+            }
+
+            // 如果在 BrowserWindow 模式，或者当前已开启了 float window，优先在 BW 内播放音频
+            // 这样所有实例（Tab或Float）都统一由 BW 发声，避免双重播放，且利用 BW 的 autoplayPolicy 绕过限制。
+            const bwInstance = PomodoroTimer.browserWindowInstance;
+            if (bwInstance && !bwInstance.isDestroyed()) {
                 try {
                     const src = audio.src || '';
                     const loop = !!audio.loop;
                     const volume = typeof audio.volume === 'number' ? audio.volume : 1;
+
+                    // 避免重复触发锁定：如果该音频在 BW 中已经在 500ms 内触发过，则跳过，防止多实例并发导致的回声
+                    const lockKey = `${src}_${loop}`;
+                    if (PomodoroTimer.bwPlayingLock.has(lockKey)) {
+                        return true;
+                    }
+                    PomodoroTimer.bwPlayingLock.add(lockKey);
+                    setTimeout(() => PomodoroTimer.bwPlayingLock.delete(lockKey), 500);
+
                     const played = await this.playSoundInBrowserWindow(src, { loop, volume });
                     if (played) {
                         return true;
                     }
                     // BW 播放失败时直接返回 false，不回退到主窗口播放
-                    // （主窗口音频元素无法被 stopAllAudio 在 BW 模式下可靠地清理）
-                    console.warn('[PomodoroTimer] BrowserWindow 音频播放失败，放弃播放');
+                    console.warn('[PomodoroTimer] BrowserWindow 音频播放失败');
                     return false;
                 } catch (e) {
                     console.warn('在 BrowserWindow 中播放音频失败:', e);
@@ -2011,13 +1997,10 @@ export class PomodoroTimer {
                 }
             }
 
-            // 确保音频已初始化（仅在非 BrowserWindow 模式或 BrowserWindow 播放失败时才需要）
+            // 确保音频已初始化（仅在非 BrowserWindow 模式下）
             if (!this.audioInitialized) {
                 await this.initializeAudioPlayback();
-                // 如果初始化未成功（例如受限于 autoplay 策略），直接返回 false，避免重复激进尝试
-                if (!this.audioInitialized) {
-                    return false;
-                }
+                if (!this.audioInitialized) return false;
             }
 
             // 检查音频是否准备就绪
@@ -2028,55 +2011,25 @@ export class PomodoroTimer {
             // 重置音频到开始位置
             try {
                 audio.currentTime = 0;
-            } catch (e) {
-                // 某些浏览器在未准备好时设置currentTime会抛错，忽略
-            }
+            } catch (e) { }
 
             // 播放音频
             await audio.play();
             return true;
         } catch (error: any) {
             console.warn('音频播放失败:', error);
-
             if (error && error.name === 'NotAllowedError') {
                 this.audioInitialized = false;
-                // 在 BrowserWindow 模式下，更积极地重新初始化
-                const isBrowserWindow = !this.isTabMode && this.container && typeof (this.container as any).webContents !== 'undefined';
-                if (isBrowserWindow) {
-                }
-                // 强制重新初始化音频播放权限
                 try {
                     await this.initializeAudioPlayback(true);
-                    // 重新尝试播放
                     if (audio.readyState >= 3) {
-                        try {
-                            audio.currentTime = 0;
-                        } catch { }
+                        try { audio.currentTime = 0; } catch { }
                         await audio.play();
                         return true;
                     }
-                } catch (retryError) {
-                    console.warn('强制重新初始化后播放仍失败:', retryError);
-                }
-                // 不抛出异常，返回 false 让调用方决定后续动作
-                return false;
-            } else if (error && error.name === 'AbortError') {
-                // 延迟一小段时间后重试（安全地捕捉错误）
-                setTimeout(async () => {
-                    try {
-                        if (audio.readyState >= 3) {
-                            try {
-                                audio.currentTime = 0;
-                            } catch { }
-                            await audio.play();
-                        }
-                    } catch (delayedError) {
-                        console.warn('延迟重试也失败:', delayedError);
-                    }
-                }, 100);
+                } catch { }
                 return false;
             }
-
             return false;
         }
     }
@@ -5337,32 +5290,33 @@ export class PomodoroTimer {
     }
 
     private stopAllAudio() {
-        // BrowserWindow 模式下，同时停止 BW 内音频和主窗口音频元素（防止回退播放时遗漏）
+        // BrowserWindow 模式下，同时停止 BW 内音频和主窗口音频元素
         try {
-            const isBrowserWindow = !this.isTabMode && this.container && typeof (this.container as any).webContents !== 'undefined';
-            if (isBrowserWindow && this.container && (this.container as any).webContents) {
+            const bwInstance = PomodoroTimer.browserWindowInstance;
+            if (bwInstance && !bwInstance.isDestroyed()) {
                 try {
                     this.stopAllAudioInBrowserWindow();
-                } catch (e) {
-                    console.warn('在 BrowserWindow 中停止音频失败:', e);
-                }
+                } catch (e) { }
             }
         } catch (e) { }
 
-        // 无论是任何模式，都必须停止主进程的 HTMLAudioElement（防止回退播放的音频没有被清理）
-        if (this.workAudio) {
-            this.workAudio.pause();
-            try { this.workAudio.currentTime = 0; } catch (e) { }
-        }
-        if (this.breakAudio) {
-            this.breakAudio.pause();
-            try { this.breakAudio.currentTime = 0; } catch (e) { }
-        }
-        if (this.longBreakAudio) {
-            this.longBreakAudio.pause();
-            try { this.longBreakAudio.currentTime = 0; } catch (e) { }
-        }
+        // 停止并重置所有可能的主窗口音频实例
+        const audios = [
+            this.workAudio, this.breakAudio, this.longBreakAudio,
+            this.workEndAudio, this.breakEndAudio,
+            this.randomRestEndSound, ...(this.randomRestSounds || [])
+        ];
+
+        audios.forEach(audio => {
+            if (audio) {
+                try {
+                    audio.pause();
+                    audio.currentTime = 0;
+                } catch (e) { }
+            }
+        });
     }
+
 
     private async updateReminderPomodoroCount() {
         try {
