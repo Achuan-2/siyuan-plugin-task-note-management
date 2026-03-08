@@ -15,7 +15,7 @@ export interface SortConfig {
 // 所有可用的排序方法
 export const AVAILABLE_SORT_METHODS = [
     { key: 'priority', label: () => i18n("sortByPriority"), icon: '🎯' },
-    { key: 'category', label: () => i18n("sortByCategory") || "按分类排序", icon: '🏷️' }
+    { key: 'category', label: () => i18n("sortByCategory") || "按分类排序", icon: '🏷️' },
     { key: 'time', label: () => i18n("sortByTime"), icon: '🗓' },
     { key: 'created', label: () => i18n("sortByCreated"), icon: '🗓' },
     { key: 'title', label: () => i18n("sortByTitle"), icon: '📜' },
