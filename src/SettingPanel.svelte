@@ -106,6 +106,22 @@
         }
 
         settings.audioFileLists[key] = currentList;
+
+        // 如果被删除的音频正在试听，停止播放
+        if (playingPath === url && audioPreviewEl) {
+            audioPreviewEl.pause();
+            audioPreviewEl = null;
+            playingPath = null;
+            isAudioPlaying = false;
+        }
+
+        // 如果被删除的音频正是当前选中的，自动切换到列表中第一个可用项（或清空）
+        if (settings.audioSelected && settings.audioSelected[key] === url) {
+            const remaining = currentList.filter(i => !i.removed);
+            if (!settings.audioSelected) settings.audioSelected = {};
+            settings.audioSelected[key] = remaining.length > 0 ? remaining[0].path : '';
+        }
+
         await saveSettings();
         updateGroupItems();
     }
