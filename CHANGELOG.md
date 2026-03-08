@@ -14,6 +14,22 @@
 - 🎨 跨平台复制文本优化
 - 🐛 项目看板：编辑有绑定块的任务，编辑内容之后，任务会及时更新，然后又会恢复为原来样式，然后又恢复成新的内容，而没有绑定块的内容就不会这样
 
+---
+
+- 🎨 Pomodoro timer supports presets
+- 🎨 Pomodoro timer: Optimized the issue of progress bar jumping when starting
+- 🎨 Pomodoro timer: Optimized global Pomodoro timer sound playback on desktop
+- 🎨 Pomodoro timer: Sound deletion cancels sound selection and stops preview playback
+- 🎨 Task sidebar: Supports multi-select sorting
+- 🎨 Task editing: Leading four spaces are not parsed as code blocks
+- 🎨 Task editing: Optimized Pomodoro estimated duration interaction
+- 🎨 Task management: Deleted tasks display the deleted task name
+- 🎨 Filter optimization for tasks with multiple categories
+- 🎨 WebDAV browser upload adaptation
+- 🎨 Date recognition optimization: Uses commas and periods to separate time recognition context
+- 🎨 Cross-platform text copy optimization
+- 🐛 Project Kanban: Editing a task with bound blocks causes the task to update immediately after editing, then revert to the original style, and then revert to the new content, while tasks without bound blocks do not exhibit this behavior
+
 ## v6.2.5 / 20260307
 - 🎨 更新插件图标，感谢Forrest为插件设计的图标
 - 🎨 日历视图支持显示在侧栏
