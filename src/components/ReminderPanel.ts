@@ -9250,8 +9250,8 @@ export class ReminderPanel {
         const dialog = new Dialog({
             title: i18n("selectCategories"),
             content: this.createCategorySelectContent(categories),
-            width: "400px",
-            height: "250px"
+            width: "500px",
+            height: "300px"
         });
 
         // 绑定事件
