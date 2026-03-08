@@ -65,6 +65,11 @@ export class ReminderPanel {
     private lastClickedReminderId: string | null = null;
     private _panelKeydownHandler: ((e: KeyboardEvent) => void) | null = null;
 
+    // 当前应用的自定义过滤器ID（用于分类筛选同步）
+    private currentCustomFilterId: string | null = null;
+    // 用户手动修改的分类筛选（独立于筛选器设置）
+    private userManualCategories: string[] = ['all'];
+
     // 分页相关状态
     private currentPage: number = 1;
     private itemsPerPage: number = 30;
@@ -388,7 +393,21 @@ export class ReminderPanel {
             <option value="completed">${i18n("completedReminders")}</option>
         `;
         this.filterSelect.addEventListener('change', () => {
-            this.currentTab = this.filterSelect.value;
+            const newTab = this.filterSelect.value;
+            const isOldTabCustom = this.currentTab.startsWith('custom_');
+            const isNewTabCustom = newTab.startsWith('custom_');
+            this.currentTab = newTab;
+
+            // 如果从自定义过滤器切换到非自定义过滤器，重置当前自定义过滤器ID
+            // 这样下次切换到自定义过滤器时会重新同步分类设置
+            if (isOldTabCustom && !isNewTabCustom) {
+                this.currentCustomFilterId = null;
+                // 切换到内置筛选器时，使用用户手动记忆的分啰
+                this.selectedCategories = [...this.userManualCategories];
+                this.updateCategoryFilterButtonText();
+                this.saveSelectedCategories();
+            }
+
             // 切换筛选时清理防抖，清空当前缓存并强制刷新，避免从 "completed" 切换到 "todayCompleted" 时不更新的问题
             if (this.loadTimeoutId) {
                 clearTimeout(this.loadTimeoutId);
@@ -3394,6 +3413,30 @@ export class ReminderPanel {
             return reminders;
         }
 
+        // 同步过滤器中的分类设置到侧边栏分类筛选按钮
+        // 只有切换到不同的过滤器时才更新
+        if (this.currentCustomFilterId !== filterId) {
+            this.currentCustomFilterId = filterId;
+            // 只有当筛选器设置了具体的分类（不是'all'）时，才同步筛选器的分类
+            // 筛选器设置为'all'或未设置时，使用用户手动记忆的分啰
+            const hasSpecificCategories = filterConfig.categoryFilters &&
+                filterConfig.categoryFilters.length > 0 &&
+                !filterConfig.categoryFilters.includes('all');
+
+            if (hasSpecificCategories) {
+                // 筛选器有具体分类设置，同步到侧边栏
+                this.selectedCategories = [...filterConfig.categoryFilters];
+                this.updateCategoryFilterButtonText();
+                // 保存到设置
+                this.saveSelectedCategories();
+            } else {
+                // 筛选器没有设置分类或设置为'all'，使用用户手动记忆的分类筛选
+                this.selectedCategories = [...this.userManualCategories];
+                this.updateCategoryFilterButtonText();
+                this.saveSelectedCategories();
+            }
+        }
+
         let filtered = [...reminders];
 
         // 1. 应用日期过滤
@@ -3600,19 +3643,25 @@ export class ReminderPanel {
 
     /**
      * 应用自定义分类过滤器
+     * 支持多分类：只要任务包含选中的任意一个分类即可显示
      */
     private applyCustomCategoryFilter(reminders: any[], categoryFilters: string[]): any[] {
         return reminders.filter(r => {
             if (categoryFilters.includes('all')) {
                 return true;
             }
-            if (categoryFilters.includes('none')) {
-                if (!r.categoryId) return true;
+
+            const categoryIdStr = r.categoryId || 'none';
+            // 支持多分类：分割逗号分隔的分类ID
+            const taskCategoryIds = categoryIdStr.split(',').filter((id: string) => id);
+
+            if (taskCategoryIds.length === 0) {
+                // 任务没有分类，检查是否选中了"无分类"
+                return categoryFilters.includes('none');
             }
-            if (r.categoryId && categoryFilters.includes(r.categoryId)) {
-                return true;
-            }
-            return false;
+
+            // 只要任务的任意一个分类在过滤器列表中，就显示该任务
+            return taskCategoryIds.some((id: string) => categoryFilters.includes(id));
         });
     }
 
@@ -9239,6 +9288,8 @@ export class ReminderPanel {
                 });
             }
             this.selectedCategories = selected;
+            // 保存用户手动修改的分类筛选
+            this.userManualCategories = [...selected];
             this.updateCategoryFilterButtonText();
             this.saveSelectedCategories();
             this.loadReminders();
