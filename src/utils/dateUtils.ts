@@ -646,6 +646,8 @@ export function autoDetectDateTimeFromTitle(title: string, removeMode: 'none' | 
         /大后天/gi,
         /下?周[一二三四五六日天]/gi,
         /下?星期[一二三四五六日天]/gi,
+        // English weekdays (full and common abbreviations)
+        /\b(?:mon(?:day)?|tue(?:s|sday)?|wed(?:nesday)?|thu(?:r|rs|rsday)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)\b/gi,
         /\d{4}年\s*\d{1,2}月\s*\d{1,2}[日号]/gi,
         /\d{1,2}月\s*\d{1,2}[日号]/gi,
         /\d+\s*天[后以]后/gi,
