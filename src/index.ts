@@ -52,8 +52,6 @@ export interface AudioFileItem {
     replaces?: string; // 记录此项替换了哪个原始路径（用于保持排序）
 }
 
-export { exportIcsFile, uploadIcsToCloud };
-
 
 
 const TAB_TYPE = "reminder_calendar_tab";
@@ -65,32 +63,7 @@ export const STORAGE_NAME = "siyuan-plugin-task-note-management";
 
 // 默认设置
 export const DEFAULT_SETTINGS = {
-    workVolume: 0.5,
-    breakVolume: 1,
-    longBreakVolume: 1,
-    workEndVolume: 0.5,
-    breakEndVolume: 0.5,
-    randomRestVolume: 0.5,
-    randomRestEndVolume: 0.5,
-    pomodoroWorkDuration: 45,
-    pomodoroDurationPresets: [5, 10, 15, 25],
-    pomodoroBreakDuration: 10,
-    pomodoroLongBreakDuration: 30,
-    pomodoroLongBreakInterval: 4,
-    pomodoroAutoMode: false,
-    pomodoroSystemNotification: true, // 新增：番茄结束后系统弹窗
-    pomodoroEndPopupWindow: true, // 新增：番茄钟结束弹窗提醒，默认关闭
-    pomodoroDockPosition: 'top', // 新增：番茄钟吸附位置 'right' | 'left' | 'top'
-    reminderSystemNotification: true, // 新增：事件到期提醒系统弹窗
-    dailyNotificationTime: '08:00', // 新增：每日通知时间，默认08:00
-    dailyNotificationEnabled: false, // 新增：是否启用每日统一通知
-    randomRestEnabled: false,
-    randomRestMinInterval: 3,
-    randomRestMaxInterval: 5,
-    randomRestBreakDuration: 10,
-    randomRestSystemNotification: true, // 新增：随机微休息系统通知
-    randomRestPopupWindow: true, // 新增：随机微休息弹窗提醒，默认关闭
-    dailyFocusGoal: 6,
+    // 任务笔记设置
     autoDetectDateTime: false, // 新增：是否自动识别日期时间
     removeDateAfterDetection: 'all', // 从bool改为option：'none' | 'date' | 'all'
     newDocNotebook: '', // 新增：新建文档的笔记本ID
@@ -99,7 +72,8 @@ export const DEFAULT_SETTINGS = {
     milestoneDefaultHeadingLevel: 2, // 新增：新建标题里程碑的默认层级（1-6），默认为2级标题
     defaultHeadingLevel: 3, // 新增：新建标题的默认层级（1-6），默认为3级标题
     defaultHeadingPosition: 'prepend', // 新增：新建标题的默认位置（'prepend' | 'append'），默认为最前
-    weekStartDay: 1, // 新增：周视图的一周开始日 (0=周日, 1=周一，默认周一)
+    enableOutlinePrefix: true, // 是否在大纲中为绑定标题添加任务状态前缀
+
     // 控制侧边栏显示
     enableReminderDock: true, // 侧边栏：提醒（任务管理）
     enableProjectDock: true, // 侧边栏：项目管理
@@ -111,12 +85,7 @@ export const DEFAULT_SETTINGS = {
     enableReminderDockBadge: true,
     enableProjectDockBadge: true,
     enableHabitDockBadge: true,
-    // 摘要设置
-    showPomodoroInSummary: true,
-    showHabitInSummary: true,
-    // 排序配置
-    sortMethod: "priority",
-    sortOrder: "desc",
+
     // 日历配置
     calendarShowCategoryAndProject: false, // 是否显示分类图标和项目信息
     calendarColorBy: 'priority',
@@ -124,6 +93,17 @@ export const DEFAULT_SETTINGS = {
     dayStartTime: '08:00', // 日历视图一天的起始时间
     todayStartTime: '03:00', // 日常任务/习惯的一天起始时间
     calendarShowLunar: (window as any).siyuan?.config?.lang === 'zh_CN' ? true : false, // 日历显示农历
+    calendarShowHoliday: true, // 是否显示节假日
+    calendarShowPomodoro: true, // 是否显示番茄专注时间
+    calendarHolidayIcsUrl: 'https://www.shuyz.com/githubfiles/china-holiday-calender/master/holidayCal.ics?token=cb429c2a-81a6-4c26-8f35-4f4bf0c84b2c&compStart=*&compEnd=*', // 节假日ICS URL
+    calendarMultiDaysCount: 3, // 多天视图默认显示天数
+    weekStartDay: 1, // 新增：周视图的一周开始日 (0=周日, 1=周一，默认周一)
+    // 日历摘要设置
+    showPomodoroInSummary: true,
+    showHabitInSummary: true,
+    // 任务管理侧栏排序配置
+    sortMethod: "priority",
+    sortOrder: "desc",
     // 四象限设置
     eisenhowerImportanceThreshold: 'medium',
     eisenhowerUrgencyDays: 3,
@@ -166,17 +146,35 @@ export const DEFAULT_SETTINGS = {
     s3ForcePathStyle: false, // S3 Addressing风格，true为Path-style，false为Virtual hosted style（默认）
     s3TlsVerify: true, // S3 TLS证书验证，true为启用验证（默认），false为禁用验证
     s3CustomDomain: '', // S3 自定义域名，用于生成外链
-    enableOutlinePrefix: true, // 是否在大纲中为绑定标题添加任务状态前缀
-    calendarShowHoliday: true, // 是否显示节假日
-    calendarShowPomodoro: true, // 是否显示番茄专注时间
-    calendarHolidayIcsUrl: 'https://www.shuyz.com/githubfiles/china-holiday-calender/master/holidayCal.ics?token=cb429c2a-81a6-4c26-8f35-4f4bf0c84b2c&compStart=*&compEnd=*', // 节假日ICS URL
-    calendarMultiDaysCount: 3, // 多天视图默认显示天数
-    // 数据迁移标记
-    datatransfer: {
-        bindblockAddAttr: false, // 是否已迁移绑定块的 custom-bind-reminders 属性
-        termTypeTransfer: false, // 是否已迁移 termType -> kanbanStatus 的转换
-        audioFileTransfer: false, // 是否已迁移音频文件列表
-    },
+
+
+    // 番茄钟
+    dailyFocusGoal: 6,
+    workVolume: 0.5,
+    breakVolume: 1,
+    longBreakVolume: 1,
+    workEndVolume: 0.5,
+    breakEndVolume: 0.5,
+    randomRestVolume: 0.5,
+    randomRestEndVolume: 0.5,
+    pomodoroWorkDuration: 45,
+    pomodoroDurationPresets: [5, 10, 15, 25],
+    pomodoroBreakDuration: 10,
+    pomodoroLongBreakDuration: 30,
+    pomodoroLongBreakInterval: 4,
+    pomodoroAutoMode: false,
+    pomodoroSystemNotification: true, // 新增：番茄结束后系统弹窗
+    pomodoroEndPopupWindow: true, // 新增：番茄钟结束弹窗提醒，默认关闭
+    pomodoroDockPosition: 'top', // 新增：番茄钟吸附位置 'right' | 'left' | 'top'
+    reminderSystemNotification: true, // 新增：事件到期提醒系统弹窗
+    dailyNotificationTime: '08:00', // 新增：每日通知时间，默认08:00
+    dailyNotificationEnabled: false, // 新增：是否启用每日统一通知
+    randomRestEnabled: false,
+    randomRestMinInterval: 3,
+    randomRestMaxInterval: 5,
+    randomRestBreakDuration: 10,
+    randomRestSystemNotification: true, // 新增：随机微休息系统通知
+    randomRestPopupWindow: true, // 新增：随机微休息弹窗提醒，默认关闭
     // 每个声音设置项各自的音频文件列表 { settingKey: [{path: url, removed: false}, ...] }
     audioFileLists: {
         notificationSound: [{ path: '/plugins/siyuan-plugin-task-note-management/audios/notify.mp3' }],
@@ -214,6 +212,12 @@ export const DEFAULT_SETTINGS = {
         randomRestSounds: '/plugins/siyuan-plugin-task-note-management/audios/random_start.mp3',
         randomRestEndSound: '/plugins/siyuan-plugin-task-note-management/audios/random_end.mp3',
     } as Record<string, string>,
+    // 数据迁移标记
+    datatransfer: {
+        bindblockAddAttr: false, // 是否已迁移绑定块的 custom-bind-reminders 属性
+        termTypeTransfer: false, // 是否已迁移 termType -> kanbanStatus 的转换
+        audioFileTransfer: false, // 是否已迁移音频文件列表
+    },
 };
 
 export default class ReminderPlugin extends Plugin {
