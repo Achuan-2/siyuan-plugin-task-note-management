@@ -62,7 +62,6 @@ export class CategoryManager {
             console.error('初始化分类失败:', error);
             // 如果加载失败，使用默认分类
             this.categories = getLocalizedDefaultCategories();
-            await this.saveCategories();
         }
     }
 
@@ -73,9 +72,7 @@ export class CategoryManager {
         try {
             const content = await this.plugin.loadCategories();
             if (!content) {
-                console.log('分类文件不存在，创建默认分类');
                 this.categories = getLocalizedDefaultCategories();
-                await this.saveCategories();
                 return this.categories;
             }
 
@@ -97,12 +94,10 @@ export class CategoryManager {
             } else {
                 console.log('分类数据无效，使用默认分类');
                 this.categories = getLocalizedDefaultCategories();
-                await this.saveCategories();
             }
         } catch (error) {
             console.warn('加载分类文件失败，使用默认分类:', error);
             this.categories = getLocalizedDefaultCategories();
-            await this.saveCategories();
         }
 
         return this.categories;

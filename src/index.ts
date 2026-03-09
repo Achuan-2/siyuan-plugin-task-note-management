@@ -636,21 +636,6 @@ export default class ReminderPlugin extends Plugin {
     }
 
     /**
-     * 确保通知记录文件存在
-     */
-    public async ensureNotifyDataFile(): Promise<void> {
-        try {
-            const data = await this.loadData(NOTIFY_DATA_FILE);
-            if (!data) {
-                console.log('通知记录文件不存在，创建新文件');
-                await this.writeNotifyData({});
-            }
-        } catch (error) {
-            console.error('检查通知记录文件失败:', error);
-        }
-    }
-
-    /**
      * 检查某日期是否已提醒过全天事件
      */
     public async hasNotifiedToday(date: string): Promise<boolean> {
@@ -748,11 +733,6 @@ export default class ReminderPlugin extends Plugin {
         await this.loadHabitGroupData();
         await this.loadHolidayData();
 
-        try {
-            await this.ensureNotifyDataFile();
-        } catch (error) {
-            console.warn('初始化通知记录文件失败:', error);
-        }
 
 
         // 初始化上次番茄钟设置缓存，避免第一次设置更新时误判
@@ -1021,8 +1001,28 @@ export default class ReminderPlugin extends Plugin {
         }
 
         const data = await this.loadData(SETTINGS_FILE) || {};
+        const isFreshInstall = !data || Object.keys(data).length === 0;
+
+        // 新安装用户默认视为已完成迁移，避免首次启动因迁移写入 settings 文件。
+        const defaultDatatransfer = isFreshInstall
+            ? {
+                ...DEFAULT_SETTINGS.datatransfer,
+                bindblockAddAttr: true,
+                termTypeTransfer: true,
+                randomRestTransfer: true,
+                audioFileTransfer: true,
+            }
+            : { ...DEFAULT_SETTINGS.datatransfer };
+
         // 合并默认设置和用户设置，确保所有设置项都有值
-        const settings = { ...DEFAULT_SETTINGS, ...data };
+        const settings = {
+            ...DEFAULT_SETTINGS,
+            ...data,
+            datatransfer: {
+                ...defaultDatatransfer,
+                ...(data.datatransfer || {}),
+            },
+        };
 
 
         // 验证 VIP 状态 (从独立文件加载)
