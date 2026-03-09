@@ -754,6 +754,70 @@ export class ReminderPanel {
 
         return orderA - orderB;
     }
+
+    // 当前排序模式下的主分组键（用于限制跨分组拖拽）
+    private getNonPrioritySortGroupKey(reminder: any): string {
+        const primary = this.currentSortCriteria?.[0];
+        if (!primary || primary.method === 'priority') return '__ALLOW_ALL__';
+
+        if (primary.method === 'time') {
+            const baseDate = reminder?.date || reminder?.endDate;
+            if (!baseDate) return '__NO_DATE__';
+            const baseTime = reminder?.time || reminder?.endTime;
+            return this.getReminderLogicalDate(baseDate, baseTime);
+        }
+
+        if (primary.method === 'category') {
+            const categories = this.categoryManager.getCategories();
+            const categoryOrder = new Map<string, number>();
+            categories.forEach((cat, index) => {
+                categoryOrder.set(cat.id, index);
+            });
+
+            let categoryId = reminder?.categoryId;
+            if (!categoryId && reminder?.isRepeatInstance && reminder?.originalId && this.originalRemindersCache) {
+                const original = this.originalRemindersCache[reminder.originalId];
+                if (original) categoryId = original.categoryId;
+            }
+
+            if (!categoryId) return 'none';
+            const ids = String(categoryId).split(',').map((id: string) => id.trim()).filter((id: string) => id);
+            if (ids.length === 0) return 'none';
+            if (ids.length === 1) return ids[0];
+
+            let bestId = ids[0];
+            let bestOrder = categoryOrder.get(bestId) ?? Number.MAX_SAFE_INTEGER;
+            for (let i = 1; i < ids.length; i++) {
+                const id = ids[i];
+                const order = categoryOrder.get(id) ?? Number.MAX_SAFE_INTEGER;
+                if (order < bestOrder) {
+                    bestOrder = order;
+                    bestId = id;
+                }
+            }
+            return bestId;
+        }
+
+        // 其他非优先级排序方式暂不限制跨组
+        return '__ALLOW_ALL__';
+    }
+
+    private isSameNonPrioritySortGroup(a: any, b: any): boolean {
+        const hasPriorityCriterion = this.currentSortCriteria?.some(c => c.method === 'priority');
+        if (hasPriorityCriterion) return true;
+
+        const keyA = this.getNonPrioritySortGroupKey(a);
+        const keyB = this.getNonPrioritySortGroupKey(b);
+        if (keyA === '__ALLOW_ALL__' || keyB === '__ALLOW_ALL__') return true;
+        return keyA === keyB;
+    }
+
+    // 创建时间/标题排序下禁用拖拽重排
+    private isDragDisabledBySortMode(): boolean {
+        const primary = this.currentSortCriteria?.[0]?.method;
+        return primary === 'created' || primary === 'title';
+    }
+
     // 新增：优先级排序与手动排序结合（支持重复实例）
     private compareByPriorityWithManualSort(a: any, b: any): number {
         const priorityOrder = { 'high': 3, 'medium': 2, 'low': 1, 'none': 0 };
@@ -4553,6 +4617,7 @@ export class ReminderPanel {
         const isAndroid = getBackend().endsWith('android');
 
         if (isAndroid) return; // 华为平板不能添加lement.draggable = true;
+        if (this.isDragDisabledBySortMode()) return;
 
         element.draggable = true;
 
@@ -5244,6 +5309,10 @@ export class ReminderPanel {
 
     // 新增：检查是否可以放置
     private canDropHere(draggedReminder: any, targetReminder: any, isSetParent: boolean = false): boolean {
+        if (this.isDragDisabledBySortMode()) {
+            return false;
+        }
+
         // 检查基本条件：不能拖到自己上
         if (draggedReminder.id === targetReminder.id) {
             return false;
@@ -5276,6 +5345,10 @@ export class ReminderPanel {
             }
         } else {
             // 排序时的检查
+            if (!this.isSameNonPrioritySortGroup(draggedReminder, targetReminder)) {
+                return false;
+            }
+
             // 如果被拖动的任务有父任务，说明是要移除父子关系，此时不检查优先级限制
             const isRemovingParent = draggedReminder.parentId != null;
 
@@ -5571,8 +5644,17 @@ export class ReminderPanel {
     // 新增：重新排序提醒（支持重复实例）
     private async reorderReminders(draggedReminder: any, targetReminder: any, insertBefore: boolean, providedReminderData?: any) {
         try {
+            if (this.isDragDisabledBySortMode()) {
+                return;
+            }
+
             const reminderData = providedReminderData || await getAllReminders(this.plugin, undefined, false, 'sidebar');
             const hasPriorityCriterion = this.currentSortCriteria.some(c => c.method === 'priority');
+
+            // 兜底保护：非优先级模式禁止跨分组拖拽
+            if (!hasPriorityCriterion && !this.isSameNonPrioritySortGroup(draggedReminder, targetReminder)) {
+                return;
+            }
 
             const draggedParsed = this.parseReminderInstanceId(draggedReminder?.id);
             const targetParsed = this.parseReminderInstanceId(targetReminder?.id);
