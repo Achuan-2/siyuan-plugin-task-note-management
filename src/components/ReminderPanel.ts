@@ -1673,7 +1673,7 @@ export class ReminderPanel {
                     const hasSpecificCategories = filterConfig.categoryFilters &&
                         filterConfig.categoryFilters.length > 0 &&
                         !filterConfig.categoryFilters.includes('all');
-                    
+
                     if (hasSpecificCategories) {
                         // 筛选器有具体分类设置，同步到侧边栏
                         this.selectedCategories = [...filterConfig.categoryFilters];
