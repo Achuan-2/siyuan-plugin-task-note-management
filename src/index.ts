@@ -746,8 +746,6 @@ export default class ReminderPlugin extends Plugin {
         // 添加用户交互监听器来启用音频
         this.enableAudioOnUserInteraction();
 
-        // 初始化系统通知权限
-        this.initSystemNotificationPermission();
 
         // 监听设置变更，动态显示/隐藏侧边停靠栏
         const onSettingsUpdated = async () => {
@@ -4794,43 +4792,7 @@ export default class ReminderPlugin extends Plugin {
     private addCleanup(fn: () => void) {
         this.cleanupFunctions.push(fn);
     }
-    /**
-     * 初始化系统通知权限
-     */
-    private async initSystemNotificationPermission() {
-        try {
-            if ('Notification' in window) {
-                if (Notification.permission === 'default') {
-                    // 在用户交互时请求权限
-                    const enableNotification = async () => {
-                        const permission = await Notification.requestPermission();
-                        if (permission === 'granted') {
-                        } else {
-                            console.error('系统通知权限被拒绝');
-                        }
 
-                        // 移除事件监听器
-                        document.removeEventListener('click', enableNotification);
-                        document.removeEventListener('touchstart', enableNotification);
-                        document.removeEventListener('keydown', enableNotification);
-                    };
-
-                    // 监听用户交互事件来请求权限（只触发一次）
-                    document.addEventListener('click', enableNotification, { once: true });
-                    document.addEventListener('touchstart', enableNotification, { once: true });
-                    document.addEventListener('keydown', enableNotification, { once: true });
-
-                    this.addCleanup(() => {
-                        document.removeEventListener('click', enableNotification);
-                        document.removeEventListener('touchstart', enableNotification);
-                        document.removeEventListener('keydown', enableNotification);
-                    });
-                }
-            }
-        } catch (error) {
-            console.warn('初始化系统通知权限失败:', error);
-        }
-    }
 
     // 获取每日通知时间设置
     async getDailyNotificationTime(): Promise<string> {
