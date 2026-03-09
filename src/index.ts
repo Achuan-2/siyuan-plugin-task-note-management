@@ -704,9 +704,6 @@ export default class ReminderPlugin extends Plugin {
     async onload() {
         await this.loadSettings();
 
-        // 调试：显示当前 frontend / backend 环境
-        // new Dialog({ title: "getFrontend", content: `<div style="padding:16px">${getFrontend()}</div>`, width: "300px" });
-        // new Dialog({ title: "getBackend", content: `<div style="padding:16px">${getBackend()}</div>`, width: "300px" });
 
         // 添加自定义图标
         this.addIcons(`
