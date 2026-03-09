@@ -2333,7 +2333,8 @@ export class QuickReminderDialog {
                 // 如果启用了自动识别，从标题中提取日期/时间并填充到输入框
                 if (this.autoDetectDateTime) {
                     try {
-                        const detected = autoDetectDateTimeFromTitle(this.blockContent);
+                        // First parse date/time without altering title; cleanup is applied by global setting below.
+                        const detected = autoDetectDateTimeFromTitle(this.blockContent, 'none');
                         if (detected && (detected.date || detected.endDate)) {
                             this.applyNaturalLanguageResult(detected);
 
@@ -3063,7 +3064,8 @@ export class QuickReminderDialog {
                 if (pasteAutoDetect && pasteAutoDetect.checked) {
                     // 使用粘贴的所有非空行进行识别，以便第二行或后续行中的自然语言也能被识别
                     const joined = lines.join(' ');
-                    const detected = autoDetectDateTimeFromTitle(joined);
+                    // First parse date/time without altering title; cleanup is applied by global setting below.
+                    const detected = autoDetectDateTimeFromTitle(joined, 'none');
                     if (detected && (detected.date || detected.endDate)) {
                         this.applyNaturalLanguageResult(detected);
 
