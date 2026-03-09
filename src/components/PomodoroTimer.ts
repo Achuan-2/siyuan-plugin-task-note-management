@@ -7347,7 +7347,7 @@ document.body.classList.remove('docked-mode');
         // 设置默认值
         miniModeTitle = miniModeTitle || (i18n('miniMode') || '迷你模式');
         dockModeTitle = dockModeTitle || (i18n('dockToEdge') || '吸附到屏幕边缘');
-        
+
         // 计算初始状态图标
         let initialStatusIcon = '🍅';
         if (!currentState.isWorkPhase) {
@@ -7355,7 +7355,7 @@ document.body.classList.remove('docked-mode');
         } else {
             initialStatusIcon = currentState.isCountUp ? '⏱' : '🍅';
         }
-        
+
         return `<!DOCTYPE html>
 <html>
 <head>
