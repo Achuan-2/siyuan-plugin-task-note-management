@@ -619,13 +619,13 @@ export class ReminderPanel {
 
             case 'priority':
                 result = this.compareByPriorityValue(a, b);
-                // 优先级相同时按手动排序
+                // 同优先级内始终按手动 sort 升序，不受优先级升降序影响。
                 if (result === 0) {
                     const sortA = this.getReminderSortValue(a);
                     const sortB = this.getReminderSortValue(b);
-                    result = sortA - sortB;
+                    return sortA - sortB;
                 }
-                break;
+                return criterion.order === 'desc' ? -result : result;
 
             case 'title':
                 result = this.compareByTitle(a, b);
@@ -5563,22 +5563,25 @@ export class ReminderPanel {
         try {
             const reminderData = providedReminderData || await getAllReminders(this.plugin, undefined, false, 'sidebar');
 
+            const draggedParsed = this.parseReminderInstanceId(draggedReminder?.id);
+            const targetParsed = this.parseReminderInstanceId(targetReminder?.id);
+
             // 判断是否为重复实例
-            // 优先使用 isRepeatInstance 属性，如果未设置则通过 originalId 判断（只有明确有 originalId 才是实例）
-            const isDraggedInstance = draggedReminder.isRepeatInstance !== undefined
-                ? draggedReminder.isRepeatInstance
-                : !!draggedReminder.originalId;
-            const isTargetInstance = targetReminder.isRepeatInstance !== undefined
-                ? targetReminder.isRepeatInstance
-                : !!targetReminder.originalId;
+            // 仅在明确标记为实例，或可从 id 解析出实例日期时，才按实例处理。
+            const isDraggedInstance = draggedReminder?.isRepeatInstance === true || (!!draggedReminder?.originalId && !!draggedParsed);
+            const isTargetInstance = targetReminder?.isRepeatInstance === true || (!!targetReminder?.originalId && !!targetParsed);
 
             // 获取原始ID
-            const draggedOriginalId = isDraggedInstance ? (draggedReminder.originalId || draggedReminder.id.split('_')[0]) : draggedReminder.id;
-            const targetOriginalId = isTargetInstance ? (targetReminder.originalId || targetReminder.id.split('_')[0]) : targetReminder.id;
+            const draggedOriginalId = isDraggedInstance
+                ? (draggedReminder.originalId || draggedParsed?.originalId || draggedReminder.id)
+                : draggedReminder.id;
+            const targetOriginalId = isTargetInstance
+                ? (targetReminder.originalId || targetParsed?.originalId || targetReminder.id)
+                : targetReminder.id;
 
             // 获取原始实例日期（从 ID 中提取，因为 date 可能已被修改）
-            const draggedOriginalInstanceDate = isDraggedInstance ? draggedReminder.id.split('_').pop() : undefined;
-            const targetOriginalInstanceDate = isTargetInstance ? targetReminder.id.split('_').pop() : undefined;
+            const draggedOriginalInstanceDate = isDraggedInstance ? draggedParsed?.instanceDate : undefined;
+            const targetOriginalInstanceDate = isTargetInstance ? targetParsed?.instanceDate : undefined;
 
             const oldPriority = draggedReminder.priority || 'none';
             const newPriority = targetReminder.priority || 'none';
@@ -5631,6 +5634,21 @@ export class ReminderPanel {
             console.error('重新排序提醒失败:', error);
             throw error;
         }
+    }
+
+    // 解析重复实例 ID，格式: <originalId>_<YYYY-MM-DD>
+    // 普通任务 ID 可能含有下划线，因此仅从最后一个下划线切分并校验日期段。
+    private parseReminderInstanceId(reminderId?: string): { originalId: string; instanceDate: string } | null {
+        if (!reminderId || typeof reminderId !== 'string') return null;
+
+        const splitIndex = reminderId.lastIndexOf('_');
+        if (splitIndex <= 0 || splitIndex >= reminderId.length - 1) return null;
+
+        const originalId = reminderId.substring(0, splitIndex);
+        const instanceDate = reminderId.substring(splitIndex + 1);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(instanceDate)) return null;
+
+        return { originalId, instanceDate };
     }
 
     /**
@@ -5719,9 +5737,8 @@ export class ReminderPanel {
 
         // 确保目标项在列表中
         // 优先使用 isRepeatInstance 属性，如果未设置则通过 originalId 判断（只有明确有 originalId 才是实例）
-        const isTargetInstance = targetReminder?.isRepeatInstance !== undefined
-            ? targetReminder.isRepeatInstance
-            : !!targetReminder?.originalId;
+        const targetParsed = this.parseReminderInstanceId(targetReminder?.id);
+        const isTargetInstance = targetReminder?.isRepeatInstance === true || (!!targetReminder?.originalId && !!targetParsed);
         const targetFullId = isTargetInstance ? `${targetOriginalId}_${targetInstanceDate}` : targetOriginalId;
         const targetExists = items.some(item => item.id === targetFullId);
         if (!targetExists && targetReminder) {
