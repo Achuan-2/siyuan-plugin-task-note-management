@@ -1457,8 +1457,6 @@
         // 确保 audioFileLists 存在
         if (!settings.audioFileLists) settings.audioFileLists = {};
         updateGroupItems();
-        // 确保设置已保存（可能包含新的默认值），但不发出更新事件
-        await saveSettings(false);
         console.debug('加载配置文件完成');
     }
 
