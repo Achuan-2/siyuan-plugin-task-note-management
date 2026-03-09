@@ -565,7 +565,7 @@ export class ReminderPanel {
         // 特殊处理：今日任务视图下，每日可做任务始终放在最后，不参与其他排序
         if (this.currentTab === 'today') {
             const todayStr = getLogicalDateString();
-            
+
             // 定义分组：0-普通任务, 1-订阅任务, 2-每日可做(Dessert)
             const getGroupOrder = (item: any) => {
                 const isDessert = item.isAvailableToday && (!item.date && !item.endDate || (item.date || item.endDate) !== todayStr);
@@ -573,17 +573,17 @@ export class ReminderPanel {
                 if (item.isSubscribed) return 1;
                 return 0;
             };
-            
+
             // 先按分组排序（普通任务在前，每日可做最后）
             reminders.sort((a: any, b: any) => {
                 const orderA = getGroupOrder(a);
                 const orderB = getGroupOrder(b);
-                
+
                 // 如果分组不同，直接按分组排序
                 if (orderA !== orderB) {
                     return orderA - orderB;
                 }
-                
+
                 // 同组内再按排序条件排序
                 return this.sortByCriteria(a, b, criteria, isPast7Filter);
             });
@@ -607,7 +607,8 @@ export class ReminderPanel {
                 const hasDateB = !!(b.date || b.endDate);
 
                 if (!hasDateA && !hasDateB) {
-                    result = this.compareByPriorityValue(a, b);
+                    // 两者都无日期时视为相同，后续由非优先级模式的 sort 兜底决定顺序
+                    result = 0;
                 } else if (!hasDateA) {
                     result = 1;  // a 无日期，排在后面
                 } else if (!hasDateB) {
@@ -669,6 +670,15 @@ export class ReminderPanel {
             }
         }
 
+        // 非优先级排序模式下，相同值按手动 sort 升序
+        const hasPriorityCriterion = criteria.some(c => c.method === 'priority');
+        if (!hasPriorityCriterion) {
+            const sortDiff = this.getReminderSortValue(a) - this.getReminderSortValue(b);
+            if (sortDiff !== 0) {
+                return sortDiff;
+            }
+        }
+
         // 所有排序条件都相同时，按创建时间作为兜底排序（确保排序的稳定性）
         return this.compareByCreatedTime(a, b);
     }
@@ -684,17 +694,17 @@ export class ReminderPanel {
     private compareByCategory(a: any, b: any): number {
         const categories = this.categoryManager.getCategories();
         const categoryOrder = new Map<string, number>();
-        
+
         // 构建分类ID到排序索引的映射
         categories.forEach((cat, index) => {
             categoryOrder.set(cat.id, index);
         });
-        
+
         // 获取任务的排序最靠前的分类ID（支持重复任务实例）
         const getHighestPriorityCategoryId = (reminder: any): string => {
             // 对于重复任务实例，优先使用自身的 categoryId，如果没有则从原始任务获取
             let categoryId = reminder.categoryId;
-            
+
             // 如果没有 categoryId 且有 originalId，尝试从原始任务获取
             if (!categoryId && reminder.isRepeatInstance && reminder.originalId && this.originalRemindersCache) {
                 const original = this.originalRemindersCache[reminder.originalId];
@@ -702,17 +712,17 @@ export class ReminderPanel {
                     categoryId = original.categoryId;
                 }
             }
-            
+
             if (!categoryId) return 'none';
             const ids = String(categoryId).split(',').map((id: string) => id.trim()).filter((id: string) => id);
-            
+
             if (ids.length === 0) return 'none';
             if (ids.length === 1) return ids[0];
-            
+
             // 有多个分类时，返回排序最靠前的那个（在 categoryOrder 中索引最小的）
             let bestId = ids[0];
             let bestOrder = categoryOrder.get(bestId) ?? Number.MAX_SAFE_INTEGER;
-            
+
             for (let i = 1; i < ids.length; i++) {
                 const id = ids[i];
                 const order = categoryOrder.get(id) ?? Number.MAX_SAFE_INTEGER;
@@ -721,27 +731,27 @@ export class ReminderPanel {
                     bestId = id;
                 }
             }
-            
+
             return bestId;
         };
-        
+
         const catA = getHighestPriorityCategoryId(a);
         const catB = getHighestPriorityCategoryId(b);
-        
+
         // 调试日志
         // if (a.categoryId?.includes(',') || b.categoryId?.includes(',')) {
         //     console.log('[分类排序]', a.title?.substring(0, 20), `(${a.categoryId || 'none'})`, '=>', catA, 'vs', b.title?.substring(0, 20), `(${b.categoryId || 'none'})`, '=>', catB);
         // }
-        
+
         // 无分类的任务排在最后
         if (catA === 'none' && catB === 'none') return 0;
         if (catA === 'none') return 1;
         if (catB === 'none') return -1;
-        
+
         // 按照分类的排序索引比较
         const orderA = categoryOrder.get(catA) ?? Number.MAX_SAFE_INTEGER;
         const orderB = categoryOrder.get(catB) ?? Number.MAX_SAFE_INTEGER;
-        
+
         return orderA - orderB;
     }
     // 新增：优先级排序与手动排序结合（支持重复实例）
@@ -5562,6 +5572,7 @@ export class ReminderPanel {
     private async reorderReminders(draggedReminder: any, targetReminder: any, insertBefore: boolean, providedReminderData?: any) {
         try {
             const reminderData = providedReminderData || await getAllReminders(this.plugin, undefined, false, 'sidebar');
+            const hasPriorityCriterion = this.currentSortCriteria.some(c => c.method === 'priority');
 
             const draggedParsed = this.parseReminderInstanceId(draggedReminder?.id);
             const targetParsed = this.parseReminderInstanceId(targetReminder?.id);
@@ -5585,6 +5596,28 @@ export class ReminderPanel {
 
             const oldPriority = draggedReminder.priority || 'none';
             const newPriority = targetReminder.priority || 'none';
+
+            // 非优先级排序模式：只调整 sort，不变更 priority
+            if (!hasPriorityCriterion) {
+                await this.reorderSortGroup(
+                    reminderData,
+                    draggedOriginalId,
+                    isDraggedInstance,
+                    draggedOriginalInstanceDate,
+                    targetOriginalId,
+                    targetOriginalInstanceDate,
+                    insertBefore,
+                    draggedReminder,
+                    targetReminder
+                );
+
+                await saveReminders(this.plugin, reminderData);
+                window.dispatchEvent(new CustomEvent('reminderUpdated', {
+                    detail: { source: this.panelId }
+                }));
+                await this.loadReminders();
+                return;
+            }
 
             // 检查是否跨优先级拖拽
             if (oldPriority !== newPriority) {
@@ -5634,6 +5667,129 @@ export class ReminderPanel {
             console.error('重新排序提醒失败:', error);
             throw error;
         }
+    }
+
+    /**
+     * 非优先级排序模式下的拖拽重排：仅调整 sort，不修改 priority
+     */
+    private async reorderSortGroup(
+        reminderData: any,
+        draggedOriginalId: string,
+        isDraggedInstance: boolean,
+        draggedInstanceDate?: string,
+        targetOriginalId?: string,
+        targetInstanceDate?: string,
+        insertBefore?: boolean,
+        draggedReminder?: any,
+        targetReminder?: any
+    ) {
+        const items: Array<{
+            id: string;
+            originalId: string;
+            date?: string;
+            sort: number;
+            isInstance: boolean;
+        }> = [];
+
+        // 收集普通任务
+        Object.values(reminderData).forEach((task: any) => {
+            if (!task.repeat?.enabled) {
+                items.push({
+                    id: task.id,
+                    originalId: task.id,
+                    sort: task.sort || 0,
+                    isInstance: false
+                });
+            }
+        });
+
+        // 收集重复实例（从 instanceModifications 中）
+        Object.values(reminderData).forEach((task: any) => {
+            if (task.repeat?.enabled && task.repeat?.instanceModifications) {
+                Object.entries(task.repeat.instanceModifications).forEach(([date, mod]: [string, any]) => {
+                    if (!mod) return;
+                    items.push({
+                        id: `${task.id}_${date}`,
+                        originalId: task.id,
+                        date: date,
+                        sort: mod.sort !== undefined ? mod.sort : (task.sort || 0),
+                        isInstance: true
+                    });
+                });
+            }
+        });
+
+        if (!targetOriginalId) {
+            items.sort((a, b) => a.sort - b.sort);
+            items.forEach((item, index) => {
+                this.updateItemSort(reminderData, item, index * 10);
+            });
+            return;
+        }
+
+        const draggedFullId = isDraggedInstance ? `${draggedOriginalId}_${draggedInstanceDate}` : draggedOriginalId;
+        const draggedExists = items.some(item => item.id === draggedFullId);
+        if (!draggedExists && draggedReminder) {
+            let sort = 0;
+            if (isDraggedInstance) {
+                const originalTask = reminderData[draggedOriginalId];
+                sort = originalTask?.repeat?.instanceModifications?.[draggedInstanceDate!]?.sort ?? originalTask?.sort ?? 0;
+            } else {
+                sort = reminderData[draggedOriginalId]?.sort || 0;
+            }
+            items.push({
+                id: draggedFullId,
+                originalId: draggedOriginalId,
+                date: draggedInstanceDate,
+                sort,
+                isInstance: isDraggedInstance
+            });
+        }
+
+        const targetParsed = this.parseReminderInstanceId(targetReminder?.id);
+        const isTargetInstance = targetReminder?.isRepeatInstance === true || (!!targetReminder?.originalId && !!targetParsed);
+        const targetFullId = isTargetInstance ? `${targetOriginalId}_${targetInstanceDate}` : targetOriginalId;
+        const targetExists = items.some(item => item.id === targetFullId);
+        if (!targetExists && targetReminder) {
+            let sort = 0;
+            if (isTargetInstance) {
+                const originalTask = reminderData[targetOriginalId];
+                sort = originalTask?.repeat?.instanceModifications?.[targetInstanceDate!]?.sort ?? originalTask?.sort ?? 0;
+            } else {
+                sort = reminderData[targetOriginalId]?.sort || 0;
+            }
+            items.push({
+                id: targetFullId,
+                originalId: targetOriginalId,
+                date: targetInstanceDate,
+                sort,
+                isInstance: isTargetInstance
+            });
+        }
+
+        items.sort((a, b) => a.sort - b.sort);
+
+        const targetIndex = items.findIndex(item => item.id === targetFullId);
+        const draggedIndex = items.findIndex(item => item.id === draggedFullId);
+        if (targetIndex === -1 || draggedIndex === -1) {
+            console.error('找不到拖拽或目标任务', { draggedFullId, targetFullId, items: items.map(i => i.id) });
+            return;
+        }
+
+        let insertIndex = insertBefore ? targetIndex : targetIndex + 1;
+
+        const draggedItem = items[draggedIndex];
+        items.splice(draggedIndex, 1);
+        if (draggedIndex < insertIndex) {
+            insertIndex--;
+        }
+
+        const validInsertIndex = Math.max(0, Math.min(insertIndex, items.length));
+        items.splice(validInsertIndex, 0, draggedItem);
+
+        items.forEach((item, index) => {
+            this.updateItemSort(reminderData, item, index * 10);
+        });
     }
 
     // 解析重复实例 ID，格式: <originalId>_<YYYY-MM-DD>
