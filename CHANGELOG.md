@@ -6,6 +6,14 @@
 - 🎨 适配思源v3.5.10系统通知
 - 🐛 任务侧栏：自定义筛选器设置分类筛选时的数据加载刷新问题
 
+---
+
+- 🎨 Pomodoro Timer: Global Pomodoro Timer mini mode now supports resizing
+- 🎨 Task Sidebar: Sorting optimization
+  1. In non-priority sorting mode, dragging tasks does not adjust priority, only changes the sort value
+  2. In non-priority sorting mode, items with the same value are sorted according to their sort value
+- 🎨 Adapted to SiYuan v3.5.10 system notifications
+- 🐛 Task Sidebar: Fixed data loading and refresh issues when setting category filters in custom filters
 
 ## v6.2.6 / 20260308
 - 🎨 番茄钟支持预设
