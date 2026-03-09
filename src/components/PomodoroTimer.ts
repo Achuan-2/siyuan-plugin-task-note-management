@@ -4122,7 +4122,7 @@ export class PomodoroTimer {
         // 更新颜色和状态显示
         let color = '#FF6B6B';
         let statusText = i18n('pomodoroWork') || '工作时间';
-        let statusIconHtml = this.isCountUp ? '⏱️' : '🍅';
+        let statusIconHtml = this.isCountUp ? '⏱' : '🍅';
 
         if (!this.isWorkPhase) {
             if (this.isLongBreak) {
@@ -7347,6 +7347,15 @@ document.body.classList.remove('docked-mode');
         // 设置默认值
         miniModeTitle = miniModeTitle || (i18n('miniMode') || '迷你模式');
         dockModeTitle = dockModeTitle || (i18n('dockToEdge') || '吸附到屏幕边缘');
+        
+        // 计算初始状态图标
+        let initialStatusIcon = '🍅';
+        if (!currentState.isWorkPhase) {
+            initialStatusIcon = currentState.isLongBreak ? '🧘' : '🍵';
+        } else {
+            initialStatusIcon = currentState.isCountUp ? '⏱' : '🍅';
+        }
+        
         return `<!DOCTYPE html>
 <html>
 <head>
@@ -7718,7 +7727,7 @@ document.body.classList.remove('docked-mode');
                     <circle class="progress-ring-circle" id="progressCircle" cx="40" cy="40" r="36"></circle>
                 </svg>
                 <div class="center-content" ondblclick="handleDoubleClick()">
-                    <div class="pomodoro-status-icon" id="statusIcon">🍅</div>
+                    <div class="pomodoro-status-icon" id="statusIcon">${initialStatusIcon}</div>
                     <div class="control-buttons">
                         <button class="circle-control-btn" onclick="callMethod('toggleTimer')">▶️</button>
                         <button class="circle-control-btn" id="stopBtn" onclick="callMethod('resetTimer')" style="display:none">⏹</button>
@@ -7916,7 +7925,7 @@ document.body.classList.remove('docked-mode');
 
             // 5. Update Status Text/Icon
              let statusText = '${i18n('pomodoroWork') || '工作时间'}';
-            let statusIcon = '🍅';
+            let statusIcon = localState.isCountUp ? '⏱' : '🍅';
             let color = '#FF6B6B'; // Default red
 
             if (!localState.isWorkPhase) {
@@ -7932,7 +7941,7 @@ document.body.classList.remove('docked-mode');
             } else {
                 // Work phase
                  statusText = '${i18n('pomodoroWork') || '工作时间'}';
-                 statusIcon = '🍅';
+                 statusIcon = localState.isCountUp ? '⏱' : '🍅';
                  color = '#FF6B6B';
             }
             
