@@ -3786,7 +3786,6 @@ export default class ReminderPlugin extends Plugin {
             if ('Notification' in window && Notification.permission === 'granted') {
                 // 使用浏览器通知
                 const notification = new Notification(title, {
-                    icon: '/favicon.ico',
                     body: message,
                     requireInteraction: true,
                     silent: false, // 使用我们自己的音频

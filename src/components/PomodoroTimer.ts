@@ -4766,7 +4766,6 @@ export class PomodoroTimer {
             if ('Notification' in window && Notification.permission === 'granted') {
                 // 使用浏览器通知作为备选方案
                 const notification = new Notification(title, {
-                    icon: '/favicon.ico',
                     body: message,
                     requireInteraction: !autoCloseDelay,
                     silent: false
