@@ -1229,13 +1229,6 @@ export default class ReminderPlugin extends Plugin {
         }
     }
     private async initializeUI() {
-        // 添加顶栏按钮
-        // this.topBarElement = this.addTopBar({
-        //     icon: "iconClock",
-        //     title: t("timeReminder"),
-        //     position: "left",
-        //     callback: () => this.openReminderFloatPanel()
-        // });
         // 加载设置（用于初始显示/隐藏某些停靠栏）
         const settings = await this.loadSettings();
 
