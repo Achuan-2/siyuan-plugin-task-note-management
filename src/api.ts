@@ -6,7 +6,7 @@
  * API 文档见 [API_zh_CN.md](https://github.com/siyuan-note/siyuan/blob/master/API_zh_CN.md)
  */
 
-import { fetchPost, fetchSyncPost, IWebSocketData, openTab, Constants } from "siyuan";
+import { fetchPost, fetchSyncPost, IWebSocketData, openTab, Constants, platformUtils } from "siyuan";
 
 import { getFrontend, openMobileFileById } from 'siyuan';
 import { getPluginInstance } from "./pluginInstance";
@@ -703,14 +703,8 @@ export async function pushErrMsg(msg: string, timeout: number = 7000) {
 
 export async function sendNotification(title: string, body: string, delayInSeconds: number = 0) {
     const plugin = getPluginInstance();
-    let payload = {
-        channel: plugin.i18n('name'),
-        title: title,
-        body: body,
-        delayInSeconds: delayInSeconds
-    };
-    let url = "/api/notification/sendDeviceNotification";
-    return request(url, payload);
+
+    return platformUtils.sendNotification(plugin.i18n('name'), title, body, delayInSeconds);
 }
 
 // **************************************** Network ****************************************
