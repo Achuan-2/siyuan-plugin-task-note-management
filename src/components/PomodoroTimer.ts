@@ -6648,7 +6648,7 @@ export class PomodoroTimer {
                 backgroundColor = '#00000000';
             } else if (this.isMiniMode) {
                 // 迷你模式：设置为小圆形窗口
-                const size = 120;
+                const size = 80;
                 winWidth = size;
                 winHeight = size;
                 // 如果有继承的窗口位置，使用它；否则使用默认位置
@@ -6691,7 +6691,9 @@ export class PomodoroTimer {
                 movable: true,
                 skipTaskbar: false,
                 hasShadow: !this.isDocked,
-                resizable: !this.isDocked && !this.isMiniMode,
+                resizable: !this.isDocked,
+                minWidth: 40,
+                minHeight: 40,
                 transparent: transparent,
                 webPreferences: {
                     nodeIntegration: true,
@@ -6700,8 +6702,6 @@ export class PomodoroTimer {
                     enableRemoteModule: true,
                     autoplayPolicy: 'no-user-gesture-required'
                 },
-                minWidth: 1,
-                minHeight: 1,
                 show: false,
                 backgroundColor: backgroundColor
             });
@@ -7557,10 +7557,10 @@ document.body.classList.remove('docked-mode');
         }
         body.mini-mode .progress-container { 
             -webkit-app-region: drag;
-            width: calc(100vw - 20px); 
-            height: calc(100vh - 20px); 
-            max-width: calc(100vh - 20px);
-            max-height: calc(100vw - 20px);
+            width: calc(100vw - 4px); 
+            height: calc(100vh - 4px); 
+            max-width: calc(100vh - 4px);
+            max-height: calc(100vw - 4px);
             cursor: move;
         }
         body.mini-mode .center-content {
@@ -7572,28 +7572,28 @@ document.body.classList.remove('docked-mode');
         }
         body.mini-mode .pomodoro-status-icon { 
             -webkit-app-region: no-drag;
-            font-size: clamp(24px, 15vmin, 12vh);
+            font-size: 35vmin;
             cursor: pointer;
         }
         body.mini-mode .circle-control-btn { 
             -webkit-app-region: no-drag;
-            width: clamp(24px, 18vmin, 12vh); 
-            height: clamp(24px, 18vmin, 12vh);
-            font-size: clamp(12px, 9vmin, 6vh);
+            width: 45vmin; 
+            height: 45vmin;
+            font-size: 20vmin;
         }
         .mini-restore-btn {
             -webkit-app-region: no-drag;
             position: absolute;
             top: 8px;
             right: 8px;
-            width: 24px;
-            height: 24px;
+            width: clamp(16px, 15vmin, 32px);
+            height: clamp(16px, 15vmin, 32px);
             background: var(--b3-theme-primary, #4CAF50);
             color: #fff;
             border: none;
             border-radius: 50%;
             cursor: pointer;
-            font-size: 14px;
+            font-size: clamp(10px, 8vmin, 18px);
             display: none;
             align-items: center;
             justify-content: center;
@@ -8120,8 +8120,13 @@ document.body.classList.remove('docked-mode');
                         try { this.normalWindowBounds = pomodoroWindow.getBounds(); } catch (e) { this.normalWindowBounds = null; }
                     }
                     try {
-                        pomodoroWindow.setSize(120, 120);
-                        pomodoroWindow.setResizable(false);
+                        // 如果当前大小明显不对（比如还没初始化），才设置默认大小
+                        const bounds = pomodoroWindow.getBounds();
+                        if (bounds.width > 200 || bounds.height > 200) {
+                            pomodoroWindow.setSize(80, 80);
+                        }
+                        pomodoroWindow.setResizable(true);
+                        pomodoroWindow.setAspectRatio(1);
                     } catch (e) { }
                     try {
                         await pomodoroWindow.webContents.executeJavaScript(`document.body.classList.add('mini-mode');document.body.classList.remove('docked-mode');`);
@@ -8379,9 +8384,10 @@ document.body.classList.remove('docked-mode');
                 }
 
                 // 设置为圆形小窗口
-                const size = 120;
+                const size = 80;
                 pomodoroWindow.setSize(size, size);
-                pomodoroWindow.setResizable(false);
+                pomodoroWindow.setResizable(true);
+                pomodoroWindow.setAspectRatio(1);
 
                 // 添加迷你模式样式
                 pomodoroWindow.webContents.executeJavaScript(`
@@ -8397,6 +8403,7 @@ document.body.classList.remove('docked-mode');
                     pomodoroWindow.setSize(240, 235);
                 }
                 pomodoroWindow.setResizable(true);
+                pomodoroWindow.setAspectRatio(0); // 取消比例限制
 
                 // 移除迷你模式样式
                 pomodoroWindow.webContents.executeJavaScript(`
