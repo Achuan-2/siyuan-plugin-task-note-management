@@ -2445,7 +2445,7 @@ export class PomodoroTimer {
             text-overflow: ellipsis;
             margin-bottom: 5px;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: background-color 0.2s ease, transform 0.2s ease;
             padding: 4px 8px;
             font-family: var(--b3-font-family) !important;
             max-width: 100%;
@@ -7480,6 +7480,18 @@ document.body.classList.remove('docked-mode');
         }
         .progress-container:hover .control-buttons { opacity: 1; }
         .progress-container:hover .pomodoro-status-icon { opacity: 0.3; }
+        /* mini 模式下：只有悬浮到 emoji 上才显示按钮，圆环中间空白可拖动 */
+        body.mini-mode .center-content {
+            -webkit-app-region: drag;
+            cursor: move;
+        }
+        body.mini-mode .pomodoro-status-icon:hover ~ .control-buttons,
+        body.mini-mode .control-buttons:hover {
+            opacity: 1;
+        }
+        body.mini-mode .pomodoro-status-icon:hover {
+            opacity: 0.3;
+        }
         .circle-control-btn {
             background: rgba(255, 255, 255, 0.9);
             border: none;
@@ -7562,18 +7574,22 @@ document.body.classList.remove('docked-mode');
             max-width: calc(100vh - 4px);
             max-height: calc(100vw - 4px);
             cursor: move;
+            overflow: hidden;
         }
-        body.mini-mode .center-content {
-            -webkit-app-region: no-drag;
-            cursor: pointer;
+        body.mini-mode .progress-ring,
+        body.mini-mode .progress-ring-bg,
+        body.mini-mode .progress-ring-circle {
+            -webkit-app-region: drag;
+            pointer-events: none;
         }
-        body.mini-mode .control-buttons {
-            -webkit-app-region: no-drag;
-        }
+        /* mini 模式下：emoji 和按钮区域不可拖动，其他区域可拖动 */
         body.mini-mode .pomodoro-status-icon { 
             -webkit-app-region: no-drag;
             font-size: 35vmin;
             cursor: pointer;
+        }
+        body.mini-mode .control-buttons {
+            -webkit-app-region: no-drag;
         }
         body.mini-mode .circle-control-btn { 
             -webkit-app-region: no-drag;
@@ -7584,32 +7600,43 @@ document.body.classList.remove('docked-mode');
         .mini-restore-btn {
             -webkit-app-region: no-drag;
             position: absolute;
-            top: 8px;
-            right: 8px;
-            width: clamp(16px, 15vmin, 32px);
-            height: clamp(16px, 15vmin, 32px);
+            width: clamp(12px, 12vmin, 120px);
+            height: clamp(12px, 12vmin, 120px);
+            aspect-ratio: 1 / 1;
             background: var(--b3-theme-primary, #4CAF50);
             color: #fff;
             border: none;
             border-radius: 50%;
             cursor: pointer;
-            font-size: clamp(10px, 8vmin, 18px);
+
             display: none;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-            transition: all 0.2s ease;
+            line-height: 1;
+            flex-shrink: 0;
+            box-sizing: border-box;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+            transform-origin: top right;
             z-index: 100;
-            opacity: 0;
+            transition: none;
         }
-        body:not(.mini-mode) .mini-restore-btn { display: none !important; }
-        body.mini-mode .progress-container:hover .mini-restore-btn {
+        /* mini 模式下始终显示恢复按钮 */
+        body.mini-mode .mini-restore-btn {
+            position: fixed;
+            top: 6vh;
+            right: 6vw;
+            width: clamp(4px, 13vmin, 120px);
+            height: clamp(4px, 13vmin, 120px);
+            font-size: clamp(3px, 8vmin, 80px);
+            min-width: 12px;
+            min-height: 12px;
+            aspect-ratio: 1 / 1;
             display: flex;
             opacity: 1;
         }
         .mini-restore-btn:hover {
             background: var(--b3-theme-primary-light, #66BB6A);
-            transform: scale(1.1);
+            transform: scale(1.05);
         }
         
         /* 吸附模式样式 */
