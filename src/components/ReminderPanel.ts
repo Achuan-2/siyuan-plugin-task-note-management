@@ -6359,7 +6359,7 @@ export class ReminderPanel {
         // 添加项目管理选项（仅当任务有projectId时显示）
         if (reminder.projectId) {
             menu.addItem({
-                icon: "iconGrid",
+                icon: "iconProject",
                 label: i18n("openProjectKanban"),
                 click: () => this.openProjectKanban(reminder.projectId)
             });
