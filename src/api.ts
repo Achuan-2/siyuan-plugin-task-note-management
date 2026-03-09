@@ -701,10 +701,16 @@ export async function pushErrMsg(msg: string, timeout: number = 7000) {
     return request(url, payload);
 }
 
-export async function sendNotification(title: string, body: string, delayInSeconds: number = 0) {
+export async function sendNotification(title: string, body: string, delayInSeconds: number = 0, timeoutType: 'default' | 'never' = 'default') {
     const plugin = getPluginInstance();
 
-    return platformUtils.sendNotification(plugin.i18n('name'), title, body, delayInSeconds);
+    return platformUtils.sendNotification({
+        channel: plugin.i18n('name'),
+        title: title,
+        body: body,
+        delay: delayInSeconds,
+        timeoutType: timeoutType,
+    });
 }
 
 // **************************************** Network ****************************************
