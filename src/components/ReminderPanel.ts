@@ -1664,6 +1664,28 @@ export class ReminderPanel {
             // 将所有任务保存到 allRemindersMap 中，用于后续计算进度
             this.allRemindersMap = new Map(reminderMap);
 
+            // 0. 如果当前是自定义过滤器，提前同步分类设置
+            if (this.currentTab.startsWith('custom_')) {
+                const filterId = this.currentTab.replace('custom_', '');
+                const filterConfig = this.getCustomFilterConfig(filterId);
+                if (filterConfig && this.currentCustomFilterId !== filterId) {
+                    this.currentCustomFilterId = filterId;
+                    const hasSpecificCategories = filterConfig.categoryFilters &&
+                        filterConfig.categoryFilters.length > 0 &&
+                        !filterConfig.categoryFilters.includes('all');
+                    
+                    if (hasSpecificCategories) {
+                        // 筛选器有具体分类设置，同步到侧边栏
+                        this.selectedCategories = [...filterConfig.categoryFilters];
+                    } else {
+                        // 筛选器没有设置分类或设置为'all'，使用用户手动记忆的分类筛选
+                        this.selectedCategories = [...this.userManualCategories];
+                    }
+                    this.updateCategoryFilterButtonText();
+                    this.saveSelectedCategories();
+                }
+            }
+
             // 1. 应用分类过滤
             const categoryFilteredReminders = this.applyCategoryFilter(filteredReminders);
 
@@ -3525,29 +3547,8 @@ export class ReminderPanel {
             return reminders;
         }
 
-        // 同步过滤器中的分类设置到侧边栏分类筛选按钮
-        // 只有切换到不同的过滤器时才更新
-        if (this.currentCustomFilterId !== filterId) {
-            this.currentCustomFilterId = filterId;
-            // 只有当筛选器设置了具体的分类（不是'all'）时，才同步筛选器的分类
-            // 筛选器设置为'all'或未设置时，使用用户手动记忆的分啰
-            const hasSpecificCategories = filterConfig.categoryFilters &&
-                filterConfig.categoryFilters.length > 0 &&
-                !filterConfig.categoryFilters.includes('all');
-
-            if (hasSpecificCategories) {
-                // 筛选器有具体分类设置，同步到侧边栏
-                this.selectedCategories = [...filterConfig.categoryFilters];
-                this.updateCategoryFilterButtonText();
-                // 保存到设置
-                this.saveSelectedCategories();
-            } else {
-                // 筛选器没有设置分类或设置为'all'，使用用户手动记忆的分类筛选
-                this.selectedCategories = [...this.userManualCategories];
-                this.updateCategoryFilterButtonText();
-                this.saveSelectedCategories();
-            }
-        }
+        // 注意：分类设置的同步已经在 loadReminders 方法开头处理，避免在此处重复更新
+        // 这样可以确保在应用分类过滤之前，分类设置就已经是最新的了
 
         let filtered = [...reminders];
 
