@@ -74,129 +74,129 @@ export class BatchReminderDialog {
 
     async autoDetectBatchDateTime(blockIds: string[]): Promise<AutoDetectResult[]> {
         const results = [];
-        const { getBlockByID, getChildBlocks, exportMdContent } = await import("../api");
+        const { sql, getBlockByID } = await import("../api");
 
-        // 第一步：识别所有应该被跳过的子块ID
-        const blocksToSkip = new Set<string>();
+        // 合并查询：一次性获取所有选中块的记录
+        try {
+            const idsList = blockIds.map(id => `'${id}'`).join(',');
+            const blocks = await sql(`select * from blocks where id in (${idsList})`);
+            const blockMap: Record<string, any> = {};
+            (blocks || []).forEach((b: any) => { blockMap[b.id] = b; });
 
-        for (const blockId of blockIds) {
-            try {
-                const block = await getBlockByID(blockId);
-                if (block && block.type === 'h') {
-                    // 获取这个标题的所有子块
-                    const childRes = await getChildBlocks(blockId);
-                    const childIds = childRes ? childRes.map(c => c.id) : [];
-
-                    // 如果子块也在选中列表中，标记为需要跳过
-                    for (const childId of childIds) {
-                        if (blockIds.includes(childId)) {
-                            blocksToSkip.add(childId);
-                        }
-                    }
+            // 合并查询子块：一次性获取 parent_id 在选中范围内的子块，用于跳过被包含的子块
+            const children = await sql(`select id, parent_id from blocks where parent_id in (${idsList})`);
+            const blocksToSkip = new Set<string>();
+            (children || []).forEach((c: any) => {
+                if (blockIds.includes(c.id)) {
+                    blocksToSkip.add(c.id);
                 }
-            } catch (error) {
-                console.error(`检查块 ${blockId} 的子块失败:`, error);
-            }
-        }
+            });
 
-        // 第二步：处理未被跳过的块
-        for (const blockId of blockIds) {
-            // 跳过子块
-            if (blocksToSkip.has(blockId)) {
-                continue;
-            }
-            try {
-                const block = await getBlockByID(blockId);
+            // 处理每个块（避免使用 exportMdContent）
+            for (const blockId of blockIds) {
+                if (blocksToSkip.has(blockId)) continue;
 
-                if (block) {
-                    let exportedContent = '';
-
-                    // 导出块内容
-                    const res = await exportMdContent(blockId);
-                    if (window.siyuan.config.export.addTitle) {
-                        // 需要去掉第一行，为没用的标题行
-                        exportedContent = res?.content?.split('\n').slice(1).join('\n') || '';
-                    } else {
-                        exportedContent = res?.content || '';
+                try {
+                    let block = blockMap[blockId];
+                    if (!block) {
+                        // 兜底：单独获取
+                        block = await getBlockByID(blockId);
                     }
 
-                    // 统一处理：第一行作为标题，其余行作为备注
-                    let content = '';
-                    let note = '';
-
-                    if (exportedContent) {
-                        const originalLines = exportedContent.split('\n');
-                        // 过滤掉空白行，找到真正的第一行内容
-                        const lines = originalLines.map(line => line.trim()).filter(line => line.length > 0);
-
-                        if (lines.length > 0) {
-                            const firstLine = lines[0];
-
-                            if (firstLine.startsWith('#')) {
-                                // 1. 处理标题行：去掉 # 号
-                                content = firstLine.replace(/^#+\s*/, '').trim();
+                    if (block) {
+                        // 根据块类型选择标题来源：
+                        // - 列表与任务项优先使用 fcontent（渲染后的单行内容）
+                        // - 其他块使用 content（完整原始内容）
+                        let exportedContent = '';
+                        try {
+                            const isListType = block.type === 'l' || block.type === 'i';
+                            if (isListType) {
+                                exportedContent = (block.fcontent || block.content || '').toString();
                             } else {
-                                // 2. 处理普通行或列表行
-                                // 这里的正则增加了对 - [ ] 和 - [x] 的支持
-                                // ^[-*+]\s+\[[ xX]\]\s+ : 匹配任务列表 - [ ] 或 - [x]
-                                // |^[-*+]\s+ : 匹配普通无序列表 - 或 * 或 +
-                                // |^\d+\.\s+ : 匹配有序列表 1.
-                                content = firstLine
-                                    .replace(/^[-*+]\s+\[[ xX]\]\s+/, '') // 先匹配任务列表标记
-                                    .replace(/^[-*+]\s+/, '')            // 再匹配普通无序列表标记
-                                    .replace(/^\d+\.\s+/, '')             // 再匹配有序列表标记
-                                    .trim();
+                                exportedContent = (block.content || '').toString();
                             }
+                        } catch (e) {
+                            exportedContent = (block.content || '').toString();
+                        }
 
-                            // 提取备注：保留第一行之后的所有原始内容
-                            const firstLineIndex = originalLines.findIndex(line => line.trim() === firstLine);
-                            if (firstLineIndex >= 0 && firstLineIndex < originalLines.length - 1) {
-                                note = originalLines.slice(firstLineIndex + 1).join('\n').trim();
+                        let content = '';
+                        let note = '';
+
+                        if (exportedContent) {
+                            const originalLines = exportedContent.split('\n');
+                            const lines = originalLines.map((line: string) => line.trim()).filter((line: string) => line.length > 0);
+                            if (lines.length > 0) {
+                                const firstLine = lines[0];
+                                if (firstLine.startsWith('#')) {
+                                    content = firstLine.replace(/^#+\s*/, '').trim();
+                                } else {
+                                    content = firstLine
+                                        .replace(/^[-*+]\s+\[[ xX]\]\s+/, '')
+                                        .replace(/^[-*+]\s+/, '')
+                                        .replace(/^\d+\.\s+/, '')
+                                        .trim();
+                                }
+
+                                const firstLineIndex = originalLines.findIndex((line: string) => line.trim() === firstLine);
+                                if (firstLineIndex >= 0 && firstLineIndex < originalLines.length - 1) {
+                                    note = originalLines.slice(firstLineIndex + 1).join('\n').trim();
+                                }
                             }
                         }
+
+                        const removeMode = await this.plugin.getRemoveDateAfterDetectionMode();
+                        const titleAuto = autoDetectDateTimeFromTitle(content, removeMode);
+
+                        let date = titleAuto.date;
+                        let time = titleAuto.time;
+                        let hasTime = titleAuto.hasTime;
+                        if (!date) {
+                            const contentAuto = autoDetectDateTimeFromTitle(note, removeMode);
+                            date = contentAuto.date;
+                            time = contentAuto.time;
+                            hasTime = contentAuto.hasTime;
+                        }
+
+                        const cleanTitle = titleAuto.cleanTitle || content;
+
+                        results.push({
+                            blockId,
+                            content: content,
+                            note: note,
+                            date,
+                            time,
+                            hasTime,
+                            endDate: titleAuto.endDate,
+                            endTime: titleAuto.endTime,
+                            hasEndTime: titleAuto.hasEndTime,
+                            cleanTitle: cleanTitle
+                        } as AutoDetectResult);
                     }
-
-
-                    const removeMode = await this.plugin.getRemoveDateAfterDetectionMode();
-                    // 从标题中识别日期
-                    const titleAuto = autoDetectDateTimeFromTitle(content, removeMode);
-                    // 从备注中识别日期，如果标题没有
-                    let date = titleAuto.date;
-                    let time = titleAuto.time;
-                    let hasTime = titleAuto.hasTime;
-                    if (!date) {
-                        const contentAuto = autoDetectDateTimeFromTitle(note, removeMode);
-                        date = contentAuto.date;
-                        time = contentAuto.time;
-                        hasTime = contentAuto.hasTime;
-                    }
-
-                    const cleanTitle = titleAuto.cleanTitle || content;
-
+                } catch (error) {
+                    console.error(`获取块 ${blockId} 失败:`, error);
                     results.push({
                         blockId,
-                        content: content,
-                        note: note,
-                        date,
-                        time,
-                        hasTime,
-                        endDate: titleAuto.endDate,
-                        endTime: titleAuto.endTime,
-                        hasEndTime: titleAuto.hasEndTime,
-                        cleanTitle: cleanTitle
-                    });
+                        content: '无法获取块内容',
+                        cleanTitle: '无法获取块内容'
+                    } as AutoDetectResult);
                 }
-            } catch (error) {
-                console.error(`获取块 ${blockId} 失败:`, error);
-                results.push({
-                    blockId,
-                    content: '无法获取块内容',
-                    cleanTitle: '无法获取块内容'
-                });
             }
-        }
 
-        return results;
+            return results;
+        } catch (err) {
+            console.error('批量识别块内容失败:', err);
+            // 回退到逐个处理（兼容性保守策略）
+            const { getBlockByID } = await import("../api");
+            for (const blockId of blockIds) {
+                try {
+                    const block = await getBlockByID(blockId);
+                    results.push({ blockId, content: block?.content || '', cleanTitle: block?.content || '' } as AutoDetectResult);
+                } catch (error) {
+                    results.push({ blockId, content: '无法获取块内容', cleanTitle: '无法获取块内容' } as AutoDetectResult);
+                }
+            }
+            return results;
+        }
     }
 
 
@@ -1243,6 +1243,19 @@ class SmartBatchDialog {
             let failureCount = 0;
             const successfulBlockIds: string[] = [];
 
+            // 批量获取所有相关块信息，减少多次单独查询
+            const allBlockIds = Array.from(this.blockSettings.keys());
+            const { sql } = await import("../api");
+            const blockIdListSql = allBlockIds.map(id => `'${id}'`).join(',');
+            let blockRows: any[] = [];
+            try {
+                blockRows = await sql(`select * from blocks where id in (${blockIdListSql})`);
+            } catch (err) {
+                console.warn('批量获取块信息失败，回退到逐个获取:', err);
+            }
+            const blockMap: Record<string, any> = {};
+            (blockRows || []).forEach(b => blockMap[b.id] = b);
+
             for (const [blockId, setting] of this.blockSettings) {
                 try {
                     if (!setting.date) {
@@ -1251,12 +1264,12 @@ class SmartBatchDialog {
                     }
 
                     const reminderId = `reminder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-                    const block = await getBlockByID(blockId);
+                    const block = blockMap[blockId];
 
                     const reminder: any = {
                         id: reminderId,
                         blockId: blockId,
-                        docId: block.root_id,
+                        docId: block ? block.root_id : undefined,
                         completed: false,
                         pomodoroCount: 0,
                         createdAt: new Date().toISOString()
@@ -1346,14 +1359,14 @@ class SmartBatchDialog {
 
             await this.plugin.saveReminderData(reminderData);
 
-            // 为所有成功创建提醒的块更新属性
-            for (const blockId of successfulBlockIds) {
+            // 并行更新所有成功创建提醒的块的属性，减少等待时间
+            await Promise.all(successfulBlockIds.map(async (blockId) => {
                 try {
                     await updateBindBlockAtrrs(blockId, this.plugin);
                 } catch (error) {
                     console.error(`更新块 ${blockId} 书签失败:`, error);
                 }
-            }
+            }));
 
             if (successCount > 0) {
                 showMessage(i18n("batchCompleted", {
