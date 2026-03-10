@@ -2027,11 +2027,40 @@ export default class ReminderPlugin extends Plugin {
         const rootId = block.root_id;
         const parentId = block.parent_id;
 
-        // 1. 优先检查父块
-        // 1. 优先检查父块（递归向上直到rootId）
-        let currentParentId = parentId;
-        while (currentParentId && currentParentId !== rootId) {
-            const parentReminder = Object.values(reminderData).find((r: any) => r.blockId === currentParentId && r.projectId);
+        // 1. 优先检查父块 — 使用递归 SQL 一次性获取祖先链，避免多次 getBlockByID 调用
+        let ancestors: any[] = [];
+        try {
+            if (parentId) {
+                const ancRows = await sql(`WITH RECURSIVE anc(id,parent_id,root_id,type,subtype) AS (
+                        SELECT id,parent_id,root_id,type,subtype FROM blocks WHERE id='${parentId}'
+                        UNION ALL
+                        SELECT b.id,b.parent_id,b.root_id,b.type,b.subtype FROM blocks b JOIN anc a ON b.id = a.parent_id
+                    )
+                    SELECT id,parent_id,root_id,type,subtype FROM anc;
+                `);
+                const ancMap: Record<string, any> = {};
+                (ancRows || []).forEach((r: any) => ancMap[r.id] = r);
+                // 从最近父块开始，按向上顺序构造 ancestors 数组
+                let cur = parentId;
+                while (cur && cur !== rootId && ancMap[cur]) {
+                    ancestors.push(ancMap[cur]);
+                    cur = ancMap[cur].parent_id;
+                }
+            }
+        } catch (err) {
+            // 回退到逐层获取（兼容性保障）
+            let currentParentId = parentId;
+            while (currentParentId && currentParentId !== rootId) {
+                const parentBlock = await getBlockByID(currentParentId);
+                if (!parentBlock) break;
+                ancestors.push(parentBlock);
+                currentParentId = parentBlock.parent_id;
+            }
+        }
+
+        // 在祖先链中查找第一个含有 projectId 的 reminder
+        for (const anc of ancestors) {
+            const parentReminder = Object.values(reminderData).find((r: any) => r.blockId === anc.id && r.projectId);
             if (parentReminder) {
                 return {
                     projectId: (parentReminder as any).projectId,
@@ -2040,10 +2069,6 @@ export default class ReminderPlugin extends Plugin {
                     categoryId: (parentReminder as any).categoryId
                 };
             }
-            // 获取上一级父块
-            const parentBlock = await getBlockByID(currentParentId);
-            if (!parentBlock) break;
-            currentParentId = parentBlock.parent_id;
         }
 
         // 2. 检查最近的同级标题
@@ -2102,11 +2127,23 @@ export default class ReminderPlugin extends Plugin {
         // 4. Fallback: 检查文档是否本身是项目，或者是否绑定了某个项目分组
         const projectData = await this.loadProjectData();
         if (projectData) {
-            // 4.0 先检查父块路径是否是项目或者项目分组的绑定块
-            let checkParentId = parentId;
-            while (checkParentId && checkParentId !== rootId) {
+            // 4.0 先检查父块路径是否是项目或者项目分组的绑定块（使用已获取的 ancestors，避免额外查询）
+            const parentChain = ancestors && ancestors.length > 0 ? ancestors : [];
+            if (parentChain.length === 0 && parentId) {
+                // 如果 ancestors 为空，但仍有 parentId，尝试逐层获取作为兜底（极少数情况）
+                let checkParentId = parentId;
+                while (checkParentId && checkParentId !== rootId) {
+                    const parentBlock = await getBlockByID(checkParentId);
+                    if (!parentBlock) break;
+                    parentChain.push(parentBlock);
+                    checkParentId = parentBlock.parent_id;
+                }
+            }
+
+            for (const parentBlock of parentChain) {
+                const checkId = parentBlock.id;
                 // Check if this parent block is a project main block
-                const parentProject = Object.values(projectData).find((p: any) => p.blockId === checkParentId);
+                const parentProject = Object.values(projectData).find((p: any) => p.blockId === checkId);
                 if (parentProject) {
                     return {
                         projectId: (parentProject as any).id,
@@ -2119,7 +2156,7 @@ export default class ReminderPlugin extends Plugin {
                 // Check if this parent block is a project group block
                 for (const p of Object.values(projectData) as any[]) {
                     if (p.customGroups && Array.isArray(p.customGroups)) {
-                        const group = p.customGroups.find((g: any) => g.blockId === checkParentId);
+                        const group = p.customGroups.find((g: any) => g.blockId === checkId);
                         if (group) {
                             return {
                                 projectId: p.id,
@@ -2130,11 +2167,6 @@ export default class ReminderPlugin extends Plugin {
                         }
                     }
                 }
-
-                // Move up
-                const parentBlock = await getBlockByID(checkParentId);
-                if (!parentBlock) break;
-                checkParentId = parentBlock.parent_id;
             }
 
             // 4.1 检查是否是项目主文档
