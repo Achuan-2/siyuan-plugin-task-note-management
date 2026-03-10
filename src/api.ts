@@ -9,7 +9,7 @@
 import { fetchPost, fetchSyncPost, IWebSocketData, openTab, Constants, platformUtils } from "siyuan";
 
 import { getFrontend, openMobileFileById } from 'siyuan';
-import { getPluginInstance } from "./pluginInstance";
+import { getPluginInstance,i18n } from "./pluginInstance";
 export async function request(url: string, data: any) {
     let response: IWebSocketData = await fetchSyncPost(url, data);
     let res = response.code === 0 ? response.data : null;
@@ -702,10 +702,9 @@ export async function pushErrMsg(msg: string, timeout: number = 7000) {
 }
 
 export async function sendNotification(title: string, body: string, delayInSeconds: number = 0, timeoutType: 'default' | 'never' = 'default') {
-    const plugin = getPluginInstance();
 
     return platformUtils.sendNotification({
-        channel: plugin.i18n('name'),
+        channel: i18n('name'),
         title: title,
         body: body,
         delay: delayInSeconds,
