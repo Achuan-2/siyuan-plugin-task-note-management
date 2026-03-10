@@ -5609,7 +5609,23 @@ export class ReminderPanel {
                 return;
             }
 
-            // 移动DOM元素
+            // 获取被拖拽任务的所有子任务（从缓存中）
+            const getAllDescendants = (parentId: string): any[] => {
+                const result: any[] = [];
+                const children = this.currentRemindersCache.filter(r => r.parentId === parentId);
+                for (const child of children) {
+                    result.push(child);
+                    result.push(...getAllDescendants(child.id));
+                }
+                return result;
+            };
+
+            const draggedChildren = getAllDescendants(draggedReminder.id);
+            const draggedChildElements = draggedChildren
+                .map(child => this.remindersContainer.querySelector(`[data-reminder-id="${child.id}"]`) as HTMLElement)
+                .filter(el => el !== null);
+
+            // 移动DOM元素（父任务）
             if (insertBefore) {
                 this.remindersContainer.insertBefore(draggedElement, targetElement);
             } else {
@@ -5621,20 +5637,40 @@ export class ReminderPanel {
                 }
             }
 
+            // 移动所有子任务元素（紧跟在父任务后面）
+            let lastInsertedElement: HTMLElement = draggedElement;
+            for (const childEl of draggedChildElements) {
+                if (lastInsertedElement.nextSibling) {
+                    this.remindersContainer.insertBefore(childEl, lastInsertedElement.nextSibling);
+                } else {
+                    this.remindersContainer.appendChild(childEl);
+                }
+                lastInsertedElement = childEl;
+            }
+
             // 更新缓存中的顺序
             const draggedIndex = this.currentRemindersCache.findIndex(r => r.id === draggedReminder.id);
             const targetIndex = this.currentRemindersCache.findIndex(r => r.id === targetReminder.id);
 
             if (draggedIndex !== -1 && targetIndex !== -1) {
-                // 从缓存中移除被拖拽的项
-                const [removed] = this.currentRemindersCache.splice(draggedIndex, 1);
+                // 收集被拖拽的任务及其所有后代
+                const itemsToMove = [draggedReminder, ...draggedChildren];
+                const idsToMove = new Set(itemsToMove.map(r => r.id));
+
+                // 从缓存中移除所有被拖拽的项（包括子任务）
+                const removedItems: any[] = [];
+                for (let i = this.currentRemindersCache.length - 1; i >= 0; i--) {
+                    if (idsToMove.has(this.currentRemindersCache[i].id)) {
+                        removedItems.unshift(this.currentRemindersCache.splice(i, 1)[0]);
+                    }
+                }
 
                 // 重新计算插入位置（因为移除操作可能改变了索引）
                 const newTargetIndex = this.currentRemindersCache.findIndex(r => r.id === targetReminder.id);
                 const insertIndex = insertBefore ? newTargetIndex : newTargetIndex + 1;
 
-                // 插入到新位置
-                this.currentRemindersCache.splice(insertIndex, 0, removed);
+                // 插入到新位置（保持父子顺序：父任务在前，子任务在后）
+                this.currentRemindersCache.splice(insertIndex, 0, ...removedItems);
             }
 
         } catch (error) {
