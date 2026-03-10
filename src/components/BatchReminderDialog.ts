@@ -221,12 +221,27 @@ class SmartBatchDialog {
         this.categoryManager = CategoryManager.getInstance(this.plugin);
         this.projectManager = ProjectManager.getInstance(this.plugin);
 
-        // 初始化每个块的设置
-        this.initializeBlockSettings();
+
     }
 
-    private initializeBlockSettings() {
-        this.autoDetectedData.forEach(data => {
+    private async initializeBlockSettings() {
+        for (const data of this.autoDetectedData) {
+            let projectId = this.defaultSettings?.defaultProjectId || '';
+            let customGroupId = this.defaultSettings?.defaultCustomGroupId || '';
+            let milestoneId = this.defaultSettings?.defaultMilestoneId || '';
+            let categoryId = this.defaultSettings?.defaultCategoryId || '';
+            try {
+                const inherit = await (this.plugin as any).getInheritedProjectAndGroup(data.blockId);
+                if (inherit) {
+                    if (inherit.projectId) projectId = inherit.projectId;
+                    if (inherit.groupId) customGroupId = inherit.groupId;
+                    if (inherit.milestoneId) milestoneId = inherit.milestoneId;
+                    if (inherit.categoryId) categoryId = inherit.categoryId;
+                }
+            } catch (err) {
+                // ignore
+            }
+
             this.blockSettings.set(data.blockId, {
                 blockId: data.blockId,
                 content: data.content,
@@ -238,8 +253,10 @@ class SmartBatchDialog {
                 endTime: data.endTime || '',
                 hasEndTime: data.hasEndTime || false,
                 priority: 'none',
-                categoryId: this.defaultSettings?.defaultCategoryId || '',
-                projectId: this.defaultSettings?.defaultProjectId || '',
+                categoryId: categoryId || '',
+                projectId: projectId || '',
+                customGroupId: customGroupId || '',
+                milestoneId: milestoneId || '',
                 note: data.note || '',
                 repeatConfig: {
                     enabled: false,
@@ -248,13 +265,15 @@ class SmartBatchDialog {
                     endType: 'never'
                 }
             });
-        });
+        }
     }
 
     async show() {
         // 初始化分类管理器和项目管理器
         await this.categoryManager.initialize();
         await this.projectManager.initialize();
+        // 初始化每个块的设置并应用继承的项目/分组/里程碑/分类
+        await this.initializeBlockSettings();
 
         const dialog = new Dialog({
             title: i18n("smartBatchTitle", { count: this.blockIds.length.toString() }),
@@ -288,6 +307,20 @@ class SmartBatchDialog {
                             </div>
                         </div>
                         <div class="batch-operations-content" id="batchOperationsContent" style="display: none;">
+                            <div class="batch-operation-row">
+                                <div class="batch-operation-item">
+                                    <label class="b3-form__label">${i18n("batchSetDate")}</label>
+                                    <div class="batch-date-container">
+                                        <input type="date" id="batchDateInput" class="b3-text-field" value="${getLogicalDateString()}" max="9999-12-31">
+                                        <button type="button" id="batchApplyDateBtn" class="b3-button b3-button--primary">
+                                            ${i18n("applyDateToAll")}
+                                        </button>
+                                        <button type="button" id="batchNlDateBtn" class="b3-button b3-button--outline" title="${i18n('smartDateRecognition')}">
+                                            ✨
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
                             <div class="batch-operation-row">
                                 <div class="batch-operation-item">
                                     <label class="b3-form__label">${i18n("batchSetCategory")}</label>
@@ -330,31 +363,36 @@ class SmartBatchDialog {
                             <div class="batch-operation-row">
                                 <div class="batch-operation-item">
                                     <label class="b3-form__label">${i18n("batchSetProject")}</label>
-                                    <div class="batch-project-container">
-                                        <select id="batchProjectSelector" class="b3-select" style="flex: 1;">
-                                            <option value="">${i18n("noProject")}</option>
-                                            <!-- 项目选择器将在这里渲染 -->
-                                        </select>
+                                    <div class="batch-project-container" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; min-width:0;">
+                                        <div style="flex:1 1 100%; display:flex; align-items:center; gap:8px; min-width:0; flex-wrap:wrap;">
+                                            <select id="batchProjectSelector" class="b3-select" style="flex: 1 1 200px; min-width:120px;">
+                                                <option value="">${i18n("noProject")}</option>
+                                                <!-- 项目选择器将在这里渲染 -->
+                                            </select>
+                                            <select id="batchGroupSelector" class="b3-select" style="flex: 0 1 160px; min-width:120px; display:none;">
+                                                <option value="">${i18n("noGroup") || '无分组'}</option>
+                                            </select>
+                                            <select id="batchMilestoneSelector" class="b3-select" style="flex: 0 1 200px; min-width:120px; display:none;">
+                                                <option value="">${i18n("noMilestone") || '无里程碑'}</option>
+                                            </select>
+                                        </div>
+                                        <div style="margin-left:auto; flex:0 0 auto;">
                                             <button type="button" id="batchApplyProjectBtn" class="b3-button b3-button--primary" disabled>
                                                 ${i18n("applyToAll")}
                                             </button>
-                                            <select id="batchStatusSelector" class="b3-select" style="margin-left:8px; min-width:140px; display: none;">
-                                                <option value="">${i18n("selectStatus") || '选择状态'}</option>
-                                            </select>
-                                            <button type="button" id="batchApplyStatusBtn" class="b3-button b3-button--primary" disabled style="display:none; margin-left:6px;">
-                                                ${i18n("applyStatusToAll") || '应用状态'}
-                                            </button>
+                                        </div>
                                     </div>
                                 </div>
+                            </div>
+                            <div class="batch-operation-row">
                                 <div class="batch-operation-item">
-                                    <label class="b3-form__label">${i18n("batchSetDate")}</label>
-                                    <div class="batch-date-container">
-                                        <input type="date" id="batchDateInput" class="b3-text-field" value="${getLogicalDateString()}" max="9999-12-31">
-                                        <button type="button" id="batchApplyDateBtn" class="b3-button b3-button--primary">
-                                            ${i18n("applyDateToAll")}
-                                        </button>
-                                        <button type="button" id="batchNlDateBtn" class="b3-button b3-button--outline" title="${i18n('smartDateRecognition')}">
-                                            ✨
+                                    <label class="b3-form__label">${i18n("batchSetStatus") || '批量设置状态'}</label>
+                                    <div class="batch-status-container">
+                                        <select id="batchStatusSelector" class="b3-select" style="flex: 1; display:none; min-width:200px;">
+                                            <option value="">${i18n("selectStatus") || '选择状态'}</option>
+                                        </select>
+                                        <button type="button" id="batchApplyStatusBtn" class="b3-button b3-button--primary" disabled style="margin-left:6px; display:none;">
+                                            ${i18n("applyToAll") || '应用状态'}
                                         </button>
                                     </div>
                                 </div>
@@ -402,7 +440,9 @@ class SmartBatchDialog {
             // 获取分类、优先级和项目显示
             const categoryDisplay = this.getCategoryDisplay(setting?.categoryId);
             const priorityDisplay = this.getPriorityDisplay(setting?.priority);
-            const projectDisplay = this.getProjectDisplay(setting?.projectId);
+            const projectDisplay = await this.getProjectDisplay(setting?.projectId, setting?.customGroupId);
+
+            const milestoneDisplay = setting?.milestoneId ? await this.getMilestoneDisplay(setting.projectId, setting.milestoneId) : '';
 
             // 获取状态显示
             let statusDisplay = '';
@@ -443,6 +483,7 @@ class SmartBatchDialog {
                                 <div class="block-project-status">
                                     <span class="block-project">${projectDisplay}</span>
                                     <span class="block-status">${statusDisplay}</span>
+                                    <span class="block-milestone">${milestoneDisplay}</span>
                                 </div>
                             </div>
                         </div>
@@ -499,19 +540,43 @@ class SmartBatchDialog {
         return priorityMap[priority as keyof typeof priorityMap] || priorityMap.none;
     }
 
-    private getProjectDisplay(projectId?: string): string {
+    private async getProjectDisplay(projectId?: string, groupId?: string): Promise<string> {
         if (!projectId) return `📂 ${i18n("noProject")}`;
 
         try {
             const project = this.projectManager.getProjectById(projectId);
             if (project) {
-                return `<span class="project-badge" style="background-color: ${project.color || '#E0E0E0'}; padding: 2px 6px; border-radius: 3px; font-size: 12px;">📂 ${project.name}</span>`;
+                let text = `📂 ${project.name}`;
+                if (groupId) {
+                    try {
+                        const groups = await this.projectManager.getProjectCustomGroups(projectId);
+                        const g = groups.find(gr => gr.id === groupId);
+                        if (g) text += ` / ${g.name}`;
+                    } catch (err) {
+                        // ignore group name failure
+                    }
+                }
+                return `<span class="project-badge" style="background-color: ${project.color || '#E0E0E0'}; padding: 2px 6px; border-radius: 3px; font-size: 12px;">${text}</span>`;
             }
         } catch (error) {
             console.error('获取项目显示失败:', error);
         }
 
         return `📂 ${i18n("noProject")}`;
+    }
+
+
+    private async getMilestoneDisplay(projectId?: string, milestoneId?: string): Promise<string> {
+        if (!projectId || !milestoneId) return '';
+        try {
+            const m = await this.projectManager.getMilestoneById(projectId, milestoneId);
+            if (m) {
+                return `<span class="milestone-badge" style="background-color: #f0f6ff; padding: 2px 6px; border-radius:3px; margin-left:6px; font-size:11px;">🏁 ${m.name}</span>`;
+            }
+        } catch (err) {
+            console.warn('获取里程碑显示失败:', err);
+        }
+        return '';
     }
 
     private bindSmartBatchEvents(dialog: Dialog) {
@@ -623,11 +688,23 @@ class SmartBatchDialog {
                 batchApplyStatusBtn.style.display = 'none';
                 batchApplyStatusBtn.disabled = true;
             }
+            // reset group/milestone selectors
+            const batchGroupSelector = dialog.element.querySelector('#batchGroupSelector') as HTMLSelectElement;
+            const batchMilestoneSelector = dialog.element.querySelector('#batchMilestoneSelector') as HTMLSelectElement;
+            if (batchGroupSelector) {
+                batchGroupSelector.style.display = 'none';
+                batchGroupSelector.innerHTML = `<option value="">${i18n("noGroup") || '无分组'}</option>`;
+            }
+            if (batchMilestoneSelector) {
+                batchMilestoneSelector.style.display = 'none';
+                batchMilestoneSelector.innerHTML = `<option value="">${i18n("noMilestone") || '无里程碑'}</option>`;
+            }
+
             if (!projectId) return;
             try {
+                // 加载状态
                 const statuses = await this.projectManager.getProjectKanbanStatuses(projectId);
                 if (statuses && statuses.length > 0 && batchStatusSelector) {
-                    // 排除已完成状态（id === 'completed'）
                     statuses
                         .filter(s => s.id !== 'completed')
                         .forEach(s => {
@@ -636,8 +713,8 @@ class SmartBatchDialog {
                             opt.text = `${s.icon || ''} ${s.name || s.id}`;
                             batchStatusSelector.appendChild(opt);
                         });
-                    // 如果过滤后仍有选项则显示
                     if (batchStatusSelector.options.length > 1) {
+                        // 状态选择器将显示在单独一行，由 render 中的 UI 布局控制
                         batchStatusSelector.style.display = '';
                         if (batchApplyStatusBtn) {
                             batchApplyStatusBtn.style.display = '';
@@ -645,8 +722,66 @@ class SmartBatchDialog {
                         }
                     }
                 }
+
+                // 加载自定义分组
+                try {
+                    const groups = await this.projectManager.getProjectCustomGroups(projectId);
+                    if (groups && groups.length > 0 && batchGroupSelector) {
+                        groups.forEach(g => {
+                            const opt = document.createElement('option');
+                            opt.value = g.id;
+                            opt.text = g.name || g.id;
+                            batchGroupSelector.appendChild(opt);
+                        });
+                        batchGroupSelector.style.display = '';
+                    }
+                } catch (err) {
+                    console.warn('加载项目自定义分组失败:', err);
+                }
+
+                // 加载项目级里程碑（过滤掉已归档的）
+                try {
+                    const milestones = await this.projectManager.getProjectMilestones(projectId) || [];
+                    const activeMilestones = milestones.filter(m => !m.archived);
+                    if (activeMilestones.length > 0 && batchMilestoneSelector) {
+                        activeMilestones.forEach(m => {
+                            const opt = document.createElement('option');
+                            opt.value = m.id;
+                            opt.text = m.name || m.id;
+                            batchMilestoneSelector.appendChild(opt);
+                        });
+                        batchMilestoneSelector.style.display = '';
+                    }
+                } catch (err) {
+                    console.warn('加载项目里程碑失败:', err);
+                }
+
+                // 当选择某个分组时加载该分组下的里程碑（如果有）
+                if (batchGroupSelector) {
+                    batchGroupSelector.addEventListener('change', async () => {
+                        const gid = batchGroupSelector.value;
+                        if (!gid) return;
+                        try {
+                            const groupMilestones = await this.projectManager.getGroupMilestones(projectId, gid);
+                            if (groupMilestones && groupMilestones.length > 0 && batchMilestoneSelector) {
+                                // 清空并添加分组里程碑（过滤掉已归档）
+                                batchMilestoneSelector.innerHTML = `<option value="">${i18n("noMilestone") || '无里程碑'}</option>`;
+                                groupMilestones.filter(m => !m.archived).forEach(m => {
+                                    const opt = document.createElement('option');
+                                    opt.value = m.id;
+                                    opt.text = m.name || m.id;
+                                    batchMilestoneSelector.appendChild(opt);
+                                });
+                                batchMilestoneSelector.style.display = '';
+                            }
+                        } catch (err) {
+                            console.warn('加载分组里程碑失败:', err);
+                        }
+                    });
+                }
+
             } catch (error) {
-                console.error('加载项目状态失败:', error);
+                console.error('加载项目状态/分组/里程碑失败:', error);
             }
         });
 
@@ -904,6 +1039,8 @@ class SmartBatchDialog {
             priority: setting.priority,
             categoryId: setting.categoryId || undefined,
             projectId: setting.projectId || undefined,
+            customGroupId: setting.customGroupId || undefined,
+            milestoneId: setting.milestoneId || undefined,
             kanbanStatus: setting.kanbanStatus || undefined,
             note: setting.note,
             repeat: setting.repeatConfig?.enabled ? setting.repeatConfig : undefined,
@@ -927,6 +1064,8 @@ class SmartBatchDialog {
                     setting.priority = modifiedReminder.priority || 'none';
                     setting.categoryId = modifiedReminder.categoryId || '';
                     setting.projectId = modifiedReminder.projectId || '';
+                    setting.customGroupId = modifiedReminder.customGroupId || '';
+                    setting.milestoneId = modifiedReminder.milestoneId || '';
                     setting.kanbanStatus = modifiedReminder.kanbanStatus || '';
                     setting.note = modifiedReminder.note || '';
                     setting.repeatConfig = modifiedReminder.repeat || {
@@ -1122,6 +1261,12 @@ class SmartBatchDialog {
             const setting = this.blockSettings.get(blockId);
             if (setting) {
                 setting.projectId = projectId;
+                const groupSelector = dialog.element.querySelector('#batchGroupSelector') as HTMLSelectElement;
+                const milestoneSelector = dialog.element.querySelector('#batchMilestoneSelector') as HTMLSelectElement;
+                const gid = groupSelector?.value || '';
+                const mid = milestoneSelector?.value || '';
+                setting.customGroupId = gid || '';
+                setting.milestoneId = mid || '';
             }
         });
 
@@ -1180,12 +1325,13 @@ class SmartBatchDialog {
         const blockPriority = blockItem.querySelector('.block-priority') as HTMLElement;
         const blockProject = blockItem.querySelector('.block-project') as HTMLElement;
         const blockStatus = blockItem.querySelector('.block-project-status .block-status') as HTMLElement;
+        const blockMilestone = blockItem.querySelector('.block-milestone') as HTMLElement;
 
         if (blockDate) blockDate.textContent = dateDisplay;
         if (blockTime) blockTime.textContent = timeDisplay;
         if (blockCategory) blockCategory.innerHTML = this.getCategoryDisplay(setting.categoryId);
         if (blockPriority) blockPriority.innerHTML = this.getPriorityDisplay(setting.priority);
-        if (blockProject) blockProject.innerHTML = this.getProjectDisplay(setting.projectId);
+        if (blockProject) blockProject.innerHTML = await this.getProjectDisplay(setting.projectId, setting.customGroupId);
 
         // 更新状态显示
         let statusDisplay = '';
@@ -1202,6 +1348,7 @@ class SmartBatchDialog {
             }
         }
         if (blockStatus) blockStatus.innerHTML = statusDisplay;
+        if (blockMilestone) blockMilestone.innerHTML = setting.milestoneId ? await this.getMilestoneDisplay(setting.projectId, setting.milestoneId) : '';
     }
 
     private showLoadingDialog(message: string) {
@@ -1281,6 +1428,8 @@ class SmartBatchDialog {
                     reminder.priority = setting.priority;
                     reminder.categoryId = setting.categoryId || undefined;
                     reminder.projectId = setting.projectId || undefined;
+                    if (setting.customGroupId) reminder.customGroupId = setting.customGroupId;
+                    if (setting.milestoneId) reminder.milestoneId = setting.milestoneId;
                     if (setting.kanbanStatus) reminder.kanbanStatus = setting.kanbanStatus;
                     reminder.repeat = setting.repeatConfig?.enabled ? setting.repeatConfig : undefined;
 
@@ -1405,6 +1554,8 @@ interface BlockSetting {
     priority: string;
     categoryId: string;
     projectId?: string;
+    customGroupId?: string;
+    milestoneId?: string;
     kanbanStatus?: string;
     note: string;
     repeatConfig: RepeatConfig;

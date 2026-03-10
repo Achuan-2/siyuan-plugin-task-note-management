@@ -1912,5 +1912,6 @@
     "andMoreTasks": "... 还有 ${count} 个任务",
     "noMilestones": "暂无里程碑",
     "pleaseInputDateTimeDesc": "请输入日期时间描述",
-    "mergeProject": "合并项目"
+    "mergeProject": "合并项目",
+    "batchSetStatus": "批量设置状态"
 }
