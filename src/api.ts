@@ -707,7 +707,7 @@ export async function sendNotification(title: string, body: string, delayInSecon
         channel: i18n('name'),
         title: title,
         body: body,
-        delay: delayInSeconds,
+        delayInSeconds: delayInSeconds,
         timeoutType: timeoutType,
     });
 }
