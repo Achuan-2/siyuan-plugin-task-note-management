@@ -2893,9 +2893,13 @@ export class QuickReminderDialog {
 
         // 只在编辑模式下，如果设置了开始但未设置结束，才使用持续天数来自动填充结束日期
         // 新建任务时不自动填充，除非用户手动修改了持续天数
+        // 对于仅有固定时间的单次事件，不应自动添加 endDate，这里增加判断以避免误添加
         if (this.mode === 'edit' && startDateInput && startDateInput.value && endDateInput && !endDateInput.value && durationInput) {
-            const days = parseInt(durationInput.value || '1') || 1;
-            endDateInput.value = this.addDaysToDate(startDateInput.value, days - 1);
+            const shouldAutoFill = (this.reminder && this.reminder.endDate) || this.isTimeRange || this.durationManuallyChanged;
+            if (shouldAutoFill) {
+                const days = parseInt(durationInput.value || '1') || 1;
+                endDateInput.value = this.addDaysToDate(startDateInput.value, days - 1);
+            }
         }
 
         // 当开始日期变化，更新结束日期的最小值与自动计算
