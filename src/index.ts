@@ -3534,15 +3534,15 @@ export default class ReminderPlugin extends Plugin {
                 const categoryText = (categoryInfo as any).categoryName ? ` [${(categoryInfo as any).categoryName}]` : '';
                 let timeText = '';
                 if (displayChosen) {
-                    timeText = ` ⏰${displayChosen}`;
+                    timeText = `${displayChosen}`;
                 } else if (triggerField === 'time' && reminder.time) {
                     const dt = this.extractDateAndTime(reminder.time);
-                    timeText = ` ${dt.time || reminder.time}`;
+                    timeText = `${dt.time || reminder.time}`;
                 } else if (reminder.customReminderTime) {
                     const dt = this.extractDateAndTime(reminder.customReminderTime);
-                    timeText = ` ⏰${dt.time || reminder.customReminderTime}`;
+                    timeText = `${dt.time || reminder.customReminderTime}`;
                 }
-                const message = `${reminderInfo.title}${categoryText}${timeText}`;
+                const message = `${timeText} ${reminderInfo.title}${categoryText}`;
 
                 this.showReminderSystemNotification(title, message, reminderInfo);
             }
