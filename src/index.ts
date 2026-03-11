@@ -155,8 +155,8 @@ export const DEFAULT_SETTINGS = {
     // 番茄钟
     dailyFocusGoal: 6,
     workVolume: 0.5,
-    breakVolume: 1,
-    longBreakVolume: 1,
+    breakVolume: 0.5,
+    longBreakVolume: 0.5,
     workEndVolume: 0.5,
     breakEndVolume: 0.5,
     randomRestVolume: 0.5,
