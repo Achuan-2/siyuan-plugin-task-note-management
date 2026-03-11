@@ -1205,12 +1205,13 @@
 }
 
 // 修复 fc-more-popover 超出日历右边界的问题
-.reminder-calendar-container .fc-popover {
+.reminder-calendar-container.fc .fc-popover {
     max-width: calc(100% - 8px); // 限制弹出框最大宽度不超出容器
+    z-index: 10 !important;
 }
 
 // 修改日历样式以适应思源主题
-.fc {
+.reminder-calendar-container.fc {
     --fc-border-color: var(--b3-border-color);
     --fc-button-bg-color: var(--b3-theme-primary);
     --fc-button-border-color: var(--b3-theme-primary);
@@ -1223,8 +1224,8 @@
 }
 
 // 选择时的临时事件样式（无优先级样式）
-.fc-event-mirror,
-.fc-highlight {
+.reminder-calendar-container.fc .fc-event-mirror,
+.reminder-calendar-container.fc .fc-highlight {
     border-color: var(--b3-theme-surface-lighter) !important;
     background-color: var(--b3-theme-surface-lighter) !important;
     background-color: color-mix(in srgb, var(--b3-theme-surface-lighter), transparent 70%) !important;
@@ -1236,17 +1237,17 @@
     }
 }
 
-.fc .fc-button {
+.reminder-calendar-container.fc .fc-button {
     font-family: inherit;
 }
 
-.fc .fc-jumpTo-button {
+.reminder-calendar-container.fc .fc-jumpTo-button {
     display: inline-flex !important;
     align-items: center;
     justify-content: center;
 }
 
-.fc-event-title {
+.reminder-calendar-container.fc .fc-event-title {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
