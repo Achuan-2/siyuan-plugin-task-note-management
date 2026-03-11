@@ -8,6 +8,16 @@
 - 📝 vip：明确月会员为30天
 - 🎨 系统通知：适配思源v3.5.10
 
+---
+
+- 🎨 Multi-select block batch task creation: Supports setting groups and milestones
+- 🎨 Multi-select block batch task creation: Optimized performance, no longer calls exportMdContent to retrieve titles and notes
+- 🎨 Task sidebar: Dragging to sort parent tasks also moves child tasks accordingly
+- 🎨 Pomodoro Timer: Mini mode optimization
+- 🎨 Installing plugins no longer automatically creates configuration files to prevent data loss due to synchronization
+- 🐛 Calendar view editing fixed-time tasks with 'time' set but no 'endDate' and 'endTime' incorrectly adds 'endDate' during editing
+- 📝 VIP: Clarifies that monthly membership is for 30 days
+- 🎨 System notifications: Adapted for SiYuan v3.5.10
 
 ## v6.2.7 / 20260309
 - 🎨 番茄钟：全局番茄钟mini模式支持调整大小
