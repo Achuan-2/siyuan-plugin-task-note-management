@@ -792,16 +792,34 @@ export default class ReminderPlugin extends Plugin {
                     // 有实例且相关设置发生改变，进行更新
                     let updatedCount = 0;
                     if (currentPomodoro && typeof currentPomodoro.getCurrentState === 'function' && typeof currentPomodoro.updateState === 'function') {
-                        const state = currentPomodoro.getCurrentState();
-                        // 强制更新，即使正在运行
-                        const reminder = { id: state.reminderId, title: state.reminderTitle };
-                        await currentPomodoro.updateState(reminder, pomodoroSettings, state.isCountUp, state, true, true);
-                        updatedCount++;
+                        // 先检查窗口是否仍然存在，避免操作已销毁的 BrowserWindow
+                        if (typeof currentPomodoro.isWindowActive === 'function' && !currentPomodoro.isWindowActive()) {
+                            // 窗口已失效，清理引用，不再尝试更新
+                            PomodoroManager.getInstance().cleanupInactiveTimer();
+                        } else {
+                            try {
+                                const state = currentPomodoro.getCurrentState();
+                                // 强制更新，即使正在运行
+                                const reminder = { id: state.reminderId, title: state.reminderTitle };
+                                await currentPomodoro.updateState(reminder, pomodoroSettings, state.isCountUp, state, true, true);
+                                updatedCount++;
+                            } catch (e) {
+                                console.warn('更新独立番茄钟窗口设置失败:', e);
+                                // 如果是 BrowserWindow 已销毁导致的错误，清理引用
+                                if (e?.message?.includes('destroyed') || e?.message?.includes('Object has been destroyed')) {
+                                    PomodoroManager.getInstance().cleanupInactiveTimer();
+                                }
+                            }
+                        }
                     }
 
                     for (const [, view] of this.tabViews) {
                         if (view && typeof view.updateState === 'function' && typeof view.getCurrentState === 'function') {
                             try {
+                                // 同样检查 Tab 中的番茄钟窗口是否有效
+                                if (typeof view.isWindowActive === 'function' && !view.isWindowActive()) {
+                                    continue;
+                                }
                                 const state = view.getCurrentState();
                                 // 强制更新，即使正在运行
                                 const reminder = { id: state.reminderId, title: state.reminderTitle };
