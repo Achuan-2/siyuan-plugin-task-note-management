@@ -33,7 +33,7 @@
     "rollup-plugin-livereload": "^2.0.5",
     "sass": "^1.89.2",
     "sass-loader": "^16.0.5",
-    "siyuan": "1.1.7",
+    "siyuan": "1.1.8",
     "svelte": "^4.2.19",
     "ts-node": "^10.9.1",
     "typescript": "^5.1.3",
