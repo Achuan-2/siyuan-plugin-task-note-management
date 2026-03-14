@@ -736,7 +736,6 @@ export async function sendNotification(
             }
         }
     }
-    console.log(`sendNotification: title="${title}", body="${body}", delayInSeconds=${delayInSeconds}, timeoutType=${timeoutType}`);
     return platformUtils.sendNotification({
         channel: i18n('name'),
         title: title,
