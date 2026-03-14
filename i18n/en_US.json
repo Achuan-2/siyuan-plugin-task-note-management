@@ -522,6 +522,8 @@
     "pomodoroSystemNotificationDesc": "Show system notification popup when pomodoro session ends",
     "reminderSystemNotification": "Reminder System Notification",
     "reminderSystemNotificationDesc": "Show system notification popup when events are due, supports clicking to jump to related blocks",
+    "showInternalNotification": "Show Internal Notification",
+    "showInternalNotificationDesc": "Show internal notification dialog when task/habit reminder triggers",
     "dailyNotificationTime": "Daily Notification Time",
     "dailyNotificationTimeDesc": "Set the time of day (HH:MM) to show daily reminders (e.g., '09:00'); default is 08:00",
     "dailyNotificationEnabled": "Enable Daily Unified Notification",

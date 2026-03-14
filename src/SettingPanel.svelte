@@ -405,6 +405,13 @@
                     description: i18n('reminderSystemNotificationDesc'),
                 },
                 {
+                    key: 'showInternalNotification',
+                    value: settings.showInternalNotification,
+                    type: 'checkbox',
+                    title: i18n('showInternalNotification'),
+                    description: i18n('showInternalNotificationDesc'),
+                },
+                {
                     key: 'dailyNotificationTime',
                     value: settings.dailyNotificationTime,
                     type: 'textinput',
