@@ -555,26 +555,75 @@ export class BlockRemindersDialog {
         if (!reminder.date) return null;
 
         const now = new Date();
-        const targetDate = new Date(reminder.date + (reminder.time ? 'T' + reminder.time : ''));
-        const diffMs = targetDate.getTime() - now.getTime();
-        const diffDays = Math.ceil(diffMs / (24 * 60 * 60 * 1000));
-
-        if (diffDays < 0) return null; // 已过期
+        
+        // 判断是否设置了结束日期（与开始日期不同）
+        const hasEndDate = reminder.endDate && reminder.endDate !== reminder.date;
+        
+        // 计算开始日期的差值
+        const startDate = new Date(reminder.date + (reminder.time ? 'T' + reminder.time : ''));
+        const startDiffMs = startDate.getTime() - now.getTime();
+        const startDiffDays = Math.ceil(startDiffMs / (24 * 60 * 60 * 1000));
+        
+        // 计算结束日期的差值（如果有）
+        let endDiffDays: number | null = null;
+        if (hasEndDate) {
+            const endDate = new Date(reminder.endDate + (reminder.endTime ? 'T' + reminder.endTime : ''));
+            const endDiffMs = endDate.getTime() - now.getTime();
+            endDiffDays = Math.ceil(endDiffMs / (24 * 60 * 60 * 1000));
+        }
 
         const countdownEl = document.createElement('span');
         countdownEl.className = 'reminder-countdown';
         countdownEl.style.cssText = 'font-size: 11px; color: var(--b3-theme-on-surface-light); background: rgba(0,0,0,0.05); padding: 2px 6px; border-radius: 10px;';
 
-        if (diffDays === 0) {
-            countdownEl.textContent = i18n("dueToday") || '今天到期';
-            countdownEl.style.background = 'rgba(255, 193, 7, 0.1)';
-            countdownEl.style.color = '#ffc107';
-        } else if (diffDays === 1) {
-            countdownEl.textContent = i18n("tomorrowDeadline") || '明天到期';
-        } else if (diffDays <= 7) {
-            countdownEl.textContent = i18n("deadlineInNDays")?.replace("${days}", diffDays.toString()) || `${diffDays}天后`;
+        // 逻辑：
+        // 1. 开始日期在未来 -> 显示"X天后开始"
+        // 2. 开始日期已过去（或今天），有结束日期 -> 基于结束日期显示倒计时
+        // 3. 开始日期已过去，无结束日期 -> 显示逾期
+        
+        if (startDiffDays > 0) {
+            // 任务未开始
+            if (startDiffDays === 1) {
+                countdownEl.textContent = i18n("startsTomorrow") || '明天开始';
+            } else if (startDiffDays <= 7) {
+                countdownEl.textContent = (i18n("startsInNDays") || '${days}天后开始').replace("${days}", startDiffDays.toString());
+            } else {
+                return null; // 不显示太远的倒计时
+            }
         } else {
-            return null; // 不显示太远的倒计时
+            // 任务已开始（或今天开始）
+            if (endDiffDays !== null) {
+                // 有结束日期，基于结束日期计算
+                if (endDiffDays < 0) {
+                    const overdueDays = Math.abs(endDiffDays);
+                    countdownEl.textContent = (i18n("overdueNDays") || '逾期${days}天').replace("${days}", overdueDays.toString());
+                    countdownEl.style.background = 'rgba(244, 67, 54, 0.1)';
+                    countdownEl.style.color = '#f44336';
+                } else if (endDiffDays === 0) {
+                    countdownEl.textContent = i18n("dueToday") || '今天截止';
+                    countdownEl.style.background = 'rgba(255, 193, 7, 0.1)';
+                    countdownEl.style.color = '#ffc107';
+                } else if (endDiffDays === 1) {
+                    countdownEl.textContent = i18n("tomorrowDeadline") || '明天截止';
+                } else if (endDiffDays <= 7) {
+                    countdownEl.textContent = i18n("deadlineInNDays")?.replace("${days}", endDiffDays.toString()) || `${endDiffDays}天后截止`;
+                } else {
+                    return null;
+                }
+            } else {
+                // 无结束日期，基于开始日期判断是否逾期
+                if (startDiffDays < 0) {
+                    const overdueDays = Math.abs(startDiffDays);
+                    countdownEl.textContent = (i18n("overdueNDays") || '逾期${days}天').replace("${days}", overdueDays.toString());
+                    countdownEl.style.background = 'rgba(244, 67, 54, 0.1)';
+                    countdownEl.style.color = '#f44336';
+                } else {
+                    // startDiffDays === 0，今天开始且无结束日期
+                    countdownEl.textContent = i18n("dueToday") || '今天';
+                    countdownEl.style.background = 'rgba(255, 193, 7, 0.1)';
+                    countdownEl.style.color = '#ffc107';
+                }
+            }
         }
 
         return countdownEl;
@@ -604,9 +653,10 @@ export class BlockRemindersDialog {
             async () => {
                 // 用户确认删除
                 try {
+                    // 使用插件的 deleteReminder 方法，会自动取消移动端通知
+                    await this.plugin.deleteReminder(reminder.id);
+                    
                     const reminderData = await this.plugin.loadReminderData();
-                    delete reminderData[reminder.id];
-                    await this.plugin.saveReminderData(reminderData);
 
                     // 更新块的书签状态
                     await updateBindBlockAtrrs(this.blockId, this.plugin);
