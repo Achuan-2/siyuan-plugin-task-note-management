@@ -3344,8 +3344,11 @@ export class CalendarView {
 
                 if (reminderData[reminderId]) {
                     const blockId = reminderData[reminderId].blockId;
+                    // 取消移动端通知
+                    await this.plugin.cancelMobileNotification(reminderId);
                     delete reminderData[reminderId];
-
+                    // 触发更新事件
+                    window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
                     // 保存数据到存储
                     await saveReminders(this.plugin, reminderData);
 
@@ -3358,8 +3361,7 @@ export class CalendarView {
                         }
                     }
 
-                    // 触发更新事件
-                    window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
+
                     showMessage(i18n("reminderDeleted"));
                 }
             } catch (error) {

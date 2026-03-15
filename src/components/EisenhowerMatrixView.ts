@@ -1819,17 +1819,30 @@ export class EisenhowerMatrixView {
                 await this.toggleRepeatInstanceCompletion(task, completed);
             } else if (reminderData[task.id]) {
                 // 对于普通任务，使用原有逻辑
+                const completedTaskIds: string[] = [];
                 reminderData[task.id].completed = completed;
 
                 // 如果是完成任务，记录完成时间并自动完成所有子任务
                 if (completed) {
                     reminderData[task.id].completedTime = getLocalDateTimeString(new Date());
-                    await this.completeAllChildTasks(task.id, reminderData);
+                    const childIds = await this.completeAllChildTasks(task.id, reminderData);
+                    completedTaskIds.push(task.id, ...childIds);
                 } else {
                     delete reminderData[task.id].completedTime;
                 }
 
                 await saveReminders(this.plugin, reminderData);
+
+                // 取消已完成任务的移动端通知
+                if (completed && this.plugin?.cancelMobileNotification) {
+                    for (const taskId of completedTaskIds) {
+                        try {
+                            await this.plugin.cancelMobileNotification(taskId);
+                        } catch (e) {
+                            console.warn('取消移动端通知失败:', taskId, e);
+                        }
+                    }
+                }
 
                 // 更新本地缓存 this.allTasks 中对应任务的状态
                 const localTask = this.allTasks.find(t => t.id === task.id);
@@ -1886,6 +1899,7 @@ export class EisenhowerMatrixView {
             const instanceDate = task.date;
             const completedInstances = originalReminder.repeat.completedInstances;
 
+            const completedTaskIds: string[] = [];
             if (completed) {
                 // 添加到完成列表（如果还没有的话）
                 if (!completedInstances.includes(instanceDate)) {
@@ -1899,7 +1913,8 @@ export class EisenhowerMatrixView {
                 originalReminder.repeat.instanceCompletedTimes[instanceDate] = getLocalDateTimeString(new Date());
 
                 // [NEW] 递归完成该实例下的所有子任务实例
-                await this.completeAllChildInstances(task.originalId!, instanceDate, reminderData);
+                const childIds = await this.completeAllChildInstances(task.originalId!, instanceDate, reminderData);
+                completedTaskIds.push(task.id, ...childIds);
             } else {
                 // 从完成列表中移除
                 const index = completedInstances.indexOf(instanceDate);
@@ -1914,6 +1929,17 @@ export class EisenhowerMatrixView {
             }
 
             await saveReminders(this.plugin, reminderData);
+
+            // 取消已完成任务的移动端通知
+            if (completed && this.plugin?.cancelMobileNotification) {
+                for (const taskId of completedTaskIds) {
+                    try {
+                        await this.plugin.cancelMobileNotification(taskId);
+                    } catch (e) {
+                        console.warn('取消移动端通知失败:', taskId, e);
+                    }
+                }
+            }
 
             // 更新本地缓存
             const localTask = this.allTasks.find(t => t.id === task.id);
@@ -1985,7 +2011,9 @@ export class EisenhowerMatrixView {
      * @param date 实例日期
      * @param reminderData 任务数据
      */
-    private async completeAllChildInstances(parentId: string, date: string, reminderData: any): Promise<void> {
+    private async completeAllChildInstances(parentId: string, date: string, reminderData: any): Promise<string[]> {
+        const completedTaskIds: string[] = [];
+        
         // 1. 处理 Ghost 子任务 (基于 originalId 的后代)
         const ghostChildren = (Object.values(reminderData) as any[]).filter((r: any) => r.parentId === parentId);
 
@@ -2016,7 +2044,10 @@ export class EisenhowerMatrixView {
         // 2. 处理普通子任务 (直接绑定到 instanceId 的后代)
         // 这些是该特定实例下创建的非重复子任务，它们的 parentId 是 parentId_date
         const instanceId = `${parentId}_${date}`;
-        await this.completeAllChildTasks(instanceId, reminderData);
+        const childIds = await this.completeAllChildTasks(instanceId, reminderData);
+        completedTaskIds.push(...childIds);
+        
+        return completedTaskIds;
     }
 
     /**
@@ -2024,13 +2055,14 @@ export class EisenhowerMatrixView {
      * @param parentId 父任务ID
      * @param reminderData 任务数据
      */
-    private async completeAllChildTasks(parentId: string, reminderData: any): Promise<void> {
+    private async completeAllChildTasks(parentId: string, reminderData: any): Promise<string[]> {
+        const completedTaskIds: string[] = [];
         try {
             // 获取所有子任务ID（递归获取所有后代）
             const descendantIds = this.getAllDescendantIds(parentId, reminderData);
 
             if (descendantIds.length === 0) {
-                return; // 没有子任务，直接返回
+                return completedTaskIds; // 没有子任务，返回空数组
             }
 
             const currentTime = getLocalDateTimeString(new Date());
@@ -2043,6 +2075,7 @@ export class EisenhowerMatrixView {
                     childTask.completed = true;
                     childTask.completedTime = currentTime;
                     completedCount++;
+                    completedTaskIds.push(childId);
                 }
             }
 
@@ -2054,6 +2087,7 @@ export class EisenhowerMatrixView {
             console.error('自动完成子任务失败:', error);
             // 不要阻止父任务的完成，只是记录错误
         }
+        return completedTaskIds;
     }
 
     /**
@@ -2137,6 +2171,8 @@ export class EisenhowerMatrixView {
 
             for (const [taskId, reminder] of Object.entries(reminderData as any)) {
                 if (reminder && typeof reminder === 'object' && (reminder as any).blockId === blockId) {
+                    // 取消移动端通知
+                    await this.plugin.cancelMobileNotification(taskId);
                     delete reminderData[taskId];
                     taskFound = true;
                 }
@@ -3464,12 +3500,14 @@ export class EisenhowerMatrixView {
 
                     // 删除所有相关任务
                     let deletedCount = 0;
-                    taskIdsToDelete.forEach(taskId => {
+                    for (const taskId of taskIdsToDelete) {
                         if (reminderData[taskId]) {
+                            // 取消移动端通知
+                            await this.plugin.cancelMobileNotification(taskId);
                             delete reminderData[taskId];
                             deletedCount++;
                         }
-                    });
+                    };
 
                     if (deletedCount > 0) {
                         await saveReminders(this.plugin, reminderData);

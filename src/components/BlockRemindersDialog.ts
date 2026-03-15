@@ -597,16 +597,18 @@ export class BlockRemindersDialog {
                 if (endDiffDays < 0) {
                     const overdueDays = Math.abs(endDiffDays);
                     countdownEl.textContent = (i18n("overdueNDays") || '逾期${days}天').replace("${days}", overdueDays.toString());
-                    countdownEl.style.background = 'rgba(244, 67, 54, 0.1)';
-                    countdownEl.style.color = '#f44336';
+                    countdownEl.style.background = 'var(--b3-card-error-background)';
+                    countdownEl.style.color = 'var(--b3-card-error-color)';
                 } else if (endDiffDays === 0) {
                     countdownEl.textContent = i18n("dueToday") || '今天截止';
-                    countdownEl.style.background = 'rgba(255, 193, 7, 0.1)';
-                    countdownEl.style.color = '#ffc107';
+                    countdownEl.style.background = 'var(--b3-card-warning-background)';
+                    countdownEl.style.color = 'var(--b3-card-warning-color)';
                 } else if (endDiffDays === 1) {
                     countdownEl.textContent = i18n("tomorrowDeadline") || '明天截止';
                 } else if (endDiffDays <= 7) {
                     countdownEl.textContent = i18n("deadlineInNDays")?.replace("${days}", endDiffDays.toString()) || `${endDiffDays}天后截止`;
+                    countdownEl.style.background = 'var(--b3-font-background4)';
+                    countdownEl.style.color = 'var(--b3-font-color4)';
                 } else {
                     return null;
                 }
@@ -615,13 +617,13 @@ export class BlockRemindersDialog {
                 if (startDiffDays < 0) {
                     const overdueDays = Math.abs(startDiffDays);
                     countdownEl.textContent = (i18n("overdueNDays") || '逾期${days}天').replace("${days}", overdueDays.toString());
-                    countdownEl.style.background = 'rgba(244, 67, 54, 0.1)';
-                    countdownEl.style.color = '#f44336';
+                    countdownEl.style.background = 'var(--b3-card-error-background)';
+                    countdownEl.style.color = 'var(--b3-card-error-color)';
                 } else {
                     // startDiffDays === 0，今天开始且无结束日期
                     countdownEl.textContent = i18n("dueToday") || '今天';
-                    countdownEl.style.background = 'rgba(255, 193, 7, 0.1)';
-                    countdownEl.style.color = '#ffc107';
+                    countdownEl.style.background = 'var(--b3-card-warning-background)';
+                    countdownEl.style.color = 'var(--b3-card-warning-color)';
                 }
             }
         }

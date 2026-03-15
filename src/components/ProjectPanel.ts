@@ -2141,13 +2141,15 @@ export class ProjectPanel {
                 let deletedCount = 0;
 
                 // 删除所有关联的任务
-                Object.keys(reminderData).forEach(reminderId => {
+                for (const reminderId of Object.keys(reminderData)) {
                     const reminder = reminderData[reminderId];
                     if (reminder && reminder.projectId === projectId) {
+                        // 取消移动端通知
+                        await this.plugin.cancelMobileNotification(reminderId);
                         delete reminderData[reminderId];
                         deletedCount++;
                     }
-                });
+                };
 
                 if (deletedCount > 0) {
                     await this.plugin.saveReminderData(reminderData);

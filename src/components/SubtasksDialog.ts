@@ -759,13 +759,17 @@ export class SubtasksDialog {
         // 定义执行删除的函数
         const doDelete = async () => {
             // Recursive delete
-            const deleteRecursive = (idToDelete: string) => {
+            const deleteRecursive = async (idToDelete: string) => {
                 const children = (Object.values(reminderData) as any[]).filter((r: any) => r.parentId === idToDelete);
-                children.forEach((child: any) => deleteRecursive(child.id));
+                for (const child of children) {
+                    await deleteRecursive(child.id);
+                }
+                // 取消移动端通知
+                await this.plugin.cancelMobileNotification(idToDelete);
                 delete reminderData[idToDelete];
             };
 
-            deleteRecursive(targetId);
+            await deleteRecursive(targetId);
             await this.plugin.saveReminderData(reminderData);
             await this.loadSubtasks();
             this.renderSubtasks();

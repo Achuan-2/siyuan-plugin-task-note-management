@@ -1,6 +1,6 @@
 import { showMessage, confirm, getFrontend, getBackend, Dialog } from "siyuan";
 import { PomodoroRecordManager } from "../utils/pomodoroRecord";
-import { getBlockByID, openBlock, sendNotification } from "../api";
+import { getBlockByID, openBlock, sendNotification, cancelNotification } from "../api";
 import { i18n } from "../pluginInstance";
 import { resolveAudioPath } from "../utils/audioUtils";
 
@@ -116,6 +116,7 @@ export class PomodoroTimer {
     private isDocked: boolean = false; // BrowserWindow 吸附模式状态
     private normalWindowBounds: { x: number; y: number; width: number; height: number } | null = null; // 保存正常窗口位置和大小
     private inheritedWindowBounds: { x: number; y: number; width: number; height: number } | null = null; // 继承的窗口位置信息
+    private scheduledNotificationIds: number[] = []; // 已调度的移动端通知ID列表
 
     constructor(reminder: any, settings: any, isCountUp: boolean = false, inheritState?: any, plugin?: any, container?: HTMLElement, orphanedWindow?: any) {
         this.reminder = reminder;
@@ -4418,6 +4419,8 @@ export class PomodoroTimer {
             this.updateDisplay();
         }, 500);
 
+        // 调度移动端通知
+        this.scheduleAllMobileNotifications();
 
         // 更新显示
         this.updateDisplay();
@@ -4437,7 +4440,8 @@ export class PomodoroTimer {
         // 停止随机微休息定时器
         this.stopRandomRestTimer();
 
-        // 暂停所有背景音
+        // 停止移动端通知并停止音频
+        this.cancelAllMobileNotifications();
         this.stopAllAudio();
 
         // 更新显示
@@ -4515,6 +4519,9 @@ export class PomodoroTimer {
             this.updateDisplay();
         }, 500);
 
+        // 调度移动端通知
+        this.scheduleAllMobileNotifications();
+
         // 更新显示
         this.updateDisplay();
     }
@@ -4531,6 +4538,7 @@ export class PomodoroTimer {
 
         this.stopAllAudio();
         this.stopRandomRestTimer(); // 停止随机微休息
+        this.cancelAllMobileNotifications(); // 取消移动端通知
 
         this.isWorkPhase = true;
         this.isLongBreak = false;
@@ -4569,6 +4577,7 @@ export class PomodoroTimer {
 
         this.stopAllAudio();
         this.stopRandomRestTimer(); // 停止随机微休息
+        this.cancelAllMobileNotifications(); // 取消移动端通知
 
         this.isWorkPhase = false;
         this.isLongBreak = false;
@@ -4606,6 +4615,7 @@ export class PomodoroTimer {
 
         this.stopAllAudio();
         this.stopRandomRestTimer(); // 停止随机微休息
+        this.cancelAllMobileNotifications(); // 取消移动端通知
 
         this.isWorkPhase = false;
         this.isLongBreak = true;
@@ -4724,6 +4734,7 @@ export class PomodoroTimer {
 
         this.stopAllAudio();
         this.stopRandomRestTimer(); // 停止随机微休息
+        this.cancelAllMobileNotifications(); // 取消移动端通知
 
         if (this.isCountUp) {
             this.timeElapsed = 0;
@@ -4787,7 +4798,7 @@ export class PomodoroTimer {
      * 注意：调用方负责检查各自的通知开关（systemNotificationEnabled / randomRestSystemNotificationEnabled），
      * 本函数不做统一拦截，避免随机微休息通知被番茄钟通知开关错误屏蔽。
      */
-    private showSystemNotification(title: string, message: string, autoCloseDelay?: number) {
+    private async showSystemNotification(title: string, message: string, autoCloseDelay?: number, scheduledTime?: Date | string): Promise<number | undefined> {
         // 判断是否是移动端
         const isMobileDevice = getFrontend().endsWith('mobile') || getBackend().endsWith('android') || getBackend().endsWith('ios') || getBackend().endsWith('harmony');
 
@@ -4795,7 +4806,11 @@ export class PomodoroTimer {
         if (isMobileDevice) {
             // 手机端：使用内核接口进行系统通知
             try {
-                sendNotification(title, message);
+                if (scheduledTime) {
+                    return await sendNotification(title, message, scheduledTime);
+                } else {
+                    return await sendNotification(title, message);
+                }
             } catch (error) {
                 console.warn('手机端发送系统通知失败:', error);
             }
@@ -4829,9 +4844,117 @@ export class PomodoroTimer {
         }
     }
 
+    /**
+     * 取消所有已调度的移动端系统通知
+     */
+    private cancelAllMobileNotifications() {
+        if (this.scheduledNotificationIds.length > 0) {
+            this.scheduledNotificationIds.forEach(id => {
+                try {
+                    cancelNotification(id);
+                } catch (e) {
+                    console.warn(`[PomodoroTimer] 取消移动端通知失败: id=${id}`, e);
+                }
+            });
+            this.scheduledNotificationIds = [];
+        }
+    }
+
+    /**
+     * 调度番茄钟相关的移动端系统通知
+     */
+    private async scheduleAllMobileNotifications() {
+        // 先清理旧通知
+        this.cancelAllMobileNotifications();
+
+        // 检查开关
+        if (!this.systemNotificationEnabled) return;
+
+        // 仅移动端调度
+        const isMobileDevice = getFrontend().endsWith('mobile') || getBackend().endsWith('android') || getBackend().endsWith('ios') || getBackend().endsWith('harmony');
+        if (!isMobileDevice) return;
+
+        const now = Date.now();
+
+        try {
+            if (this.isWorkPhase) {
+                // 1. 调度番茄钟结束通知 (倒计时模式)
+                if (!this.isCountUp && this.timeLeft > 0) {
+                    const scheduledTime = new Date(now + this.timeLeft * 1000);
+                    const title = `🍅 ${i18n('pomodoroWorkEnd') || '工作时间结束！'}`;
+                    const eventTitle = this.reminder.title || (i18n('pomodoroFocusDefault') || '番茄专注');
+                    const message = `「${eventTitle}」${i18n('pomodoroWorkEndDesc') || '的工作时间已结束，是时候休息一下了！'}`;
+
+                    const id = await this.showSystemNotification(title, message, undefined, scheduledTime);
+                    if (typeof id === 'number') this.scheduledNotificationIds.push(id);
+                }
+
+                // 2. 调度微休息通知
+                if (this.randomRestEnabled) {
+                    const minInterval = (Number(this.settings.randomRestMinInterval) || 1) * 60 * 1000;
+                    const maxInterval = (Number(this.settings.randomRestMaxInterval) || 1) * 60 * 1000;
+                    const breakDuration = (Number(this.settings.randomRestBreakDuration) || 0) * 1000;
+                    const totalWorkMs = this.settings.workDuration * 60 * 1000;
+                    const workRemainingMs = this.isCountUp ? (totalWorkMs - this.timeElapsed * 1000) : (this.timeLeft * 1000);
+                    const workEndTime = now + workRemainingMs;
+
+                    let currentTime = now;
+                    // 循环预生成该工作阶段内所有的微休息
+                    while (true) {
+                        const randomInterval = minInterval + Math.random() * (Math.max(minInterval, maxInterval) - minInterval);
+                        currentTime += randomInterval;
+
+                        if (currentTime < workEndTime - 60000) { // 至少离结束还有1分钟才调度微休息
+                            const startTime = new Date(currentTime);
+                            const endTime = new Date(currentTime + breakDuration);
+
+                            // 微休息开始通知
+                            const startId = await this.showSystemNotification(
+                                i18n('randomRestSettings'),
+                                i18n('randomRest', { duration: this.settings.randomRestBreakDuration }),
+                                this.randomRestAutoClose ? this.randomRestAutoCloseDelay : undefined,
+                                startTime
+                            );
+                            if (typeof startId === 'number') this.scheduledNotificationIds.push(startId);
+
+                            // 微休息结束通知
+                            const endId = await this.showSystemNotification(
+                                i18n('randomRestSettings'),
+                                i18n('randomRestComplete') || '微休息时间结束，可以继续专注工作了！',
+                                this.randomRestAutoClose ? this.randomRestAutoCloseDelay : undefined,
+                                endTime
+                            );
+                            if (typeof endId === 'number') this.scheduledNotificationIds.push(endId);
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            } else {
+                // 休息阶段：调度休息结束通知
+                const breakTimeLeftMs = this.isCountUp ? (this.breakTimeLeft * 1000) : (this.timeLeft * 1000);
+                if (breakTimeLeftMs > 0) {
+                    const scheduledTime = new Date(now + breakTimeLeftMs);
+                    const breakType = this.isLongBreak ? (i18n('pomodoroLongBreak') || '长时休息') : (i18n('pomodoroBreak') || '短时休息');
+                    const title = `☕ ${breakType}结束！`;
+                    const eventTitle = this.reminder.title || (i18n('pomodoroFocusDefault') || '番茄专注');
+                    const message = `「${eventTitle}」的${breakType}已结束，准备开始下一个专注阶段吧！`;
+
+                    const id = await this.showSystemNotification(title, message, undefined, scheduledTime);
+                    if (typeof id === 'number') this.scheduledNotificationIds.push(id);
+                }
+            }
+        } catch (e) {
+            console.warn('[PomodoroTimer] 调度移动端通知失败:', e);
+        }
+    }
+
 
     // 完成番茄阶段（正计时模式）
     private async completePomodoroPhase() {
+        // 先取消所有已调度的移动端通知
+        this.cancelAllMobileNotifications();
+
         // 防重入
         if (this.isCompletingPhase) {
             console.warn('[PomodoroTimer] completePomodoroPhase 重入被阻止');
@@ -4928,6 +5051,9 @@ export class PomodoroTimer {
 
     // 完成休息阶段（正计时模式）
     private async completeBreakPhase() {
+        // 先取消所有已调度的移动端通知
+        this.cancelAllMobileNotifications();
+
         // 防重入
         if (this.isCompletingPhase) {
             console.warn('[PomodoroTimer] completeBreakPhase 重入被阻止');
@@ -5019,6 +5145,9 @@ export class PomodoroTimer {
 
     // 完成阶段（倒计时模式）
     private async completePhase() {
+        // 先取消所有已调度的移动端通知
+        this.cancelAllMobileNotifications();
+
         // 防重入：避免 async 执行期间 setInterval 再次触发
         if (this.isCompletingPhase) {
             console.warn('[PomodoroTimer] completePhase 重入被阻止');
@@ -5279,6 +5408,9 @@ export class PomodoroTimer {
             this.updateDisplay();
         }, 500);
 
+        // 调度移动端通知
+        this.scheduleAllMobileNotifications();
+
         this.updateDisplay();
         this.updateStatsDisplay();
 
@@ -5352,6 +5484,9 @@ export class PomodoroTimer {
             }
             this.updateDisplay();
         }, 500);
+
+        // 调度移动端通知
+        this.scheduleAllMobileNotifications();
 
         this.updateDisplay();
         this.updateStatsDisplay();

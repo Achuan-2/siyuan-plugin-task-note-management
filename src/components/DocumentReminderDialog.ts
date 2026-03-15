@@ -1232,8 +1232,11 @@ export class DocumentReminderDialog {
             throw new Error(i18n("reminderNotExistError"));
         }
 
+        
         // 直接删除提醒
         delete reminderData[reminderId];
+        // 取消移动端通知
+        await this.plugin.cancelMobileNotification(reminder.id);
     }
 
     /**

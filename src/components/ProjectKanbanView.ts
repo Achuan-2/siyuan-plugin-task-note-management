@@ -3454,6 +3454,8 @@ export class ProjectKanbanView {
                         // 删除所有任务
                         for (const task of tasksInGroup) {
                             const taskData = task as any;
+                            // 取消移动端通知
+                            await this.plugin.cancelMobileNotification(taskData.id);
                             delete reminderData[taskData.id];
                         }
                         showMessage(i18n('groupDeletedWithTasks', { count: String(tasksInGroup.length) }));
@@ -3475,8 +3477,8 @@ export class ProjectKanbanView {
                     }
 
                     // 保存任务数据
-                    await saveReminders(this.plugin, reminderData);
                     this.dispatchReminderUpdate(true);
+                    await saveReminders(this.plugin, reminderData);
                 } else {
                     showMessage(i18n('groupDeleted'));
                 }
@@ -10937,16 +10939,29 @@ export class ProjectKanbanView {
                             affectedBlockIds.add(task.blockId || task.docId);
                         }
 
+                        const completedTaskIds: string[] = [];
                         if (completed) {
                             reminderData[task.id].completedTime = getLocalDateTimeString(new Date());
                             // 父任务完成时，自动完成所有子任务
-                            await this.completeAllChildTasks(task.id, reminderData, affectedBlockIds);
+                            const childIds = await this.completeAllChildTasks(task.id, reminderData, affectedBlockIds);
+                            completedTaskIds.push(task.id, ...childIds);
                         } else {
                             delete reminderData[task.id].completedTime;
                             // 取消完成父任务时，通常不自动取消子任务
                         }
 
                         await saveReminders(this.plugin, reminderData);
+
+                        // 取消已完成任务的移动端通知
+                        if (completed && this.plugin?.cancelMobileNotification) {
+                            for (const taskId of completedTaskIds) {
+                                try {
+                                    await this.plugin.cancelMobileNotification(taskId);
+                                } catch (e) {
+                                    console.warn('取消移动端通知失败:', taskId, e);
+                                }
+                            }
+                        }
 
                         // 更新所有受影响块的书签状态
                         for (const bId of affectedBlockIds) {
@@ -11000,6 +11015,7 @@ export class ProjectKanbanView {
             const instanceDate = task.date;
             const completedInstances = originalReminder.repeat.completedInstances;
 
+            const completedTaskIds: string[] = [];
             if (completed) {
                 // 添加到完成列表（如果还没有的话）
                 if (!completedInstances.includes(instanceDate)) {
@@ -11016,7 +11032,8 @@ export class ProjectKanbanView {
                 affectedBlockIds = new Set<string>();
 
                 // 递归完成所有子任务的对应实例或本身，包括普通子任务
-                await this.completeAllChildInstances(task.originalId, instanceDate, reminderData, affectedBlockIds, task.id);
+                const childIds = await this.completeAllChildInstances(task.originalId, instanceDate, reminderData, affectedBlockIds, task.id);
+                completedTaskIds.push(task.id, ...childIds);
             } else {
                 // 从完成列表中移除
                 const index = completedInstances.indexOf(instanceDate);
@@ -11031,6 +11048,17 @@ export class ProjectKanbanView {
             }
 
             await saveReminders(this.plugin, reminderData);
+
+            // 取消已完成任务的移动端通知
+            if (completed && this.plugin?.cancelMobileNotification) {
+                for (const taskId of completedTaskIds) {
+                    try {
+                        await this.plugin.cancelMobileNotification(taskId);
+                    } catch (e) {
+                        console.warn('取消移动端通知失败:', taskId, e);
+                    }
+                }
+            }
 
             // 如果是标记为完成，更新受影响子任务的块属性
             if (completed) {
@@ -11126,6 +11154,9 @@ export class ProjectKanbanView {
                     affectedBlockIds.add(task.blockId || task.docId);
                 }
 
+                // 收集所有已完成的任务ID用于取消移动端通知
+                const completedTaskIds: string[] = [];
+
                 // 如果是周期实例，需要更新实例的完成状态
                 if (task.isRepeatInstance) {
                     // 处理周期实例的完成状态
@@ -11143,7 +11174,8 @@ export class ProjectKanbanView {
                         }
 
                         // 周期实例完成时，也自动完成所有子任务的对应实例
-                        await this.completeAllChildInstances(actualTaskId, task.date, reminderData, affectedBlockIds, task.id);
+                        const childIds = await this.completeAllChildInstances(actualTaskId, task.date, reminderData, affectedBlockIds, task.id);
+                        completedTaskIds.push(task.id, ...childIds);
                     } else {
                         // [FIX] 对于周期实例的状态修改，应该只影响该实例及其 Ghost 子任务
                         // 而不是修改原始任务的全局状态
@@ -11184,7 +11216,8 @@ export class ProjectKanbanView {
                         reminderData[actualTaskId].completedTime = getLocalDateTimeString(new Date());
 
                         // 父任务完成时，自动完成所有子任务
-                        await this.completeAllChildTasks(actualTaskId, reminderData, affectedBlockIds);
+                        const childIds = await this.completeAllChildTasks(actualTaskId, reminderData, affectedBlockIds);
+                        completedTaskIds.push(actualTaskId, ...childIds);
                     } else {
                         reminderData[actualTaskId].completed = false;
                         delete reminderData[actualTaskId].completedTime;
@@ -11200,6 +11233,17 @@ export class ProjectKanbanView {
                 }
 
                 await saveReminders(this.plugin, reminderData);
+
+                // 取消已完成任务的移动端通知
+                if (newStatus === 'completed' && this.plugin?.cancelMobileNotification) {
+                    for (const taskId of completedTaskIds) {
+                        try {
+                            await this.plugin.cancelMobileNotification(taskId);
+                        } catch (e) {
+                            console.warn('取消移动端通知失败:', taskId, e);
+                        }
+                    }
+                }
 
                 // 更新受影响块的书签状态
                 for (const bId of affectedBlockIds) {
@@ -11259,13 +11303,14 @@ export class ProjectKanbanView {
      * @param parentId 父任务ID
      * @param reminderData 任务数据
      */
-    private async completeAllChildTasks(parentId: string, reminderData: any, affectedBlockIds?: Set<string>): Promise<void> {
+    private async completeAllChildTasks(parentId: string, reminderData: any, affectedBlockIds?: Set<string>): Promise<string[]> {
+        const completedTaskIds: string[] = [];
         try {
             // 获取所有子任务ID（递归获取所有后代）
             const descendantIds = this.getAllDescendantIds(parentId, reminderData);
 
             if (descendantIds.length === 0) {
-                return; // 没有子任务，直接返回
+                return completedTaskIds; // 没有子任务，返回空数组
             }
 
             const currentTime = getLocalDateTimeString(new Date());
@@ -11278,6 +11323,7 @@ export class ProjectKanbanView {
                     childTask.completed = true;
                     childTask.completedTime = currentTime;
                     completedCount++;
+                    completedTaskIds.push(childId);
 
                     // 收集需要更新的块ID
                     if (affectedBlockIds && (childTask.blockId || childTask.docId)) {
@@ -11293,6 +11339,7 @@ export class ProjectKanbanView {
             console.error('自动完成子任务失败:', error);
             // 不要阻止父任务的完成，只是记录错误
         }
+        return completedTaskIds;
     }
 
     /**
@@ -11301,7 +11348,8 @@ export class ProjectKanbanView {
      * @param date 实例日期
      * @param reminderData 全量任务数据
      */
-    private async completeAllChildInstances(parentId: string, date: string, reminderData: any, affectedBlockIds?: Set<string>, instanceId?: string): Promise<void> {
+    private async completeAllChildInstances(parentId: string, date: string, reminderData: any, affectedBlockIds?: Set<string>, instanceId?: string): Promise<string[]> {
+        const completedTaskIds: string[] = [];
         try {
             const currentTime = getLocalDateTimeString(new Date());
             let completedCount = 0;
@@ -11351,6 +11399,7 @@ export class ProjectKanbanView {
                     childTask.completed = true;
                     childTask.completedTime = currentTime;
                     completedCount++;
+                    completedTaskIds.push(childId);
 
                     // 收集需要更新的块ID
                     if (affectedBlockIds && (childTask.blockId || childTask.docId)) {
@@ -11366,6 +11415,7 @@ export class ProjectKanbanView {
             console.error('自动完成子任务实例失败:', error);
             // 不要阻止父任务的完成，只是记录错误
         }
+        return completedTaskIds;
     }
 
     /**
@@ -12225,6 +12275,8 @@ export class ProjectKanbanView {
                             if (t.blockId || t.docId) {
                                 boundIdsToUpdate.add(t.blockId || t.docId);
                             }
+                            // 取消移动端通知
+                            await this.plugin.cancelMobileNotification(taskId);
                             // 删除数据项
                             delete reminderData[taskId];
                         }
@@ -17699,6 +17751,8 @@ export class ProjectKanbanView {
                 if (boundId) {
                     boundIds.push(boundId);
                 }
+                // 取消移动端通知
+                await this.plugin.cancelMobileNotification(taskId);
                 delete reminderData[taskId];
             }
         }
