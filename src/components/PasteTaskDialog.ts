@@ -225,11 +225,14 @@ export class PasteTaskDialog {
                     ${selectorsHtml}
                     <div id="taskList" style="height: 300px; border: 1px solid var(--b3-theme-surface-lighter); border-radius: 4px;"></div>
                     <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
-                        <label class="b3-checkbox" style="display: flex; align-items: center;">
-                            <input id="autoDetectDate" type="checkbox" class="b3-switch">
-                            <span class="b3-checkbox__graphic"></span>
-                            <span class="b3-checkbox__label">${i18n("autoDetectDateTime")}</span>
-                        </label>
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                            <label class="b3-checkbox" style="display: flex; align-items: center;">
+                                <input id="autoDetectDate" type="checkbox" class="b3-switch">
+                                <span class="b3-checkbox__graphic"></span>
+                                <span class="b3-checkbox__label">${i18n("autoDetectDateTime")}</span>
+                            </label>
+                            <button id="previewDateBtn" class="b3-button b3-button--text" style="display: none; padding: 4px; min-width: auto; margin-left: 8px; font-size: 12px;" title="${i18n("previewRecognizedDates") || "预览识别结果"}">✨ ${i18n("preview") || "预览"}</button>
+                        </div>
                         <div id="removeDateContainer" style="display: flex; align-items: center; gap: 8px; margin-left: 24px;">
                             <span style="font-size: 14px; color: var(--b3-theme-on-surface); cursor: default;">${i18n("removeDateAfterDetection")}</span>
                             <select id="removeDateMode" class="b3-select" style="padding: 2px 8px; height: 28px;">
@@ -272,6 +275,7 @@ export class PasteTaskDialog {
         const milestoneContainer = dialog.element.querySelector('#pasteTaskMilestoneContainer') as HTMLElement;
         const unifiedDateCheckbox = dialog.element.querySelector('#unifiedDateCheckbox') as HTMLInputElement;
         const unifiedDateInput = dialog.element.querySelector('#unifiedDateInput') as HTMLInputElement;
+        const previewDateBtn = dialog.element.querySelector('#previewDateBtn') as HTMLButtonElement;
 
         if (unifiedDateCheckbox && unifiedDateInput) {
             unifiedDateCheckbox.addEventListener('change', () => {
@@ -316,16 +320,24 @@ export class PasteTaskDialog {
                 removeDateContainer.style.opacity = "1";
                 removeDateContainer.style.pointerEvents = "auto";
                 removeDateModeSelect.disabled = false;
+                if (previewDateBtn) previewDateBtn.style.display = "block";
             } else {
                 removeDateContainer.style.opacity = "0.5";
                 removeDateContainer.style.pointerEvents = "none";
                 removeDateModeSelect.disabled = true;
+                if (previewDateBtn) previewDateBtn.style.display = "none";
             }
         }
 
         autoDetectCheckbox.addEventListener('change', () => {
             updateRemoveDateVisibility();
         });
+
+        if (previewDateBtn) {
+            previewDateBtn.addEventListener('click', () => {
+                this.showRecognitionPreview(dialog.element);
+            });
+        }
 
         // Initialize Milkdown Editor
         setTimeout(() => {
@@ -661,6 +673,73 @@ export class PasteTaskDialog {
             this.loadingDialog.destroy();
             this.loadingDialog = null;
         }
+    }
+
+    private showRecognitionPreview(parentDialogElement: HTMLElement) {
+        const text = this.taskListContent.trim();
+        if (!text) {
+            showMessage(i18n("contentNotEmpty") || "列表内容不能为空");
+            return;
+        }
+
+        const removeDateModeSelect = parentDialogElement.querySelector('#removeDateMode') as HTMLSelectElement;
+        const removeMode = removeDateModeSelect ? (removeDateModeSelect.value as 'none' | 'date' | 'all') : 'all';
+        const hierarchicalTasks = this.parseHierarchicalTaskList(text, true, removeMode);
+
+        if (hierarchicalTasks.length === 0) {
+            showMessage(i18n("noTasksDetected") || "未识别到任务");
+            return;
+        }
+
+        const renderTaskPreview = (task: HierarchicalTask, level: number = 0): string => {
+            const dateStr = task.startDate ? `📅 ${task.startDate}${task.time ? ' ' + task.time : ''}` : '';
+            const endDateStr = task.endDate ? `🏁 ${task.endDate}${task.endTime ? ' ' + task.endTime : ''}` : '';
+
+            let html = `
+                <div style="padding: 8px 12px; border-bottom: 1px solid var(--b3-theme-surface-lighter); display: flex; align-items: center; gap: 8px; margin-left: ${level * 16}px;">
+                    <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--b3-theme-on-surface); font-size: 13px;" title="${task.title}">${task.title}</span>
+                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 11px; min-width: 140px; flex-shrink: 0;">
+                        ${dateStr ? `<span style="color: var(--b3-theme-primary);">${dateStr}</span>` : ''}
+                        ${endDateStr ? `<span style="color: var(--b3-theme-info);">${endDateStr}</span>` : ''}
+                        ${!dateStr && !endDateStr ? `<span style="opacity: 0.3;">-</span>` : ''}
+                    </div>
+                </div>
+            `;
+            if (task.children && task.children.length > 0) {
+                for (const child of task.children) {
+                    html += renderTaskPreview(child, level + 1);
+                }
+            }
+            return html;
+        };
+
+        let contentHtml = '';
+        for (const task of hierarchicalTasks) {
+            contentHtml += renderTaskPreview(task);
+        }
+
+        const previewDialog = new Dialog({
+            title: i18n("recognitionPreview") || "日期识别预览",
+            content: `
+                <div class="b3-dialog__content" style="padding: 0; max-height: 450px; overflow-y: auto;">
+                    <div style="background: var(--b3-theme-surface); position: sticky; top: 0; padding: 8px 12px; font-weight: bold; border-bottom: 1px solid var(--b3-theme-surface-lighter); display: flex; justify-content: space-between; font-size: 13px; z-index: 1;">
+                        <span>${i18n("taskTitle") || "任务标题"}</span>
+                        <span>${i18n("detectedDate") || "识别结果"}</span>
+                    </div>
+                    <div>
+                        ${contentHtml}
+                    </div>
+                </div>
+                <div class="b3-dialog__action">
+                    <button class="b3-button b3-button--primary" id="closePreviewBtn">${i18n("close") || "关闭"}</button>
+                </div>
+            `,
+            width: "500px"
+        });
+
+        previewDialog.element.querySelector('#closePreviewBtn')!.addEventListener('click', () => {
+            previewDialog.destroy();
+        });
     }
 
     private parseHierarchicalTaskList(text: string, autoDetect: boolean = false, removeMode: 'none' | 'date' | 'all' = 'all'): HierarchicalTask[] {
