@@ -804,8 +804,6 @@ class SmartBatchDialog {
             });
             this.updateBlockListDisplay(dialog);
             showMessage(i18n("settingsApplied"));
-            // disable until next selection
-            if (batchApplyStatusBtn) batchApplyStatusBtn.disabled = true;
         });
 
         // 状态选择器改变时重新启用应用按钮
@@ -1272,10 +1270,6 @@ class SmartBatchDialog {
 
         this.updateBlockListDisplay(dialog);
         showMessage(i18n("settingsApplied"));
-
-        // 重置按钮状态
-        const batchApplyProjectBtn = dialog.element.querySelector('#batchApplyProjectBtn') as HTMLButtonElement;
-        batchApplyProjectBtn.disabled = true;
     }
 
     private batchApplyDate(dialog: Dialog) {
