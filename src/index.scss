@@ -1152,6 +1152,16 @@
     flex-direction: column;
     overflow: hidden;
     padding: 8px;
+    height: 100%;
+    flex: 1;
+}
+
+// 确保日历 dock 在移动端正确显示高度
+.dock__item[data-type="calendar_dock"] .fn__flex-1,
+.dock__item[data-type="calendar_dock"] > .fn__flex-column,
+.dock__item[data-type="calendar_dock"] > div {
+    height: 100%;
+    min-height: 100%;
 }
 
 // 视图按钮激活状态样式
