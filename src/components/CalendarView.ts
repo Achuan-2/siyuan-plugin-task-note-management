@@ -1671,6 +1671,16 @@ export class CalendarView {
                     targetEl.classList.add('fc-daygrid-block-event');
                 }
 
+                // Ensure events in popovers are not absolute positioned (fixes timeGrid popover issues)
+                if (info.el.closest('.fc-popover')) {
+                    targetEl.style.position = 'relative';
+                    targetEl.style.top = 'auto';
+                    targetEl.style.left = 'auto';
+                    targetEl.style.right = 'auto';
+                    targetEl.style.bottom = 'auto';
+                    targetEl.style.width = '100%';
+                }
+
                 if (!info.view.type.startsWith('list')) {
                     // 背景色使用项目/分类颜色，左边框使用优先级颜色
                     const bgColor = info.event.backgroundColor || 'var(--b3-theme-primary)';

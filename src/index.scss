@@ -1218,6 +1218,24 @@
 .reminder-calendar-container.fc .fc-popover {
     max-width: calc(100% - 8px); // 限制弹出框最大宽度不超出容器
     z-index: 10 !important;
+
+    // 确保弹窗内的任务不会因为绝对定位覆盖整个弹窗
+    .fc-event {
+        position: relative !important;
+        top: auto !important;
+        left: auto !important;
+        right: auto !important;
+        bottom: auto !important;
+        width: calc(100% - 8px) !important;
+        height: auto !important;
+        margin: 2px 4px !important;
+        display: block !important;
+    }
+
+    .fc-popover-body {
+        max-height: 400px;
+        overflow-y: auto;
+    }
 }
 
 // 修改日历样式以适应思源主题
