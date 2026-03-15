@@ -8495,12 +8495,50 @@ document.body.classList.remove('docked-mode');
 `).catch((e: any) => console.error(e));
             } else {
                 // 退出迷你模式
-                if (this.normalWindowBounds) {
-                    pomodoroWindow.setBounds(this.normalWindowBounds);
-                    this.normalWindowBounds = null;
-                } else {
-                    pomodoroWindow.setSize(240, 235);
+                // 获取当前 mini 模式窗口位置
+                const currentBounds = pomodoroWindow.getBounds();
+                
+                // 正常模式的窗口大小
+                const normalWidth = 240;
+                const normalHeight = 235;
+                
+                // 获取屏幕尺寸以进行边界检查
+                let screenWidth = 1920;
+                let screenHeight = 1080;
+                try {
+                    const electronReq = (window as any).require;
+                    const remote = electronReq?.('@electron/remote') || electronReq?.('electron')?.remote;
+                    const screen = remote?.screen || electronReq?.('electron')?.screen;
+                    if (screen && screen.getPrimaryDisplay) {
+                        const primaryDisplay = screen.getPrimaryDisplay();
+                        screenWidth = primaryDisplay.workAreaSize.width;
+                        screenHeight = primaryDisplay.workAreaSize.height;
+                    }
+                } catch (e) {
+                    // 如果无法获取屏幕尺寸，使用窗口大小作为备选
+                    screenWidth = window.screen.availWidth || 1920;
+                    screenHeight = window.screen.availHeight || 1080;
                 }
+                
+                // 计算正常模式窗口的位置（以 mini 模式窗口中心为基准）
+                let newX = currentBounds.x + (currentBounds.width - normalWidth) / 2;
+                let newY = currentBounds.y + (currentBounds.height - normalHeight) / 2;
+                
+                // 确保窗口不超出屏幕边界
+                newX = Math.max(0, Math.min(newX, screenWidth - normalWidth));
+                newY = Math.max(0, Math.min(newY, screenHeight - normalHeight));
+                
+                // 设置窗口大小和位置
+                pomodoroWindow.setBounds({
+                    x: Math.round(newX),
+                    y: Math.round(newY),
+                    width: normalWidth,
+                    height: normalHeight
+                });
+                
+                // 清除保存的正常窗口位置，因为我们使用 mini 模式的位置
+                this.normalWindowBounds = null;
+                
                 pomodoroWindow.setResizable(true);
                 pomodoroWindow.setAspectRatio(0); // 取消比例限制
 
