@@ -6845,9 +6845,9 @@ export class PomodoroTimer {
                 backgroundColor = '#00000000';
             } else if (this.isMiniMode) {
                 // 迷你模式：设置为小圆形窗口
-                const size = 80;
-                winWidth = size;
-                winHeight = size;
+                const miniSize = this.resolveMiniWindowSize(this.inheritedWindowBounds);
+                winWidth = miniSize;
+                winHeight = miniSize;
                 // 如果有继承的窗口位置，使用它；否则使用默认位置
                 if (this.inheritedWindowBounds) {
                     x = this.inheritedWindowBounds.x;
@@ -7011,9 +7011,10 @@ export class PomodoroTimer {
                 // 如果继承了迷你模式状态，应用迷你模式设置
                 if (this.isMiniMode) {
                     console.log('[PomodoroTimer] 应用继承的迷你模式设置');
-                    const size = 80;
-                    pomodoroWindow.setSize(size, size);
+                    const miniSize = this.resolveMiniWindowSize(this.inheritedWindowBounds || pomodoroWindow.getBounds());
+                    pomodoroWindow.setSize(miniSize, miniSize);
                     pomodoroWindow.setResizable(true);
+                    pomodoroWindow.setAspectRatio(1);
 
                     // 添加迷你模式样式
                     setTimeout(() => {
@@ -8349,8 +8350,9 @@ document.body.classList.remove('docked-mode');
                     try {
                         // 如果当前大小明显不对（比如还没初始化），才设置默认大小
                         const bounds = pomodoroWindow.getBounds();
-                        if (bounds.width > 200 || bounds.height > 200) {
-                            pomodoroWindow.setSize(80, 80);
+                        const targetSize = this.resolveMiniWindowSize(this.inheritedWindowBounds || bounds);
+                        if (Math.round(bounds.width) !== targetSize || Math.round(bounds.height) !== targetSize) {
+                            pomodoroWindow.setSize(targetSize, targetSize);
                         }
                         pomodoroWindow.setResizable(true);
                         pomodoroWindow.setAspectRatio(1);
@@ -8737,6 +8739,23 @@ document.body.classList.remove('mini-mode');
         const mins = Math.floor(Math.abs(seconds) / 60);
         const secs = Math.floor(Math.abs(seconds) % 60);
         return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')} `;
+    }
+
+    private resolveMiniWindowSize(bounds?: { width: number; height: number } | null): number {
+        const defaultSize = 80;
+        if (!bounds) {
+            return defaultSize;
+        }
+
+        const width = Number(bounds.width);
+        const height = Number(bounds.height);
+        const candidate = width > 0 ? width : (height > 0 ? height : defaultSize);
+
+        if (!Number.isFinite(candidate) || candidate <= 0) {
+            return defaultSize;
+        }
+
+        return Math.max(40, Math.round(candidate));
     }
 
     /**
