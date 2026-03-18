@@ -3788,9 +3788,13 @@ export default class ReminderPlugin extends Plugin {
                         // 移动端：系统定时通知由 scheduleMobileNotification 设置，不在此处处理
                         if (systemNotificationEnabled && !this.isInMobileApp) {
                             // 统一标题格式：习惯提醒（不含 emoji）
-                            const title = i18n('habitReminder');
-                            // message 统一为：时间 + 空格 + 习惯名称，不显示 emoji，也不显示备注
+                            const title = "🌱" + i18n('habitReminder');
+                            // message 格式为：时间 + 习惯名称（备注）
                             let message = reminderInfo.time ? `${reminderInfo.time} ${reminderInfo.title}` : `${reminderInfo.title}`;
+                            // 如果有备注，添加（备注）格式
+                            if (reminderInfo.note) {
+                                message += `（${reminderInfo.note}）`;
+                            }
                             await this.showReminderSystemNotification(title, message, reminderInfo);
                         }
 
@@ -3868,17 +3872,37 @@ export default class ReminderPlugin extends Plugin {
                 const title = `⏰ ${i18n("timeReminderNotification")}`;
 
                 let timeText = '';
+                let rawTime = '';
                 if (displayChosen) {
                     timeText = `${displayChosen}`;
+                    rawTime = rawChosenTime;
                 } else if (triggerField === 'time' && reminder.time) {
                     const dt = this.extractDateAndTime(reminder.time);
                     timeText = `${dt.time || reminder.time}`;
+                    rawTime = reminder.time;
                 } else if (reminder.customReminderTime) {
                     const dt = this.extractDateAndTime(reminder.customReminderTime);
                     timeText = `${dt.time || reminder.customReminderTime}`;
+                    rawTime = reminder.customReminderTime;
                 }
 
-                const message = this.buildNotificationMessage(reminder, timeText);
+                // 从 reminderTimes 中获取备注
+                let timeNote = '';
+                if (reminder.reminderTimes && Array.isArray(reminder.reminderTimes)) {
+                    for (const rt of reminder.reminderTimes) {
+                        if (typeof rt === 'object' && rt.time && rt.note && rt.time === rawTime) {
+                            timeNote = rt.note;
+                            break;
+                        }
+                    }
+                }
+
+                // 构建消息：时间 + 任务名（备注）
+                let message = timeText ? `${timeText} ` : '';
+                message += `${reminder.title || i18n("unnamedNote")}`;
+                if (timeNote) {
+                    message += `（${timeNote}）`;
+                }
 
                 await this.showReminderSystemNotification(title, message, reminderInfo);
             }
@@ -4585,6 +4609,20 @@ export default class ReminderPlugin extends Plugin {
         const systemNotificationEnabled = await this.getReminderSystemNotificationEnabled();
         if (!systemNotificationEnabled) return [];
 
+        // 判断是否为习惯（根据id前缀）
+        const isHabit = typeof reminder.id === 'string' && reminder.id.startsWith('habit');
+
+        // 从 reminderTimes 中提取时间和备注的映射
+        const timeNoteMap: Record<string, string> = {};
+        if (reminder.reminderTimes && Array.isArray(reminder.reminderTimes)) {
+            for (const rt of reminder.reminderTimes) {
+                if (typeof rt === 'object' && rt.time) {
+                    const timeKey = rt.time.includes('T') ? rt.time : `${reminder.date || new Date().toISOString().split('T')[0]}T${rt.time}`;
+                    timeNoteMap[timeKey] = rt.note || '';
+                }
+            }
+        }
+
         const notificationIds: number[] = [];
         for (const iso of (isoTimes || [])) {
             try {
@@ -4593,8 +4631,19 @@ export default class ReminderPlugin extends Plugin {
                 // 跳过已经过去的时间
                 if (scheduledTime.getTime() <= Date.now()) continue;
 
-                const title = `⏰ ${i18n("timeReminderNotification")}`;
-                const message = this.buildNotificationMessage(reminder);
+                // 根据类型使用不同的标题
+                const title = isHabit ? "🌱" + i18n('habitReminder') : `⏰ ${i18n("timeReminderNotification")}`;
+
+                // 获取该时间点的备注
+                const note = timeNoteMap[iso] || '';
+
+                // 构建通知消息：时间 + 标题（备注）
+                const hours = scheduledTime.getHours().toString().padStart(2, '0');
+                const minutes = scheduledTime.getMinutes().toString().padStart(2, '0');
+                let message = `${hours}:${minutes} ${reminder.title || i18n("unnamedNote")}`;
+                if (note) {
+                    message += `（${note}）`;
+                }
 
                 const notificationId = await this.showReminderSystemNotification(
                     title,

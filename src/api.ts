@@ -710,7 +710,7 @@ export function isInMobileApp(): boolean {
         return window.siyuan.config.system.container === "harmony" && window.JSHarmony;
     };
     try {
-        if (platformUtils.isInAndroid?.() || isInHarmony || platformUtils.isInIOS?.()) {
+        if (platformUtils.isInAndroid() || isInHarmony() || platformUtils.isInIOS()) {
             return true;
         }
     } catch (e) {
