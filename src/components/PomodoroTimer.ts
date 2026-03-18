@@ -7011,9 +7011,9 @@ export class PomodoroTimer {
                 // 如果继承了迷你模式状态，应用迷你模式设置
                 if (this.isMiniMode) {
                     console.log('[PomodoroTimer] 应用继承的迷你模式设置');
-                    const size = 120;
+                    const size = 80;
                     pomodoroWindow.setSize(size, size);
-                    pomodoroWindow.setResizable(false);
+                    pomodoroWindow.setResizable(true);
 
                     // 添加迷你模式样式
                     setTimeout(() => {
