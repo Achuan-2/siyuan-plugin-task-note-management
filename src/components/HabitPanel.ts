@@ -1446,6 +1446,15 @@ export class HabitPanel {
         const habitData = await this.plugin.loadHabitData();
         habitData[habit.id] = habit;
         await this.plugin.saveHabitData(habitData);
+        // 同步更新移动端系统通知（限制7天），确保手机端也能收到习惯提醒
+        try {
+            if (this.plugin && typeof this.plugin.updateMobileNotification === 'function') {
+                await this.plugin.updateMobileNotification(habit, undefined, 7);
+            }
+        } catch (e) {
+            console.warn('更新习惯移动端通知失败:', e);
+        }
+
         window.dispatchEvent(new CustomEvent('habitUpdated'));
     }
 
@@ -1456,6 +1465,15 @@ export class HabitPanel {
             await this.plugin.saveHabitData(habitData);
             showMessage(i18n("deleteSuccess"));
             this.loadHabits();
+            // 删除习惯时取消移动端的系统通知（如果有）
+            try {
+                if (this.plugin && typeof this.plugin.cancelMobileNotification === 'function') {
+                    await this.plugin.cancelMobileNotification(habitId);
+                }
+            } catch (e) {
+                console.warn('取消习惯移动端通知失败:', e);
+            }
+
             window.dispatchEvent(new CustomEvent('habitUpdated'));
         } catch (error) {
             console.error('deleteHabit failed:', error);

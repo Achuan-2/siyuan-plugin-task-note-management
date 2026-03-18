@@ -29,7 +29,7 @@ import { ProjectKanbanView } from "./components/ProjectKanbanView";
 import { PomodoroManager } from "./utils/pomodoroManager";
 import SettingPanelComponent from "./SettingPanel.svelte";
 import { exportIcsFile } from "./utils/icsUtils";
-import { getFile, sendNotification, cancelNotification, pushErrMsg, pushMsg } from "./api";
+import { getFile, sendNotification, cancelNotification, pushErrMsg, pushMsg, isInMobileApp } from "./api";
 import { resolveAudioPath } from "./utils/audioUtils";
 import { showVipDialog } from "./components/VipDialog";
 import { performDataMigration } from "./utils/dataMigration";
@@ -267,6 +267,7 @@ export default class ReminderPlugin extends Plugin {
     private mobileNotifyDataCacheForCurrentDevice: Record<string, number[]> | null = null;
     // 仅内存缓存（当前设备实例）：任务id -> 未来提醒时间(ISO)数组
     private mobileNotificationPlansCache: Record<string, string[]> | null = null;
+    private mobileHabitNotificationPlansCache: Record<string, string[]> | null = null;
     private cleanupFunctions: (() => void)[] = [];
 
     // 内存中的提醒记录，用于避免同一会话中重复提醒
@@ -280,6 +281,7 @@ export default class ReminderPlugin extends Plugin {
 
     public settings: any;
     public vip: any = { vipKeys: [], isVip: false, expireDate: '', freeTrialUsed: false };
+    public isInMobileApp: boolean = false;
 
     /**
      * 加载提醒数据，支持缓存
@@ -894,7 +896,7 @@ export default class ReminderPlugin extends Plugin {
         try {
             const data = await this.loadNotifyData();
             // 桌面端仅将当前分钟视为有效去重范围。
-            if (!this.isMobileDevice()) {
+            if (!this.isInMobileApp) {
                 const currentMinute = this.getCurrentLogicalMinute();
                 const keyMinute = this.extractMinuteBucketFromNotifyKey(key);
                 if (!keyMinute || keyMinute !== currentMinute) {
@@ -915,7 +917,7 @@ export default class ReminderPlugin extends Plugin {
             const data = await this.loadNotifyData();
             if (!data.notifiedKeys) data.notifiedKeys = {};
 
-            if (!this.isMobileDevice()) {
+            if (!this.isInMobileApp) {
                 // 桌面端：notifiedKeys 只保存当前分钟的通知；进入下一分钟即过滤旧记录。
                 const currentMinute = this.getCurrentLogicalMinute();
                 const filtered: Record<string, boolean> = {};
@@ -984,7 +986,7 @@ export default class ReminderPlugin extends Plugin {
         if (deviceName && deviceName !== this.getDeviceName()) {
             return;
         }
-        
+
         try {
             const data = await this.loadMobileNotifyData();
             const validIdSet = new Set(validReminderIds);
@@ -1009,6 +1011,9 @@ export default class ReminderPlugin extends Plugin {
     }
 
     async onload() {
+        // 初始化移动端检测
+        this.isInMobileApp = isInMobileApp();
+        
         await this.loadSettings();
 
         // 添加自定义图标
@@ -1178,8 +1183,6 @@ export default class ReminderPlugin extends Plugin {
         this.initCoordinator();
 
         const frontend = getFrontend();
-        const isMobileDevice = getFrontend().endsWith('mobile') || getBackend().endsWith('android') || getBackend().endsWith('ios') || getBackend().endsWith('harmony');
-
         const isBrowserDesktop = frontend === 'browser-desktop';
 
         // // 为了测试NotificationDialog和showReminderSystemNotification能否在手机上显示，onload就显示测试数据
@@ -1200,7 +1203,7 @@ export default class ReminderPlugin extends Plugin {
         //     this.showReminderSystemNotification('测试系统通知标题', '测试系统通知内容，用于手机端测试', testReminder);
         // }, 3000);
 
-        if (!isMobileDevice && !isBrowserDesktop) {
+        if (!this.isInMobileApp && !isBrowserDesktop) {
             // 尝试恢复已存在的番茄钟独立窗口
             // 先询问其他窗口是否已有活跃番茄钟，避免多窗口同时恢复导致重复计时
             import("./components/PomodoroTimer").then(async ({ PomodoroTimer }) => {
@@ -3774,7 +3777,6 @@ export default class ReminderPlugin extends Plugin {
 
                         // 显示系统弹窗（如果启用）
                         const systemNotificationEnabled = await this.getReminderSystemNotificationEnabled();
-                        const isMobileDevice = getFrontend().endsWith('mobile') || getBackend().endsWith('android') || getBackend().endsWith('ios');
                         const showInternalNotification = await this.getShowInternalNotificationEnabled();
 
                         // 根据设置决定是否显示内部通知框
@@ -3784,16 +3786,11 @@ export default class ReminderPlugin extends Plugin {
 
                         // 桌面端：如果启用了系统通知，显示浏览器通知
                         // 移动端：系统定时通知由 scheduleMobileNotification 设置，不在此处处理
-                        if (systemNotificationEnabled && !isMobileDevice) {
-                            // 统一标题格式：习惯提醒
-                            const title = `⏰ ${i18n('habitReminder')}`;
-                            let message = `${reminderInfo.title}`;
-                            if (reminderInfo.time) {
-                                message += `\n⏰ ${reminderInfo.time}`;
-                            }
-                            if (reminderInfo.note) {
-                                message += `\n📝 ${reminderInfo.note}`;
-                            }
+                        if (systemNotificationEnabled && !this.isInMobileApp) {
+                            // 统一标题格式：习惯提醒（不含 emoji）
+                            const title = i18n('habitReminder');
+                            // message 统一为：时间 + 空格 + 习惯名称，不显示 emoji，也不显示备注
+                            let message = reminderInfo.time ? `${reminderInfo.time} ${reminderInfo.title}` : `${reminderInfo.title}`;
                             await this.showReminderSystemNotification(title, message, reminderInfo);
                         }
 
@@ -3848,7 +3845,6 @@ export default class ReminderPlugin extends Plugin {
 
             // 检查是否启用系统弹窗通知
             const systemNotificationEnabled = await this.getReminderSystemNotificationEnabled();
-            const isMobileDevice = getFrontend().endsWith('mobile') || getBackend().endsWith('android') || getBackend().endsWith('ios');
 
             // 记录触发字段，方便调试与后续显示一致性处理
             try { (reminderInfo as any)._triggerField = triggerField; } catch (e) { }
@@ -3867,7 +3863,7 @@ export default class ReminderPlugin extends Plugin {
 
             // 桌面端：如果启用了系统通知，显示浏览器通知
             // 移动端：系统定时通知由 scheduleMobileNotification 设置，不在此处处理
-            if (systemNotificationEnabled && !isMobileDevice) {
+            if (systemNotificationEnabled && !this.isInMobileApp) {
                 // 统一标题格式：任务提醒
                 const title = `⏰ ${i18n("timeReminderNotification")}`;
 
@@ -3901,9 +3897,7 @@ export default class ReminderPlugin extends Plugin {
      */
     private async showReminderSystemNotification(title: string, message: string, reminderInfo?: any, scheduledTime?: Date | string): Promise<number | undefined> {
         // 判断是否是移动端
-        const isMobileDevice = getFrontend().endsWith('mobile') || getBackend().endsWith('android') || getBackend().endsWith('ios') || getBackend().endsWith('harmony');
-
-        if (isMobileDevice) {
+        if (this.isInMobileApp) {
             // 手机端：使用内核接口进行系统通知
             try {
                 // 如果有预定时间，则传递时间戳进行定时通知
@@ -4289,24 +4283,48 @@ export default class ReminderPlugin extends Plugin {
                 this.loadHabitData(true),
                 this.loadHabitGroupData(true),
                 this.loadPomodoroRecords(true),
-                this.isMobileDevice() ? this.loadMobileNotifyData() : Promise.resolve(),
+                this.isInMobileApp ? this.loadMobileNotifyData() : Promise.resolve(),
             ]);
             window.dispatchEvent(new CustomEvent('reminderUpdated'));
             window.dispatchEvent(new CustomEvent('habitUpdated'));
 
             // 移动端：数据变化时（包括从其他设备同步），清空当前设备的通知记录并重新生成。
-            if (this.isMobileDevice()) {
+            if (this.isInMobileApp) {
                 try {
                     // 加载所有未完成的任务（使用已更新的缓存）
                     const reminderData = this.reminderDataCache || await this.loadReminderData(true);
                     const uncompletedReminders = Object.values(reminderData).filter((r: any) => !r.completed);
 
-                    // 先比较通知计划，计划一致则无需重建并避免额外写入 notify.json
-                    const currentPlan = this.mobileNotificationPlansCache;
-                    const expectedPlan = this.buildMobileNotificationPlan(uncompletedReminders as any[], 7);
+                    // 为任务和习惯分别构建移动通知计划快照并比较，分开存储以便区分
+                    const currentTaskPlan = this.mobileNotificationPlansCache;
+                    const expectedTaskPlan = this.buildMobileNotificationPlan(uncompletedReminders as any[], 7);
 
-                    if (this.isSameMobileNotificationPlan(currentPlan, expectedPlan)) {
-                        pushMsg('[MobileNotification] 数据变化但通知计划未变化，跳过重建');
+                    let expectedHabitPlan: Record<string, string[]> = {};
+                    try {
+                        const habitData = this.habitDataCache || await this.loadHabitData(true);
+                        if (habitData && typeof habitData === 'object') {
+                            for (const [hid, habit] of Object.entries(habitData)) {
+                                try {
+                                    const h = habit as any;
+                                    if (h.completed) continue;
+                                    const times = this.calculateAllNotificationTimes(h, 7).map((t) => t.toISOString()).sort();
+                                    if (times.length > 0) {
+                                        expectedHabitPlan[hid] = times;
+                                    }
+                                } catch (e) {
+                                    // 忽略单个习惯计算错误
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('[MobileNotification] 构建习惯通知计划失败:', e);
+                    }
+
+                    // 如果任务和习惯的计划都未变化，则跳过重建
+                    const taskSame = this.isSameMobileNotificationPlan(currentTaskPlan, expectedTaskPlan);
+                    const habitSame = this.isSameMobileNotificationPlan(this.mobileHabitNotificationPlansCache, expectedHabitPlan);
+                    if (taskSame && habitSame) {
+                        pushMsg('[MobileNotification] 数据变化但任务/习惯通知计划未变化，跳过重建');
                         return;
                     }
 
@@ -4316,21 +4334,41 @@ export default class ReminderPlugin extends Plugin {
                     const canceledCount = await this.cancelAllCurrentDeviceMobileNotifications();
                     // pushMsg(`[MobileNotification] 已取消当前设备 ${canceledCount} 条旧通知，开始重新生成`);
 
-                    // 基于 expectedPlan 直接生成通知（性能更好），避免遍历全部未完成任务并重复计算
+                    // 基于 expectedTaskPlan 和 expectedHabitPlan 分别生成通知
                     let scheduledCount = 0;
-                    for (const [reminderId, times] of Object.entries(expectedPlan)) {
+
+                    // 任务通知
+                    for (const [reminderId, times] of Object.entries(expectedTaskPlan)) {
                         try {
                             const reminder = (reminderData as any) && (reminderData as any)[reminderId];
                             if (!reminder) continue;
                             const ids = await this.scheduleMobileNotificationsAtTimes(reminder, times as string[]);
                             scheduledCount += (ids?.length || 0);
                         } catch (e) {
-                            console.warn(`[MobileNotification] 重新初始化通知失败: reminderId=${reminderId}`, e);
+                            console.warn(`[MobileNotification] 重新初始化任务通知失败: reminderId=${reminderId}`, e);
                         }
                     }
 
+                    // 习惯通知
+                    try {
+                        const habitData = this.habitDataCache || await this.loadHabitData(true);
+                        for (const [hid, times] of Object.entries(expectedHabitPlan)) {
+                            try {
+                                const habit = habitData && habitData[hid];
+                                if (!habit) continue;
+                                const ids = await this.scheduleMobileNotificationsAtTimes(habit, times as string[]);
+                                scheduledCount += (ids?.length || 0);
+                            } catch (e) {
+                                console.warn(`[MobileNotification] 重新初始化习惯通知失败: habitId=${hid}`, e);
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('[MobileNotification] 习惯通知重建过程中读取习惯数据失败:', e);
+                    }
+
                     // 重建后仅更新内存计划快照（不写入 notify.json）
-                    this.mobileNotificationPlansCache = expectedPlan;
+                    this.mobileNotificationPlansCache = expectedTaskPlan;
+                    this.mobileHabitNotificationPlansCache = expectedHabitPlan;
 
                 } catch (error) {
                     console.warn('[MobileNotification] 移动端通知重新初始化失败:', error);
@@ -4348,20 +4386,13 @@ export default class ReminderPlugin extends Plugin {
     // ==================== 移动端定时通知管理 ====================
 
     /**
-     * 判断是否为移动端设备
-     */
-    public isMobileDevice(): boolean {
-        return getFrontend().endsWith('mobile') || getBackend().endsWith('android') || getBackend().endsWith('ios') || getBackend().endsWith('harmony');
-    }
-
-    /**
      * 为提醒设置移动端系统定时通知
      * @param reminder 提醒对象
      * @param daysLimit 限制天数，只计算未来指定天数内的通知（默认7天），设为0表示不限制
      * @returns 通知ID（如果设置成功）
      */
     public async scheduleMobileNotification(reminder: any, daysLimit: number = 7): Promise<number | undefined> {
-        if (!this.isMobileDevice()) return;
+        if (!this.isInMobileApp) return;
         if (!reminder || !reminder.id || reminder.completed) return;
 
         // 获取系统通知启用状态
@@ -4410,7 +4441,7 @@ export default class ReminderPlugin extends Plugin {
      * @returns 所有设置成功的通知ID数组
      */
     public async scheduleAllMobileNotifications(reminder: any, daysLimit: number = 7): Promise<number[]> {
-        if (!this.isMobileDevice()) return [];
+        if (!this.isInMobileApp) return [];
         if (!reminder || !reminder.id || reminder.completed) return [];
 
         // 获取系统通知启用状态
@@ -4466,7 +4497,7 @@ export default class ReminderPlugin extends Plugin {
      * @param reminderIdOrReminder 提醒ID或提醒对象
      */
     public async cancelMobileNotification(reminderIdOrReminder: string | any): Promise<void> {
-        if (!this.isMobileDevice()) return;
+        if (!this.isInMobileApp) return;
 
         try {
             let reminderId: string | undefined;
@@ -4492,10 +4523,13 @@ export default class ReminderPlugin extends Plugin {
             // 从 notify.json 中移除记录
             if (reminderId) {
                 await this.removeMobileNotificationId(reminderId);
-                
-                // 【修复：同步更新内存计划快照，避免删除任务后触发无谓的通知全量重建】
+
+                // 【修复：同步更新内存计划快照，避免删除任务或习惯后触发无谓的通知全量重建】
                 if (this.mobileNotificationPlansCache && this.mobileNotificationPlansCache[reminderId]) {
                     delete this.mobileNotificationPlansCache[reminderId];
+                }
+                if (this.mobileHabitNotificationPlansCache && this.mobileHabitNotificationPlansCache[reminderId]) {
+                    delete this.mobileHabitNotificationPlansCache[reminderId];
                 }
             }
         } catch (error) {
@@ -4508,7 +4542,7 @@ export default class ReminderPlugin extends Plugin {
      * 用于同步后重建通知前的全量清理，避免已删除任务的残留通知。
      */
     public async cancelAllCurrentDeviceMobileNotifications(): Promise<number> {
-        if (!this.isMobileDevice()) return 0;
+        if (!this.isInMobileApp) return 0;
 
         try {
             const allNotificationMap = await this.getAllMobileNotificationIds();
@@ -4545,7 +4579,7 @@ export default class ReminderPlugin extends Plugin {
      * @param isoTimes ISO 字符串数组
      */
     public async scheduleMobileNotificationsAtTimes(reminder: any, isoTimes: string[]): Promise<number[]> {
-        if (!this.isMobileDevice()) return [];
+        if (!this.isInMobileApp) return [];
         if (!reminder || !reminder.id) return [];
 
         const systemNotificationEnabled = await this.getReminderSystemNotificationEnabled();
@@ -4742,7 +4776,7 @@ export default class ReminderPlugin extends Plugin {
      */
     private isSameMobileNotificationPlan(a: Record<string, string[]> | null, b: Record<string, string[]>): boolean {
         if (!a) return false;
-        
+
         const aKeys = Object.keys(a).sort();
         const bKeys = Object.keys(b).sort();
         if (aKeys.length !== bKeys.length) return false;
@@ -4806,7 +4840,7 @@ export default class ReminderPlugin extends Plugin {
      * @param daysLimit 限制天数，只计算未来指定天数内的通知（默认7天），设为0表示不限制
      */
     public async updateMobileNotification(reminder: any, oldReminder?: any, daysLimit: number = 7): Promise<void> {
-        if (!this.isMobileDevice()) return;
+        if (!this.isInMobileApp) return;
         if (!reminder?.id) return;
 
         try {
@@ -4828,25 +4862,43 @@ export default class ReminderPlugin extends Plugin {
                 await this.cancelMobileNotification(reminder.id);
             }
 
-            // 如果任务已完成，不需要设置新通知
+            // 如果已完成，不需要设置新通知
             if (reminder.completed) {
-                console.log(`[MobileNotification] 任务已完成，跳过设置通知: reminderId=${reminder.id}`);
-                // 同步从计划快照中移除
-                if (this.mobileNotificationPlansCache && this.mobileNotificationPlansCache[reminder.id]) {
-                    delete this.mobileNotificationPlansCache[reminder.id];
+                console.log(`[MobileNotification] 已完成，跳过设置通知: id=${reminder.id}`);
+                // 同步从计划快照中移除（通过 ID 前缀区分习惯与任务）
+                const isHabit = typeof reminder.id === 'string' && reminder.id.startsWith('habit');
+                if (isHabit) {
+                    if (this.mobileHabitNotificationPlansCache && this.mobileHabitNotificationPlansCache[reminder.id]) {
+                        delete this.mobileHabitNotificationPlansCache[reminder.id];
+                    }
+                } else {
+                    if (this.mobileNotificationPlansCache && this.mobileNotificationPlansCache[reminder.id]) {
+                        delete this.mobileNotificationPlansCache[reminder.id];
+                    }
                 }
                 return;
             }
 
             // 为所有未来的提醒时间设置通知（默认限制7天内）
             await this.scheduleAllMobileNotifications(reminder, daysLimit);
-            
+
             // 【修复：本地保存时同步更新计划快照，防止与 onDataChanged 冲突导致误判及通知残留】
             const times = this.calculateAllNotificationTimes(reminder, daysLimit).map((time) => time.toISOString()).sort();
+            const isHabit = typeof reminder.id === 'string' && reminder.id.startsWith('habit');
             if (times.length > 0) {
-                this.mobileNotificationPlansCache[reminder.id] = times;
-            } else if (this.mobileNotificationPlansCache[reminder.id]) {
-                delete this.mobileNotificationPlansCache[reminder.id];
+                if (isHabit) {
+                    if (!this.mobileHabitNotificationPlansCache) this.mobileHabitNotificationPlansCache = {};
+                    this.mobileHabitNotificationPlansCache[reminder.id] = times;
+                } else {
+                    if (!this.mobileNotificationPlansCache) this.mobileNotificationPlansCache = {};
+                    this.mobileNotificationPlansCache[reminder.id] = times;
+                }
+            } else {
+                if (isHabit) {
+                    if (this.mobileHabitNotificationPlansCache && this.mobileHabitNotificationPlansCache[reminder.id]) delete this.mobileHabitNotificationPlansCache[reminder.id];
+                } else {
+                    if (this.mobileNotificationPlansCache && this.mobileNotificationPlansCache[reminder.id]) delete this.mobileNotificationPlansCache[reminder.id];
+                }
             }
         } catch (error) {
             console.warn('[MobileNotification] 更新通知失败:', error);

@@ -865,14 +865,13 @@ export class PomodoroTimer {
         if (!this.settings.pomodoroEndPopupWindow) return;
 
         const frontend = getFrontend();
-        const isMobile = frontend.endsWith('mobile');
         const isBrowserDesktop = frontend === 'browser-desktop';
 
         const title = i18n('pomodoroWorkEnd') || '工作结束';
         const message = i18n('pomodoroWorkEndDesc') || '工作时间结束，起来走走喝喝水吧！';
 
         // 非电脑客户端使用思源内部 Dialog
-        if (isMobile || isBrowserDesktop) {
+        if (this.plugin?.isInMobileApp || isBrowserDesktop) {
             this.openSiyuanDialog(title, message, '🍅');
             return;
         }
@@ -895,7 +894,6 @@ export class PomodoroTimer {
         if (!this.settings.randomRestPopupWindow) return;
 
         const frontend = getFrontend();
-        const isMobile = frontend.endsWith('mobile');
         const isBrowserDesktop = frontend === 'browser-desktop';
 
         const title = i18n('randomRestTitle') || '随机微休息';
@@ -903,7 +901,7 @@ export class PomodoroTimer {
         const autoCloseDelay = Number(this.settings.randomRestBreakDuration) || 0;
 
         // 非电脑客户端使用思源内部 Dialog
-        if (isMobile || isBrowserDesktop) {
+        if (this.plugin?.isInMobileApp || isBrowserDesktop) {
             this.openSiyuanDialog(title, message, '🎲', autoCloseDelay);
             return;
         }
@@ -2080,7 +2078,6 @@ export class PomodoroTimer {
     private async createWindow(targetContainer?: HTMLElement) {
         // 检测前端类型
         const frontend = getFrontend();
-        const isMobile = frontend.endsWith('mobile');
         const isBrowserDesktop = frontend === 'browser-desktop';
 
         // 如果提供了 targetContainer，则创建 DOM 元素（Tab 模式）
@@ -2090,7 +2087,7 @@ export class PomodoroTimer {
         }
 
         // 移动端或浏览器桌面端强制使用 DOM 窗口（因为不支持 BrowserWindow）
-        if (isMobile || isBrowserDesktop) {
+        if (this.plugin?.isInMobileApp || isBrowserDesktop) {
             // 创建一个悬浮的 DOM 窗口
             const container = document.createElement('div');
             document.body.appendChild(container);
@@ -4800,10 +4797,7 @@ export class PomodoroTimer {
      */
     private async showSystemNotification(title: string, message: string, autoCloseDelay?: number, scheduledTime?: Date | string): Promise<number | undefined> {
         // 判断是否是移动端
-        const isMobileDevice = getFrontend().endsWith('mobile') || getBackend().endsWith('android') || getBackend().endsWith('ios') || getBackend().endsWith('harmony');
-
-
-        if (isMobileDevice) {
+        if (this.plugin?.isInMobileApp) {
             // 手机端：使用内核接口进行系统通知
             try {
                 if (scheduledTime) {
@@ -4871,8 +4865,7 @@ export class PomodoroTimer {
         if (!this.systemNotificationEnabled) return;
 
         // 仅移动端调度
-        const isMobileDevice = getFrontend().endsWith('mobile') || getBackend().endsWith('android') || getBackend().endsWith('ios') || getBackend().endsWith('harmony');
-        if (!isMobileDevice) return;
+        if (!this.plugin?.isInMobileApp) return;
 
         const now = Date.now();
 

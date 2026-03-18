@@ -701,6 +701,24 @@ export async function pushErrMsg(msg: string, timeout: number = 7000) {
     return request(url, payload);
 }
 
+/**
+ * 判断当前是否在移动端应用环境
+ * 使用 platformUtils 提供的接口进行检测，若不可用则返回 false
+ */
+export function isInMobileApp(): boolean {
+    const isInHarmony = () => {
+        return window.siyuan.config.system.container === "harmony" && window.JSHarmony;
+    };
+    try {
+        if (platformUtils.isInAndroid?.() || isInHarmony || platformUtils.isInIOS?.()) {
+            return true;
+        }
+    } catch (e) {
+        // ignore
+    }
+    return false;
+}
+
 
 export async function sendNotification(
     title: string,
