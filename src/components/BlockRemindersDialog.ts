@@ -606,7 +606,7 @@ export class BlockRemindersDialog {
                 } else if (endDiffDays === 1) {
                     countdownEl.textContent = i18n("tomorrowDeadline") || '明天截止';
                 } else if (endDiffDays <= 7) {
-                    countdownEl.textContent = i18n("deadlineInNDays")?.replace("${days}", endDiffDays.toString()) || `${endDiffDays}天后截止`;
+                    countdownEl.textContent = i18n("deadlineInNDays")?.replace("${days}", endDiffDays.toString());
                     countdownEl.style.background = 'var(--b3-font-background4)';
                     countdownEl.style.color = 'var(--b3-font-color4)';
                 } else {
