@@ -3292,7 +3292,6 @@ export default class ReminderPlugin extends Plugin {
                             id: instance.instanceId,
                             date: instance.date,
                             endDate: instance.endDate,
-                            customReminderTime: instance.customReminderTime || reminder.customReminderTime,
                             reminderTimes: instanceMod?.reminderTimes !== undefined ? instanceMod.reminderTimes : instance.reminderTimes,
                             customReminderPreset: instanceMod?.customReminderPreset !== undefined ? instanceMod.customReminderPreset : instance.customReminderPreset,
                             time: instance.time,
@@ -3362,8 +3361,8 @@ export default class ReminderPlugin extends Plugin {
                 const isAllDay = !reminder.time || reminder.time === '';
 
                 // 构建完整的提醒信息
-                const dt = this.extractDateAndTime(reminder.time || reminder.customReminderTime);
-                const displayTime = dt?.time || reminder.time || reminder.customReminderTime;
+                const dt = this.extractDateAndTime(reminder.time);
+                const displayTime = dt?.time || reminder.time;
                 const reminderInfo = {
                     id: reminder.id,
                     blockId: reminder.blockId,
@@ -3442,7 +3441,7 @@ export default class ReminderPlugin extends Plugin {
                     sortedReminders.slice(0, 2).forEach(reminder => {
                         let timeText = '';
                         // 使用仅时间部分进行提示文本显示
-                        const parsed = this.extractDateAndTime(reminder.customReminderTime || reminder.time || reminder.time);
+                        const parsed = this.extractDateAndTime(reminder.time);
                         if (parsed && parsed.time) {
                             timeText = ` ⏰${parsed.time}`;
                         } else if (reminder.time) {
@@ -3498,7 +3497,7 @@ export default class ReminderPlugin extends Plugin {
 
                 // 处理普通提醒
                 if (!reminderObj.repeat?.enabled) {
-                    // 普通（非重复）提醒：按字段分别处理 time 和 customReminderTime
+                    // 普通（非重复）提醒：按字段分别处理 time 和 reminderTimes
 
                     // 计算任务的起止范围（用于跨天提醒）
                     const startDate = reminderObj.date || today;
@@ -3517,28 +3516,6 @@ export default class ReminderPlugin extends Plugin {
                                 await this.showTimeReminder(reminderObj, 'time');
                                 this.notifiedReminders.set(notifyKey, true);
                                 await this.markReminderNotified(notifyKey);
-                            }
-                        }
-                    }
-
-                    // 检查 customReminderTime 提醒（对于跨天任务也应在每一天生效，直到 endDate 过期）
-                    if (reminderObj.customReminderTime) {
-                        // 如果 customReminderTime 带有具体日期（YYYY-MM-DD），则仅在该日期触发；否则按 inDateRange 检查
-                        const parsedCustom = this.extractDateAndTime(reminderObj.customReminderTime);
-                        const customHasDate = !!parsedCustom.date;
-                        const shouldCheckRange = customHasDate ? (parsedCustom.date === today) : inDateRange;
-                        if (shouldCheckRange) {
-                            const notifyKey = `${reminderObj.id}_${today}_${reminderObj.customReminderTime}_custom`;
-                            if (!this.notifiedReminders.has(notifyKey) && this.shouldNotifyNow(reminderObj, today, currentTime, 'customReminderTime')) {
-                                // 二次检查持久化记录
-                                if (await this.hasReminderNotified(notifyKey)) {
-                                    this.notifiedReminders.set(notifyKey, true);
-                                } else {
-                                    console.debug('checkTimeReminders - triggering customReminderTime reminder', { id: reminderObj.id, date: reminderObj.date, customReminderTime: reminderObj.customReminderTime });
-                                    await this.showTimeReminder(reminderObj, 'customReminderTime');
-                                    this.notifiedReminders.set(notifyKey, true);
-                                    await this.markReminderNotified(notifyKey);
-                                }
                             }
                         }
                     }
@@ -3564,8 +3541,8 @@ export default class ReminderPlugin extends Plugin {
                                         this.notifiedReminders.set(notifyKey, true);
                                     } else {
                                         console.debug('checkTimeReminders - triggering reminderTimes reminder', { id: reminderObj.id, rt });
-                                        const tempReminder = { ...reminderObj, customReminderTime: rt, note: note ? (reminderObj.note ? reminderObj.note + '\n' + note : note) : reminderObj.note };
-                                        await this.showTimeReminder(tempReminder, 'customReminderTime');
+                                        const tempReminder = { ...reminderObj, note: note ? (reminderObj.note ? reminderObj.note + '\n' + note : note) : reminderObj.note };
+                                        await this.showTimeReminder(tempReminder, 'reminderTimes', rt);
                                         this.notifiedReminders.set(notifyKey, true);
                                         await this.markReminderNotified(notifyKey);
                                     }
@@ -3597,7 +3574,6 @@ export default class ReminderPlugin extends Plugin {
                                     time: modObj.time || reminderObj.time,
                                     endDate: modObj.endDate || reminderObj.endDate,
                                     endTime: modObj.endTime || reminderObj.endTime,
-                                    customReminderTime: modObj.customReminderTime || reminderObj.customReminderTime,
                                     reminderTimes: modObj.reminderTimes !== undefined ? modObj.reminderTimes : reminderObj.reminderTimes,
                                     customReminderPreset: modObj.customReminderPreset !== undefined ? modObj.customReminderPreset : reminderObj.customReminderPreset,
                                     instanceId: instanceId,
@@ -3646,27 +3622,6 @@ export default class ReminderPlugin extends Plugin {
                             }
                         }
 
-                        // customReminderTime 实例提醒
-                        if (instance.customReminderTime) {
-                            const parsedCustomInst = this.extractDateAndTime(instance.customReminderTime);
-                            if (parsedCustomInst.date && parsedCustomInst.date !== instance.date) {
-                                // customReminderTime 指定了不同日期，不在此实例触发
-                            } else {
-                                const notifyKey = `${instance.instanceId}_${today}_${instance.customReminderTime}_custom`;
-                                if (!this.notifiedReminders.has(notifyKey) && this.shouldNotifyNow(instance, today, currentTime, 'customReminderTime')) {
-                                    // 二次检查持久化记录
-                                    if (await this.hasReminderNotified(notifyKey)) {
-                                        this.notifiedReminders.set(notifyKey, true);
-                                    } else {
-                                        console.debug('checkTimeReminders - triggering repeat instance customReminderTime reminder', { id: instance.instanceId, date: instance.date, customReminderTime: instance.customReminderTime });
-                                        await this.showTimeReminder(instance, 'customReminderTime');
-                                        this.notifiedReminders.set(notifyKey, true);
-                                        await this.markReminderNotified(notifyKey);
-                                    }
-                                }
-                            }
-                        }
-
                         // reminderTimes 实例提醒
                         if (instance.reminderTimes && Array.isArray(instance.reminderTimes)) {
                             for (const rtItem of instance.reminderTimes) {
@@ -3687,8 +3642,7 @@ export default class ReminderPlugin extends Plugin {
                                         this.notifiedReminders.set(notifyKey, true);
                                     } else {
                                         console.debug('checkTimeReminders - triggering repeat instance reminderTimes reminder', { id: instance.instanceId, rt });
-                                        const tempInstance = { ...instance, customReminderTime: rt };
-                                        await this.showTimeReminder(tempInstance, 'customReminderTime');
+                                        await this.showTimeReminder(instance, 'reminderTimes', rt);
                                         this.notifiedReminders.set(notifyKey, true);
                                         await this.markReminderNotified(notifyKey);
                                     }
@@ -3705,7 +3659,7 @@ export default class ReminderPlugin extends Plugin {
     }
 
     // 判断是否应该现在提醒（只检测当前分钟，不检测过期提醒）
-    private shouldNotifyNow(reminder: any, today: string, currentTime: string, timeField: 'time' | 'customReminderTime' = 'time'): boolean {
+    private shouldNotifyNow(reminder: any, today: string, currentTime: string, timeField: 'time' = 'time'): boolean {
         // 不在此处强制检查日期，调用方负责判断提醒是否在当天或范围内。
 
         // 必须有时间字段
@@ -3740,7 +3694,7 @@ export default class ReminderPlugin extends Plugin {
     /**
      * 更新非重复任务的总体 notified 标志。
      * 规则：
-     * - 如果有 time 和 customReminderTime，只有两者都已被对应标记为已提醒（notifiedTime/notifiedCustomTime）且两者时间都已过时，才将 notified 设为 true。
+     * - 如果有 time 和 reminderTimes，只有两者都已被对应标记为已提醒且两者时间都已过时，才将 notified 设为 true。
      * - 如果只有其中一个时间存在，则以该字段的已提醒状态为准（并确保该时间已过去）。
      * - 对于跨多天任务（有 endDate），只有当 endDate 是过去时间时，才允许设置 notified 为 true。
      * 返回是否发生了变更（用于持久化判断）。
@@ -3755,7 +3709,6 @@ export default class ReminderPlugin extends Plugin {
         }
 
         const hasTime = !!reminder.time;
-        const hasCustom = !!reminder.customReminderTime;
         const hasReminderTimes = reminder.reminderTimes && Array.isArray(reminder.reminderTimes) && reminder.reminderTimes.length > 0;
 
         const currentNum = this.timeStringToNumber(currentTime);
@@ -3804,12 +3757,11 @@ export default class ReminderPlugin extends Plugin {
             }
         }
 
-        if (hasTime || hasCustom || hasReminderTimes) {
+        if (hasTime || hasReminderTimes) {
             const timeOk = !hasTime || (!!reminder.notifiedTime && checkPassed('time'));
-            const customOk = !hasCustom || (!!reminder.notifiedCustomTime && checkPassed('customReminderTime'));
             const reminderTimesOk = !hasReminderTimes || reminderTimesAllNotified;
 
-            now = timeOk && customOk && reminderTimesOk;
+            now = timeOk && reminderTimesOk;
         } else {
             now = false;
         }
@@ -4032,7 +3984,7 @@ export default class ReminderPlugin extends Plugin {
         }
     }
     // 显示时间提醒
-    private async showTimeReminder(reminder: any, triggerField: 'time' | 'customReminderTime' = 'time') {
+    private async showTimeReminder(reminder: any, triggerField: 'time' | 'reminderTimes' = 'time', triggeredTime?: string) {
         try {
             // 播放通知声音
             await this.playNotificationSound();
@@ -4050,8 +4002,8 @@ export default class ReminderPlugin extends Plugin {
                 }
             }
 
-            const rawChosenTime = (triggerField === 'customReminderTime') ? reminder.customReminderTime : reminder.time;
-            const displayChosen = this.extractDateAndTime(rawChosenTime)?.time || rawChosenTime || reminder.time || reminder.customReminderTime;
+            const rawChosenTime = triggerField === 'reminderTimes' ? triggeredTime : reminder.time;
+            const displayChosen = this.extractDateAndTime(rawChosenTime)?.time || rawChosenTime || reminder.time;
             const reminderInfo = {
                 id: reminder.id,
                 blockId: reminder.blockId,
@@ -4060,7 +4012,7 @@ export default class ReminderPlugin extends Plugin {
                 priority: reminder.priority || 'none',
                 categoryId: reminder.categoryId,
                 // 使用仅时间部分用于显示，若无则回退到原始字段
-                time: displayChosen || reminder.time || reminder.customReminderTime,
+                time: displayChosen || reminder.time,
                 date: reminder.date,
                 endDate: reminder.endDate,
                 isAllDay: false,
@@ -4101,10 +4053,10 @@ export default class ReminderPlugin extends Plugin {
                     const dt = this.extractDateAndTime(reminder.time);
                     timeText = `${dt.time || reminder.time}`;
                     rawTime = reminder.time;
-                } else if (reminder.customReminderTime) {
-                    const dt = this.extractDateAndTime(reminder.customReminderTime);
-                    timeText = `${dt.time || reminder.customReminderTime}`;
-                    rawTime = reminder.customReminderTime;
+                } else if (triggerField === 'reminderTimes' && triggeredTime) {
+                    const dt = this.extractDateAndTime(triggeredTime);
+                    timeText = `${dt.time || triggeredTime}`;
+                    rawTime = triggeredTime;
                 }
 
                 // 从 reminderTimes 中获取备注
@@ -4922,9 +4874,6 @@ export default class ReminderPlugin extends Plugin {
         if (reminder.time) {
             times.push(reminder.time);
         }
-        if (reminder.customReminderTime) {
-            times.push(reminder.customReminderTime);
-        }
         if (reminder.reminderTimes && Array.isArray(reminder.reminderTimes)) {
             for (const rt of reminder.reminderTimes) {
                 if (typeof rt === 'string') {
@@ -4954,7 +4903,7 @@ export default class ReminderPlugin extends Plugin {
             const startDate = reminder.date || today;
             const endDate = reminder.endDate || startDate;
 
-            // 显式日期的提醒（如 customReminderTime=YYYY-MM-DDTHH:MM）应以字段日期为准，不受任务 date/endDate 过滤
+            // 显式日期的提醒应以字段日期为准，不受任务 date/endDate 过滤
             if (!hasExplicitDate && (datePart < startDate || datePart > endDate)) continue;
 
             // 检查是否超过限制天数
@@ -4992,9 +4941,6 @@ export default class ReminderPlugin extends Plugin {
         if (reminder.time) {
             times.push(reminder.time);
         }
-        if (reminder.customReminderTime) {
-            times.push(reminder.customReminderTime);
-        }
         if (reminder.reminderTimes && Array.isArray(reminder.reminderTimes)) {
             for (const rt of reminder.reminderTimes) {
                 if (typeof rt === 'string') {
@@ -5023,7 +4969,7 @@ export default class ReminderPlugin extends Plugin {
             const startDate = reminder.date || today;
             const endDate = reminder.endDate || startDate;
 
-            // 显式日期的提醒（如 customReminderTime=YYYY-MM-DDTHH:MM）应以字段日期为准，不受任务 date/endDate 过滤
+            // 显式日期的提醒应以字段日期为准，不受任务 date/endDate 过滤
             if (!hasExplicitDate && (datePart < startDate || datePart > endDate)) continue;
 
             // 检查是否超过限制天数
@@ -5202,7 +5148,6 @@ export default class ReminderPlugin extends Plugin {
                 const timeChanged =
                     oldReminder.date !== reminder.date ||
                     oldReminder.time !== reminder.time ||
-                    oldReminder.customReminderTime !== reminder.customReminderTime ||
                     JSON.stringify(oldReminder.reminderTimes) !== JSON.stringify(reminder.reminderTimes);
 
                 const completedChanged = !oldReminder.completed && reminder.completed;
