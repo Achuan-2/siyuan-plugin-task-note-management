@@ -4070,7 +4070,7 @@ export class ReminderPanel {
         }
 
         // 时间相同且类型相同时，按优先级排序
-        return this.compareByPriorityValue(a, b);
+        return 0;
     }
 
     // 按优先级比较（优先级相同时按时间）
