@@ -4874,18 +4874,8 @@ export class CalendarView {
 
                         // 重新计算总体 notified
                         const hasTime = !!r.time;
-                        const hasCustom = !!r.customReminderTime;
                         const nt = !!r.notifiedTime;
-                        const nc = !!r.notifiedCustomTime;
-                        if (hasTime && hasCustom) {
-                            r.notified = nt && nc;
-                        } else if (hasTime) {
-                            r.notified = nt;
-                        } else if (hasCustom) {
-                            r.notified = nc;
-                        } else {
-                            r.notified = false;
-                        }
+                        r.notified = hasTime ? nt : false;
                     } catch (err) {
                         reminderData[reminderId].notified = false;
                     }

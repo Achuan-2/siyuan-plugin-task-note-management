@@ -2407,14 +2407,6 @@ export class ProjectKanbanView {
                             }
                         });
                     }
-                    // 处理 customReminderTime（旧格式向后兼容）
-                    else if (task.customReminderTime) {
-                        const reminderDate = this.parseReminderDate(task.customReminderTime, task.date);
-                        if (reminderDate && compareDateStrings(reminderDate, today) >= 0) {
-                            futureReminderTimes.push(task.customReminderTime);
-                        }
-                    }
-
                     // 显示未来提醒时间
                     if (futureReminderTimes.length > 0) {
                         const reminderEl = document.createElement('div');
@@ -9254,14 +9246,6 @@ export class ProjectKanbanView {
                     }
                 });
             }
-            // 处理 customReminderTime（旧格式向后兼容）
-            else if (task.customReminderTime) {
-                const reminderDate = this.parseReminderDate(task.customReminderTime, task.date);
-                if (reminderDate && compareDateStrings(reminderDate, today) >= 0) {
-                    futureReminderTimes.push(task.customReminderTime);
-                }
-            }
-
             // 显示未来提醒时间
             if (futureReminderTimes.length > 0) {
                 const reminderEl = document.createElement('div');

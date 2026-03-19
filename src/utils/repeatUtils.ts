@@ -9,7 +9,6 @@ export interface RepeatInstance {
     time?: string;
     endDate?: string;
     endTime?: string;
-    customReminderTime?: string;
     reminderTimes?: Array<{ time: string, note?: string }>; // 提醒时间列表
     customReminderPreset?: string; // 提醒预设
     instanceId: string; // 实例标识符
@@ -124,7 +123,6 @@ export function generateRepeatInstances(
                         time: modification?.time || reminder.time,
                         endDate: modification?.endDate || (reminder.endDate && reminder.date ? addDaysToDate(modification?.date || currentDateStr, getDaysDifference(reminder.date, reminder.endDate)) : undefined),
                         endTime: modification?.endTime || reminder.endTime,
-                        customReminderTime: modification?.customReminderTime || reminder.customReminderTime,
                         reminderTimes: modification?.reminderTimes !== undefined ? modification.reminderTimes : reminder.reminderTimes,
                         customReminderPreset: modification?.customReminderPreset !== undefined ? modification.customReminderPreset : reminder.customReminderPreset,
                         instanceId: `${reminder.id}_${currentDateStr}`,

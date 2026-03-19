@@ -4666,7 +4666,7 @@ export class ReminderPanel {
             }
         }
 
-        // 准备最终结果字符串，统一在末尾追加 customReminderTime（如果存在）
+        // 准备最终结果字符串，统一在末尾追加 reminderTimes（如果存在）
         let result = '';
 
         // 处理跨天事件
@@ -4702,8 +4702,7 @@ export class ReminderPanel {
             result = time ? `${dateStr} ${time}` : dateStr;
         }
 
-        // 如果存在 customReminderTime，按规则显示：
-        // 如果存在 reminderTimes，显示多个时间
+        // 如果存在 reminderTimes，按规则显示
         try {
             if (reminder?.reminderTimes && Array.isArray(reminder.reminderTimes) && reminder.reminderTimes.length > 0) {
                 const times = reminder.reminderTimes.map((rtItem: any) => {
@@ -4743,53 +4742,9 @@ export class ReminderPanel {
                 if (times) {
                     result += ` ⏰${times}`;
                 }
-            } else {
-                const custom = reminder?.customReminderTime;
-                if (custom) {
-                    let s = String(custom).trim();
-                    let datePart: string | null = null;
-                    let timePart: string | null = null;
-
-                    if (s.includes('T')) {
-                        const parts = s.split('T');
-                        datePart = parts[0];
-                        timePart = parts[1] || null;
-                    } else if (s.includes(' ')) {
-                        const parts = s.split(' ');
-                        if (/^\d{4}-\d{2}-\d{2}$/.test(parts[0])) {
-                            datePart = parts[0];
-                            timePart = parts.slice(1).join(' ') || null;
-                        } else {
-                            timePart = parts.slice(-1)[0] || null;
-                        }
-                    } else if (/^\d{2}:\d{2}$/.test(s)) {
-                        timePart = s;
-                    } else if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-                        datePart = s;
-                    } else {
-                        timePart = s;
-                    }
-
-                    const targetDate = datePart || date || today;
-                    const logicalTarget = this.getReminderLogicalDate(targetDate, timePart || undefined);
-
-                    if (compareDateStrings(logicalTarget, today) < 0) {
-                        // 过去：不显示 customReminderTime
-                    } else if (compareDateStrings(logicalTarget, today) === 0) {
-                        if (timePart) {
-                            const showTime = timePart.substring(0, 5);
-                            result = `${result} ⏰${showTime}`;
-                        }
-                    } else {
-                        // 未来：显示日期 + 时间（如果有）
-                        const showDate = targetDate;
-                        const showTime = timePart ? ` ${timePart.substring(0, 5)}` : '';
-                        result = `${result} ⏰${showDate}${showTime}`;
-                    }
-                }
             }
         } catch (e) {
-            console.warn('格式化 customReminderTime 失败', e);
+            console.warn('格式化 reminderTimes 失败', e);
         }
 
         return result;
@@ -5513,9 +5468,7 @@ export class ReminderPanel {
                         i18n("spanningDaysLeftPlural", { days: daysDiff.toString() });
                 } else {
                     applyCountdownStyle('--b3-font-color4', '--b3-font-background4');
-                    countdownEl.textContent = daysDiff === 1 ?
-                        i18n("startInDays", { days: daysDiff.toString() }) :
-                        i18n("startInDays", { days: daysDiff.toString() });
+                    countdownEl.textContent = i18n("startInDays", { days: daysDiff.toString() });
                 }
             } else {
                 applyCountdownStyle('--b3-font-color4', '--b3-font-background4');
@@ -6359,6 +6312,29 @@ export class ReminderPanel {
         // 只有当今天还没完成时才显示 "今日已完成"
         const dailyCompletedList = Array.isArray(reminder.dailyDessertCompleted) ? reminder.dailyDessertCompleted : [];
         const isAlreadyCompletedToday = dailyCompletedList.includes(today);
+        // 计算逻辑起止日期并检查是否为跨天事件且在今日任务中
+        const startLogical = this.getReminderLogicalDate(reminder.date, reminder.time);
+        const endLogical = this.getReminderLogicalDate(reminder.endDate || reminder.date, reminder.endTime || reminder.time);
+        const isSpanningInToday = isSpanningDays && compareDateStrings(startLogical, today) <= 0 && compareDateStrings(today, endLogical) <= 0;
+        const isFutureReminderInToday = this.isFutureTaskRemindedOnDate(reminder, today);
+        const canToggleTodayCompleted = !reminder.completed && (isSpanningInToday || isFutureReminderInToday);
+
+        // 添加"今日已完成"选项
+        if (canToggleTodayCompleted) {
+            const isTodayCompleted = this.hasDailyCompletionMark(reminder, today);
+            menu.addItem({
+                iconHTML: isTodayCompleted ? "↩️" : "✅",
+                label: isTodayCompleted ? i18n("unmarkTodayCompleted") : i18n("markTodayCompleted"),
+                click: () => {
+                    if (isTodayCompleted) {
+                        this.unmarkSpanningEventTodayCompleted(reminder);
+                    } else {
+                        this.markSpanningEventTodayCompleted(reminder);
+                    }
+                }
+            });
+            menu.addSeparator();
+        }
 
         if (isDessert && !reminder.completed && !isAlreadyCompletedToday) {
             menu.addItem({
@@ -6541,12 +6517,6 @@ export class ReminderPanel {
             return menuItems;
         };
 
-        // 计算逻辑起止日期并检查是否为跨天事件且在今日任务中
-        const startLogical = this.getReminderLogicalDate(reminder.date, reminder.time);
-        const endLogical = this.getReminderLogicalDate(reminder.endDate || reminder.date, reminder.endTime || reminder.time);
-        const isSpanningInToday = isSpanningDays && compareDateStrings(startLogical, today) <= 0 && compareDateStrings(today, endLogical) <= 0;
-        const isFutureReminderInToday = this.isFutureTaskRemindedOnDate(reminder, today);
-        const canToggleTodayCompleted = !reminder.completed && (isSpanningInToday || isFutureReminderInToday);
 
 
         // 添加项目管理选项（仅当任务有projectId时显示）
@@ -6656,22 +6626,6 @@ export class ReminderPanel {
                 });
             }
 
-            // 为跨天的重复事件实例添加"今日已完成"选项
-            if (canToggleTodayCompleted) {
-                const isTodayCompleted = this.hasDailyCompletionMark(reminder, today);
-                menu.addItem({
-                    iconHTML: isTodayCompleted ? "🔄" : "✅",
-                    label: isTodayCompleted ? i18n("unmarkTodayCompleted") : i18n("markTodayCompleted"),
-                    click: () => {
-                        if (isTodayCompleted) {
-                            this.unmarkSpanningEventTodayCompleted(reminder);
-                        } else {
-                            this.markSpanningEventTodayCompleted(reminder);
-                        }
-                    }
-                });
-                menu.addSeparator();
-            }
 
 
 
@@ -6756,22 +6710,7 @@ export class ReminderPanel {
                 });
             }
 
-            // 为跨天的普通事件添加"今日已完成"选项
-            if (canToggleTodayCompleted) {
-                const isTodayCompleted = this.hasDailyCompletionMark(reminder, today);
-                menu.addItem({
-                    iconHTML: isTodayCompleted ? "🔄" : "✅",
-                    label: isTodayCompleted ? i18n("unmarkTodayCompleted") : i18n("markTodayCompleted"),
-                    click: () => {
-                        if (isTodayCompleted) {
-                            this.unmarkSpanningEventTodayCompleted(reminder);
-                        } else {
-                            this.markSpanningEventTodayCompleted(reminder);
-                        }
-                    }
-                });
-                menu.addSeparator();
-            }
+
 
 
             // 快速调整日期（普通任务）
