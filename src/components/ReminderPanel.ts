@@ -1553,8 +1553,9 @@ export class ReminderPanel {
                     try {
                         const cachedInfo = this.asyncDataCache && this.asyncDataCache.get(child.id);
                         if (cachedInfo) {
+                            this.upsertPomodoroDisplay(el, child, cachedInfo);
                             const pomEl = el.querySelector('.reminder-item__pomodoro-count') as HTMLElement | null;
-                            if (pomEl) {
+                            if (pomEl && !child.isRepeatInstance) {
                                 const totalCount = cachedInfo.pomodoroCount || 0;
                                 const todayCount = cachedInfo.todayPomodoroCount || 0;
                                 const focusTimeMinutes = cachedInfo.focusTime || 0;
@@ -2080,6 +2081,119 @@ export class ReminderPanel {
      * 获取按深度优先（DFS）遍历的可见任务 ID 序列
      * 逻辑与 renderRemindersIteratively 保持一致，用于确定乐观插入时的 DOM 位置
      */
+    private formatPomodoroMinutes(minutes: number): string {
+        const hours = Math.floor(minutes / 60);
+        const mins = Math.floor(minutes % 60);
+        if (hours > 0) return `${hours}h ${mins}m`;
+        return `${mins}m`;
+    }
+
+    private shouldShowPomodoroDisplay(reminder: any, cachedData: any): boolean {
+        return !!(
+            reminder?.estimatedPomodoroDuration ||
+            (cachedData?.pomodoroCount && cachedData.pomodoroCount > 0) ||
+            (cachedData?.todayPomodoroCount && cachedData.todayPomodoroCount > 0) ||
+            (cachedData?.focusTime && cachedData.focusTime > 0) ||
+            (cachedData?.todayFocusTime && cachedData.todayFocusTime > 0) ||
+            (cachedData?.totalRepeatingPomodoroCount && cachedData.totalRepeatingPomodoroCount > 0) ||
+            (cachedData?.totalRepeatingFocusTime && cachedData.totalRepeatingFocusTime > 0)
+        );
+    }
+
+    private buildPomodoroDisplayHTML(reminder: any, cachedData: any): string {
+        if (!this.shouldShowPomodoroDisplay(reminder, cachedData)) {
+            return '';
+        }
+
+        const totalCount = cachedData.pomodoroCount || 0;
+        const todayCount = cachedData.todayPomodoroCount || 0;
+        const totalFocus = cachedData.focusTime || 0;
+        const todayFocus = cachedData.todayFocusTime || 0;
+        const formattedTotalTomato = `🍅 ${totalCount}`;
+        const totalFocusText = totalFocus > 0 ? ` 🕒 ${this.formatPomodoroMinutes(totalFocus)}` : '';
+        const todayFocusText = (todayFocus > 0 || totalCount > 0) ? ` 🕒 ${this.formatPomodoroMinutes(todayFocus)}` : '';
+        const estimatedLine = reminder.estimatedPomodoroDuration ? `<span title='${i18n('estimatedPomodoro')}'>${i18n('estimated')}: ${reminder.estimatedPomodoroDuration}</span>` : '';
+
+        let totalLine = '';
+        let todayLine = '';
+
+        if (reminder.isRepeatInstance) {
+            const repeatingTotal = cachedData.totalRepeatingPomodoroCount || 0;
+            const repeatingFocus = cachedData.totalRepeatingFocusTime || 0;
+            const repeatingFocusText = repeatingFocus > 0 ? ` 🕒 ${this.formatPomodoroMinutes(repeatingFocus)}` : '';
+            const instanceFocusText = totalFocus > 0 ? ` 🕒 ${this.formatPomodoroMinutes(totalFocus)}` : '';
+
+            totalLine = `<div style="margin-top:${estimatedLine ? '6px' : '0'}; font-size:12px;">
+                <div title="${i18n('seriesTotalTomatoTitle')}${repeatingTotal}">
+                    <span>${i18n('series')}: 🍅 ${repeatingTotal}</span>
+                    <span style="margin-left:8px; opacity:0.9;">${repeatingFocusText}</span>
+                </div>
+                <div title="${i18n('instanceTomatoTitle')}${totalCount}" style="margin-top:4px; opacity:0.95;">
+                    <span>${i18n('currentInstance')}: 🍅 ${totalCount}</span>
+                    <span style="margin-left:8px; opacity:0.9;">${instanceFocusText}</span>
+                </div>
+             </div>`;
+        } else {
+            totalLine = (totalCount > 0 || totalFocus > 0)
+                ? `<div style="margin-top:${estimatedLine ? '6px' : '0'}; font-size:12px;"><span title="${i18n('totalCompletedPomodoroTitle')}${totalCount}">${i18n('total')}: ${formattedTotalTomato}</span><span title="${i18n('totalFocusDurationTitle')}${totalFocus} ${i18n('minutes')}" style="margin-left:8px; opacity:0.9;">${totalFocusText}</span></div>`
+                : '';
+
+            const hasHistoricalData = (totalCount > todayCount) || (totalFocus > todayFocus);
+            todayLine = hasHistoricalData && (todayCount > 0 || todayFocus > 0)
+                ? `<div style="margin-top:6px; font-size:12px; opacity:0.95;"><span title='${i18n('todayCompletedPomodoroTitle')}${todayCount}'>${i18n('today')}: 🍅 ${todayCount}</span><span title='${i18n('todayFocusTimeTitle')}${todayFocus} ${i18n('minutes')}' style='margin-left:8px'>${todayFocusText}</span></div>`
+                : '';
+        }
+
+        return `${estimatedLine}${totalLine}${todayLine}`;
+    }
+
+    private createPomodoroDisplayElement(reminder: any, cachedData: any): HTMLElement | null {
+        const html = this.buildPomodoroDisplayHTML(reminder, cachedData);
+        if (!html) {
+            return null;
+        }
+
+        const pomodoroDisplay = document.createElement('div');
+        pomodoroDisplay.className = 'reminder-item__pomodoro-count';
+        pomodoroDisplay.style.cssText = `
+            font-size: 12px;
+            display: block;
+            background: rgba(255, 99, 71, 0.1);
+            color: rgb(255, 99, 71);
+            padding: 4px 8px;
+            border-radius: 4px;
+            margin-top: 4px;
+            width: fit-content;
+        `;
+        pomodoroDisplay.innerHTML = html;
+        return pomodoroDisplay;
+    }
+
+    private upsertPomodoroDisplay(reminderEl: HTMLElement, reminder: any, cachedData: any): void {
+        const infoEl = reminderEl.querySelector('.reminder-item__info') as HTMLElement | null;
+        if (!infoEl) {
+            return;
+        }
+
+        const html = this.buildPomodoroDisplayHTML(reminder, cachedData);
+        const existing = infoEl.querySelector('.reminder-item__pomodoro-count') as HTMLElement | null;
+
+        if (!html) {
+            existing?.remove();
+            return;
+        }
+
+        if (existing) {
+            existing.innerHTML = html;
+            return;
+        }
+
+        const created = this.createPomodoroDisplayElement(reminder, cachedData);
+        if (created) {
+            infoEl.appendChild(created);
+        }
+    }
+
     private getVisualOrderIds(reminders: any[]): string[] {
         if (!reminders || reminders.length === 0) return [];
 
@@ -9203,9 +9317,21 @@ export class ReminderPanel {
     private async getReminderPomodoroCount(reminderId: string, reminder?: any, reminderData?: any): Promise<number> {
         try {
             const pomodoroManager = this.pomodoroRecordManager;
-            // If this is a repeat instance, always use per-event count
+            // Repeat instances can also own ghost descendants. In that case we need to
+            // aggregate the whole visible instance subtree instead of only the current node.
             if (reminder && reminder.isRepeatInstance) {
-                return await pomodoroManager.getReminderPomodoroCount(reminderId);
+                const idsToQuery = await this.getReminderSubtreeIdsForStats(reminderId, reminder, reminderData);
+                if (!pomodoroManager['isInitialized']) await pomodoroManager.initialize();
+
+                let total = 0;
+                for (const id of idsToQuery) {
+                    if (typeof pomodoroManager.getEventTotalPomodoroCount === 'function') {
+                        total += pomodoroManager.getEventTotalPomodoroCount(id) || 0;
+                    } else {
+                        total += await pomodoroManager.getReminderPomodoroCount(id);
+                    }
+                }
+                return total;
             }
 
             // Determine if this reminder has any descendants (regardless of depth)
@@ -9274,16 +9400,21 @@ export class ReminderPanel {
     private async getReminderFocusTime(reminderId: string, reminder?: any, reminderData?: any): Promise<number> {
         try {
             const pomodoroManager = this.pomodoroRecordManager;
-            // If this is a repeat instance, always use per-event total
+            // Repeat instances can also own ghost descendants. Aggregate the whole
+            // visible instance subtree instead of only the current node.
             if (reminder && reminder.isRepeatInstance) {
+                const idsToQuery = await this.getReminderSubtreeIdsForStats(reminderId, reminder, reminderData);
                 if (!pomodoroManager['isInitialized']) await pomodoroManager.initialize();
-                if (typeof pomodoroManager.getEventTotalFocusTime === 'function') {
-                    return pomodoroManager.getEventTotalFocusTime(reminderId);
+
+                let total = 0;
+                for (const id of idsToQuery) {
+                    if (typeof pomodoroManager.getEventTotalFocusTime === 'function') {
+                        total += pomodoroManager.getEventTotalFocusTime(id) || 0;
+                    } else if (typeof pomodoroManager.getEventFocusTime === 'function') {
+                        total += pomodoroManager.getEventFocusTime(id) || 0;
+                    }
                 }
-                if (typeof pomodoroManager.getEventFocusTime === 'function') {
-                    return pomodoroManager.getEventFocusTime(reminderId);
-                }
-                return 0;
+                return total;
             }
 
             // Determine if this reminder has any descendants (regardless of depth)
@@ -9330,11 +9461,16 @@ export class ReminderPanel {
             const pomodoroManager = this.pomodoroRecordManager;
             const targetDate = date || getLogicalDateString();
 
-            // If it's a repeat instance or an instance id (contains date), try direct event count
+            // Repeat instances can own ghost descendants. Sum the current instance subtree.
             if (reminder && reminder.isRepeatInstance) {
+                const idsToQuery = await this.getReminderSubtreeIdsForStats(reminderId, reminder, reminderData);
                 if (typeof pomodoroManager.getEventPomodoroCount === 'function') {
                     if (!pomodoroManager['isInitialized']) await pomodoroManager.initialize();
-                    return pomodoroManager.getEventPomodoroCount(reminderId, targetDate);
+                    let total = 0;
+                    for (const id of idsToQuery) {
+                        total += pomodoroManager.getEventPomodoroCount(id, targetDate) || 0;
+                    }
+                    return total;
                 }
                 return 0;
             }
@@ -9427,11 +9563,16 @@ export class ReminderPanel {
             const pomodoroManager = this.pomodoroRecordManager;
             const targetDate = date || getLogicalDateString();
 
-            // If it's a repeat instance, use event-specific focus time
+            // Repeat instances can own ghost descendants. Sum the current instance subtree.
             if (reminder && reminder.isRepeatInstance) {
+                const idsToQuery = await this.getReminderSubtreeIdsForStats(reminderId, reminder, reminderData);
                 if (typeof pomodoroManager.getEventFocusTime === 'function') {
                     if (!pomodoroManager['isInitialized']) await pomodoroManager.initialize();
-                    return pomodoroManager.getEventFocusTime(reminderId, targetDate);
+                    let total = 0;
+                    for (const id of idsToQuery) {
+                        total += pomodoroManager.getEventFocusTime(id, targetDate) || 0;
+                    }
+                    return total;
                 }
                 return 0;
             }
@@ -9498,6 +9639,51 @@ export class ReminderPanel {
         } catch (error) {
             console.error('Failed to get today focus time:', error);
             return 0;
+        }
+    }
+
+    private async getReminderSubtreeIdsForStats(reminderId: string, reminder?: any, reminderData?: any): Promise<Set<string>> {
+        const idsToQuery = new Set<string>();
+        idsToQuery.add(reminderId);
+
+        const dataMap = await this.getReminderStatsDataMap(reminder, reminderData);
+        if (!dataMap) {
+            return idsToQuery;
+        }
+
+        try {
+            const descendantIds = this.getAllDescendantIds(reminderId, dataMap);
+            descendantIds.forEach(id => idsToQuery.add(id));
+        } catch (e) {
+            // ignore subtree resolution failures and fall back to the current node
+        }
+
+        return idsToQuery;
+    }
+
+    private async getReminderStatsDataMap(reminder?: any, reminderData?: any): Promise<Map<string, any> | null> {
+        if (this.allRemindersMap && this.allRemindersMap.size > 0) {
+            if (!reminder?.isRepeatInstance || this.allRemindersMap.has(reminder.id)) {
+                return this.allRemindersMap;
+            }
+        }
+
+        const raw = reminderData;
+        if (raw instanceof Map) {
+            return raw;
+        }
+        if (Array.isArray(raw)) {
+            return new Map(raw.map((r: any) => [r.id, r]));
+        }
+        if (raw && typeof raw === 'object') {
+            return new Map(Object.values(raw).map((r: any) => [r.id, r]));
+        }
+
+        try {
+            const rd = await getAllReminders(this.plugin, undefined, false, 'sidebar');
+            return new Map(Object.values(rd || {}).map((r: any) => [r.id, r]));
+        } catch (e) {
+            return null;
         }
     }
 
