@@ -289,6 +289,25 @@ export default class ReminderPlugin extends Plugin {
     public vip: any = { vipKeys: [], isVip: false, expireDate: '', freeTrialUsed: false };
     public isInMobileApp: boolean = false;
 
+    public getWorkspaceDir(): string {
+        return (window as any).siyuan?.config?.system?.workspaceDir || "";
+    }
+
+    private getWorkspaceScopedChannelName(baseName: string): string {
+        const workspaceDir = this.getWorkspaceDir();
+        if (!workspaceDir) {
+            return baseName;
+        }
+
+        let hash = 0;
+        for (let i = 0; i < workspaceDir.length; i++) {
+            hash = ((hash << 5) - hash) + workspaceDir.charCodeAt(i);
+            hash |= 0;
+        }
+
+        return `${baseName}-${Math.abs(hash).toString(36)}`;
+    }
+
     /**
      * 加载提醒数据，支持缓存
      * @param update 是否强制更新（从文件读取）
@@ -3055,7 +3074,8 @@ export default class ReminderPlugin extends Plugin {
     }
 
     private initCoordinator() {
-        this.coordinatorChannel = new BroadcastChannel('siyuan-plugin-task-note-management-coordinator');
+        const channelName = this.getWorkspaceScopedChannelName('siyuan-plugin-task-note-management-coordinator');
+        this.coordinatorChannel = new BroadcastChannel(channelName);
 
         // 监听来自其他窗口的消息
         this.coordinatorChannel.onmessage = (event) => {

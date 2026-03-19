@@ -118,6 +118,22 @@ export class PomodoroTimer {
     private inheritedWindowBounds: { x: number; y: number; width: number; height: number } | null = null; // 继承的窗口位置信息
     private scheduledNotificationIds: number[] = []; // 已调度的移动端通知ID列表
 
+    private static async isWindowFromWorkspace(win: any, workspaceDir: string): Promise<boolean> {
+        if (!workspaceDir) {
+            return true;
+        }
+
+        try {
+            const windowWorkspaceDir = await win.webContents.executeJavaScript(
+                'window.pomodoroWorkspaceDir || window.localState?.workspaceDir || ""'
+            ).catch(() => '');
+
+            return windowWorkspaceDir === workspaceDir;
+        } catch (error) {
+            return false;
+        }
+    }
+
     constructor(reminder: any, settings: any, isCountUp: boolean = false, inheritState?: any, plugin?: any, container?: HTMLElement, orphanedWindow?: any) {
         this.reminder = reminder;
         this.settings = settings;
@@ -7123,7 +7139,7 @@ document.body.classList.remove('docked-mode');
 
     public static async recoverOrphanedWindow(plugin: any, settings: any): Promise<PomodoroTimer | null> {
         // Scan first, BEFORE creating any instance to avoid side effects (like opening a new window)
-        const win = await PomodoroTimer.scanForOrphanedWindow();
+        const win = await PomodoroTimer.scanForOrphanedWindow(plugin);
 
         if (win) {
             console.log('[PomodoroTimer] Found orphan during recovery scan', win.id);
@@ -7212,13 +7228,14 @@ document.body.classList.remove('docked-mode');
         return null;
     }
 
-    private static async scanForOrphanedWindow(): Promise<any> {
+    private static async scanForOrphanedWindow(plugin?: any): Promise<any> {
         try {
             let remote: any;
             try { remote = (window as any).require('@electron/remote'); }
             catch (e) { try { remote = (window as any).require('electron').remote; } catch (e2) { } }
             if (!remote) return null;
 
+            const workspaceDir = plugin?.getWorkspaceDir?.() || '';
             const wins = remote.BrowserWindow.getAllWindows();
             for (const win of wins) {
                 if (win.isDestroyed()) continue;
@@ -7236,7 +7253,9 @@ document.body.classList.remove('docked-mode');
                         } catch (e) { }
                     }
 
-                    if (isPomodoro) return win;
+                    if (isPomodoro && await PomodoroTimer.isWindowFromWorkspace(win, workspaceDir)) {
+                        return win;
+                    }
                 } catch (e) { }
             }
         } catch (e) { }
@@ -7249,7 +7268,7 @@ document.body.classList.remove('docked-mode');
         if (PomodoroTimer.browserWindowInstance) return;
 
         try {
-            const win = await PomodoroTimer.scanForOrphanedWindow();
+            const win = await PomodoroTimer.scanForOrphanedWindow(this.plugin);
             if (win) {
                 if (PomodoroTimer.browserWindowInstance === win) return;
 
@@ -7982,9 +8001,10 @@ document.body.classList.remove('docked-mode');
         let isPinned = true;
         
         // Initialize local state from arguments
-        let localState = ${JSON.stringify(currentState)};
+        let localState = ${JSON.stringify({ ...currentState, workspaceDir: this.plugin?.getWorkspaceDir?.() || '' })};
         // Expose localState globally for recovery
         window.localState = localState;
+        window.pomodoroWorkspaceDir = localState.workspaceDir || '';
         
         let settings = ${JSON.stringify({
                 workDuration: this.settings.workDuration,
@@ -8526,7 +8546,10 @@ document.body.classList.remove('docked-mode');
             };
 
             // Send state to window using executeJavaScript
-            const enhancedState = Object.assign({}, currentState, { isBackgroundAudioMuted: this.isBackgroundAudioMuted });
+            const enhancedState = Object.assign({}, currentState, {
+                isBackgroundAudioMuted: this.isBackgroundAudioMuted,
+                workspaceDir: this.plugin?.getWorkspaceDir?.() || ''
+            });
             const script = `if(window.updateLocalState) window.updateLocalState(${JSON.stringify(enhancedState)}, ${JSON.stringify(settingsUpdate)});`;
 
             window.webContents.executeJavaScript(script).catch(() => { });
