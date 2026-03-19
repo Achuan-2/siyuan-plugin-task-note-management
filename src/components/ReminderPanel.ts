@@ -856,6 +856,111 @@ export class ReminderPanel {
         return timeB - timeA; // 最新创建的在前
     }
 
+    private createQuickDateContextMenuItems(targetReminder: any, onlyThisInstance: boolean = false): any[] {
+        const items: any[] = [];
+        const todayStr = getLogicalDateString();
+        const tomorrowStr = getRelativeDateString(1);
+        const dayAfterStr = getRelativeDateString(2);
+        const nextWeekStr = getRelativeDateString(7);
+        const isSpanningTask = !!(targetReminder.date && targetReminder.endDate && targetReminder.endDate !== targetReminder.date);
+        const calendarIcon = "📅";
+        const removeIcon = "❌";
+        const editIcon = "✏️";
+
+        const getOriginalInstanceDate = () => {
+            const parsedInstance = targetReminder.isRepeatInstance ? this.parseReminderInstanceId(targetReminder.id) : null;
+            return parsedInstance?.instanceDate || targetReminder.date;
+        };
+
+        const applyStartDate = async (newDate: string | null) => {
+            try {
+                if (targetReminder.isRepeatInstance && onlyThisInstance) {
+                    await this.setInstanceDate(targetReminder.originalId, getOriginalInstanceDate(), newDate);
+                } else {
+                    const targetId = targetReminder.isRepeatInstance ? targetReminder.originalId : targetReminder.id;
+                    await this.setReminderBaseDate(targetId, newDate);
+                }
+            } catch (err) {
+                console.error('快速调整开始日期失败:', err);
+                showMessage(i18n("operationFailed"));
+            }
+        };
+
+        const applyEndDate = async (newDate: string) => {
+            try {
+                if (targetReminder.isRepeatInstance && onlyThisInstance) {
+                    await this.setInstanceEndDate(targetReminder.originalId, getOriginalInstanceDate(), newDate);
+                } else {
+                    const targetId = targetReminder.isRepeatInstance ? targetReminder.originalId : targetReminder.id;
+                    await this.setReminderEndDate(targetId, newDate);
+                }
+            } catch (err) {
+                console.error('快速调整结束日期失败:', err);
+                showMessage(i18n("operationFailed"));
+            }
+        };
+
+        const createDateTargetSubmenu = (applyDate: (newDate: string) => Promise<void>) => ([
+            { iconHTML: calendarIcon, label: i18n("moveToToday") || "移至今天", click: () => applyDate(todayStr) },
+            { iconHTML: calendarIcon, label: i18n("moveToTomorrow") || "移至明天", click: () => applyDate(tomorrowStr) },
+            { iconHTML: calendarIcon, label: i18n("moveToDayAfterTomorrow") || "移至后天", click: () => applyDate(dayAfterStr) },
+            { iconHTML: calendarIcon, label: i18n("moveToNextWeek") || "移至下周", click: () => applyDate(nextWeekStr) }
+        ]);
+
+        const editDate = () => {
+            const isInstanceEdit = targetReminder.isRepeatInstance && onlyThisInstance;
+            const originalInstanceDate = getOriginalInstanceDate();
+            const dlg = new QuickReminderDialog(
+                undefined, undefined, undefined, undefined,
+                {
+                    mode: 'edit',
+                    reminder: isInstanceEdit ? {
+                        ...targetReminder,
+                        isInstance: true,
+                        originalId: targetReminder.originalId,
+                        instanceDate: originalInstanceDate
+                    } : targetReminder,
+                    isInstanceEdit: isInstanceEdit,
+                    plugin: this.plugin,
+                    dateOnly: true,
+                    onSaved: async (savedReminder) => {
+                        if (savedReminder && savedReminder.id) {
+                            await this.handleOptimisticSavedReminder(savedReminder);
+                        } else {
+                            await this.loadReminders();
+                        }
+                        window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
+                    }
+                }
+            );
+            dlg.show();
+        };
+
+        if (isSpanningTask) {
+            items.push({
+                iconHTML: calendarIcon,
+                label: i18n("adjustStartDate") || "调整开始日期",
+                submenu: createDateTargetSubmenu(applyStartDate)
+            });
+            items.push({
+                iconHTML: calendarIcon,
+                label: i18n("adjustEndDate") || "调整结束日期",
+                submenu: createDateTargetSubmenu(applyEndDate)
+            });
+            items.push({ iconHTML: removeIcon, label: i18n("clearDate") || "清除日期", click: () => applyStartDate(null) });
+            items.push({ iconHTML: editIcon, label: i18n("editDate") || "编辑日期", click: editDate });
+        } else {
+            items.push({ iconHTML: calendarIcon, label: i18n("moveToToday") || "移至今天", click: () => applyStartDate(todayStr) });
+            items.push({ iconHTML: calendarIcon, label: i18n("moveToTomorrow") || "移至明天", click: () => applyStartDate(tomorrowStr) });
+            items.push({ iconHTML: calendarIcon, label: i18n("moveToDayAfterTomorrow") || "移至后天", click: () => applyStartDate(dayAfterStr) });
+            items.push({ iconHTML: calendarIcon, label: i18n("moveToNextWeek") || "移至下周", click: () => applyStartDate(nextWeekStr) });
+            items.push({ iconHTML: removeIcon, label: i18n("clearDate") || "清除日期", click: () => applyStartDate(null) });
+            items.push({ iconHTML: editIcon, label: i18n("editDate") || "编辑日期", click: editDate });
+        }
+
+        return items;
+    }
+
     /**
      * 获取任务的排序值（支持重复实例）
      */
@@ -6633,7 +6738,7 @@ export class ReminderPanel {
             menu.addItem({
                 iconHTML: "📆",
                 label: i18n("quickReschedule") || "快速调整日期",
-                submenu: createQuickDateMenuItems(reminder, true)
+                submenu: this.createQuickDateContextMenuItems(reminder, true)
             });
 
             // 优先级默认只修改此实例（因为不同实例的优先级可能不同）
@@ -6717,7 +6822,7 @@ export class ReminderPanel {
             menu.addItem({
                 iconHTML: "📆",
                 label: i18n("quickReschedule") || "快速调整日期",
-                submenu: createQuickDateMenuItems(reminder, false)
+                submenu: this.createQuickDateContextMenuItems(reminder, false)
             });
             menu.addItem({
                 iconHTML: "🎯",
@@ -6811,6 +6916,37 @@ export class ReminderPanel {
         }
     }
 
+    private async setReminderEndDate(reminderId: string, newDate: string) {
+        const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
+        const reminder = reminderData[reminderId];
+        if (!reminder) {
+            showMessage(i18n("reminderNotExist"));
+            return;
+        }
+
+        try {
+            const startDate = reminder.date || reminder.endDate;
+            if (startDate && compareDateStrings(newDate, startDate) < 0) {
+                reminder.endDate = startDate;
+                showMessage(i18n('endDateAdjusted') || '结束日期已自动调整为开始日期');
+            } else {
+                reminder.endDate = newDate;
+            }
+
+            await saveReminders(this.plugin, reminderData);
+
+            if (reminder.blockId) {
+                try { await updateBindBlockAtrrs(reminder.blockId, this.plugin); } catch (e) { /* ignore */ }
+            }
+
+            await this.loadReminders();
+            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
+        } catch (err) {
+            console.error('设置结束日期失败:', err);
+            showMessage(i18n("operationFailed"));
+        }
+    }
+
     /**
      * 设置重复事件的某个实例日期（通过 instanceModifications）。
      * 同时根据原始事件的跨度设置实例的 endDate 修改。
@@ -6855,6 +6991,41 @@ export class ReminderPanel {
             showMessage(i18n("instanceTimeUpdated") || "实例时间已更新");
         } catch (err) {
             console.error('设置实例日期失败:', err);
+            showMessage(i18n("operationFailed"));
+        }
+    }
+
+    private async setInstanceEndDate(originalId: string, instanceDate: string, newDate: string) {
+        const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
+        const originalReminder = reminderData[originalId];
+        if (!originalReminder || !originalReminder.repeat?.enabled) {
+            showMessage(i18n("reminderNotExist"));
+            return;
+        }
+
+        try {
+            if (!originalReminder.repeat.instanceModifications) {
+                originalReminder.repeat.instanceModifications = {};
+            }
+            if (!originalReminder.repeat.instanceModifications[instanceDate]) {
+                originalReminder.repeat.instanceModifications[instanceDate] = {};
+            }
+
+            const modifiedDate = originalReminder.repeat.instanceModifications[instanceDate].date;
+            const startDate = modifiedDate !== undefined && modifiedDate !== null ? modifiedDate : instanceDate;
+            if (startDate && compareDateStrings(newDate, startDate) < 0) {
+                originalReminder.repeat.instanceModifications[instanceDate].endDate = startDate;
+                showMessage(i18n('endDateAdjusted') || '结束日期已自动调整为开始日期');
+            } else {
+                originalReminder.repeat.instanceModifications[instanceDate].endDate = newDate;
+            }
+
+            await saveReminders(this.plugin, reminderData);
+            await this.loadReminders();
+            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
+            showMessage(i18n("instanceTimeUpdated") || "实例时间已更新");
+        } catch (err) {
+            console.error('设置实例结束日期失败:', err);
             showMessage(i18n("operationFailed"));
         }
     }

@@ -10536,12 +10536,15 @@ export class ProjectKanbanView {
             const tomorrowStr = getRelativeDateString(1);
             const dayAfterStr = getRelativeDateString(2);
             const nextWeekStr = getRelativeDateString(7);
+            const isSpanningTask = !!(targetTask.date && targetTask.endDate && targetTask.endDate !== targetTask.date);
 
-            const apply = async (newDate: string | null) => {
+            const getOriginalInstanceDate = () =>
+                (targetTask.id && targetTask.id.includes('_')) ? targetTask.id.split('_').pop()! : targetTask.date;
+
+            const applyStartDate = async (newDate: string | null) => {
                 try {
                     if (targetTask.isRepeatInstance && onlyThisInstance) {
-                        // 使用原始实例日期作为键（如果实例曾被移动，task.date 可能已改变）
-                        const originalInstanceDate = (targetTask.id && targetTask.id.includes('_')) ? targetTask.id.split('_').pop()! : targetTask.date;
+                        const originalInstanceDate = getOriginalInstanceDate();
                         const reminderData = await getAllReminders(this.plugin);
                         const originalReminder = reminderData[targetTask.originalId];
                         if (!originalReminder) {
@@ -10554,13 +10557,11 @@ export class ProjectKanbanView {
                         if (!originalReminder.repeat.instanceModifications[originalInstanceDate]) originalReminder.repeat.instanceModifications[originalInstanceDate] = {};
 
                         if (newDate === null) {
-                            // 标记为移除该实例（generateRepeatInstances 会跳过 date 为 null 的修改）
                             originalReminder.repeat.instanceModifications[originalInstanceDate].date = null;
                             delete originalReminder.repeat.instanceModifications[originalInstanceDate].endDate;
                         } else {
                             originalReminder.repeat.instanceModifications[originalInstanceDate].date = newDate;
 
-                            // 如果原始为跨天，保持跨度
                             if (originalReminder.endDate && originalReminder.date) {
                                 const span = getDaysDifference(originalReminder.date, originalReminder.endDate);
                                 originalReminder.repeat.instanceModifications[originalInstanceDate].endDate = addDaysToDate(newDate, span);
@@ -10568,7 +10569,6 @@ export class ProjectKanbanView {
                         }
 
                         await saveReminders(this.plugin, reminderData);
-
                         this.dispatchReminderUpdate(true);
                         this.queueLoadTasks();
                         showMessage(i18n("instanceTimeUpdated") || "实例时间已更新");
@@ -10585,7 +10585,6 @@ export class ProjectKanbanView {
                         const oldEndDate: string | undefined = reminder.endDate;
 
                         if (newDate === null) {
-                            // 清除日期和相关结束日期/时间
                             delete reminder.date;
                             delete reminder.time;
                             delete reminder.endDate;
@@ -10599,7 +10598,6 @@ export class ProjectKanbanView {
                         }
 
                         await saveReminders(this.plugin, reminderData);
-
                         this.dispatchReminderUpdate(true);
                         this.queueLoadTasks();
                         showMessage(i18n("operationSuccessful"));
@@ -10610,39 +10608,115 @@ export class ProjectKanbanView {
                 }
             };
 
-            items.push({ iconHTML: "📅", label: i18n("moveToToday") || "移至今天", click: () => apply(todayStr) });
-            items.push({ iconHTML: "📅", label: i18n("moveToTomorrow") || "移至明天", click: () => apply(tomorrowStr) });
-            items.push({ iconHTML: "📅", label: i18n("moveToDayAfterTomorrow") || "移至后天", click: () => apply(dayAfterStr) });
-            items.push({ iconHTML: "📅", label: i18n("moveToNextWeek") || "移至下周", click: () => apply(nextWeekStr) });
-            items.push({ iconHTML: "❌", label: i18n('clearDate') || '清除日期', click: () => apply(null) });
-            items.push({
-                iconHTML: "✏️", label: i18n("editDate") || "编辑日期", click: () => {
-                    const isInstanceEdit = targetTask.isRepeatInstance && onlyThisInstance;
-                    const originalInstanceDate = (targetTask.isRepeatInstance && targetTask.id && targetTask.id.includes('_'))
-                        ? targetTask.id.substring(targetTask.id.lastIndexOf('_') + 1)
-                        : targetTask.date;
-                    const dlg = new QuickReminderDialog(
-                        undefined, undefined, undefined, undefined,
-                        {
-                            mode: 'edit',
-                            reminder: isInstanceEdit ? {
-                                ...targetTask,
-                                isInstance: true,
-                                originalId: targetTask.originalId,
-                                instanceDate: originalInstanceDate
-                            } : targetTask,
-                            isInstanceEdit: isInstanceEdit,
-                            plugin: this.plugin,
-                            dateOnly: true,
-                            onSaved: async () => {
-                                this.dispatchReminderUpdate(true);
-                                await this.queueLoadTasks();
-                            }
+            const applyEndDate = async (newDate: string) => {
+                try {
+                    if (targetTask.isRepeatInstance && onlyThisInstance) {
+                        const originalInstanceDate = getOriginalInstanceDate();
+                        const reminderData = await getAllReminders(this.plugin);
+                        const originalReminder = reminderData[targetTask.originalId];
+                        if (!originalReminder) {
+                            showMessage(i18n("reminderNotExist"));
+                            return;
                         }
-                    );
-                    dlg.show();
+
+                        if (!originalReminder.repeat) originalReminder.repeat = {};
+                        if (!originalReminder.repeat.instanceModifications) originalReminder.repeat.instanceModifications = {};
+                        if (!originalReminder.repeat.instanceModifications[originalInstanceDate]) originalReminder.repeat.instanceModifications[originalInstanceDate] = {};
+
+                        const modifiedDate = originalReminder.repeat.instanceModifications[originalInstanceDate].date;
+                        const startDate = modifiedDate !== undefined && modifiedDate !== null ? modifiedDate : originalInstanceDate;
+                        if (startDate && compareDateStrings(newDate, startDate) < 0) {
+                            originalReminder.repeat.instanceModifications[originalInstanceDate].endDate = startDate;
+                            showMessage(i18n('endDateAdjusted') || '结束日期已自动调整为开始日期');
+                        } else {
+                            originalReminder.repeat.instanceModifications[originalInstanceDate].endDate = newDate;
+                        }
+
+                        await saveReminders(this.plugin, reminderData);
+                        this.dispatchReminderUpdate(true);
+                        this.queueLoadTasks();
+                        showMessage(i18n("instanceTimeUpdated") || "实例时间已更新");
+                    } else {
+                        const targetId = targetTask.isRepeatInstance ? targetTask.originalId : targetTask.id;
+                        const reminderData = await getAllReminders(this.plugin);
+                        const reminder = reminderData[targetId];
+                        if (!reminder) {
+                            showMessage(i18n("reminderNotExist"));
+                            return;
+                        }
+
+                        const startDate = reminder.date || reminder.endDate;
+                        if (startDate && compareDateStrings(newDate, startDate) < 0) {
+                            reminder.endDate = startDate;
+                            showMessage(i18n('endDateAdjusted') || '结束日期已自动调整为开始日期');
+                        } else {
+                            reminder.endDate = newDate;
+                        }
+
+                        await saveReminders(this.plugin, reminderData);
+                        this.dispatchReminderUpdate(true);
+                        this.queueLoadTasks();
+                        showMessage(i18n("operationSuccessful"));
+                    }
+                } catch (err) {
+                    console.error('快速调整结束日期失败:', err);
+                    showMessage(i18n("operationFailed"));
                 }
-            });
+            };
+
+            const createDateTargetSubmenu = (applyDate: (newDate: string) => Promise<void>) => ([
+                { iconHTML: "📅", label: i18n("moveToToday") || "移至今天", click: () => applyDate(todayStr) },
+                { iconHTML: "📅", label: i18n("moveToTomorrow") || "移至明天", click: () => applyDate(tomorrowStr) },
+                { iconHTML: "📅", label: i18n("moveToDayAfterTomorrow") || "移至后天", click: () => applyDate(dayAfterStr) },
+                { iconHTML: "📅", label: i18n("moveToNextWeek") || "移至下周", click: () => applyDate(nextWeekStr) }
+            ]);
+
+            const editDate = () => {
+                const isInstanceEdit = targetTask.isRepeatInstance && onlyThisInstance;
+                const originalInstanceDate = getOriginalInstanceDate();
+                const dlg = new QuickReminderDialog(
+                    undefined, undefined, undefined, undefined,
+                    {
+                        mode: 'edit',
+                        reminder: isInstanceEdit ? {
+                            ...targetTask,
+                            isInstance: true,
+                            originalId: targetTask.originalId,
+                            instanceDate: originalInstanceDate
+                        } : targetTask,
+                        isInstanceEdit: isInstanceEdit,
+                        plugin: this.plugin,
+                        dateOnly: true,
+                        onSaved: async () => {
+                            this.dispatchReminderUpdate(true);
+                            await this.queueLoadTasks();
+                        }
+                    }
+                );
+                dlg.show();
+            };
+
+            if (isSpanningTask) {
+                items.push({
+                    iconHTML: "📅",
+                    label: i18n("adjustStartDate") || "调整开始日期",
+                    submenu: createDateTargetSubmenu(applyStartDate)
+                });
+                items.push({
+                    iconHTML: "📅",
+                    label: i18n("adjustEndDate") || "调整结束日期",
+                    submenu: createDateTargetSubmenu(applyEndDate)
+                });
+                items.push({ iconHTML: "❌", label: i18n('clearDate') || '清除日期', click: () => applyStartDate(null) });
+                items.push({ iconHTML: "✏️", label: i18n("editDate") || "编辑日期", click: editDate });
+            } else {
+                items.push({ iconHTML: "📅", label: i18n("moveToToday") || "移至今天", click: () => applyStartDate(todayStr) });
+                items.push({ iconHTML: "📅", label: i18n("moveToTomorrow") || "移至明天", click: () => applyStartDate(tomorrowStr) });
+                items.push({ iconHTML: "📅", label: i18n("moveToDayAfterTomorrow") || "移至后天", click: () => applyStartDate(dayAfterStr) });
+                items.push({ iconHTML: "📅", label: i18n("moveToNextWeek") || "移至下周", click: () => applyStartDate(nextWeekStr) });
+                items.push({ iconHTML: "❌", label: i18n('clearDate') || '清除日期', click: () => applyStartDate(null) });
+                items.push({ iconHTML: "✏️", label: i18n("editDate") || "编辑日期", click: editDate });
+            }
             return items;
         };
 
