@@ -1927,5 +1927,6 @@
     "noMilestones": "No Milestones",
     "pleaseInputDateTimeDesc": "Please enter the date and time description",
     "mergeProject": "Merge Project",
-    "batchSetStatus": "Batch Set Status"
+    "batchSetStatus": "Batch Set Status",
+    "rightClickToManage": "Right Click to Manage"
 }
