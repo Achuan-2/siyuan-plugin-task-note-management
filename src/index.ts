@@ -35,6 +35,7 @@ import { showVipDialog } from "./components/VipDialog";
 import { performDataMigration } from "./utils/dataMigration";
 import { initIcsSync, initIcsSubscriptionSync, handleIcsSyncSettingsChange, cleanupIcsSync } from "./utils/icsSync";
 import { TaskNoteDOMManager } from "./utils/taskNoteDOM";
+import { addDaysToDate, generateRepeatInstances, getDaysDifference, getRelativeReminderWindow } from "./utils/repeatUtils";
 
 export const SETTINGS_FILE = "reminder-settings.json";
 export const PROJECT_DATA_FILE = "project.json";
@@ -4860,64 +4861,8 @@ export default class ReminderPlugin extends Plugin {
      * @returns 下次通知时间，如果没有则返回 null
      */
     private calculateNextNotificationTime(reminder: any, daysLimit: number = 0): Date | null {
-        const now = new Date();
-        const today = getLogicalDateString();
-
-        // 计算限制日期
-        const limitDate = daysLimit > 0 ? new Date(now.getTime() + daysLimit * 24 * 60 * 60 * 1000) : null;
-
-        // 获取提醒日期和时间
-        const reminderDate = reminder.date || today;
-        const times: string[] = [];
-
-        // 收集所有可能的提醒时间
-        if (reminder.time) {
-            times.push(reminder.time);
-        }
-        if (reminder.reminderTimes && Array.isArray(reminder.reminderTimes)) {
-            for (const rt of reminder.reminderTimes) {
-                if (typeof rt === 'string') {
-                    times.push(rt);
-                } else if (rt?.time) {
-                    times.push(rt.time);
-                }
-            }
-        }
-
-        if (times.length === 0) return null;
-
-        // 找到最近的未来时间
-        let nextTime: Date | null = null;
-        let minDiff = Infinity;
-
-        for (const timeStr of times) {
-            const parsed = this.extractDateAndTime(timeStr);
-            if (!parsed.time) continue;
-            const hasExplicitDate = !!parsed.date;
-
-            // 构建完整的日期时间
-            const datePart = parsed.date || reminderDate;
-            const dateTime = new Date(`${datePart}T${parsed.time}`);
-
-            // 检查日期是否在任务范围内
-            const startDate = reminder.date || today;
-            const endDate = reminder.endDate || startDate;
-
-            // 显式日期的提醒应以字段日期为准，不受任务 date/endDate 过滤
-            if (!hasExplicitDate && (datePart < startDate || datePart > endDate)) continue;
-
-            // 检查是否超过限制天数
-            if (limitDate && dateTime.getTime() > limitDate.getTime()) continue;
-
-            // 只考虑未来的时间（给 1 分钟缓冲）
-            const diff = dateTime.getTime() - now.getTime();
-            if (diff > -60000 && diff < minDiff) {
-                minDiff = diff;
-                nextTime = dateTime;
-            }
-        }
-
-        return nextTime;
+        const allTimes = this.calculateAllNotificationTimes(reminder, daysLimit);
+        return allTimes.length > 0 ? allTimes[0] : null;
     }
 
     /**
@@ -4932,6 +4877,59 @@ export default class ReminderPlugin extends Plugin {
 
         // 计算限制日期
         const limitDate = daysLimit > 0 ? new Date(now.getTime() + daysLimit * 24 * 60 * 60 * 1000) : null;
+
+        if (reminder?.repeat?.enabled && reminder?.date) {
+            const repeatWindow = getRelativeReminderWindow(reminder.reminderTimes, reminder.date, reminder.endDate);
+            const scanDays = daysLimit > 0 ? daysLimit : 400;
+            const scanEndDate = addDaysToDate(today, scanDays);
+            const instanceStartDate = addDaysToDate(today, -repeatWindow.lookBackDays);
+            const instanceEndDate = addDaysToDate(scanEndDate, repeatWindow.lookAheadDays);
+            const rangeDays = Math.max(getDaysDifference(instanceStartDate, instanceEndDate) + 1, 1);
+            const instances = generateRepeatInstances(reminder, instanceStartDate, instanceEndDate, Math.max(rangeDays * 2, 500));
+            const futureTimes: Date[] = [];
+
+            for (const instance of instances) {
+                if (instance.completed) continue;
+                const instanceTimes: string[] = [];
+                if (instance.time) {
+                    instanceTimes.push(instance.time);
+                }
+                if (instance.reminderTimes && Array.isArray(instance.reminderTimes)) {
+                    for (const rt of instance.reminderTimes) {
+                        if (typeof rt === 'string') {
+                            instanceTimes.push(rt);
+                        } else if (rt?.time) {
+                            instanceTimes.push(rt.time);
+                        }
+                    }
+                }
+
+                for (const timeStr of instanceTimes) {
+                    const parsed = this.extractDateAndTime(timeStr);
+                    if (!parsed.time) continue;
+                    const datePart = parsed.date || instance.date;
+                    const dateTime = new Date(`${datePart}T${parsed.time}`);
+                    if (isNaN(dateTime.getTime())) continue;
+                    if (limitDate && dateTime.getTime() > limitDate.getTime()) continue;
+
+                    const diff = dateTime.getTime() - now.getTime();
+                    if (diff > -60000) {
+                        futureTimes.push(dateTime);
+                    }
+                }
+            }
+
+            futureTimes.sort((a, b) => a.getTime() - b.getTime());
+            const dedupSet = new Set<number>();
+            const deduped: Date[] = [];
+            for (const dt of futureTimes) {
+                const ts = dt.getTime();
+                if (dedupSet.has(ts)) continue;
+                dedupSet.add(ts);
+                deduped.push(dt);
+            }
+            return deduped;
+        }
 
         // 获取提醒日期和时间
         const reminderDate = reminder.date || today;

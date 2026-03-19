@@ -5,7 +5,7 @@ import { CategoryManager } from "../utils/categoryManager";
 import { ProjectManager } from "../utils/projectManager";
 import { i18n } from "../pluginInstance";
 import { RepeatSettingsDialog, RepeatConfig } from "./RepeatSettingsDialog";
-import { getRepeatDescription } from "../utils/repeatUtils";
+import { getRepeatDescription, getDaysDifference, getReminderTaskDurationDays } from "../utils/repeatUtils";
 import { CategoryManageDialog } from "./CategoryManageDialog";
 import { BlockBindingDialog } from "./BlockBindingDialog";
 import { SubtasksDialog } from "./SubtasksDialog";
@@ -208,7 +208,7 @@ export class QuickReminderDialog {
     private defaultBlockId?: string;
     private defaultParentId?: string;
     private plugin?: any; // 插件实例
-    private customTimes: Array<{ time: string, note?: string }> = []; // 自定义提醒时间列表
+    private customTimes: Array<{ time: string, note?: string, dayOffset?: number, dayIndex?: number }> = []; // 自定义提醒时间列表
     private selectedTagIds: string[] = []; // 当前选中的标签ID列表
     private isInstanceEdit: boolean = false;
     private instanceDate?: string;
@@ -779,22 +779,19 @@ export class QuickReminderDialog {
         // 填充自定义提醒时间（兼容旧格式：仅时间 和 新格式：datetime-local）
         // 优先使用 reminderTimes
         if (this.reminder.reminderTimes && Array.isArray(this.reminder.reminderTimes)) {
-            this.customTimes = this.reminder.reminderTimes.map((item: any) => {
-                if (typeof item === 'string') {
-                    return { time: item, note: '' };
-                }
-                return item;
-            }).filter((item: any) => item && item.time); // 过滤掉无效项
+            this.customTimes = this.reminder.reminderTimes
+                .map((item: any) => this.normalizeCustomTimeItem(item, this.reminder.date, this.reminder.endDate))
+                .filter((item: any) => item && item.time); // 过滤掉无效项
         } else if (this.reminder.customReminderTime) {
             // 兼容旧字段
             let val = this.reminder.customReminderTime;
             if (typeof val === 'string' && val.includes('T')) {
-                this.customTimes.push({ time: val, note: '' });
+                this.customTimes.push(this.normalizeCustomTimeItem({ time: val, note: '' }, this.reminder.date, this.reminder.endDate));
             } else if (typeof val === 'string' && this.reminder.date) {
-                this.customTimes.push({ time: `${this.reminder.date}T${val}`, note: '' });
+                this.customTimes.push(this.normalizeCustomTimeItem({ time: `${this.reminder.date}T${val}`, note: '' }, this.reminder.date, this.reminder.endDate));
             } else if (typeof val === 'string') {
                 const today = getLogicalDateString();
-                this.customTimes.push({ time: `${today}T${val}`, note: '' });
+                this.customTimes.push(this.normalizeCustomTimeItem({ time: `${today}T${val}`, note: '' }, this.reminder.date, this.reminder.endDate));
             }
         }
         this.renderCustomTimeList();
@@ -1619,10 +1616,9 @@ export class QuickReminderDialog {
 
         // 初始化自定义提醒时间
         if (this.reminder && this.reminder.reminderTimes) {
-            this.customTimes = this.reminder.reminderTimes.map((t: any) => {
-                if (typeof t === 'string') return { time: t, note: '' };
-                return t;
-            });
+            this.customTimes = this.reminder.reminderTimes
+                .map((t: any) => this.normalizeCustomTimeItem(t, this.reminder.date, this.reminder.endDate))
+                .filter((item: any) => item && item.time);
         } else {
             this.customTimes = [];
         }
@@ -1799,12 +1795,18 @@ export class QuickReminderDialog {
                             <!-- 自定义时间输入区域（点击添加提醒时间按钮后显示） -->
                             <div id="quickCustomTimeInputArea" style="display: none; padding: 12px; background: var(--b3-theme-background-light); border-radius: 6px; border: 1px solid var(--b3-theme-surface-lighter);">
                                 <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                                    <div id="quickCustomReminderDayWrapper" style="display: none; flex: 0 0 auto; align-items: center; gap: 6px;">
+                                        <span>第</span>
+                                        <input type="number" id="quickCustomReminderDayValue" class="b3-text-field" style="width: 72px;" step="1">
+                                        <span>天</span>
+                                    </div>
                                     <input type="datetime-local" id="quickCustomReminderTime" class="b3-text-field" style="flex: 1 1 140px; min-width: 0;" lang="${langTag}">
                                     <input type="text" id="quickCustomReminderNote" class="b3-text-field" placeholder="${i18n("note")}" style="flex: 1 1 80px; min-width: 0;" spellcheck="false">
                                     <button type="button" id="quickCancelCustomTimeBtn" class="b3-button b3-button--outline" title="${i18n("cancel")}" style="padding: 4px 8px; flex: 0 0 auto;">
                                         <svg class="b3-button__icon"><use xlink:href="#iconClose"></use></svg>
                                     </button>
                                 </div>
+                                <div id="quickCustomReminderDayHint" class="b3-form__desc" style="display: none; margin-top: 8px;"></div>
                             </div>
                         </div>
                         
@@ -2710,15 +2712,203 @@ export class QuickReminderDialog {
         }
     }
 
+    private getCurrentReminderDateRange(): { date?: string; endDate?: string } {
+        const dateInput = this.dialog?.element?.querySelector('#quickReminderDate') as HTMLInputElement;
+        const endDateInput = this.dialog?.element?.querySelector('#quickReminderEndDate') as HTMLInputElement;
+        return {
+            date: dateInput?.value || this.reminder?.date || this.initialDate,
+            endDate: endDateInput?.value || this.reminder?.endDate || this.initialEndDate
+        };
+    }
+
+    private isRepeatCustomReminderMode(date?: string, endDate?: string): boolean {
+        void endDate;
+        return !!this.repeatConfig?.enabled && !!date;
+    }
+
+    private getRepeatCustomReminderDurationDays(date?: string, endDate?: string): number {
+        return getReminderTaskDurationDays(date, endDate);
+    }
+
+    private getCustomReminderTimeValue(value?: string): string {
+        if (!value) return '';
+        if (value.includes('T')) {
+            return value.split('T')[1]?.split(':').slice(0, 2).join(':') || '';
+        }
+        if (value.includes(' ')) {
+            return value.split(' ')[1]?.split(':').slice(0, 2).join(':') || '';
+        }
+        return value.split(':').slice(0, 2).join(':');
+    }
+
+    private getCustomReminderDateValue(value?: string): string | undefined {
+        if (!value) return undefined;
+        if (value.includes('T')) {
+            return value.split('T')[0];
+        }
+        if (value.includes(' ')) {
+            return value.split(' ')[0];
+        }
+        return undefined;
+    }
+
+    private normalizeCustomTimeItem(
+        item: any,
+        date?: string,
+        endDate?: string
+    ): { time: string, note?: string, dayOffset?: number, dayIndex?: number } {
+        const normalized = typeof item === 'string' ? { time: item, note: '' } : { ...item };
+        normalized.time = this.getCustomReminderTimeValue(normalized.time) || normalized.time || '';
+
+        if (!this.isRepeatCustomReminderMode(date, endDate) || !date) {
+            return normalized;
+        }
+
+        const durationDays = this.getRepeatCustomReminderDurationDays(date, endDate);
+        const parsedDate = this.getCustomReminderDateValue(typeof item === 'string' ? item : item?.time);
+
+        if (durationDays > 1) {
+            if (typeof normalized.dayIndex !== 'number') {
+                if (parsedDate) {
+                    const diff = getDaysDifference(date, parsedDate);
+                    normalized.dayIndex = diff >= 0 && diff < durationDays ? diff + 1 : 1;
+                } else {
+                    normalized.dayIndex = 1;
+                }
+            }
+            delete normalized.dayOffset;
+        } else {
+            if (typeof normalized.dayOffset !== 'number') {
+                if (parsedDate) {
+                    const diff = getDaysDifference(date, parsedDate);
+                    normalized.dayOffset = diff >= 0 ? diff + 1 : diff;
+                } else {
+                    normalized.dayOffset = 1;
+                }
+            }
+            normalized.dayOffset = Math.min(Math.max(normalized.dayOffset, -1), 1);
+            delete normalized.dayIndex;
+        }
+
+        return normalized;
+    }
+
+    private getCustomReminderDayValue(
+        item: { time: string, note?: string, dayOffset?: number, dayIndex?: number },
+        date?: string,
+        endDate?: string
+    ): number {
+        const normalized = this.normalizeCustomTimeItem(item, date, endDate);
+        const durationDays = this.getRepeatCustomReminderDurationDays(date, endDate);
+        return durationDays > 1 ? (normalized.dayIndex || 1) : (normalized.dayOffset ?? 1);
+    }
+
+    private getCustomReminderSortValue(
+        item: { time: string, note?: string, dayOffset?: number, dayIndex?: number },
+        date?: string,
+        endDate?: string
+    ): number {
+        const normalized = this.normalizeCustomTimeItem(item, date, endDate);
+        if (!this.isRepeatCustomReminderMode(date, endDate)) {
+            return 0;
+        }
+
+        const durationDays = this.getRepeatCustomReminderDurationDays(date, endDate);
+        if (durationDays > 1) {
+            return (normalized.dayIndex || 1) - 1;
+        }
+
+        const dayOffset = normalized.dayOffset ?? 1;
+        return dayOffset <= 0 ? dayOffset : dayOffset - 1;
+    }
+
+    private buildCustomTimeItem(
+        time: string,
+        note?: string,
+        dayValue?: string,
+        date?: string,
+        endDate?: string
+    ): { time: string, note?: string, dayOffset?: number, dayIndex?: number } {
+        if (!this.isRepeatCustomReminderMode(date, endDate)) {
+            return { time, note };
+        }
+
+        const item: { time: string, note?: string, dayOffset?: number, dayIndex?: number } = {
+            time: this.getCustomReminderTimeValue(time) || time,
+            note
+        };
+        const durationDays = this.getRepeatCustomReminderDurationDays(date, endDate);
+        const numericValue = Number.parseInt(dayValue || '', 10);
+        if (durationDays > 1) {
+            item.dayIndex = Number.isFinite(numericValue) ? Math.min(Math.max(numericValue, 1), durationDays) : 1;
+        } else {
+            item.dayOffset = Number.isFinite(numericValue) ? Math.min(Math.max(numericValue, -1), 1) : 1;
+        }
+        return item;
+    }
+
+    private updateCustomReminderInputMode() {
+        const customReminderInput = this.dialog.element.querySelector('#quickCustomReminderTime') as HTMLInputElement;
+        const dayWrapper = this.dialog.element.querySelector('#quickCustomReminderDayWrapper') as HTMLElement;
+        const dayInput = this.dialog.element.querySelector('#quickCustomReminderDayValue') as HTMLInputElement;
+        const dayHint = this.dialog.element.querySelector('#quickCustomReminderDayHint') as HTMLElement;
+        const addPresetBtn = this.dialog.element.querySelector('#quickAddPresetBtn') as HTMLButtonElement;
+        if (!customReminderInput || !dayWrapper || !dayInput || !dayHint) return;
+
+        const { date, endDate } = this.getCurrentReminderDateRange();
+        const isRepeatMode = this.isRepeatCustomReminderMode(date, endDate);
+        const durationDays = this.getRepeatCustomReminderDurationDays(date, endDate);
+
+        if (isRepeatMode) {
+            customReminderInput.type = 'time';
+            dayWrapper.style.display = '';
+            dayHint.style.display = '';
+            if (durationDays > 1) {
+                dayInput.min = '1';
+                dayInput.max = String(durationDays);
+                if (!dayInput.value) dayInput.value = '1';
+                dayHint.textContent = `第 x 天提醒，范围 1-${durationDays}`;
+            } else {
+                dayInput.min = '-1';
+                dayInput.max = '1';
+                if (!dayInput.value) dayInput.value = '1';
+                dayHint.textContent = '第 x 天提醒，0/1 表示当天，-1 表示提前一天';
+            }
+
+            if (customReminderInput.value.includes('T')) {
+                customReminderInput.value = this.getCustomReminderTimeValue(customReminderInput.value);
+            }
+
+            if (addPresetBtn) {
+                addPresetBtn.disabled = true;
+                addPresetBtn.title = '重复任务请直接设置第 x 天和时间';
+            }
+        } else {
+            customReminderInput.type = 'datetime-local';
+            dayWrapper.style.display = 'none';
+            dayHint.style.display = 'none';
+            dayInput.value = '';
+            if (addPresetBtn) {
+                addPresetBtn.disabled = false;
+                addPresetBtn.title = '';
+            }
+        }
+    }
+
     // 渲染自定义时间列表
     // 渲染自定义时间列表
     private renderCustomTimeList() {
         const container = this.dialog.element.querySelector('#quickCustomTimeList') as HTMLElement;
         if (!container) return;
+        const { date, endDate } = this.getCurrentReminderDateRange();
+        const isRepeatMode = this.isRepeatCustomReminderMode(date, endDate);
+        const durationDays = this.getRepeatCustomReminderDurationDays(date, endDate);
         // 渲染为多行可编辑输入：每行包含 datetime-local 输入、备注输入、移除按钮
         container.innerHTML = '';
         this.customTimes.forEach((item, index) => {
             if (!item) return;
+            const normalizedItem = this.normalizeCustomTimeItem(item, date, endDate);
+            this.customTimes[index] = normalizedItem;
 
             const row = document.createElement('div');
             row.className = 'custom-time-row';
@@ -2731,10 +2921,37 @@ export class QuickReminderDialog {
             `;
 
             const timeInput = document.createElement('input');
-            timeInput.type = 'datetime-local';
+            timeInput.type = isRepeatMode ? 'time' : 'datetime-local';
             timeInput.className = 'b3-text-field';
             timeInput.style.cssText = 'flex: 1 1 140px; min-width: 0;';
-            timeInput.value = item.time || '';
+            timeInput.value = isRepeatMode ? this.getCustomReminderTimeValue(normalizedItem.time) : (normalizedItem.time || '');
+
+            let dayInput: HTMLInputElement | null = null;
+            let dayWrapper: HTMLDivElement | null = null;
+            if (isRepeatMode) {
+                dayWrapper = document.createElement('div');
+                dayWrapper.style.cssText = 'display: flex; align-items: center; gap: 6px; flex: 0 0 auto;';
+                const dayPrefix = document.createElement('span');
+                dayPrefix.textContent = '第';
+                dayInput = document.createElement('input');
+                dayInput.type = 'number';
+                dayInput.className = 'b3-text-field';
+                dayInput.style.cssText = 'width: 72px;';
+                dayInput.step = '1';
+                const daySuffix = document.createElement('span');
+                daySuffix.textContent = '天';
+                if (durationDays > 1) {
+                    dayInput.min = '1';
+                    dayInput.max = String(durationDays);
+                    dayInput.title = `第x天，范围 1-${durationDays}`;
+                } else {
+                    dayInput.title = '第x天，0/1 表示当天，-1 表示提前一天';
+                }
+                dayInput.value = String(this.getCustomReminderDayValue(normalizedItem, date, endDate));
+                dayWrapper.appendChild(dayPrefix);
+                dayWrapper.appendChild(dayInput);
+                dayWrapper.appendChild(daySuffix);
+            }
 
             const noteInput = document.createElement('input');
             noteInput.type = 'text';
@@ -2760,13 +2977,18 @@ export class QuickReminderDialog {
                     this.renderCustomTimeList();
                     return;
                 }
-                this.customTimes[index] = { time: v, note: this.customTimes[index]?.note || '' };
+                this.customTimes[index] = this.buildCustomTimeItem(v, this.customTimes[index]?.note || '', dayInput?.value || '', date, endDate);
+            });
+
+            dayInput?.addEventListener('change', () => {
+                this.customTimes[index] = this.buildCustomTimeItem(timeInput.value || '', this.customTimes[index]?.note || '', dayInput?.value || '', date, endDate);
+                this.renderCustomTimeList();
             });
 
             noteInput.addEventListener('input', () => {
                 const v = noteInput.value?.trim();
                 if (!this.customTimes[index]) {
-                    this.customTimes[index] = { time: timeInput.value || '', note: v };
+                    this.customTimes[index] = this.buildCustomTimeItem(timeInput.value || '', v, dayInput?.value || '', date, endDate);
                 } else {
                     this.customTimes[index].note = v;
                 }
@@ -2777,6 +2999,9 @@ export class QuickReminderDialog {
                 this.renderCustomTimeList();
             });
 
+            if (dayWrapper) {
+                row.appendChild(dayWrapper);
+            }
             row.appendChild(timeInput);
             row.appendChild(noteInput);
             row.appendChild(removeBtn);
@@ -2786,14 +3011,20 @@ export class QuickReminderDialog {
     }
 
     // 添加自定义时间
-    private addCustomTime(time: string, note?: string) {
-        if (!time) return;
+    private addCustomTime(timeOrItem: string | { time: string, note?: string, dayOffset?: number, dayIndex?: number }, note?: string) {
+        if (!timeOrItem) return;
+        const { date, endDate } = this.getCurrentReminderDateRange();
+        const item = typeof timeOrItem === 'string'
+            ? this.buildCustomTimeItem(timeOrItem, note, '', date, endDate)
+            : this.normalizeCustomTimeItem(timeOrItem, date, endDate);
         // 直接添加，允许重复时间
-        this.customTimes.push({ time, note });
+        this.customTimes.push(item);
         this.customTimes.sort((a, b) => {
             if (!a || !a.time) return 1;
             if (!b || !b.time) return -1;
-            return a.time.localeCompare(b.time);
+            const dayCompare = this.getCustomReminderSortValue(a, date, endDate) - this.getCustomReminderSortValue(b, date, endDate);
+            if (dayCompare !== 0) return dayCompare;
+            return this.getCustomReminderTimeValue(a.time).localeCompare(this.getCustomReminderTimeValue(b.time));
         });
         this.renderCustomTimeList();
     }
@@ -3101,22 +3332,31 @@ export class QuickReminderDialog {
         const addPresetBtn = this.dialog.element.querySelector('#quickAddPresetBtn') as HTMLButtonElement;
         const customTimeInputArea = this.dialog.element.querySelector('#quickCustomTimeInputArea') as HTMLElement;
         const customReminderInput = this.dialog.element.querySelector('#quickCustomReminderTime') as HTMLInputElement;
+        const customReminderDayInput = this.dialog.element.querySelector('#quickCustomReminderDayValue') as HTMLInputElement;
         const customReminderNoteInput = this.dialog.element.querySelector('#quickCustomReminderNote') as HTMLInputElement;
         const cancelCustomTimeBtn = this.dialog.element.querySelector('#quickCancelCustomTimeBtn') as HTMLButtonElement;
         const presetDropdown = this.dialog.element.querySelector('#quickPresetDropdown') as HTMLElement;
 
         // 添加自定义时间按钮 - 直接添加当前时间
         addCustomTimeBtn?.addEventListener('click', () => {
-            // 使用当前时间
+            const { date, endDate } = this.getCurrentReminderDateRange();
+            const isRepeatMode = this.isRepeatCustomReminderMode(date, endDate);
+            const durationDays = this.getRepeatCustomReminderDurationDays(date, endDate);
             const now = new Date();
-            const yyyy = now.getFullYear();
-            const mm = String(now.getMonth() + 1).padStart(2, '0');
-            const dd = String(now.getDate()).padStart(2, '0');
             const hh = String(now.getHours()).padStart(2, '0');
             const min = String(now.getMinutes()).padStart(2, '0');
-            const timeVal = `${yyyy}-${mm}-${dd}T${hh}:${min}`;
-            
-            this.addCustomTime(timeVal, '');
+            if (isRepeatMode) {
+                this.addCustomTime({
+                    time: `${hh}:${min}`,
+                    note: '',
+                    ...(durationDays > 1 ? { dayIndex: 1 } : { dayOffset: 1 })
+                });
+            } else {
+                const yyyy = now.getFullYear();
+                const mm = String(now.getMonth() + 1).padStart(2, '0');
+                const dd = String(now.getDate()).padStart(2, '0');
+                this.addCustomTime(`${yyyy}-${mm}-${dd}T${hh}:${min}`, '');
+            }
             showMessage(i18n('reminderTimeAdded') || '提醒时间已添加');
         });
 
@@ -3375,6 +3615,8 @@ export class QuickReminderDialog {
         // 时间输入框变化时更新预设下拉状态
         timeInput?.addEventListener('change', () => {
             this.updatePresetSelectState();
+            this.updateCustomReminderInputMode();
+            this.renderCustomTimeList();
         });
 
         // 结束时间输入框变化时更新预设下拉状态
@@ -3526,14 +3768,27 @@ export class QuickReminderDialog {
                 if (customReminderInput.value) return;
                 const dateInput = this.dialog.element.querySelector('#quickReminderDate') as HTMLInputElement;
                 const timeInput = this.dialog.element.querySelector('#quickReminderTime') as HTMLInputElement;
-                // 仅在任务设置了日期和时间时初始化
-                if (dateInput && timeInput && dateInput.value && timeInput.value) {
+                const endDateInput = this.dialog.element.querySelector('#quickReminderEndDate') as HTMLInputElement;
+                const isRepeatMode = this.isRepeatCustomReminderMode(dateInput?.value, endDateInput?.value);
+                if (timeInput?.value) {
+                    customReminderInput.value = timeInput.value;
+                } else if (dateInput && timeInput && dateInput.value && timeInput.value) {
                     customReminderInput.value = `${dateInput.value}T${timeInput.value}`;
+                } else if (isRepeatMode) {
+                    const now = new Date();
+                    customReminderInput.value = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+                }
+
+                if (isRepeatMode && customReminderDayInput && !customReminderDayInput.value) {
+                    customReminderDayInput.value = '1';
                 }
             } catch (e) {
                 console.warn('初始化自定义提醒时间失败:', e);
             }
         });
+
+        this.updateCustomReminderInputMode();
+        this.renderCustomTimeList();
 
         // Available Today checkbox event
         const isAvailableTodayCheckbox = this.dialog.element.querySelector('#quickIsAvailableToday') as HTMLInputElement;
@@ -3617,6 +3872,10 @@ export class QuickReminderDialog {
         const repeatDialog = new RepeatSettingsDialog(this.repeatConfig, (config: RepeatConfig) => {
             this.repeatConfig = config;
             this.updateRepeatDescription();
+            const { date, endDate } = this.getCurrentReminderDateRange();
+            this.customTimes = this.customTimes.map((item) => this.normalizeCustomTimeItem(item, date, endDate));
+            this.updateCustomReminderInputMode();
+            this.renderCustomTimeList();
         }, startDate);
         repeatDialog.show();
     }

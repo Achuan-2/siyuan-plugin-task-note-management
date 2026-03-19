@@ -28,6 +28,13 @@ export interface RepeatInstance {
     sort?: number;
 }
 
+export interface ReminderTimeConfig {
+    time: string;
+    note?: string;
+    dayOffset?: number;
+    dayIndex?: number;
+}
+
 /**
  * 将 Date 对象转换为 YYYY-MM-DD 格式的本地日期字符串
  */
@@ -36,6 +43,137 @@ function getLocalDateString(date: Date): string {
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
     const day = date.getDate().toString().padStart(2, '0');
     return `${year}-${month}-${day}`;
+}
+
+function extractDateAndTimeParts(value?: string): { date?: string | null; time?: string | null } {
+    if (!value || typeof value !== 'string') return { date: null, time: null };
+    if (value.includes('T')) {
+        const [datePart, timePart] = value.split('T');
+        if (!timePart) return { date: datePart, time: null };
+        return { date: datePart, time: timePart.split(':').slice(0, 2).join(':') };
+    }
+    if (value.includes(' ')) {
+        const [datePart, timePart] = value.split(' ');
+        return { date: datePart, time: (timePart || '').split(':').slice(0, 2).join(':') || null };
+    }
+    if (value.split(':').length >= 2) {
+        return { date: null, time: value.split(':').slice(0, 2).join(':') };
+    }
+    return { date: null, time: null };
+}
+
+function normalizeReminderTimeEntry(entry: any): ReminderTimeConfig | null {
+    if (!entry) return null;
+    if (typeof entry === 'string') {
+        return { time: entry };
+    }
+    if (typeof entry === 'object' && typeof entry.time === 'string') {
+        return {
+            time: entry.time,
+            note: entry.note,
+            dayOffset: typeof entry.dayOffset === 'number' ? entry.dayOffset : undefined,
+            dayIndex: typeof entry.dayIndex === 'number' ? entry.dayIndex : undefined
+        };
+    }
+    return null;
+}
+
+export function getReminderTaskDurationDays(date?: string, endDate?: string): number {
+    if (!date) return 1;
+    if (!endDate) return 1;
+    return Math.max(getDaysDifference(date, endDate) + 1, 1);
+}
+
+function getReminderEntryRelativeOffset(
+    entry: ReminderTimeConfig,
+    taskDate?: string,
+    taskEndDate?: string
+): number {
+    const durationDays = getReminderTaskDurationDays(taskDate, taskEndDate);
+
+    if (typeof entry.dayIndex === 'number') {
+        const normalizedDayIndex = Math.min(Math.max(Math.trunc(entry.dayIndex), 1), durationDays);
+        return normalizedDayIndex - 1;
+    }
+
+    if (typeof entry.dayOffset === 'number') {
+        const normalizedDayOffset = Math.trunc(entry.dayOffset);
+        return normalizedDayOffset <= 0 ? normalizedDayOffset : normalizedDayOffset - 1;
+    }
+
+    const parsed = extractDateAndTimeParts(entry.time);
+    if (parsed.date && taskDate) {
+        return getDaysDifference(taskDate, parsed.date);
+    }
+
+    return 0;
+}
+
+export function getRelativeReminderWindow(
+    reminderTimes: any[] | undefined,
+    taskDate?: string,
+    taskEndDate?: string
+): { lookBackDays: number; lookAheadDays: number } {
+    if (!Array.isArray(reminderTimes) || reminderTimes.length === 0) {
+        return { lookBackDays: 0, lookAheadDays: 0 };
+    }
+
+    let minOffset = 0;
+    let maxOffset = 0;
+
+    reminderTimes.forEach((item) => {
+        const entry = normalizeReminderTimeEntry(item);
+        if (!entry) return;
+        const offset = getReminderEntryRelativeOffset(entry, taskDate, taskEndDate);
+        minOffset = Math.min(minOffset, offset);
+        maxOffset = Math.max(maxOffset, offset);
+    });
+
+    return {
+        lookBackDays: Math.max(maxOffset, 0),
+        lookAheadDays: Math.max(-minOffset, 0)
+    };
+}
+
+export function resolveRepeatReminderTimes(
+    reminderTimes: any[] | undefined,
+    instanceDate: string,
+    instanceEndDate?: string,
+    originalTaskDate?: string,
+    originalTaskEndDate?: string
+): ReminderTimeConfig[] | undefined {
+    if (!Array.isArray(reminderTimes) || reminderTimes.length === 0) {
+        return undefined;
+    }
+
+    const durationDays = getReminderTaskDurationDays(instanceDate, instanceEndDate);
+    const resolved = reminderTimes
+        .map((item) => normalizeReminderTimeEntry(item))
+        .filter((item): item is ReminderTimeConfig => !!item)
+        .map((item) => {
+            const parsed = extractDateAndTimeParts(item.time);
+            if (!parsed.time) return null;
+
+            let resolvedDate = parsed.date || instanceDate;
+            if (typeof item.dayIndex === 'number') {
+                const dayIndex = Math.min(Math.max(Math.trunc(item.dayIndex), 1), durationDays);
+                resolvedDate = addDaysToDate(instanceDate, dayIndex - 1);
+            } else if (typeof item.dayOffset === 'number') {
+                const dayOffset = Math.trunc(item.dayOffset);
+                resolvedDate = addDaysToDate(instanceDate, dayOffset <= 0 ? dayOffset : dayOffset - 1);
+            } else if (!parsed.date && originalTaskDate) {
+                const offset = getReminderEntryRelativeOffset(item, originalTaskDate, originalTaskEndDate);
+                resolvedDate = addDaysToDate(instanceDate, offset);
+            }
+
+            return {
+                time: `${resolvedDate}T${parsed.time}`,
+                note: item.note
+            };
+        })
+        .filter(Boolean) as ReminderTimeConfig[];
+
+    return resolved.length > 0 ? resolved : undefined;
 }
 
 function getEffectiveMonthDays(year: number, month: number, monthDays: number[]): number[] {
@@ -123,7 +261,13 @@ export function generateRepeatInstances(
                         time: modification?.time || reminder.time,
                         endDate: modification?.endDate || (reminder.endDate && reminder.date ? addDaysToDate(modification?.date || currentDateStr, getDaysDifference(reminder.date, reminder.endDate)) : undefined),
                         endTime: modification?.endTime || reminder.endTime,
-                        reminderTimes: modification?.reminderTimes !== undefined ? modification.reminderTimes : reminder.reminderTimes,
+                        reminderTimes: resolveRepeatReminderTimes(
+                            modification?.reminderTimes !== undefined ? modification.reminderTimes : reminder.reminderTimes,
+                            modification?.date || currentDateStr,
+                            modification?.endDate || (reminder.endDate && reminder.date ? addDaysToDate(modification?.date || currentDateStr, getDaysDifference(reminder.date, reminder.endDate)) : undefined),
+                            reminder.date,
+                            reminder.endDate
+                        ),
                         customReminderPreset: modification?.customReminderPreset !== undefined ? modification.customReminderPreset : reminder.customReminderPreset,
                         instanceId: `${reminder.id}_${currentDateStr}`,
                         originalId: reminder.id,
@@ -501,7 +645,13 @@ export function generateSubtreeInstances(
             kanbanStatus: instanceMod?.kanbanStatus !== undefined ? instanceMod.kanbanStatus : child.kanbanStatus,
             milestoneId: instanceMod?.milestoneId !== undefined ? instanceMod.milestoneId : child.milestoneId,
             tagIds: instanceMod?.tagIds !== undefined ? instanceMod.tagIds : child.tagIds,
-            reminderTimes: instanceMod?.reminderTimes !== undefined ? instanceMod.reminderTimes : child.reminderTimes,
+            reminderTimes: resolveRepeatReminderTimes(
+                instanceMod?.reminderTimes !== undefined ? instanceMod.reminderTimes : child.reminderTimes,
+                instanceDate,
+                instanceMod?.endDate || (child.endDate && child.date ? addDaysToDate(instanceDate, getDaysDifference(child.date, child.endDate)) : undefined),
+                child.date,
+                child.endDate
+            ),
             customReminderPreset: instanceMod?.customReminderPreset !== undefined ? instanceMod.customReminderPreset : child.customReminderPreset,
             completedTime: isInstanceCompleted ? (instanceMod?.completedTime || child.repeat?.completedTimes?.[instanceDate] || getLocalDateTimeString(new Date(instanceDate))) : undefined,
             sort: (instanceMod && typeof instanceMod.sort === 'number') ? instanceMod.sort : (child.sort || 0)
