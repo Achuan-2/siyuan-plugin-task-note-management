@@ -783,16 +783,6 @@ export class QuickReminderDialog {
         }
         this.renderCustomTimeList();
 
-        // 设置预设下拉的当前值（编辑时显示之前选择的预设）
-        try {
-            const presetSelect = this.dialog.element.querySelector('#quickCustomReminderPreset') as HTMLSelectElement;
-            if (presetSelect && this.reminder.customReminderPreset) {
-                presetSelect.value = this.reminder.customReminderPreset;
-            }
-        } catch (e) {
-            // ignore
-        }
-
         // 填充预计番茄时长
         const estimatedPomodoroHoursInput = this.dialog.element.querySelector('#quickEstimatedPomodoroHours') as HTMLInputElement;
         const estimatedPomodoroMinutesInput = this.dialog.element.querySelector('#quickEstimatedPomodoroMinutes') as HTMLInputElement;
@@ -1774,34 +1764,30 @@ export class QuickReminderDialog {
                             <div id="quickCustomTimeList" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
                                 <!-- Added times will be shown here -->
                             </div>
-                            <button type="button" id="quickShowCustomTimeBtn" class="b3-button b3-button--outline" style="width: 100%; margin-bottom: 8px;">
-                                <svg class="b3-button__icon" style="margin-right: 4px;"><use xlink:href="#iconAdd"></use></svg>
-                                <span>${i18n("addReminderTime")}</span>
-                            </button>
-                            <div id="quickCustomTimeInputArea" style="display: none; padding: 12px; background: var(--b3-theme-background-light); border-radius: 6px; border: 1px solid var(--b3-theme-surface-lighter);">
-                                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px;">
-                                    <input type="datetime-local" id="quickCustomReminderTime" class="b3-text-field" style="flex: 1 1 140px; min-width: 0;" lang="${langTag}">
-                                    <input type="text" id="quickCustomReminderNote" class="b3-text-field" placeholder="${i18n("note")}" style="flex: 1 1 80px; min-width: 0;" spellcheck="false">
-                                    <div style="display: flex; gap: 8px; flex: 0 0 auto;">
-                                        <button type="button" id="quickConfirmCustomTimeBtn" class="b3-button b3-button--primary" title="${i18n("confirm")}" style="padding: 4px 8px;">
-                                            <svg class="b3-button__icon"><use xlink:href="#iconCheck"></use></svg>
-                                        </button>
-                                        <button type="button" id="quickCancelCustomTimeBtn" class="b3-button b3-button--outline" title="${i18n("cancel")}" style="padding: 4px 8px;">
-                                            <svg class="b3-button__icon"><use xlink:href="#iconClose"></use></svg>
-                                        </button>
+                            <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                                <button type="button" id="quickAddCustomTimeBtn" class="b3-button b3-button--outline" style="flex: 1;">
+                                    <svg class="b3-button__icon" style="margin-right: 4px;"><use xlink:href="#iconAdd"></use></svg>
+                                    <span>${i18n("addCustomReminderTime") || "添加提醒时间"}</span>
+                                </button>
+                                <div style="flex: 1; position: relative;">
+                                    <button type="button" id="quickAddPresetBtn" class="b3-button b3-button--outline" style="width: 100%;">
+                                        <svg class="b3-button__icon" style="margin-right: 4px;"><use xlink:href="#iconList"></use></svg>
+                                        <span>${i18n("addPreset") || "添加预设"}</span>
+                                    </button>
+                                    <!-- 预设下拉菜单 -->
+                                    <div id="quickPresetDropdown" class="b3-menu" style="display: none; position: absolute; left: 0; right: 0; top: 100%; max-height: 200px; overflow-y: auto; z-index: 100; margin-top: 4px; box-shadow: var(--b3-menu-shadow); background: var(--b3-menu-background); border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius);">
+                                        <!-- 预设选项将在这里动态生成 -->
                                     </div>
                                 </div>
-                                <div id="quickPresetContainer" style="width: 100%; display: ${this.initialTime ? 'block' : 'none'};">
-                                    <label class="b3-form__label" style="font-size: 12px;">${i18n("reminderPreset")}</label>
-                                    <select id="quickCustomReminderPreset" class="b3-select" style="width: 100%;">
-                                        <option value="">${i18n("selectPreset")}</option>
-                                        <option value="5m">${i18n("before5m")}</option>
-                                        <option value="10m">${i18n("before10m")}</option>
-                                        <option value="30m">${i18n("before30m")}</option>
-                                        <option value="1h">${i18n("before1h")}</option>
-                                        <option value="2h">${i18n("before2h")}</option>
-                                        <option value="1d">${i18n("before1d")}</option>
-                                    </select>
+                            </div>
+                            <!-- 自定义时间输入区域（点击添加提醒时间按钮后显示） -->
+                            <div id="quickCustomTimeInputArea" style="display: none; padding: 12px; background: var(--b3-theme-background-light); border-radius: 6px; border: 1px solid var(--b3-theme-surface-lighter);">
+                                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                                    <input type="datetime-local" id="quickCustomReminderTime" class="b3-text-field" style="flex: 1 1 140px; min-width: 0;" lang="${langTag}">
+                                    <input type="text" id="quickCustomReminderNote" class="b3-text-field" placeholder="${i18n("note")}" style="flex: 1 1 80px; min-width: 0;" spellcheck="false">
+                                    <button type="button" id="quickCancelCustomTimeBtn" class="b3-button b3-button--outline" title="${i18n("cancel")}" style="padding: 4px 8px; flex: 0 0 auto;">
+                                        <svg class="b3-button__icon"><use xlink:href="#iconClose"></use></svg>
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -2778,13 +2764,7 @@ export class QuickReminderDialog {
             container.appendChild(row);
         });
 
-        // 如果列表为空，则显示占位说明
-        if (this.customTimes.length === 0) {
-            const hint = document.createElement('div');
-            hint.style.cssText = 'color: var(--b3-theme-on-surface-light); font-size: 12px; width:100%;';
-            hint.textContent = i18n("noCustomReminderTimes");
-            container.appendChild(hint);
-        }
+
     }
 
     // 添加自定义时间
@@ -2808,19 +2788,11 @@ export class QuickReminderDialog {
 
     /**
      * 更新提醒时间预设区域的显示状态
-     * 当任务设置了具体时间时显示预设，否则隐藏
+     * 现在预设通过下拉菜单动态生成，此方法保留用于兼容性
      */
     private updatePresetSelectState() {
-        const presetContainer = this.dialog.element.querySelector('#quickPresetContainer') as HTMLElement;
-        const timeInput = this.dialog.element.querySelector('#quickReminderTime') as HTMLInputElement;
-        const dateInput = this.dialog.element.querySelector('#quickReminderDate') as HTMLInputElement;
-
-        if (!presetContainer) return;
-
-        const hasDateTime = dateInput?.value && timeInput?.value;
-
-        // 根据是否有任务时间显示或隐藏预设区域
-        presetContainer.style.display = hasDateTime ? 'block' : 'none';
+        // 预设选项现在通过 generatePresetOptions 方法动态生成
+        // 不再需要显示/隐藏预设容器
     }
 
     private bindEvents() {
@@ -3113,56 +3085,176 @@ export class QuickReminderDialog {
         });
 
         // 自定义提醒时间相关元素
-        const showCustomTimeBtn = this.dialog.element.querySelector('#quickShowCustomTimeBtn') as HTMLButtonElement;
-        const confirmCustomTimeBtn = this.dialog.element.querySelector('#quickConfirmCustomTimeBtn') as HTMLButtonElement;
-        const cancelCustomTimeBtn = this.dialog.element.querySelector('#quickCancelCustomTimeBtn') as HTMLButtonElement;
+        const addCustomTimeBtn = this.dialog.element.querySelector('#quickAddCustomTimeBtn') as HTMLButtonElement;
+        const addPresetBtn = this.dialog.element.querySelector('#quickAddPresetBtn') as HTMLButtonElement;
         const customTimeInputArea = this.dialog.element.querySelector('#quickCustomTimeInputArea') as HTMLElement;
         const customReminderInput = this.dialog.element.querySelector('#quickCustomReminderTime') as HTMLInputElement;
         const customReminderNoteInput = this.dialog.element.querySelector('#quickCustomReminderNote') as HTMLInputElement;
+        const cancelCustomTimeBtn = this.dialog.element.querySelector('#quickCancelCustomTimeBtn') as HTMLButtonElement;
+        const presetDropdown = this.dialog.element.querySelector('#quickPresetDropdown') as HTMLElement;
 
-        // 显示/隐藏自定义时间输入区域
-        showCustomTimeBtn?.addEventListener('click', () => {
-            if (customTimeInputArea) {
-                customTimeInputArea.style.display = 'block';
-                showCustomTimeBtn.style.display = 'none';
-                // 自动聚焦到日期输入框
-                setTimeout(() => customReminderInput?.focus(), 100);
-            }
+        // 添加自定义时间按钮 - 直接添加当前时间
+        addCustomTimeBtn?.addEventListener('click', () => {
+            // 使用当前时间
+            const now = new Date();
+            const yyyy = now.getFullYear();
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+            const dd = String(now.getDate()).padStart(2, '0');
+            const hh = String(now.getHours()).padStart(2, '0');
+            const min = String(now.getMinutes()).padStart(2, '0');
+            const timeVal = `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+            
+            this.addCustomTime(timeVal, '');
+            showMessage(i18n('reminderTimeAdded') || '提醒时间已添加');
         });
 
-        // 确认添加自定义时间
-        confirmCustomTimeBtn?.addEventListener('click', () => {
-            const timeVal = customReminderInput?.value?.trim();
-            const noteVal = customReminderNoteInput?.value?.trim() || '';
-            if (timeVal) {
-                this.addCustomTime(timeVal, noteVal);
-                customReminderInput.value = '';
-                if (customReminderNoteInput) customReminderNoteInput.value = '';
-                // 隐藏输入区域，显示添加按钮
-                if (customTimeInputArea) {
-                    customTimeInputArea.style.display = 'none';
-                    showCustomTimeBtn.style.display = 'flex';
+        // 生成预设选项
+        const generatePresetOptions = () => {
+            const dateInput = this.dialog.element.querySelector('#quickReminderDate') as HTMLInputElement;
+            const timeInput = this.dialog.element.querySelector('#quickReminderTime') as HTMLInputElement;
+            const hasDate = !!dateInput?.value;
+            const hasTime = !!timeInput?.value;
+            
+            let options: Array<{ value: string; label: string }> = [];
+            
+            if (hasDate && hasTime) {
+                // 有固定时间的任务：提前5分钟、10分钟、30分钟、1小时、2小时、一天
+                options = [
+                    { value: '5m', label: i18n('before5m') || '提前5分钟' },
+                    { value: '10m', label: i18n('before10m') || '提前10分钟' },
+                    { value: '30m', label: i18n('before30m') || '提前30分钟' },
+                    { value: '1h', label: i18n('before1h') || '提前1小时' },
+                    { value: '2h', label: i18n('before2h') || '提前2小时' },
+                    { value: '1d', label: i18n('before1d') || '提前一天' }
+                ];
+            } else if (hasDate && !hasTime) {
+                // 有日期但无固定时间：当天9点、提前1天9点、提前2天9点
+                options = [
+                    { value: 'same_day_9am', label: i18n('sameDay9am') || '当天9点' },
+                    { value: '1d_9am', label: i18n('before1d9am') || '提前1天9点' },
+                    { value: '2d_9am', label: i18n('before2d9am') || '提前2天9点' }
+                ];
+            } else {
+                // 无日期无固定时间：今天9点、明天9点、后天9点
+                options = [
+                    { value: 'today_9am', label: i18n('today9am') || '今天9点' },
+                    { value: 'tomorrow_9am', label: i18n('tomorrow9am') || '明天9点' },
+                    { value: 'after_tomorrow_9am', label: i18n('afterTomorrow9am') || '后天9点' }
+                ];
+            }
+            
+            return options;
+        };
+        
+        // 计算预设时间
+        const calculatePresetTime = (presetValue: string): string | null => {
+            const dateInput = this.dialog.element.querySelector('#quickReminderDate') as HTMLInputElement;
+            const timeInput = this.dialog.element.querySelector('#quickReminderTime') as HTMLInputElement;
+            const hasDate = !!dateInput?.value;
+            const hasTime = !!timeInput?.value;
+            
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            const formatDateTime = (date: Date) => {
+                const yyyy = date.getFullYear();
+                const mm = String(date.getMonth() + 1).padStart(2, '0');
+                const dd = String(date.getDate()).padStart(2, '0');
+                const hh = String(date.getHours()).padStart(2, '0');
+                const min = String(date.getMinutes()).padStart(2, '0');
+                return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+            };
+            
+            if (hasDate && hasTime) {
+                // 基于任务时间计算偏移
+                const baseDate = new Date(`${dateInput.value}T${timeInput.value}`);
+                if (isNaN(baseDate.getTime())) return null;
+                
+                let offsetMinutes = 0;
+                switch (presetValue) {
+                    case '5m': offsetMinutes = 5; break;
+                    case '10m': offsetMinutes = 10; break;
+                    case '30m': offsetMinutes = 30; break;
+                    case '1h': offsetMinutes = 60; break;
+                    case '2h': offsetMinutes = 120; break;
+                    case '1d': offsetMinutes = 24 * 60; break;
+                    default: return null;
+                }
+                
+                const target = new Date(baseDate.getTime() - offsetMinutes * 60 * 1000);
+                return formatDateTime(target);
+            } else if (hasDate && !hasTime) {
+                // 基于日期计算9点时间
+                const baseDate = new Date(dateInput.value);
+                baseDate.setHours(9, 0, 0, 0);
+                
+                switch (presetValue) {
+                    case 'same_day_9am':
+                        return formatDateTime(baseDate);
+                    case '1d_9am':
+                        baseDate.setDate(baseDate.getDate() - 1);
+                        return formatDateTime(baseDate);
+                    case '2d_9am':
+                        baseDate.setDate(baseDate.getDate() - 2);
+                        return formatDateTime(baseDate);
+                    default: return null;
                 }
             } else {
-                showMessage(i18n("pleaseEnterReminderTime"), 3000, "error");
+                // 无日期，基于今天计算
+                const targetDate = new Date(today);
+                targetDate.setHours(9, 0, 0, 0);
+                
+                switch (presetValue) {
+                    case 'today_9am':
+                        return formatDateTime(targetDate);
+                    case 'tomorrow_9am':
+                        targetDate.setDate(targetDate.getDate() + 1);
+                        return formatDateTime(targetDate);
+                    case 'after_tomorrow_9am':
+                        targetDate.setDate(targetDate.getDate() + 2);
+                        return formatDateTime(targetDate);
+                    default: return null;
+                }
             }
+        };
+
+        // 添加预设按钮 - 显示下拉菜单
+        addPresetBtn?.addEventListener('click', () => {
+            if (!presetDropdown) return;
+            
+            // 生成预设选项
+            const options = generatePresetOptions();
+            
+            // 渲染下拉菜单
+            presetDropdown.innerHTML = options.map(opt => `
+                <div class="b3-menu__item" data-value="${opt.value}" style="padding: 8px 12px; cursor: pointer;">
+                    <span class="b3-menu__label">${opt.label}</span>
+                </div>
+            `).join('');
+            
+            // 显示下拉菜单
+            presetDropdown.style.display = 'block';
+            
+            // 绑定选项点击事件
+            presetDropdown.querySelectorAll('.b3-menu__item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const value = item.getAttribute('data-value');
+                    if (value) {
+                        const timeVal = calculatePresetTime(value);
+                        if (timeVal) {
+                            this.addCustomTime(timeVal, '');
+                            showMessage(i18n('reminderTimeAdded') || '提醒时间已添加');
+                        }
+                    }
+                    presetDropdown.style.display = 'none';
+                });
+            });
         });
 
-        // 取消添加自定义时间
-        cancelCustomTimeBtn?.addEventListener('click', () => {
-            if (customTimeInputArea) {
-                customTimeInputArea.style.display = 'none';
-                showCustomTimeBtn.style.display = 'flex';
-                // 清空输入
-                customReminderInput.value = '';
-                if (customReminderNoteInput) customReminderNoteInput.value = '';
-            }
-        });
-
-        // 回车键快速确认添加
-        customReminderInput?.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                confirmCustomTimeBtn?.click();
+        // 点击其他地方关闭预设下拉菜单
+        document.addEventListener('click', (e) => {
+            if (presetDropdown && addPresetBtn && !presetDropdown.contains(e.target as Node) && !addPresetBtn.contains(e.target as Node)) {
+                presetDropdown.style.display = 'none';
             }
         });
 
@@ -3415,65 +3507,6 @@ export class QuickReminderDialog {
                 }
             });
         }
-
-        // 预设下拉：根据选项快速设置自定义提醒时间（基于任务的起始 datetime）
-        const presetSelect = this.dialog.element.querySelector('#quickCustomReminderPreset') as HTMLSelectElement;
-        // const customReminderInput = this.dialog.element.querySelector('#quickCustomReminderTime') as HTMLInputElement; // Already declared above
-        presetSelect?.addEventListener('change', () => {
-            try {
-                const val = presetSelect.value;
-                if (!val) return;
-
-                const dateInput = this.dialog.element.querySelector('#quickReminderDate') as HTMLInputElement;
-                const timeInput = this.dialog.element.querySelector('#quickReminderTime') as HTMLInputElement;
-
-                // 仅在任务已设置日期和时间时可用
-                if (!dateInput || !dateInput.value || !timeInput || !timeInput.value) {
-                    showMessage(i18n("setDateTimeFirst"));
-                    presetSelect.value = '';
-                    return;
-                }
-
-                const base = new Date(`${dateInput.value}T${timeInput.value}`);
-                if (isNaN(base.getTime())) {
-                    presetSelect.value = '';
-                    return;
-                }
-
-                let offsetMinutes = 0;
-                switch (val) {
-                    case '5m': offsetMinutes = 5; break;
-                    case '10m': offsetMinutes = 10; break;
-                    case '30m': offsetMinutes = 30; break;
-                    case '1h': offsetMinutes = 60; break;
-                    case '2h': offsetMinutes = 120; break;
-                    case '1d': offsetMinutes = 24 * 60; break;
-                    default: offsetMinutes = 0;
-                }
-
-                const target = new Date(base.getTime() - offsetMinutes * 60 * 1000);
-
-                const yyyy = target.getFullYear().toString().padStart(4, '0');
-                const mm = (target.getMonth() + 1).toString().padStart(2, '0');
-                const dd = target.getDate().toString().padStart(2, '0');
-                const hh = target.getHours().toString().padStart(2, '0');
-                const min = target.getMinutes().toString().padStart(2, '0');
-
-                const dtLocal = `${yyyy}-${mm}-${dd}T${hh}:${min}`;
-
-                // 自动添加到提醒时间列表
-                const note = customReminderNoteInput?.value?.trim();
-                this.addCustomTime(dtLocal, note);
-
-                // 清空输入框，方便继续添加
-                if (customReminderNoteInput) customReminderNoteInput.value = '';
-
-                // 重置预设选择
-                presetSelect.value = '';
-            } catch (e) {
-                console.error('应用快速预设失败:', e);
-            }
-        });
 
         // 如果 custom input 聚焦且为空，尝试从任务日期和时间初始化
         customReminderInput?.addEventListener('focus', () => {
@@ -4186,7 +4219,6 @@ export class QuickReminderDialog {
         const milestoneSelector = this.dialog.element.querySelector('#quickMilestoneSelector') as HTMLSelectElement;
         const milestoneId = milestoneSelector?.value || undefined;
 
-        const customReminderPreset = (this.dialog.element.querySelector('#quickCustomReminderPreset') as HTMLSelectElement)?.value || undefined;
         const estimatedPomodoroDuration = this.getEstimatedPomodoroDurationValue();
 
         // 每日可做
@@ -4261,7 +4293,6 @@ export class QuickReminderDialog {
                 kanbanStatus: kanbanStatus,
                 tagIds: tagIds.length > 0 ? tagIds : undefined,
                 reminderTimes: this.customTimes.length > 0 ? [...this.customTimes] : undefined,
-                customReminderPreset: customReminderPreset,
                 repeat: this.repeatConfig.enabled ? this.repeatConfig : undefined,
                 quadrant: this.defaultQuadrant,
                 estimatedPomodoroDuration: estimatedPomodoroDuration,
@@ -4325,7 +4356,6 @@ export class QuickReminderDialog {
             optimisticReminder.customGroupId = customGroupId;
             optimisticReminder.milestoneId = milestoneId;
             optimisticReminder.tagIds = tagIds.length > 0 ? tagIds : undefined;
-            optimisticReminder.customReminderPreset = customReminderPreset;
             optimisticReminder.reminderTimes = this.customTimes.length > 0 ? [...this.customTimes] : undefined;
             // 保存 repeat 信息：如果用户开启了重复（repeatConfig.enabled），使用新的配置；
             // 否则保留原对象中用于记录历史/实例状态的元数据（completedInstances/completedTimes/instanceModifications/excludeDates），
@@ -4386,7 +4416,6 @@ export class QuickReminderDialog {
                 estimatedPomodoroDuration: estimatedPomodoroDuration
             };
 
-            if (customReminderPreset) optimisticReminder.customReminderPreset = customReminderPreset;
             if (typeof this.defaultSort === 'number') optimisticReminder.sort = this.defaultSort;
         }
 
@@ -4438,7 +4467,6 @@ export class QuickReminderDialog {
                             kanbanStatus: kanbanStatus,
                             // 提醒时间相关字段
                             reminderTimes: this.customTimes.length > 0 ? [...this.customTimes] : undefined,
-                            customReminderPreset: customReminderPreset,
                             estimatedPomodoroDuration: estimatedPomodoroDuration
                         };
 
@@ -4484,7 +4512,6 @@ export class QuickReminderDialog {
                         reminder.milestoneId = milestoneId;
                         reminder.tagIds = tagIds.length > 0 ? tagIds : undefined;
                         // 不再使用旧的 `customReminderTime` 存储；所有自定义提醒统一保存到 `reminderTimes`
-                        reminder.customReminderPreset = customReminderPreset;
                         reminder.reminderTimes = this.customTimes.length > 0 ? [...this.customTimes] : undefined;
                         // 在保存时，合并/保留可能存在的实例元数据（例如 ghost 子任务使用的 completedInstances/completedTimes 等），
                         // 防止“编辑全部实例”误清空这些历史数据。
@@ -4735,11 +4762,6 @@ export class QuickReminderDialog {
                         estimatedPomodoroDuration: estimatedPomodoroDuration
                     };
 
-                    // 保存 preset 信息
-                    if (customReminderPreset) {
-                        reminder.customReminderPreset = customReminderPreset;
-                    }
-
                     // 添加默认排序值
                     if (typeof this.defaultSort === 'number') {
                         reminder.sort = this.defaultSort;
@@ -4970,7 +4992,6 @@ export class QuickReminderDialog {
                 milestoneId: instanceData.milestoneId,
                 kanbanStatus: instanceData.kanbanStatus,
                 reminderTimes: instanceData.reminderTimes,
-                customReminderPreset: instanceData.customReminderPreset,
                 estimatedPomodoroDuration: instanceData.estimatedPomodoroDuration,
                 modifiedAt: new Date().toISOString().split('T')[0]
             };
