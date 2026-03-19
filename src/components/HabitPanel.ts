@@ -1442,14 +1442,37 @@ export class HabitPanel {
         }
     }
 
-    private async saveHabit(habit: Habit) {
+    private cloneHabit(habit: Habit | null | undefined): Habit | undefined {
+        if (!habit) return undefined;
+        try {
+            return JSON.parse(JSON.stringify(habit));
+        } catch {
+            return { ...habit };
+        }
+    }
+
+    private async saveHabit(habit: Habit, oldHabit?: Habit) {
         const habitData = await this.plugin.loadHabitData();
+        const previousHabit = this.cloneHabit(oldHabit) || this.cloneHabit(habitData[habit.id]);
+
+        // 如果编辑场景中发生了 ID 变更，清理旧 ID 的数据和通知，避免残留
+        if (previousHabit?.id && previousHabit.id !== habit.id) {
+            delete habitData[previousHabit.id];
+            try {
+                if (this.plugin && typeof this.plugin.cancelMobileNotification === 'function') {
+                    await this.plugin.cancelMobileNotification(previousHabit.id);
+                }
+            } catch (e) {
+                console.warn('清理旧习惯ID的移动端通知失败:', e);
+            }
+        }
+
         habitData[habit.id] = habit;
         await this.plugin.saveHabitData(habitData);
-        // 同步更新移动端系统通知（限制7天），确保手机端也能收到习惯提醒
+        // 同步更新移动端系统通知（限制7天）
         try {
             if (this.plugin && typeof this.plugin.updateMobileNotification === 'function') {
-                await this.plugin.updateMobileNotification(habit, undefined, 7);
+                await this.plugin.updateMobileNotification(habit, previousHabit, 7);
             }
         } catch (e) {
             console.warn('更新习惯移动端通知失败:', e);
@@ -1461,11 +1484,7 @@ export class HabitPanel {
     private async deleteHabit(habitId: string) {
         try {
             const habitData = await this.plugin.loadHabitData();
-            delete habitData[habitId];
-            await this.plugin.saveHabitData(habitData);
-            showMessage(i18n("deleteSuccess"));
-            this.loadHabits();
-            // 删除习惯时取消移动端的系统通知（如果有）
+            // 先取消移动端通知，避免删除后极端情况下的通知残留
             try {
                 if (this.plugin && typeof this.plugin.cancelMobileNotification === 'function') {
                     await this.plugin.cancelMobileNotification(habitId);
@@ -1473,6 +1492,11 @@ export class HabitPanel {
             } catch (e) {
                 console.warn('取消习惯移动端通知失败:', e);
             }
+
+            delete habitData[habitId];
+            await this.plugin.saveHabitData(habitData);
+            showMessage(i18n("deleteSuccess"));
+            this.loadHabits();
 
             window.dispatchEvent(new CustomEvent('habitUpdated'));
         } catch (error) {
@@ -1490,8 +1514,9 @@ export class HabitPanel {
     }
 
     private showEditHabitDialog(habit: Habit) {
+        const oldHabitSnapshot = this.cloneHabit(habit);
         const dialog = new HabitEditDialog(habit, async (updatedHabit) => {
-            await this.saveHabit(updatedHabit);
+            await this.saveHabit(updatedHabit, oldHabitSnapshot);
             this.loadHabits();
         });
         dialog.show();

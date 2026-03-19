@@ -262,7 +262,9 @@ export default class ReminderPlugin extends Plugin {
         lastNotified?: string,
         notifiedKeys?: Record<string, boolean>,
         // 废弃，保留用于兼容迁移
-        mobileNotifications?: Record<string, Record<string, number[]>>
+        mobileNotifications?: Record<string, Record<string, number[]>>,
+        // 习惯系统通知ID（按设备隔离）
+        habit?: Record<string, Record<string, number[]>>
     } | null = null;
     private mobileNotifyDataCacheForCurrentDevice: Record<string, number[]> | null = null;
     // 仅内存缓存（当前设备实例）：任务id -> 未来提醒时间(ISO)数组
@@ -612,6 +614,11 @@ export default class ReminderPlugin extends Plugin {
         }
     }
 
+    private getNotifyDeviceKey(): string {
+        const id = (window as any).siyuan?.config?.system?.id;
+        return id ? String(id) : this.getDeviceName();
+    }
+
     /**
      * 加载通知数据，支持缓存
      * @param update 是否强制更新（从文件读取）
@@ -619,20 +626,22 @@ export default class ReminderPlugin extends Plugin {
     public async loadNotifyData(update: boolean = false): Promise<{
         lastNotified?: string,
         notifiedKeys?: Record<string, boolean>,
-        mobileNotifications?: Record<string, Record<string, number[]>>
+        mobileNotifications?: Record<string, Record<string, number[]>>,
+        habit?: Record<string, Record<string, number[]>>
     }> {
         if (update || !this.notifyDataCache) {
             try {
                 const data = await this.loadData(NOTIFY_DATA_FILE);
                 if (!data || typeof data !== 'object') {
                     this.notifyDataCache = {};
-                } else if (data.mobileNotifications || typeof data.lastNotified === 'string' || data.notifiedKeys) {
+                } else if (data.mobileNotifications || data.habit || typeof data.lastNotified === 'string' || data.notifiedKeys) {
                     // 新格式（多端版本）
                     this.notifyDataCache = {
                         lastNotified: data.lastNotified,
                         notifiedKeys: data.notifiedKeys || {},
                         // 确保 mobileNotifications 是多端格式（设备 -> 任务 -> ID数组）
-                        mobileNotifications: data.mobileNotifications || {}
+                        mobileNotifications: data.mobileNotifications || {},
+                        habit: data.habit || {}
                     };
                 } else {
                     // 旧数据格式迁移 (date -> boolean)
@@ -641,7 +650,7 @@ export default class ReminderPlugin extends Plugin {
                         const validDates = dateKeys.filter(k => !!data[k]);
                         if (validDates.length > 0) {
                             const latest = validDates.sort().pop();
-                            this.notifyDataCache = { lastNotified: latest, notifiedKeys: {}, mobileNotifications: {} };
+                            this.notifyDataCache = { lastNotified: latest, notifiedKeys: {}, mobileNotifications: {}, habit: {} };
                             try {
                                 await this.saveNotifyData(this.notifyDataCache);
                             } catch (err) {
@@ -669,7 +678,8 @@ export default class ReminderPlugin extends Plugin {
     public async saveNotifyData(data: {
         lastNotified?: string,
         notifiedKeys?: Record<string, boolean>,
-        mobileNotifications?: Record<string, Record<string, number[]>>
+        mobileNotifications?: Record<string, Record<string, number[]>>,
+        habit?: Record<string, Record<string, number[]>>
     }): Promise<void> {
         this.notifyDataCache = data;
         try {
@@ -713,6 +723,120 @@ export default class ReminderPlugin extends Plugin {
         } catch (error) {
             console.error('写入移动端通知记录文件失败:', error);
             throw error;
+        }
+    }
+
+    public async loadMobileHabitNotifyData(update: boolean = false): Promise<Record<string, number[]>> {
+        try {
+            const notifyData = await this.loadNotifyData(update);
+            if (!notifyData.habit || typeof notifyData.habit !== 'object') {
+                notifyData.habit = {};
+            }
+            const deviceKey = this.getNotifyDeviceKey();
+            if (!notifyData.habit[deviceKey] || typeof notifyData.habit[deviceKey] !== 'object') {
+                notifyData.habit[deviceKey] = {};
+            }
+            return notifyData.habit[deviceKey];
+        } catch (error) {
+            console.warn('读取习惯移动端通知记录失败:', error);
+            return {};
+        }
+    }
+
+    public async saveMobileHabitNotifyData(data: Record<string, number[]>): Promise<void> {
+        try {
+            const notifyData = await this.loadNotifyData();
+            if (!notifyData.habit || typeof notifyData.habit !== 'object') {
+                notifyData.habit = {};
+            }
+            const deviceKey = this.getNotifyDeviceKey();
+            notifyData.habit[deviceKey] = data || {};
+            await this.saveNotifyData(notifyData);
+        } catch (error) {
+            console.error('写入习惯移动端通知记录失败:', error);
+            throw error;
+        }
+    }
+
+    public async getMobileHabitNotificationIds(habitId: string): Promise<number[]> {
+        try {
+            const data = await this.loadMobileHabitNotifyData();
+            return data[habitId] || [];
+        } catch (error) {
+            console.warn('获取习惯移动端通知ID失败:', error);
+            return [];
+        }
+    }
+
+    public async saveMobileHabitNotificationId(habitId: string, notificationId: number): Promise<void> {
+        try {
+            const data = await this.loadMobileHabitNotifyData();
+            if (!data[habitId]) {
+                data[habitId] = [];
+            }
+            if (!data[habitId].includes(notificationId)) {
+                data[habitId].push(notificationId);
+            }
+            await this.saveMobileHabitNotifyData(data);
+            console.log(`[MobileHabitNotification] 已保存通知ID: habitId=${habitId}, notificationId=${notificationId}`);
+        } catch (error) {
+            console.warn('保存习惯移动端通知ID失败:', error);
+        }
+    }
+
+    public async removeMobileHabitNotificationId(habitId: string, notificationId?: number): Promise<boolean> {
+        try {
+            const data = await this.loadMobileHabitNotifyData();
+            if (!(habitId in data)) {
+                return false;
+            }
+
+            if (notificationId !== undefined) {
+                const ids = data[habitId];
+                const index = ids.indexOf(notificationId);
+                if (index > -1) {
+                    ids.splice(index, 1);
+                    if (ids.length === 0) {
+                        delete data[habitId];
+                    }
+                    await this.saveMobileHabitNotifyData(data);
+                    console.log(`[MobileHabitNotification] 已移除通知ID记录: habitId=${habitId}, notificationId=${notificationId}`);
+                    return true;
+                }
+            } else {
+                delete data[habitId];
+                await this.saveMobileHabitNotifyData(data);
+                console.log(`[MobileHabitNotification] 已移除所有通知ID记录: habitId=${habitId}`);
+                return true;
+            }
+            return false;
+        } catch (error) {
+            console.warn('移除习惯移动端通知ID失败:', error);
+            return false;
+        }
+    }
+
+    public async clearAllMobileHabitNotificationIds(): Promise<void> {
+        try {
+            const data = await this.loadMobileHabitNotifyData();
+            const hasNotificationIds = Object.keys(data || {}).length > 0;
+            const hasPlanSnapshot = !!this.mobileHabitNotificationPlansCache && Object.keys(this.mobileHabitNotificationPlansCache).length > 0;
+            if (hasNotificationIds || hasPlanSnapshot) {
+                this.mobileHabitNotificationPlansCache = {};
+                await this.saveMobileHabitNotifyData({});
+                console.log(`[MobileHabitNotification] 已清理当前设备的所有通知ID记录`);
+            }
+        } catch (error) {
+            console.warn('清理习惯移动端通知ID记录失败:', error);
+        }
+    }
+
+    public async getAllMobileHabitNotificationIds(): Promise<Record<string, number[]>> {
+        try {
+            return await this.loadMobileHabitNotifyData();
+        } catch (error) {
+            console.warn('获取习惯移动端通知ID失败:', error);
+            return {};
         }
     }
 
@@ -812,7 +936,7 @@ export default class ReminderPlugin extends Plugin {
         try {
             const data = await this.loadMobileNotifyData();
             const hasNotificationIds = Object.keys(data).length > 0;
-            const hasPlanSnapshot = Object.keys(this.mobileNotificationPlansCache).length > 0;
+            const hasPlanSnapshot = !!this.mobileNotificationPlansCache && Object.keys(this.mobileNotificationPlansCache).length > 0;
             if (hasNotificationIds || hasPlanSnapshot) {
                 this.mobileNotificationPlansCache = {};
                 await this.saveMobileNotifyData({});
@@ -831,6 +955,7 @@ export default class ReminderPlugin extends Plugin {
         // 由于改为单文件存储，仅支持清理当前设备
         if (!deviceName || deviceName === this.getDeviceName()) {
             await this.clearAllMobileNotificationIds();
+            await this.clearAllMobileHabitNotificationIds();
         } else {
             console.warn('已不再支持直接清理其他设备的通知记录');
         }
@@ -4307,7 +4432,8 @@ export default class ReminderPlugin extends Plugin {
                 this.loadHabitData(true),
                 this.loadHabitGroupData(true),
                 this.loadPomodoroRecords(true),
-                this.isInMobileApp ? this.loadMobileNotifyData() : Promise.resolve(),
+                this.isInMobileApp ? this.loadMobileNotifyData(true) : Promise.resolve(),
+                this.isInMobileApp ? this.loadMobileHabitNotifyData(true) : Promise.resolve(),
             ]);
             window.dispatchEvent(new CustomEvent('reminderUpdated'));
             window.dispatchEvent(new CustomEvent('habitUpdated'));
@@ -4331,7 +4457,7 @@ export default class ReminderPlugin extends Plugin {
                                 try {
                                     const h = habit as any;
                                     if (h.completed) continue;
-                                    const times = this.calculateAllNotificationTimes(h, 7).map((t) => t.toISOString()).sort();
+                                    const times = this.calculateHabitNotificationTimes(h, 7).map((t) => t.toISOString()).sort();
                                     if (times.length > 0) {
                                         expectedHabitPlan[hid] = times;
                                     }
@@ -4418,6 +4544,7 @@ export default class ReminderPlugin extends Plugin {
     public async scheduleMobileNotification(reminder: any, daysLimit: number = 7): Promise<number | undefined> {
         if (!this.isInMobileApp) return;
         if (!reminder || !reminder.id || reminder.completed) return;
+        if (typeof reminder.id === 'string' && reminder.id.startsWith('habit')) return;
 
         // 获取系统通知启用状态
         const systemNotificationEnabled = await this.getReminderSystemNotificationEnabled();
@@ -4431,28 +4558,10 @@ export default class ReminderPlugin extends Plugin {
             // 如果时间在过去，不发送
             if (nextNotifyTime.getTime() <= Date.now()) return;
 
-            // 先取消已存在的通知并移除记录
+            // 统一走按时间点调度逻辑，确保任务名后可附加“(提醒备注)”
             await this.cancelMobileNotification(reminder.id);
-
-            // 构建通知内容
-            const title = `⏰ ${i18n("timeReminderNotification")}`;
-            const message = this.buildNotificationMessage(reminder);
-
-            // 设置定时通知
-            const notificationId = await this.showReminderSystemNotification(
-                title,
-                message,
-                { blockId: reminder.blockId },
-                nextNotifyTime
-            );
-
-            // 保存通知ID到 notify.json
-            if (notificationId !== undefined) {
-                await this.saveMobileNotificationId(reminder.id, notificationId);
-            }
-
-            console.log(`[MobileNotification] 已设置定时通知: reminderId=${reminder.id}, time=${nextNotifyTime.toISOString()}, notificationId=${notificationId}`);
-            return notificationId;
+            const ids = await this.scheduleMobileNotificationsAtTimes(reminder, [nextNotifyTime.toISOString()]);
+            return ids[0];
         } catch (error) {
             console.warn('[MobileNotification] 设置定时通知失败:', error);
         }
@@ -4467,6 +4576,7 @@ export default class ReminderPlugin extends Plugin {
     public async scheduleAllMobileNotifications(reminder: any, daysLimit: number = 7): Promise<number[]> {
         if (!this.isInMobileApp) return [];
         if (!reminder || !reminder.id || reminder.completed) return [];
+        if (typeof reminder.id === 'string' && reminder.id.startsWith('habit')) return [];
 
         // 获取系统通知启用状态
         const systemNotificationEnabled = await this.getReminderSystemNotificationEnabled();
@@ -4475,43 +4585,44 @@ export default class ReminderPlugin extends Plugin {
         try {
             // 计算所有未来的提醒时间
             const allNotifyTimes = this.calculateAllNotificationTimes(reminder, daysLimit);
-            if (allNotifyTimes.length === 0) return [];
+            if (allNotifyTimes.length === 0) {
+                await this.cancelMobileNotification(reminder.id);
+                return [];
+            }
 
             // 先取消已存在的通知
             await this.cancelMobileNotification(reminder.id);
-
-            const notificationIds: number[] = [];
-
-            // 为每个提醒时间设置通知
-            for (const notifyTime of allNotifyTimes) {
-                try {
-                    // 构建通知内容
-                    const title = `⏰ ${i18n("timeReminderNotification")}`;
-                    const message = this.buildNotificationMessage(reminder);
-
-                    // 设置定时通知
-                    const notificationId = await this.showReminderSystemNotification(
-                        title,
-                        message,
-                        { blockId: reminder.blockId },
-                        notifyTime
-                    );
-
-                    // 保存通知ID
-                    if (notificationId !== undefined) {
-                        await this.saveMobileNotificationId(reminder.id, notificationId);
-                        notificationIds.push(notificationId);
-                    }
-
-                    console.log(`[MobileNotification] 已设置定时通知: reminderId=${reminder.id}, time=${notifyTime.toISOString()}, notificationId=${notificationId}`);
-                } catch (e) {
-                    console.warn(`[MobileNotification] 设置单个通知失败: reminderId=${reminder.id}, time=${notifyTime.toISOString()}`, e);
-                }
-            }
-
-            return notificationIds;
+            // 统一走按时间点调度逻辑，确保任务名后可附加“(提醒备注)”
+            return await this.scheduleMobileNotificationsAtTimes(
+                reminder,
+                allNotifyTimes.map((time) => time.toISOString())
+            );
         } catch (error) {
             console.warn('[MobileNotification] 设置所有定时通知失败:', error);
+            return [];
+        }
+    }
+
+    public async scheduleAllMobileHabitNotifications(habit: any, daysLimit: number = 7): Promise<number[]> {
+        if (!this.isInMobileApp) return [];
+        if (!habit || !habit.id || habit.completed) return [];
+        if (!(typeof habit.id === 'string' && habit.id.startsWith('habit'))) return [];
+
+        const systemNotificationEnabled = await this.getReminderSystemNotificationEnabled();
+        if (!systemNotificationEnabled) return [];
+
+        try {
+            const allNotifyTimes = this.calculateHabitNotificationTimes(habit, daysLimit);
+            if (allNotifyTimes.length === 0) {
+                await this.cancelMobileNotification(habit.id);
+                return [];
+            }
+
+            await this.cancelMobileNotification(habit.id);
+            const isoTimes = allNotifyTimes.map((t) => t.toISOString());
+            return await this.scheduleMobileNotificationsAtTimes(habit, isoTimes);
+        } catch (error) {
+            console.warn('[MobileHabitNotification] 设置所有定时通知失败:', error);
             return [];
         }
     }
@@ -4526,13 +4637,24 @@ export default class ReminderPlugin extends Plugin {
         try {
             let reminderId: string | undefined;
             let notificationIds: number[] = [];
+            let isHabit = false;
 
             if (typeof reminderIdOrReminder === 'string') {
                 reminderId = reminderIdOrReminder;
-                notificationIds = await this.getMobileNotificationIds(reminderId);
+                isHabit = reminderId.startsWith('habit');
             } else if (reminderIdOrReminder?.id) {
                 reminderId = reminderIdOrReminder.id;
-                notificationIds = await this.getMobileNotificationIds(reminderId);
+                isHabit = reminderId.startsWith('habit');
+            }
+
+            if (reminderId) {
+                if (isHabit) {
+                    const habitIds = await this.getMobileHabitNotificationIds(reminderId);
+                    const legacyTaskIds = await this.getMobileNotificationIds(reminderId);
+                    notificationIds = [...new Set([...(habitIds || []), ...(legacyTaskIds || [])])];
+                } else {
+                    notificationIds = await this.getMobileNotificationIds(reminderId);
+                }
             }
 
             // 取消所有与该提醒相关的通知
@@ -4546,7 +4668,13 @@ export default class ReminderPlugin extends Plugin {
 
             // 从 notify.json 中移除记录
             if (reminderId) {
-                await this.removeMobileNotificationId(reminderId);
+                if (isHabit) {
+                    await this.removeMobileHabitNotificationId(reminderId);
+                    // 兼容清理：历史版本里习惯通知可能误存到任务记录
+                    await this.removeMobileNotificationId(reminderId);
+                } else {
+                    await this.removeMobileNotificationId(reminderId);
+                }
 
                 // 【修复：同步更新内存计划快照，避免删除任务或习惯后触发无谓的通知全量重建】
                 if (this.mobileNotificationPlansCache && this.mobileNotificationPlansCache[reminderId]) {
@@ -4570,9 +4698,15 @@ export default class ReminderPlugin extends Plugin {
 
         try {
             const allNotificationMap = await this.getAllMobileNotificationIds();
+            const allHabitNotificationMap = await this.getAllMobileHabitNotificationIds();
             const idSet = new Set<any>();
 
             Object.values(allNotificationMap).forEach((ids) => {
+                (ids || []).forEach((id) => {
+                    if (id !== undefined && id !== null) idSet.add(id);
+                });
+            });
+            Object.values(allHabitNotificationMap).forEach((ids) => {
                 (ids || []).forEach((id) => {
                     if (id !== undefined && id !== null) idSet.add(id);
                 });
@@ -4590,6 +4724,7 @@ export default class ReminderPlugin extends Plugin {
 
             // 无论系统取消是否部分失败，都清空本地记录，防止脏数据阻塞后续重建
             await this.clearAllMobileNotificationIds();
+            await this.clearAllMobileHabitNotificationIds();
             return canceledCount;
         } catch (error) {
             console.warn('[MobileNotification] 取消当前设备全部通知失败:', error);
@@ -4609,16 +4744,20 @@ export default class ReminderPlugin extends Plugin {
         const systemNotificationEnabled = await this.getReminderSystemNotificationEnabled();
         if (!systemNotificationEnabled) return [];
 
-        // 判断是否为习惯（根据id前缀）
         const isHabit = typeof reminder.id === 'string' && reminder.id.startsWith('habit');
-
-        // 从 reminderTimes 中提取时间和备注的映射
-        const timeNoteMap: Record<string, string> = {};
+        const noteByDateTime: Record<string, string> = {};
+        const noteByTimeOnly: Record<string, string> = {};
         if (reminder.reminderTimes && Array.isArray(reminder.reminderTimes)) {
             for (const rt of reminder.reminderTimes) {
                 if (typeof rt === 'object' && rt.time) {
-                    const timeKey = rt.time.includes('T') ? rt.time : `${reminder.date || new Date().toISOString().split('T')[0]}T${rt.time}`;
-                    timeNoteMap[timeKey] = rt.note || '';
+                    const parsedRt = this.extractDateAndTime(rt.time);
+                    const note = rt.note || '';
+                    if (parsedRt.time) {
+                        noteByTimeOnly[parsedRt.time] = note;
+                    }
+                    if (parsedRt.date && parsedRt.time) {
+                        noteByDateTime[`${parsedRt.date}T${parsedRt.time}`] = note;
+                    }
                 }
             }
         }
@@ -4631,18 +4770,16 @@ export default class ReminderPlugin extends Plugin {
                 // 跳过已经过去的时间
                 if (scheduledTime.getTime() <= Date.now()) continue;
 
-                // 根据类型使用不同的标题
                 const title = isHabit ? "🌱" + i18n('habitReminder') : `⏰ ${i18n("timeReminderNotification")}`;
 
-                // 获取该时间点的备注
-                const note = timeNoteMap[iso] || '';
-
-                // 构建通知消息：时间 + 标题（备注）
                 const hours = scheduledTime.getHours().toString().padStart(2, '0');
                 const minutes = scheduledTime.getMinutes().toString().padStart(2, '0');
+                const datePart = getLocalDateString(scheduledTime);
+                const timePart = `${hours}:${minutes}`;
+                const note = noteByDateTime[`${datePart}T${timePart}`] || noteByTimeOnly[timePart] || '';
                 let message = `${hours}:${minutes} ${reminder.title || i18n("unnamedNote")}`;
                 if (note) {
-                    message += `（${note}）`;
+                    message += ` (${note})`;
                 }
 
                 const notificationId = await this.showReminderSystemNotification(
@@ -4653,7 +4790,11 @@ export default class ReminderPlugin extends Plugin {
                 );
 
                 if (notificationId !== undefined) {
-                    await this.saveMobileNotificationId(reminder.id, notificationId);
+                    if (isHabit) {
+                        await this.saveMobileHabitNotificationId(reminder.id, notificationId);
+                    } else {
+                        await this.saveMobileNotificationId(reminder.id, notificationId);
+                    }
                     notificationIds.push(notificationId);
                 }
             } catch (e) {
@@ -4673,7 +4814,6 @@ export default class ReminderPlugin extends Plugin {
     private calculateNextNotificationTime(reminder: any, daysLimit: number = 0): Date | null {
         const now = new Date();
         const today = getLogicalDateString();
-        const currentTimeStr = getLocalTimeString();
 
         // 计算限制日期
         const limitDate = daysLimit > 0 ? new Date(now.getTime() + daysLimit * 24 * 60 * 60 * 1000) : null;
@@ -4708,6 +4848,7 @@ export default class ReminderPlugin extends Plugin {
         for (const timeStr of times) {
             const parsed = this.extractDateAndTime(timeStr);
             if (!parsed.time) continue;
+            const hasExplicitDate = !!parsed.date;
 
             // 构建完整的日期时间
             const datePart = parsed.date || reminderDate;
@@ -4717,7 +4858,8 @@ export default class ReminderPlugin extends Plugin {
             const startDate = reminder.date || today;
             const endDate = reminder.endDate || startDate;
 
-            if (datePart < startDate || datePart > endDate) continue;
+            // 显式日期的提醒（如 customReminderTime=YYYY-MM-DDTHH:MM）应以字段日期为准，不受任务 date/endDate 过滤
+            if (!hasExplicitDate && (datePart < startDate || datePart > endDate)) continue;
 
             // 检查是否超过限制天数
             if (limitDate && dateTime.getTime() > limitDate.getTime()) continue;
@@ -4775,6 +4917,7 @@ export default class ReminderPlugin extends Plugin {
         for (const timeStr of times) {
             const parsed = this.extractDateAndTime(timeStr);
             if (!parsed.time) continue;
+            const hasExplicitDate = !!parsed.date;
 
             // 构建完整的日期时间
             const datePart = parsed.date || reminderDate;
@@ -4784,7 +4927,8 @@ export default class ReminderPlugin extends Plugin {
             const startDate = reminder.date || today;
             const endDate = reminder.endDate || startDate;
 
-            if (datePart < startDate || datePart > endDate) continue;
+            // 显式日期的提醒（如 customReminderTime=YYYY-MM-DDTHH:MM）应以字段日期为准，不受任务 date/endDate 过滤
+            if (!hasExplicitDate && (datePart < startDate || datePart > endDate)) continue;
 
             // 检查是否超过限制天数
             if (limitDate && dateTime.getTime() > limitDate.getTime()) continue;
@@ -4800,6 +4944,68 @@ export default class ReminderPlugin extends Plugin {
         futureTimes.sort((a, b) => a.getTime() - b.getTime());
 
         return futureTimes;
+    }
+
+    private calculateHabitNotificationTimes(habit: any, daysLimit: number = 0): Date[] {
+        const now = new Date();
+        const today = getLogicalDateString();
+        const limitDate = daysLimit > 0 ? new Date(now.getTime() + daysLimit * 24 * 60 * 60 * 1000) : null;
+        const scanDays = daysLimit > 0 ? daysLimit : 30;
+
+        const timeEntries: { time: string; note?: string }[] = [];
+        if (Array.isArray(habit?.reminderTimes) && habit.reminderTimes.length > 0) {
+            for (const rt of habit.reminderTimes) {
+                if (typeof rt === 'string') {
+                    timeEntries.push({ time: rt });
+                } else if (rt && typeof rt === 'object' && rt.time) {
+                    timeEntries.push({ time: rt.time, note: rt.note });
+                }
+            }
+        } else if (habit?.reminderTime) {
+            timeEntries.push({ time: habit.reminderTime });
+        }
+        if (timeEntries.length === 0) return [];
+
+        const startDateCursor = new Date(`${today}T00:00:00`);
+        const futureTimes: Date[] = [];
+
+        for (let dayOffset = 0; dayOffset <= scanDays; dayOffset++) {
+            const currentDate = new Date(startDateCursor);
+            currentDate.setDate(startDateCursor.getDate() + dayOffset);
+            const logicalDate = getLocalDateString(currentDate);
+
+            if (habit?.startDate && compareDateStrings(logicalDate, habit.startDate) < 0) continue;
+            if (habit?.endDate && compareDateStrings(logicalDate, habit.endDate) > 0) continue;
+            if (!this.shouldCheckHabitOnDate(habit, logicalDate)) continue;
+            if (this.isHabitCompletedOnDate(habit, logicalDate)) continue;
+
+            for (const item of timeEntries) {
+                const parsed = this.extractDateAndTime(item.time);
+                if (!parsed.time) continue;
+                if (parsed.date && parsed.date !== logicalDate) continue;
+
+                const datePart = parsed.date || logicalDate;
+                const dateTime = new Date(`${datePart}T${parsed.time}`);
+                if (isNaN(dateTime.getTime())) continue;
+                if (limitDate && dateTime.getTime() > limitDate.getTime()) continue;
+
+                const diff = dateTime.getTime() - now.getTime();
+                if (diff > -60000) {
+                    futureTimes.push(dateTime);
+                }
+            }
+        }
+
+        futureTimes.sort((a, b) => a.getTime() - b.getTime());
+        const dedupSet = new Set<number>();
+        const deduped: Date[] = [];
+        for (const dt of futureTimes) {
+            const ts = dt.getTime();
+            if (dedupSet.has(ts)) continue;
+            dedupSet.add(ts);
+            deduped.push(dt);
+        }
+        return deduped;
     }
 
     /**
@@ -4893,6 +5099,8 @@ export default class ReminderPlugin extends Plugin {
         if (!reminder?.id) return;
 
         try {
+            const isHabit = typeof reminder.id === 'string' && reminder.id.startsWith('habit');
+
             // 检查是否需要取消旧通知
             if (oldReminder?.id) {
                 const timeChanged =
@@ -4915,7 +5123,6 @@ export default class ReminderPlugin extends Plugin {
             if (reminder.completed) {
                 console.log(`[MobileNotification] 已完成，跳过设置通知: id=${reminder.id}`);
                 // 同步从计划快照中移除（通过 ID 前缀区分习惯与任务）
-                const isHabit = typeof reminder.id === 'string' && reminder.id.startsWith('habit');
                 if (isHabit) {
                     if (this.mobileHabitNotificationPlansCache && this.mobileHabitNotificationPlansCache[reminder.id]) {
                         delete this.mobileHabitNotificationPlansCache[reminder.id];
@@ -4929,11 +5136,16 @@ export default class ReminderPlugin extends Plugin {
             }
 
             // 为所有未来的提醒时间设置通知（默认限制7天内）
-            await this.scheduleAllMobileNotifications(reminder, daysLimit);
+            if (isHabit) {
+                await this.scheduleAllMobileHabitNotifications(reminder, daysLimit);
+            } else {
+                await this.scheduleAllMobileNotifications(reminder, daysLimit);
+            }
 
             // 【修复：本地保存时同步更新计划快照，防止与 onDataChanged 冲突导致误判及通知残留】
-            const times = this.calculateAllNotificationTimes(reminder, daysLimit).map((time) => time.toISOString()).sort();
-            const isHabit = typeof reminder.id === 'string' && reminder.id.startsWith('habit');
+            const times = (isHabit ? this.calculateHabitNotificationTimes(reminder, daysLimit) : this.calculateAllNotificationTimes(reminder, daysLimit))
+                .map((time) => time.toISOString())
+                .sort();
             if (times.length > 0) {
                 if (isHabit) {
                     if (!this.mobileHabitNotificationPlansCache) this.mobileHabitNotificationPlansCache = {};
