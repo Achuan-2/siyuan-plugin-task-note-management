@@ -2646,7 +2646,8 @@ export class ReminderPanel {
                 const isInstanceEdit = isRepeatInstance && !!originalId;
 
                 // 获取实例日期
-                const originalInstanceDate = (isRepeatInstance && reminder.id && reminder.id.includes('_')) ? reminder.id.split('_').pop() : reminder.date;
+                const parsedInstance = isRepeatInstance ? this.parseReminderInstanceId(reminder.id) : null;
+                const originalInstanceDate = parsedInstance?.instanceDate || reminder.date;
 
                 new QuickReminderDialog(
                     undefined, undefined, undefined, undefined,
@@ -6387,9 +6388,8 @@ export class ReminderPanel {
             items.push({
                 iconHTML: "✏️", label: i18n("editDate") || "编辑日期", click: () => {
                     const isInstanceEdit = targetReminder.isRepeatInstance && onlyThisInstance;
-                    const originalInstanceDate = (targetReminder.isRepeatInstance && targetReminder.id && targetReminder.id.includes('_'))
-                        ? targetReminder.id.split('_').pop()
-                        : targetReminder.date;
+                    const parsedInstance = targetReminder.isRepeatInstance ? this.parseReminderInstanceId(targetReminder.id) : null;
+                    const originalInstanceDate = parsedInstance?.instanceDate || targetReminder.date;
                     const dlg = new QuickReminderDialog(
                         undefined, undefined, undefined, undefined,
                         {
@@ -7997,7 +7997,8 @@ export class ReminderPanel {
             }
 
             // 从 instanceId 提取原始日期（格式：originalId_YYYY-MM-DD）
-            const originalInstanceDate = reminder.id ? reminder.id.split('_').pop() : reminder.date;
+            const parsedInstance = this.parseReminderInstanceId(reminder.id);
+            const originalInstanceDate = parsedInstance?.instanceDate || reminder.date;
 
             // 检查实例级别的修改（包括备注）
             const instanceModifications = originalReminder.repeat?.instanceModifications || {};
@@ -8134,7 +8135,8 @@ export class ReminderPanel {
                     }
 
                     // 从 ID 中提取原始生成日期
-                    const originalInstanceDate = reminder.id && reminder.id.includes('_') ? reminder.id.split('_').pop()! : reminder.date;
+                    const parsedInstance = this.parseReminderInstanceId(reminder.id);
+                    const originalInstanceDate = parsedInstance?.instanceDate || reminder.date;
 
                     // 检查实例级别的修改
                     const instanceModifications = originalReminder.repeat?.instanceModifications || {};
@@ -8151,6 +8153,14 @@ export class ReminderPanel {
                         endTime: reminder.endTime,
                         note: instanceMod?.note !== undefined ? instanceMod.note : (originalReminder.note || ''),
                         priority: instanceMod?.priority !== undefined ? instanceMod.priority : (originalReminder.priority || 'none'),
+                        categoryId: instanceMod?.categoryId !== undefined ? instanceMod.categoryId : originalReminder.categoryId,
+                        projectId: instanceMod?.projectId !== undefined ? instanceMod.projectId : originalReminder.projectId,
+                        customGroupId: instanceMod?.customGroupId !== undefined ? instanceMod.customGroupId : originalReminder.customGroupId,
+                        milestoneId: instanceMod?.milestoneId !== undefined ? instanceMod.milestoneId : originalReminder.milestoneId,
+                        kanbanStatus: instanceMod?.kanbanStatus !== undefined ? instanceMod.kanbanStatus : originalReminder.kanbanStatus,
+                        reminderTimes: instanceMod?.reminderTimes !== undefined ? instanceMod.reminderTimes : originalReminder.reminderTimes,
+                        customReminderPreset: instanceMod?.customReminderPreset !== undefined ? instanceMod.customReminderPreset : originalReminder.customReminderPreset,
+                        estimatedPomodoroDuration: instanceMod?.estimatedPomodoroDuration !== undefined ? instanceMod.estimatedPomodoroDuration : originalReminder.estimatedPomodoroDuration,
                         isInstance: true,
                         originalId: reminder.originalId,
                         instanceDate: originalInstanceDate

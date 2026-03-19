@@ -307,6 +307,22 @@ export class QuickReminderDialog {
             this.blockContent = this.reminder.content || '';
         }
 
+        if (this.isInstanceEdit && this.reminder && this.instanceDate) {
+            const instanceMod = this.reminder.repeat?.instanceModifications?.[this.instanceDate] || {};
+            const originalId = this.reminder.originalId || this.reminder.id;
+            const instanceId = this.reminder.isInstance ? this.reminder.id : `${originalId}_${this.instanceDate}`;
+            this.reminder = {
+                ...this.reminder,
+                ...instanceMod,
+                id: instanceId,
+                originalId,
+                instanceDate: this.instanceDate,
+                isInstance: true,
+                title: instanceMod.title || this.reminder.title || '(无标题)'
+            };
+            this.defaultStatus = this.reminder.kanbanStatus || this.defaultStatus;
+        }
+
         this.categoryManager = CategoryManager.getInstance(this.plugin);
         this.projectManager = ProjectManager.getInstance(this.plugin);
         this.pomodoroRecordManager = PomodoroRecordManager.getInstance(this.plugin);
@@ -2465,7 +2481,11 @@ export class QuickReminderDialog {
 
         // 获取当前选中的状态
         const currentSelected = selector.querySelector('.task-status-option.selected') as HTMLElement;
-        let currentStatusId = currentSelected?.getAttribute('data-status-type') || this.defaultStatus || 'doing';
+        let currentStatusId =
+            currentSelected?.getAttribute('data-status-type') ||
+            this.reminder?.kanbanStatus ||
+            this.defaultStatus ||
+            'doing';
 
         // 确保 currentStatusId 在可用状态列表中，如果不在则默认选中第一个
         const statusExists = availableStatuses.some(s => s.id === currentStatusId);
@@ -2763,26 +2783,18 @@ export class QuickReminderDialog {
 
             container.appendChild(row);
         });
-
-
     }
 
     // 添加自定义时间
     private addCustomTime(time: string, note?: string) {
         if (!time) return;
-        // 检查是否已存在相同时间
-        const existingIndex = this.customTimes.findIndex(t => t && t.time === time);
-        if (existingIndex >= 0) {
-            // 更新备注
-            this.customTimes[existingIndex].note = note;
-        } else {
-            this.customTimes.push({ time, note });
-            this.customTimes.sort((a, b) => {
-                if (!a || !a.time) return 1;
-                if (!b || !b.time) return -1;
-                return a.time.localeCompare(b.time);
-            });
-        }
+        // 直接添加，允许重复时间
+        this.customTimes.push({ time, note });
+        this.customTimes.sort((a, b) => {
+            if (!a || !a.time) return 1;
+            if (!b || !b.time) return -1;
+            return a.time.localeCompare(b.time);
+        });
         this.renderCustomTimeList();
     }
 

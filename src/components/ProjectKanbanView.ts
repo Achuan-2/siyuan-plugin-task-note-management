@@ -10646,7 +10646,7 @@ export class ProjectKanbanView {
                 iconHTML: "✏️", label: i18n("editDate") || "编辑日期", click: () => {
                     const isInstanceEdit = targetTask.isRepeatInstance && onlyThisInstance;
                     const originalInstanceDate = (targetTask.isRepeatInstance && targetTask.id && targetTask.id.includes('_'))
-                        ? targetTask.id.split('_').pop()
+                        ? targetTask.id.substring(targetTask.id.lastIndexOf('_') + 1)
                         : targetTask.date;
                     const dlg = new QuickReminderDialog(
                         undefined, undefined, undefined, undefined,
@@ -15191,7 +15191,11 @@ export class ProjectKanbanView {
             }
 
             // 从 instanceId (格式: originalId_YYYY-MM-DD) 中提取原始生成日期
-            const originalInstanceDate = task.id ? task.id.split('_').pop() : task.date;
+            const originalInstanceDate = (() => {
+                if (!task.id) return task.date;
+                const lastUnderscoreIndex = task.id.lastIndexOf('_');
+                return lastUnderscoreIndex >= 0 ? task.id.substring(lastUnderscoreIndex + 1) : task.date;
+            })();
 
             // 检查实例级别的修改（包括备注）
             const instanceModifications = originalReminder.repeat?.instanceModifications || {};
@@ -15208,6 +15212,12 @@ export class ProjectKanbanView {
                 endTime: task.endTime,
                 note: instanceMod?.note !== undefined ? instanceMod.note : (originalReminder.note || ''),
                 priority: instanceMod?.priority !== undefined ? instanceMod.priority : (originalReminder.priority || 'none'),
+                projectId: instanceMod?.projectId !== undefined ? instanceMod.projectId : originalReminder.projectId,
+                customGroupId: instanceMod?.customGroupId !== undefined ? instanceMod.customGroupId : originalReminder.customGroupId,
+                milestoneId: instanceMod?.milestoneId !== undefined ? instanceMod.milestoneId : originalReminder.milestoneId,
+                kanbanStatus: instanceMod?.kanbanStatus !== undefined ? instanceMod.kanbanStatus : originalReminder.kanbanStatus,
+                reminderTimes: instanceMod?.reminderTimes !== undefined ? instanceMod.reminderTimes : originalReminder.reminderTimes,
+                estimatedPomodoroDuration: instanceMod?.estimatedPomodoroDuration !== undefined ? instanceMod.estimatedPomodoroDuration : originalReminder.estimatedPomodoroDuration,
                 isInstance: true,
                 originalId: task.originalId,
                 instanceDate: originalInstanceDate  // 使用原始生成日期而非当前显示日期
