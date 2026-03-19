@@ -5427,10 +5427,8 @@ export class ReminderPanel {
                         i18n("startInDays", { days: daysDiff.toString() });
                 }
             } else {
-                applyCountdownStyle('--b3-font-color2', '--b3-font-background2');
-                countdownEl.textContent = daysDiff === 1 ?
-                    i18n("daysLeftSingle") :
-                    i18n("daysLeftPlural", { days: daysDiff.toString() });
+                applyCountdownStyle('--b3-font-color4', '--b3-font-background4');
+                countdownEl.textContent = i18n("startInDays", { days: daysDiff.toString() });
             }
         }
 
