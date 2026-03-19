@@ -270,6 +270,8 @@
     "skipFirstOccurrence": "Skip First Occurrence",
     "skipThisOccurrence": "Skip This Occurrence",
     "quickReschedule": "Quick Reschedule",
+    "adjustStartDate": "Adjust Start Date",
+    "adjustEndDate": "Adjust End Date",
     "moveToToday": "Move to Today",
     "moveToTomorrow": "Move to Tomorrow",
     "moveToDayAfterTomorrow": "Move to Day After Tomorrow",

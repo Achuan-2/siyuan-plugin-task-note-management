@@ -270,6 +270,8 @@
     "skipFirstOccurrence": "跳过首次发生",
     "skipThisOccurrence": "跳过此次发生",
     "quickReschedule": "快速调整日期",
+    "adjustStartDate": "调整开始日期",
+    "adjustEndDate": "调整结束日期",
     "moveToToday": "移至今天",
     "moveToTomorrow": "移至明天",
     "moveToDayAfterTomorrow": "移至后天",
