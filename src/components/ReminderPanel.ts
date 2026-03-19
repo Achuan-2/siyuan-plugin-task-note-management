@@ -4499,6 +4499,7 @@ export class ReminderPanel {
                 const times = reminder.reminderTimes.map((rtItem: any) => {
                     if (!rtItem) return '';
                     const rt = typeof rtItem === 'string' ? rtItem : rtItem.time;
+                    const note = typeof rtItem === 'string' ? '' : String(rtItem.note || '').trim();
                     if (!rt) return '';
                     let s = String(rt).trim();
                     let datePart: string | null = null;
@@ -4518,12 +4519,14 @@ export class ReminderPanel {
                     if (compareDateStrings(logicalTarget, today) < 0) return ''; // 过去的不显示
 
                     if (compareDateStrings(logicalTarget, today) === 0) {
-                        return timePart ? timePart.substring(0, 5) : '';
+                        const displayTime = timePart ? timePart.substring(0, 5) : '';
+                        return note && displayTime ? `${displayTime}（${note}）` : displayTime;
                     } else {
                         // 未来：显示日期 + 时间（显示原始 targetDate）
                         const d = new Date(targetDate + 'T00:00:00');
                         const ds = d.toLocaleDateString(getLocaleTag(), { month: 'short', day: 'numeric' });
-                        return `${ds}${timePart ? ' ' + timePart.substring(0, 5) : ''}`;
+                        const displayTime = `${ds}${timePart ? ' ' + timePart.substring(0, 5) : ''}`;
+                        return note ? `${displayTime}（${note}）` : displayTime;
                     }
                 }).filter(Boolean).join(', ');
 
