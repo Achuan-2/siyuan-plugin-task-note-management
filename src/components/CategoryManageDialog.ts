@@ -1,7 +1,8 @@
-import { Dialog, showMessage, confirm } from "siyuan";
+import { Dialog, showMessage, confirm, openEmoji } from "siyuan";
 import { CategoryManager, Category } from "../utils/categoryManager";
 import { i18n } from "../pluginInstance";
 import { Picker } from "emoji-picker-element";
+import zh_CN from "emoji-picker-element/i18n/zh_CN";
 export class CategoryManageDialog {
     private dialog: Dialog;
     private categoryManager: CategoryManager;
@@ -269,7 +270,7 @@ export class CategoryManageDialog {
             <div class="category-info">
                 <div class="category-visual">
                     <div class="category-icon" style="background-color: ${category.color};">
-                        ${category.icon || '📁'}
+                        ${category.icon || '🏷'}
                     </div>
                     <div class="category-color-preview" style="background-color: ${category.color};"></div>
                 </div>
@@ -506,13 +507,13 @@ export class CategoryManageDialog {
                         </div>
                         <div class="b3-form__group">
                             <label class="b3-form__label">分类图标</label>
-                            <div id="categoryIcon" class="category-icon-display">${category?.icon || '📁'}</div>
+                            <div id="categoryIcon" class="category-icon-display">${category?.icon || '🏷'}</div>
                         </div>
                         <div class="b3-form__group">
                             <label class="b3-form__label">预览</label>
                             <div class="category-preview">
                                 <div class="category-dot" id="previewDot" style="background-color: ${category?.color || '#3498db'};"></div>
-                                <span id="previewIcon">${category?.icon || '📁'}</span>
+                                <span id="previewIcon">${category?.icon || '🏷'}</span>
                                 <span id="previewName">${category?.name || '新分类'}</span>
                             </div>
                         </div>
@@ -544,10 +545,7 @@ export class CategoryManageDialog {
                 </div>
             `,
             width: "400px",
-            height: "350px",
-            destroyCallback: () => {
-                this.clearAllPickers();
-            }
+            height: "350px"
         });
 
         // 绑定预览更新事件
@@ -562,29 +560,20 @@ export class CategoryManageDialog {
         if (category?.icon) {
             iconDisplay.textContent = category.icon;
         } else {
-            iconDisplay.textContent = '📁';
+            iconDisplay.textContent = '🏷';
         }
 
         // 绑定图标点击事件
         iconDisplay?.addEventListener('click', (e) => {
+            e.preventDefault();
             e.stopPropagation();
-            this.initSharedPicker();
-            this.activeIconDisplay = iconDisplay;
-            if (!this.sharedPicker) return;
-            const show = this.sharedPicker.style.display === 'none' || this.sharedPicker.style.display === '';
-            if (show) {
-                this.sharedPicker.style.display = 'block';
-                this.positionSharedPicker(iconDisplay);
-            } else {
-                this.sharedPicker.style.display = 'none';
-                this.activeIconDisplay = null;
-            }
+            this.openBuiltInEmojiPicker(iconDisplay, previewIcon);
         });
 
         const updatePreview = () => {
             const name = nameInput.value || '新分类';
             const color = colorInput.value;
-            const icon = iconDisplay.textContent || '📁';
+            const icon = iconDisplay.textContent || '🏷';
 
             previewDot.style.backgroundColor = color;
             previewIcon.textContent = icon;
@@ -663,6 +652,24 @@ export class CategoryManageDialog {
                 }
             }
         );
+    }
+
+    private openBuiltInEmojiPicker(target: HTMLElement, previewIcon: HTMLElement) {
+        const rect = target.getBoundingClientRect();
+        openEmoji({
+            hideDynamicIcon: true,
+            hideCustomIcon: true,
+            position: {
+                x: rect.left,
+                y: rect.bottom
+            },
+            selectedCB: (emojiCode: string) => {
+                const codePoints = emojiCode.split(/[-\s]+/).map(cp => parseInt(cp, 16));
+                const selectedEmoji = String.fromCodePoint(...codePoints);
+                target.textContent = selectedEmoji;
+                previewIcon.textContent = selectedEmoji;
+            }
+        });
     }
 
     private initSharedPicker() {

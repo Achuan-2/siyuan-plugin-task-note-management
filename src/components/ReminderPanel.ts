@@ -6434,7 +6434,7 @@ export class ReminderPanel {
             // Add existing categories with proper emoji display
             categories.forEach(category => {
                 menuItems.push({
-                    iconHTML: category.icon || "📁",
+                    iconHTML: category.icon || "🏷",
                     label: category.name,
                     current: currentCategoryId === category.id,
                     click: () => {
@@ -7155,6 +7155,9 @@ export class ReminderPanel {
                 return this.calculateWeeklyNext(startDate, repeat.interval || 1);
 
             case 'monthly':
+                if (repeat.monthDays && repeat.monthDays.length > 0) {
+                    return this.calculateNextMonthday(startDate, repeat.monthDays, repeat.interval || 1);
+                }
                 return this.calculateMonthlyNext(startDate, repeat.interval || 1);
 
             case 'yearly':
@@ -7278,32 +7281,30 @@ export class ReminderPanel {
     /**
      * Calculate next occurrence based on month days
      */
-    private calculateNextMonthday(startDate: Date, monthDays: number[]): Date {
+    private calculateNextMonthday(startDate: Date, monthDays: number[], interval: number = 1): Date {
         const nextDate = new Date(startDate);
         const currentDay = nextDate.getDate();
 
+        const getEffectiveDays = (date: Date): number[] => {
+            const lastDayOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+            return Array.from(new Set(monthDays.map(day => Math.min(day, lastDayOfMonth)))).sort((a, b) => a - b);
+        };
+
         // Sort month days and find next one
-        const sortedDays = [...monthDays].sort((a, b) => a - b);
+        const sortedDays = getEffectiveDays(nextDate);
 
         // Find next day in the same month
         let nextDay = sortedDays.find(day => day > currentDay);
 
         if (nextDay !== undefined) {
-            // Check if the day exists in current month
-            const tempDate = new Date(nextDate.getFullYear(), nextDate.getMonth(), nextDay);
-            if (tempDate.getMonth() === nextDate.getMonth()) {
-                nextDate.setDate(nextDay);
-                return nextDate;
-            }
+            nextDate.setDate(nextDay);
+            return nextDate;
         }
 
-        // Next occurrence is next month, use first day
-        nextDate.setMonth(nextDate.getMonth() + 1);
-        const firstDay = sortedDays[0];
-
-        // Ensure the day exists in the target month
-        const lastDayOfMonth = new Date(nextDate.getFullYear(), nextDate.getMonth() + 1, 0).getDate();
-        nextDate.setDate(Math.min(firstDay, lastDayOfMonth));
+        // Next occurrence is in the next eligible month, use the first effective day there.
+        nextDate.setMonth(nextDate.getMonth() + interval);
+        const targetMonthDays = getEffectiveDays(nextDate);
+        nextDate.setDate(targetMonthDays[0]);
 
         return nextDate;
     }
@@ -9966,13 +9967,13 @@ export class ReminderPanel {
             }];
             categories.forEach((cat: any) => {
                 catItems.push({
-                    iconHTML: cat.icon || '📁',
+                    iconHTML: cat.icon || '🏷',
                     label: cat.name,
                     click: () => this.panelBatchSetCategory(cat.id)
                 });
             });
             menu.addItem({
-                iconHTML: '📁',
+                iconHTML: '🏷',
                 label: i18n('setCategory') || '设置分类',
                 submenu: catItems
             });

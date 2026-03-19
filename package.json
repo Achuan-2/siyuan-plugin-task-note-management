@@ -52,7 +52,6 @@
     "chrono-node": "2.8.2",
     "echarts": "^5.6.0",
     "elliptic": "^6.6.1",
-    "emoji-picker-element": "^1.28.0",
     "ical.js": "^2.2.1",
     "ics": "^3.8.1",
     "lunar-typescript": "^1.8.2",
