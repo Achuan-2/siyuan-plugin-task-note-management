@@ -39,6 +39,11 @@ function getLocalDateString(date: Date): string {
     return `${year}-${month}-${day}`;
 }
 
+function getEffectiveMonthDays(year: number, month: number, monthDays: number[]): number[] {
+    const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
+    return Array.from(new Set(monthDays.map(day => Math.min(day, lastDayOfMonth)))).sort((a, b) => a - b);
+}
+
 /**
  * 生成重复事件实例
  */
@@ -182,15 +187,26 @@ function shouldGenerateInstance(currentDate: Date, originalDate: string, repeatC
             return weeksDiff >= 0 && weeksDiff % interval === 0 && sameWeekday;
 
         case 'monthly':
-            // 如果设置了monthDays，检查当前日期是否在指定的日期列表中
-            if (repeatConfig.monthDays && repeatConfig.monthDays.length > 0) {
-                return repeatConfig.monthDays.includes(currentDate.getDate()) && currentDate >= originalDateObj;
-            }
-            // 否则按原有逻辑：检查与原始日期的日是否相同
             const monthsDiff = (currentDate.getFullYear() - originalDateObj.getFullYear()) * 12 +
                 (currentDate.getMonth() - originalDateObj.getMonth());
+            const monthlyInterval = repeatConfig.interval || 1;
+
+            // 如果设置了 monthDays，同时要求命中“每 N 个月”的间隔。
+            if (repeatConfig.monthDays && repeatConfig.monthDays.length > 0) {
+                const effectiveMonthDays = getEffectiveMonthDays(
+                    currentDate.getFullYear(),
+                    currentDate.getMonth(),
+                    repeatConfig.monthDays
+                );
+                return currentDate >= originalDateObj &&
+                    monthsDiff >= 0 &&
+                    monthsDiff % monthlyInterval === 0 &&
+                    effectiveMonthDays.includes(currentDate.getDate());
+            }
+
+            // 否则按原有逻辑：检查与原始日期的日是否相同
             const sameDay = currentDate.getDate() === originalDateObj.getDate();
-            return monthsDiff >= 0 && monthsDiff % (repeatConfig.interval || 1) === 0 && sameDay;
+            return monthsDiff >= 0 && monthsDiff % monthlyInterval === 0 && sameDay;
 
         case 'yearly':
             // 如果设置了months和monthDays，检查当前日期是否匹配
@@ -367,7 +383,10 @@ export function getRepeatDescription(repeatConfig: RepeatConfig): string {
             break;
         case 'monthly':
             if (repeatConfig.monthDays && repeatConfig.monthDays.length > 0) {
-                description = `每月${repeatConfig.monthDays.join(',')}日`;
+                const monthDaysText = repeatConfig.monthDays.join(',');
+                description = interval === 1
+                    ? `每月${monthDaysText}日`
+                    : `每${interval}个月的${monthDaysText}日`;
             } else {
                 description = interval === 1 ? i18n("everyMonth") : i18n("everyNMonths", { n: interval.toString() });
             }

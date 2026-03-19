@@ -417,11 +417,11 @@ export class RepeatSettingsDialog {
             intervalUnit.textContent = this.getIntervalUnit();
 
             // 显示/隐藏相关选项
-            // 显示间隔输入：对大多数类型可用，排除艾宾浩斯和农历专用类型及按月/按年特殊输入
-            // 保留对每周类型的间隔支持，以实现“每隔 X 周”的配置
+            // 显示间隔输入：对大多数类型可用，排除艾宾浩斯和农历专用类型。
+            // monthly 保留间隔支持，以实现“每 X 个月”的配置。
             const showInterval = this.repeatConfig.type !== 'ebbinghaus' &&
                 this.repeatConfig.type !== 'lunar-monthly' && this.repeatConfig.type !== 'lunar-yearly' &&
-                this.repeatConfig.type !== 'monthly' && this.repeatConfig.type !== 'yearly';
+                this.repeatConfig.type !== 'yearly';
             intervalGroup.style.display = showInterval ? 'block' : 'none';
 
             // 每周重复：显示星期选择器
