@@ -1928,5 +1928,6 @@
     "pleaseInputDateTimeDesc": "请输入日期时间描述",
     "mergeProject": "合并项目",
     "batchSetStatus": "批量设置状态",
-    "rightClickToManage": "右键管理任务"
+    "rightClickToManage": "右键管理任务",
+    "batchSetMilestone": "批量设置里程碑"
 }
