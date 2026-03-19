@@ -551,8 +551,14 @@ export class ReminderPanel {
                 const aIsIgnored = a.isAvailableToday && Array.isArray(a.dailyDessertIgnored) && a.dailyDessertIgnored.includes(today);
                 const bIsIgnored = b.isAvailableToday && Array.isArray(b.dailyDessertIgnored) && b.dailyDessertIgnored.includes(today);
 
-                if (aIsIgnored && !bIsIgnored) return 1;
-                if (!aIsIgnored && bIsIgnored) return -1;
+                if (this.currentTab === 'todayCompleted') {
+                    const aGroup = aIsIgnored ? 2 : (a.isSubscribed ? 1 : 0);
+                    const bGroup = bIsIgnored ? 2 : (b.isSubscribed ? 1 : 0);
+                    if (aGroup !== bGroup) return aGroup - bGroup;
+                } else {
+                    if (aIsIgnored && !bIsIgnored) return 1;
+                    if (!aIsIgnored && bIsIgnored) return -1;
+                }
 
                 // 直接使用 compareByCompletedTime 的结果作为最终排序依据
                 let result = this.compareByCompletedTime(a, b);
@@ -9018,6 +9024,28 @@ export class ReminderPanel {
                 }
             }
 
+            // 8.5.1 处理订阅任务分隔符，避免非订阅任务在乐观更新时被追加到订阅区下方
+            if ((this.currentTab === 'today' || this.currentTab === 'todayCompleted') && !savedReminder.parentId) {
+                const subscribedSeparator = this.remindersContainer.querySelector('#subscribed-tasks-separator') as HTMLElement;
+                if (subscribedSeparator && !savedReminder.isSubscribed) {
+                    let shouldInsertBeforeSubscribedSeparator = false;
+                    if (!nextEl) {
+                        shouldInsertBeforeSubscribedSeparator = true;
+                    } else if (nextEl === subscribedSeparator) {
+                        shouldInsertBeforeSubscribedSeparator = true;
+                    } else {
+                        const nextId = nextEl.getAttribute('data-reminder-id');
+                        const nextReminder = nextId ? this.allRemindersMap.get(nextId) : null;
+                        if (nextReminder?.isSubscribed) {
+                            shouldInsertBeforeSubscribedSeparator = true;
+                        }
+                    }
+                    if (shouldInsertBeforeSubscribedSeparator) {
+                        nextEl = subscribedSeparator;
+                    }
+                }
+            }
+
             // 9. 执行 DOM 插入或位置校正
             const existing = this.remindersContainer.querySelector(`[data-reminder-id="${savedReminder.id}"]`);
             if (existing) {
@@ -9064,7 +9092,16 @@ export class ReminderPanel {
                                 }
                             }
                         }
-                        prevEl.after(el);
+                        if ((this.currentTab === 'today' || this.currentTab === 'todayCompleted') && !savedReminder.parentId && !savedReminder.isSubscribed) {
+                            const subscribedSeparator = this.remindersContainer.querySelector('#subscribed-tasks-separator') as HTMLElement;
+                            if (subscribedSeparator && prevEl === subscribedSeparator) {
+                                this.remindersContainer.insertBefore(el, subscribedSeparator);
+                                prevEl = null;
+                            }
+                        }
+                        if (prevEl) {
+                            prevEl.after(el);
+                        }
                     } else {
                         // 连前项都没有，说明是列表首个元素
                         this.remindersContainer.prepend(el);
