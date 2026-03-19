@@ -1864,7 +1864,11 @@ export class EisenhowerMatrixView {
                     }
                 }
 
-                // 广播更新事件以便其他组件和自身刷新视图（例如在“进行中任务”筛选下，已完成的任务会被移除）
+                // 当前视图会忽略自己 source 的 reminderUpdated 事件，因此这里先主动刷新，
+                // 再广播给其他视图，确保已完成任务会立刻从矩阵中过滤掉。
+                await this.refresh(false);
+
+                // 广播更新事件以便其他组件同步刷新
                 window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.viewId } }));
             }
         } catch (error) {
@@ -1949,6 +1953,10 @@ export class EisenhowerMatrixView {
                     if (localTask.extendedProps) delete localTask.extendedProps.completedTime;
                 }
             }
+
+            // 当前视图会忽略自己 source 的 reminderUpdated 事件，因此这里先主动刷新，
+            // 再广播给其他视图，确保重复实例完成后会立刻从矩阵中过滤掉。
+            await this.refresh(false);
 
             // 广播更新事件
             window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.viewId } }));
