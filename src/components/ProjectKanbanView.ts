@@ -1,4 +1,4 @@
-import { colorWithOpacity } from "../utils/uiUtils";
+﻿import { colorWithOpacity } from "../utils/uiUtils";
 import { showMessage, confirm, Menu, Dialog, Constants, openEmoji, platformUtils } from "siyuan";
 
 
@@ -4446,6 +4446,9 @@ export class ProjectKanbanView {
             if (ph) ph.style.display = 'none';
         });
 
+        // 列头也支持作为任务状态调整的拖放区域
+        this.addDropZoneEvents(header, status);
+
         // 列内容
         const content = document.createElement('div');
         content.className = 'kanban-column-content';
@@ -5185,6 +5188,7 @@ export class ProjectKanbanView {
                     console.error('保存任务状态修正失败:', err);
                 });
             }
+            const taskMap = new Map(projectTasks.map((t: any) => [t.id, { ...t }]));
             // 根据日期自动将到期（今天或过去）且未完成的父任务设置为 doing，并级联到所有后代
             try {
                 const todayForDateCheck = getLogicalDateString();
@@ -5194,6 +5198,19 @@ export class ProjectKanbanView {
                 if (hasDoingStatus) {
                     for (const t of projectTasks) {
                         if (!t) continue;
+                        // 重复任务系列由实例日期决定显示列，不应按原始任务日期强制回退到 doing
+                        if (t.repeat?.enabled) continue;
+                        let hasRepeatingAncestor = false;
+                        let current = t;
+                        while (current?.parentId && taskMap.has(current.parentId)) {
+                            const parent = taskMap.get(current.parentId);
+                            if (parent?.repeat?.enabled) {
+                                hasRepeatingAncestor = true;
+                                break;
+                            }
+                            current = parent;
+                        }
+                        if (hasRepeatingAncestor) continue;
                         // 仅对未完成且有明确 date 的任务处理（不处理实例层的逻辑，这里作用于原始提醒与普通任务）
                         if (!t.completed && t.date && compareDateStrings(t.date, todayForDateCheck) <= 0) {
                             // 如果父任务已经是进行中，则跳过，避免重复设置及不必要的级联
@@ -5232,7 +5249,6 @@ export class ProjectKanbanView {
             } catch (err) {
                 console.warn('自动根据日期级联设置状态失败:', err);
             }
-            const taskMap = new Map(projectTasks.map((t: any) => [t.id, { ...t }]));
 
             const getRootStatus = (task: any): string => {
                 let current = task;
@@ -6309,14 +6325,11 @@ export class ProjectKanbanView {
     private getTaskSortValue(task: any): number {
         if (!task) return 0;
 
-        // 如果是重复实例，从 instanceModifications 中读取
-        // 使用原始日期（从 ID 中提取）作为键，因为 date 可能已被修改
-        if (task.isRepeatInstance && task.originalId && task.id && task.id.includes('_')) {
-            const originalInstanceDate = task.id.split('_').pop();
-            // 从 reminderData 缓存中查找原始任务
+        // 重复实例的手动排序统一读取原始任务 sort
+        if (task.isRepeatInstance && task.originalId) {
             const originalTask = this.reminderData?.[task.originalId];
-            if (originalTask?.repeat?.instanceModifications?.[originalInstanceDate]) {
-                return originalTask.repeat.instanceModifications[originalInstanceDate].sort ?? task.sort ?? 0;
+            if (originalTask) {
+                return originalTask.sort ?? task.sort ?? 0;
             }
         }
 
@@ -8445,6 +8458,9 @@ export class ProjectKanbanView {
 
         groupHeader.appendChild(headerRight);
         groupHeaderWrapper.appendChild(groupHeader);
+
+        // 头部也作为有效拖放区域，允许直接拖到状态标题上修改状态
+        this.addStatusSubGroupDropEvents(groupHeader, status);
 
         // 分组任务容器
         const groupTasksContainer = document.createElement('div');
@@ -12843,6 +12859,11 @@ export class ProjectKanbanView {
                 border-color: var(--b3-theme-primary);
             }
 
+            .kanban-column-header.kanban-drop-zone-active {
+                background: var(--b3-theme-primary-lightest) !important;
+                box-shadow: inset 0 0 0 2px var(--b3-theme-primary);
+            }
+
             /* 父子任务拖拽样式 */
             .parent-child-drop-target {
                 border: 2px dashed var(--b3-theme-primary) !important;
@@ -13180,6 +13201,12 @@ export class ProjectKanbanView {
 
             .custom-status-group-header:hover {
                 background: var(--b3-theme-primary-lightest) !important;
+            }
+
+            .custom-status-group-header.kanban-drop-zone-active {
+                background: var(--b3-theme-primary-lightest) !important;
+                box-shadow: inset 0 0 0 2px var(--b3-theme-primary);
+                border-radius: 6px;
             }
 
             .custom-status-group-title {
@@ -14304,7 +14331,7 @@ export class ProjectKanbanView {
             // 使用原始日期（从 ID 中提取），因为 date 可能已被修改
             const targetInstanceDate = isTargetInstance ? targetTask.id.split('_').pop() : null;
 
-            // 收集该状态下所有普通任务和实例
+            // 收集该状态下所有任务；重复实例拖动排序统一落到原始任务
             const items: Array<{
                 id: string;
                 originalId: string;
@@ -14315,6 +14342,7 @@ export class ProjectKanbanView {
                 group: string | null;
                 priority: string;
             }> = [];
+            const addedOriginalIds = new Set<string>();
 
             // 收集普通任务（属于当前项目、匹配目标状态/分组/优先级）
             Object.values(reminderData).forEach((task: any) => {
@@ -14332,6 +14360,7 @@ export class ProjectKanbanView {
                 const priorityMatch = taskPriority === targetPriority;
 
                 if (statusMatch && groupMatch && priorityMatch) {
+                    addedOriginalIds.add(task.id);
                     items.push({
                         id: task.id,
                         originalId: task.id,
@@ -14344,7 +14373,7 @@ export class ProjectKanbanView {
                 }
             });
 
-            // 收集重复实例（从 instanceModifications 中）
+            // 收集重复实例，但排序条目只保留到原始任务粒度
             Object.values(reminderData).forEach((task: any) => {
                 if (!task || !task.repeat?.enabled || !task.repeat?.instanceModifications) return;
 
@@ -14360,13 +14389,14 @@ export class ProjectKanbanView {
                     const groupMatch = targetGroup === undefined || instGroup === targetGroup;
                     const priorityMatch = instPriority === targetPriority;
 
-                    if (statusMatch && groupMatch && priorityMatch) {
+                    if (statusMatch && groupMatch && priorityMatch && !addedOriginalIds.has(task.id)) {
+                        addedOriginalIds.add(task.id);
                         items.push({
-                            id: `${task.id}_${date}`,
+                            id: task.id,
                             originalId: task.id,
                             date: date,
-                            sort: mod.sort !== undefined ? mod.sort : (task.sort || 0),
-                            isInstance: true,
+                            sort: task.sort || 0,
+                            isInstance: false,
                             status: instStatus,
                             group: instGroup,
                             priority: instPriority
@@ -14376,22 +14406,16 @@ export class ProjectKanbanView {
             });
 
             // 确保拖拽项在列表中
-            const draggedFullId = isDraggedInstance ? `${draggedOriginalId}_${draggedInstanceDate}` : draggedOriginalId;
+            const draggedFullId = draggedOriginalId;
             const draggedExists = items.some(item => item.id === draggedFullId);
             if (!draggedExists) {
-                let sort = 0;
-                if (isDraggedInstance) {
-                    const originalTask = reminderData[draggedOriginalId];
-                    sort = originalTask?.repeat?.instanceModifications?.[draggedInstanceDate!]?.sort ?? originalTask?.sort ?? 0;
-                } else {
-                    sort = reminderData[draggedOriginalId]?.sort || 0;
-                }
+                const sort = reminderData[draggedOriginalId]?.sort || 0;
                 items.push({
                     id: draggedFullId,
                     originalId: draggedOriginalId,
                     date: draggedInstanceDate || undefined,
                     sort: sort,
-                    isInstance: !!isDraggedInstance,
+                    isInstance: false,
                     status: targetStatus || this.getTaskStatus(draggedTask),
                     group: targetGroup !== undefined ? targetGroup : (draggedTask.customGroupId === undefined ? null : draggedTask.customGroupId),
                     priority: targetPriority
@@ -14399,22 +14423,16 @@ export class ProjectKanbanView {
             }
 
             // 确保目标项在列表中
-            const targetFullId = isTargetInstance ? `${targetOriginalId}_${targetInstanceDate}` : targetOriginalId;
+            const targetFullId = targetOriginalId;
             const targetExists = items.some(item => item.id === targetFullId);
             if (!targetExists) {
-                let sort = 0;
-                if (isTargetInstance) {
-                    const originalTask = reminderData[targetOriginalId];
-                    sort = originalTask?.repeat?.instanceModifications?.[targetInstanceDate!]?.sort ?? originalTask?.sort ?? 0;
-                } else {
-                    sort = reminderData[targetOriginalId]?.sort || 0;
-                }
+                const sort = reminderData[targetOriginalId]?.sort || 0;
                 items.push({
                     id: targetFullId,
                     originalId: targetOriginalId,
                     date: targetInstanceDate || undefined,
                     sort: sort,
-                    isInstance: !!isTargetInstance,
+                    isInstance: false,
                     status: targetStatus || this.getTaskStatus(targetTask),
                     group: targetGroup !== undefined ? targetGroup : (targetTask.customGroupId === undefined ? null : targetTask.customGroupId),
                     priority: targetPriority
@@ -14451,29 +14469,39 @@ export class ProjectKanbanView {
             // 更新排序值
             items.forEach((item, index) => {
                 const newSort = index * 10;
-                if (item.isInstance) {
-                    // 更新 instanceModifications 中的 sort
-                    const originalTask = reminderData[item.originalId];
-                    if (originalTask && originalTask.repeat) {
-                        const instMod = this.ensureInstanceModificationStructure(originalTask, item.date!);
-                        instMod.sort = newSort;
-                    }
-                } else {
-                    // 更新普通任务的 sort
-                    if (reminderData[item.id]) {
-                        reminderData[item.id].sort = newSort;
-                    }
+                if (reminderData[item.originalId]) {
+                    reminderData[item.originalId].sort = newSort;
                 }
             });
 
-            // 如果被拖拽的是实例，同步更新其状态/分组/优先级到 instanceModifications
+            // 如果被拖拽的是实例，状态/优先级更新原始任务；分组仍保留实例级
             if (isDraggedInstance) {
                 const original = reminderData[draggedOriginalId];
                 if (original) {
                     const instMod = this.ensureInstanceModificationStructure(original, draggedInstanceDate!);
-                    if (targetStatus !== undefined) instMod.kanbanStatus = targetStatus;
+                    const instanceCompletedTime = getLocalDateTimeString(new Date());
+                    if (targetStatus !== undefined) {
+                        delete instMod.kanbanStatus;
+                        this.syncRepeatInstanceCompletionState(original, draggedInstanceDate!, targetStatus, instanceCompletedTime);
+                        if (targetStatus === 'completed') {
+                            // 重复实例拖到已完成时，只完成当前实例，不完成整个原始任务
+                        } else {
+                            original.completed = false;
+                            delete original.completedTime;
+                            original.kanbanStatus = targetStatus === 'doing' ? 'doing' : targetStatus;
+                        }
+                    }
                     if (targetGroup !== undefined) instMod.customGroupId = targetGroup;
-                    if (targetPriority !== undefined) instMod.priority = targetPriority;
+                    if (targetPriority !== undefined) {
+                        original.priority = targetPriority;
+                        if (original.repeat?.instanceModifications) {
+                            Object.keys(original.repeat.instanceModifications).forEach(date => {
+                                if (original.repeat.instanceModifications[date]?.priority !== undefined) {
+                                    delete original.repeat.instanceModifications[date].priority;
+                                }
+                            });
+                        }
+                    }
 
                     // 递归更新 ghost 子任务
                     const originalIdsToUpdate = [draggedOriginalId, ...this.getAllDescendantIds(draggedOriginalId, reminderData)];
@@ -14481,9 +14509,28 @@ export class ProjectKanbanView {
                         const originalTask = reminderData[oid];
                         if (!originalTask) continue;
                         const currentInstMod = this.ensureInstanceModificationStructure(originalTask, draggedInstanceDate!);
-                        if (targetStatus !== undefined) currentInstMod.kanbanStatus = targetStatus;
+                        if (targetStatus !== undefined) {
+                            delete currentInstMod.kanbanStatus;
+                            this.syncRepeatInstanceCompletionState(originalTask, draggedInstanceDate!, targetStatus, instanceCompletedTime);
+                            if (targetStatus === 'completed') {
+                                // Ghost 后代只同步该实例日期的完成状态
+                            } else {
+                                originalTask.completed = false;
+                                delete originalTask.completedTime;
+                                originalTask.kanbanStatus = targetStatus === 'doing' ? 'doing' : targetStatus;
+                            }
+                        }
                         if (targetGroup !== undefined) currentInstMod.customGroupId = targetGroup;
-                        if (targetPriority !== undefined) currentInstMod.priority = targetPriority;
+                        if (targetPriority !== undefined) {
+                            originalTask.priority = targetPriority;
+                            if (originalTask.repeat?.instanceModifications) {
+                                Object.keys(originalTask.repeat.instanceModifications).forEach(date => {
+                                    if (originalTask.repeat.instanceModifications[date]?.priority !== undefined) {
+                                        delete originalTask.repeat.instanceModifications[date].priority;
+                                    }
+                                });
+                            }
+                        }
                     }
                 }
             }
@@ -14539,19 +14586,15 @@ export class ProjectKanbanView {
 
             // 更新本地缓存
             items.forEach(item => {
-                const localTask = this.tasks.find(t => t.id === item.id);
-                if (localTask) {
-                    localTask.sort = item.sort;
-                    if (item.isInstance) {
-                        const originalTask = reminderData[item.originalId];
-                        if (originalTask?.repeat?.instanceModifications?.[item.date!]) {
-                            const instSaved = originalTask.repeat.instanceModifications[item.date!];
-                            if (instSaved.kanbanStatus !== undefined) localTask.kanbanStatus = instSaved.kanbanStatus;
-                            if (instSaved.customGroupId !== undefined) localTask.customGroupId = instSaved.customGroupId;
-                            if (instSaved.priority !== undefined) localTask.priority = instSaved.priority;
-                        }
-                    }
-                }
+                this.tasks
+                    .filter(t => t.id === item.id || t.originalId === item.originalId)
+                    .forEach(localTask => {
+                        localTask.sort = reminderData[item.originalId]?.sort ?? item.sort;
+                        localTask.priority = reminderData[item.originalId]?.priority ?? localTask.priority;
+                        localTask.completed = !!reminderData[item.originalId]?.completed;
+                        localTask.completedTime = reminderData[item.originalId]?.completedTime;
+                        localTask.kanbanStatus = reminderData[item.originalId]?.kanbanStatus ?? localTask.kanbanStatus;
+                    });
             });
 
             this.dispatchReminderUpdate(true);
@@ -14604,23 +14647,22 @@ export class ProjectKanbanView {
                         let targetStatus: string | undefined;
                         let targetGroup: string | null | undefined;
                         let targetPriority: string = 'none';
+                        const uiTargetStatus = this.getTaskStatus(targetTask);
+                        const uiTargetGroup = targetTask.customGroupId === undefined ? null : targetTask.customGroupId;
+                        const uiTargetPriority = targetTask.priority || 'none';
 
                         if (targetTaskInDb) {
-                            targetStatus = this.getTaskStatus(targetTaskInDb);
-                            targetGroup = targetTaskInDb.customGroupId === undefined ? null : targetTaskInDb.customGroupId;
-                            targetPriority = targetTaskInDb.priority || 'none';
+                            targetStatus = uiTargetStatus;
+                            targetGroup = uiTargetGroup;
+                            targetPriority = uiTargetPriority;
                         } else if (isTargetInstance && reminderData[targetTask.originalId]) {
-                            const tOrig = reminderData[targetTask.originalId];
-                            const tDate = targetTask.date;
-                            const tMods = tOrig.repeat?.instanceModifications || {};
-                            const tInst = tMods[tDate] || {};
-                            targetStatus = tInst.kanbanStatus !== undefined ? tInst.kanbanStatus : this.getTaskStatus(tOrig);
-                            targetGroup = tInst.customGroupId !== undefined ? tInst.customGroupId : (tOrig.customGroupId === undefined ? null : tOrig.customGroupId);
-                            targetPriority = tInst.priority !== undefined ? tInst.priority : (tOrig.priority || 'none');
+                            targetStatus = uiTargetStatus;
+                            targetGroup = uiTargetGroup;
+                            targetPriority = uiTargetPriority;
                         } else if (targetTask) {
-                            targetStatus = targetTask.kanbanStatus !== undefined ? this.getTaskStatus(targetTask) : undefined;
-                            targetGroup = (targetTask.customGroupId === undefined) ? undefined : targetTask.customGroupId;
-                            targetPriority = targetTask.priority || 'none';
+                            targetStatus = uiTargetStatus;
+                            targetGroup = uiTargetGroup;
+                            targetPriority = uiTargetPriority;
                         }
 
                         // 使用改进的排序逻辑：收集所有相关任务（普通任务+实例），统一排序
@@ -17213,12 +17255,24 @@ export class ProjectKanbanView {
 
                         const instMod = this.ensureInstanceModificationStructure(originalTask, instanceDate);
                         let instanceChanged = false;
+                        const instanceCompletedTime = getLocalDateTimeString(new Date());
 
-                        // Instance Status Update
+                        // Dragging an instance should update the original task status, not an instance override
                         if (updates.kanbanStatus) {
                             const newStatus = updates.kanbanStatus;
-                            if (instMod.kanbanStatus !== newStatus) {
-                                instMod.kanbanStatus = newStatus;
+                            if (instMod.kanbanStatus !== undefined) {
+                                delete instMod.kanbanStatus;
+                                instanceChanged = true;
+                            }
+                            if (this.syncRepeatInstanceCompletionState(originalTask, instanceDate, newStatus, instanceCompletedTime)) {
+                                instanceChanged = true;
+                            }
+                            if (newStatus === 'completed') {
+                                // 重复实例拖到已完成时，只完成该实例日期，不修改原始任务全局完成状态
+                            } else if (originalTask.completed || originalTask.kanbanStatus !== newStatus) {
+                                originalTask.completed = false;
+                                delete originalTask.completedTime;
+                                originalTask.kanbanStatus = newStatus === 'doing' ? 'doing' : newStatus;
                                 instanceChanged = true;
                             }
                         }
@@ -17237,11 +17291,15 @@ export class ProjectKanbanView {
                             }
                         }
 
-                        // Instance Priority Update
+                        // Dragging an instance should update the original task priority, not an instance override
                         if (updates.priority !== undefined) {
                             const newPriority = updates.priority;
-                            if (instMod.priority !== newPriority) {
-                                instMod.priority = newPriority;
+                            if (instMod.priority !== undefined) {
+                                delete instMod.priority;
+                                instanceChanged = true;
+                            }
+                            if (originalTask.priority !== newPriority) {
+                                originalTask.priority = newPriority;
                                 instanceChanged = true;
                             }
                         }
@@ -17276,6 +17334,7 @@ export class ProjectKanbanView {
                     const baseTask = reminderData[originalId];
                     if (baseTask) {
                         let baseTaskChanged = false;
+                        const instanceCompletedTime = getLocalDateTimeString(new Date());
                         if (updates.projectId !== undefined && baseTask.projectId !== updates.projectId) {
                             baseTask.projectId = updates.projectId;
                             baseTaskChanged = true;
@@ -17285,9 +17344,18 @@ export class ProjectKanbanView {
                             else baseTask.customGroupId = updates.customGroupId;
                             baseTaskChanged = true;
                         }
-                        if (updates.kanbanStatus && updates.kanbanStatus !== 'completed' && baseTask.kanbanStatus !== updates.kanbanStatus) {
-                            baseTask.kanbanStatus = updates.kanbanStatus;
-                            baseTaskChanged = true;
+                        if (updates.kanbanStatus) {
+                            if (this.syncRepeatInstanceCompletionState(baseTask, instanceDate, updates.kanbanStatus, instanceCompletedTime)) {
+                                baseTaskChanged = true;
+                            }
+                            if (updates.kanbanStatus === 'completed') {
+                                // 重复实例拖到已完成时，只完成该实例日期，不修改原始任务全局完成状态
+                            } else if (baseTask.completed || baseTask.kanbanStatus !== updates.kanbanStatus) {
+                                baseTask.completed = false;
+                                delete baseTask.completedTime;
+                                baseTask.kanbanStatus = updates.kanbanStatus === 'doing' ? 'doing' : updates.kanbanStatus;
+                                baseTaskChanged = true;
+                            }
                         }
 
                         if (baseTaskChanged) {
@@ -17312,6 +17380,8 @@ export class ProjectKanbanView {
                         if (!subTaskInDb) continue;
 
                         let subTaskChanged = false;
+                        const instanceCompletedTime = getLocalDateTimeString(new Date());
+                        const isGhostSeriesTask = originalIdsToUpdate.includes(oid);
 
                         // 同步项目
                         if (updates.projectId !== undefined) {
@@ -17321,10 +17391,22 @@ export class ProjectKanbanView {
                             }
                         }
 
-                        // 同步状态 (如果不是 completed，我们通常让普通子任务同步系列状态)
-                        if (updates.kanbanStatus && updates.kanbanStatus !== 'completed') {
-                            if (subTaskInDb.kanbanStatus !== updates.kanbanStatus) {
-                                subTaskInDb.kanbanStatus = updates.kanbanStatus;
+                        // 同步状态到原始子任务定义
+                        if (updates.kanbanStatus) {
+                            if (isGhostSeriesTask && this.syncRepeatInstanceCompletionState(subTaskInDb, instanceDate, updates.kanbanStatus, instanceCompletedTime)) {
+                                subTaskChanged = true;
+                            }
+                            if (updates.kanbanStatus === 'completed') {
+                                if (!isGhostSeriesTask && (!subTaskInDb.completed || subTaskInDb.kanbanStatus !== 'completed')) {
+                                    subTaskInDb.completed = true;
+                                    subTaskInDb.completedTime = instanceCompletedTime;
+                                    subTaskInDb.kanbanStatus = 'completed';
+                                    subTaskChanged = true;
+                                }
+                            } else if (subTaskInDb.completed || subTaskInDb.kanbanStatus !== updates.kanbanStatus) {
+                                subTaskInDb.completed = false;
+                                delete subTaskInDb.completedTime;
+                                subTaskInDb.kanbanStatus = updates.kanbanStatus === 'doing' ? 'doing' : updates.kanbanStatus;
                                 subTaskChanged = true;
                             }
                         }
@@ -17790,6 +17872,47 @@ export class ProjectKanbanView {
             reminder.repeat.instanceModifications[instanceDate] = {};
         }
         return reminder.repeat.instanceModifications[instanceDate];
+    }
+
+    private syncRepeatInstanceCompletionState(reminder: any, instanceDate: string, newStatus: string, completedTime?: string): boolean {
+        if (!reminder.repeat) {
+            reminder.repeat = {};
+        }
+
+        let changed = false;
+
+        if (!Array.isArray(reminder.repeat.completedInstances)) {
+            reminder.repeat.completedInstances = [];
+        }
+
+        if (!reminder.repeat.instanceCompletedTimes) {
+            reminder.repeat.instanceCompletedTimes = {};
+        }
+
+        const completedInstances = reminder.repeat.completedInstances;
+        const completedIndex = completedInstances.indexOf(instanceDate);
+
+        if (newStatus === 'completed') {
+            if (completedIndex === -1) {
+                completedInstances.push(instanceDate);
+                changed = true;
+            }
+            if (completedTime && reminder.repeat.instanceCompletedTimes[instanceDate] !== completedTime) {
+                reminder.repeat.instanceCompletedTimes[instanceDate] = completedTime;
+                changed = true;
+            }
+        } else {
+            if (completedIndex !== -1) {
+                completedInstances.splice(completedIndex, 1);
+                changed = true;
+            }
+            if (reminder.repeat.instanceCompletedTimes[instanceDate]) {
+                delete reminder.repeat.instanceCompletedTimes[instanceDate];
+                changed = true;
+            }
+        }
+
+        return changed;
     }
 
 }
