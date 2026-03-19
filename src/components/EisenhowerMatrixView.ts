@@ -1,4 +1,4 @@
-import { getFile, putFile, openBlock, getBlockByID, removeFile } from "../api";
+﻿import { getFile, putFile, openBlock, getBlockByID, removeFile } from "../api";
 import { getAllReminders, saveReminders } from "../utils/icsSubscription";
 import { ProjectManager } from "../utils/projectManager";
 import { CategoryManager } from "../utils/categoryManager";
@@ -505,14 +505,11 @@ export class EisenhowerMatrixView {
                     }
                 }
 
-                // 获取正确的排序值（支持重复实例）
-                // 使用原始日期（从 ID 中提取）作为键，因为 date 可能已被修改
                 let taskSort = reminder?.sort || 0;
-                if (reminder?.isRepeatInstance && reminder?.originalId && reminder?.id && reminder?.id.includes('_')) {
-                    const originalInstanceDate = reminder.id.split('_').pop();
+                if (reminder?.isRepeatInstance && reminder?.originalId) {
                     const originalReminder = reminderData[reminder.originalId];
-                    if (originalReminder?.repeat?.instanceModifications?.[originalInstanceDate]) {
-                        taskSort = originalReminder.repeat.instanceModifications[originalInstanceDate].sort ?? reminder.sort ?? 0;
+                    if (originalReminder) {
+                        taskSort = originalReminder.sort ?? reminder.sort ?? 0;
                     }
                 }
 
@@ -3666,16 +3663,8 @@ export class EisenhowerMatrixView {
         isTargetInstance: boolean,
         event: DragEvent
     ) {
-        // 获取被拖拽项的优先级和项目ID（如果是实例，从 instanceModifications 中读取）
-        const draggedDate = isDraggedInstance ? draggedTaskId.split('_').pop() : null;
         let priority = draggedTask.priority || 'none';
         let projectId = draggedTask.projectId || 'no-project';
-
-        if (isDraggedInstance && draggedDate && draggedTask.repeat?.instanceModifications?.[draggedDate]) {
-            const instMod = draggedTask.repeat.instanceModifications[draggedDate];
-            if (instMod.priority !== undefined) priority = instMod.priority;
-            if (instMod.projectId !== undefined) projectId = instMod.projectId;
-        }
 
         // 如果是重复实例排序，需要使用特殊的排序逻辑
         if (isDraggedInstance || isTargetInstance) {
@@ -3763,148 +3752,52 @@ export class EisenhowerMatrixView {
         priority: string,
         projectId: string
     ) {
-        // 解析拖拽和目标的实例日期
-        const draggedDate = isDraggedInstance ? draggedTaskId.split('_').pop() : null;
-        const targetDate = isTargetInstance ? targetTaskId.split('_').pop() : null;
         const draggedOriginalId = isDraggedInstance ? draggedTaskId.substring(0, draggedTaskId.lastIndexOf('_')) : draggedTaskId;
         const targetOriginalId = isTargetInstance ? targetTaskId.substring(0, targetTaskId.lastIndexOf('_')) : targetTaskId;
+        const items: Array<{ id: string; originalId: string; sort: number }> = [];
+        const addedOriginalIds = new Set<string>();
 
-        if (!draggedDate && isDraggedInstance) {
-            console.error('无法解析拖拽实例日期:', draggedTaskId);
-            return;
-        }
-
-        // 获取所有重复实例（包括当前项目的所有重复任务实例）
-        const allInstances: Array<{ id: string; originalId: string; date: string; sort: number; isInstance: boolean }> = [];
-
-        // 收集所有普通任务（不排除带下划线的 ID，因为许多任务 ID 本身就带下划线）
         Object.values(reminderData).forEach((task: any) => {
-            if ((task.projectId || 'no-project') === projectId &&
-                (task.priority || 'none') === priority) {
-
-                // 如果是重复任务的模板，我们在下面的循环中处理其实例
-                // 这里只收集非重复任务，或者虽然是重复任务但我们要把模板也作为一个可排选项（通常不建议）
-                // 为了与之前的逻辑保持最大兼容并修复 bug，我们收集所有匹配的项目
-                // 但要排除已经是实例 ID 的情况（虽然 reminderData 中不该有实例 ID）
-                const isTemplate = task.repeat?.enabled;
-                if (!isTemplate) {
-                    allInstances.push({
-                        id: task.id,
-                        originalId: task.id,
-                        date: task.date,
-                        sort: task.sort || 0,
-                        isInstance: false
-                    });
-                }
+            if (!task || (task.projectId || 'no-project') !== projectId || (task.priority || 'none') !== priority) {
+                return;
             }
+            if (addedOriginalIds.has(task.id)) {
+                return;
+            }
+            addedOriginalIds.add(task.id);
+            items.push({
+                id: task.id,
+                originalId: task.id,
+                sort: task.sort || 0
+            });
         });
 
-        // 收集所有重复实例（从 repeatInstances 或 instanceModifications 中）
-        Object.values(reminderData).forEach((task: any) => {
-            if (!task.repeat?.enabled) return;
-
-            // 获取该重复任务在当前项目/优先级下的所有实例
-            // 从 instanceModifications 收集已经有修改记录的实例
-            const processedDates = new Set<string>();
-            if (task.repeat.instanceModifications) {
-                Object.entries(task.repeat.instanceModifications).forEach(([date, mod]: [string, any]) => {
-                    if (!mod) return;
-                    processedDates.add(date);
-                    const instProjectId = mod.projectId || task.projectId || 'no-project';
-                    const instPriority = mod.priority || task.priority || 'none';
-                    if (instProjectId === projectId && instPriority === priority) {
-                        allInstances.push({
-                            id: `${task.id}_${date}`,
-                            originalId: task.id,
-                            date: date,
-                            sort: mod.sort !== undefined ? mod.sort : (task.sort || 0),
-                            isInstance: true
-                        });
-                    }
-                });
-            }
-
-            // 如果被拖拽或目标的实例还没有被处理，确保它们被包含
-            // 这处理那些还没有 instanceModifications 的新实例
-            if (isDraggedInstance && draggedDate && task.id === draggedOriginalId && !processedDates.has(draggedDate)) {
-                if ((task.projectId || 'no-project') === projectId && (task.priority || 'none') === priority) {
-                    allInstances.push({
-                        id: draggedTaskId,
-                        originalId: draggedOriginalId,
-                        date: draggedDate,
-                        sort: task.sort || 0,
-                        isInstance: true
-                    });
-                }
-            }
-            if (isTargetInstance && targetDate && task.id === targetOriginalId && !processedDates.has(targetDate)) {
-                if ((task.projectId || 'no-project') === projectId && (task.priority || 'none') === priority) {
-                    allInstances.push({
-                        id: targetTaskId,
-                        originalId: targetOriginalId,
-                        date: targetDate,
-                        sort: task.sort || 0,
-                        isInstance: true
-                    });
-                }
-            }
-        });
-
-        // 确保当前拖拽的实例被包含（如果没有的话）
-        const draggedExists = allInstances.some(inst => inst.id === draggedTaskId);
-        if (!draggedExists) {
-            let sort = 0;
-            if (draggedTask) {
-                sort = draggedTask.repeat?.instanceModifications?.[draggedDate!]?.sort ?? draggedTask.sort ?? 0;
-            } else {
-                // 如果找不到原始任务，尝试从 filteredTasks 获取
-                const draggedTaskInfo = this.filteredTasks.find(t => t.id === draggedTaskId);
-                sort = draggedTaskInfo?.sort || 0;
-            }
-
-            allInstances.push({
-                id: draggedTaskId,
+        if (!items.some((item) => item.id === draggedOriginalId) && reminderData[draggedOriginalId]) {
+            items.push({
+                id: draggedOriginalId,
                 originalId: draggedOriginalId,
-                date: draggedDate || '',
-                sort: sort,
-                isInstance: !!draggedDate
+                sort: reminderData[draggedOriginalId].sort || 0
             });
         }
 
-        // 确保目标实例被包含（如果没有的话）
-        const targetExists = allInstances.some(inst => inst.id === targetTaskId);
-        if (!targetExists) {
-            const targetTask = reminderData[targetOriginalId];
-            let sort = 0;
-            if (targetTask) {
-                sort = targetTask.repeat?.instanceModifications?.[targetDate!]?.sort ?? targetTask.sort ?? 0;
-            } else {
-                const targetTaskInfo = this.filteredTasks.find(t => t.id === targetTaskId);
-                sort = targetTaskInfo?.sort || 0;
-            }
-
-            allInstances.push({
-                id: targetTaskId,
+        if (!items.some((item) => item.id === targetOriginalId) && reminderData[targetOriginalId]) {
+            items.push({
+                id: targetOriginalId,
                 originalId: targetOriginalId,
-                date: targetDate || '',
-                sort: sort,
-                isInstance: !!targetDate
+                sort: reminderData[targetOriginalId].sort || 0
             });
         }
 
-        // 按 sort 排序
-        allInstances.sort((a, b) => a.sort - b.sort);
+        items.sort((a, b) => a.sort - b.sort);
 
-        // 找到目标索引
-        const targetIndex = allInstances.findIndex((inst) => inst.id === targetTaskId);
-        const draggedIndex = allInstances.findIndex((inst) => inst.id === draggedTaskId);
+        const targetIndex = items.findIndex((item) => item.id === targetOriginalId);
+        const draggedIndex = items.findIndex((item) => item.id === draggedOriginalId);
 
         if (targetIndex === -1 || draggedIndex === -1) {
-            console.error('找不到拖拽或目标任务', { draggedTaskId, targetTaskId, allInstances: allInstances.map(i => i.id) });
+            console.error('找不到拖拽或目标任务', { draggedTaskId, targetTaskId, items: items.map(i => i.id) });
             return;
         }
 
-        // 计算插入位置
         let insertIndex = targetIndex;
         if (event.currentTarget instanceof HTMLElement) {
             const rect = event.currentTarget.getBoundingClientRect();
@@ -3912,38 +3805,18 @@ export class EisenhowerMatrixView {
             insertIndex = event.clientY < midpoint ? targetIndex : targetIndex + 1;
         }
 
-        // 重新排序
-        const draggedInst = allInstances[draggedIndex];
-        allInstances.splice(draggedIndex, 1);
-
-        // 调整插入索引（如果拖拽项在插入点之前被移除）
+        const draggedItem = items[draggedIndex];
+        items.splice(draggedIndex, 1);
         if (draggedIndex < insertIndex) {
             insertIndex--;
         }
 
-        const validInsertIndex = Math.max(0, Math.min(insertIndex, allInstances.length));
-        allInstances.splice(validInsertIndex, 0, draggedInst);
+        const validInsertIndex = Math.max(0, Math.min(insertIndex, items.length));
+        items.splice(validInsertIndex, 0, draggedItem);
 
-        // 更新排序值
-        allInstances.forEach((inst, index) => {
-            const newSort = index * 10;
-            if (inst.isInstance) {
-                // 更新 instanceModifications 中的 sort
-                const originalTask = reminderData[inst.originalId];
-                if (originalTask && originalTask.repeat) {
-                    if (!originalTask.repeat.instanceModifications) {
-                        originalTask.repeat.instanceModifications = {};
-                    }
-                    if (!originalTask.repeat.instanceModifications[inst.date]) {
-                        originalTask.repeat.instanceModifications[inst.date] = {};
-                    }
-                    originalTask.repeat.instanceModifications[inst.date].sort = newSort;
-                }
-            } else {
-                // 更新普通任务的 sort
-                if (reminderData[inst.id]) {
-                    reminderData[inst.id].sort = newSort;
-                }
+        items.forEach((item, index) => {
+            if (reminderData[item.originalId]) {
+                reminderData[item.originalId].sort = index * 10;
             }
         });
 
@@ -3969,21 +3842,9 @@ export class EisenhowerMatrixView {
         const draggedInstanceDate = isDraggedInstance ? draggedTaskId.split('_').pop() : null;
         const targetInstanceDate = isTargetInstance ? targetTaskId.split('_').pop() : null;
 
-        // 获取优先级（如果是实例，从 instanceModifications 中读取）
         let oldPriority = draggedTask.priority || 'none';
         let newPriority = targetTask.priority || 'none';
         let projectId = draggedTask.projectId || 'no-project';
-
-        if (isDraggedInstance && draggedInstanceDate && draggedTask.repeat?.instanceModifications?.[draggedInstanceDate]) {
-            const instMod = draggedTask.repeat.instanceModifications[draggedInstanceDate];
-            if (instMod.priority !== undefined) oldPriority = instMod.priority;
-            if (instMod.projectId !== undefined) projectId = instMod.projectId;
-        }
-
-        if (isTargetInstance && targetInstanceDate && targetTask.repeat?.instanceModifications?.[targetInstanceDate]) {
-            const instMod = targetTask.repeat.instanceModifications[targetInstanceDate];
-            if (instMod.priority !== undefined) newPriority = instMod.priority;
-        }
 
         // 如果是重复实例，需要特殊处理
         if (isDraggedInstance) {
@@ -4082,14 +3943,15 @@ export class EisenhowerMatrixView {
             return;
         }
 
-        // 1. 更新重复实例的优先级（存储在 instanceModifications 中）
-        if (!draggedTask.repeat.instanceModifications) {
-            draggedTask.repeat.instanceModifications = {};
+        // 1. 更新重复实例对应原始任务的优先级，并清理实例级优先级覆盖
+        draggedTask.priority = newPriority;
+        if (draggedTask.repeat?.instanceModifications) {
+            Object.keys(draggedTask.repeat.instanceModifications).forEach((date) => {
+                if (draggedTask.repeat.instanceModifications[date]?.priority !== undefined) {
+                    delete draggedTask.repeat.instanceModifications[date].priority;
+                }
+            });
         }
-        if (!draggedTask.repeat.instanceModifications[draggedInstanceDate]) {
-            draggedTask.repeat.instanceModifications[draggedInstanceDate] = {};
-        }
-        draggedTask.repeat.instanceModifications[draggedInstanceDate].priority = newPriority;
 
         // 2. 处理旧优先级分组：收集所有实例 and 普通任务，移除被拖拽项并重新排序
         const oldGroup = this.collectTasksAndInstances(reminderData, projectId, oldPriority, draggedTaskId);
@@ -4102,14 +3964,8 @@ export class EisenhowerMatrixView {
         const newGroup = this.collectTasksAndInstances(reminderData, projectId, newPriority, draggedTaskId);
 
         // 找到目标位置
-        let targetIndex = -1;
-        if (isTargetInstance && targetInstanceDate) {
-            targetIndex = newGroup.findIndex((item: any) =>
-                item.id === targetTaskId || (item.originalId === targetTaskId.substring(0, targetTaskId.lastIndexOf('_')) && item.date === targetInstanceDate)
-            );
-        } else {
-            targetIndex = newGroup.findIndex((item: any) => item.id === targetTaskId);
-        }
+        const targetOriginalId = isTargetInstance ? targetTaskId.substring(0, targetTaskId.lastIndexOf('_')) : targetTaskId;
+        let targetIndex = newGroup.findIndex((item: any) => item.originalId === targetOriginalId || item.id === targetOriginalId);
         if (targetIndex === -1) targetIndex = newGroup.length;
 
         // 计算插入位置
@@ -4122,10 +3978,10 @@ export class EisenhowerMatrixView {
 
         // 构建被拖拽的实例项
         const draggedItem = {
-            id: draggedTaskId,
+            id: draggedTask.id,
             originalId: draggedTask.id,
             date: draggedInstanceDate,
-            sort: draggedTask.repeat.instanceModifications[draggedInstanceDate!]?.sort || draggedTask.sort || 0,
+            sort: draggedTask.sort || 0,
             isInstance: true
         };
 
@@ -4148,42 +4004,18 @@ export class EisenhowerMatrixView {
      */
     private collectTasksAndInstances(reminderData: any, projectId: string, priority: string, excludeId?: string): any[] {
         const items: any[] = [];
+        const excludedOriginalId = excludeId && excludeId.includes('_') ? excludeId.substring(0, excludeId.lastIndexOf('_')) : excludeId;
 
-        // 收集普通任务
         Object.values(reminderData).forEach((task: any) => {
             if ((task.projectId || 'no-project') === projectId &&
                 (task.priority || 'none') === priority &&
-                (!excludeId || task.id !== excludeId)) {
+                (!excludeId || (task.id !== excludeId && task.id !== excludedOriginalId))) {
                 items.push({
                     id: task.id,
                     originalId: task.id,
                     date: task.date,
                     sort: task.sort || 0,
-                    isInstance: false
-                });
-            }
-        });
-
-        // 收集重复实例
-        Object.values(reminderData).forEach((task: any) => {
-            if (!task.repeat?.enabled) return;
-
-            // 从 instanceModifications 收集
-            if (task.repeat?.instanceModifications) {
-                const mods = task.repeat.instanceModifications;
-                Object.entries(mods).forEach(([date, mod]: [string, any]) => {
-                    const instanceId = `${task.id}_${date}`;
-                    if ((!excludeId || instanceId !== excludeId) &&
-                        (mod.projectId || task.projectId || 'no-project') === projectId &&
-                        (mod.priority || task.priority || 'none') === priority) {
-                        items.push({
-                            id: instanceId,
-                            originalId: task.id,
-                            date: date,
-                            sort: mod.sort !== undefined ? mod.sort : (task.sort || 0),
-                            isInstance: true
-                        });
-                    }
+                    isInstance: !!task.repeat?.enabled
                 });
             }
         });
@@ -4198,21 +4030,9 @@ export class EisenhowerMatrixView {
      * 更新任务或实例的 sort 值
      */
     private updateItemSort(reminderData: any, item: any, sort: number) {
-        if (item.isInstance) {
-            const originalTask = reminderData[item.originalId];
-            if (originalTask && originalTask.repeat) {
-                if (!originalTask.repeat.instanceModifications) {
-                    originalTask.repeat.instanceModifications = {};
-                }
-                if (!originalTask.repeat.instanceModifications[item.date]) {
-                    originalTask.repeat.instanceModifications[item.date] = {};
-                }
-                originalTask.repeat.instanceModifications[item.date].sort = sort;
-            }
-        } else {
-            if (reminderData[item.id]) {
-                reminderData[item.id].sort = sort;
-            }
+        const targetId = item.originalId || item.id;
+        if (reminderData[targetId]) {
+            reminderData[targetId].sort = sort;
         }
     }
 
