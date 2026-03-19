@@ -41,12 +41,15 @@ export const PROJECT_DATA_FILE = "project.json";
 export const CATEGORIES_DATA_FILE = "categories.json";
 export const REMINDER_DATA_FILE = "reminder.json";
 export const HABIT_DATA_FILE = "habit.json";
+export const HABIT_CHECKIN_DIR = "habitCheckin";
 export const NOTIFY_DATA_FILE = "notify.json";
 export const POMODORO_RECORD_DATA_FILE = "pomodoro_record.json";
 export const HABIT_GROUP_DATA_FILE = "habitGroup.json";
 export const STATUSES_DATA_FILE = "statuses.json";
 export const HOLIDAY_DATA_FILE = "holiday.json";
 export const LICENSE_DATA_FILE = "license.json";
+
+const HABIT_CHECKIN_DATA_KEYS = ["checkIns", "hasNotify", "totalCheckIns"] as const;
 
 export interface AudioFileItem {
     path: string;
@@ -222,6 +225,7 @@ export const DEFAULT_SETTINGS = {
         bindblockAddAttr: false, // 是否已迁移绑定块的 custom-bind-reminders 属性
         termTypeTransfer: false, // 是否已迁移 termType -> kanbanStatus 的转换
         audioFileTransfer: false, // 是否已迁移音频文件列表
+        habitCheckinTransfer: false,
     },
 };
 
@@ -396,7 +400,25 @@ export default class ReminderPlugin extends Plugin {
         if (update || !this.habitDataCache) {
             try {
                 const data = await this.loadData(HABIT_DATA_FILE);
-                this.habitDataCache = data || {};
+                const baseData = (data && typeof data === 'object') ? data : {};
+                const mergedData: Record<string, any> = {};
+
+                await Promise.all(Object.entries(baseData).map(async ([habitId, habit]) => {
+                    if (!habit || typeof habit !== 'object') {
+                        mergedData[habitId] = habit;
+                        return;
+                    }
+
+                    try {
+                        const checkinData = await this.loadData(this.getHabitCheckinFileName(habitId));
+                        mergedData[habitId] = this.mergeHabitWithCheckinData(habit as Record<string, any>, checkinData);
+                    } catch (error) {
+                        console.warn(`Failed to load habit checkin data for ${habitId}:`, error);
+                        mergedData[habitId] = this.mergeHabitWithCheckinData(habit as Record<string, any>, null);
+                    }
+                }));
+
+                this.habitDataCache = mergedData;
             } catch (error) {
                 console.error('Failed to load habit data:', error);
                 this.habitDataCache = {};
@@ -410,8 +432,61 @@ export default class ReminderPlugin extends Plugin {
      * @param data 习惯数据
      */
     public async saveHabitData(data: any): Promise<void> {
-        this.habitDataCache = data;
-        await this.saveData(HABIT_DATA_FILE, data);
+        const fullData = (data && typeof data === 'object') ? data : {};
+        const baseData: Record<string, any> = {};
+        const saveTasks: Promise<unknown>[] = [];
+
+        Object.entries(fullData).forEach(([habitId, habit]) => {
+            if (!habit || typeof habit !== 'object') {
+                baseData[habitId] = habit;
+                return;
+            }
+
+            baseData[habitId] = this.stripHabitCheckinData(habit as Record<string, any>);
+            saveTasks.push(this.saveData(
+                this.getHabitCheckinFileName(habitId),
+                this.extractHabitCheckinData(habit as Record<string, any>)
+            ));
+        });
+
+        const staleHabitIds = Object.keys(this.habitDataCache || {}).filter((habitId) => !(habitId in fullData));
+
+        this.habitDataCache = fullData;
+        await this.saveData(HABIT_DATA_FILE, baseData);
+        await Promise.all([
+            ...saveTasks,
+            ...staleHabitIds.map((habitId) => this.removeData(this.getHabitCheckinFileName(habitId))),
+        ]);
+    }
+
+    private getHabitCheckinFileName(habitId: string): string {
+        return `${HABIT_CHECKIN_DIR}/${habitId}.json`;
+    }
+
+    private stripHabitCheckinData(habit: Record<string, any>): Record<string, any> {
+        const baseHabit = { ...habit };
+        for (const key of HABIT_CHECKIN_DATA_KEYS) {
+            delete baseHabit[key];
+        }
+        return baseHabit;
+    }
+
+    private extractHabitCheckinData(habit: Record<string, any>): Record<string, any> {
+        return {
+            checkIns: habit.checkIns || {},
+            hasNotify: habit.hasNotify || {},
+            totalCheckIns: habit.totalCheckIns ?? 0,
+        };
+    }
+
+    private mergeHabitWithCheckinData(habit: Record<string, any>, checkinData: any): Record<string, any> {
+        const normalizedCheckinData = (checkinData && typeof checkinData === 'object') ? checkinData : {};
+        return {
+            ...habit,
+            checkIns: normalizedCheckinData.checkIns || habit.checkIns || {},
+            hasNotify: normalizedCheckinData.hasNotify || habit.hasNotify || {},
+            totalCheckIns: normalizedCheckinData.totalCheckIns ?? habit.totalCheckIns ?? 0,
+        };
     }
 
     /**
@@ -1452,6 +1527,7 @@ export default class ReminderPlugin extends Plugin {
                 termTypeTransfer: true,
                 randomRestTransfer: true,
                 audioFileTransfer: true,
+                habitCheckinTransfer: true,
             }
             : { ...DEFAULT_SETTINGS.datatransfer };
 

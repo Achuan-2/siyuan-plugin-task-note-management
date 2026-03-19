@@ -1495,6 +1495,13 @@ export class HabitPanel {
 
             delete habitData[habitId];
             await this.plugin.saveHabitData(habitData);
+            try {
+                if (this.plugin && typeof this.plugin.removeData === 'function') {
+                    await this.plugin.removeData(`habitCheckin/${habitId}.json`);
+                }
+            } catch (e) {
+                console.warn('删除习惯打卡文件失败:', e);
+            }
             showMessage(i18n("deleteSuccess"));
             this.loadHabits();
 

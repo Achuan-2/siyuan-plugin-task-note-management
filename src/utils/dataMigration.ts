@@ -9,9 +9,15 @@ interface AudioFileItemLike {
 interface MigrationPlugin {
     loadSettings(update?: boolean): Promise<any>;
     saveSettings(settings: any): Promise<void>;
+    loadData(file: string): Promise<any>;
+    saveData(file: string, data: any): Promise<any>;
+    removeData(file: string): Promise<any>;
     loadReminderData(update?: boolean): Promise<any>;
     saveReminderData(data: any): Promise<void>;
 }
+
+const HABIT_DATA_FILE = "habit.json";
+const HABIT_CHECKIN_DIR = "habit";
 
 /**
  * 执行数据迁移
@@ -204,6 +210,9 @@ export async function performDataMigration(plugin: MigrationPlugin): Promise<voi
             await plugin.saveSettings(settings);
             console.log(`音频文件列表迁移完成，更新了 ${audioMigratedCount} 个项`);
         }
+        if (!settings.datatransfer?.habitCheckinTransfer) {
+            await migrateHabitCheckinData(plugin, settings);
+        }
     } catch (error) {
         console.error("数据迁移失败:", error);
     }
@@ -261,5 +270,56 @@ async function migrateBindBlockAttributes(plugin: MigrationPlugin): Promise<void
     } catch (error) {
         console.error("迁移绑定块属性时出错:", error);
         throw error;
+    }
+}
+
+function getHabitCheckinFileName(habitId: string): string {
+    return `${HABIT_CHECKIN_DIR}/${habitId}.json`;
+}
+
+async function migrateHabitCheckinData(plugin: MigrationPlugin, settings: any): Promise<void> {
+    try {
+        const rawHabitData = await plugin.loadData(HABIT_DATA_FILE);
+        const habitData = (rawHabitData && typeof rawHabitData === "object") ? rawHabitData : {};
+        const nextHabitData: Record<string, any> = {};
+        const activeHabitIds = new Set<string>();
+
+        for (const [habitId, habit] of Object.entries(habitData) as [string, any][]) {
+            if (!habit || typeof habit !== "object") {
+                nextHabitData[habitId] = habit;
+                continue;
+            }
+
+            activeHabitIds.add(habitId);
+            await plugin.saveData(getHabitCheckinFileName(habitId), {
+                checkIns: habit.checkIns || {},
+                hasNotify: habit.hasNotify || {},
+                totalCheckIns: habit.totalCheckIns ?? 0,
+            });
+
+            const baseHabit = { ...habit };
+            delete baseHabit.checkIns;
+            delete baseHabit.hasNotify;
+            delete baseHabit.totalCheckIns;
+            nextHabitData[habitId] = baseHabit;
+        }
+
+        await plugin.saveData(HABIT_DATA_FILE, nextHabitData);
+
+        const existingCheckinDir = await plugin.loadData(HABIT_CHECKIN_DIR);
+        if (existingCheckinDir && typeof existingCheckinDir === "object" && !Array.isArray(existingCheckinDir)) {
+            for (const fileName of Object.keys(existingCheckinDir)) {
+                const habitId = fileName.replace(/\.json$/i, "");
+                if (!activeHabitIds.has(habitId)) {
+                    await plugin.removeData(getHabitCheckinFileName(habitId));
+                }
+            }
+        }
+
+        settings.datatransfer = settings.datatransfer || {};
+        settings.datatransfer.habitCheckinTransfer = true;
+        await plugin.saveSettings(settings);
+    } catch (error) {
+        console.error("Failed to migrate habit checkin data:", error);
     }
 }
