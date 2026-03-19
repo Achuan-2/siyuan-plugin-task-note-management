@@ -5385,51 +5385,49 @@ export class ReminderPanel {
         const countdownEl = document.createElement('div');
         countdownEl.className = 'reminder-countdown';
 
-        // 根据是否过期设置不同的样式和文本
-        if (isOverdueEvent || daysDiff < 0) {
-            // 过期事件：红色样式
+        const applyCountdownStyle = (colorVar: string, backgroundVar: string) => {
             countdownEl.style.cssText = `
-                color: var(--b3-font-color1);
+                color: var(${colorVar});
                 font-size: 12px;
                 font-weight: 500;
-                background: var(--b3-font-background1);
-                border: 1px solid var(--b3-font-color1);
+                background: var(${backgroundVar});
+                border: 1px solid var(${colorVar});
                 border-radius: 4px;
                 padding: 2px 6px;
                 flex-shrink: 0;
             `;
+        };
+
+        // 根据是否过期设置不同的样式和文本
+        if (isOverdueEvent || daysDiff < 0) {
+            // 过期事件：红色样式
+            applyCountdownStyle('--b3-font-color1', '--b3-font-background1');
 
             const overdueDays = Math.abs(daysDiff);
             countdownEl.textContent = overdueDays === 1 ?
                 i18n("overdueBySingleDay") :
                 i18n("overdueByDays", { days: overdueDays.toString() });
         } else {
-            // 未来事件：绿色样式
-            countdownEl.style.cssText = `
-                color: var(--b3-font-color4);
-                font-size: 12px;
-                font-weight: 500;
-                background: var(--b3-font-background4);
-                border: 1px solid var(--b3-font-color4);
-                border-radius: 4px;
-                padding: 2px 6px;
-                flex-shrink: 0;
-            `;
+            // 未来事件：根据“未开始/还剩”显示不同样式
+            applyCountdownStyle('--b3-font-color4', '--b3-font-background4');
 
             // 根据是否为跨天事件显示不同的文案
             if (isSpanningRealEvent) {
                 const isInRange = compareDateStrings(startLogical, today) <= 0 && compareDateStrings(today, endLogical) <= 0;
 
                 if (isInRange) {
+                    applyCountdownStyle('--b3-font-color2', '--b3-font-background2');
                     countdownEl.textContent = daysDiff === 1 ?
                         i18n("spanningDaysLeftSingle") :
                         i18n("spanningDaysLeftPlural", { days: daysDiff.toString() });
                 } else {
+                    applyCountdownStyle('--b3-font-color4', '--b3-font-background4');
                     countdownEl.textContent = daysDiff === 1 ?
                         i18n("startInDays", { days: daysDiff.toString() }) :
                         i18n("startInDays", { days: daysDiff.toString() });
                 }
             } else {
+                applyCountdownStyle('--b3-font-color2', '--b3-font-background2');
                 countdownEl.textContent = daysDiff === 1 ?
                     i18n("daysLeftSingle") :
                     i18n("daysLeftPlural", { days: daysDiff.toString() });

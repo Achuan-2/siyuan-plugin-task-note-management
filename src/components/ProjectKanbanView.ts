@@ -2350,13 +2350,8 @@ export class ProjectKanbanView {
                     if (!task.completed) {
                         const countdownInfo = this.getTaskCountdownInfo(task);
                         if (countdownInfo.type !== 'none' && countdownInfo.days >= 0) {
-                            let urgencyClass = 'countdown-normal';
-                            if (countdownInfo.days <= 1) {
-                                urgencyClass = 'countdown-urgent';
-                            } else if (countdownInfo.days <= 3) {
-                                urgencyClass = 'countdown-warning';
-                            }
-                            dateHtml += `<span class="countdown-badge ${urgencyClass}">${countdownInfo.text}</span>`;
+                            const countdownClass = countdownInfo.type === 'start' ? 'countdown-start' : 'countdown-end';
+                            dateHtml += `<span class="countdown-badge ${countdownClass}">${countdownInfo.text}</span>`;
                         }
                     }
 
@@ -9233,14 +9228,8 @@ export class ProjectKanbanView {
             if (!task.completed) {
                 const countdownInfo = this.getTaskCountdownInfo(task);
                 if (countdownInfo.type !== 'none' && countdownInfo.days >= 0) {
-                    let urgencyClass = 'countdown-normal';
-                    if (countdownInfo.days <= 1) {
-                        urgencyClass = 'countdown-urgent';
-                    } else if (countdownInfo.days <= 3) {
-                        urgencyClass = 'countdown-warning';
-                    }
-
-                    dateHtml += `<span class="countdown-badge ${urgencyClass}">${countdownInfo.text}</span>`;
+                    const countdownClass = countdownInfo.type === 'start' ? 'countdown-start' : 'countdown-end';
+                    dateHtml += `<span class="countdown-badge ${countdownClass}">${countdownInfo.text}</span>`;
                 }
             }
 
@@ -9972,7 +9961,7 @@ export class ProjectKanbanView {
         // 辅助函数：创建过期徽章（completed 为 true 时使用“X天前”的词语）
         const createExpiredBadge = (days: number, completed: boolean = false): string => {
             const text = completed ? i18n('daysAgo', { days: String(days) }) : i18n('overdueDays', { days: String(days) });
-            return `<span class="countdown-badge countdown-normal" style="background-color: rgba(231, 76, 60, 0.15); color: #e74c3c; border: 1px solid rgba(231, 76, 60, 0.3);">${text}</span>`;
+            return `<span class="countdown-badge countdown-overdue">${text}</span>`;
         };
 
         // 使用逻辑日期判断（考虑一天起始时间）
@@ -12993,29 +12982,22 @@ export class ProjectKanbanView {
                 display: inline-block;
             }
 
-            .countdown-urgent {
-                background-color: rgba(231, 76, 60, 0.15);
-                color: #e74c3c;
-                border: 1px solid rgba(231, 76, 60, 0.3);
+            .countdown-start {
+                color: var(--b3-font-color4);
+                background: var(--b3-font-background4);
+                border: 1px solid var(--b3-font-color4);
             }
 
-            .countdown-warning {
-                background-color: rgba(243, 156, 18, 0.15);
-                color: #f39c12;
-                border: 1px solid rgba(243, 156, 18, 0.3);
+            .countdown-end {
+                color: var(--b3-font-color2);
+                background: var(--b3-font-background2);
+                border: 1px solid var(--b3-font-color2);
             }
 
-            .countdown-normal {
-                background-color: rgba(46, 204, 113, 0.15);
-                color: #2ecc71;
-                border: 1px solid rgba(46, 204, 113, 0.3);
-            }
-
-            /* 过期任务样式 - 复用倒计时样式 */
-            .countdown-badge.countdown-normal[style*="rgba(231, 76, 60"] {
-                background-color: rgba(231, 76, 60, 0.15) !important;
-                color: #e74c3c !important;
-                border: 1px solid rgba(231, 76, 60, 0.3) !important;
+            .countdown-overdue {
+                color: var(--b3-font-color1);
+                background: var(--b3-font-background1);
+                border: 1px solid var(--b3-font-color1);
             }
 
            .kanban-task-checkbox {
