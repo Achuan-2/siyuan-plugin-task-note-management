@@ -16,10 +16,10 @@
         | 'tomorrow'
         | 'this_week'
         | 'next_7_days'
-        | 'future'
         | 'past_7_days'
-        | 'custom_range'
         | 'future_x_days'
+        | 'future'
+        | 'custom_range'
         | 'yearly_date_range';
 
     interface DateFilter {
@@ -674,20 +674,6 @@
                         </div>
                         <div
                             class="filter-option"
-                            class:selected={selectedDateFilters.includes('next_7_days')}
-                            on:click={() => toggleDateFilter('next_7_days')}
-                        >
-                            {i18n('next7Days')}
-                        </div>
-                        <div
-                            class="filter-option"
-                            class:selected={selectedDateFilters.includes('future')}
-                            on:click={() => toggleDateFilter('future')}
-                        >
-                            {i18n('future')}
-                        </div>
-                        <div
-                            class="filter-option"
                             class:selected={selectedDateFilters.includes('past_7_days')}
                             on:click={() => toggleDateFilter('past_7_days')}
                         >
@@ -695,10 +681,24 @@
                         </div>
                         <div
                             class="filter-option"
+                            class:selected={selectedDateFilters.includes('next_7_days')}
+                            on:click={() => toggleDateFilter('next_7_days')}
+                        >
+                            {i18n('next7Days')}
+                        </div>
+                        <div
+                            class="filter-option"
                             class:selected={selectedDateFilters.includes('future_x_days')}
                             on:click={() => toggleDateFilter('future_x_days')}
                         >
                             {i18n('futureXDays')}
+                        </div>
+                        <div
+                            class="filter-option"
+                            class:selected={selectedDateFilters.includes('future')}
+                            on:click={() => toggleDateFilter('future')}
+                        >
+                            {i18n('future')}
                         </div>
                         <div
                             class="filter-option"
