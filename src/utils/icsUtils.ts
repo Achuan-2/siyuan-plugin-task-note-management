@@ -51,6 +51,38 @@ export async function exportIcsFile(
             return [parts[0], parts[1]];
         }
 
+        function shiftDateArrayByDays(dateArray: number[], dayOffset: number): number[] {
+            if (!Array.isArray(dateArray) || dateArray.length < 3) return dateArray;
+            const [year, month, day] = dateArray;
+            const hour = dateArray.length >= 4 ? dateArray[3] : 0;
+            const minute = dateArray.length >= 5 ? dateArray[4] : 0;
+            const dt = new Date(year, month - 1, day, hour, minute, 0, 0);
+            dt.setDate(dt.getDate() + dayOffset);
+            if (dateArray.length >= 5) {
+                return [dt.getFullYear(), dt.getMonth() + 1, dt.getDate(), dt.getHours(), dt.getMinutes()];
+            }
+            if (dateArray.length === 4) {
+                return [dt.getFullYear(), dt.getMonth() + 1, dt.getDate(), dt.getHours()];
+            }
+            return [dt.getFullYear(), dt.getMonth() + 1, dt.getDate()];
+        }
+
+        function cloneEventWithDayOffset(baseEvent: any, dayOffset: number, uid: string): any {
+            const occEvent: any = {
+                ...baseEvent,
+                uid,
+            };
+            if (Array.isArray(baseEvent.start)) {
+                occEvent.start = shiftDateArrayByDays(baseEvent.start, dayOffset);
+            }
+            if (Array.isArray(baseEvent.end)) {
+                occEvent.end = shiftDateArrayByDays(baseEvent.end, dayOffset);
+            }
+            delete occEvent.recurrenceRule;
+            delete occEvent.exclusionDates;
+            return occEvent;
+        }
+
         /**
          * 辅助函数：根据 reminderTimes 或默认规则构建 alarms。
          * - 有 reminderTimes：用 ics 库原生 trigger 数组格式，生成绝对时间 VALARM。
@@ -643,6 +675,98 @@ export async function exportIcsFile(
             }
 
             if (r.repeat && r.repeat.enabled) {
+                // 特殊处理：艾宾浩斯重复（今天 + 1/2/4/7/15，之后每15天）
+                // 说明：标准 RRULE 无法直接表达前置不规则节点，因此：
+                // - 有结束条件时：展开为精确独立事件；
+                // - 无结束条件时：导出前置独立事件 + 从最大节点开始的 15 天 RRULE。
+                if (r.repeat.type === 'ebbinghaus') {
+                    try {
+                        const rawPattern = Array.isArray(r.repeat.ebbinghausPattern) && r.repeat.ebbinghausPattern.length > 0
+                            ? r.repeat.ebbinghausPattern
+                            : [1, 2, 4, 7, 15];
+                        const pattern = Array.from(
+                            new Set(
+                                rawPattern
+                                    .map((n: any) => Math.trunc(Number(n)))
+                                    .filter((n: number) => Number.isFinite(n) && n > 0)
+                            )
+                        ).sort((a, b) => a - b);
+                        const maxPatternDay = pattern.length > 0 ? Math.max(...pattern) : 15;
+                        const fixedInterval = 15;
+
+                        const buildOffsetsByCount = (count: number): number[] => {
+                            if (!Number.isFinite(count) || count <= 0) return [];
+                            const offsets: number[] = [];
+                            const normalizedCount = Math.trunc(count);
+                            let index = 0;
+                            while (offsets.length < normalizedCount) {
+                                if (index === 0) {
+                                    offsets.push(0);
+                                } else if (index <= pattern.length) {
+                                    offsets.push(pattern[index - 1]);
+                                } else {
+                                    offsets.push(maxPatternDay + fixedInterval * (index - pattern.length));
+                                }
+                                index++;
+                            }
+                            return offsets;
+                        };
+
+                        const buildOffsetsByEndDate = (repeatEndDateStr: string): number[] => {
+                            const start = new Date((r.date || '') + 'T00:00:00');
+                            const end = new Date(repeatEndDateStr + 'T00:00:00');
+                            const maxDays = Math.floor((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
+                            if (!Number.isFinite(maxDays) || maxDays < 0) return [];
+
+                            const offsetsSet = new Set<number>();
+                            offsetsSet.add(0);
+                            pattern.forEach((d) => {
+                                if (d <= maxDays) offsetsSet.add(d);
+                            });
+                            if (maxPatternDay <= maxDays) {
+                                for (let d = maxPatternDay; d <= maxDays; d += fixedInterval) {
+                                    offsetsSet.add(d);
+                                }
+                            }
+                            return Array.from(offsetsSet).sort((a, b) => a - b);
+                        };
+
+                        // 有结束次数：完全展开，确保与应用内实例一致
+                        if (r.repeat.endType === 'count' && r.repeat.endCount !== undefined && r.repeat.endCount !== null) {
+                            const offsets = buildOffsetsByCount(Number(r.repeat.endCount));
+                            offsets.forEach((offset) => {
+                                const occEvent = cloneEventWithDayOffset(event, offset, `${id}-ebb-${offset}@siyuan`);
+                                events.push(occEvent);
+                            });
+                            continue;
+                        }
+
+                        // 有结束日期：在结束日期内完全展开，确保与应用内实例一致
+                        if (r.repeat.endType === 'date' && r.repeat.endDate) {
+                            const offsets = buildOffsetsByEndDate(r.repeat.endDate);
+                            offsets.forEach((offset) => {
+                                const occEvent = cloneEventWithDayOffset(event, offset, `${id}-ebb-${offset}@siyuan`);
+                                events.push(occEvent);
+                            });
+                            continue;
+                        }
+
+                        // 无结束条件：导出前置不规则节点 + 15天循环
+                        const preOffsets = Array.from(new Set([0, ...pattern.filter((d) => d < maxPatternDay)])).sort((a, b) => a - b);
+                        preOffsets.forEach((offset) => {
+                            const occEvent = cloneEventWithDayOffset(event, offset, `${id}-ebb-${offset}@siyuan`);
+                            events.push(occEvent);
+                        });
+
+                        const recurringEvent = cloneEventWithDayOffset(event, maxPatternDay, `${id}-ebb-cycle@siyuan`);
+                        recurringEvent.recurrenceRule = `FREQ=DAILY;INTERVAL=${fixedInterval}`;
+                        events.push(recurringEvent);
+                        continue;
+                    } catch (e) {
+                        console.warn('处理艾宾浩斯重复事件失败', e, r);
+                    }
+                }
+
                 // 特殊处理：农历年事件，生成今年和明年两个普通事件
                 if (r.repeat.type === 'lunar-yearly') {
                     try {
