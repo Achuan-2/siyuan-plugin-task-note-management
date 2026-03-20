@@ -4170,13 +4170,16 @@ export default class ReminderPlugin extends Plugin {
     }
 
     // 打开日历视图标签页
-    openCalendarTab(data?: { projectFilter?: string }) {
+    openCalendarTab(data?: { projectFilter?: string, showHabitsOnly?: boolean }) {
         const isMobile = getFrontend().endsWith('mobile');
+        const calendarTitle = data?.showHabitsOnly
+            ? (i18n("habitCalendar") || "习惯日历")
+            : i18n("calendarView");
 
         if (isMobile) {
             // 手机端：使用Dialog打开日历视图
             const dialog = new Dialog({
-                title: i18n("calendarView"),
+                title: calendarTitle,
                 content: '<div id="mobileCalendarContainer" style="height: 100%; width: 100%;"></div>',
                 width: "99%",
                 height: "100%",
@@ -4205,7 +4208,7 @@ export default class ReminderPlugin extends Plugin {
                 app: this.app,
                 custom:
                 {
-                    title: i18n("calendarView"),
+                    title: calendarTitle,
                     icon: 'iconCalendar',
                     id: this.name + TAB_TYPE,
                     data: data || {}

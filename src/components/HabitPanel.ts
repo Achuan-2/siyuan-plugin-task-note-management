@@ -2,7 +2,6 @@ import { showMessage, Dialog, Menu, confirm } from "siyuan";
 import { openBlock } from "../api";
 import { getLocalDateTimeString, getLogicalDateString, getRelativeDateString } from "../utils/dateUtils";
 import { HabitGroupManager } from "../utils/habitGroupManager";
-import { HabitCalendarDialog } from "./HabitCalendarDialog";
 import { i18n } from "../pluginInstance";
 import { HabitEditDialog } from "./HabitEditDialog";
 import { HabitStatsDialog } from "./HabitStatsDialog";
@@ -194,13 +193,13 @@ export class HabitPanel {
         });
         actionContainer.appendChild(newHabitBtn);
 
-        // 打卡日历按钮
+        // 日历视图按钮（习惯分布）
         const calendarBtn = document.createElement('button');
         calendarBtn.className = 'b3-button b3-button--outline';
-        calendarBtn.innerHTML = '📊';
-        calendarBtn.title = i18n("checkInCalendar");
+        calendarBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconCalendar"></use></svg>';
+        calendarBtn.title = i18n("calendarView");
         calendarBtn.addEventListener('click', () => {
-            this.showCalendarView();
+            this.openHabitCalendarView();
         });
         actionContainer.appendChild(calendarBtn);
 
@@ -1540,9 +1539,12 @@ export class HabitPanel {
         dialog.show();
     }
 
-    private showCalendarView() {
-        const dialog = new HabitCalendarDialog(this.plugin);
-        dialog.show();
+    private openHabitCalendarView() {
+        if (this.plugin && typeof this.plugin.openCalendarTab === 'function') {
+            this.plugin.openCalendarTab({ showHabitsOnly: true });
+            return;
+        }
+        showMessage(i18n("operationFailed") || "操作失败", 3000, 'error');
     }
 
     private showHabitStats(habit: Habit) {

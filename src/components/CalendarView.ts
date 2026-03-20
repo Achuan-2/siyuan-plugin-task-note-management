@@ -28,6 +28,8 @@ import { PomodoroRecordManager } from "../utils/pomodoroRecord";
 import { Solar } from 'lunar-typescript';
 import { VipManager } from "../utils/vip";
 import { createPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
+import { HabitEditDialog } from "./HabitEditDialog";
+import { HabitStatsDialog } from "./HabitStatsDialog";
 export class CalendarView {
     private container: HTMLElement;
     private calendar: Calendar;
@@ -42,7 +44,10 @@ export class CalendarView {
     private currentCategoryFilter: Set<string> = new Set(['all']); // 当前分类过滤（支持多选）
     private currentProjectFilter: Set<string> = new Set(['all']); // 当前项目过滤（支持多选）
     private initialProjectFilter: string | null = null;
+    private openedFromHabitPanel: boolean = false;
     private showCategoryAndProject: boolean = true; // 是否显示分类和项目信息
+    private showTasks: boolean = true; // 是否显示任务
+    private showHabits: boolean = true; // 是否显示习惯
     private showLunar: boolean = true; // 是否显示农历
     private showHoliday: boolean = true; // 是否显示节假日
     private showPomodoro: boolean = true; // 是否显示番茄专注时间
@@ -133,6 +138,10 @@ export class CalendarView {
     private async updateSettings() {
         const settings = await this.plugin.loadSettings();
         this.showCategoryAndProject = settings.calendarShowCategoryAndProject !== false;
+        if (this.openedFromHabitPanel) {
+            this.showTasks = false;
+            this.showHabits = true;
+        }
         this.showLunar = settings.calendarShowLunar !== false;
         this.showHoliday = settings.calendarShowHoliday !== false;
         this.showPomodoro = settings.calendarShowPomodoro;
@@ -218,10 +227,11 @@ export class CalendarView {
         this.checkVip();
     }
 
-    constructor(container: HTMLElement, plugin: any, data?: { projectFilter?: string, isDockMode?: boolean }) {
+    constructor(container: HTMLElement, plugin: any, data?: { projectFilter?: string, isDockMode?: boolean, showHabitsOnly?: boolean }) {
         this.container = container;
         this.plugin = plugin;
         this.isDockMode = data?.isDockMode || false;
+        this.openedFromHabitPanel = data?.showHabitsOnly === true;
         this.pomodoroRecordManager = PomodoroRecordManager.getInstance(plugin);
         this.categoryManager = CategoryManager.getInstance(plugin); // 初始化分类管理器
         this.projectManager = ProjectManager.getInstance(this.plugin);
@@ -230,6 +240,10 @@ export class CalendarView {
         this.taskSummaryDialog = new TaskSummaryDialog(undefined, plugin);
         if (data?.projectFilter) {
             this.initialProjectFilter = data.projectFilter;
+        }
+        if (this.openedFromHabitPanel) {
+            this.showTasks = false;
+            this.showHabits = true;
         }
 
         // 初始化 Lute
@@ -458,6 +472,10 @@ export class CalendarView {
         this.colorBy = this.calendarConfigManager.getColorBy();
         const settings = await this.plugin.loadSettings();
         this.showCategoryAndProject = settings.calendarShowCategoryAndProject !== false;
+        if (this.openedFromHabitPanel) {
+            this.showTasks = false;
+            this.showHabits = true;
+        }
         this.showLunar = this.calendarConfigManager.getShowLunar();
         this.showHoliday = settings.calendarShowHoliday !== false;
         this.showPomodoro = this.calendarConfigManager.getShowPomodoro(); // Use config manager for pomodoro state
@@ -827,6 +845,9 @@ export class CalendarView {
         filterGroup.style.flexWrap = 'wrap';
         filterGroup.style.gap = '8px';
         toolbarFilterParent.appendChild(filterGroup);
+        if (this.openedFromHabitPanel) {
+            filterGroup.style.display = 'none';
+        }
 
         // 筛选图标
         const filterIcon = document.createElement('span');
@@ -1060,6 +1081,18 @@ export class CalendarView {
             await this.refreshEvents();
         }));
 
+        // 任务显示开关（仅当前日历视图会话生效）
+        displaySettingsDropdown.appendChild(createSwitchItem(i18n("showTasks") || "显示任务", this.showTasks, async (checked) => {
+            this.showTasks = checked;
+            await this.refreshEvents();
+        }));
+
+        // 习惯显示开关（仅当前日历视图会话生效）
+        displaySettingsDropdown.appendChild(createSwitchItem(i18n("showHabits") || "显示习惯", this.showHabits, async (checked) => {
+            this.showHabits = checked;
+            await this.refreshEvents();
+        }));
+
         // 上色方案设置
         const colorDivider = document.createElement('div');
         colorDivider.style.height = '1px';
@@ -1223,67 +1256,87 @@ export class CalendarView {
                 refreshBtn.disabled = false;
             }
         });
-        filterGroup.appendChild(refreshBtn);
+        if (this.openedFromHabitPanel) {
+            const habitToolbarActions = document.createElement('div');
+            habitToolbarActions.style.display = 'flex';
+            habitToolbarActions.style.alignItems = 'center';
+            habitToolbarActions.style.gap = '8px';
+            toolbar.appendChild(habitToolbarActions);
+            habitToolbarActions.appendChild(refreshBtn);
+            const openTaskCalendarBtn = document.createElement('button');
+            openTaskCalendarBtn.className = 'b3-button b3-button--outline';
+            openTaskCalendarBtn.style.padding = '6px';
+            openTaskCalendarBtn.innerHTML = '<svg class="b3-button__icon" style="margin-right: 0;"><use xlink:href="#iconCalendar"></use></svg>';
+            openTaskCalendarBtn.title = i18n("calendarView") || "任务日历视图";
+            openTaskCalendarBtn.addEventListener('click', () => {
+                this.plugin.openCalendarTab();
+            });
+            habitToolbarActions.appendChild(openTaskCalendarBtn);
+        } else {
+            filterGroup.appendChild(refreshBtn);
+        }
 
 
 
-        // 摘要按钮
-        const summaryBtn = document.createElement('button');
-        summaryBtn.className = 'b3-button b3-button--outline';
-        summaryBtn.style.padding = '6px';
-        summaryBtn.innerHTML = '<svg class="b3-button__icon" style="margin-right: 0;"><use xlink:href="#iconList"></use></svg>';
-        summaryBtn.title = i18n("taskSummary") || "任务摘要";
-        summaryBtn.addEventListener('click', () => {
-            this.taskSummaryDialog.showTaskSummaryDialog();
-        });
-        filterGroup.appendChild(summaryBtn);
-        // 更多按钮（包含管理分类、项目颜色、插件设置）
-        const moreBtn = document.createElement('button');
-        moreBtn.className = 'b3-button b3-button--outline';
-        moreBtn.title = i18n('more') || '更多';
-        moreBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconMore"></use></svg>';
-        moreBtn.addEventListener('click', (e) => {
-            try {
-                e.stopPropagation();
-                e.preventDefault();
-                const menu = new Menu('calendar-more-menu');
+        if (!this.openedFromHabitPanel) {
+            // 摘要按钮
+            const summaryBtn = document.createElement('button');
+            summaryBtn.className = 'b3-button b3-button--outline';
+            summaryBtn.style.padding = '6px';
+            summaryBtn.innerHTML = '<svg class="b3-button__icon" style="margin-right: 0;"><use xlink:href="#iconFile"></use></svg>';
+            summaryBtn.title = i18n("taskSummary") || "任务摘要";
+            summaryBtn.addEventListener('click', () => {
+                this.taskSummaryDialog.showTaskSummaryDialog();
+            });
+            filterGroup.appendChild(summaryBtn);
+            // 更多按钮（包含管理分类、项目颜色、插件设置）
+            const moreBtn = document.createElement('button');
+            moreBtn.className = 'b3-button b3-button--outline';
+            moreBtn.title = i18n('more') || '更多';
+            moreBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconMore"></use></svg>';
+            moreBtn.addEventListener('click', (e) => {
+                try {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    const menu = new Menu('calendar-more-menu');
 
-                menu.addItem({
-                    icon: 'iconTags',
-                    label: i18n('manageCategories') || '管理分类',
-                    click: () => this.showCategoryManageDialog()
-                });
+                    menu.addItem({
+                        icon: 'iconTags',
+                        label: i18n('manageCategories') || '管理分类',
+                        click: () => this.showCategoryManageDialog()
+                    });
 
-                menu.addItem({
-                    icon: 'iconProject',
-                    label: i18n('projectColor') || '项目颜色',
-                    click: () => this.showProjectColorDialog()
-                });
+                    menu.addItem({
+                        icon: 'iconProject',
+                        label: i18n('projectColor') || '项目颜色',
+                        click: () => this.showProjectColorDialog()
+                    });
 
-                menu.addItem({
-                    icon: 'iconSettings',
-                    label: i18n('pluginSettings') || '插件设置',
-                    click: () => {
-                        try {
-                            if (this.plugin && typeof this.plugin.openSetting === 'function') {
-                                this.plugin.openSetting();
-                            } else {
-                                console.warn('plugin.openSetting is not available');
+                    menu.addItem({
+                        icon: 'iconSettings',
+                        label: i18n('pluginSettings') || '插件设置',
+                        click: () => {
+                            try {
+                                if (this.plugin && typeof this.plugin.openSetting === 'function') {
+                                    this.plugin.openSetting();
+                                } else {
+                                    console.warn('plugin.openSetting is not available');
+                                }
+                            } catch (err) {
+                                console.error('打开插件设置失败:', err);
                             }
-                        } catch (err) {
-                            console.error('打开插件设置失败:', err);
                         }
-                    }
-                });
+                    });
 
-                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                menu.open({ x: rect.right, y: rect.bottom + 4 });
-            } catch (err) {
-                console.error('打开更多菜单失败:', err);
-            }
-        });
+                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                    menu.open({ x: rect.right, y: rect.bottom + 4 });
+                } catch (err) {
+                    console.error('打开更多菜单失败:', err);
+                }
+            });
 
-        filterGroup.appendChild(moreBtn);
+            filterGroup.appendChild(moreBtn);
+        }
         // 创建日历容器
         const calendarEl = document.createElement('div');
         calendarEl.className = 'reminder-calendar-container';
@@ -1545,8 +1598,8 @@ export class CalendarView {
             eventDrop: this.handleEventDrop.bind(this),
             eventResize: this.handleEventResize.bind(this),
             eventAllow: (dropInfo, draggedEvent) => {
-                // 禁用订阅任务的拖拽和调整大小
-                if (draggedEvent.extendedProps.isSubscribed) {
+                // 禁用订阅任务和习惯事件的拖拽和调整大小
+                if (draggedEvent.extendedProps.isSubscribed || draggedEvent.extendedProps.isHabit) {
                     return false;
                 }
                 return this.handleEventAllow(dropInfo, draggedEvent);
@@ -1643,7 +1696,9 @@ export class CalendarView {
 
                 info.el.addEventListener('contextmenu', (e) => {
                     e.preventDefault();
-                    this.showEventContextMenu(e, info.event);
+                    this.showEventContextMenu(e, info.event).catch((err) => {
+                        console.error('显示事件右键菜单失败:', err);
+                    });
                 });
 
                 // 改进的鼠标悬浮事件监听器 - 添加延迟显示
@@ -2523,7 +2578,7 @@ export class CalendarView {
         }, 300); // 300ms延迟隐藏
     }
 
-    private showEventContextMenu(event: MouseEvent, calendarEvent: any) {
+    private async showEventContextMenu(event: MouseEvent, calendarEvent: any) {
         // 在显示右键菜单前先隐藏提示框
         if (this.tooltip) {
             this.hideEventTooltip();
@@ -2646,6 +2701,41 @@ export class CalendarView {
                 }
             };
             // 继续执行后续普通任务的菜单逻辑，不 return
+        }
+
+        if (calendarEvent.extendedProps.isHabit) {
+            const habitId = calendarEvent.extendedProps.habitId;
+            const habitDate = calendarEvent.extendedProps.date || getLogicalDateString();
+            const habitData = await this.plugin.loadHabitData();
+            const habit = habitData?.[habitId];
+            if (!habit) {
+                showMessage(i18n("noHabits") || "未找到习惯");
+                return;
+            }
+            menu.addItem({
+                iconHTML: "✅",
+                label: i18n("checkInMenuItem") || "打卡",
+                submenu: this.createHabitCheckInSubmenu(habit, habitDate)
+            });
+            menu.addItem({
+                iconHTML: "📝",
+                label: i18n("editHabitMenuItem") || "编辑习惯",
+                click: async () => {
+                    await this.openHabitEditDialog(calendarEvent.extendedProps.habitId);
+                }
+            });
+            menu.addItem({
+                iconHTML: "📊",
+                label: i18n("viewStatsMenuItem") || "查看统计",
+                click: async () => {
+                    await this.openHabitStatsDialog(calendarEvent.extendedProps.habitId);
+                }
+            });
+            menu.open({
+                x: event.clientX,
+                y: event.clientY
+            });
+            return;
         }
 
         if (calendarEvent.extendedProps.isSubscribed) {
@@ -2940,6 +3030,215 @@ export class CalendarView {
             x: event.clientX,
             y: event.clientY
         });
+    }
+
+    private async openHabitEditDialog(habitId?: string) {
+        try {
+            if (!habitId) {
+                showMessage(i18n("operationFailed") || "操作失败");
+                return;
+            }
+            const habitData = await this.plugin.loadHabitData();
+            const habit = habitData?.[habitId];
+            if (!habit) {
+                showMessage(i18n("noHabits") || "未找到习惯");
+                return;
+            }
+
+            const oldHabitSnapshot = JSON.parse(JSON.stringify(habit));
+            const dialog = new HabitEditDialog(habit, async (updatedHabit) => {
+                const data = await this.plugin.loadHabitData();
+                if (oldHabitSnapshot?.id && oldHabitSnapshot.id !== updatedHabit.id) {
+                    delete data[oldHabitSnapshot.id];
+                }
+                data[updatedHabit.id] = updatedHabit;
+                await this.plugin.saveHabitData(data);
+
+                try {
+                    if (this.plugin && typeof this.plugin.updateMobileNotification === 'function') {
+                        await this.plugin.updateMobileNotification(updatedHabit, oldHabitSnapshot, 7);
+                    }
+                } catch (e) {
+                    console.warn('更新习惯移动端通知失败:', e);
+                }
+
+                window.dispatchEvent(new CustomEvent('habitUpdated'));
+                await this.refreshEvents(true);
+            });
+            dialog.show();
+        } catch (error) {
+            console.error('打开习惯编辑失败:', error);
+            showMessage(i18n("habitSaveFailed") || "保存习惯失败", 3000, 'error');
+        }
+    }
+
+    private async openHabitStatsDialog(habitId?: string) {
+        try {
+            if (!habitId) {
+                showMessage(i18n("operationFailed") || "操作失败");
+                return;
+            }
+            const habitData = await this.plugin.loadHabitData();
+            const habit = habitData?.[habitId];
+            if (!habit) {
+                showMessage(i18n("noHabits") || "未找到习惯");
+                return;
+            }
+
+            const dialog = new HabitStatsDialog(habit, async (updatedHabit) => {
+                const data = await this.plugin.loadHabitData();
+                data[updatedHabit.id] = updatedHabit;
+                await this.plugin.saveHabitData(data);
+                window.dispatchEvent(new CustomEvent('habitUpdated'));
+                await this.refreshEvents(true);
+            });
+            dialog.show();
+        } catch (error) {
+            console.error('打开习惯统计失败:', error);
+            showMessage(i18n("operationFailed") || "操作失败", 3000, 'error');
+        }
+    }
+
+    private createHabitCheckInSubmenu(habit: any, targetDate: string): any[] {
+        const submenu: any[] = [];
+        const checkInEmojis = Array.isArray(habit?.checkInEmojis) ? habit.checkInEmojis : [];
+        if (!checkInEmojis.length) {
+            submenu.push({
+                label: i18n("openCheckInMenuFailed") || "没有可用的打卡选项",
+                disabled: true
+            });
+            return submenu;
+        }
+
+        // hideCheckedToday 语义与 HabitPanel 保持一致：按“今天已打卡”隐藏选项
+        const filterDate = getLogicalDateString();
+        const dayCheckIn = habit.checkIns?.[filterDate];
+        const checkedEmojis = new Set<string>();
+        if (Array.isArray(dayCheckIn?.entries)) {
+            dayCheckIn.entries.forEach((entry: any) => {
+                if (entry?.emoji) checkedEmojis.add(entry.emoji);
+            });
+        } else if (Array.isArray(dayCheckIn?.status)) {
+            dayCheckIn.status.forEach((emoji: string) => {
+                if (emoji) checkedEmojis.add(emoji);
+            });
+        }
+
+        checkInEmojis.forEach((emojiConfig: any) => {
+            if (habit.hideCheckedToday && checkedEmojis.has(emojiConfig.emoji)) return;
+            submenu.push({
+                label: `${emojiConfig.emoji} ${emojiConfig.meaning || ''}`.trim(),
+                click: async () => {
+                    await this.checkInHabitOnDate(habit, emojiConfig, targetDate);
+                }
+            });
+        });
+
+        if (!submenu.length) {
+            submenu.push({
+                label: i18n("openCheckInMenuFailed") || "没有可用的打卡选项",
+                disabled: true
+            });
+        }
+
+        return submenu;
+    }
+
+    private async checkInHabitOnDate(habit: any, emojiConfig: any, targetDate: string) {
+        try {
+            const now = new Date();
+            const updatedAt = getLocalDateTimeString(now);
+            if (!habit.checkIns) {
+                habit.checkIns = {};
+            }
+            if (!habit.checkIns[targetDate]) {
+                habit.checkIns[targetDate] = {
+                    count: 0,
+                    status: [],
+                    timestamp: updatedAt,
+                    entries: []
+                };
+            }
+
+            const checkIn = habit.checkIns[targetDate];
+            let note: string | undefined = undefined;
+            let customTimestamp: string = updatedAt;
+            let cancelled = false;
+
+            if (emojiConfig?.promptNote) {
+                let resolveFn: (() => void) | null = null;
+                const promise = new Promise<void>((resolve) => { resolveFn = resolve; });
+                const nowHours = String(now.getHours()).padStart(2, '0');
+                const nowMinutes = String(now.getMinutes()).padStart(2, '0');
+                const datetimeLocalValue = `${targetDate}T${nowHours}:${nowMinutes}`;
+
+                const inputDialog = new Dialog({
+                    title: i18n("checkInInfo"),
+                    content: `<div class="b3-dialog__content"><div class="ft__breakword" style="padding:12px">
+                        <div style="margin-bottom:12px;">
+                            <label style="display:block;margin-bottom:4px;font-weight:bold;">${i18n("checkInTimeLabel")}</label>
+                            <input type="datetime-local" id="__calendar_habits_time_input" value="${datetimeLocalValue}" style="width:100%;padding:8px;box-sizing:border-box;border:1px solid var(--b3-theme-surface-lighter);border-radius:4px;background:var(--b3-theme-background);" />
+                        </div>
+                        <div>
+                            <label style="display:block;margin-bottom:4px;font-weight:bold;">${i18n("checkInNoteLabel")}</label>
+                            <textarea id="__calendar_habits_note_input" placeholder="${i18n("checkInNotePlaceholder")}" style="width:100%;height:100px;box-sizing:border-box;resize:vertical;padding:8px;border:1px solid var(--b3-theme-surface-lighter);border-radius:4px;background:var(--b3-theme-background);"></textarea>
+                        </div>
+                    </div></div><div class="b3-dialog__action"><button class="b3-button b3-button--cancel">${i18n("cancel")}</button><div class="fn__space"></div><button class="b3-button b3-button--text" id="__calendar_habits_note_confirm">${i18n("save")}</button></div>`,
+                    width: '520px',
+                    height: '360px',
+                    destroyCallback: () => {
+                        if (resolveFn) resolveFn();
+                    }
+                });
+
+                const timeInputEl = inputDialog.element.querySelector('#__calendar_habits_time_input') as HTMLInputElement;
+                const noteInputEl = inputDialog.element.querySelector('#__calendar_habits_note_input') as HTMLTextAreaElement;
+                const cancelBtn = inputDialog.element.querySelector('.b3-button.b3-button--cancel') as HTMLButtonElement;
+                const okBtn = inputDialog.element.querySelector('#__calendar_habits_note_confirm') as HTMLButtonElement;
+
+                okBtn.addEventListener('click', () => {
+                    note = noteInputEl.value.trim();
+                    const timeValue = timeInputEl.value;
+                    if (timeValue) {
+                        customTimestamp = getLocalDateTimeString(new Date(timeValue));
+                    }
+                    cancelled = false;
+                    inputDialog.destroy();
+                });
+                cancelBtn.addEventListener('click', () => {
+                    cancelled = true;
+                    inputDialog.destroy();
+                });
+                inputDialog.element.addEventListener('keydown', (e: KeyboardEvent) => {
+                    if (e.key === 'Escape') {
+                        cancelled = true;
+                        inputDialog.destroy();
+                    }
+                });
+
+                await promise;
+                if (cancelled) return;
+            }
+
+            checkIn.entries = checkIn.entries || [];
+            checkIn.entries.push({ emoji: emojiConfig.emoji, timestamp: customTimestamp, note });
+            checkIn.count = (checkIn.count || 0) + 1;
+            checkIn.status = (checkIn.status || []).concat([emojiConfig.emoji]);
+            checkIn.timestamp = customTimestamp;
+
+            habit.totalCheckIns = (habit.totalCheckIns || 0) + 1;
+            habit.updatedAt = updatedAt;
+
+            const habitData = await this.plugin.loadHabitData();
+            habitData[habit.id] = habit;
+            await this.plugin.saveHabitData(habitData);
+            window.dispatchEvent(new CustomEvent('habitUpdated'));
+            await this.refreshEvents(true);
+            showMessage(`${i18n("checkInSuccess")}${emojiConfig.emoji}` + (note ? ` - ${note}` : ''));
+        } catch (error) {
+            console.error('日历视图习惯打卡失败:', error);
+            showMessage(i18n("checkInFailed") || "打卡失败", 3000, 'error');
+        }
     }
 
     private async showInstanceEditDialog(calendarEvent: any) {
@@ -3437,23 +3736,29 @@ export class CalendarView {
         const mainFrame = document.createElement('div');
         mainFrame.className = 'fc-event-main-frame';
         mainFrame.setAttribute('data-event-id', event.id);
+        if (props.isHabit && props.completed) {
+            mainFrame.style.opacity = '0.72';
+        }
 
         // 顶部行：放置复选框和任务标题（同一行）
         const topRow = document.createElement('div');
         topRow.className = 'reminder-event-top-row';
 
-        // 1. 复选框 or 订阅图标
-        if (props.isSubscribed) {
+        // 1. 复选框 or 只读图标
+        if (props.isSubscribed || props.isHabit) {
             const subIcon = document.createElement('span');
-            subIcon.innerHTML = '🗓';
-            subIcon.title = i18n("subscribedTaskReadOnly") || "订阅任务（只读）";
+            const isHabit = !!props.isHabit;
+            subIcon.innerHTML = isHabit ? '🌱' : '🗓';
+            subIcon.title = isHabit
+                ? (i18n("habitPanelTitle") || "习惯")
+                : (i18n("subscribedTaskReadOnly") || "订阅任务（只读）");
             subIcon.style.width = '14px';
             subIcon.style.height = '14px';
             subIcon.style.display = 'flex';
             subIcon.style.alignItems = 'center';
             subIcon.style.justifyContent = 'center';
             subIcon.style.fontSize = '10px';
-            subIcon.style.backgroundColor = 'var(--b3-theme-primary)';
+            subIcon.style.backgroundColor = isHabit ? '#2e7d32' : 'var(--b3-theme-primary)';
             subIcon.style.borderRadius = '50%';
             subIcon.style.lineHeight = '1';
             subIcon.style.flexShrink = '0';
@@ -3475,7 +3780,7 @@ export class CalendarView {
         titleEl.className = 'fc-event-title';
 
         // 如果有绑定块，将内容包裹在 span 中并添加虚线边框
-        if (props.blockId && !props.isSubscribed) {
+        if (props.blockId && !props.isSubscribed && !props.isHabit) {
             const textSpan = document.createElement('span');
             const textColor = (event && event.textColor) ? event.textColor : '#fff';
             textSpan.innerHTML = event.title;
@@ -3541,7 +3846,7 @@ export class CalendarView {
 
         // 分类图标 (订阅图标已移至顶部复选框位置)
         // 分类图标 (订阅图标已移至顶部复选框位置)
-        if (this.showCategoryAndProject && !props.isSubscribed && props.categoryId) {
+        if (this.showCategoryAndProject && !props.isSubscribed && !props.isHabit && props.categoryId) {
             const categoryIds = props.categoryId.split(',');
             categoryIds.forEach(id => {
                 const category = this.categoryManager.getCategoryById(id);
@@ -4055,6 +4360,13 @@ export class CalendarView {
             return isSubA ? -1 : 1;
         }
 
+        // 1.5 习惯事件次级置顶（在任务之前，订阅之后）
+        const isHabitA = a.extendedProps?.isHabit || false;
+        const isHabitB = b.extendedProps?.isHabit || false;
+        if (isHabitA !== isHabitB) {
+            return isHabitA ? -1 : 1;
+        }
+
         // 如果都是订阅日历，则按照订阅日历本身的排序进行 (ics-subscriptions.json 中的顺序)
         if (isSubA && isSubB) {
             const subIdA = a.extendedProps?.subscriptionId;
@@ -4219,6 +4531,11 @@ export class CalendarView {
         // Pomodoro events should act as read-only in click handler
         // Right-click context menu is available for them
         if (info.event.extendedProps.type === 'pomodoro') {
+            return;
+        }
+
+        // Habit events are read-only in CalendarView
+        if (info.event.extendedProps.isHabit) {
             return;
         }
 
@@ -5670,7 +5987,7 @@ export class CalendarView {
 
             try {
                 // 刷新番茄数据以确保统计准确
-                if (this.showPomodoro) {
+                if (this.showTasks && this.showPomodoro) {
                     await this.pomodoroRecordManager.refreshData();
                 }
 
@@ -5745,7 +6062,7 @@ export class CalendarView {
                 });
             }
 
-            const reminderData = await getAllReminders(this.plugin, undefined, force);
+            const reminderData = this.showTasks ? await getAllReminders(this.plugin, undefined, force) : {};
             const events = [];
 
             // 获取当前视图的日期范围
@@ -5766,7 +6083,7 @@ export class CalendarView {
             const projectData = await this.plugin.loadProjectData() || {};
 
             // 转换为数组并过滤
-            const allReminders = Object.values(reminderData) as any[];
+            const allReminders = this.showTasks ? (Object.values(reminderData) as any[]) : [];
             let filteredReminders = allReminders.filter(reminder => {
                 if (!reminder || typeof reminder !== 'object') return false;
 
@@ -5954,8 +6271,13 @@ export class CalendarView {
                 }
             }
 
+            // 添加习惯事件
+            if (this.showHabits) {
+                await this.addHabitEventsToList(events, startDate, endDate);
+            }
+
             // Add Pomodoro records if enabled and in Day/Week view
-            if (this.showPomodoro && this.calendar && this.calendar.view) {
+            if (this.showTasks && this.showPomodoro && this.calendar && this.calendar.view) {
                 const viewType = this.calendar.view.type;
                 if (viewType === 'timeGridDay' || viewType === 'timeGridWeek' || viewType === 'timeGridMultiDays') {
                     const pomodoroManager = this.pomodoroRecordManager;
@@ -6028,7 +6350,7 @@ export class CalendarView {
             }
 
             // Add completed task times if enabled and in Day/Week view
-            if (this.showCompletedTaskTime && this.calendar && this.calendar.view) {
+            if (this.showTasks && this.showCompletedTaskTime && this.calendar && this.calendar.view) {
                 const viewType = this.calendar.view.type;
                 if (viewType === 'timeGridDay' || viewType === 'timeGridWeek' || viewType === 'timeGridMultiDays' || viewType === 'dayGridDay') {
                     //  || viewType === 'dayGridWeek' || viewType === 'dayGridMultiDays 周看板暂时不显示完成时间避免卡死
@@ -6042,6 +6364,157 @@ export class CalendarView {
             console.error('获取事件数据失败:', error);
             showMessage(i18n("loadReminderDataFailed"));
             return [];
+        }
+    }
+
+    private shouldCheckHabitOnDate(habit: any, date: string): boolean {
+        if (!habit || !habit.startDate) return false;
+        if (habit.startDate > date) return false;
+        if (habit.endDate && habit.endDate < date) return false;
+
+        const frequency = habit.frequency || { type: 'daily' };
+        const checkDate = new Date(date + 'T00:00:00');
+        const startDate = new Date(habit.startDate + 'T00:00:00');
+
+        switch (frequency.type) {
+            case 'daily':
+                if (frequency.interval) {
+                    const daysDiff = Math.floor((checkDate.getTime() - startDate.getTime()) / 86400000);
+                    return daysDiff >= 0 && daysDiff % frequency.interval === 0;
+                }
+                return checkDate >= startDate;
+            case 'weekly':
+                if (frequency.weekdays && frequency.weekdays.length > 0) {
+                    return frequency.weekdays.includes(checkDate.getDay());
+                }
+                if (frequency.interval) {
+                    const weeksDiff = Math.floor((checkDate.getTime() - startDate.getTime()) / (86400000 * 7));
+                    return weeksDiff >= 0 && weeksDiff % frequency.interval === 0 && checkDate.getDay() === startDate.getDay();
+                }
+                return checkDate.getDay() === startDate.getDay();
+            case 'monthly':
+                if (frequency.monthDays && frequency.monthDays.length > 0) {
+                    return frequency.monthDays.includes(checkDate.getDate());
+                }
+                if (frequency.interval) {
+                    const monthsDiff = (checkDate.getFullYear() - startDate.getFullYear()) * 12 +
+                        (checkDate.getMonth() - startDate.getMonth());
+                    return monthsDiff >= 0 && monthsDiff % frequency.interval === 0 && checkDate.getDate() === startDate.getDate();
+                }
+                return checkDate.getDate() === startDate.getDate();
+            case 'yearly':
+                if (frequency.months && frequency.months.length > 0) {
+                    if (!frequency.months.includes(checkDate.getMonth() + 1)) return false;
+                    if (frequency.monthDays && frequency.monthDays.length > 0) {
+                        return frequency.monthDays.includes(checkDate.getDate());
+                    }
+                    return checkDate.getDate() === startDate.getDate();
+                }
+                if (frequency.interval) {
+                    const yearsDiff = checkDate.getFullYear() - startDate.getFullYear();
+                    return yearsDiff >= 0 && yearsDiff % frequency.interval === 0 &&
+                        checkDate.getMonth() === startDate.getMonth() &&
+                        checkDate.getDate() === startDate.getDate();
+                }
+                return checkDate.getMonth() === startDate.getMonth() && checkDate.getDate() === startDate.getDate();
+            case 'ebbinghaus':
+                const ebbinghausDaysDiff = Math.floor((checkDate.getTime() - startDate.getTime()) / 86400000);
+                const ebbinghausPattern = [1, 2, 4, 7, 15];
+                const maxPatternDay = 15;
+                if (ebbinghausDaysDiff < 0) return false;
+                if (ebbinghausDaysDiff === 0) return true;
+                if (ebbinghausPattern.includes(ebbinghausDaysDiff)) return true;
+                return ebbinghausDaysDiff > maxPatternDay && (ebbinghausDaysDiff - maxPatternDay) % 15 === 0;
+            default:
+                return true;
+        }
+    }
+
+    private isHabitCompletedOnDate(habit: any, date: string): boolean {
+        const checkIn = habit?.checkIns?.[date];
+        if (!checkIn) return false;
+
+        const emojis: string[] = [];
+        if (checkIn.entries && checkIn.entries.length > 0) {
+            checkIn.entries.forEach(entry => {
+                if (entry.emoji) emojis.push(entry.emoji);
+            });
+        } else if (checkIn.status && checkIn.status.length > 0) {
+            emojis.push(...checkIn.status);
+        }
+
+        const target = habit.target || 1;
+        return emojis.length >= target;
+    }
+
+    private getHabitCheckInEmojisOnDate(habit: any, date: string): string[] {
+        const checkIn = habit?.checkIns?.[date];
+        if (!checkIn) return [];
+
+        const emojis: string[] = [];
+        if (Array.isArray(checkIn.entries) && checkIn.entries.length > 0) {
+            checkIn.entries.forEach((entry: any) => {
+                if (entry?.emoji) emojis.push(entry.emoji);
+            });
+        } else if (Array.isArray(checkIn.status) && checkIn.status.length > 0) {
+            emojis.push(...checkIn.status.filter(Boolean));
+        }
+        return emojis;
+    }
+
+    private async addHabitEventsToList(events: any[], startDate: string, endDate: string) {
+        try {
+            const habitData = await this.plugin.loadHabitData();
+            const habits = Object.values(habitData || {}) as any[];
+            if (!habits.length) return;
+            const today = getLogicalDateString();
+
+            const start = new Date(startDate + 'T00:00:00');
+            const end = new Date(endDate + 'T00:00:00');
+
+            for (const habit of habits) {
+                if (!habit || !habit.id) continue;
+
+                for (const current = new Date(start); current <= end; current.setDate(current.getDate() + 1)) {
+                    const dateStr = getLocalDateString(current);
+                    if (!this.shouldCheckHabitOnDate(habit, dateStr)) continue;
+
+                    const completed = this.isHabitCompletedOnDate(habit, dateStr);
+                    const checkedEmojis = this.getHabitCheckInEmojisOnDate(habit, dateStr);
+                    // 过去日期：未完成不显示；今天和未来都显示
+                    if (compareDateStrings(dateStr, today) < 0 && !completed) continue;
+                    if (this.currentCompletionFilter === 'completed' && !completed) continue;
+                    if (this.currentCompletionFilter === 'incomplete' && completed) continue;
+
+                    events.push({
+                        id: `habit-${habit.id}-${dateStr}`,
+                        title: habit.title || i18n("unnamedTask"),
+                        start: dateStr,
+                        allDay: true,
+                        display: 'block',
+                        backgroundColor: completed ? 'rgba(46, 125, 50, 0.62)' : '#43a047',
+                        borderColor: completed ? '#1b5e20' : '#2e7d32',
+                        textColor: 'var(--b3-theme-on-background)',
+                        className: `habit-calendar-event${completed ? ' completed' : ''}`,
+                        editable: false,
+                        startEditable: false,
+                        durationEditable: false,
+                        extendedProps: {
+                            type: 'habit',
+                            isHabit: true,
+                            habitId: habit.id,
+                            date: dateStr,
+                            completed,
+                            checkedEmojis,
+                            note: habit.note || '',
+                            target: habit.target || 1,
+                            frequency: habit.frequency
+                        }
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('加载习惯事件失败:', error);
         }
     }
 
@@ -6858,6 +7331,56 @@ export class CalendarView {
                 `</div>`
             );
 
+            return htmlParts.join('');
+        }
+
+        if (reminder.type === 'habit' || reminder.isHabit) {
+            const htmlParts: string[] = [];
+            const title = calendarEvent.title || i18n("habitPanelTitle");
+            htmlParts.push(
+                `<div style="font-weight: 600; color: var(--b3-theme-on-surface); margin-bottom: 8px; font-size: 14px; text-align: left; width: 100%;">`,
+                `🌱 ${this.escapeHtml(title)}`,
+                `</div>`
+            );
+            const dateText = reminder.date || '';
+            if (dateText) {
+                htmlParts.push(
+                    `<div style="color: var(--b3-theme-on-surface); margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">`,
+                    `<span style="opacity: 0.7;">📅</span>`,
+                    `<span>${this.escapeHtml(dateText)}</span>`,
+                    `</div>`
+                );
+            }
+            htmlParts.push(
+                `<div style="color: ${reminder.completed ? 'var(--b3-theme-success)' : 'var(--b3-theme-on-surface-light)'}; margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">`,
+                `<span style="opacity: 0.8;">${reminder.completed ? '✅' : '⏳'}</span>`,
+                `<span>${(() => {
+                    const target = Math.max(1, Number(reminder.target) || 1);
+                    const checkedCount = Array.isArray(reminder.checkedEmojis) ? reminder.checkedEmojis.length : 0;
+                    const statusText = reminder.completed ? (i18n("completed") || "已完成") : (i18n("uncompleted") || "未完成");
+                    return this.escapeHtml(`${statusText}（${checkedCount}/${target}）`);
+                })()}</span>`,
+                `</div>`
+            );
+            if (Array.isArray(reminder.checkedEmojis) && reminder.checkedEmojis.length > 0) {
+                const emojiCountMap = new Map<string, number>();
+                reminder.checkedEmojis.forEach((emoji: string) => {
+                    emojiCountMap.set(emoji, (emojiCountMap.get(emoji) || 0) + 1);
+                });
+                const emojiText = Array.from(emojiCountMap.entries())
+                    .map(([emoji, count]) => count > 1 ? `${emoji}×${count}` : emoji)
+                    .join(' ');
+                htmlParts.push(
+                    `<div style="color: var(--b3-theme-on-surface); margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">`,
+                    `<span>${this.escapeHtml((i18n("habitCheckinLabel") || "打卡") + "：" + emojiText)}</span>`,
+                    `</div>`
+                );
+            }
+            htmlParts.push(
+                `<div style="color: var(--b3-theme-on-surface-light); margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--b3-theme-border); font-size: 12px; font-style: italic;">`,
+                `${i18n("rightClickToEdit") || "右键编辑习惯"}`,
+                `</div>`
+            );
             return htmlParts.join('');
         }
 
