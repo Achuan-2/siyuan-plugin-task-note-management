@@ -1,9 +1,10 @@
-import { Dialog, showMessage } from "siyuan";
+import { Dialog, showMessage, platformUtils } from "siyuan";
 import { getBlockByID, getBlockDOM } from "../api";
 import { Habit } from "./HabitPanel";
 import { getLocalDateTimeString, getLogicalDateString } from "../utils/dateUtils";
 import { HabitGroupManager } from "../utils/habitGroupManager";
 import { i18n } from "../pluginInstance";
+import { HabitCheckInEmojiDialog } from "./HabitCheckInEmojiDialog";
 
 export class HabitEditDialog {
     private dialog: Dialog;
@@ -55,6 +56,8 @@ export class HabitEditDialog {
         container.className = 'b3-dialog__content';
         const form = document.createElement('form');
         form.style.cssText = 'display: flex; flex-direction: column; gap: 16px;';
+        let draftCheckInEmojis = JSON.parse(JSON.stringify(this.habit?.checkInEmojis || this.getDefaultCheckInEmojis()));
+        let draftHideCheckedToday = !!this.habit?.hideCheckedToday;
 
         // 习惯标题
         const titleGroup = this.createFormGroup(i18n("habitTitleLabel"), 'text', 'title', this.habit?.title || '');
@@ -174,11 +177,11 @@ export class HabitEditDialog {
         blockInput.style.cssText = 'flex: 1;';
         blockInput.spellcheck = false;
 
-        const pasteBtn = document.createElement('button');
-        pasteBtn.type = 'button';
-        pasteBtn.className = 'b3-button b3-button--outline';
-        pasteBtn.title = i18n("habitPasteBlockRef");
-        pasteBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconPaste"></use></svg>';
+        const copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'b3-button b3-button--outline';
+        copyBtn.title = i18n("copyBlockRef");
+        copyBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconCopy"></use></svg>';
 
         const clearBtn = document.createElement('button');
         clearBtn.type = 'button';
@@ -187,7 +190,7 @@ export class HabitEditDialog {
         clearBtn.textContent = i18n("clearBlock");
 
         blockInputRow.appendChild(blockInput);
-        blockInputRow.appendChild(pasteBtn);
+        blockInputRow.appendChild(copyBtn);
         blockInputRow.appendChild(clearBtn);
 
         const blockPreview = document.createElement('div');
@@ -211,7 +214,39 @@ export class HabitEditDialog {
         // 按钮
         // 创建按钮组，不再作为表单内部直接的子元素；它将被放在 actionContainer（dialog action）中
         const buttonGroup = document.createElement('div');
-        buttonGroup.style.cssText = 'display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px;';
+        buttonGroup.style.cssText = 'display: flex; gap: 8px; align-items: center; justify-content: space-between; width: 100%; margin-top: 16px;';
+
+        const editCheckInBtn = document.createElement('button');
+        editCheckInBtn.type = 'button';
+        editCheckInBtn.className = 'b3-button b3-button--outline';
+        editCheckInBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconSettings"></use></svg>${i18n("editCheckInOptions")}`;
+        editCheckInBtn.addEventListener('click', () => {
+            const titleInput = form.querySelector('input[name="title"]') as HTMLInputElement | null;
+            const tempHabit: Habit = {
+                id: this.habit?.id || `habit-temp-${Date.now()}`,
+                title: titleInput?.value?.trim() || this.habit?.title || i18n("newHabitTitle"),
+                target: parseInt((form.querySelector('input[name="target"]') as HTMLInputElement | null)?.value || '1') || 1,
+                frequency: this.habit?.frequency || { type: 'daily', interval: 1 },
+                startDate: (form.querySelector('input[name="startDate"]') as HTMLInputElement | null)?.value || getLogicalDateString(),
+                endDate: (form.querySelector('input[name="endDate"]') as HTMLInputElement | null)?.value || undefined,
+                reminderTime: this.habit?.reminderTime,
+                reminderTimes: this.habit?.reminderTimes || [],
+                groupId: this.habit?.groupId,
+                priority: this.habit?.priority || 'none',
+                checkInEmojis: JSON.parse(JSON.stringify(draftCheckInEmojis)),
+                checkIns: this.habit?.checkIns || {},
+                totalCheckIns: this.habit?.totalCheckIns || 0,
+                createdAt: this.habit?.createdAt || getLocalDateTimeString(new Date()),
+                updatedAt: getLocalDateTimeString(new Date()),
+                blockId: this.habit?.blockId,
+                hideCheckedToday: draftHideCheckedToday
+            };
+            const dialog = new HabitCheckInEmojiDialog(tempHabit, async (emojis) => {
+                draftCheckInEmojis = JSON.parse(JSON.stringify(emojis));
+                draftHideCheckedToday = !!tempHabit.hideCheckedToday;
+            });
+            dialog.show();
+        });
 
         const cancelBtn = document.createElement('button');
         cancelBtn.type = 'button';
@@ -224,47 +259,45 @@ export class HabitEditDialog {
         saveBtn.className = 'b3-button b3-button--primary';
         saveBtn.textContent = i18n("save");
 
-        buttonGroup.appendChild(cancelBtn);
-        buttonGroup.appendChild(saveBtn);
+        const rightButtons = document.createElement('div');
+        rightButtons.style.cssText = 'display: flex; gap: 8px; align-items: center;';
+        rightButtons.appendChild(cancelBtn);
+        rightButtons.appendChild(saveBtn);
+
+        buttonGroup.appendChild(editCheckInBtn);
+        buttonGroup.appendChild(rightButtons);
 
         // Don't append buttonGroup to the form. It'll be appended to the actionContainer (sibling)
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
-            await this.handleSubmit(form, isNew);
+            await this.handleSubmit(form, isNew, draftCheckInEmojis, draftHideCheckedToday);
         });
 
         // 绑定块按钮事件
-        pasteBtn.addEventListener('click', async () => {
+        copyBtn.addEventListener('click', async () => {
             try {
-                const clipboardText = await navigator.clipboard.readText();
-                if (!clipboardText) return;
-
-                const blockRefRegex = /\(\(([\w\-]+)\s+'(.*)'\)\)/;
-                const blockLinkRegex = /\[(.*)\]\(siyuan:\/\/blocks\/([\w\-]+)\)/;
-
-                let blockId: string | undefined;
-
-                const refMatch = clipboardText.match(blockRefRegex);
-                if (refMatch) {
-                    blockId = refMatch[1];
-                } else {
-                    const linkMatch = clipboardText.match(blockLinkRegex);
-                    if (linkMatch) {
-                        blockId = linkMatch[2];
+                const raw = blockInput.value?.trim();
+                const blockId = raw ? (this.extractBlockId(raw) || raw) : '';
+                if (!blockId) {
+                    showMessage(i18n("noBlockToCopy"), 3000, 'error');
+                    return;
+                }
+                let copiedText = `((${blockId}))`;
+                try {
+                    const block = await getBlockByID(blockId);
+                    const blockTitle = ((block?.content || block?.fcontent || '') as string).replace(/\s+/g, ' ').trim();
+                    if (blockTitle) {
+                        copiedText = `((${blockId} '${blockTitle.replace(/'/g, "\\'")}'))`;
                     }
+                } catch (innerError) {
+                    console.warn('构造块引用文案失败，使用纯块引用格式', innerError);
                 }
-
-                if (blockId) {
-                    blockInput.value = blockId;
-                    await this.updatePreviewForBlock(blockId, blockPreview);
-                    showMessage(i18n("pasteBlockSuccess"));
-                } else {
-                    showMessage(i18n("pasteBlockInvalid"), 3000, 'error');
-                }
+                await platformUtils.writeText(copiedText);
+                showMessage(i18n("copiedBlockRef") || i18n("copySuccess"));
             } catch (error) {
-                console.error('读取剪贴板失败:', error);
-                showMessage(i18n("pasteBlockReadFailed"), 3000, 'error');
+                console.error('复制块引用失败:', error);
+                showMessage(i18n("copyFailed"), 3000, 'error');
             }
         });
 
@@ -591,7 +624,7 @@ export class HabitEditDialog {
         return group;
     }
 
-    private async handleSubmit(form: HTMLFormElement, isNew: boolean) {
+    private async handleSubmit(form: HTMLFormElement, isNew: boolean, draftCheckInEmojis: any[], draftHideCheckedToday: boolean) {
         const formData = new FormData(form);
 
         const title = formData.get('title') as string;
@@ -638,15 +671,12 @@ export class HabitEditDialog {
             blockId: parsedBlockId || undefined,
             priority: formData.get('priority') as any || 'none',
             groupId: formData.get('groupId') as string === 'none' ? undefined : formData.get('groupId') as string,
-            checkInEmojis: this.habit?.checkInEmojis || [
-                { emoji: '✅', meaning: i18n("checkInSuccess") || '完成', promptNote: false },
-                { emoji: '❌', meaning: i18n("checkInFailed") || '未完成', promptNote: false },
-                { emoji: '⭕️', meaning: '部分完成', promptNote: false }
-            ],
+            checkInEmojis: JSON.parse(JSON.stringify(draftCheckInEmojis && draftCheckInEmojis.length > 0 ? draftCheckInEmojis : this.getDefaultCheckInEmojis())),
             checkIns: this.habit?.checkIns || {},
             totalCheckIns: this.habit?.totalCheckIns || 0,
             createdAt: this.habit?.createdAt || now,
-            updatedAt: now
+            updatedAt: now,
+            hideCheckedToday: draftHideCheckedToday || false
         };
         // 保留已有的 hasNotify 值（编辑时），避免覆盖已有记录
         if (this.habit && this.habit.hasNotify) {
@@ -890,5 +920,13 @@ export class HabitEditDialog {
         const idRegex = /^([a-zA-Z0-9\-]{5,})$/;
         if (idRegex.test(raw)) return raw;
         return null;
+    }
+
+    private getDefaultCheckInEmojis() {
+        return [
+            { emoji: '✅', meaning: i18n("checkInSuccess") || '完成', promptNote: false },
+            { emoji: '❌', meaning: i18n("checkInFailed") || '未完成', promptNote: false },
+            { emoji: '⭕️', meaning: i18n("partialCompleted") || '部分完成', promptNote: false }
+        ];
     }
 }

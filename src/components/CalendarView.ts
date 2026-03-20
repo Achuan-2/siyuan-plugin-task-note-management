@@ -3114,6 +3114,8 @@ export class CalendarView {
         const filterDate = getLogicalDateString();
         const dayCheckIn = habit.checkIns?.[filterDate];
         const checkedEmojis = new Set<string>();
+        const emojiGroupMap = new Map<string, string>();
+        const checkedGroups = new Set<string>();
         if (Array.isArray(dayCheckIn?.entries)) {
             dayCheckIn.entries.forEach((entry: any) => {
                 if (entry?.emoji) checkedEmojis.add(entry.emoji);
@@ -3123,9 +3125,20 @@ export class CalendarView {
                 if (emoji) checkedEmojis.add(emoji);
             });
         }
+        checkInEmojis.forEach((emojiConfig: any) => {
+            const groupName = (emojiConfig?.group || '').trim();
+            if (groupName) {
+                emojiGroupMap.set(emojiConfig.emoji, groupName);
+            }
+        });
+        checkedEmojis.forEach((checkedEmoji) => {
+            const groupName = emojiGroupMap.get(checkedEmoji);
+            if (groupName) checkedGroups.add(groupName);
+        });
 
         checkInEmojis.forEach((emojiConfig: any) => {
-            if (habit.hideCheckedToday && checkedEmojis.has(emojiConfig.emoji)) return;
+            const groupName = (emojiConfig?.group || '').trim();
+            if (habit.hideCheckedToday && (checkedEmojis.has(emojiConfig.emoji) || (!!groupName && checkedGroups.has(groupName)))) return;
             submenu.push({
                 label: `${emojiConfig.emoji} ${emojiConfig.meaning || ''}`.trim(),
                 click: async () => {

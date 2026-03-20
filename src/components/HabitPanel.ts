@@ -12,6 +12,8 @@ import { getBackend } from "siyuan";
 export interface HabitCheckInEmoji {
     emoji: string;
     meaning: string;
+    value?: number;
+    group?: string; // 打卡选项分组
     // 当打卡该emoji时，是否在每次打卡时弹窗输入备注
     promptNote?: boolean;
     // 是否认为是成功打卡（默认为true）
@@ -1298,6 +1300,8 @@ export class HabitPanel {
         const today = getLogicalDateString();
         const todayCheckIn = habit.checkIns?.[today];
         const checkedEmojisToday = new Set<string>();
+        const emojiGroupMap = new Map<string, string>();
+        const checkedGroupsToday = new Set<string>();
 
         if (todayCheckIn?.entries) {
             todayCheckIn.entries.forEach(entry => checkedEmojisToday.add(entry.emoji));
@@ -1305,10 +1309,24 @@ export class HabitPanel {
             todayCheckIn.status.forEach(emoji => checkedEmojisToday.add(emoji));
         }
 
+        habit.checkInEmojis.forEach(emojiConfig => {
+            const groupName = (emojiConfig.group || '').trim();
+            if (groupName) {
+                emojiGroupMap.set(emojiConfig.emoji, groupName);
+            }
+        });
+        checkedEmojisToday.forEach(checkedEmoji => {
+            const groupName = emojiGroupMap.get(checkedEmoji);
+            if (groupName) checkedGroupsToday.add(groupName);
+        });
+
         // 添加默认的打卡emoji选项
         habit.checkInEmojis.forEach(emojiConfig => {
-            // 如果设置了隐藏今天已打卡的选项，且该选项今天已打卡，则跳过
-            if (habit.hideCheckedToday && checkedEmojisToday.has(emojiConfig.emoji)) {
+            const groupName = (emojiConfig.group || '').trim();
+            // 如果设置了隐藏今天已打卡选项：
+            // 1. 当前 emoji 已打卡，隐藏
+            // 2. 当前 emoji 所属分组中任意项已打卡，整组隐藏
+            if (habit.hideCheckedToday && (checkedEmojisToday.has(emojiConfig.emoji) || (!!groupName && checkedGroupsToday.has(groupName)))) {
                 return;
             }
 
