@@ -567,6 +567,9 @@ export class TaskSummaryDialog {
       case 'yearly':
         label = i18n('yearly');
         break;
+      case 'ebbinghaus':
+        label = i18n('ebbinghausRepeat');
+        break;
       default:
         label = i18n('daily');
     }
@@ -626,6 +629,14 @@ export class TaskSummaryDialog {
         }
         return checkDate.getMonth() === startDate.getMonth() &&
           checkDate.getDate() === startDate.getDate();
+      case 'ebbinghaus':
+        const ebbinghausDaysDiff = Math.floor((checkDate.getTime() - startDate.getTime()) / 86400000);
+        const ebbinghausPattern = [1, 2, 4, 7, 15];
+        const maxPatternDay = 15;
+        if (ebbinghausDaysDiff < 0) return false;
+        if (ebbinghausDaysDiff === 0) return true;
+        if (ebbinghausPattern.includes(ebbinghausDaysDiff)) return true;
+        return ebbinghausDaysDiff > maxPatternDay && (ebbinghausDaysDiff - maxPatternDay) % 15 === 0;
     }
     return true;
   }

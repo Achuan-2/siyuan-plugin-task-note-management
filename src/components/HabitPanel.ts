@@ -27,7 +27,7 @@ export interface Habit {
     blockId?: string; // 绑定的块ID
     target: number; // 每次打卡需要打卡x次
     frequency: {
-        type: 'daily' | 'weekly' | 'monthly' | 'yearly';
+        type: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'ebbinghaus';
         interval?: number; // 重复间隔，比如每x天
         weekdays?: number[]; // 重复星期 (0-6, 0=周日)
         monthDays?: number[]; // 重复日期 (1-31)
@@ -543,6 +543,15 @@ export class HabitPanel {
                 return checkDate.getMonth() === startDate.getMonth() &&
                     checkDate.getDate() === startDate.getDate();
 
+            case 'ebbinghaus':
+                const ebbinghausDaysDiff = Math.floor((checkDate.getTime() - startDate.getTime()) / 86400000);
+                const ebbinghausPattern = [1, 2, 4, 7, 15];
+                const maxPatternDay = 15;
+                if (ebbinghausDaysDiff < 0) return false;
+                if (ebbinghausDaysDiff === 0) return true;
+                if (ebbinghausPattern.includes(ebbinghausDaysDiff)) return true;
+                return ebbinghausDaysDiff > maxPatternDay && (ebbinghausDaysDiff - maxPatternDay) % 15 === 0;
+
             default:
                 return true;
         }
@@ -1050,6 +1059,8 @@ export class HabitPanel {
                     return i18n("freqYearMonths", { months: monthStr });
                 }
                 return interval ? i18n("freqEveryNYears", { n: String(interval) }) : i18n("freqEveryYear");
+            case 'ebbinghaus':
+                return i18n("ebbinghausRepeat");
             default:
                 return i18n("freqEveryDay");
         }

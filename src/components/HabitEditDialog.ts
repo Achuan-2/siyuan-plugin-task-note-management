@@ -365,6 +365,7 @@ export class HabitEditDialog {
             <option value="weekly">${i18n("freqWeekly")}</option>
             <option value="monthly">${i18n("freqMonthly")}</option>
             <option value="yearly">${i18n("freqYearly")}</option>
+            <option value="ebbinghaus">${i18n("ebbinghaus")}</option>
         `;
 
         if (this.habit?.frequency) {
@@ -504,6 +505,11 @@ export class HabitEditDialog {
                 weekdaysContainer.style.display = 'none';
                 monthDaysContainer.style.display = 'none';
                 yearlyDateContainer.style.display = 'flex';
+            } else if (type === 'ebbinghaus') {
+                intervalContainer.style.display = 'none';
+                weekdaysContainer.style.display = 'none';
+                monthDaysContainer.style.display = 'none';
+                yearlyDateContainer.style.display = 'none';
             }
         };
 

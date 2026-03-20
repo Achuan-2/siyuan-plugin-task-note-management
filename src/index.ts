@@ -2428,6 +2428,15 @@ export default class ReminderPlugin extends Plugin {
                 return checkDate.getMonth() === startDate.getMonth() &&
                     checkDate.getDate() === startDate.getDate();
 
+            case 'ebbinghaus':
+                const ebbinghausDaysDiff = Math.floor((checkDate.getTime() - startDate.getTime()) / 86400000);
+                const ebbinghausPattern = [1, 2, 4, 7, 15];
+                const maxPatternDay = 15;
+                if (ebbinghausDaysDiff < 0) return false;
+                if (ebbinghausDaysDiff === 0) return true;
+                if (ebbinghausPattern.includes(ebbinghausDaysDiff)) return true;
+                return ebbinghausDaysDiff > maxPatternDay && (ebbinghausDaysDiff - maxPatternDay) % 15 === 0;
+
             case 'custom':
                 // 自定义频率：如果设置了周重复则按周判断，如果设置了月重复则按月判断；默认返回true
                 if (frequency.weekdays && frequency.weekdays.length > 0) {
@@ -3850,6 +3859,15 @@ export default class ReminderPlugin extends Plugin {
                 }
                 return checkDate.getMonth() === startDate.getMonth() &&
                     checkDate.getDate() === startDate.getDate();
+
+            case 'ebbinghaus':
+                const ebbinghausDaysDiff = Math.floor((checkDate.getTime() - startDate.getTime()) / 86400000);
+                const ebbinghausPattern = [1, 2, 4, 7, 15];
+                const maxPatternDay = 15;
+                if (ebbinghausDaysDiff < 0) return false;
+                if (ebbinghausDaysDiff === 0) return true;
+                if (ebbinghausPattern.includes(ebbinghausDaysDiff)) return true;
+                return ebbinghausDaysDiff > maxPatternDay && (ebbinghausDaysDiff - maxPatternDay) % 15 === 0;
 
             case 'custom':
                 if (frequency.weekdays && frequency.weekdays.length > 0) {
