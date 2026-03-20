@@ -1441,7 +1441,7 @@ export class CalendarView {
             },
             viewDidMount: this.handleViewDidMount.bind(this),
             editable: true,
-            selectable: true,
+            selectable: !this.openedFromHabitPanel,
             selectMirror: true,
             selectOverlap: true,
             eventResizableFromStart: true, // 允许从事件顶部拖动调整开始时间
@@ -3853,6 +3853,26 @@ export class CalendarView {
 
         mainFrame.appendChild(topRow);
 
+        // 习惯日历模式下：第二行显示当天已打卡的 emoji
+        if (this.openedFromHabitPanel && props.isHabit) {
+            const checkedEmojis: string[] = Array.isArray(props.checkedEmojis) ? props.checkedEmojis : [];
+            if (checkedEmojis.length > 0) {
+                const checkInLine = document.createElement('div');
+                checkInLine.className = 'reminder-event-habit-checkins';
+                checkInLine.style.cssText = `
+                    margin-top: 2px;
+                    font-size: 11px;
+                    line-height: 1.2;
+                    opacity: 0.9;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                `;
+                checkInLine.textContent = `${i18n("habitCheckinLabel") || "打卡"}：${checkedEmojis.join(' ')}`;
+                mainFrame.appendChild(checkInLine);
+            }
+        }
+
         // 3. 指标行：放置状态图标
         const indicatorsRow = document.createElement('div');
         indicatorsRow.className = 'reminder-event-indicators-row';
@@ -5803,6 +5823,9 @@ export class CalendarView {
     }
 
     private handleDateClick(info) {
+        if (this.openedFromHabitPanel) {
+            return;
+        }
         // 实现双击检测逻辑
         const currentTime = Date.now();
         const timeDiff = currentTime - this.lastClickTime;
@@ -5921,6 +5944,10 @@ export class CalendarView {
     }
 
     private handleDateSelect(selectInfo) {
+        if (this.openedFromHabitPanel) {
+            this.calendar.unselect();
+            return;
+        }
         // 强制隐藏提示框，防止在创建新提醒时它仍然可见
         this.forceHideTooltip();
         // 处理拖拽选择时间段创建事项
@@ -6494,8 +6521,8 @@ export class CalendarView {
 
                     const completed = this.isHabitCompletedOnDate(habit, dateStr);
                     const checkedEmojis = this.getHabitCheckInEmojisOnDate(habit, dateStr);
-                    // 过去日期：未完成不显示；今天和未来都显示
-                    if (compareDateStrings(dateStr, today) < 0 && !completed) continue;
+                    // 过去日期：未完成且无打卡记录不显示；有打卡记录则显示
+                    if (compareDateStrings(dateStr, today) < 0 && !completed && checkedEmojis.length === 0) continue;
                     if (this.currentCompletionFilter === 'completed' && !completed) continue;
                     if (this.currentCompletionFilter === 'incomplete' && completed) continue;
 

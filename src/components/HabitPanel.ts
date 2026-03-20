@@ -7,6 +7,7 @@ import { HabitEditDialog } from "./HabitEditDialog";
 import { HabitStatsDialog } from "./HabitStatsDialog";
 import { HabitGroupManageDialog } from "./HabitGroupManageDialog";
 import { HabitCheckInEmojiDialog } from "./HabitCheckInEmojiDialog";
+import { HabitCalendarDialog } from "./HabitCalendarDialog";
 import { getBackend } from "siyuan";
 
 export interface HabitCheckInEmoji {
@@ -199,11 +200,21 @@ export class HabitPanel {
         const calendarBtn = document.createElement('button');
         calendarBtn.className = 'b3-button b3-button--outline';
         calendarBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconCalendar"></use></svg>';
-        calendarBtn.title = i18n("calendarView");
+        calendarBtn.title = i18n("habitCalendar");
         calendarBtn.addEventListener('click', () => {
             this.openHabitCalendarView();
         });
         actionContainer.appendChild(calendarBtn);
+
+        // 统计日历按钮（HabitCalendarDialog）
+        const habitStatsCalendarBtn = document.createElement('button');
+        habitStatsCalendarBtn.className = 'b3-button b3-button--outline';
+        habitStatsCalendarBtn.textContent = '📊';
+        habitStatsCalendarBtn.title = i18n("habitStats") || "习惯统计";
+        habitStatsCalendarBtn.addEventListener('click', () => {
+            this.openHabitStatsCalendarDialog();
+        });
+        actionContainer.appendChild(habitStatsCalendarBtn);
 
         // 添加排序按钮
         this.sortButton = document.createElement('button');
@@ -216,16 +227,6 @@ export class HabitPanel {
             this.showSortMenu(e);
         });
         actionContainer.appendChild(this.sortButton);
-
-        // 分组管理按钮
-        const groupManageBtn = document.createElement('button');
-        groupManageBtn.className = 'b3-button b3-button--outline';
-        groupManageBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconTags"></use></svg>';
-        groupManageBtn.title = i18n("groupManageBtn");
-        groupManageBtn.addEventListener('click', () => {
-            this.showGroupManageDialog();
-        });
-        actionContainer.appendChild(groupManageBtn);
 
         // 刷新按钮
         const refreshBtn = document.createElement('button');
@@ -394,6 +395,15 @@ export class HabitPanel {
                     } catch (err) {
                         console.error('打开插件设置失败:', err);
                     }
+                }
+            });
+
+            // 分组管理
+            menu.addItem({
+                icon: 'iconTags',
+                label: i18n("groupManageBtn"),
+                click: () => {
+                    this.showGroupManageDialog();
                 }
             });
 
@@ -1507,6 +1517,7 @@ export class HabitPanel {
         }
 
         window.dispatchEvent(new CustomEvent('habitUpdated'));
+        window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'habitPanel' } }));
     }
 
     private async deleteHabit(habitId: string) {
@@ -1534,6 +1545,7 @@ export class HabitPanel {
             this.loadHabits();
 
             window.dispatchEvent(new CustomEvent('habitUpdated'));
+            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'habitPanel' } }));
         } catch (error) {
             console.error('deleteHabit failed:', error);
             showMessage(i18n("deleteFailed"), 3000, 'error');
@@ -1563,6 +1575,16 @@ export class HabitPanel {
             return;
         }
         showMessage(i18n("operationFailed") || "操作失败", 3000, 'error');
+    }
+
+    private openHabitStatsCalendarDialog() {
+        try {
+            const dialog = new HabitCalendarDialog(this.plugin);
+            dialog.show();
+        } catch (error) {
+            console.error('打开习惯统计日历失败:', error);
+            showMessage(i18n("operationFailed") || "操作失败", 3000, 'error');
+        }
     }
 
     private showHabitStats(habit: Habit) {

@@ -1726,7 +1726,7 @@
     "sortDefault": "默认",
     "todayCheckedSection": "今日已打卡",
     "reorderFailed": "调整顺序失败",
-    "openCheckInMenuFailed": "打开打卡菜单失败",
+    "openCheckInMenuFailed": "无打卡项",
     "freqEveryNDays": "每${n}天",
     "freqEveryDay": "每天",
     "freqWeekdays": "每周${days}",
@@ -1956,6 +1956,8 @@
     "renameCheckInGroup": "重命名打卡分组",
     "reset": "恢复默认",
     "renameGroup": "重命名分组",
+    "habitCheckinLabel": "打卡",
     "deleteCheckInOptionTitle": "删除打卡项",
-    "confirmDeleteCheckInOption": "确定要删除打卡项「${emoji} ${meaning}」吗？"
+    "confirmDeleteCheckInOption": "确定要删除打卡项「${emoji} ${meaning}」吗？",
+    "partialCompleted": "部分完成"
 }

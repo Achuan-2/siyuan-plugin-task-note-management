@@ -1956,6 +1956,8 @@
     "renameCheckInGroup": "Rename Check-in Group",
     "reset": "Reset",
     "renameGroup": "Rename Group",
+    "habitCheckinLabel": "Check-in",
     "deleteCheckInOptionTitle": "Delete Check-in Option",
-    "confirmDeleteCheckInOption": "Are you sure you want to delete check-in option \"${emoji} ${meaning}\"?"
+    "confirmDeleteCheckInOption": "Are you sure you want to delete check-in option \"${emoji} ${meaning}\"?",
+    "partialCompleted": "Partially Completed"
 }

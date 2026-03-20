@@ -1,5 +1,5 @@
 import { Dialog } from "siyuan";
-import { Habit } from "./HabitPanel";
+import type { Habit } from "./HabitPanel";
 import { DEFAULT_SETTINGS } from "../index";
 import { i18n } from "../pluginInstance";
 
