@@ -4063,9 +4063,10 @@ export class QuickReminderDialog {
 
         if (projectId) {
             // 新建任务时，自动填充项目所属分类
+            // 仅在当前没有显式分类（如父任务继承/defaultCategoryId）时才自动填充，避免覆盖父任务分类
             if (this.mode !== 'edit' && this.mode !== 'batch_edit') {
                 const project = this.projectManager.getProjectById(projectId);
-                if (project && project.categoryId) {
+                if (project && project.categoryId && this.selectedCategoryIds.length === 0) {
                     this.selectedCategoryIds = project.categoryId.split(',')
                         .map(id => id.trim())
                         .filter(id => id);

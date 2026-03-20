@@ -8658,7 +8658,17 @@ export class ReminderPanel {
         const allReminders = Array.from(this.allRemindersMap.values());
         const maxSort = allReminders.reduce((max, r) => Math.max(max, r.sort || 0), 0);
         const defaultSort = maxSort + 10000;
-
+        const resolvedParentId = (parentReminder?.isRepeatInstance && parentReminder?.originalId)
+            ? parentReminder.originalId
+            : parentReminder.id;
+        const resolvedCategoryId = parentReminder?.categoryId
+            || ((parentReminder?.isRepeatInstance && parentReminder?.originalId)
+                ? this.getOriginalReminder(parentReminder.originalId)?.categoryId
+                : undefined);
+        console.log('创建子任务 - 计算默认值', {
+            resolvedParentId,
+            resolvedCategoryId
+        });
         const dialog = new QuickReminderDialog(
             undefined, // initialDate
             undefined, // initialTime
@@ -8674,9 +8684,9 @@ export class ReminderPanel {
             },
             undefined, // 无时间段选项
             { // options
-                defaultParentId: parentReminder.id,
+                defaultParentId: resolvedParentId,
                 defaultProjectId: parentReminder.projectId,
-                defaultCategoryId: parentReminder.categoryId,
+                defaultCategoryId: resolvedCategoryId,
                 defaultPriority: parentReminder.priority || 'none',
                 // 自动填充父任务的自定义分组与状态
                 defaultCustomGroupId: parentReminder.customGroupId || undefined,
