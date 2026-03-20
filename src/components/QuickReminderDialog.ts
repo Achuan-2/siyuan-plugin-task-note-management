@@ -4510,7 +4510,8 @@ export class QuickReminderDialog {
         let endTime: string | undefined = endTimeInput?.value || undefined;
 
         // 自动根据日期更新状态：如果是今天或过去的任务，且未完成，自动设为进行中
-        if (date && kanbanStatus !== 'completed') {
+        // 但重复任务系列应保留用户显式选择的状态（如长期），实例显示由实例逻辑决定
+        if (date && kanbanStatus !== 'completed' && !(this.repeatConfig && this.repeatConfig.enabled)) {
             const today = getLogicalDateString();
             if (compareDateStrings(date, today) <= 0) {
                 const hasDoingStatus = this.currentKanbanStatuses.some(s => s.id === 'doing');

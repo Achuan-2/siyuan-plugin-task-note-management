@@ -6164,6 +6164,16 @@ export class ProjectKanbanView {
         // 如果任务已完成，直接返回
         if (task.completed) return 'completed';
 
+        // 重复实例：今天或已过且未完成时，展示在 doing（仅展示层，不回写原始任务状态）
+        if (task.isRepeatInstance && task.date) {
+            const today = getLogicalDateString();
+            const logicalDate = this.getTaskLogicalDate(task.date, task.time);
+            if (compareDateStrings(logicalDate, today) <= 0) {
+                const hasDoingStatus = this.kanbanStatuses.some(s => s.id === 'doing');
+                if (hasDoingStatus) return 'doing';
+            }
+        }
+
         // 如果有 kanbanStatus 且是有效的状态ID，使用之
         if (task.kanbanStatus) {
             const validStatus = this.kanbanStatuses.find(s => s.id === task.kanbanStatus);
@@ -14521,15 +14531,9 @@ export class ProjectKanbanView {
                     const instMod = this.ensureInstanceModificationStructure(original, draggedInstanceDate!);
                     const instanceCompletedTime = getLocalDateTimeString(new Date());
                     if (targetStatus !== undefined) {
-                        delete instMod.kanbanStatus;
+                        const normalizedStatus = targetStatus === 'doing' ? 'doing' : targetStatus;
+                        instMod.kanbanStatus = normalizedStatus;
                         this.syncRepeatInstanceCompletionState(original, draggedInstanceDate!, targetStatus, instanceCompletedTime);
-                        if (targetStatus === 'completed') {
-                            // 重复实例拖到已完成时，只完成当前实例，不完成整个原始任务
-                        } else {
-                            original.completed = false;
-                            delete original.completedTime;
-                            original.kanbanStatus = targetStatus === 'doing' ? 'doing' : targetStatus;
-                        }
                     }
                     if (targetGroup !== undefined) instMod.customGroupId = targetGroup;
                     if (targetPriority !== undefined) {
@@ -14550,15 +14554,9 @@ export class ProjectKanbanView {
                         if (!originalTask) continue;
                         const currentInstMod = this.ensureInstanceModificationStructure(originalTask, draggedInstanceDate!);
                         if (targetStatus !== undefined) {
-                            delete currentInstMod.kanbanStatus;
+                            const normalizedStatus = targetStatus === 'doing' ? 'doing' : targetStatus;
+                            currentInstMod.kanbanStatus = normalizedStatus;
                             this.syncRepeatInstanceCompletionState(originalTask, draggedInstanceDate!, targetStatus, instanceCompletedTime);
-                            if (targetStatus === 'completed') {
-                                // Ghost 后代只同步该实例日期的完成状态
-                            } else {
-                                originalTask.completed = false;
-                                delete originalTask.completedTime;
-                                originalTask.kanbanStatus = targetStatus === 'doing' ? 'doing' : targetStatus;
-                            }
                         }
                         if (targetGroup !== undefined) currentInstMod.customGroupId = targetGroup;
                         if (targetPriority !== undefined) {
@@ -17307,22 +17305,15 @@ export class ProjectKanbanView {
                         let instanceChanged = false;
                         const instanceCompletedTime = getLocalDateTimeString(new Date());
 
-                        // Dragging an instance should update the original task status, not an instance override
+                        // 拖动重复实例调整状态：仅更新实例级 kanbanStatus，不修改原始任务全局状态
                         if (updates.kanbanStatus) {
                             const newStatus = updates.kanbanStatus;
-                            if (instMod.kanbanStatus !== undefined) {
-                                delete instMod.kanbanStatus;
+                            const normalizedStatus = newStatus === 'doing' ? 'doing' : newStatus;
+                            if (instMod.kanbanStatus !== normalizedStatus) {
+                                instMod.kanbanStatus = normalizedStatus;
                                 instanceChanged = true;
                             }
                             if (this.syncRepeatInstanceCompletionState(originalTask, instanceDate, newStatus, instanceCompletedTime)) {
-                                instanceChanged = true;
-                            }
-                            if (newStatus === 'completed') {
-                                // 重复实例拖到已完成时，只完成该实例日期，不修改原始任务全局完成状态
-                            } else if (originalTask.completed || originalTask.kanbanStatus !== newStatus) {
-                                originalTask.completed = false;
-                                delete originalTask.completedTime;
-                                originalTask.kanbanStatus = newStatus === 'doing' ? 'doing' : newStatus;
                                 instanceChanged = true;
                             }
                         }
@@ -17379,8 +17370,7 @@ export class ProjectKanbanView {
                     }
 
                     // [更正/新增] 同步基准任务定义 (Base Task Definition)
-                    // 确保原始任务 (originalId) 的 projectId, customGroupId, kanbanStatus 也被更新
-                    // 这样未来生成的实例才会继续属于该项目
+                    // project/group 写入原始定义；状态仅写入实例级覆盖，避免改动原始任务状态
                     const baseTask = reminderData[originalId];
                     if (baseTask) {
                         let baseTaskChanged = false;
@@ -17395,15 +17385,13 @@ export class ProjectKanbanView {
                             baseTaskChanged = true;
                         }
                         if (updates.kanbanStatus) {
-                            if (this.syncRepeatInstanceCompletionState(baseTask, instanceDate, updates.kanbanStatus, instanceCompletedTime)) {
+                            const baseInstMod = this.ensureInstanceModificationStructure(baseTask, instanceDate);
+                            const normalizedStatus = updates.kanbanStatus === 'doing' ? 'doing' : updates.kanbanStatus;
+                            if (baseInstMod.kanbanStatus !== normalizedStatus) {
+                                baseInstMod.kanbanStatus = normalizedStatus;
                                 baseTaskChanged = true;
                             }
-                            if (updates.kanbanStatus === 'completed') {
-                                // 重复实例拖到已完成时，只完成该实例日期，不修改原始任务全局完成状态
-                            } else if (baseTask.completed || baseTask.kanbanStatus !== updates.kanbanStatus) {
-                                baseTask.completed = false;
-                                delete baseTask.completedTime;
-                                baseTask.kanbanStatus = updates.kanbanStatus === 'doing' ? 'doing' : updates.kanbanStatus;
+                            if (this.syncRepeatInstanceCompletionState(baseTask, instanceDate, updates.kanbanStatus, instanceCompletedTime)) {
                                 baseTaskChanged = true;
                             }
                         }
@@ -17441,13 +17429,20 @@ export class ProjectKanbanView {
                             }
                         }
 
-                        // 同步状态到原始子任务定义
+                        // 同步状态到实例级覆盖（ghost 系列子任务不改原始定义状态）
                         if (updates.kanbanStatus) {
-                            if (isGhostSeriesTask && this.syncRepeatInstanceCompletionState(subTaskInDb, instanceDate, updates.kanbanStatus, instanceCompletedTime)) {
-                                subTaskChanged = true;
-                            }
-                            if (updates.kanbanStatus === 'completed') {
-                                if (!isGhostSeriesTask && (!subTaskInDb.completed || subTaskInDb.kanbanStatus !== 'completed')) {
+                            const normalizedStatus = updates.kanbanStatus === 'doing' ? 'doing' : updates.kanbanStatus;
+                            if (isGhostSeriesTask) {
+                                const subInstMod = this.ensureInstanceModificationStructure(subTaskInDb, instanceDate);
+                                if (subInstMod.kanbanStatus !== normalizedStatus) {
+                                    subInstMod.kanbanStatus = normalizedStatus;
+                                    subTaskChanged = true;
+                                }
+                                if (this.syncRepeatInstanceCompletionState(subTaskInDb, instanceDate, updates.kanbanStatus, instanceCompletedTime)) {
+                                    subTaskChanged = true;
+                                }
+                            } else if (updates.kanbanStatus === 'completed') {
+                                if (!subTaskInDb.completed || subTaskInDb.kanbanStatus !== 'completed') {
                                     subTaskInDb.completed = true;
                                     subTaskInDb.completedTime = instanceCompletedTime;
                                     subTaskInDb.kanbanStatus = 'completed';
@@ -17456,7 +17451,7 @@ export class ProjectKanbanView {
                             } else if (subTaskInDb.completed || subTaskInDb.kanbanStatus !== updates.kanbanStatus) {
                                 subTaskInDb.completed = false;
                                 delete subTaskInDb.completedTime;
-                                subTaskInDb.kanbanStatus = updates.kanbanStatus === 'doing' ? 'doing' : updates.kanbanStatus;
+                                subTaskInDb.kanbanStatus = normalizedStatus;
                                 subTaskChanged = true;
                             }
                         }
