@@ -3621,16 +3621,6 @@ export class ReminderPanel {
                     if (r.isAvailableToday) {
                         const availDate = r.availableStartDate || today;
                         if (compareDateStrings(availDate, today) <= 0) {
-                            // 排除已有未来日期的任务
-                            const checkDate = r.date || r.endDate;
-                            const checkTime = r.time || r.endTime;
-                            if (checkDate && checkTime) {
-                                const s = this.getReminderLogicalDate(checkDate, checkTime);
-                                if (compareDateStrings(s, today) > 0) return false;
-                            } else if (checkDate && compareDateStrings(checkDate, today) > 0) {
-                                return false;
-                            }
-
                             // 检查今天是否已完成
                             const dailyCompleted = Array.isArray(r.dailyDessertCompleted) ? r.dailyDessertCompleted : [];
                             if (dailyCompleted.includes(today)) return false;
@@ -8756,9 +8746,6 @@ export class ReminderPanel {
                 if (reminder.isAvailableToday && !reminder.completed) {
                     const availDate = reminder.availableStartDate || today;
                     if (compareDateStrings(availDate, today) <= 0) {
-                        // 排除已有未来日期的任务
-                        if (reminder.date && compareDateStrings(startLogical_cur!, today) > 0) return false;
-
                         // 检查今天是否已完成
                         const dailyCompleted = Array.isArray(reminder.dailyDessertCompleted) ? reminder.dailyDessertCompleted : [];
                         if (dailyCompleted.includes(today)) return false;
