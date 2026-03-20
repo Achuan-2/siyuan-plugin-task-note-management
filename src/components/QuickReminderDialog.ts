@@ -1796,9 +1796,14 @@ export class QuickReminderDialog {
                             <div id="quickCustomTimeInputArea" style="display: none; padding: 12px; background: var(--b3-theme-background-light); border-radius: 6px; border: 1px solid var(--b3-theme-surface-lighter);">
                                 <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                                     <div id="quickCustomReminderDayWrapper" style="display: none; flex: 0 0 auto; align-items: center; gap: 6px;">
-                                        <span>第</span>
-                                        <input type="number" id="quickCustomReminderDayValue" class="b3-text-field" style="width: 72px;" step="1">
-                                        <span>天</span>
+                                        <select id="quickCustomReminderDayValue" class="b3-text-field" style="min-width: 120px;">
+                                            <option value="today">当天</option>
+                                            <option value="before">提前</option>
+                                        </select>
+                                        <div id="quickCustomReminderBeforeDaysWrapper" style="display: none; align-items: center; gap: 6px;">
+                                            <input type="number" id="quickCustomReminderBeforeDays" class="b3-text-field" style="width: 72px;" min="1" step="1" value="1">
+                                            <span>天</span>
+                                        </div>
                                     </div>
                                     <input type="datetime-local" id="quickCustomReminderTime" class="b3-text-field" style="flex: 1 1 140px; min-width: 0;" lang="${langTag}">
                                     <input type="text" id="quickCustomReminderNote" class="b3-text-field" placeholder="${i18n("note")}" style="flex: 1 1 80px; min-width: 0;" spellcheck="false">
@@ -2768,15 +2773,28 @@ export class QuickReminderDialog {
         const parsedDate = this.getCustomReminderDateValue(typeof item === 'string' ? item : item?.time);
 
         if (durationDays > 1) {
-            if (typeof normalized.dayIndex !== 'number') {
+            const hasBeforeOffset = typeof normalized.dayOffset === 'number' && normalized.dayOffset <= 0;
+            if (hasBeforeOffset) {
+                normalized.dayOffset = Math.trunc(normalized.dayOffset as number);
+                delete normalized.dayIndex;
+            } else if (typeof normalized.dayIndex !== 'number') {
                 if (parsedDate) {
                     const diff = getDaysDifference(date, parsedDate);
-                    normalized.dayIndex = diff >= 0 && diff < durationDays ? diff + 1 : 1;
+                    if (diff < 0) {
+                        normalized.dayOffset = diff;
+                        delete normalized.dayIndex;
+                    } else {
+                        normalized.dayIndex = diff >= 0 && diff < durationDays ? diff + 1 : 1;
+                        delete normalized.dayOffset;
+                    }
                 } else {
                     normalized.dayIndex = 1;
+                    delete normalized.dayOffset;
                 }
+            } else {
+                normalized.dayIndex = Math.min(Math.max(Math.trunc(normalized.dayIndex), 1), durationDays);
+                delete normalized.dayOffset;
             }
-            delete normalized.dayOffset;
         } else {
             if (typeof normalized.dayOffset !== 'number') {
                 if (parsedDate) {
@@ -2786,21 +2804,40 @@ export class QuickReminderDialog {
                     normalized.dayOffset = 1;
                 }
             }
-            normalized.dayOffset = Math.min(Math.max(normalized.dayOffset, -1), 1);
+            normalized.dayOffset = normalized.dayOffset <= 0 ? Math.trunc(normalized.dayOffset) : 1;
             delete normalized.dayIndex;
         }
 
         return normalized;
     }
 
-    private getCustomReminderDayValue(
+    private getCustomReminderDaySelection(
         item: { time: string, note?: string, dayOffset?: number, dayIndex?: number },
         date?: string,
         endDate?: string
-    ): number {
+    ): { selectValue: string; beforeDays: number } {
         const normalized = this.normalizeCustomTimeItem(item, date, endDate);
         const durationDays = this.getRepeatCustomReminderDurationDays(date, endDate);
-        return durationDays > 1 ? (normalized.dayIndex || 1) : (normalized.dayOffset ?? 1);
+
+        if (durationDays > 1) {
+            if (typeof normalized.dayOffset === 'number' && normalized.dayOffset <= 0) {
+                return {
+                    selectValue: 'before',
+                    beforeDays: Math.max(1, Math.abs(Math.trunc(normalized.dayOffset)))
+                };
+            }
+            const dayIndex = Math.min(Math.max(Math.trunc(normalized.dayIndex || 1), 1), durationDays);
+            return { selectValue: `day:${dayIndex}`, beforeDays: 1 };
+        }
+
+        if (typeof normalized.dayOffset === 'number' && normalized.dayOffset <= 0) {
+            return {
+                selectValue: 'before',
+                beforeDays: Math.max(1, Math.abs(Math.trunc(normalized.dayOffset)))
+            };
+        }
+
+        return { selectValue: 'today', beforeDays: 1 };
     }
 
     private getCustomReminderSortValue(
@@ -2815,6 +2852,9 @@ export class QuickReminderDialog {
 
         const durationDays = this.getRepeatCustomReminderDurationDays(date, endDate);
         if (durationDays > 1) {
+            if (typeof normalized.dayOffset === 'number' && normalized.dayOffset <= 0) {
+                return normalized.dayOffset;
+            }
             return (normalized.dayIndex || 1) - 1;
         }
 
@@ -2825,7 +2865,8 @@ export class QuickReminderDialog {
     private buildCustomTimeItem(
         time: string,
         note?: string,
-        dayValue?: string,
+        daySelectionValue?: string,
+        beforeDaysValue?: string,
         date?: string,
         endDate?: string
     ): { time: string, note?: string, dayOffset?: number, dayIndex?: number } {
@@ -2838,11 +2879,21 @@ export class QuickReminderDialog {
             note
         };
         const durationDays = this.getRepeatCustomReminderDurationDays(date, endDate);
-        const numericValue = Number.parseInt(dayValue || '', 10);
+        const parsedBeforeDays = Number.parseInt(beforeDaysValue || '', 10);
+        const beforeDays = Number.isFinite(parsedBeforeDays) && parsedBeforeDays > 0 ? parsedBeforeDays : 1;
         if (durationDays > 1) {
-            item.dayIndex = Number.isFinite(numericValue) ? Math.min(Math.max(numericValue, 1), durationDays) : 1;
+            if (daySelectionValue === 'before') {
+                item.dayOffset = -beforeDays;
+            } else {
+                const numericValue = Number.parseInt((daySelectionValue || '').replace('day:', ''), 10);
+                item.dayIndex = Number.isFinite(numericValue) ? Math.min(Math.max(numericValue, 1), durationDays) : 1;
+            }
         } else {
-            item.dayOffset = Number.isFinite(numericValue) ? Math.min(Math.max(numericValue, -1), 1) : 1;
+            if (daySelectionValue === 'before') {
+                item.dayOffset = -beforeDays;
+            } else {
+                item.dayOffset = 1;
+            }
         }
         return item;
     }
@@ -2850,10 +2901,12 @@ export class QuickReminderDialog {
     private updateCustomReminderInputMode() {
         const customReminderInput = this.dialog.element.querySelector('#quickCustomReminderTime') as HTMLInputElement;
         const dayWrapper = this.dialog.element.querySelector('#quickCustomReminderDayWrapper') as HTMLElement;
-        const dayInput = this.dialog.element.querySelector('#quickCustomReminderDayValue') as HTMLInputElement;
+        const daySelect = this.dialog.element.querySelector('#quickCustomReminderDayValue') as HTMLSelectElement;
+        const beforeDaysWrapper = this.dialog.element.querySelector('#quickCustomReminderBeforeDaysWrapper') as HTMLElement;
+        const beforeDaysInput = this.dialog.element.querySelector('#quickCustomReminderBeforeDays') as HTMLInputElement;
         const dayHint = this.dialog.element.querySelector('#quickCustomReminderDayHint') as HTMLElement;
         const addPresetBtn = this.dialog.element.querySelector('#quickAddPresetBtn') as HTMLButtonElement;
-        if (!customReminderInput || !dayWrapper || !dayInput || !dayHint) return;
+        if (!customReminderInput || !dayWrapper || !daySelect || !beforeDaysWrapper || !beforeDaysInput || !dayHint) return;
 
         const { date, endDate } = this.getCurrentReminderDateRange();
         const isRepeatMode = this.isRepeatCustomReminderMode(date, endDate);
@@ -2863,17 +2916,27 @@ export class QuickReminderDialog {
             customReminderInput.type = 'time';
             dayWrapper.style.display = '';
             dayHint.style.display = '';
+            const previousValue = daySelect.value;
+
             if (durationDays > 1) {
-                dayInput.min = '1';
-                dayInput.max = String(durationDays);
-                if (!dayInput.value) dayInput.value = '1';
-                dayHint.textContent = `第 x 天提醒，范围 1-${durationDays}`;
+                const dayOptions = Array.from({ length: durationDays }, (_, idx) =>
+                    `<option value="day:${idx + 1}">第${idx + 1}天</option>`
+                ).join('');
+                daySelect.innerHTML = `${dayOptions}<option value="before">提前</option>`;
+                daySelect.value = (previousValue?.startsWith('day:') || previousValue === 'before') ? previousValue : 'day:1';
+                if (!daySelect.value) daySelect.value = 'day:1';
+                dayHint.textContent = `可选第1天到第${durationDays}天，或提前 x 天`;
             } else {
-                dayInput.min = '-1';
-                dayInput.max = '1';
-                if (!dayInput.value) dayInput.value = '1';
-                dayHint.textContent = '第 x 天提醒，0/1 表示当天，-1 表示提前一天';
+                daySelect.innerHTML = '<option value="today">当天</option><option value="before">提前</option>';
+                daySelect.value = previousValue === 'before' ? 'before' : 'today';
+                if (!daySelect.value) daySelect.value = 'today';
+                dayHint.textContent = '可选当天，或提前 x 天';
             }
+            beforeDaysInput.min = '1';
+            if (!beforeDaysInput.value || Number.parseInt(beforeDaysInput.value, 10) < 1) {
+                beforeDaysInput.value = '1';
+            }
+            beforeDaysWrapper.style.display = daySelect.value === 'before' ? 'flex' : 'none';
 
             if (customReminderInput.value.includes('T')) {
                 customReminderInput.value = this.getCustomReminderTimeValue(customReminderInput.value);
@@ -2881,13 +2944,16 @@ export class QuickReminderDialog {
 
             if (addPresetBtn) {
                 addPresetBtn.disabled = true;
-                addPresetBtn.title = '重复任务请直接设置第 x 天和时间';
+                addPresetBtn.title = '重复任务请直接设置提醒日与时间';
             }
         } else {
             customReminderInput.type = 'datetime-local';
             dayWrapper.style.display = 'none';
+            beforeDaysWrapper.style.display = 'none';
             dayHint.style.display = 'none';
-            dayInput.value = '';
+            daySelect.innerHTML = '<option value="today">当天</option><option value="before">提前</option>';
+            daySelect.value = 'today';
+            beforeDaysInput.value = '1';
             if (addPresetBtn) {
                 addPresetBtn.disabled = false;
                 addPresetBtn.title = '';
@@ -2926,31 +2992,58 @@ export class QuickReminderDialog {
             timeInput.style.cssText = 'flex: 1 1 140px; min-width: 0;';
             timeInput.value = isRepeatMode ? this.getCustomReminderTimeValue(normalizedItem.time) : (normalizedItem.time || '');
 
-            let dayInput: HTMLInputElement | null = null;
+            let daySelect: HTMLSelectElement | null = null;
+            let beforeDaysInput: HTMLInputElement | null = null;
             let dayWrapper: HTMLDivElement | null = null;
             if (isRepeatMode) {
                 dayWrapper = document.createElement('div');
-                dayWrapper.style.cssText = 'display: flex; align-items: center; gap: 6px; flex: 0 0 auto;';
-                const dayPrefix = document.createElement('span');
-                dayPrefix.textContent = '第';
-                dayInput = document.createElement('input');
-                dayInput.type = 'number';
-                dayInput.className = 'b3-text-field';
-                dayInput.style.cssText = 'width: 72px;';
-                dayInput.step = '1';
-                const daySuffix = document.createElement('span');
-                daySuffix.textContent = '天';
+                dayWrapper.style.cssText = 'display: flex; align-items: center; gap: 6px; flex: 0 0 auto; flex-wrap: wrap;';
+                daySelect = document.createElement('select');
+                daySelect.className = 'b3-text-field';
+                daySelect.style.cssText = 'min-width: 120px;';
+                const selection = this.getCustomReminderDaySelection(normalizedItem, date, endDate);
                 if (durationDays > 1) {
-                    dayInput.min = '1';
-                    dayInput.max = String(durationDays);
-                    dayInput.title = `第x天，范围 1-${durationDays}`;
+                    const options = Array.from({ length: durationDays }, (_, idx) => {
+                        const day = idx + 1;
+                        return `<option value="day:${day}">第${day}天</option>`;
+                    }).join('') + '<option value="before">提前</option>';
+                    daySelect.innerHTML = options;
+                    daySelect.value = selection.selectValue.startsWith('day:') || selection.selectValue === 'before'
+                        ? selection.selectValue
+                        : 'day:1';
                 } else {
-                    dayInput.title = '第x天，0/1 表示当天，-1 表示提前一天';
+                    daySelect.innerHTML = '<option value="today">当天</option><option value="before">提前</option>';
+                    daySelect.value = selection.selectValue === 'before' ? 'before' : 'today';
                 }
-                dayInput.value = String(this.getCustomReminderDayValue(normalizedItem, date, endDate));
-                dayWrapper.appendChild(dayPrefix);
-                dayWrapper.appendChild(dayInput);
-                dayWrapper.appendChild(daySuffix);
+                const beforeWrapper = document.createElement('div');
+                beforeWrapper.style.cssText = `display: ${daySelect.value === 'before' ? 'flex' : 'none'}; align-items: center; gap: 6px;`;
+                beforeDaysInput = document.createElement('input');
+                beforeDaysInput.type = 'number';
+                beforeDaysInput.className = 'b3-text-field';
+                beforeDaysInput.style.cssText = 'width: 72px;';
+                beforeDaysInput.min = '1';
+                beforeDaysInput.step = '1';
+                beforeDaysInput.value = String(selection.beforeDays);
+                const beforeSuffix = document.createElement('span');
+                beforeSuffix.textContent = '天';
+                beforeWrapper.appendChild(beforeDaysInput);
+                beforeWrapper.appendChild(beforeSuffix);
+
+                dayWrapper.appendChild(daySelect);
+                dayWrapper.appendChild(beforeWrapper);
+
+                daySelect.addEventListener('change', () => {
+                    beforeWrapper.style.display = daySelect?.value === 'before' ? 'flex' : 'none';
+                    this.customTimes[index] = this.buildCustomTimeItem(
+                        timeInput.value || '',
+                        this.customTimes[index]?.note || '',
+                        daySelect?.value || '',
+                        beforeDaysInput?.value || '',
+                        date,
+                        endDate
+                    );
+                    this.renderCustomTimeList();
+                });
             }
 
             const noteInput = document.createElement('input');
@@ -2977,18 +3070,39 @@ export class QuickReminderDialog {
                     this.renderCustomTimeList();
                     return;
                 }
-                this.customTimes[index] = this.buildCustomTimeItem(v, this.customTimes[index]?.note || '', dayInput?.value || '', date, endDate);
+                this.customTimes[index] = this.buildCustomTimeItem(
+                    v,
+                    this.customTimes[index]?.note || '',
+                    daySelect?.value || '',
+                    beforeDaysInput?.value || '',
+                    date,
+                    endDate
+                );
             });
 
-            dayInput?.addEventListener('change', () => {
-                this.customTimes[index] = this.buildCustomTimeItem(timeInput.value || '', this.customTimes[index]?.note || '', dayInput?.value || '', date, endDate);
+            beforeDaysInput?.addEventListener('change', () => {
+                this.customTimes[index] = this.buildCustomTimeItem(
+                    timeInput.value || '',
+                    this.customTimes[index]?.note || '',
+                    daySelect?.value || '',
+                    beforeDaysInput?.value || '',
+                    date,
+                    endDate
+                );
                 this.renderCustomTimeList();
             });
 
             noteInput.addEventListener('input', () => {
                 const v = noteInput.value?.trim();
                 if (!this.customTimes[index]) {
-                    this.customTimes[index] = this.buildCustomTimeItem(timeInput.value || '', v, dayInput?.value || '', date, endDate);
+                    this.customTimes[index] = this.buildCustomTimeItem(
+                        timeInput.value || '',
+                        v,
+                        daySelect?.value || '',
+                        beforeDaysInput?.value || '',
+                        date,
+                        endDate
+                    );
                 } else {
                     this.customTimes[index].note = v;
                 }
@@ -3015,7 +3129,7 @@ export class QuickReminderDialog {
         if (!timeOrItem) return;
         const { date, endDate } = this.getCurrentReminderDateRange();
         const item = typeof timeOrItem === 'string'
-            ? this.buildCustomTimeItem(timeOrItem, note, '', date, endDate)
+            ? this.buildCustomTimeItem(timeOrItem, note, '', '', date, endDate)
             : this.normalizeCustomTimeItem(timeOrItem, date, endDate);
         // 直接添加，允许重复时间
         this.customTimes.push(item);
@@ -3332,10 +3446,18 @@ export class QuickReminderDialog {
         const addPresetBtn = this.dialog.element.querySelector('#quickAddPresetBtn') as HTMLButtonElement;
         const customTimeInputArea = this.dialog.element.querySelector('#quickCustomTimeInputArea') as HTMLElement;
         const customReminderInput = this.dialog.element.querySelector('#quickCustomReminderTime') as HTMLInputElement;
-        const customReminderDayInput = this.dialog.element.querySelector('#quickCustomReminderDayValue') as HTMLInputElement;
+        const customReminderDaySelect = this.dialog.element.querySelector('#quickCustomReminderDayValue') as HTMLSelectElement;
+        const customReminderBeforeDaysWrapper = this.dialog.element.querySelector('#quickCustomReminderBeforeDaysWrapper') as HTMLElement;
+        const customReminderBeforeDaysInput = this.dialog.element.querySelector('#quickCustomReminderBeforeDays') as HTMLInputElement;
         const customReminderNoteInput = this.dialog.element.querySelector('#quickCustomReminderNote') as HTMLInputElement;
         const cancelCustomTimeBtn = this.dialog.element.querySelector('#quickCancelCustomTimeBtn') as HTMLButtonElement;
         const presetDropdown = this.dialog.element.querySelector('#quickPresetDropdown') as HTMLElement;
+
+        customReminderDaySelect?.addEventListener('change', () => {
+            if (customReminderBeforeDaysWrapper) {
+                customReminderBeforeDaysWrapper.style.display = customReminderDaySelect.value === 'before' ? 'flex' : 'none';
+            }
+        });
 
         // 添加自定义时间按钮 - 直接添加当前时间
         addCustomTimeBtn?.addEventListener('click', () => {
@@ -3779,8 +3901,11 @@ export class QuickReminderDialog {
                     customReminderInput.value = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
                 }
 
-                if (isRepeatMode && customReminderDayInput && !customReminderDayInput.value) {
-                    customReminderDayInput.value = '1';
+                if (isRepeatMode && customReminderDaySelect && !customReminderDaySelect.value) {
+                    customReminderDaySelect.value = this.getRepeatCustomReminderDurationDays(dateInput?.value, endDateInput?.value) > 1 ? 'day:1' : 'today';
+                }
+                if (isRepeatMode && customReminderBeforeDaysInput && (!customReminderBeforeDaysInput.value || Number.parseInt(customReminderBeforeDaysInput.value, 10) < 1)) {
+                    customReminderBeforeDaysInput.value = '1';
                 }
             } catch (e) {
                 console.warn('初始化自定义提醒时间失败:', e);
