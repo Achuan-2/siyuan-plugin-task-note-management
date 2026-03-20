@@ -414,9 +414,24 @@ function checkCustomRepeat(currentDate: Date, originalDate: Date, repeatConfig: 
  */
 function checkEbbinghausRepeat(currentDate: Date, originalDate: Date, repeatConfig: RepeatConfig): boolean {
     const daysDiff = Math.floor((currentDate.getTime() - originalDate.getTime()) / (24 * 60 * 60 * 1000));
+    // 艾宾浩斯规则：
+    // 1) 首次实例应为当天（daysDiff = 0）
+    // 2) 默认检查点为 1,2,4,7,15 天
+    // 3) 达到 15 天后，固定每 15 天重复一次（30,45,60...）
     const pattern = repeatConfig.ebbinghausPattern || [1, 2, 4, 7, 15];
+    if (daysDiff < 0) {
+        return false;
+    }
+    if (daysDiff === 0) {
+        return true;
+    }
+    if (pattern.includes(daysDiff)) {
+        return true;
+    }
 
-    return pattern.includes(daysDiff);
+    const maxPatternDay = pattern.length > 0 ? Math.max(...pattern) : 15;
+    const fixedInterval = 15;
+    return daysDiff > maxPatternDay && (daysDiff - maxPatternDay) % fixedInterval === 0;
 }
 
 /**
