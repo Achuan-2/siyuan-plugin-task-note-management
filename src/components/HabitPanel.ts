@@ -818,6 +818,19 @@ export class HabitPanel {
         }
     }
 
+    private toggleGroupCollapseUI(groupContainer: HTMLElement, groupId: string, isCollapsed: boolean) {
+        const collapseIcon = groupContainer.querySelector('.habit-group__collapse-icon') as HTMLElement;
+        const groupContent = groupContainer.querySelector('.habit-group__content') as HTMLElement;
+        
+        if (collapseIcon) {
+            collapseIcon.innerHTML = isCollapsed ? '▶' : '▼';
+        }
+        
+        if (groupContent) {
+            groupContent.style.display = isCollapsed ? 'none' : '';
+        }
+    }
+
     private renderGroup(groupId: string, habits: Habit[]) {
         const groupContainer = document.createElement('div');
         groupContainer.className = 'habit-group';
@@ -842,88 +855,91 @@ export class HabitPanel {
         groupHeader.appendChild(groupTitle);
 
         groupHeader.addEventListener('click', () => {
-            if (this.collapsedGroups.has(groupId)) {
+            const isCollapsed = this.collapsedGroups.has(groupId);
+            if (isCollapsed) {
                 this.collapsedGroups.delete(groupId);
             } else {
                 this.collapsedGroups.add(groupId);
             }
-            this.loadHabits();
+            this.saveCollapseStates();
+            // 只更新当前分组的 UI，不刷新整个列表
+            this.toggleGroupCollapseUI(groupContainer, groupId, !isCollapsed);
         });
 
         groupContainer.appendChild(groupHeader);
 
-        // 分组内容
-        if (!isCollapsed) {
-            const groupContent = document.createElement('div');
-            groupContent.className = 'habit-group__content';
-
-            // 对分组内的习惯进行排序
-            const sortedHabits = this.sortHabitsInGroup(habits);
-            sortedHabits.forEach(habit => {
-                const habitCard = this.createHabitCard(habit);
-                const isAndroid = getFrontend().endsWith('mobile') || getBackend().endsWith('android');
-                if (!isAndroid) {                // 启用拖拽：仅在同一分组内按优先级排序时可拖拽调整
-                    habitCard.draggable = true;
-                    habitCard.dataset.habitId = habit.id;
-                    habitCard.style.cursor = 'grab';
-
-                    habitCard.addEventListener('dragstart', (e) => {
-                        this.draggingHabitId = habit.id;
-                        habitCard.style.opacity = '0.5';
-                        habitCard.style.cursor = 'grabbing';
-                        if (e.dataTransfer) {
-                            e.dataTransfer.effectAllowed = 'move';
-                            e.dataTransfer.setData('text/plain', habit.id);
-                        }
-                    });
-
-                    habitCard.addEventListener('dragend', () => {
-                        this.draggingHabitId = null;
-                        habitCard.style.opacity = '';
-                        habitCard.style.cursor = 'grab';
-                        this.clearDragOver();
-                    });
-
-                    habitCard.addEventListener('dragover', (e) => {
-                        if (this.draggingHabitId && this.draggingHabitId !== habit.id) {
-                            e.preventDefault();
-                            const rect = habitCard.getBoundingClientRect();
-                            const pos = (e.clientY - rect.top) < (rect.height / 2) ? 'before' : 'after';
-                            this.setDragOverIndicator(habitCard, pos as 'before' | 'after');
-                        }
-                    });
-
-                    habitCard.addEventListener('dragleave', () => {
-                        this.clearDragOverOn(habitCard);
-                    });
-
-                    habitCard.addEventListener('drop', async (e) => {
-                        e.preventDefault();
-                        if (!this.draggingHabitId || this.draggingHabitId === habit.id) return;
-                        const draggedId = this.draggingHabitId;
-                        const targetId = habit.id;
-
-                        try {
-                            // 支持跨优先级排序，自动更新优先级
-                            await this.reorderHabits(groupId, habit.priority, draggedId, targetId, this.dragOverPosition || 'after');
-                            await this.loadHabits();
-                            showMessage(i18n("sortUpdated"));
-                        } catch (err) {
-                            console.error('reorder failed:', err);
-                            showMessage(i18n("reorderFailed"), 3000, 'error');
-                        }
-                        this.draggingHabitId = null;
-                        this.clearDragOver();
-                    });
-                };
-
-
-                groupContent.appendChild(habitCard);
-            });
-
-            groupContainer.appendChild(groupContent);
+        // 分组内容 - 始终创建，通过 CSS 控制显示/隐藏
+        const groupContent = document.createElement('div');
+        groupContent.className = 'habit-group__content';
+        if (isCollapsed) {
+            groupContent.style.display = 'none';
         }
 
+        // 对分组内的习惯进行排序
+        const sortedHabits = this.sortHabitsInGroup(habits);
+        sortedHabits.forEach(habit => {
+            const habitCard = this.createHabitCard(habit);
+            const isAndroid = getFrontend().endsWith('mobile') || getBackend().endsWith('android');
+            if (!isAndroid) {                // 启用拖拽：仅在同一分组内按优先级排序时可拖拽调整
+                habitCard.draggable = true;
+                habitCard.dataset.habitId = habit.id;
+                habitCard.style.cursor = 'grab';
+
+                habitCard.addEventListener('dragstart', (e) => {
+                    this.draggingHabitId = habit.id;
+                    habitCard.style.opacity = '0.5';
+                    habitCard.style.cursor = 'grabbing';
+                    if (e.dataTransfer) {
+                        e.dataTransfer.effectAllowed = 'move';
+                        e.dataTransfer.setData('text/plain', habit.id);
+                    }
+                });
+
+                habitCard.addEventListener('dragend', () => {
+                    this.draggingHabitId = null;
+                    habitCard.style.opacity = '';
+                    habitCard.style.cursor = 'grab';
+                    this.clearDragOver();
+                });
+
+                habitCard.addEventListener('dragover', (e) => {
+                    if (this.draggingHabitId && this.draggingHabitId !== habit.id) {
+                        e.preventDefault();
+                        const rect = habitCard.getBoundingClientRect();
+                        const pos = (e.clientY - rect.top) < (rect.height / 2) ? 'before' : 'after';
+                        this.setDragOverIndicator(habitCard, pos as 'before' | 'after');
+                    }
+                });
+
+                habitCard.addEventListener('dragleave', () => {
+                    this.clearDragOverOn(habitCard);
+                });
+
+                habitCard.addEventListener('drop', async (e) => {
+                    e.preventDefault();
+                    if (!this.draggingHabitId || this.draggingHabitId === habit.id) return;
+                    const draggedId = this.draggingHabitId;
+                    const targetId = habit.id;
+
+                    try {
+                        // 支持跨优先级排序，自动更新优先级
+                        await this.reorderHabits(groupId, habit.priority, draggedId, targetId, this.dragOverPosition || 'after');
+                        await this.loadHabits();
+                        showMessage(i18n("sortUpdated"));
+                    } catch (err) {
+                        console.error('reorder failed:', err);
+                        showMessage(i18n("reorderFailed"), 3000, 'error');
+                    }
+                    this.draggingHabitId = null;
+                    this.clearDragOver();
+                });
+            };
+
+
+            groupContent.appendChild(habitCard);
+        });
+
+        groupContainer.appendChild(groupContent);
         this.habitsContainer.appendChild(groupContainer);
     }
 
