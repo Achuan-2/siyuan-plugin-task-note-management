@@ -1,4 +1,4 @@
-import { Dialog, showMessage, platformUtils } from "siyuan";
+import { Dialog, showMessage, platformUtils, openEmoji } from "siyuan";
 import { getBlockByID, getBlockDOM } from "../api";
 import { Habit } from "./HabitPanel";
 import { getLocalDateTimeString, getLogicalDateString } from "../utils/dateUtils";
@@ -67,9 +67,81 @@ export class HabitEditDialog {
         let draftCheckInEmojis = JSON.parse(JSON.stringify(this.habit?.checkInEmojis || this.getDefaultCheckInEmojis()));
         let draftHideCheckedToday = !!this.habit?.hideCheckedToday;
 
-        // 习惯标题
+        // 习惯标题 + 图标
         const titleGroup = this.createFormGroup(i18n("habitTitleLabel"), 'text', 'title', this.habit?.title || '');
+        const titleInput = titleGroup.querySelector('input[name="title"]') as HTMLInputElement | null;
+        if (titleInput) {
+            const titleRow = document.createElement('div');
+            titleRow.style.cssText = 'display:flex; align-items:center; gap:8px;';
+
+            const iconBtn = document.createElement('button');
+            iconBtn.type = 'button';
+            iconBtn.className = 'b3-button b3-button--outline';
+            iconBtn.style.cssText = `
+                width: 40px;
+                min-width: 40px;
+                height: 40px;
+                padding: 0;
+                border-radius: 50%;
+                font-size: 20px;
+                line-height: 1;
+                display:flex;
+                align-items:center;
+                justify-content:center;
+            `;
+            iconBtn.textContent = this.habit?.icon || '🌱';
+            iconBtn.title = '点击选择图标';
+            iconBtn.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                this.openBuiltInEmojiPicker(iconBtn);
+            });
+
+            const iconInput = document.createElement('input');
+            iconInput.type = 'hidden';
+            iconInput.name = 'icon';
+            iconInput.value = iconBtn.textContent || '🌱';
+
+            titleInput.style.flex = '1';
+            titleInput.style.minWidth = '0';
+
+            titleRow.appendChild(iconBtn);
+            titleRow.appendChild(titleInput);
+            titleGroup.appendChild(iconInput);
+            titleGroup.appendChild(titleRow);
+        }
         form.appendChild(titleGroup);
+
+        // 习惯颜色
+        const colorGroup = document.createElement('div');
+        colorGroup.style.cssText = 'display:flex; flex-direction:column; gap:6px;';
+        const colorLabel = document.createElement('label');
+        colorLabel.textContent = i18n("habitColorLabel") || '习惯颜色';
+        colorLabel.style.cssText = 'font-weight: bold; font-size: 14px;';
+        const colorRow = document.createElement('div');
+        colorRow.style.cssText = 'display:flex; align-items:center; gap:8px;';
+
+        const initialColor = this.habit?.color || this.generateRandomHabitColor();
+        const colorInput = document.createElement('input');
+        colorInput.type = 'color';
+        colorInput.name = 'color';
+        colorInput.value = initialColor;
+        colorInput.className = 'b3-text-field';
+        colorInput.style.cssText = 'width: 64px; height: 36px; padding: 2px 4px;';
+
+        const randomColorBtn = document.createElement('button');
+        randomColorBtn.type = 'button';
+        randomColorBtn.className = 'b3-button b3-button--outline';
+        randomColorBtn.textContent = i18n("randomColor") || '随机颜色';
+        randomColorBtn.addEventListener('click', () => {
+            colorInput.value = this.generateRandomHabitColor();
+        });
+
+        colorRow.appendChild(colorInput);
+        colorRow.appendChild(randomColorBtn);
+        colorGroup.appendChild(colorLabel);
+        colorGroup.appendChild(colorRow);
+        form.appendChild(colorGroup);
 
         // 打卡目标设置（按次数/按番茄）
         const goalGroup = document.createElement('div');
@@ -338,10 +410,6 @@ export class HabitEditDialog {
             this.updatePreviewForBlock(blockInput.value, blockPreview).catch(err => console.warn('初始化块预览失败', err));
         }
 
-        // 优先级
-        const priorityGroup = this.createPriorityGroup();
-        form.appendChild(priorityGroup);
-
         // 按钮
         // 创建按钮组，不再作为表单内部直接的子元素；它将被放在 actionContainer（dialog action）中
         const buttonGroup = document.createElement('div');
@@ -360,6 +428,8 @@ export class HabitEditDialog {
             const pomodoroTargetTotal = Math.max(1, pomodoroHours * 60 + pomodoroMinutes);
             const tempHabit: Habit = {
                 id: this.habit?.id || `habit-temp-${Date.now()}`,
+                icon: (form.querySelector('input[name="icon"]') as HTMLInputElement | null)?.value || this.habit?.icon || '🌱',
+                color: (form.querySelector('input[name="color"]') as HTMLInputElement | null)?.value || this.habit?.color || this.generateRandomHabitColor(),
                 title: titleInput?.value?.trim() || this.habit?.title || i18n("newHabitTitle"),
                 target: goalType === 'pomodoro' ? pomodoroTargetTotal : targetValue,
                 goalType,
@@ -752,34 +822,6 @@ export class HabitEditDialog {
         return group;
     }
 
-    private createPriorityGroup(): HTMLElement {
-        const group = document.createElement('div');
-        group.style.cssText = 'display: flex; flex-direction: column; gap: 4px;';
-
-        const label = document.createElement('label');
-        label.textContent = i18n("habitPriorityLabel");
-        label.style.cssText = 'font-weight: bold; font-size: 14px;';
-
-        const select = document.createElement('select');
-        select.name = 'priority';
-        select.className = 'b3-select';
-        select.innerHTML = `
-            <option value="none">${i18n("habitPriorityNone")}</option>
-            <option value="low">${i18n("habitPriorityLow")}</option>
-            <option value="medium">${i18n("habitPriorityMedium")}</option>
-            <option value="high">${i18n("habitPriorityHigh")}</option>
-        `;
-
-        if (this.habit?.priority) {
-            select.value = this.habit.priority;
-        }
-
-        group.appendChild(label);
-        group.appendChild(select);
-
-        return group;
-    }
-
     private createGroupSelect(): HTMLElement {
         const group = document.createElement('div');
         group.style.cssText = 'display: flex; flex-direction: column; gap: 4px;';
@@ -825,6 +867,9 @@ export class HabitEditDialog {
             showMessage(i18n("habitInputRequired"), 3000, 'error');
             return;
         }
+        const icon = ((formData.get('icon') as string) || this.habit?.icon || '🌱').trim() || '🌱';
+        const colorRaw = ((formData.get('color') as string) || this.habit?.color || '').trim();
+        const color = /^#[0-9a-fA-F]{6}$/.test(colorRaw) ? colorRaw : this.generateRandomHabitColor();
 
         const startDate = formData.get('startDate') as string;
         if (!startDate) {
@@ -864,6 +909,8 @@ export class HabitEditDialog {
 
         const habit: Habit = {
             id: this.habit?.id || `habit-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            icon,
+            color,
             title: title.trim(),
             // note: (formData.get('note') as string)?.trim() || undefined, // 移除全局备注
             target: goalType === 'pomodoro' ? Math.max(1, pomodoroTotalMinutes) : targetCount,
@@ -880,7 +927,8 @@ export class HabitEditDialog {
             reminderTime: undefined, // deprecated: will keep first value for compatibility below
             reminderTimes: [],
             blockId: parsedBlockId || undefined,
-            priority: formData.get('priority') as any || 'none',
+            // 保留兼容字段，不再在编辑界面展示优先级
+            priority: this.habit?.priority || 'none',
             groupId: formData.get('groupId') as string === 'none' ? undefined : formData.get('groupId') as string,
             checkInEmojis: JSON.parse(JSON.stringify(draftCheckInEmojis && draftCheckInEmojis.length > 0 ? draftCheckInEmojis : this.getDefaultCheckInEmojis())),
             checkIns: this.habit?.checkIns || {},
@@ -1083,6 +1131,28 @@ export class HabitEditDialog {
         }
     }
 
+    private openBuiltInEmojiPicker(target: HTMLElement) {
+        const rect = target.getBoundingClientRect();
+        openEmoji({
+            hideDynamicIcon: true,
+            hideCustomIcon: true,
+            position: {
+                x: rect.left,
+                y: rect.bottom
+            },
+            selectedCB: (emojiCode: string) => {
+                const codePoints = emojiCode.split(/[-\s]+/).map(cp => parseInt(cp, 16));
+                const selectedEmoji = String.fromCodePoint(...codePoints);
+                target.textContent = selectedEmoji;
+                const form = target.closest('form');
+                const iconInput = form?.querySelector('input[name="icon"]') as HTMLInputElement | null;
+                if (iconInput) {
+                    iconInput.value = selectedEmoji;
+                }
+            }
+        });
+    }
+
     private async updatePreviewForBlock(blockId: string, previewEl: HTMLElement) {
         try {
             const block = await getBlockByID(blockId);
@@ -1139,5 +1209,31 @@ export class HabitEditDialog {
             { emoji: '❌', meaning: i18n("checkInFailed") || '未完成', promptNote: false, countsAsSuccess:false },
             { emoji: '⭕️', meaning: i18n("partialCompleted") || '部分完成', promptNote: false, countsAsSuccess:false }
         ];
+    }
+
+    private generateRandomHabitColor(): string {
+        const hue = Math.floor(Math.random() * 360);
+        const saturation = 55 + Math.floor(Math.random() * 25); // 55-79
+        const lightness = 48 + Math.floor(Math.random() * 12); // 48-59
+        return this.hslToHex(hue, saturation, lightness);
+    }
+
+    private hslToHex(h: number, s: number, l: number): string {
+        const sat = s / 100;
+        const lig = l / 100;
+        const c = (1 - Math.abs(2 * lig - 1)) * sat;
+        const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+        const m = lig - c / 2;
+        let r = 0, g = 0, b = 0;
+
+        if (h < 60) { r = c; g = x; b = 0; }
+        else if (h < 120) { r = x; g = c; b = 0; }
+        else if (h < 180) { r = 0; g = c; b = x; }
+        else if (h < 240) { r = 0; g = x; b = c; }
+        else if (h < 300) { r = x; g = 0; b = c; }
+        else { r = c; g = 0; b = x; }
+
+        const toHex = (v: number) => Math.round((v + m) * 255).toString(16).padStart(2, '0');
+        return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
     }
 }

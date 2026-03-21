@@ -1,33 +1,35 @@
+<script lang="ts">
+import { onMount, onDestroy } from "svelte";
+
+export let plugin: any;
+let host: HTMLDivElement;
+let statsView: any = null;
+
 import { Dialog } from "siyuan";
 import { showMessage } from "siyuan";
 import { confirm } from "siyuan";
-import { PomodoroRecordManager, PomodoroSession } from "../utils/pomodoroRecord";
-import { i18n } from "../pluginInstance";
-import { getLocalDateString, getLogicalDateString, getDayStartMinutes, getLocaleTag } from "../utils/dateUtils";
-import { init, use, EChartsType } from 'echarts/core';
+import { PomodoroRecordManager } from "../../utils/pomodoroRecord";
+import { i18n } from "../../pluginInstance";
+import { getLocalDateString, getLogicalDateString, getDayStartMinutes, getLocaleTag } from "../../utils/dateUtils";
+import { init, use } from 'echarts/core';
 import { PieChart, HeatmapChart, CustomChart } from 'echarts/charts';
 import { TooltipComponent, VisualMapComponent, GridComponent, TitleComponent, LegendComponent, CalendarComponent } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
-import { formatDate } from "@fullcalendar/core";
+import { setLastStatsMode } from "./statsMode";
 
-export const STATS_MODE_STORAGE_KEY = "siyuan-plugin-task-note-management:stats-mode";
-
-export function getLastStatsMode(): 'pomodoro' | 'task' {
-    try {
-        const value = localStorage.getItem(STATS_MODE_STORAGE_KEY);
-        return value === 'task' ? 'task' : 'pomodoro';
-    } catch {
-        return 'pomodoro';
-    }
-}
-
-export function setLastStatsMode(mode: 'pomodoro' | 'task'): void {
-    try {
-        localStorage.setItem(STATS_MODE_STORAGE_KEY, mode);
-    } catch {
-        // ignore storage failures
-    }
-}
+type PomodoroSession = {
+    id: string;
+    type: 'work' | 'shortBreak' | 'longBreak';
+    eventId: string;
+    eventTitle: string;
+    startTime: string;
+    endTime: string;
+    duration: number;
+    plannedDuration: number;
+    completed: boolean;
+    isCountUp?: boolean;
+    count?: number;
+};
 
 // 注册 ECharts 组件
 use([
@@ -43,8 +45,10 @@ use([
     CanvasRenderer
 ]);
 
-export class PomodoroStatsView {
+class PomodoroStatsView {
     private dialog: Dialog;
+    private embeddedHost?: HTMLElement;
+    private embeddedMode: boolean = false;
     private recordManager: PomodoroRecordManager;
     private currentView: 'overview' | 'details' | 'records' | 'trends' | 'timeline' | 'heatmap' = 'overview';
     private currentTimeRange: 'today' | 'week' | 'month' | 'year' = 'today';
@@ -53,13 +57,24 @@ export class PomodoroStatsView {
     private currentMonthOffset: number = 0; // 月偏移量，0表示本月，-1表示上月，1表示下月
     private currentYearOffset: number = 0; // 年偏移量，0表示今年，-1表示去年，1表示明年
     private plugin;
-    constructor(plugin) {
+    constructor(plugin: any, embeddedHost?: HTMLElement) {
         this.recordManager = PomodoroRecordManager.getInstance();
         this.plugin = plugin;
+        this.embeddedHost = embeddedHost;
+        this.embeddedMode = !!embeddedHost;
         this.createDialog();
     }
 
     private createDialog() {
+        if (this.embeddedHost) {
+            this.embeddedHost.innerHTML = this.createContent();
+            this.dialog = {
+                element: this.embeddedHost,
+                destroy: () => { }
+            } as any;
+            return;
+        }
+
         this.dialog = new Dialog({
             title: "🍅 " + i18n("pomodoroStats"),
             content: this.createContent(),
@@ -92,14 +107,16 @@ export class PomodoroStatsView {
     private createContent(): string {
         return `
             <div class="pomodoro-stats-view">
-                <div class="stats-switch">
-                    <button class="stats-switch-btn" data-mode="task">
-                        ✅ ${i18n("taskStats")}
-                    </button>
-                    <button class="stats-switch-btn active" data-mode="pomodoro">
-                        🍅 ${i18n("pomodoroStats")}
-                    </button>
-                </div>
+                ${this.embeddedMode ? '' : `
+                    <div class="stats-switch">
+                        <button class="stats-switch-btn" data-mode="task">
+                            ✅ ${i18n("taskStats")}
+                        </button>
+                        <button class="stats-switch-btn active" data-mode="pomodoro">
+                            🍅 ${i18n("pomodoroStats")}
+                        </button>
+                    </div>
+                `}
                 <!-- 导航标签 -->
                 <div class="stats-nav">
                     <button class="nav-btn ${this.currentView === 'overview' ? 'active' : ''}" data-view="overview">
@@ -1584,14 +1601,10 @@ export class PomodoroStatsView {
         const target = event.target as HTMLElement;
 
         if (target.classList.contains('stats-switch-btn')) {
+            if (this.embeddedMode) return;
             const mode = target.dataset.mode;
             if (mode === 'task') {
                 setLastStatsMode('task');
-                this.dialog.destroy();
-                import("./TaskStatsView").then(({ TaskStatsView }) => {
-                    const statsView = new TaskStatsView(this.plugin);
-                    statsView.show();
-                });
             }
             return;
         }
@@ -1790,3 +1803,24 @@ export class PomodoroStatsView {
         });
     }
 }
+
+
+onMount(async () => {
+    statsView = new PomodoroStatsView(plugin, host);
+    statsView.show();
+});
+
+onDestroy(() => {
+    try {
+        statsView?.dialog?.destroy?.();
+    } catch {
+        // ignore
+    }
+});
+</script>
+
+<div class="stats-tab-host" bind:this={host}></div>
+
+<style>
+    .stats-tab-host { height: 100%; }
+</style>

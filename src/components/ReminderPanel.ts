@@ -11,8 +11,8 @@ import { BlockBindingDialog } from "./BlockBindingDialog";
 import { i18n } from "../pluginInstance";
 import { generateRepeatInstances, getRepeatDescription, getDaysDifference, addDaysToDate, generateSubtreeInstances } from "../utils/repeatUtils";
 import { PomodoroTimer } from "./PomodoroTimer";
-import { PomodoroStatsView, getLastStatsMode } from "./PomodoroStatsView";
-import { TaskStatsView } from "./TaskStatsView";
+import { getLastStatsMode } from "./stats/statsMode";
+import { showStatsDialog } from "./stats/ShowStatsDialog";
 import { PomodoroManager } from "../utils/pomodoroManager";
 import { PomodoroRecordManager } from "../utils/pomodoroRecord"; // Add import
 import { getSolarDateLunarString, getNextLunarMonthlyDate, getNextLunarYearlyDate } from "../utils/lunarUtils";
@@ -316,7 +316,7 @@ export class ReminderPanel {
             const pomodoroStatsBtn = document.createElement('button');
             pomodoroStatsBtn.className = 'b3-button b3-button--outline';
             pomodoroStatsBtn.innerHTML = '📊';
-            pomodoroStatsBtn.title = i18n("pomodoroStats");
+            pomodoroStatsBtn.title = i18n("statsView");
             pomodoroStatsBtn.addEventListener('click', () => {
                 this.showPomodoroStatsView();
             });
@@ -9091,13 +9091,8 @@ export class ReminderPanel {
     private showPomodoroStatsView() {
         try {
             const lastMode = getLastStatsMode();
-            if (lastMode === 'task') {
-                const statsView = new TaskStatsView(this.plugin);
-                statsView.show();
-            } else {
-                const statsView = new PomodoroStatsView(this.plugin);
-                statsView.show();
-            }
+            const initialTab = lastMode === 'task' ? 'task' : 'pomodoro';
+            showStatsDialog(this.plugin, initialTab);
         } catch (error) {
             console.error('打开番茄钟统计视图失败:', error);
             showMessage("打开番茄钟统计视图失败");

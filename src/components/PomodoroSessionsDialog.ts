@@ -692,7 +692,7 @@ export class PomodoroSessionsDialog {
         if (!session) return;
 
         confirm(
-            "⚠️ " + (i18n("confirmDelete") || "确认删除"),
+            "⚠️ " + (i18n("confirmDeleteNormal") || "确认删除"),
             `<div style="padding: 16px;">
                 <p>${i18n("confirmDeletePomodoro") || "确定要删除这个番茄钟记录吗？"}</p>
                 <p style="color: var(--b3-theme-on-surface-light); font-size: 12px;">

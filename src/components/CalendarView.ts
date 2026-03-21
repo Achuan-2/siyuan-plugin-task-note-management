@@ -29,7 +29,7 @@ import { Solar } from 'lunar-typescript';
 import { VipManager } from "../utils/vip";
 import { createPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
 import { HabitEditDialog } from "./HabitEditDialog";
-import { HabitStatsDialog } from "./HabitStatsDialog";
+import { HabitStatsDialog } from "./stats/HabitStatsDialog";
 export class CalendarView {
     private container: HTMLElement;
     private calendar: Calendar;
@@ -3104,7 +3104,7 @@ export class CalendarView {
                 await this.plugin.saveHabitData(data);
                 window.dispatchEvent(new CustomEvent('habitUpdated'));
                 await this.refreshEvents(true);
-            });
+            }, this.plugin);
             dialog.show();
         } catch (error) {
             console.error('打开习惯统计失败:', error);

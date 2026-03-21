@@ -1,25 +1,29 @@
 import { Dialog } from "siyuan";
-import type { Habit } from "./HabitPanel";
-import { HabitDayDialog } from "./HabitDayDialog";
+import type { Habit } from "../HabitPanel";
+import { HabitDayDialog } from "../HabitDayDialog";
+import { PomodoroRecordManager } from "../../utils/pomodoroRecord";
 import { init, use, EChartsType } from 'echarts/core';
-import { HeatmapChart, ScatterChart, CustomChart } from 'echarts/charts';
-import { TooltipComponent, VisualMapComponent, GridComponent, TitleComponent, LegendComponent, CalendarComponent } from 'echarts/components';
+import { ScatterChart, CustomChart } from 'echarts/charts';
+import { TooltipComponent, GridComponent, TitleComponent, LegendComponent } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
-import { i18n } from "../pluginInstance";
+import { i18n } from "../../pluginInstance";
 
 // 注册 ECharts 组件
 use([
-    HeatmapChart,
     ScatterChart,
     CustomChart,
     TooltipComponent,
-    VisualMapComponent,
     GridComponent,
     TitleComponent,
     LegendComponent,
-    CalendarComponent,
     CanvasRenderer
 ]);
+
+const COLOR_POOL = [
+    "#7bc96f", "#6ccff6", "#f7a8b8", "#c49bff", "#f4b183",
+    "#82c4c3", "#89b4fa", "#f9c97f", "#a3d9a5", "#e8a8ff",
+    "#ff9e80", "#9ad0f5", "#ffd166", "#90be6d", "#ffadad"
+];
 
 export class HabitStatsDialog {
     private dialog: Dialog;
@@ -33,10 +37,14 @@ export class HabitStatsDialog {
     private resizeObservers: ResizeObserver[] = [];
 
     private onSave?: (habit: Habit) => Promise<void>;
+    private plugin?: any;
+    private pomodoroRecordManager: PomodoroRecordManager | null = null;
+    private pomodoroReady = false;
 
-    constructor(habit: Habit, onSave?: (habit: Habit) => Promise<void>) {
+    constructor(habit: Habit, onSave?: (habit: Habit) => Promise<void>, plugin?: any) {
         this.habit = habit;
         this.onSave = onSave;
+        this.plugin = plugin;
     }
 
     show() {
@@ -54,6 +62,19 @@ export class HabitStatsDialog {
         if (!container) return;
 
         this.currentMonthDate = new Date();
+        void this.initPomodoroAndRender(container);
+    }
+
+    private async initPomodoroAndRender(container: HTMLElement) {
+        try {
+            this.pomodoroRecordManager = PomodoroRecordManager.getInstance(this.plugin);
+            await this.pomodoroRecordManager.initialize();
+            await this.pomodoroRecordManager.refreshData();
+            this.pomodoroReady = true;
+        } catch (error) {
+            console.warn("HabitStatsDialog 初始化番茄数据失败", error);
+            this.pomodoroReady = false;
+        }
         this.renderContainer(container);
     }
 
@@ -237,6 +258,12 @@ export class HabitStatsDialog {
      * @returns true表示达标，false表示未达标或未打卡
      */
     private isCheckInComplete(dateStr: string): boolean {
+        if (this.getHabitGoalType(this.habit) === "pomodoro") {
+            const target = this.getHabitPomodoroTargetMinutes(this.habit);
+            const current = this.getHabitPomodoroFocusMinutes(this.habit, dateStr);
+            return current >= target;
+        }
+
         const checkIn = this.habit.checkIns?.[dateStr];
         if (!checkIn) return false;
 
@@ -259,9 +286,51 @@ export class HabitStatsDialog {
             return emojiConfig ? (emojiConfig.countsAsSuccess !== false) : true;
         });
 
-        const successCount = successEmojis.length;
+        let successCount = successEmojis.length;
+        // 兼容旧数据：只有 count，没有 status/entries
+        if (successCount === 0 && typeof checkIn.count === "number" && checkIn.count > 0) {
+            successCount = checkIn.count;
+        }
         const target = this.habit.target || 1;
         return successCount >= target;
+    }
+
+    private getHabitGoalType(habit: Habit): "count" | "pomodoro" {
+        return habit.goalType === "pomodoro" ? "pomodoro" : "count";
+    }
+
+    private getHabitPomodoroTargetMinutes(habit: Habit): number {
+        const hours = Math.max(0, Number((habit as any).pomodoroTargetHours) || 0);
+        const minutes = Math.max(0, Number((habit as any).pomodoroTargetMinutes) || 0);
+        const total = (hours * 60) + minutes;
+        if (total > 0) return total;
+        return Math.max(1, Number(habit.target) || 1);
+    }
+
+    private getHabitPomodoroFocusMinutes(habit: Habit, dateStr: string): number {
+        if (!this.pomodoroReady || !this.pomodoroRecordManager) return 0;
+        const direct = this.pomodoroRecordManager.getEventFocusTime(habit.id, dateStr) || 0;
+        const sessions = this.pomodoroRecordManager.getDateSessions(dateStr) || [];
+        const fromInstances = sessions
+            .filter(s => s.type === "work" && s.eventId && s.eventId.startsWith(`${habit.id}_`))
+            .reduce((sum, s) => sum + (s.duration || 0), 0);
+        return Math.max(direct, fromInstances);
+    }
+
+    private getCheckInEmojis(dateStr: string): string[] {
+        const checkIn = this.habit.checkIns?.[dateStr];
+        if (!checkIn) return [];
+        if (checkIn.entries && checkIn.entries.length > 0) {
+            return checkIn.entries.map(entry => entry.emoji).filter(Boolean);
+        }
+        if (checkIn.status && checkIn.status.length > 0) {
+            return checkIn.status.filter(Boolean);
+        }
+        if (typeof checkIn.count === "number" && checkIn.count > 0) {
+            const fallback = this.habit.autoCheckInEmoji || "🍅";
+            return Array.from({ length: Math.min(checkIn.count, 8) }, () => fallback);
+        }
+        return [];
     }
 
     private calculateEmojiStats(): Array<{ emoji: string; count: number; percentage: number }> {
@@ -343,16 +412,21 @@ export class HabitStatsDialog {
         const month = now.getMonth();
         const daysInMonth = new Date(year, month + 1, 0).getDate();
 
+        const habitColor = this.getHabitColor();
+        const habitColorSoft = this.applyAlphaToColor(habitColor, 0.75);
         for (let day = 1; day <= daysInMonth; day++) {
             const date = new Date(year, month, day);
             const dateStr = this.formatLocalDate(date);
             const checkIn = this.habit.checkIns?.[dateStr];
             const isComplete = this.isCheckInComplete(dateStr);
+            const isToday = dateStr === this.formatLocalDate(new Date());
 
             // 根据打卡状态设置背景色：达标为绿色，未达标为橙色，未打卡为默认
             let backgroundColor = 'var(--b3-theme-surface)';
             if (checkIn) {
-                backgroundColor = isComplete ? 'var(--b3-theme-primary-lighter)' : 'rgba(250, 200, 88, 0.3)';
+                backgroundColor = isComplete
+                    ? `color-mix(in srgb, ${habitColorSoft} 28%, white 72%)`
+                    : 'rgba(250, 200, 88, 0.3)';
             }
 
             const dayCell = document.createElement('div');
@@ -364,7 +438,7 @@ export class HabitStatsDialog {
                 border-radius: 4px;
                 font-size: 12px;
                 background: ${backgroundColor};
-                border: 1px solid var(--b3-theme-surface-lighter);
+                border: 1px solid ${isToday ? 'var(--b3-theme-primary)' : 'var(--b3-theme-surface-lighter)'};
             `;
 
             // 显示日期以及状态 emoji（支持多行、自动缩放字体）
@@ -451,7 +525,7 @@ export class HabitStatsDialog {
                         this.habit = updatedHabit;
                     }
                     this.renderMonthlyView(container);
-                });
+                }, this.plugin);
                 dayDialog.show();
             });
 
@@ -470,6 +544,7 @@ export class HabitStatsDialog {
     }
 
     private renderYearlyView(container: HTMLElement) {
+        container.innerHTML = '';
         const section = document.createElement('div');
         section.style.cssText = 'margin-bottom: 24px;';
 
@@ -523,61 +598,143 @@ export class HabitStatsDialog {
         titleRow.appendChild(toolbar);
         section.appendChild(titleRow);
 
-        const yearGrid = document.createElement('div');
-        yearGrid.style.cssText = 'display: grid; grid-template-columns: repeat(12, 1fr); gap: 8px;';
+        const yearCheckInDays = Object.keys(this.habit.checkIns || {})
+            .filter(dateStr => dateStr.startsWith(`${year}-`) && this.isCheckInComplete(dateStr)).length;
+        const daysInYear = new Date(year, 1, 29).getMonth() === 1 ? 366 : 365;
+        const completionRate = daysInYear > 0 ? (yearCheckInDays / daysInYear) * 100 : 0;
 
+        const yearCard = document.createElement('div');
+        yearCard.style.cssText = 'border-radius:16px; background:var(--b3-theme-surface); border:1px solid var(--b3-theme-surface-lighter); padding:12px;';
+
+        const yearCardHeader = document.createElement('div');
+        yearCardHeader.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px;';
+        const yearTitle = document.createElement('div');
+        yearTitle.textContent = `${this.habit.icon || "🌱"} ${this.habit.title}`;
+        yearTitle.style.cssText = 'font-size:15px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;';
+        const habitColor = this.getHabitColor();
+        const habitColorSoft = this.applyAlphaToColor(habitColor, 0.75);
+        const yearMeta = document.createElement('div');
+        yearMeta.style.cssText = `display:flex; align-items:center; gap:10px; font-size:12px; color: color-mix(in srgb, ${habitColorSoft} 70%, var(--b3-theme-on-surface-light) 30%); font-weight:600; white-space:nowrap;`;
+        yearMeta.innerHTML = `<span>${completionRate.toFixed(0)}%</span><span>${yearCheckInDays}${i18n("habitDays")}</span>`;
+        yearCardHeader.appendChild(yearTitle);
+        yearCardHeader.appendChild(yearMeta);
+        yearCard.appendChild(yearCardHeader);
+
+        // 顶部月度统计卡片：每个月达标打卡天数
+        const monthlyStatsGrid = document.createElement('div');
+        monthlyStatsGrid.style.cssText = 'display:grid; grid-template-columns:repeat(6, minmax(0, 1fr)); gap:6px; margin-bottom:10px;';
         for (let month = 0; month < 12; month++) {
-            const monthCard = document.createElement('div');
-            monthCard.style.cssText = 'padding: 8px; background: var(--b3-theme-surface); border-radius: 4px;';
-
-            const monthName = document.createElement('div');
-            monthName.textContent = i18n("monthNames").split(',')[month];
-            monthName.style.cssText = 'font-size: 12px; font-weight: bold; margin-bottom: 4px; text-align: center;';
-            monthCard.appendChild(monthName);
-
-            const daysInMonth = new Date(year, month + 1, 0).getDate();
-            let checkInCount = 0;
-
-            for (let day = 1; day <= daysInMonth; day++) {
-                const date = new Date(year, month, day);
-                const dateStr = this.formatLocalDate(date);
-                // 只统计达标的打卡天数
+            const monthDays = new Date(year, month + 1, 0).getDate();
+            let monthDoneDays = 0;
+            for (let day = 1; day <= monthDays; day++) {
+                const dateStr = this.formatLocalDate(new Date(year, month, day));
                 if (this.isCheckInComplete(dateStr)) {
-                    checkInCount++;
+                    monthDoneDays += 1;
                 }
             }
 
-            const countDiv = document.createElement('div');
-            countDiv.textContent = `${checkInCount}${i18n("habitDays")}`;
-            countDiv.style.cssText = 'font-size: 16px; font-weight: bold; text-align: center; color: var(--b3-theme-primary);';
-            monthCard.appendChild(countDiv);
-
-            yearGrid.appendChild(monthCard);
+            const statCard = document.createElement('div');
+            statCard.style.cssText = 'padding:6px; border-radius:8px; background:var(--b3-theme-background); text-align:center;';
+            statCard.innerHTML = `
+                <div style="font-size:11px; color:var(--b3-theme-on-surface-light);">${month + 1}月</div>
+                <div style="font-size:14px; font-weight:700; color:var(--b3-theme-primary);">${monthDoneDays}${i18n("habitDays")}</div>
+            `;
+            monthlyStatsGrid.appendChild(statCard);
         }
+        yearCard.appendChild(monthlyStatsGrid);
 
-        section.appendChild(yearGrid);
+        const yearGrid = document.createElement('div');
+        yearGrid.style.cssText = 'display:flex; flex-direction:column; gap:4px;';
+        for (let month = 0; month < 12; month++) {
+            const row = document.createElement('div');
+            row.style.cssText = 'display:grid; grid-template-columns:34px 1fr; align-items:center; gap:4px;';
+
+            const label = document.createElement('div');
+            label.textContent = `${month + 1}月`;
+            label.style.cssText = 'font-size:11px; color:var(--b3-theme-on-surface-light); text-align:right;';
+            row.appendChild(label);
+
+            const cells = document.createElement('div');
+            cells.style.cssText = 'display:grid; grid-template-columns:repeat(31, minmax(0, 1fr)); gap:2px;';
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+            for (let day = 1; day <= 31; day++) {
+                if (day > daysInMonth) {
+                    const emptyCell = document.createElement('div');
+                    emptyCell.style.cssText = 'width:100%; aspect-ratio:1; border-radius:3px; background:transparent;';
+                    cells.appendChild(emptyCell);
+                    continue;
+                }
+
+                const date = new Date(year, month, day);
+                const dateStr = this.formatLocalDate(date);
+                const done = this.isCheckInComplete(dateStr);
+                const emojis = this.getCheckInEmojis(dateStr);
+                const isToday = dateStr === this.formatLocalDate(new Date());
+
+                const dayCell = document.createElement('div');
+                dayCell.style.cssText = `
+                    width:100%;
+                    aspect-ratio:1;
+                    border-radius:3px;
+                    background:${done ? `color-mix(in srgb, ${habitColorSoft} 78%, white 22%)` : 'color-mix(in srgb, var(--b3-theme-surface-lighter) 85%, white 15%)'};
+                    border:1px solid ${isToday ? 'var(--b3-theme-primary)' : 'transparent'};
+                    display:flex;
+                    align-items:center;
+                    justify-content:center;
+                    overflow:hidden;
+                    padding:1px;
+                    box-sizing:border-box;
+                    cursor:pointer;
+                `;
+                dayCell.title = `${dateStr}${emojis.length > 0 ? `\n打卡: ${emojis.join(" ")}` : "\n未打卡"}`;
+
+                if (emojis.length > 0) {
+                    const fontSize = emojis.length >= 7 ? 6 : (emojis.length >= 4 ? 7 : 8);
+                    const emojiWrap = document.createElement('div');
+                    emojiWrap.style.cssText = `
+                        width:100%;
+                        height:100%;
+                        display:flex;
+                        flex-wrap:wrap;
+                        align-items:center;
+                        justify-content:center;
+                        align-content:center;
+                        gap:0 1px;
+                        font-size:${fontSize}px;
+                        line-height:1;
+                    `;
+                    emojis.forEach(emoji => {
+                        const span = document.createElement('span');
+                        span.textContent = emoji;
+                        span.style.cssText = 'font-size:inherit; line-height:1;';
+                        emojiWrap.appendChild(span);
+                    });
+                    dayCell.appendChild(emojiWrap);
+                }
+
+                dayCell.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const dayDialog = new HabitDayDialog(this.habit, dateStr, async (updatedHabit) => {
+                        if (this.onSave) {
+                            await this.onSave(updatedHabit);
+                        } else {
+                            this.habit = updatedHabit;
+                        }
+                        this.rerenderYearlyView(container);
+                    }, this.plugin);
+                    dayDialog.show();
+                });
+
+                cells.appendChild(dayCell);
+            }
+
+            row.appendChild(cells);
+            yearGrid.appendChild(row);
+        }
+        yearCard.appendChild(yearGrid);
+        section.appendChild(yearCard);
         container.appendChild(section);
-
-        // 热力图容器
-        const heatmapSection = document.createElement('div');
-        heatmapSection.style.cssText = 'margin-top: 24px;';
-
-        const heatmapTitle = document.createElement('h3');
-        heatmapTitle.textContent = i18n("habitYearlyHeatmap");
-        heatmapTitle.style.marginBottom = '12px';
-        heatmapSection.appendChild(heatmapTitle);
-
-        const heatmapContainer = document.createElement('div');
-        heatmapContainer.style.cssText = 'width: 100%; height: 180px;';
-        heatmapContainer.id = 'habitYearlyHeatmap';
-        heatmapSection.appendChild(heatmapContainer);
-
-        container.appendChild(heatmapSection);
-
-        // 渲染热力图
-        setTimeout(() => {
-            this.renderYearlyHeatmap(heatmapContainer, year);
-        }, 100);
     }
 
     private rerenderYearlyView(container: HTMLElement) {
@@ -585,107 +742,6 @@ export class HabitStatsDialog {
         container.innerHTML = '';
         this.destroyCharts();
         this.renderYearlyView(container);
-    }
-
-    private renderYearlyHeatmap(container: HTMLElement, year: number) {
-        const chart = init(container);
-        this.chartInstances.push(chart);
-
-        // 准备热力图数据
-        const heatmapData: Array<[string, number]> = [];
-        const yearStart = new Date(year, 0, 1);
-        const yearEnd = new Date(year, 11, 31);
-
-        for (let d = new Date(yearStart); d <= yearEnd; d.setDate(d.getDate() + 1)) {
-            const dateStr = this.formatLocalDate(new Date(d));
-            const checkIn = this.habit.checkIns?.[dateStr];
-            // 只有达标的打卡才计入热力图（未达标显示为0）
-            const isComplete = this.isCheckInComplete(dateStr);
-            const count = isComplete ? (checkIn.status?.length || 1) : 0;
-            heatmapData.push([dateStr, count]);
-        }
-
-        // 计算最大值用于颜色映射
-        const maxCount = Math.max(...heatmapData.map(d => d[1]), 1);
-
-        const option: echarts.EChartsOption = {
-            tooltip: {
-                trigger: 'item',
-                formatter: (params: any) => {
-                    const date = params.data[0];
-                    const count = params.data[1];
-                    const dateObj = new Date(date);
-                    const formattedDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
-                    if (count === 0) {
-                        return `${formattedDate}<br/>${i18n("habitNoCheckIn")}`;
-                    }
-                    return `${formattedDate}<br/>${i18n("habitCheckInCount")}: ${count}`;
-                }
-            },
-            visualMap: {
-                min: 0,
-                max: maxCount,
-                calculable: false,
-                hoverLink: false,
-                orient: 'horizontal',
-                left: 'center',
-                bottom: 0,
-                itemWidth: 13,
-                itemHeight: 80,
-                inRange: {
-                    color: ['#ebedf0', '#9be9a8', '#40c463', '#30a14e', '#216e39']
-                },
-                text: [i18n("more"), i18n("less")],
-                textStyle: {
-                    fontSize: 12
-                }
-            },
-            calendar: {
-                top: 20,
-                left: 40,
-                right: 20,
-                bottom: 40,
-                cellSize: 13,
-                range: year,
-                itemStyle: {
-                    borderWidth: 2,
-                    borderColor: 'transparent',
-                    borderRadius: 2
-                },
-                yearLabel: { show: false },
-                dayLabel: {
-                    firstDay: 1,
-                    nameMap: i18n("calendarWeekNames").split(','),
-                    fontSize: 10
-                },
-                monthLabel: {
-                    nameMap: i18n("monthNames").split(','),
-                    fontSize: 11
-                },
-                splitLine: {
-                    show: false
-                }
-            },
-            series: [{
-                type: 'heatmap',
-                coordinateSystem: 'calendar',
-                data: heatmapData,
-                itemStyle: {
-                    borderRadius: 2
-                }
-            }]
-        };
-
-        chart.setOption(option);
-
-        // 响应式
-        const resizeObserver = new ResizeObserver(() => {
-            if (chart && !chart.isDisposed()) {
-                chart.resize();
-            }
-        });
-        resizeObserver.observe(container);
-        this.resizeObservers.push(resizeObserver);
     }
 
     // ==================== 时间统计 Tab ====================
@@ -856,6 +912,30 @@ export class HabitStatsDialog {
             return `${match[1]}:${match[2]}`;
         }
         return null;
+    }
+
+    private getHabitColor(): string {
+        const raw = (this.habit as any).color;
+        if (typeof raw === 'string' && /^#[0-9a-fA-F]{6}$/.test(raw)) {
+            return raw;
+        }
+        const habitId = this.habit?.id || this.habit?.title || "habit";
+        let hash = 0;
+        for (let i = 0; i < habitId.length; i++) {
+            hash = (hash * 31 + habitId.charCodeAt(i)) >>> 0;
+        }
+        return COLOR_POOL[hash % COLOR_POOL.length];
+    }
+
+    private applyAlphaToColor(color: string, alpha: number): string {
+        const safeAlpha = Math.min(1, Math.max(0, alpha));
+        if (/^#[0-9a-fA-F]{6}$/.test(color)) {
+            const r = parseInt(color.slice(1, 3), 16);
+            const g = parseInt(color.slice(3, 5), 16);
+            const b = parseInt(color.slice(5, 7), 16);
+            return `rgba(${r}, ${g}, ${b}, ${safeAlpha})`;
+        }
+        return color;
     }
 
     private renderWeekTimeChart(container: HTMLElement) {

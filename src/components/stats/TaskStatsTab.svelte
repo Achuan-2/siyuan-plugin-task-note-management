@@ -1,12 +1,19 @@
+<script lang="ts">
+import { onMount, onDestroy } from "svelte";
+
+export let plugin: any;
+let host: HTMLDivElement;
+let statsView: any = null;
+
 import { Dialog } from "siyuan";
 import { showMessage } from "siyuan";
 import { confirm } from "siyuan";
-import { PomodoroRecordManager } from "../utils/pomodoroRecord";
-import { i18n } from "../pluginInstance";
-import { compareDateStrings, getLocalDateString, getLogicalDateString, getDayStartMinutes, getLocaleTag } from "../utils/dateUtils";
-import { getFile } from "../api";
-import { generateRepeatInstances } from "../utils/repeatUtils";
-import { setLastStatsMode } from "./PomodoroStatsView";
+import { PomodoroRecordManager } from "../../utils/pomodoroRecord";
+import { i18n } from "../../pluginInstance";
+import { compareDateStrings, getLocalDateString, getLogicalDateString, getDayStartMinutes, getLocaleTag } from "../../utils/dateUtils";
+import { getFile } from "../../api";
+import { generateRepeatInstances } from "../../utils/repeatUtils";
+import { setLastStatsMode } from "./statsMode";
 import { init, use } from 'echarts/core';
 import { PieChart, HeatmapChart, CustomChart } from 'echarts/charts';
 import { TooltipComponent, VisualMapComponent, GridComponent, TitleComponent, LegendComponent, CalendarComponent } from 'echarts/components';
@@ -37,8 +44,10 @@ use([
     CanvasRenderer
 ]);
 
-export class TaskStatsView {
+class TaskStatsView {
     private dialog: Dialog;
+    private embeddedHost?: HTMLElement;
+    private embeddedMode: boolean = false;
     private reminderData: Record<string, any> = {};
     private isLoading = false;
     private isReady = false;
@@ -52,12 +61,23 @@ export class TaskStatsView {
     private projectNameMap: Record<string, string> = {};
     private categoryNameMap: Record<string, string> = {};
     private plugin: any;
-    constructor(plugin?: any) {
+    constructor(plugin?: any, embeddedHost?: HTMLElement) {
         this.plugin = plugin;
+        this.embeddedHost = embeddedHost;
+        this.embeddedMode = !!embeddedHost;
         this.createDialog();
     }
 
     private createDialog() {
+        if (this.embeddedHost) {
+            this.embeddedHost.innerHTML = this.createContent();
+            this.dialog = {
+                element: this.embeddedHost,
+                destroy: () => { }
+            } as any;
+            return;
+        }
+
         this.dialog = new Dialog({
             title: "✅ " + (i18n("taskStats") || "任务统计"),
             content: this.createContent(),
@@ -90,14 +110,16 @@ export class TaskStatsView {
     private createContent(): string {
         return `
             <div class="pomodoro-stats-view">
-                <div class="stats-switch">
-                    <button class="stats-switch-btn active" data-mode="task">
-                        ✅ ${i18n("taskStats")}
-                    </button>
-                    <button class="stats-switch-btn" data-mode="pomodoro">
-                        🍅 ${i18n("pomodoroStats")}
-                    </button>
-                </div>
+                ${this.embeddedMode ? '' : `
+                    <div class="stats-switch">
+                        <button class="stats-switch-btn active" data-mode="task">
+                            ✅ ${i18n("taskStats")}
+                        </button>
+                        <button class="stats-switch-btn" data-mode="pomodoro">
+                            🍅 ${i18n("pomodoroStats")}
+                        </button>
+                    </div>
+                `}
                 <!-- 导航标签 -->
                 <div class="stats-nav">
                     <button class="nav-btn ${this.currentView === 'overview' ? 'active' : ''}" data-view="overview">
@@ -1707,14 +1729,10 @@ export class TaskStatsView {
         const target = event.target as HTMLElement;
 
         if (target.classList.contains('stats-switch-btn')) {
+            if (this.embeddedMode) return;
             const mode = target.dataset.mode;
             if (mode === 'pomodoro') {
                 setLastStatsMode('pomodoro');
-                this.dialog.destroy();
-                import("./PomodoroStatsView").then(({ PomodoroStatsView }) => {
-                    const statsView = new PomodoroStatsView(this.plugin);
-                    statsView.show();
-                });
             }
             return;
         }
@@ -1911,3 +1929,24 @@ export class TaskStatsView {
         });
     }
 }
+
+
+onMount(async () => {
+    statsView = new TaskStatsView(plugin, host);
+    await statsView.show();
+});
+
+onDestroy(() => {
+    try {
+        statsView?.dialog?.destroy?.();
+    } catch {
+        // ignore
+    }
+});
+</script>
+
+<div class="stats-tab-host" bind:this={host}></div>
+
+<style>
+    .stats-tab-host { height: 100%;  }
+</style>
