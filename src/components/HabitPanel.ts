@@ -12,6 +12,7 @@ import { PomodoroManager } from "../utils/pomodoroManager";
 import { PomodoroRecordManager } from "../utils/pomodoroRecord";
 import { createPomodoroStartSubmenu as createSharedPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
 import { showStatsDialog } from "./stats/ShowStatsDialog";
+import { HabitDayDialog } from "./HabitDayDialog";
 
 export interface HabitCheckInEmoji {
     emoji: string;
@@ -820,32 +821,22 @@ export class HabitPanel {
     private renderGroup(groupId: string, habits: Habit[]) {
         const groupContainer = document.createElement('div');
         groupContainer.className = 'habit-group';
-        groupContainer.style.cssText = 'margin-bottom: 16px;';
 
         // 分组头部
         const groupHeader = document.createElement('div');
         groupHeader.className = 'habit-group__header';
-        groupHeader.style.cssText = `
-            display: flex;
-            align-items: center;
-            padding: 8px;
-            background: var(--b3-theme-surface);
-            border-radius: 4px;
-            cursor: pointer;
-            margin-bottom: 8px;
-        `;
 
         const group = groupId === 'none' ? null : this.groupManager.getGroupById(groupId);
         const groupName = group ? group.name : i18n("noneGroupName");
         const isCollapsed = this.collapsedGroups.has(groupId);
 
         const collapseIcon = document.createElement('span');
-        collapseIcon.textContent = isCollapsed ? '▶' : '🔽';
-        collapseIcon.style.cssText = 'margin-right: 8px; font-size: 12px;';
+        collapseIcon.className = 'habit-group__collapse-icon';
+        collapseIcon.innerHTML = isCollapsed ? '▶' : '▼';
 
         const groupTitle = document.createElement('span');
-        groupTitle.textContent = `${groupName} (${habits.length})`;
-        groupTitle.style.cssText = 'flex: 1; font-weight: bold;';
+        groupTitle.className = 'habit-group__title';
+        groupTitle.innerHTML = `${groupName}<span class="habit-group__count">${habits.length}</span>`;
 
         groupHeader.appendChild(collapseIcon);
         groupHeader.appendChild(groupTitle);
@@ -981,21 +972,32 @@ export class HabitPanel {
     private createHabitCard(habit: Habit): HTMLElement {
         const card = document.createElement('div');
         card.className = 'habit-card';
-        // 标题和优先级
-        const titleRow = document.createElement('div');
-        titleRow.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-bottom: 8px;';
-
+        
+        // 卡片头部：图标、标题
+        const header = document.createElement('div');
+        header.className = 'habit-card__header';
+        
+        // 图标 - 使用习惯自定义颜色（支持随机颜色）
+        const iconEl = document.createElement('div');
+        iconEl.className = 'habit-card__icon';
+        iconEl.textContent = habit.icon || '🌱';
+        const habitColor = this.getHabitProgressColor(habit);
+        if (habitColor && habitColor !== 'var(--b3-theme-primary)') {
+            iconEl.style.background = `linear-gradient(135deg, ${habitColor}33, ${habitColor}1a)`;
+        }
+        header.appendChild(iconEl);
+        
+        // 标题
         const title = document.createElement('span');
+        title.className = habit.blockId ? 'habit-card__title habit-card__title-link' : 'habit-card__title';
         title.setAttribute('data-type', 'a');
         if (habit.blockId) {
             title.setAttribute('data-href', `siyuan://blocks/${habit.blockId}`);
         }
-        title.textContent = `${habit.icon || '🌱'} ${habit.title}`;
-        title.style.cssText = 'flex: 1; font-weight: bold; font-size: 14px;';
+        title.textContent = habit.title;
+        title.title = habit.title;
         if (habit.blockId) {
             title.style.cursor = 'pointer';
-            title.style.color = 'var(--b3-theme-primary)';
-            title.style.textDecoration = 'underline dotted';
             title.addEventListener('click', (ev) => {
                 ev.stopPropagation();
                 try {
@@ -1006,11 +1008,9 @@ export class HabitPanel {
                 }
             });
         }
-        titleRow.appendChild(title);
-
-        // 绑定块的图标已移除，点击和 data-href 在标题 `span` 上处理。
-
-        card.appendChild(titleRow);
+        header.appendChild(title);
+        
+        card.appendChild(header);
 
         // 打卡信息
         const today = getLogicalDateString();
@@ -1018,203 +1018,206 @@ export class HabitPanel {
         const goalType = this.getHabitGoalType(habit);
         const { current: currentProgress, target: targetProgress } = this.getHabitProgressOnDate(habit, today);
 
-        const progressRow = document.createElement('div');
-        progressRow.style.cssText = 'margin-bottom: 8px;';
-
+        // 进度条区域
+        const progressSection = document.createElement('div');
+        progressSection.className = 'habit-card__progress';
+        
+        const progressHeader = document.createElement('div');
+        progressHeader.className = 'habit-card__progress-header';
+        
+        const progressLabel = document.createElement('span');
+        progressLabel.className = 'habit-card__progress-label';
+        
+        const progressValue = document.createElement('span');
+        progressValue.className = 'habit-card__progress-value';
+        
+        const progressBar = document.createElement('div');
+        progressBar.className = 'habit-card__progress-bar';
+        
+        const progressFill = document.createElement('div');
+        progressFill.className = 'habit-card__progress-fill';
+        
+        const percentage = Math.min(100, (currentProgress / Math.max(1, targetProgress)) * 100);
+        
         if (goalType === 'pomodoro') {
-            const progressText = document.createElement('div');
-            progressText.textContent = `今日番茄进度：${this.formatMinutesToHourMinute(currentProgress)}/${this.formatMinutesToHourMinute(targetProgress)}`;
-            progressText.style.cssText = 'font-size: 12px; margin-bottom: 4px; color: var(--b3-theme-on-surface-light);';
-            progressRow.appendChild(progressText);
-
-            const progressBar = document.createElement('div');
-            progressBar.style.cssText = `
-                width: 100%;
-                height: 6px;
-                background: var(--b3-theme-surface);
-                border-radius: 3px;
-                overflow: hidden;
-            `;
-            const progressFill = document.createElement('div');
-            const percentage = Math.min(100, (currentProgress / Math.max(1, targetProgress)) * 100);
-            progressFill.style.cssText = `
-                width: ${percentage}%;
-                height: 100%;
-                background: ${this.getHabitProgressColor(habit)};
-                transition: width 0.3s;
-            `;
-            progressBar.appendChild(progressFill);
-            progressRow.appendChild(progressBar);
-        } else if (targetProgress > 1) {
-            const progressText = document.createElement('div');
-            progressText.textContent = `${i18n("todayProgressLabel")}${currentProgress}/${targetProgress}`;
-            progressText.style.cssText = 'font-size: 12px; margin-bottom: 4px; color: var(--b3-theme-on-surface-light);';
-            progressRow.appendChild(progressText);
-
-            const progressBar = document.createElement('div');
-            progressBar.style.cssText = `
-                width: 100%;
-                height: 6px;
-                background: var(--b3-theme-surface);
-                border-radius: 3px;
-                overflow: hidden;
-            `;
-
-            const progressFill = document.createElement('div');
-            const percentage = Math.min(100, (currentProgress / targetProgress) * 100);
-            progressFill.style.cssText = `
-                width: ${percentage}%;
-                height: 100%;
-                background: ${this.getHabitProgressColor(habit)};
-                transition: width 0.3s;
-            `;
-            progressBar.appendChild(progressFill);
-            progressRow.appendChild(progressBar);
+            progressLabel.textContent = i18n("todayProgressLabel") || '今日进度';
+            progressValue.textContent = `${this.formatMinutesToHourMinute(currentProgress)}/${this.formatMinutesToHourMinute(targetProgress)}`;
         } else {
-            const progressText = document.createElement('div');
-            progressText.textContent = `${i18n("todayStatusLabel")}${currentProgress >= targetProgress ? i18n("completed") : i18n("unfinished")}`;
-            progressText.style.cssText = 'font-size: 12px; color: var(--b3-theme-on-surface-light);';
-            progressRow.appendChild(progressText);
+            // 统一显示为 x/target 格式，即使是1次也显示 0/1 或 1/1
+            progressLabel.textContent = i18n("todayProgressLabel") || '今日进度';
+            progressValue.textContent = `${currentProgress}/${targetProgress}`;
         }
+        
+        progressFill.style.width = `${percentage}%`;
+        const progressColor = this.getHabitProgressColor(habit);
+        if (progressColor && progressColor !== 'var(--b3-theme-primary)') {
+            progressFill.style.background = `linear-gradient(90deg, ${progressColor}, ${progressColor}88)`;
+        }
+        
+        progressHeader.appendChild(progressLabel);
+        progressHeader.appendChild(progressValue);
+        progressSection.appendChild(progressHeader);
+        progressBar.appendChild(progressFill);
+        progressSection.appendChild(progressBar);
+        card.appendChild(progressSection);
 
-        card.appendChild(progressRow);
-
+        // 信息网格区域
+        const infoGrid = document.createElement('div');
+        infoGrid.className = 'habit-card__info-grid';
+        
         // 频率信息
-        const frequencyText = this.getFrequencyText(habit.frequency);
-        const frequency = document.createElement('div');
-        frequency.textContent = `${i18n("frequencyLabel")}${frequencyText}`;
-        frequency.style.cssText = 'font-size: 12px; color: var(--b3-theme-on-surface-light); margin-bottom: 4px;';
-        card.appendChild(frequency);
-
+        const frequencyItem = document.createElement('div');
+        frequencyItem.className = 'habit-card__info-item';
+        frequencyItem.innerHTML = `<span class="habit-card__info-icon">🔄</span><span class="habit-card__info-text">${this.getFrequencyText(habit.frequency)}</span>`;
+        infoGrid.appendChild(frequencyItem);
+        
         // 时间范围
-        const timeRange = document.createElement('div');
-        timeRange.textContent = `${i18n("timeLabel")}${habit.startDate}${habit.endDate ? ' ~ ' + habit.endDate : i18n("timeStart")}`;
-        timeRange.style.cssText = 'font-size: 12px; color: var(--b3-theme-on-surface-light); margin-bottom: 4px;';
-        card.appendChild(timeRange);
-
+        const timeItem = document.createElement('div');
+        timeItem.className = 'habit-card__info-item';
+        const timeText = habit.endDate 
+            ? `${habit.startDate} ~ ${habit.endDate}`
+            : `${habit.startDate} ${i18n("timeStart") || '起'}`;
+        timeItem.innerHTML = `<span class="habit-card__info-icon">📅</span><span class="habit-card__info-text">${timeText}</span>`;
+        infoGrid.appendChild(timeItem);
+        
         // 提醒时间（支持多个）
-        const timesList = Array.isArray(habit.reminderTimes) && habit.reminderTimes.length > 0 ? habit.reminderTimes : (habit.reminderTime ? [habit.reminderTime] : []);
+        const timesList = Array.isArray(habit.reminderTimes) && habit.reminderTimes.length > 0 
+            ? habit.reminderTimes 
+            : (habit.reminderTime ? [habit.reminderTime] : []);
         if (timesList && timesList.length > 0) {
-            const reminder = document.createElement('div');
-            // 提取时间字符串，如果是对象则取 time 属性
+            const reminderItem = document.createElement('div');
+            reminderItem.className = 'habit-card__info-item';
             const displayTimes = timesList.map(t => typeof t === 'string' ? t : t.time);
-            reminder.textContent = `${i18n("reminderLabel")}${displayTimes.join(', ')}`;
-            reminder.style.cssText = 'font-size: 12px; color: var(--b3-theme-on-surface-light); margin-bottom: 4px;';
-            card.appendChild(reminder);
+            reminderItem.innerHTML = `<span class="habit-card__info-icon">⏰</span><span class="habit-card__info-text">${displayTimes.join(', ')}</span>`;
+            infoGrid.appendChild(reminderItem);
         }
+        
+        card.appendChild(infoGrid);
 
+        // 番茄钟统计
         const pomodoroStats = this.getHabitPomodoroStats(habit.id);
         if (pomodoroStats.totalCount > 0 || pomodoroStats.totalFocusMinutes > 0) {
-            const pomodoroInfo = document.createElement('div');
-            pomodoroInfo.style.cssText = 'font-size: 12px; color: var(--b3-theme-on-surface-light); margin-bottom: 4px;';
-
-            const totalLine = document.createElement('div');
-            totalLine.textContent = `${i18n("total") || "总计"}: 🍅 ${pomodoroStats.totalCount}  ⏱ ${this.formatPomodoroFocusTime(pomodoroStats.totalFocusMinutes)}`;
-            pomodoroInfo.appendChild(totalLine);
-
-            const todayLine = document.createElement('div');
-            todayLine.textContent = `${i18n("today") || "今日"}: 🍅 ${pomodoroStats.todayCount}  ⏱ ${this.formatPomodoroFocusTime(pomodoroStats.todayFocusMinutes)}`;
-            pomodoroInfo.appendChild(todayLine);
-
-            card.appendChild(pomodoroInfo);
+            const pomodoroSection = document.createElement('div');
+            pomodoroSection.style.cssText = 'margin-top:0; margin-bottom:12px; font-size:12px;';
+            pomodoroSection.style.color = 'var(--b3-theme-on-surface-light)';
+            pomodoroSection.innerHTML = `
+                <div title="总计番茄钟: ${pomodoroStats.totalCount}">
+                    <span>系列: 🍅 ${pomodoroStats.totalCount}</span>
+                    <span style="margin-left:8px; opacity:0.9;">⏱ ${this.formatPomodoroFocusTime(pomodoroStats.totalFocusMinutes)}</span>
+                </div>
+                <div title="今日番茄钟: ${pomodoroStats.todayCount}" style="margin-top:4px; opacity:0.95;">
+                    <span>今日: 🍅 ${pomodoroStats.todayCount}</span>
+                    <span style="margin-left:8px; opacity:0.9;">⏱ ${this.formatPomodoroFocusTime(pomodoroStats.todayFocusMinutes)}</span>
+                </div>
+            `;
+            card.appendChild(pomodoroSection);
         }
-
-        // 坚持打卡天数（显示打卡天数，替换累计打卡次数）
-        const checkInDaysCount = Object.keys(habit.checkIns || {}).length;
-        const checkInDaysEl = document.createElement('div');
-        checkInDaysEl.textContent = i18n("persistDays", { count: checkInDaysCount.toString() });
-        checkInDaysEl.style.cssText = 'font-size: 12px; color: var(--b3-theme-primary); font-weight: bold;';
 
         // 今日打卡 emoji（只显示当天的）
         if (checkIn && ((checkIn.entries && checkIn.entries.length > 0) || (checkIn.status && checkIn.status.length > 0))) {
-            const emojiRow = document.createElement('div');
-            emojiRow.style.cssText = 'margin-top:8px; display:flex; align-items:flex-start; gap:6px; width:100%; box-sizing:border-box;';
-
-
-            const emojiLabel = document.createElement('span');
-            emojiLabel.textContent = i18n("todayCheckInEmoji");
-            emojiLabel.style.cssText = 'font-size:12px; color: var(--b3-theme-on-surface-light); flex:0 0 auto;';
-            emojiRow.appendChild(emojiLabel);
-
+            const emojiSection = document.createElement('div');
+            emojiSection.className = 'habit-card__emoji-section';
+            emojiSection.style.cursor = 'pointer';
+            emojiSection.title = i18n("clickToEditCheckIn") || '点击编辑今日打卡';
+            
+            const emojiLabel = document.createElement('div');
+            emojiLabel.className = 'habit-card__emoji-label';
+            emojiLabel.textContent = i18n("todayCheckInEmoji") || '今日打卡';
+            emojiSection.appendChild(emojiLabel);
+            
             const emojiList = document.createElement('div');
-            emojiList.style.cssText = 'display:flex; flex-wrap:wrap; gap:4px; flex:1 1 auto; min-width:0;';
-            emojiRow.appendChild(emojiList);
-
-            // Only show today's entries, and display emoji icons (preserve order). Support both "entries" (new) and "status" (legacy).
+            emojiList.className = 'habit-card__emoji-list';
+            
+            // Only show today's entries, and display emoji icons (preserve order)
             const emojis: string[] = [];
             if (checkIn.entries && checkIn.entries.length > 0) {
                 checkIn.entries.forEach(entry => emojis.push(entry.emoji));
             } else if (checkIn.status && checkIn.status.length > 0) {
-                // status may contain repeated emojis; keep the order
                 checkIn.status.forEach(s => emojis.push(s));
             }
 
             emojis.forEach((emojiStr) => {
                 const emojiEl = document.createElement('span');
+                emojiEl.className = 'habit-card__emoji-item';
                 emojiEl.textContent = emojiStr;
                 emojiEl.title = emojiStr;
-                emojiEl.style.cssText = 'font-size: 18px; line-height: 1; flex:0 0 auto;';
                 emojiList.appendChild(emojiEl);
             });
-
-
-            card.appendChild(emojiRow);
-        }
-        // 底部操作行：左侧显示坚持天数，右侧放打卡按钮（两者在一行）
-        try {
-            const footerRow = document.createElement('div');
-            footerRow.style.cssText = 'display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:8px;';
-
-            // 左侧：坚持打卡天数
-            const leftWrap = document.createElement('div');
-            leftWrap.style.cssText = 'flex:1;';
-            leftWrap.appendChild(checkInDaysEl);
-
-            // 右侧：按钮集合（当前仅一个打卡按钮）
-            const actionRow = document.createElement('div');
-            actionRow.style.cssText = 'display:flex; justify-content:flex-end; gap:8px;';
-
-            const checkInBtn = document.createElement('button');
-            checkInBtn.className = 'b3-button b3-button--outline b3-button--small';
-            checkInBtn.innerHTML = i18n("checkInBtn");
-
-            checkInBtn.addEventListener('click', (ev) => {
-                ev.preventDefault();
+            
+            emojiSection.appendChild(emojiList);
+            
+            // 点击打开 HabitDayDialog 编辑今日打卡
+            emojiSection.addEventListener('click', (ev) => {
                 ev.stopPropagation();
-                try {
-                    const menu = new Menu('habitCardCheckInMenu');
-                    const submenu = this.createCheckInSubmenu(habit);
-                    // submenu may contain separators (type:'separator') or items
-                    submenu.forEach((it: any) => {
-                        if (it && it.type === 'separator') {
-                            menu.addSeparator();
-                        } else if (it) {
-                            menu.addItem(it);
-                        }
-                    });
-
-                    // 根据按钮位置打开菜单（向上偏移一些以避免覆盖）
-                    const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
-                    const menuX = rect.left;
-                    const menuY = rect.top - 4;
-
-                    const maxX = window.innerWidth - 200;
-                    const maxY = window.innerHeight - 200;
-
-                    menu.open({ x: Math.min(menuX, maxX), y: Math.max(0, Math.min(menuY, maxY)) });
-                } catch (err) {
-                    console.error('openCheckInMenu failed', err);
-                    showMessage(i18n("openCheckInMenuFailed"), 2000, 'error');
-                }
+                const dialog = new HabitDayDialog(
+                    habit,
+                    today,
+                    async (updatedHabit) => {
+                        await this.saveHabit(updatedHabit);
+                        this.loadHabits();
+                    },
+                    this.plugin
+                );
+                dialog.show();
             });
-
-            actionRow.appendChild(checkInBtn);
-            footerRow.appendChild(leftWrap);
-            footerRow.appendChild(actionRow);
-            card.appendChild(footerRow);
-        } catch (err) {
-            console.warn('添加底部操作行失败', err);
+            
+            card.appendChild(emojiSection);
         }
+        
+        // 底部操作区：坚持天数 + 打卡按钮
+        const footer = document.createElement('div');
+        footer.className = 'habit-card__footer';
+        
+        // 坚持打卡天数
+        const checkInDaysCount = Object.keys(habit.checkIns || {}).length;
+        const streakEl = document.createElement('div');
+        streakEl.className = 'habit-card__streak';
+        streakEl.innerHTML = `<span class="habit-card__streak-icon">🔥</span><span>${i18n("persistDays", { count: checkInDaysCount.toString() })}</span>`;
+        footer.appendChild(streakEl);
+        
+        // 打卡按钮
+        const actionsEl = document.createElement('div');
+        actionsEl.className = 'habit-card__actions';
+        
+        const checkInBtn = document.createElement('button');
+        checkInBtn.className = 'habit-card__checkin-btn';
+        checkInBtn.innerHTML = `<span>✓</span><span>${i18n("checkInBtn")}</span>`;
+        // 使用习惯自定义颜色（支持随机颜色）
+        if (habitColor && habitColor !== 'var(--b3-theme-primary)') {
+            checkInBtn.style.background = `linear-gradient(135deg, ${habitColor}, ${habitColor}dd)`;
+            checkInBtn.style.boxShadow = `0 4px 12px ${habitColor}4d`;
+        }
+        
+        checkInBtn.addEventListener('click', (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            try {
+                const menu = new Menu('habitCardCheckInMenu');
+                const submenu = this.createCheckInSubmenu(habit);
+                submenu.forEach((it: any) => {
+                    if (it && it.type === 'separator') {
+                        menu.addSeparator();
+                    } else if (it) {
+                        menu.addItem(it);
+                    }
+                });
+
+                const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+                const menuX = rect.left;
+                const menuY = rect.top - 4;
+                const maxX = window.innerWidth - 200;
+                const maxY = window.innerHeight - 200;
+
+                menu.open({ x: Math.min(menuX, maxX), y: Math.max(0, Math.min(menuY, maxY)) });
+            } catch (err) {
+                console.error('openCheckInMenu failed', err);
+                showMessage(i18n("openCheckInMenuFailed"), 2000, 'error');
+            }
+        });
+        
+        actionsEl.appendChild(checkInBtn);
+        footer.appendChild(actionsEl);
+        card.appendChild(footer);
 
         // 右键菜单
         card.addEventListener('contextmenu', (e) => {
@@ -1289,19 +1292,10 @@ export class HabitPanel {
 
         const separator = document.createElement('div');
         separator.className = 'habit-completed-section';
-        separator.style.cssText = `
-            margin: 16px 0;
-            border-top: 2px dashed var(--b3-theme-surface-lighter);
-            padding-top: 16px;
-        `;
 
         const completedTitle = document.createElement('div');
-        completedTitle.textContent = `${i18n("todayCheckedSection")} (${completedHabits.length})`;
-        completedTitle.style.cssText = `
-            font-weight: bold;
-            margin-bottom: 12px;
-            color: var(--b3-theme-on-surface);
-        `;
+        completedTitle.className = 'habit-completed-section__title';
+        completedTitle.innerHTML = `<span>✓</span><span>${i18n("todayCheckedSection")} (${completedHabits.length})</span>`;
 
         separator.appendChild(completedTitle);
 

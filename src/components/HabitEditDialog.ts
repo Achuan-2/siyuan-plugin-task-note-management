@@ -1213,8 +1213,8 @@ export class HabitEditDialog {
 
     private generateRandomHabitColor(): string {
         const hue = Math.floor(Math.random() * 360);
-        const saturation = 55 + Math.floor(Math.random() * 25); // 55-79
-        const lightness = 48 + Math.floor(Math.random() * 12); // 48-59
+        const saturation = 35 + Math.floor(Math.random() * 25); // 35-60%，降低饱和度
+        const lightness = 55 + Math.floor(Math.random() * 15); // 55-70%，提高亮度
         return this.hslToHex(hue, saturation, lightness);
     }
 

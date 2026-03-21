@@ -755,35 +755,556 @@
     flex-direction: column;
 }
 
-/* 习惯卡片：淡色渐变背景，更现代的视觉效果 */
-.habit-card {
-    background-color: var(--b3-theme-background-light);
-    background-color: color-mix(in srgb, var(--b3-theme-background-light), transparent 90%);
-    border: 2px solid var(--b3-theme-primary-light);
-    border-radius: 8px;
-    padding: 12px;
-    margin-bottom: 8px;
+/* 习惯分组样式 - 现代美化版 */
+.habit-group {
+    margin-bottom: 20px;
+    animation: slideInUp 0.4s ease forwards;
+}
+
+.habit-group__header {
+    display: flex;
+    align-items: center;
+    padding: 10px 12px;
     cursor: pointer;
-    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, background 0.18s ease;
-    backdrop-filter: blur(4px);
+    margin-bottom: 12px;
+    border: 1px solid var(--b3-theme-surface-lighter);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.habit-group__header::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: linear-gradient(180deg, var(--b3-theme-primary), var(--b3-theme-primary-light));
+    opacity: 0.8;
+}
+
+.habit-group__header:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    transform: translateX(2px);
+}
+
+.habit-group__collapse-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    margin-right: 10px;
+    border-radius: 6px;
+    background: var(--b3-theme-background);
+    color: var(--b3-theme-primary);
+    font-size: 10px;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.habit-group__header:hover .habit-group__collapse-icon {
+    background: var(--b3-theme-primary);
+    color: white;
+    transform: scale(1.1);
+}
+
+.habit-group__title {
+    flex: 1;
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--b3-theme-on-background);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.habit-group__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 6px;
+    background: var(--b3-theme-primary-lightest);
+    color: var(--b3-theme-primary);
+    border-radius: 11px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+/* 习惯卡片：现代毛玻璃风格 */
+.habit-card {
+    position: relative;
+    background: linear-gradient(145deg, 
+        var(--b3-theme-background) 0%, 
+        var(--b3-theme-surface) 100%);
+    border: 1px solid var(--b3-theme-surface-lighter);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 12px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 
+        0 2px 8px rgba(0, 0, 0, 0.04),
+        0 0 1px rgba(0, 0, 0, 0.08);
+    overflow: hidden;
 }
 
 
 .habit-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
-    border-color: var(--b3-theme-primary);
+    transform: translateY(-3px) scale(1.01);
+    box-shadow: 
+        0 12px 32px rgba(0, 0, 0, 0.1),
+        0 4px 12px rgba(0, 0, 0, 0.05);
+    border-color: var(--b3-theme-primary-light);
 }
+
 
 .habit-card:active {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    transform: translateY(-1px) scale(0.995);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
 }
 
-/* 已完成区域的卡片视觉上稍淡化但仍保持可读 */
+/* 习惯标题区域 */
+.habit-card__header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.habit-card__icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, var(--b3-theme-primary-lightest), var(--b3-theme-surface-light));
+    border-radius: 10px;
+    font-size: 18px;
+    flex-shrink: 0;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+    transition: all 0.2s ease;
+}
+
+/* 使用习惯自定义颜色 */
+.habit-card__icon[style*="background"] {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.habit-card:hover .habit-card__icon {
+    transform: scale(1.1) rotate(-3deg);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.habit-card__title {
+    flex: 1;
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--b3-theme-on-background);
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.habit-card__title-link {
+    color: var(--b3-theme-primary);
+    text-decoration: none;
+    position: relative;
+}
+
+.habit-card__title-link::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--b3-theme-primary), var(--b3-theme-primary-light));
+    transition: width 0.3s ease;
+    border-radius: 1px;
+}
+
+.habit-card__title-link:hover::after {
+    width: 100%;
+}
+
+/* 进度条区域 */
+.habit-card__progress {
+    margin-bottom: 14px;
+}
+
+.habit-card__progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.habit-card__progress-label {
+    font-size: 12px;
+    color: var(--b3-theme-on-surface-light);
+    font-weight: 500;
+}
+
+.habit-card__progress-value {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--b3-theme-on-background);
+}
+
+.habit-card__progress-bar {
+    width: 100%;
+    height: 8px;
+    background: var(--b3-theme-surface-lighter);
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.habit-card__progress-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    background: linear-gradient(90deg, var(--b3-theme-primary), var(--b3-theme-primary-light));
+    box-shadow: 0 2px 8px rgba(var(--b3-theme-primary-rgb, 64, 150, 255), 0.3);
+}
+
+.habit-card__progress-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(90deg, 
+        transparent 0%, 
+        rgba(255, 255, 255, 0.2) 50%, 
+        transparent 100%);
+}
+
+/* 习惯信息网格 */
+.habit-card__info-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px 16px;
+    margin-bottom: 14px;
+}
+
+.habit-card__info-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--b3-theme-on-surface-light);
+}
+
+.habit-card__info-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    font-size: 12px;
+    opacity: 0.7;
+}
+
+.habit-card__info-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 番茄钟统计 */
+.habit-card__pomodoro-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+    background: linear-gradient(145deg, 
+        rgba(var(--b3-theme-primary-rgb, 64, 150, 255), 0.06), 
+        rgba(var(--b3-theme-primary-rgb, 64, 150, 255), 0.02));
+    border-radius: 14px;
+    margin-bottom: 14px;
+    border: 1px solid rgba(var(--b3-theme-primary-rgb, 64, 150, 255), 0.1);
+}
+
+.habit-card__pomodoro-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    background: var(--b3-theme-background);
+    border-radius: 12px;
+    border: 1px solid var(--b3-theme-surface-lighter);
+    transition: all 0.25s ease;
+}
+
+.habit-card__pomodoro-row:hover {
+    transform: translateX(4px);
+    border-color: var(--b3-theme-primary-light);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.habit-card__pomodoro-row--active {
+    background: linear-gradient(135deg, 
+        rgba(46, 204, 113, 0.08), 
+        rgba(46, 204, 113, 0.02));
+    border-color: rgba(46, 204, 113, 0.2);
+}
+
+.habit-card__pomodoro-row--active:hover {
+    border-color: rgba(46, 204, 113, 0.4);
+    box-shadow: 0 4px 12px rgba(46, 204, 113, 0.1);
+}
+
+.habit-card__pomodoro-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    font-size: 18px;
+    flex-shrink: 0;
+    background: var(--b3-theme-surface);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+    transition: all 0.2s ease;
+}
+
+.habit-card__pomodoro-row:hover .habit-card__pomodoro-icon {
+    transform: scale(1.1) rotate(-5deg);
+}
+
+.habit-card__pomodoro-icon--total {
+    background: linear-gradient(135deg, #ffebee, #fce4ec);
+}
+
+.habit-card__pomodoro-icon--today {
+    background: linear-gradient(135deg, #e8f5e9, #f1f8e9);
+}
+
+.habit-card__pomodoro-row--active .habit-card__pomodoro-icon--today {
+    background: linear-gradient(135deg, #c8e6c9, #a5d6a7);
+    animation: pulseIcon 2s ease-in-out infinite;
+}
+
+@keyframes pulseIcon {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+.habit-card__pomodoro-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.habit-card__pomodoro-label {
+    font-size: 11px;
+    color: var(--b3-theme-on-surface-light);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 500;
+}
+
+.habit-card__pomodoro-detail {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+}
+
+.habit-card__pomodoro-count {
+    font-weight: 700;
+    color: var(--b3-theme-on-background);
+}
+
+.habit-card__pomodoro-divider {
+    color: var(--b3-theme-on-surface-light);
+    opacity: 0.5;
+}
+
+.habit-card__pomodoro-time {
+    font-weight: 600;
+    color: var(--b3-theme-primary);
+}
+
+.habit-card__pomodoro-row--active .habit-card__pomodoro-time {
+    color: #27ae60;
+}
+
+/* 今日打卡表情 */
+.habit-card__emoji-section {
+    margin-bottom: 14px;
+    padding: 8px;
+    border-radius: 10px;
+    transition: all 0.2s ease;
+}
+
+.habit-card__emoji-section:hover {
+    background: var(--b3-theme-surface-lighter);
+    transform: translateX(4px);
+}
+
+.habit-card__emoji-label {
+    font-size: 11px;
+    color: var(--b3-theme-on-surface-light);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.habit-card__emoji-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.habit-card__emoji-item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: var(--b3-theme-surface);
+    border-radius: 10px;
+    font-size: 18px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+    transition: all 0.2s ease;
+    animation: popIn 0.3s ease;
+}
+
+@keyframes popIn {
+    0% { transform: scale(0); opacity: 0; }
+    70% { transform: scale(1.1); }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+.habit-card__emoji-item:hover {
+    transform: translateY(-2px) scale(1.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* 底部操作区 */
+.habit-card__footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 14px;
+    border-top: 1px solid var(--b3-theme-surface-lighter);
+}
+
+.habit-card__streak {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--b3-theme-primary);
+}
+
+.habit-card__streak-icon {
+    font-size: 14px;
+}
+
+.habit-card__actions {
+    display: flex;
+    gap: 8px;
+}
+
+/* 打卡按钮 */
+.habit-card__checkin-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: linear-gradient(135deg, var(--b3-theme-primary), var(--b3-theme-primary-light));
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 12px rgba(var(--b3-theme-primary-rgb, 64, 150, 255), 0.3);
+    position: relative;
+    overflow: hidden;
+}
+
+.habit-card__checkin-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.5s ease;
+}
+
+.habit-card__checkin-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(var(--b3-theme-primary-rgb, 64, 150, 255), 0.4);
+}
+
+.habit-card__checkin-btn:hover::before {
+    left: 100%;
+}
+
+.habit-card__checkin-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(var(--b3-theme-primary-rgb, 64, 150, 255), 0.3);
+}
+
+/* 已完成区域的卡片 */
+.habit-completed-section {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 2px dashed var(--b3-theme-surface-lighter);
+    animation: fadeIn 0.5s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.habit-completed-section__title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--b3-theme-on-surface);
+    margin-bottom: 16px;
+    padding: 8px 12px;
+    background: linear-gradient(135deg, rgba(46, 204, 113, 0.1), rgba(46, 204, 113, 0.02));
+    border-radius: 8px;
+    border: 1px solid rgba(46, 204, 113, 0.15);
+}
+
 .habit-completed-section .habit-card {
-    opacity: 0.78;
-    transform: none;
+    opacity: 0.85;
+    transform: scale(0.98);
+    filter: grayscale(0.3);
+}
+
+.habit-completed-section .habit-card:hover {
+    opacity: 1;
+    transform: scale(1);
+    filter: grayscale(0);
+}
+
+.habit-completed-section .habit-card__progress-fill {
+    background: linear-gradient(90deg, #2ecc71, #27ae60);
 }
 
 .habit-panel>.habit-header,
