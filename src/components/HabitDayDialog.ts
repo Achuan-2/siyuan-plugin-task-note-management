@@ -9,6 +9,7 @@ type HabitDayEntry = {
     meaning?: string;
     timestamp: string;
     note?: string;
+    group?: string;
 };
 
 export class HabitDayDialog {
@@ -49,7 +50,8 @@ export class HabitDayDialog {
                 emoji: e.emoji,
                 meaning: e.meaning || this.getMeaningForEmoji(e.emoji),
                 timestamp: e.timestamp,
-                note: e.note
+                note: e.note,
+                group: e.group
             }));
         }
         return (checkIn.status || []).map((s: string) => ({
@@ -457,7 +459,12 @@ export class HabitDayDialog {
             return false;
         }
 
-        dayCheckIn.entries.push({ emoji: emojiConfig.emoji, timestamp: now });
+        dayCheckIn.entries.push({ 
+            emoji: emojiConfig.emoji, 
+            timestamp: now,
+            meaning: emojiConfig.meaning,
+            group: (emojiConfig.group || '').trim() || undefined
+        });
         dayCheckIn.status.push(emojiConfig.emoji);
         dayCheckIn.count = (dayCheckIn.count || 0) + 1;
         dayCheckIn.timestamp = now;
@@ -658,7 +665,8 @@ export class HabitDayDialog {
                 emoji: selectedEmoji,
                 meaning: selectedMeaning || this.getMeaningForEmoji(selectedEmoji),
                 timestamp,
-                note: noteInput.value.trim() || undefined
+                note: noteInput.value.trim() || undefined,
+                group: (emojiConfigs.find(c => c.emoji === selectedEmoji && c.meaning === selectedMeaning)?.group || '').trim() || undefined
             });
             await this.setEntriesForDate(this.dateStr, entries);
             this.habit.totalCheckIns = (this.habit.totalCheckIns || 0) + 1;

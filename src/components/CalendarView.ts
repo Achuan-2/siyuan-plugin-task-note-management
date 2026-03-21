@@ -3115,35 +3115,60 @@ export class CalendarView {
             return submenu;
         }
 
-        // hideCheckedToday 语义与 HabitPanel 保持一致：按“今天已打卡”隐藏选项
-        const filterDate = getLogicalDateString();
+        // 这里的逻辑与 HabitPanel.ts 保持高度一致，以解决相同 emoji 不同分组时的显示问题
+        const filterDate = getLogicalDateString(); // 默认按逻辑本日过滤，CalendarView 的逻辑通常也基于此
         const dayCheckIn = habit.checkIns?.[filterDate];
-        const checkedEmojis = new Set<string>();
-        const emojiGroupMap = new Map<string, string>();
-        const checkedGroups = new Set<string>();
+        const checkedEmojisToday = new Set<string>();
+        const checkedGroupsToday = new Set<string>();
+        const emojiToGroupsMap = new Map<string, Set<string>>();
+
+        // 收集本日已打卡信息
         if (Array.isArray(dayCheckIn?.entries)) {
             dayCheckIn.entries.forEach((entry: any) => {
-                if (entry?.emoji) checkedEmojis.add(entry.emoji);
+                if (entry?.emoji) {
+                    checkedEmojisToday.add(entry.emoji);
+                    const group = (entry.group || '').trim();
+                    if (group) checkedGroupsToday.add(group);
+                }
             });
         } else if (Array.isArray(dayCheckIn?.status)) {
             dayCheckIn.status.forEach((emoji: string) => {
-                if (emoji) checkedEmojis.add(emoji);
+                if (emoji) checkedEmojisToday.add(emoji);
             });
         }
-        checkInEmojis.forEach((emojiConfig: any) => {
-            const groupName = (emojiConfig?.group || '').trim();
+
+        // 构建 Emoji 到分组的多对多映射（兼容处理）
+        checkInEmojis.forEach((config: any) => {
+            const groupName = (config.group || '').trim();
             if (groupName) {
-                emojiGroupMap.set(emojiConfig.emoji, groupName);
+                if (!emojiToGroupsMap.has(config.emoji)) {
+                    emojiToGroupsMap.set(config.emoji, new Set());
+                }
+                emojiToGroupsMap.get(config.emoji)!.add(groupName);
             }
         });
-        checkedEmojis.forEach((checkedEmoji) => {
-            const groupName = emojiGroupMap.get(checkedEmoji);
-            if (groupName) checkedGroups.add(groupName);
-        });
+
+        // 如果是旧数据只有 status 没有 group，尝试补全 checkedGroupsToday
+        if (dayCheckIn && !dayCheckIn.entries && dayCheckIn.status) {
+            checkedEmojisToday.forEach(emoji => {
+                const groups = emojiToGroupsMap.get(emoji);
+                if (groups) groups.forEach(g => checkedGroupsToday.add(g));
+            });
+        }
 
         checkInEmojis.forEach((emojiConfig: any) => {
-            const groupName = (emojiConfig?.group || '').trim();
-            if (habit.hideCheckedToday && (checkedEmojis.has(emojiConfig.emoji) || (!!groupName && checkedGroups.has(groupName)))) return;
+            const groupName = (emojiConfig.group || '').trim();
+            
+            if (habit.hideCheckedToday) {
+                if (groupName) {
+                    // 如果有分组，只要该分组已打卡，则隐藏
+                    if (checkedGroupsToday.has(groupName)) return;
+                } else {
+                    // 如果没分组，按 emoji 隐藏
+                    if (checkedEmojisToday.has(emojiConfig.emoji)) return;
+                }
+            }
+
             submenu.push({
                 label: `${emojiConfig.emoji} ${emojiConfig.meaning || ''}`.trim(),
                 click: async () => {
@@ -3239,7 +3264,13 @@ export class CalendarView {
             }
 
             checkIn.entries = checkIn.entries || [];
-            checkIn.entries.push({ emoji: emojiConfig.emoji, timestamp: customTimestamp, note });
+            checkIn.entries.push({ 
+                emoji: emojiConfig.emoji, 
+                timestamp: customTimestamp, 
+                note,
+                meaning: emojiConfig.meaning,
+                group: (emojiConfig.group || '').trim() || undefined
+            });
             checkIn.count = (checkIn.count || 0) + 1;
             checkIn.status = (checkIn.status || []).concat([emojiConfig.emoji]);
             checkIn.timestamp = customTimestamp;

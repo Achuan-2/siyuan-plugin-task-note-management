@@ -58,7 +58,7 @@ export interface Habit {
             count: number; // 当天打卡次数
             status: string[]; // 打卡状态emoji数组（兼容旧格式）
             timestamp: string; // 最后打卡时间
-            entries?: { emoji: string; timestamp: string; note?: string }[]; // 每次单独打卡记录
+            entries?: { emoji: string; timestamp: string; note?: string; meaning?: string; group?: string }[]; // 每次单独打卡记录
         };
     };
     // 每日提醒通知状态 (键为 YYYY-MM-DD -> true/false 或键->(time->true))
@@ -580,7 +580,12 @@ export class HabitPanel {
                 dayCheckIn.status = dayCheckIn.status || [];
 
                 // 只补1个，避免补录后出现大量✅
-                dayCheckIn.entries.push({ emoji: autoEmojiConfig!.emoji, timestamp: now });
+                dayCheckIn.entries.push({ 
+                    emoji: autoEmojiConfig!.emoji, 
+                    timestamp: now,
+                    meaning: autoEmojiConfig!.meaning,
+                    group: (autoEmojiConfig!.group || '').trim() || undefined
+                });
                 dayCheckIn.status.push(autoEmojiConfig!.emoji);
                 dayCheckIn.count = (dayCheckIn.count || 0) + 1;
                 dayCheckIn.timestamp = now;
@@ -1717,35 +1722,59 @@ export class HabitPanel {
 
         const today = getLogicalDateString();
         const todayCheckIn = habit.checkIns?.[today];
-        const checkedEmojisToday = new Set<string>();
-        const emojiGroupMap = new Map<string, string>();
+        const checkedOptionsToday = new Set<string>(); // "emoji:meaning:group"
         const checkedGroupsToday = new Set<string>();
+        const checkedEmojisToday = new Set<string>();
 
-        if (todayCheckIn?.entries) {
-            todayCheckIn.entries.forEach(entry => checkedEmojisToday.add(entry.emoji));
-        } else if (todayCheckIn?.status) {
-            todayCheckIn.status.forEach(emoji => checkedEmojisToday.add(emoji));
-        }
-
-        habit.checkInEmojis.forEach(emojiConfig => {
-            const groupName = (emojiConfig.group || '').trim();
-            if (groupName) {
-                emojiGroupMap.set(emojiConfig.emoji, groupName);
+        // 收集所有可能的 emoji 到分组的映射，用于旧数据兼容
+        const emojiToGroups = new Map<string, Set<string>>();
+        habit.checkInEmojis.forEach(cfg => {
+            const g = (cfg.group || '').trim();
+            if (g) {
+                if (!emojiToGroups.has(cfg.emoji)) emojiToGroups.set(cfg.emoji, new Set());
+                emojiToGroups.get(cfg.emoji)!.add(g);
             }
         });
-        checkedEmojisToday.forEach(checkedEmoji => {
-            const groupName = emojiGroupMap.get(checkedEmoji);
-            if (groupName) checkedGroupsToday.add(groupName);
-        });
+
+        if (todayCheckIn) {
+            const entries = todayCheckIn.entries || [];
+            if (entries.length > 0) {
+                entries.forEach(entry => {
+                    checkedEmojisToday.add(entry.emoji);
+                    const m = entry.meaning || '';
+                    const g = (entry.group || '').trim();
+                    if (g) {
+                        checkedGroupsToday.add(g);
+                        checkedOptionsToday.add(`${entry.emoji}:${m}:${g}`);
+                    } else {
+                        // 旧数据兼容：将该 emoji 对应的所有分组都视为已打卡
+                        const groups = emojiToGroups.get(entry.emoji);
+                        if (groups) groups.forEach(pg => checkedGroupsToday.add(pg));
+                    }
+                });
+            } else if (todayCheckIn.status) {
+                // 更旧格式兼容
+                todayCheckIn.status.forEach(emoji => {
+                    checkedEmojisToday.add(emoji);
+                    const groups = emojiToGroups.get(emoji);
+                    if (groups) groups.forEach(pg => checkedGroupsToday.add(pg));
+                });
+            }
+        }
 
         // 添加默认的打卡emoji选项
         habit.checkInEmojis.forEach(emojiConfig => {
             const groupName = (emojiConfig.group || '').trim();
+            
             // 如果设置了隐藏今天已打卡选项：
-            // 1. 当前 emoji 已打卡，隐藏
-            // 2. 当前 emoji 所属分组中任意项已打卡，整组隐藏
-            if (habit.hideCheckedToday && (checkedEmojisToday.has(emojiConfig.emoji) || (!!groupName && checkedGroupsToday.has(groupName)))) {
-                return;
+            if (habit.hideCheckedToday) {
+                if (groupName) {
+                    // 如果有分组，检查该分组是否已打卡
+                    if (checkedGroupsToday.has(groupName)) return;
+                } else {
+                    // 如果没分组，检查该 emoji 是否已打卡
+                    if (checkedEmojisToday.has(emojiConfig.emoji)) return;
+                }
             }
 
             submenu.push({
@@ -1874,7 +1903,13 @@ export class HabitPanel {
 
             // Append an entry for this check-in, using custom timestamp if provided
             checkIn.entries = checkIn.entries || [];
-            checkIn.entries.push({ emoji: emojiConfig.emoji, timestamp: customTimestamp, note });
+            checkIn.entries.push({ 
+                emoji: emojiConfig.emoji, 
+                timestamp: customTimestamp, 
+                note,
+                meaning: emojiConfig.meaning,
+                group: (emojiConfig.group || '').trim() || undefined
+            });
             // Keep status/count/timestamp fields in sync for backward compatibility
             checkIn.count = (checkIn.count || 0) + 1;
             checkIn.status = (checkIn.status || []).concat([emojiConfig.emoji]);
