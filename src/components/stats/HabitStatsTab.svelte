@@ -1278,7 +1278,6 @@ $: yearVisibleSections = groupedSections
 
     .week-cell.done {
         background: color-mix(in srgb, var(--habit-color) 70%, white 30%);
-        border-color: color-mix(in srgb, var(--habit-color) 80%, black 20%);
     }
     .week-cell.today {
         border-color: var(--b3-theme-primary) !important;
@@ -1380,7 +1379,6 @@ $: yearVisibleSections = groupedSections
 
     .month-day.done {
         background: color-mix(in srgb, var(--habit-color) 65%, white 35%);
-        border-color: color-mix(in srgb, var(--habit-color) 80%, black 20%);
         font-weight: 600;
     }
     .month-day.today {
