@@ -37,41 +37,42 @@ export class PomodoroSessionsDialog {
 
     /**
      * 解析事件标题（支持任务与习惯）
-     * 优先顺序：
-     * 1. reminderData（含实例 originalId 回退）
-     * 2. habitData
+     * 根据 eventId 分流：
+     * 1. eventId 以 "habit" 开头 -> habitData
+     * 2. 其余 -> reminderData（含实例 originalId 回退）
      * 3. 传入的 fallbackTitle
      * 4. 默认文案
      */
     private async resolveEventTitle(eventId: string, fallbackTitle?: string): Promise<string> {
         let eventTitle = "";
+        const isHabitEvent = eventId.startsWith("habit");
 
-        try {
-            const reminderData = await this.plugin.loadReminderData?.();
-            let reminder = reminderData?.[eventId];
-
-            // 兼容重复实例 ID：originalId_YYYY-MM-DD
-            if (!reminder && eventId.includes('_')) {
-                const parts = eventId.split('_');
-                const lastPart = parts[parts.length - 1];
-                if (/^\d{4}-\d{2}-\d{2}$/.test(lastPart)) {
-                    const originalId = parts.slice(0, -1).join('_');
-                    reminder = reminderData?.[originalId];
-                }
-            }
-
-            eventTitle = reminder?.title || "";
-        } catch (error) {
-            console.warn("解析 reminder 标题失败:", error);
-        }
-
-        if (!eventTitle) {
+        if (isHabitEvent) {
             try {
                 const habitData = await this.plugin.loadHabitData?.();
                 const habit = habitData?.[eventId];
                 eventTitle = habit?.title || "";
             } catch (error) {
                 console.warn("解析 habit 标题失败:", error);
+            }
+        } else {
+            try {
+                const reminderData = await this.plugin.loadReminderData?.();
+                let reminder = reminderData?.[eventId];
+
+                // 兼容重复实例 ID：originalId_YYYY-MM-DD
+                if (!reminder && eventId.includes('_')) {
+                    const parts = eventId.split('_');
+                    const lastPart = parts[parts.length - 1];
+                    if (/^\d{4}-\d{2}-\d{2}$/.test(lastPart)) {
+                        const originalId = parts.slice(0, -1).join('_');
+                        reminder = reminderData?.[originalId];
+                    }
+                }
+
+                eventTitle = reminder?.title || "";
+            } catch (error) {
+                console.warn("解析 reminder 标题失败:", error);
             }
         }
 
