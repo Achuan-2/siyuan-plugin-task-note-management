@@ -119,3 +119,34 @@ export function getSortConfigSummary(config: SortConfig): string {
     const firstName = getSortMethodName(config.criteria[0].method);
     return `${firstName} +${config.criteria.length - 1}`;
 }
+
+// ==================== 筛选配置（任务面板） ====================
+
+export const DEFAULT_FILTER_TAB = 'today';
+
+/**
+ * 加载任务面板的筛选配置
+ */
+export async function loadFilterConfig(plugin: Plugin): Promise<string> {
+    try {
+        const settings = await (plugin as any).loadSettings();
+        return settings.reminderPanelFilterTab || DEFAULT_FILTER_TAB;
+    } catch (error) {
+        console.log('加载筛选配置失败，使用默认配置:', error);
+        return DEFAULT_FILTER_TAB;
+    }
+}
+
+/**
+ * 保存任务面板的筛选配置
+ */
+export async function saveFilterConfig(plugin: Plugin, filterTab: string): Promise<void> {
+    try {
+        const settings = await (plugin as any).loadSettings();
+        settings.reminderPanelFilterTab = filterTab;
+        await (plugin as any).saveSettings(settings);
+        console.log('筛选配置保存成功:', filterTab);
+    } catch (error) {
+        console.error('保存筛选配置失败:', error);
+    }
+}

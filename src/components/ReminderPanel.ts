@@ -2,7 +2,7 @@ import { colorWithOpacity } from "../utils/uiUtils";
 import { showMessage, confirm, Dialog, Menu, Constants, getFrontend, getBackend, platformUtils } from "siyuan";
 import { refreshSql, sql, getBlockKramdown, getBlockByID, updateBindBlockAtrrs, openBlock } from "../api";
 import { getLocalDateString, compareDateStrings, getLocalDateTimeString, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../utils/dateUtils";
-import { loadSortConfig, saveSortConfig, getSortConfigSummary, SortCriterion } from "../utils/sortConfig";
+import { loadSortConfig, saveSortConfig, getSortConfigSummary, SortCriterion, loadFilterConfig, saveFilterConfig } from "../utils/sortConfig";
 import { SortMenuDialog } from "./SortMenuDialog";
 import { QuickReminderDialog } from "./QuickReminderDialog";
 import { CategoryManager } from "../utils/categoryManager";
@@ -158,7 +158,8 @@ export class ReminderPanel {
 
         this.initUI();
         await this.loadSortConfig();
-        await this.loadCustomFilters(); // 加载自定义过滤器配置
+        await this.loadCustomFilters(); // 加载自定义过滤器配置（先加载以确保筛选选项已创建）
+        await this.loadFilterTab(); // 加载筛选配置（在选项创建后设置值）
         this.loadReminders();
 
         // Escape：如果右键菜单已打开则关闭菜单（不退出多选）；否则退出多选模式
@@ -219,6 +220,23 @@ export class ReminderPanel {
         } catch (error) {
             console.error('加载排序配置失败:', error);
             this.currentSortCriteria = [{ method: 'time', order: 'asc' }];
+        }
+    }
+
+    // 加载筛选配置
+    private async loadFilterTab() {
+        try {
+            const savedTab = await loadFilterConfig(this.plugin);
+            if (savedTab && this.filterSelect) {
+                // 检查保存的值是否在选项中
+                const options = Array.from(this.filterSelect.options).map(opt => opt.value);
+                if (options.includes(savedTab)) {
+                    this.currentTab = savedTab;
+                    this.filterSelect.value = savedTab;
+                }
+            }
+        } catch (error) {
+            console.error('加载筛选配置失败:', error);
         }
     }
 
@@ -395,6 +413,9 @@ export class ReminderPanel {
             const isOldTabCustom = this.currentTab.startsWith('custom_');
             const isNewTabCustom = newTab.startsWith('custom_');
             this.currentTab = newTab;
+
+            // 保存筛选配置
+            saveFilterConfig(this.plugin, newTab);
 
             // 如果从自定义过滤器切换到非自定义过滤器，重置当前自定义过滤器ID
             // 这样下次切换到自定义过滤器时会重新同步分类设置
