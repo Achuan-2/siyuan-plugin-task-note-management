@@ -2663,6 +2663,16 @@ export class CalendarView {
                 }
             });
 
+            if (isHabitPomodoro) {
+                menu.addItem({
+                    iconHTML: "📊",
+                    label: i18n("viewStatsMenuItem") || "查看统计",
+                    click: async () => {
+                        await this.openHabitStatsDialog(relatedEventId);
+                    }
+                });
+            }
+
             menu.addItem({
                 iconHTML: "🗑️",
                 label: i18n("deletePomodoroRecord"),
