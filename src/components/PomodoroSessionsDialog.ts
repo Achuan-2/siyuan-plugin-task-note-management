@@ -35,6 +35,49 @@ export class PomodoroSessionsDialog {
         this.recordManager = PomodoroRecordManager.getInstance(plugin);
     }
 
+    /**
+     * 解析事件标题（支持任务与习惯）
+     * 优先顺序：
+     * 1. reminderData（含实例 originalId 回退）
+     * 2. habitData
+     * 3. 传入的 fallbackTitle
+     * 4. 默认文案
+     */
+    private async resolveEventTitle(eventId: string, fallbackTitle?: string): Promise<string> {
+        let eventTitle = "";
+
+        try {
+            const reminderData = await this.plugin.loadReminderData?.();
+            let reminder = reminderData?.[eventId];
+
+            // 兼容重复实例 ID：originalId_YYYY-MM-DD
+            if (!reminder && eventId.includes('_')) {
+                const parts = eventId.split('_');
+                const lastPart = parts[parts.length - 1];
+                if (/^\d{4}-\d{2}-\d{2}$/.test(lastPart)) {
+                    const originalId = parts.slice(0, -1).join('_');
+                    reminder = reminderData?.[originalId];
+                }
+            }
+
+            eventTitle = reminder?.title || "";
+        } catch (error) {
+            console.warn("解析 reminder 标题失败:", error);
+        }
+
+        if (!eventTitle) {
+            try {
+                const habitData = await this.plugin.loadHabitData?.();
+                const habit = habitData?.[eventId];
+                eventTitle = habit?.title || "";
+            } catch (error) {
+                console.warn("解析 habit 标题失败:", error);
+            }
+        }
+
+        return eventTitle || fallbackTitle || "未知任务";
+    }
+
     public async show() {
         await this.loadSessions();
 
@@ -393,27 +436,7 @@ export class PomodoroSessionsDialog {
             }
 
             try {
-                // 获取提醒信息
-                const reminderData = await this.plugin.loadReminderData();
-                let reminder = reminderData[this.reminderId];
-                let eventTitle = reminder?.title;
-
-                // 如果没有找到，可能是重复任务实例（ID格式: originalId_YYYY-MM-DD）
-                if (!reminder && this.reminderId.includes('_')) {
-                    const parts = this.reminderId.split('_');
-                    const lastPart = parts[parts.length - 1];
-                    // 检查是否是日期格式
-                    if (/^\d{4}-\d{2}-\d{2}$/.test(lastPart)) {
-                        const originalId = parts.slice(0, -1).join('_');
-                        reminder = reminderData[originalId];
-                        eventTitle = reminder?.title;
-                    }
-                }
-
-                // 如果还是没有找到，使用默认标题
-                if (!eventTitle) {
-                    eventTitle = "未知任务";
-                }
+                const eventTitle = await this.resolveEventTitle(this.reminderId);
 
                 // 计算开始和结束时间
                 const timePoint = new Date(timePointStr);
@@ -571,26 +594,7 @@ export class PomodoroSessionsDialog {
                 await this.recordManager.deleteSession(session.id);
 
                 // 创建新会话
-                const reminderData = await this.plugin.loadReminderData();
-                let reminder = reminderData[this.reminderId];
-                let eventTitle = reminder?.title;
-
-                // 如果没有找到，可能是重复任务实例（ID格式: originalId_YYYY-MM-DD）
-                if (!reminder && this.reminderId.includes('_')) {
-                    const parts = this.reminderId.split('_');
-                    const lastPart = parts[parts.length - 1];
-                    // 检查是否是日期格式
-                    if (/^\d{4}-\d{2}-\d{2}$/.test(lastPart)) {
-                        const originalId = parts.slice(0, -1).join('_');
-                        reminder = reminderData[originalId];
-                        eventTitle = reminder?.title;
-                    }
-                }
-
-                // 如果还是没有找到，使用原会话的标题
-                if (!eventTitle) {
-                    eventTitle = session.eventTitle || "未知任务";
-                }
+                const eventTitle = await this.resolveEventTitle(this.reminderId, session.eventTitle);
 
                 const startTime = new Date(startTimeStr);
                 const endTime = new Date(startTime.getTime() + duration * 60000);

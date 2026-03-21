@@ -5,15 +5,23 @@ import { getLocalDateTimeString, getLogicalDateString } from "../utils/dateUtils
 import { HabitGroupManager } from "../utils/habitGroupManager";
 import { i18n } from "../pluginInstance";
 import { HabitCheckInEmojiDialog } from "./HabitCheckInEmojiDialog";
+import { PomodoroRecordManager } from "../utils/pomodoroRecord";
+import { PomodoroSessionsDialog } from "./PomodoroSessionsDialog";
 
 export class HabitEditDialog {
     private dialog: Dialog;
     private habit: Habit | null;
     private onSave: (habit: Habit) => Promise<void>;
+    private plugin?: any;
+    private pomodoroRecordManager?: PomodoroRecordManager;
 
-    constructor(habit: Habit | null, onSave: (habit: Habit) => Promise<void>) {
+    constructor(habit: Habit | null, onSave: (habit: Habit) => Promise<void>, plugin?: any) {
         this.habit = habit;
         this.onSave = onSave;
+        this.plugin = plugin;
+        if (this.plugin) {
+            this.pomodoroRecordManager = PomodoroRecordManager.getInstance(this.plugin);
+        }
     }
 
     show() {
@@ -214,7 +222,7 @@ export class HabitEditDialog {
         // 按钮
         // 创建按钮组，不再作为表单内部直接的子元素；它将被放在 actionContainer（dialog action）中
         const buttonGroup = document.createElement('div');
-        buttonGroup.style.cssText = 'display: flex; gap: 8px; align-items: center; justify-content: space-between; width: 100%; margin-top: 16px;';
+        buttonGroup.style.cssText = 'display: flex; gap: 8px; row-gap: 8px; align-items: center; justify-content: space-between; width: 100%; margin-top: 16px; flex-wrap: wrap;';
 
         const editCheckInBtn = document.createElement('button');
         editCheckInBtn.type = 'button';
@@ -248,6 +256,23 @@ export class HabitEditDialog {
             dialog.show();
         });
 
+        const viewPomodorosBtn = document.createElement('button');
+        viewPomodorosBtn.type = 'button';
+        viewPomodorosBtn.className = 'b3-button b3-button--outline';
+        viewPomodorosBtn.style.cssText = 'min-width: 0; max-width: 100%;';
+        viewPomodorosBtn.innerHTML = `<span id="habitPomodorosCountText" style="display:inline-block; min-width:0; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${i18n("viewPomodoros")}</span>`;
+        viewPomodorosBtn.addEventListener('click', async () => {
+            if (!this.habit?.id || !this.plugin) {
+                showMessage(i18n("saveBeforeViewPomodoros") || "请先保存习惯后再查看番茄钟", 3000, 'error');
+                return;
+            }
+
+            const pomodorosDialog = new PomodoroSessionsDialog(this.habit.id, this.plugin, async () => {
+                await this.updateHabitPomodorosDisplay();
+            });
+            await pomodorosDialog.show();
+        });
+
         const cancelBtn = document.createElement('button');
         cancelBtn.type = 'button';
         cancelBtn.className = 'b3-button';
@@ -260,11 +285,16 @@ export class HabitEditDialog {
         saveBtn.textContent = i18n("save");
 
         const rightButtons = document.createElement('div');
-        rightButtons.style.cssText = 'display: flex; gap: 8px; align-items: center;';
+        rightButtons.style.cssText = 'display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-left: auto;';
         rightButtons.appendChild(cancelBtn);
         rightButtons.appendChild(saveBtn);
 
-        buttonGroup.appendChild(editCheckInBtn);
+        const leftButtons = document.createElement('div');
+        leftButtons.style.cssText = 'display: flex; gap: 8px; align-items: center; flex-wrap: wrap; min-width: 0; flex: 1 1 260px;';
+        leftButtons.appendChild(editCheckInBtn);
+        leftButtons.appendChild(viewPomodorosBtn);
+
+        buttonGroup.appendChild(leftButtons);
         buttonGroup.appendChild(rightButtons);
 
         // Don't append buttonGroup to the form. It'll be appended to the actionContainer (sibling)
@@ -339,7 +369,7 @@ export class HabitEditDialog {
         // insert the action container area and fill with buttons
         if (actionContainer) {
             // ensure actionContainer has proper padding/separation
-            actionContainer.style.cssText = 'display:flex; justify-content: flex-end; padding: 12px 20px; border-top: 1px solid rgba(0,0,0,0.04);';
+            actionContainer.style.cssText = 'display:flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; padding: 12px 20px; border-top: 1px solid rgba(0,0,0,0.04);';
             // append buttons to actionContainer and keep buttonGroup as wrapper
             actionContainer.appendChild(buttonGroup);
         }
@@ -354,6 +384,35 @@ export class HabitEditDialog {
                 form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
             }
         });
+
+        this.updateHabitPomodorosDisplay();
+    }
+
+    private async updateHabitPomodorosDisplay() {
+        const textEl = this.dialog?.element?.querySelector('#habitPomodorosCountText') as HTMLElement | null;
+        if (!textEl) return;
+
+        if (!this.habit?.id || !this.plugin || !this.pomodoroRecordManager) {
+            textEl.textContent = i18n("viewPomodoros");
+            return;
+        }
+
+        try {
+            await this.pomodoroRecordManager.initialize();
+
+            const count = this.pomodoroRecordManager.getEventTotalPomodoroCount(this.habit.id) || 0;
+            const totalMinutes = this.pomodoroRecordManager.getEventTotalFocusTime(this.habit.id) || 0;
+            const timeStr = totalMinutes > 0 ? ` (${Math.floor(totalMinutes / 60)}h${totalMinutes % 60}m)` : '';
+
+            if (count > 0 || totalMinutes > 0) {
+                textEl.textContent = `${i18n("viewPomodoros")} ${count}🍅${timeStr}`;
+            } else {
+                textEl.textContent = i18n("viewPomodoros");
+            }
+        } catch (error) {
+            console.warn('更新习惯番茄钟统计失败:', error);
+            textEl.textContent = i18n("viewPomodoros");
+        }
     }
 
     private createFormGroup(label: string, type: string, name: string, value: string): HTMLElement {

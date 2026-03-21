@@ -222,7 +222,7 @@ export class TaskSummaryDialog {
     const filteredEvents = this.filterEventsByDateRange(events, dateRange);
 
     // 按日期和项目分组任务
-    const groupedTasks = this.groupTasksByDateAndProject(filteredEvents, dateRange, stats, events);
+    const groupedTasks = await this.groupTasksByDateAndProject(filteredEvents, dateRange, stats, events);
 
     // 保存上次生成的数据，供复制使用
     this.lastGroupedTasks = groupedTasks;
@@ -283,6 +283,7 @@ export class TaskSummaryDialog {
               endTime: instance.endTime,
               completed: isInstanceCompleted,
               note: instanceMod?.note || '',
+              customGroupId: instanceMod?.customGroupId !== undefined ? instanceMod.customGroupId : (instance as any).customGroupId ?? reminder.customGroupId,
               docTitle: reminder.docTitle
             };
 
@@ -809,6 +810,7 @@ export class TaskSummaryDialog {
                 endTime: instance.endTime,
                 completed: isInstanceCompleted,
                 note: instanceMod?.note || '',
+                customGroupId: instanceMod?.customGroupId !== undefined ? instanceMod.customGroupId : (instance as any).customGroupId ?? reminder.customGroupId,
                 docTitle: reminder.docTitle // 保持文档标题
               };
 
@@ -880,6 +882,7 @@ export class TaskSummaryDialog {
         priority: priority,
         categoryId: reminder.categoryId,
         projectId: reminder.projectId,
+        customGroupId: reminder.customGroupId,
         blockId: reminder.blockId || reminder.id,
         parentId: reminder.parentId, // 添加父任务ID
         docId: reminder.docId, // 添加docId
@@ -1107,10 +1110,25 @@ export class TaskSummaryDialog {
   /**
    * 按日期和项目分组任务
    */
-  private groupTasksByDateAndProject(events: any[], dateRange: { start: string; end: string; }, stats?: any, allEvents?: any[]) {
+  private async groupTasksByDateAndProject(events: any[], dateRange: { start: string; end: string; }, stats?: any, allEvents?: any[]) {
     // 检查当前是否为日视图
     const isDayView = this.calendar && this.calendar.view.type === 'timeGridDay';
     const grouped = new Map<string, Map<string, any[]>>();
+    const projectData = await this.plugin.loadProjectData() || {};
+    const customGroupNameCache = new Map<string, string>();
+
+    const getCustomGroupName = (projectId?: string, customGroupId?: string): string => {
+      if (!projectId || !customGroupId) return '';
+      const cacheKey = `${projectId}::${customGroupId}`;
+      if (customGroupNameCache.has(cacheKey)) {
+        return customGroupNameCache.get(cacheKey) || '';
+      }
+      const groups = projectData[projectId]?.customGroups || [];
+      const group = groups.find((g: any) => g.id === customGroupId);
+      const name = group?.name || '';
+      customGroupNameCache.set(cacheKey, name);
+      return name;
+    };
 
     // 用于去重：记录已经添加到某个日期的任务
     const addedTasks = new Map<string, Set<string>>(); // Map<日期, Set<任务ID>>
@@ -1138,6 +1156,8 @@ export class TaskSummaryDialog {
         note: event.extendedProps.note,
         docTitle: event.extendedProps.docTitle,
         estimatedPomodoroDuration: event.extendedProps.estimatedPomodoroDuration,
+        customGroupId: event.extendedProps.customGroupId || '',
+        customGroupName: getCustomGroupName(event.extendedProps.projectId, event.extendedProps.customGroupId),
         extendedProps: event.extendedProps, // 保留完整的 extendedProps 以便层级排序使用
         _perDateCompleted: perDateCompleted
       };
@@ -1526,9 +1546,7 @@ export class TaskSummaryDialog {
         dateProjects.forEach((tasks, projectName) => {
           html += `<div class="task-project-group">`;
           html += `<h4 class="task-project-title">${projectName}</h4>`;
-          html += `<ul class="task-list">`;
-
-          tasks.forEach(task => {
+          const renderTaskItem = (task: any) => {
             const completedClass = task.completed ? 'completed' : '';
             const priorityClass = `priority-${task.priority}`;
             let timeStr = '';
@@ -1608,9 +1626,12 @@ export class TaskSummaryDialog {
             // 基础缩进0，每级深度增加20px
             // task-item 默认 padding 是 6px 0，我们添加 padding-left
             const indentStyle = task.depth > 0 ? `padding-left: ${task.depth * 20}px;` : '';
+            const groupName = (task.customGroupName || '').replace(/"/g, '&quot;');
+            const groupId = (task.customGroupId || '').replace(/"/g, '&quot;');
+            const groupAttrs = groupName ? ` data-group-name="${groupName}" data-group-id="${groupId}"` : '';
 
-            html += `
-                  <li class="task-item ${completedClass} ${priorityClass}" style="${indentStyle}" data-depth="${task.depth}">
+            return `
+                  <li class="task-item ${completedClass} ${priorityClass}" style="${indentStyle}" data-depth="${task.depth}"${groupAttrs}>
                     <span class="task-checkbox">${task.completed ? '✅' : '⬜'}</span>
                     <div class="task-body" style="flex:1; display:flex; flex-direction:column;">
                       <div class="task-line">
@@ -1620,9 +1641,49 @@ export class TaskSummaryDialog {
                     </div>
                   </li>
                 `;
+          };
+
+          const groupedTaskMap = new Map<string, any[]>();
+          const ungroupedTasks: any[] = [];
+          tasks.forEach(task => {
+            const groupName = (task.customGroupName || '').trim();
+            if (groupName) {
+              if (!groupedTaskMap.has(groupName)) {
+                groupedTaskMap.set(groupName, []);
+              }
+              groupedTaskMap.get(groupName).push(task);
+            } else {
+              ungroupedTasks.push(task);
+            }
           });
 
-          html += `</ul></div>`;
+          if (groupedTaskMap.size === 0) {
+            html += `<ul class="task-list">`;
+            tasks.forEach(task => {
+              html += renderTaskItem(task);
+            });
+            html += `</ul></div>`;
+            return;
+          }
+
+          if (ungroupedTasks.length > 0) {
+            html += `<ul class="task-list">`;
+            ungroupedTasks.forEach(task => {
+              html += renderTaskItem(task);
+            });
+            html += `</ul>`;
+          }
+
+          groupedTaskMap.forEach((groupTasks, groupName) => {
+            html += `<h5 class="task-custom-group-title">${groupName}</h5>`;
+            html += `<ul class="task-list task-group-list">`;
+            groupTasks.forEach(task => {
+              html += renderTaskItem(task);
+            });
+            html += `</ul>`;
+          });
+
+          html += `</div>`;
         });
       }
 
@@ -1658,6 +1719,15 @@ export class TaskSummaryDialog {
                     list-style: none;
                     padding: 0;
                     margin: 0;
+                }
+                .task-custom-group-title {
+                    margin: 10px 0 6px;
+                    font-size: 13px;
+                    color: var(--b3-theme-on-surface-light);
+                    font-weight: 600;
+                }
+                .task-group-list {
+                    margin-left: 8px;
                 }
                 .task-item {
                     display: flex;
@@ -1859,34 +1929,67 @@ export class TaskSummaryDialog {
       if (dateTitle) markdown += `## ${dateTitle.textContent?.trim()}\n\n`;
 
       const projectGroups = dateGroup.querySelectorAll('.task-project-group');
+      const appendTaskMarkdown = (task: Element) => {
+        const depth = parseInt(task.getAttribute('data-depth') || '0');
+        const indent = '  '.repeat(depth);
+        const checkbox = task.classList.contains('completed') ? '[x]' : '[ ]';
+        const title = task.querySelector('.task-title')?.textContent?.trim() || '';
+        markdown += `${indent}- ${checkbox} ${title}\n`;
+        const noteElem = task.querySelector('.task-note');
+        if (noteElem) {
+          const noteText = noteElem.textContent || '';
+          const lines = noteText.split(/\r?\n/);
+          if (lines.length > 0) {
+            markdown += `${indent}  \n`;
+            lines.forEach(line => {
+              if (line === '') {
+                markdown += `${indent}  \n`;
+              } else {
+                markdown += `${indent}  ${line.trim()}\n`;
+              }
+            });
+          }
+        }
+      };
+
       projectGroups.forEach(projectGroup => {
         const projectTitle = projectGroup.querySelector('.task-project-title');
-        if (projectTitle) markdown += `### ${projectTitle.textContent?.trim()}\n\n`;
+        const tasks = Array.from(projectGroup.querySelectorAll('.task-item'));
 
-        const tasks = projectGroup.querySelectorAll('.task-item');
+        const groupedTaskMap = new Map<string, Element[]>();
+        const ungroupedTasks: Element[] = [];
         tasks.forEach(task => {
-          const depth = parseInt(task.getAttribute('data-depth') || '0');
-          const indent = '  '.repeat(depth);
-          const checkbox = task.classList.contains('completed') ? '[x]' : '[ ]';
-          const title = task.querySelector('.task-title')?.textContent?.trim() || '';
-          markdown += `${indent}- ${checkbox} ${title}\n`;
-          const noteElem = task.querySelector('.task-note');
-          if (noteElem) {
-            const noteText = noteElem.textContent || '';
-            const lines = noteText.split(/\r?\n/);
-            if (lines.length > 0) {
-              // 在标题与备注之间插入一个空行以符合 Markdown 规范
-              markdown += `${indent}  \n`;
-              lines.forEach(line => {
-                if (line === '') {
-                  // 保留空行
-                  markdown += `${indent}  \n`;
-                } else {
-                  markdown += `${indent}  ${line.trim()}\n`;
-                }
-              });
+          const groupName = task.getAttribute('data-group-name')?.trim();
+          if (groupName) {
+            if (!groupedTaskMap.has(groupName)) {
+              groupedTaskMap.set(groupName, []);
             }
+            groupedTaskMap.get(groupName).push(task);
+          } else {
+            ungroupedTasks.push(task);
           }
+        });
+
+        const hasProjectGroups = groupedTaskMap.size > 0;
+        if (projectTitle) {
+          markdown += `${hasProjectGroups ? '####' : '###'} ${projectTitle.textContent?.trim()}\n\n`;
+        }
+
+        if (!hasProjectGroups) {
+          tasks.forEach(task => appendTaskMarkdown(task));
+          markdown += '\n';
+          return;
+        }
+
+        ungroupedTasks.forEach(task => appendTaskMarkdown(task));
+        if (ungroupedTasks.length > 0) {
+          markdown += '\n';
+        }
+
+        groupedTaskMap.forEach((groupTasks, groupName) => {
+          markdown += `##### ${groupName}\n\n`;
+          groupTasks.forEach(task => appendTaskMarkdown(task));
+          markdown += '\n';
         });
         markdown += '\n';
       });
@@ -1949,6 +2052,36 @@ export class TaskSummaryDialog {
       });
 
       const projectGroups = dateGroup.querySelectorAll('.task-project-group');
+      const appendTaskText = (task: Element) => {
+        const depth = parseInt(task.getAttribute('data-depth') || '0');
+        const indent = '  '.repeat(depth);
+        const checkbox = task.classList.contains('completed') ? '✅' : '⬜';
+
+        // 提取任务标题（包含所有内联元素）
+        const taskTitle = task.querySelector('.task-title');
+        const titleText = taskTitle?.textContent?.trim() || '';
+
+        text += `${indent}${checkbox} ${titleText}\n`;
+
+        const noteElem = task.querySelector('.task-note');
+        if (noteElem) {
+          const noteText = noteElem.textContent || '';
+          const lines = noteText.split(/\r?\n/);
+          if (lines.length > 0) {
+            // 在标题与备注之间插入一个空行
+            text += `${indent}  \n`;
+            lines.forEach(line => {
+              const l = line.trim();
+              if (l.length === 0) {
+                text += `${indent}  \n`;
+              } else {
+                text += `${indent}  ${l}\n`;
+              }
+            });
+          }
+        }
+      };
+
       projectGroups.forEach(projectGroup => {
         const projectTitle = projectGroup.querySelector('.task-project-title');
         if (projectTitle) {
@@ -1958,35 +2091,36 @@ export class TaskSummaryDialog {
           }
         }
 
-        const tasks = projectGroup.querySelectorAll('.task-item');
+        const tasks = Array.from(projectGroup.querySelectorAll('.task-item'));
+        const groupedTaskMap = new Map<string, Element[]>();
+        const ungroupedTasks: Element[] = [];
         tasks.forEach(task => {
-          const depth = parseInt(task.getAttribute('data-depth') || '0');
-          const indent = '  '.repeat(depth);
-          const checkbox = task.classList.contains('completed') ? '✅' : '⬜';
-
-          // 提取任务标题（包含所有内联元素）
-          const taskTitle = task.querySelector('.task-title');
-          const titleText = taskTitle?.textContent?.trim() || '';
-
-          text += `${indent}${checkbox} ${titleText}\n`;
-
-          const noteElem = task.querySelector('.task-note');
-          if (noteElem) {
-            const noteText = noteElem.textContent || '';
-            const lines = noteText.split(/\r?\n/);
-            if (lines.length > 0) {
-              // 在标题与备注之间插入一个空行
-              text += `${indent}  \n`;
-              lines.forEach(line => {
-                const l = line.trim();
-                if (l.length === 0) {
-                  text += `${indent}  \n`;
-                } else {
-                  text += `${indent}  ${l}\n`;
-                }
-              });
+          const groupName = task.getAttribute('data-group-name')?.trim();
+          if (groupName) {
+            if (!groupedTaskMap.has(groupName)) {
+              groupedTaskMap.set(groupName, []);
             }
+            groupedTaskMap.get(groupName).push(task);
+          } else {
+            ungroupedTasks.push(task);
           }
+        });
+
+        if (groupedTaskMap.size === 0) {
+          tasks.forEach(task => appendTaskText(task));
+          text += '\n';
+          return;
+        }
+
+        ungroupedTasks.forEach(task => appendTaskText(task));
+        if (ungroupedTasks.length > 0) {
+          text += '\n';
+        }
+
+        groupedTaskMap.forEach((groupTasks, groupName) => {
+          text += `  【${groupName}】\n`;
+          groupTasks.forEach(task => appendTaskText(task));
+          text += '\n';
         });
         text += '\n';
       });

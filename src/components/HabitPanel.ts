@@ -1,4 +1,4 @@
-import { showMessage, Dialog, Menu, confirm } from "siyuan";
+import { showMessage, Dialog, Menu, confirm, getBackend } from "siyuan";
 import { openBlock } from "../api";
 import { getLocalDateTimeString, getLogicalDateString, getRelativeDateString } from "../utils/dateUtils";
 import { HabitGroupManager } from "../utils/habitGroupManager";
@@ -8,7 +8,10 @@ import { HabitStatsDialog } from "./HabitStatsDialog";
 import { HabitGroupManageDialog } from "./HabitGroupManageDialog";
 import { HabitCheckInEmojiDialog } from "./HabitCheckInEmojiDialog";
 import { HabitCalendarDialog } from "./HabitCalendarDialog";
-import { getBackend } from "siyuan";
+import { PomodoroTimer } from "./PomodoroTimer";
+import { PomodoroManager } from "../utils/pomodoroManager";
+import { PomodoroRecordManager } from "../utils/pomodoroRecord";
+import { createPomodoroStartSubmenu as createSharedPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
 
 export interface HabitCheckInEmoji {
     emoji: string;
@@ -61,6 +64,13 @@ export interface Habit {
     sort?: number;
 }
 
+interface HabitPomodoroStats {
+    totalCount: number;
+    totalFocusMinutes: number;
+    todayCount: number;
+    todayFocusMinutes: number;
+}
+
 export class HabitPanel {
     private container: HTMLElement;
     private plugin: any;
@@ -80,11 +90,14 @@ export class HabitPanel {
     private draggingHabitId: string | null = null;
     private dragOverTargetEl: HTMLElement | null = null;
     private dragOverPosition: 'before' | 'after' | null = null;
+    private pomodoroManager: PomodoroManager = PomodoroManager.getInstance();
+    private pomodoroRecordManager: PomodoroRecordManager;
 
     constructor(container: HTMLElement, plugin?: any) {
         this.container = container;
         this.plugin = plugin;
         this.groupManager = HabitGroupManager.getInstance();
+        this.pomodoroRecordManager = PomodoroRecordManager.getInstance(this.plugin);
 
         this.habitUpdatedHandler = () => {
             this.loadHabits();
@@ -95,6 +108,7 @@ export class HabitPanel {
 
     private async initializeAsync() {
         await this.groupManager.initialize();
+        await this.pomodoroRecordManager.initialize();
         await this.loadCollapseStates();
         await this.restorePanelSettings();
 
@@ -110,6 +124,7 @@ export class HabitPanel {
         if (this.habitUpdatedHandler) {
             window.removeEventListener('habitUpdated', this.habitUpdatedHandler);
         }
+        this.pomodoroManager.cleanupInactiveTimer();
     }
 
     private async restorePanelSettings() {
@@ -442,6 +457,12 @@ export class HabitPanel {
         try {
             // 保存滚动位置
             const scrollTop = this.habitsContainer?.scrollTop || 0;
+
+            try {
+                await this.pomodoroRecordManager.refreshData();
+            } catch (error) {
+                console.warn('刷新番茄钟数据失败:', error);
+            }
 
             const habitData = await this.plugin.loadHabitData();
             const habits: Habit[] = Object.values(habitData || {});
@@ -931,6 +952,22 @@ export class HabitPanel {
             card.appendChild(reminder);
         }
 
+        const pomodoroStats = this.getHabitPomodoroStats(habit.id);
+        if (pomodoroStats.totalCount > 0 || pomodoroStats.totalFocusMinutes > 0) {
+            const pomodoroInfo = document.createElement('div');
+            pomodoroInfo.style.cssText = 'font-size: 12px; color: var(--b3-theme-on-surface-light); margin-bottom: 4px;';
+
+            const totalLine = document.createElement('div');
+            totalLine.textContent = `${i18n("total") || "总计"}: 🍅 ${pomodoroStats.totalCount}  ⏱ ${this.formatPomodoroFocusTime(pomodoroStats.totalFocusMinutes)}`;
+            pomodoroInfo.appendChild(totalLine);
+
+            const todayLine = document.createElement('div');
+            todayLine.textContent = `${i18n("today") || "今日"}: 🍅 ${pomodoroStats.todayCount}  ⏱ ${this.formatPomodoroFocusTime(pomodoroStats.todayFocusMinutes)}`;
+            pomodoroInfo.appendChild(todayLine);
+
+            card.appendChild(pomodoroInfo);
+        }
+
         // 坚持打卡天数（显示打卡天数，替换累计打卡次数）
         const checkInDaysCount = Object.keys(habit.checkIns || {}).length;
         const checkInDaysEl = document.createElement('div');
@@ -1248,6 +1285,24 @@ export class HabitPanel {
 
         menu.addSeparator();
 
+        menu.addItem({
+            iconHTML: "🍅",
+            label: i18n("startPomodoro") || "开始番茄钟",
+            submenu: this.createPomodoroStartSubmenu(habit)
+        });
+        menu.addItem({
+            iconHTML: "⏱️",
+            label: i18n("startCountUp") || "开始正向计时",
+            click: () => this.startPomodoroCountUp(habit)
+        });
+        menu.addItem({
+            iconHTML: "📊",
+            label: i18n("viewPomodoros") || "查看番茄钟",
+            click: () => this.showPomodoroSessions(habit)
+        });
+
+        menu.addSeparator();
+
         // 查看统计
         menu.addItem({
             label: i18n("viewStatsMenuItem"),
@@ -1302,6 +1357,198 @@ export class HabitPanel {
             x: event.clientX,
             y: event.clientY
         });
+    }
+
+    private createPomodoroStartSubmenu(habit: Habit): any[] {
+        return createSharedPomodoroStartSubmenu({
+            source: habit,
+            plugin: this.plugin,
+            startPomodoro: (workDurationOverride?: number) => this.startPomodoro(habit, workDurationOverride)
+        });
+    }
+
+    private startPomodoro(habit: Habit, workDurationOverride?: number) {
+        if (!this.plugin) {
+            showMessage("无法启动番茄钟：插件实例不可用");
+            return;
+        }
+
+        if (this.pomodoroManager.hasActivePomodoroTimer()) {
+            const currentState = this.pomodoroManager.getCurrentState();
+            const currentTitle = currentState.reminderTitle || '当前任务';
+            const newTitle = habit.title || '新任务';
+
+            let confirmMessage = `当前正在进行番茄钟任务："${currentTitle}"，是否要切换到新任务："${newTitle}"？`;
+
+            if (currentState.isRunning && !currentState.isPaused) {
+                if (!this.pomodoroManager.pauseCurrentTimer()) {
+                    console.error('暂停当前番茄钟失败');
+                }
+                confirmMessage += `\n\n\n选择"确定"将继承当前进度继续计时。`;
+            }
+
+            confirm(
+                "切换番茄钟任务",
+                confirmMessage,
+                () => {
+                    this.performStartPomodoro(habit, currentState, workDurationOverride);
+                },
+                () => {
+                    if (currentState.isRunning && !currentState.isPaused) {
+                        if (!this.pomodoroManager.resumeCurrentTimer()) {
+                            console.error('恢复番茄钟运行失败');
+                        }
+                    }
+                }
+            );
+        } else {
+            this.pomodoroManager.cleanupInactiveTimer();
+            this.performStartPomodoro(habit, undefined, workDurationOverride);
+        }
+    }
+
+    private async performStartPomodoro(habit: Habit, inheritState?: any, workDurationOverride?: number) {
+        const settings = await this.plugin.getPomodoroSettings();
+        const runtimeSettings = workDurationOverride && workDurationOverride > 0
+            ? { ...settings, workDuration: workDurationOverride }
+            : settings;
+
+        const hasStandaloneWindow = this.plugin && this.plugin.pomodoroWindowId;
+
+        if (hasStandaloneWindow) {
+            if (typeof this.plugin.openPomodoroWindow === 'function') {
+                await this.plugin.openPomodoroWindow(habit, runtimeSettings, false, inheritState);
+
+                if (inheritState && inheritState.isRunning && !inheritState.isPaused) {
+                    const phaseText = inheritState.isWorkPhase ? '工作时间' : '休息时间';
+                    showMessage(`已切换任务并继承${phaseText}进度`, 2000);
+                }
+            }
+        } else {
+            this.pomodoroManager.closeCurrentTimer();
+
+            const pomodoroTimer = new PomodoroTimer(habit, runtimeSettings, false, inheritState, this.plugin);
+            this.pomodoroManager.setCurrentPomodoroTimer(pomodoroTimer);
+
+            pomodoroTimer.show();
+
+            if (inheritState && inheritState.isRunning && !inheritState.isPaused) {
+                const phaseText = inheritState.isWorkPhase ? '工作时间' : '休息时间';
+                showMessage(`已切换任务并继承${phaseText}进度`, 2000);
+            }
+        }
+    }
+
+    private startPomodoroCountUp(habit: Habit) {
+        if (!this.plugin) {
+            showMessage("无法启动番茄钟：插件实例不可用");
+            return;
+        }
+
+        if (this.pomodoroManager.hasActivePomodoroTimer()) {
+            const currentState = this.pomodoroManager.getCurrentState();
+            const currentTitle = currentState.reminderTitle || '当前任务';
+            const newTitle = habit.title || '新任务';
+
+            let confirmMessage = `当前正在进行番茄钟任务："${currentTitle}"，是否要切换到新的正计时任务："${newTitle}"？`;
+
+            if (currentState.isRunning && !currentState.isPaused) {
+                if (!this.pomodoroManager.pauseCurrentTimer()) {
+                    console.error('暂停当前番茄钟失败');
+                }
+                confirmMessage += `\n\n\n选择"确定"将继承当前进度继续计时。`;
+            }
+
+            confirm(
+                "切换到正计时番茄钟",
+                confirmMessage,
+                () => {
+                    this.performStartPomodoroCountUp(habit, currentState);
+                },
+                () => {
+                    if (currentState.isRunning && !currentState.isPaused) {
+                        if (!this.pomodoroManager.resumeCurrentTimer()) {
+                            console.error('恢复番茄钟运行失败');
+                        }
+                    }
+                }
+            );
+        } else {
+            this.pomodoroManager.cleanupInactiveTimer();
+            this.performStartPomodoroCountUp(habit);
+        }
+    }
+
+    private async performStartPomodoroCountUp(habit: Habit, inheritState?: any) {
+        const settings = await this.plugin.getPomodoroSettings();
+        const hasStandaloneWindow = this.plugin && this.plugin.pomodoroWindowId;
+
+        if (hasStandaloneWindow) {
+            if (typeof this.plugin.openPomodoroWindow === 'function') {
+                await this.plugin.openPomodoroWindow(habit, settings, true, inheritState);
+
+                if (inheritState && inheritState.isRunning && !inheritState.isPaused) {
+                    const phaseText = inheritState.isWorkPhase ? '工作时间' : '休息时间';
+                    showMessage(`已切换到正计时模式并继承${phaseText}进度`, 2000);
+                } else {
+                    showMessage("已启动正计时番茄钟", 2000);
+                }
+            }
+        } else {
+            this.pomodoroManager.closeCurrentTimer();
+
+            const pomodoroTimer = new PomodoroTimer(habit, settings, true, inheritState, this.plugin);
+            this.pomodoroManager.setCurrentPomodoroTimer(pomodoroTimer);
+
+            pomodoroTimer.show();
+
+            if (inheritState && inheritState.isRunning && !inheritState.isPaused) {
+                const phaseText = inheritState.isWorkPhase ? '工作时间' : '休息时间';
+                showMessage(`已切换到正计时模式并继承${phaseText}进度`, 2000);
+            } else {
+                showMessage("已启动正计时番茄钟", 2000);
+            }
+        }
+    }
+
+    private async showPomodoroSessions(habit: Habit) {
+        const { PomodoroSessionsDialog } = await import("./PomodoroSessionsDialog");
+        const dialog = new PomodoroSessionsDialog(habit.id, this.plugin);
+        dialog.show();
+    }
+
+    private getHabitPomodoroStats(habitId: string): HabitPomodoroStats {
+        const today = getLogicalDateString();
+
+        let totalCount = 0;
+        let totalFocusMinutes = 0;
+        let todayCount = 0;
+        let todayFocusMinutes = 0;
+
+        try {
+            totalCount = this.pomodoroRecordManager.getEventTotalPomodoroCount(habitId) || 0;
+            totalFocusMinutes = this.pomodoroRecordManager.getEventTotalFocusTime(habitId) || 0;
+            todayCount = this.pomodoroRecordManager.getEventPomodoroCount(habitId, today) || 0;
+            todayFocusMinutes = this.pomodoroRecordManager.getEventFocusTime(habitId, today) || 0;
+        } catch (error) {
+            console.warn(`获取习惯 ${habitId} 的番茄统计失败:`, error);
+        }
+
+        return {
+            totalCount,
+            totalFocusMinutes,
+            todayCount,
+            todayFocusMinutes
+        };
+    }
+
+    private formatPomodoroFocusTime(minutes: number): string {
+        if (!minutes || minutes <= 0) return '0m';
+        if (minutes < 60) return `${minutes}m`;
+
+        const hours = Math.floor(minutes / 60);
+        const remain = minutes % 60;
+        return remain > 0 ? `${hours}h ${remain}m` : `${hours}h`;
     }
 
     private createCheckInSubmenu(habit: Habit): any[] {
@@ -1556,7 +1803,7 @@ export class HabitPanel {
         const dialog = new HabitEditDialog(null, async (habit) => {
             await this.saveHabit(habit);
             this.loadHabits();
-        });
+        }, this.plugin);
         dialog.show();
     }
 
@@ -1565,7 +1812,7 @@ export class HabitPanel {
         const dialog = new HabitEditDialog(habit, async (updatedHabit) => {
             await this.saveHabit(updatedHabit, oldHabitSnapshot);
             this.loadHabits();
-        });
+        }, this.plugin);
         dialog.show();
     }
 

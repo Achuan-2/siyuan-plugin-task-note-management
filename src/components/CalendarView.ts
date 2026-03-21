@@ -2593,13 +2593,26 @@ export class CalendarView {
 
         // Handle Pomodoro events specifically
         if (calendarEvent.extendedProps.type === 'pomodoro') {
+            const relatedEventId = calendarEvent.extendedProps.eventId || "";
+            const isHabitPomodoro = typeof relatedEventId === 'string' && relatedEventId.startsWith('habit');
             menu.addItem({
                 iconHTML: "📝",
-                label: i18n("viewPomodoroTask"),
+                label: isHabitPomodoro ? (i18n("viewPomodoroHabit") || "查看所属习惯") : i18n("viewPomodoroTask"),
                 click: async () => {
                     try {
                         let eventId = calendarEvent.extendedProps.eventId;
                         if (!eventId) return;
+
+                        if (isHabitPomodoro) {
+                            const habitData = await this.plugin.loadHabitData();
+                            const habit = habitData?.[eventId];
+                            if (!habit) {
+                                showMessage(i18n("noHabits") || "未找到习惯");
+                                return;
+                            }
+                            await this.openHabitEditDialog(eventId);
+                            return;
+                        }
 
                         const reminderData = await getAllReminders(this.plugin);
                         let reminder = reminderData[eventId];
@@ -3064,7 +3077,7 @@ export class CalendarView {
 
                 window.dispatchEvent(new CustomEvent('habitUpdated'));
                 await this.refreshEvents(true);
-            });
+            }, this.plugin);
             dialog.show();
         } catch (error) {
             console.error('打开习惯编辑失败:', error);
