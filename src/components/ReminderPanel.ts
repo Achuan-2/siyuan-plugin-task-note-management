@@ -6368,18 +6368,23 @@ export class ReminderPanel {
                     label: i18n("openNote") || "打开笔记",
                     click: () => this.openBlockTab(reminder.blockId)
                 });
-                menu.addItem({
-                    iconHTML: "📋",
-                    label: i18n("copyBlockRef") || "复制块引用",
-                    click: () => this.copyBlockRef(reminder)
-                });
             }
 
+            // 打开项目看板
             if (reminder.projectId) {
                 menu.addItem({
                     icon: "iconProject",
                     label: i18n("openProjectKanban") || "打开项目看板",
                     click: () => this.openProjectKanban(reminder.projectId)
+                });
+            }
+
+            // 复制块引用/绑定块（与打开项目看板一组）
+            if (reminder.blockId) {
+                menu.addItem({
+                    iconHTML: "📋",
+                    label: i18n("copyBlockRef") || "复制块引用",
+                    click: () => this.copyBlockRef(reminder)
                 });
             }
 
@@ -6635,16 +6640,6 @@ export class ReminderPanel {
 
 
 
-        // 添加项目管理选项（仅当任务有projectId时显示）
-        if (reminder.projectId) {
-            menu.addItem({
-                icon: "iconProject",
-                label: i18n("openProjectKanban"),
-                click: () => this.openProjectKanban(reminder.projectId)
-            });
-            menu.addSeparator();
-        }
-
         // Helper: quick date submenu items
         const createQuickDateMenuItems = (targetReminder: any, onlyThisInstance: boolean = false) => {
             const items: any[] = [];
@@ -6710,7 +6705,16 @@ export class ReminderPanel {
 
         if (reminder.isRepeatInstance) {
             // --- Menu for a REPEAT INSTANCE ---
-            // 只对已绑定块的事件显示复制块引用
+            // 打开项目看板（与复制块引用/绑定块一组）
+            if (reminder.projectId) {
+                menu.addItem({
+                    icon: "iconProject",
+                    label: i18n("openProjectKanban"),
+                    click: () => this.openProjectKanban(reminder.projectId)
+                });
+            }
+
+            // 复制块引用/绑定块（与打开项目看板一组）
             if (reminder.blockId) {
                 menu.addItem({
                     iconHTML: "📋",
@@ -6742,8 +6746,7 @@ export class ReminderPanel {
                 });
             }
 
-
-
+            menu.addSeparator();
 
             // 快速调整日期 (重复实例：只修改此实例)
             menu.addItem({
@@ -6794,7 +6797,16 @@ export class ReminderPanel {
 
         } else {
             // --- Menu for a SIMPLE, NON-RECURRING EVENT ---
-            // 只对已绑定块的事件显示复制块引用
+            // 打开项目看板（与复制块引用/绑定块一组）
+            if (reminder.projectId) {
+                menu.addItem({
+                    icon: "iconProject",
+                    label: i18n("openProjectKanban"),
+                    click: () => this.openProjectKanban(reminder.projectId)
+                });
+            }
+
+            // 复制块引用/绑定块（与打开项目看板一组）
             if (reminder.blockId) {
                 menu.addItem({
                     iconHTML: "📋",
@@ -6826,8 +6838,7 @@ export class ReminderPanel {
                 });
             }
 
-
-
+            menu.addSeparator();
 
             // 快速调整日期（普通任务）
             menu.addItem({
