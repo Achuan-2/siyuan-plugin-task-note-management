@@ -19,7 +19,7 @@ import { VipManager } from "../utils/vip";
 
 import { PasteTaskDialog } from "./PasteTaskDialog";
 import { ProjectDialog } from "./ProjectDialog";
-import { getBackend } from "siyuan";
+import { getFrontend,getBackend } from "siyuan";
 import { createPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
 
 export class ProjectKanbanView {
@@ -137,6 +137,8 @@ export class ProjectKanbanView {
 
     private lute: any;
     private showCompletedSubtasks: boolean = true; // 是否显示已完成的子任务
+    // 移动端禁用任务拖拽，避免长按手势被拖拽抢占导致右键菜单无法触发
+    private readonly isMobileClient: boolean;
 
     constructor(container: HTMLElement, plugin: any, projectId: string) {
         this.container = container;
@@ -145,6 +147,7 @@ export class ProjectKanbanView {
         this.projectId = projectId;
         this.categoryManager = CategoryManager.getInstance(this.plugin);
         this.projectManager = ProjectManager.getInstance(this.plugin);
+        this.isMobileClient = getBackend().endsWith('android') || getFrontend().endsWith('mobile');
 
         try {
             if ((window as any).Lute) {
@@ -1694,13 +1697,13 @@ export class ProjectKanbanView {
 
         const toggleBtn = document.createElement('button');
         toggleBtn.className = 'b3-button b3-button--small';
-        toggleBtn.innerHTML = isCollapsed ? '▶' : '▼';
+        toggleBtn.innerHTML = isCollapsed ? '▶' : '🔽';
         toggleBtn.style.marginRight = '8px';
         toggleBtn.addEventListener('click', () => {
             if (this.collapsedMilestoneGroups.has(groupKey)) {
                 this.collapsedMilestoneGroups.delete(groupKey);
                 list.style.display = 'block';
-                toggleBtn.innerHTML = '▼';
+                toggleBtn.innerHTML = '🔽';
             } else {
                 this.collapsedMilestoneGroups.add(groupKey);
                 list.style.display = 'none';
@@ -8820,7 +8823,7 @@ export class ProjectKanbanView {
         if (level > 0) {
             taskEl.classList.add('is-subtask');
         }
-        taskEl.draggable = !task.isSubscribed;
+        taskEl.draggable = !this.isMobileClient && !task.isSubscribed;
         if (task.isSubscribed) {
             taskEl.style.cursor = 'default';
         }
@@ -9681,9 +9684,8 @@ export class ProjectKanbanView {
             taskEl.appendChild(progressContainer);
         }
 
-        // 所有任务均启用拖拽（订阅任务也支持排序）
-        const isAndroid = getBackend().endsWith('android');
-        if (!isAndroid) {
+        // 所有任务均启用拖拽（订阅任务也支持排序）；移动端禁用以确保长按菜单可用
+        if (!this.isMobileClient) {
             taskEl.draggable = true;
             this.addTaskDragEvents(taskEl, task);
             taskEl.addEventListener('dragover', (e) => {

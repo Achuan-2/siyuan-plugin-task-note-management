@@ -7,7 +7,7 @@ import { BlockBindingDialog } from "./BlockBindingDialog";
 import { PomodoroTimer } from "./PomodoroTimer";
 import { PomodoroManager } from "../utils/pomodoroManager";
 import { colorWithOpacity } from "../utils/uiUtils";
-import { showMessage, confirm, Menu, Dialog, platformUtils } from "siyuan";
+import { showMessage, confirm, Menu, Dialog, platformUtils, getBackend, getFrontend } from "siyuan";
 import { i18n } from "../pluginInstance";
 import { getLocalDateTimeString, getLocalDateString, compareDateStrings, getLogicalDateString, getLocaleTag } from "../utils/dateUtils";
 import { getSolarDateLunarString } from "../utils/lunarUtils";
@@ -74,6 +74,8 @@ export class EisenhowerMatrixView {
     private draggedTaskId: string | null = null;
     private collapsedTasks: Set<string> = new Set();
     private collapsedProjects: Map<string, Set<string>> = new Map(); // 每个象限中折叠的项目
+    // 移动端禁用任务拖拽，避免长按手势被拖拽抢占
+    private readonly isMobileClient: boolean;
 
     // 全局番茄钟管理器
     private pomodoroManager = PomodoroManager.getInstance();
@@ -82,6 +84,7 @@ export class EisenhowerMatrixView {
     constructor(container: HTMLElement, plugin: any) {
         this.container = container;
         this.plugin = plugin;
+        this.isMobileClient = getBackend().endsWith('android') || getFrontend().endsWith('mobile');
         this.viewId = `eisenhower-matrix_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
         this.projectManager = ProjectManager.getInstance(plugin);
         this.categoryManager = CategoryManager.getInstance(plugin);
@@ -1046,7 +1049,7 @@ export class EisenhowerMatrixView {
             taskEl.style.marginLeft = `${level * 20}px`;
         }
         taskEl.setAttribute('data-task-id', task.id);
-        taskEl.setAttribute('draggable', 'true'); // 整个任务元素可拖拽
+        taskEl.setAttribute('draggable', this.isMobileClient ? 'false' : 'true'); // 移动端禁用拖拽
         taskEl.setAttribute('data-project-id', task.projectId || 'no-project');
         taskEl.setAttribute('data-priority', task.priority || 'none');
 
@@ -1558,104 +1561,106 @@ export class EisenhowerMatrixView {
             this.toggleTaskCompletion(task, (e.target as HTMLInputElement).checked);
         });
 
-        // 任务元素拖拽事件 - 整个 quick_item 可拖拽
-        taskEl.addEventListener('dragstart', (e) => {
-            e.stopPropagation();
-            e.dataTransfer!.setData('text/plain', task.id);
-            e.dataTransfer!.setData('task/project-id', task.projectId || 'no-project');
-            e.dataTransfer!.setData('task/priority', task.priority || 'none');
-            taskEl.classList.add('dragging');
-            taskEl.style.cursor = 'grabbing';
-            this.isDragging = true;
-            this.draggedTaskId = task.id;
-        });
+        // 任务元素拖拽事件 - 移动端禁用，避免长按冲突
+        if (!this.isMobileClient) {
+            taskEl.addEventListener('dragstart', (e) => {
+                e.stopPropagation();
+                e.dataTransfer!.setData('text/plain', task.id);
+                e.dataTransfer!.setData('task/project-id', task.projectId || 'no-project');
+                e.dataTransfer!.setData('task/priority', task.priority || 'none');
+                taskEl.classList.add('dragging');
+                taskEl.style.cursor = 'grabbing';
+                this.isDragging = true;
+                this.draggedTaskId = task.id;
+            });
 
-        taskEl.addEventListener('dragend', (e) => {
-            e.stopPropagation();
-            taskEl.classList.remove('dragging');
-            taskEl.style.cursor = 'pointer';
-            this.hideDropIndicators();
-            this.isDragging = false;
-            this.draggedTaskId = null;
-        });
+            taskEl.addEventListener('dragend', (e) => {
+                e.stopPropagation();
+                taskEl.classList.remove('dragging');
+                taskEl.style.cursor = 'pointer';
+                this.hideDropIndicators();
+                this.isDragging = false;
+                this.draggedTaskId = null;
+            });
 
-        // 添加拖放排序支持 - 支持跨优先级排序
-        taskEl.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
+            // 添加拖放排序支持 - 支持跨优先级排序
+            taskEl.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
 
-            // 检查是否有拖拽操作进行中
-            if (!this.isDragging || !this.draggedTaskId) {
-                return;
-            }
-
-            // 使用内部状态而不是依赖 dataTransfer
-            const draggedTaskId = this.draggedTaskId;
-
-            if (draggedTaskId && draggedTaskId !== task.id) {
-                // 找到被拖拽的任务
-                const draggedTask = this.filteredTasks.find(t => t.id === draggedTaskId);
-                if (!draggedTask) {
+                // 检查是否有拖拽操作进行中
+                if (!this.isDragging || !this.draggedTaskId) {
                     return;
                 }
 
-                const draggedProjectId = draggedTask.projectId || 'no-project';
-                const draggedPriority = draggedTask.priority || 'none';
-                const currentProjectId = task.projectId || 'no-project';
-                const currentPriority = task.priority || 'none';
+                // 使用内部状态而不是依赖 dataTransfer
+                const draggedTaskId = this.draggedTaskId;
 
-                // 只允许在同一项目内排序（支持跨优先级）
-                if (draggedProjectId === currentProjectId) {
-                    this.showDropIndicator(taskEl, e);
-                    taskEl.classList.add('drag-over');
-
-                    // 跨优先级拖拽时添加视觉提示
-                    if (draggedPriority !== currentPriority) {
-                        taskEl.classList.add(`priority-drop-${currentPriority}`);
-                        // 添加提示文字
-                        const indicator = taskEl.querySelector('.drop-indicator');
-                        if (indicator) {
-                            (indicator as HTMLElement).style.backgroundColor = this.getPriorityColor(currentPriority);
-                        }
+                if (draggedTaskId && draggedTaskId !== task.id) {
+                    // 找到被拖拽的任务
+                    const draggedTask = this.filteredTasks.find(t => t.id === draggedTaskId);
+                    if (!draggedTask) {
+                        return;
                     }
-                }
-            }
-        });
 
-        taskEl.addEventListener('dragleave', (e) => {
-            e.stopPropagation();
-            this.hideDropIndicators();
-            taskEl.classList.remove('drag-over', 'priority-drop-high', 'priority-drop-medium', 'priority-drop-low', 'priority-drop-none');
-        });
-
-        taskEl.addEventListener('drop', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-
-            if (!this.isDragging || !this.draggedTaskId) {
-                this.hideDropIndicators();
-                taskEl.classList.remove('drag-over');
-                return;
-            }
-
-            const draggedTaskId = this.draggedTaskId;
-
-            if (draggedTaskId && draggedTaskId !== task.id) {
-                // 找到被拖拽的任务
-                const draggedTask = this.filteredTasks.find(t => t.id === draggedTaskId);
-                if (draggedTask) {
                     const draggedProjectId = draggedTask.projectId || 'no-project';
+                    const draggedPriority = draggedTask.priority || 'none';
                     const currentProjectId = task.projectId || 'no-project';
+                    const currentPriority = task.priority || 'none';
 
                     // 只允许在同一项目内排序（支持跨优先级）
                     if (draggedProjectId === currentProjectId) {
-                        this.handleTaskReorder(draggedTaskId, task.id, e);
+                        this.showDropIndicator(taskEl, e);
+                        taskEl.classList.add('drag-over');
+
+                        // 跨优先级拖拽时添加视觉提示
+                        if (draggedPriority !== currentPriority) {
+                            taskEl.classList.add(`priority-drop-${currentPriority}`);
+                            // 添加提示文字
+                            const indicator = taskEl.querySelector('.drop-indicator');
+                            if (indicator) {
+                                (indicator as HTMLElement).style.backgroundColor = this.getPriorityColor(currentPriority);
+                            }
+                        }
                     }
                 }
-            }
-            this.hideDropIndicators();
-            taskEl.classList.remove('drag-over', 'priority-drop-high', 'priority-drop-medium', 'priority-drop-low', 'priority-drop-none');
-        });
+            });
+
+            taskEl.addEventListener('dragleave', (e) => {
+                e.stopPropagation();
+                this.hideDropIndicators();
+                taskEl.classList.remove('drag-over', 'priority-drop-high', 'priority-drop-medium', 'priority-drop-low', 'priority-drop-none');
+            });
+
+            taskEl.addEventListener('drop', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+
+                if (!this.isDragging || !this.draggedTaskId) {
+                    this.hideDropIndicators();
+                    taskEl.classList.remove('drag-over');
+                    return;
+                }
+
+                const draggedTaskId = this.draggedTaskId;
+
+                if (draggedTaskId && draggedTaskId !== task.id) {
+                    // 找到被拖拽的任务
+                    const draggedTask = this.filteredTasks.find(t => t.id === draggedTaskId);
+                    if (draggedTask) {
+                        const draggedProjectId = draggedTask.projectId || 'no-project';
+                        const currentProjectId = task.projectId || 'no-project';
+
+                        // 只允许在同一项目内排序（支持跨优先级）
+                        if (draggedProjectId === currentProjectId) {
+                            this.handleTaskReorder(draggedTaskId, task.id, e);
+                        }
+                    }
+                }
+                this.hideDropIndicators();
+                taskEl.classList.remove('drag-over', 'priority-drop-high', 'priority-drop-medium', 'priority-drop-low', 'priority-drop-none');
+            });
+        }
 
         return taskEl;
     }
@@ -1674,30 +1679,32 @@ export class EisenhowerMatrixView {
     }
 
     private setupEventListeners() {
-        // 拖拽放置区域
-        const dropZones = this.container.querySelectorAll('[data-drop-zone="true"]');
-        dropZones.forEach(zone => {
-            zone.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                zone.classList.add('drag-over');
+        // 拖拽放置区域（移动端禁用）
+        if (!this.isMobileClient) {
+            const dropZones = this.container.querySelectorAll('[data-drop-zone="true"]');
+            dropZones.forEach(zone => {
+                zone.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    zone.classList.add('drag-over');
+                });
+
+                zone.addEventListener('dragleave', () => {
+                    zone.classList.remove('drag-over');
+                });
+
+                zone.addEventListener('drop', async (e) => {
+                    e.preventDefault();
+                    zone.classList.remove('drag-over');
+
+                    const taskId = (e as DragEvent).dataTransfer!.getData('text/plain');
+                    const quadrantKey = zone.getAttribute('data-quadrant-content');
+
+                    if (taskId && quadrantKey) {
+                        await this.moveTaskToQuadrant(taskId, quadrantKey as QuadrantTask['quadrant']);
+                    }
+                });
             });
-
-            zone.addEventListener('dragleave', () => {
-                zone.classList.remove('drag-over');
-            });
-
-            zone.addEventListener('drop', async (e) => {
-                e.preventDefault();
-                zone.classList.remove('drag-over');
-
-                const taskId = (e as DragEvent).dataTransfer!.getData('text/plain');
-                const quadrantKey = zone.getAttribute('data-quadrant-content');
-
-                if (taskId && quadrantKey) {
-                    await this.moveTaskToQuadrant(taskId, quadrantKey as QuadrantTask['quadrant']);
-                }
-            });
-        });
+        }
 
         // 新建任务按钮（象限内的）
         const newTaskButtons = this.container.querySelectorAll('.add-task-btn');
