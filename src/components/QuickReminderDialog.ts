@@ -1595,6 +1595,54 @@ export class QuickReminderDialog {
         showMessage(msg);
     }
 
+    private handleMultiLineTitle(lines: string[], onChoice: (title: string, noteAppend?: string) => void) {
+        const escapeHtml = (str: string) => {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        };
+
+        const dialog = new Dialog({
+            title: i18n('multilineTitleDetected'),
+            content: `
+                <div class="b3-dialog__content" style="padding: 16px;">
+                    <div style="margin-bottom: 20px; line-height: 1.6; color: var(--b3-theme-on-surface); font-size: 14px;">
+                        ${i18n('multilineTitleChoice')}
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 12px;">
+                        <button class="b3-button b3-button--outline" id="mergeBtn" style="width: 100%; height: auto; padding: 12px; text-align: left; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; border: 1px solid var(--b3-theme-surface-lighter); border-radius: 8px;">
+                            <span style="font-weight: 600; color: var(--b3-theme-primary);">${i18n('mergeIntoOneLine')}</span>
+                            <div style="font-size: 11px; color: var(--b3-theme-on-surface-light); white-space: normal; line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
+                                ${escapeHtml(lines.join(' '))}
+                            </div>
+                        </button>
+                        <button class="b3-button b3-button--outline" id="moveBtn" style="width: 100%; height: auto; padding: 12px; text-align: left; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; border: 1px solid var(--b3-theme-surface-lighter); border-radius: 8px;">
+                            <span style="font-weight: 600; color: var(--b3-theme-primary);">${i18n('moveOthersToNote')}</span>
+                            <div style="font-size: 11px; color: var(--b3-theme-on-surface-light); white-space: normal; line-height: 1.4;">
+                                <div><b>${i18n('eventTitle')}:</b> ${escapeHtml(lines[0])}</div>
+                                <div style="overflow: hidden; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;"><b>${i18n('reminderNote')}:</b> ${escapeHtml(lines.slice(1).join(' '))}</div>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+            `,
+            width: "450px"
+        });
+
+        const mergeBtn = dialog.element.querySelector('#mergeBtn') as HTMLButtonElement;
+        const moveBtn = dialog.element.querySelector('#moveBtn') as HTMLButtonElement;
+
+        mergeBtn.addEventListener('click', () => {
+            onChoice(lines.join(' '));
+            dialog.destroy();
+        });
+
+        moveBtn.addEventListener('click', () => {
+            onChoice(lines[0], lines.slice(1).join('\n'));
+            dialog.destroy();
+        });
+    }
+
     public async show() {
         await this.categoryManager.initialize();
         await this.projectManager.initialize();
@@ -3376,51 +3424,78 @@ export class QuickReminderDialog {
         // 标题输入框粘贴事件处理
         titleInput?.addEventListener('paste', (e) => {
             e.preventDefault();
-            const pastedText = e.clipboardData?.getData('text') || '';
-            const lines = pastedText.split('\n').map(line => line.trim()).filter(line => line);
+            let pastedText = e.clipboardData?.getData('text') || '';
+            // 归一化换行符
+            pastedText = pastedText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+            const rawLines = pastedText.split('\n');
+            // 获取有意义的行用于决策
+            const meaningfulLines = rawLines.map(line => line.trim()).filter(line => line);
 
-            if (lines.length > 0) {
-                // 插入第一行到光标处
-                const start = titleInput.selectionStart || 0;
-                const end = titleInput.selectionEnd || 0;
-                const before = titleInput.value.substring(0, start);
-                const after = titleInput.value.substring(end);
-                titleInput.value = before + lines[0] + after;
-                titleInput.selectionStart = titleInput.selectionEnd = start + lines[0].length;
+            if (meaningfulLines.length > 0) {
+                const processResult = (title: string, noteAppend?: string) => {
+                    // 插入到光标处
+                    const start = titleInput.selectionStart || 0;
+                    const end = titleInput.selectionEnd || 0;
+                    const before = titleInput.value.substring(0, start);
+                    const after = titleInput.value.substring(end);
+                    titleInput.value = before + title + after;
+                    titleInput.selectionStart = titleInput.selectionEnd = start + title.length;
+                    this.autoResizeTextarea(titleInput);
 
-                // 如果有多行，后面的行放到备注
-                if (lines.length > 1) {
-                    if (this.editor) {
+                    // 如果有备注部分，放到备注
+                    if (noteAppend && this.editor) {
                         const existingNote = this.currentNote;
-                        const newNote = lines.slice(1).join('\n');
-                        this.editor.action(replaceAll(existingNote ? existingNote + '\n' + newNote : newNote));
+                        // 确保单换行符被视为分段（遵循编辑器本身粘贴逻辑）
+                        let formattedNote = noteAppend;
+                        if (formattedNote.includes('\n')) {
+                            formattedNote = formattedNote.replace(/(?<!\n)\n(?!\n)/g, '\n\n');
+                        }
+                        this.editor.action(replaceAll(existingNote ? existingNote + '\n\n' + formattedNote : formattedNote));
                     }
-                }
 
-                // 如果启用了自动识别，检测日期时间
-                const pasteAutoDetect = this.dialog.element.querySelector('#quickPasteAutoDetect') as HTMLInputElement;
-                if (pasteAutoDetect && pasteAutoDetect.checked) {
-                    // 使用粘贴的所有非空行进行识别，以便第二行或后续行中的自然语言也能被识别
-                    const joined = lines.join(' ');
-                    // First parse date/time without altering title; cleanup is applied by global setting below.
-                    const detected = autoDetectDateTimeFromTitle(joined, 'none');
-                    if (detected && (detected.date || detected.endDate)) {
-                        this.applyNaturalLanguageResult(detected);
+                    // 如果启用了自动识别，检测日期时间
+                    const pasteAutoDetect = this.dialog.element.querySelector('#quickPasteAutoDetect') as HTMLInputElement;
+                    if (pasteAutoDetect && pasteAutoDetect.checked) {
+                        // 使用粘贴的所有非空行进行识别，以便第二行或后续行中的自然语言也能被识别
+                        const joined = meaningfulLines.join(' ');
+                        const detected = autoDetectDateTimeFromTitle(joined, 'none');
+                        if (detected && (detected.date || detected.endDate)) {
+                            this.applyNaturalLanguageResult(detected);
 
-                        // 识别后移除日期
-                        this.plugin.getRemoveDateAfterDetectionMode().then((mode: 'none' | 'date' | 'all') => {
-                            if (mode !== 'none') {
-                                // 重新以指定模式识别以获取清理后的标题
-                                const detectedWithMode = autoDetectDateTimeFromTitle(joined, mode);
-                                if (detectedWithMode.cleanTitle !== undefined) {
-                                    // 重新计算 titleInput 的值，将粘贴的那部分替换为清理后的文本
-                                    const cleanPart = detectedWithMode.cleanTitle || '';
-                                    titleInput.value = before + cleanPart + after;
-                                    titleInput.selectionStart = titleInput.selectionEnd = start + cleanPart.length;
+                            // 识别后移除日期
+                            this.plugin.getRemoveDateAfterDetectionMode().then((mode: 'none' | 'date' | 'all') => {
+                                if (mode !== 'none') {
+                                    const detectedWithMode = autoDetectDateTimeFromTitle(joined, mode);
+                                    if (detectedWithMode.cleanTitle !== undefined) {
+                                        // 重新获取当前标题并清理
+                                        const currentTitle = titleInput.value;
+                                        const finalDetected = autoDetectDateTimeFromTitle(currentTitle, mode);
+                                        if (finalDetected.cleanTitle !== undefined) {
+                                            titleInput.value = finalDetected.cleanTitle || currentTitle;
+                                            this.autoResizeTextarea(titleInput);
+                                        }
+                                    }
                                 }
-                            }
-                        });
+                            });
+                        }
                     }
+                };
+
+                if (meaningfulLines.length > 1) {
+                    this.handleMultiLineTitle(meaningfulLines, (_title, noteAppend) => {
+                        if (noteAppend === undefined) {
+                            // 选择合并内容
+                            processResult(meaningfulLines.join(' '));
+                        } else {
+                            // 选择分拆：提取第一行非空行作为标题，其余原始内容（保留换行）作为备注
+                            const firstMatch = rawLines.findIndex(l => l.trim() !== '');
+                            const actualTitle = rawLines[firstMatch].trim();
+                            const actualNote = rawLines.slice(firstMatch + 1).join('\n').trim();
+                            processResult(actualTitle, actualNote);
+                        }
+                    });
+                } else {
+                    processResult(meaningfulLines[0]);
                 }
             }
         });
@@ -3444,13 +3519,10 @@ export class QuickReminderDialog {
         // 自定义提醒时间相关元素
         const addCustomTimeBtn = this.dialog.element.querySelector('#quickAddCustomTimeBtn') as HTMLButtonElement;
         const addPresetBtn = this.dialog.element.querySelector('#quickAddPresetBtn') as HTMLButtonElement;
-        const customTimeInputArea = this.dialog.element.querySelector('#quickCustomTimeInputArea') as HTMLElement;
         const customReminderInput = this.dialog.element.querySelector('#quickCustomReminderTime') as HTMLInputElement;
         const customReminderDaySelect = this.dialog.element.querySelector('#quickCustomReminderDayValue') as HTMLSelectElement;
         const customReminderBeforeDaysWrapper = this.dialog.element.querySelector('#quickCustomReminderBeforeDaysWrapper') as HTMLElement;
         const customReminderBeforeDaysInput = this.dialog.element.querySelector('#quickCustomReminderBeforeDays') as HTMLInputElement;
-        const customReminderNoteInput = this.dialog.element.querySelector('#quickCustomReminderNote') as HTMLInputElement;
-        const cancelCustomTimeBtn = this.dialog.element.querySelector('#quickCancelCustomTimeBtn') as HTMLButtonElement;
         const presetDropdown = this.dialog.element.querySelector('#quickPresetDropdown') as HTMLElement;
 
         customReminderDaySelect?.addEventListener('change', () => {
