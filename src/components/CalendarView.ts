@@ -3807,7 +3807,10 @@ export class CalendarView {
         if (props.isSubscribed || props.isHabit) {
             const subIcon = document.createElement('span');
             const isHabit = !!props.isHabit;
-            subIcon.innerHTML = isHabit ? '🌱' : '🗓';
+            const customIcon = isHabit ? props.icon : null;
+            const customColor = isHabit ? props.color : null;
+            
+            subIcon.innerHTML = customIcon || (isHabit ? '🌱' : '🗓');
             subIcon.title = isHabit
                 ? (i18n("habitPanelTitle") || "习惯")
                 : (i18n("subscribedTaskReadOnly") || "订阅任务（只读）");
@@ -3817,7 +3820,7 @@ export class CalendarView {
             subIcon.style.alignItems = 'center';
             subIcon.style.justifyContent = 'center';
             subIcon.style.fontSize = '10px';
-            subIcon.style.backgroundColor = isHabit ? '#2e7d32' : 'var(--b3-theme-primary)';
+            subIcon.style.backgroundColor = customColor || (isHabit ? '#2e7d32' : 'var(--b3-theme-primary)');
             subIcon.style.borderRadius = '50%';
             subIcon.style.lineHeight = '1';
             subIcon.style.flexShrink = '0';
@@ -6589,6 +6592,8 @@ export class CalendarView {
                             type: 'habit',
                             isHabit: true,
                             habitId: habit.id,
+                            icon: habit.icon,
+                            color: habit.color,
                             date: dateStr,
                             completed,
                             checkedEmojis,
@@ -7410,12 +7415,7 @@ export class CalendarView {
                 );
             }
 
-            // Hint
-            htmlParts.push(
-                `<div style="color: var(--b3-theme-on-surface-light); margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--b3-theme-border); font-size: 12px; font-style: italic;">`,
-                `${i18n("rightClickToEdit") || "右键编辑任务"}`,
-                `</div>`
-            );
+
 
             return htmlParts.join('');
         }
@@ -7425,7 +7425,7 @@ export class CalendarView {
             const title = calendarEvent.title || i18n("habitPanelTitle");
             htmlParts.push(
                 `<div style="font-weight: 600; color: var(--b3-theme-on-surface); margin-bottom: 8px; font-size: 14px; text-align: left; width: 100%;">`,
-                `🌱 ${this.escapeHtml(title)}`,
+                `${reminder.icon || '🌱'} ${this.escapeHtml(title)}`,
                 `</div>`
             );
             const dateText = reminder.date || '';
@@ -7462,11 +7462,6 @@ export class CalendarView {
                     `</div>`
                 );
             }
-            htmlParts.push(
-                `<div style="color: var(--b3-theme-on-surface-light); margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--b3-theme-border); font-size: 12px; font-style: italic;">`,
-                `${i18n("rightClickToEdit") || "右键编辑习惯"}`,
-                `</div>`
-            );
             return htmlParts.join('');
         }
 
