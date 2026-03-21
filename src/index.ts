@@ -3186,6 +3186,8 @@ export default class ReminderPlugin extends Plugin {
             if (this.currentLogicalDate && today !== this.currentLogicalDate) {
                 this.currentLogicalDate = today;
                 window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                // 跨天后同步刷新习惯侧栏（HabitPanel 监听 habitUpdated）
+                window.dispatchEvent(new CustomEvent('habitUpdated'));
             } else if (!this.currentLogicalDate) {
                 this.currentLogicalDate = today;
             }
