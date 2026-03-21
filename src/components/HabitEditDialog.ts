@@ -71,9 +71,132 @@ export class HabitEditDialog {
         const titleGroup = this.createFormGroup(i18n("habitTitleLabel"), 'text', 'title', this.habit?.title || '');
         form.appendChild(titleGroup);
 
-        // 打卡目标
-        const targetGroup = this.createFormGroup(i18n("habitTargetLabel"), 'number', 'target', String(this.habit?.target || 1));
-        form.appendChild(targetGroup);
+        // 打卡目标设置（按次数/按番茄）
+        const goalGroup = document.createElement('div');
+        goalGroup.style.cssText = 'display: flex; flex-direction: column; gap: 8px;';
+
+        const goalLabel = document.createElement('label');
+        goalLabel.textContent = i18n("habitTargetLabel");
+        goalLabel.style.cssText = 'font-weight: bold; font-size: 14px;';
+        goalGroup.appendChild(goalLabel);
+
+        const goalTypeSelect = document.createElement('select');
+        goalTypeSelect.name = 'goalType';
+        goalTypeSelect.className = 'b3-select';
+        goalTypeSelect.innerHTML = `
+            <option value="count">按打卡次数</option>
+            <option value="pomodoro">按番茄时长</option>
+        `;
+        const initialGoalType: 'count' | 'pomodoro' = this.habit?.goalType === 'pomodoro' ? 'pomodoro' : 'count';
+        goalTypeSelect.value = initialGoalType;
+        goalGroup.appendChild(goalTypeSelect);
+
+        const countTargetWrap = document.createElement('div');
+        countTargetWrap.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+        const countTargetInput = document.createElement('input');
+        countTargetInput.type = 'number';
+        countTargetInput.min = '1';
+        countTargetInput.name = 'target';
+        countTargetInput.className = 'b3-text-field';
+        countTargetInput.style.cssText = 'width: 120px;';
+        countTargetInput.value = String(Math.max(1, this.habit?.target || 1));
+        const countTargetSuffix = document.createElement('span');
+        countTargetSuffix.textContent = '次';
+        countTargetWrap.appendChild(countTargetInput);
+        countTargetWrap.appendChild(countTargetSuffix);
+        goalGroup.appendChild(countTargetWrap);
+
+        const pomodoroWrap = document.createElement('div');
+        pomodoroWrap.style.cssText = 'display: flex; flex-direction: column; gap: 8px;';
+
+        const pomodoroDurationRow = document.createElement('div');
+        pomodoroDurationRow.style.cssText = 'display: flex; align-items: center; gap: 8px; flex-wrap: wrap;';
+        const defaultPomodoroTargetMinutes = this.habit?.goalType === 'pomodoro'
+            ? Math.max(1, this.habit?.target || 30)
+            : 30;
+        const defaultPomodoroHours = Math.floor(defaultPomodoroTargetMinutes / 60);
+        const defaultPomodoroMinutes = defaultPomodoroTargetMinutes % 60;
+
+        const pomodoroHoursInput = document.createElement('input');
+        pomodoroHoursInput.type = 'number';
+        pomodoroHoursInput.min = '0';
+        pomodoroHoursInput.name = 'pomodoroTargetHours';
+        pomodoroHoursInput.className = 'b3-text-field';
+        pomodoroHoursInput.style.cssText = 'width: 96px;';
+        pomodoroHoursInput.value = String(Math.max(0, this.habit?.pomodoroTargetHours ?? defaultPomodoroHours));
+
+        const pomodoroHoursLabel = document.createElement('span');
+        pomodoroHoursLabel.textContent = 'h';
+
+        const pomodoroMinutesInput = document.createElement('input');
+        pomodoroMinutesInput.type = 'number';
+        pomodoroMinutesInput.min = '0';
+        pomodoroMinutesInput.max = '59';
+        pomodoroMinutesInput.name = 'pomodoroTargetMinutes';
+        pomodoroMinutesInput.className = 'b3-text-field';
+        pomodoroMinutesInput.style.cssText = 'width: 96px;';
+        pomodoroMinutesInput.value = String(Math.max(0, this.habit?.pomodoroTargetMinutes ?? defaultPomodoroMinutes));
+
+        const pomodoroMinutesLabel = document.createElement('span');
+        pomodoroMinutesLabel.textContent = 'm';
+
+        pomodoroDurationRow.appendChild(pomodoroHoursInput);
+        pomodoroDurationRow.appendChild(pomodoroHoursLabel);
+        pomodoroDurationRow.appendChild(pomodoroMinutesInput);
+        pomodoroDurationRow.appendChild(pomodoroMinutesLabel);
+        pomodoroWrap.appendChild(pomodoroDurationRow);
+
+        const autoCheckInRow = document.createElement('div');
+        autoCheckInRow.style.cssText = 'display: flex; align-items: center; gap: 8px; flex-wrap: wrap;';
+
+        const autoCheckInLabel = document.createElement('label');
+        autoCheckInLabel.style.cssText = 'display:flex; align-items:center; gap:6px; cursor:pointer;';
+        const autoCheckInCheckbox = document.createElement('input');
+        autoCheckInCheckbox.type = 'checkbox';
+        autoCheckInCheckbox.name = 'autoCheckInAfterPomodoro';
+        autoCheckInCheckbox.checked = !!this.habit?.autoCheckInAfterPomodoro;
+        const autoCheckInText = document.createElement('span');
+        autoCheckInText.textContent = '番茄完成后自动打卡';
+        autoCheckInLabel.appendChild(autoCheckInCheckbox);
+        autoCheckInLabel.appendChild(autoCheckInText);
+
+        const autoCheckInEmojiSelect = document.createElement('select');
+        autoCheckInEmojiSelect.name = 'autoCheckInEmoji';
+        autoCheckInEmojiSelect.className = 'b3-select';
+        autoCheckInEmojiSelect.style.cssText = 'min-width: 180px;';
+
+        const refreshAutoCheckInEmojiOptions = () => {
+            const previousValue = autoCheckInEmojiSelect.value || this.habit?.autoCheckInEmoji || '';
+            autoCheckInEmojiSelect.innerHTML = '';
+            const emojiList = draftCheckInEmojis && draftCheckInEmojis.length > 0
+                ? draftCheckInEmojis
+                : this.getDefaultCheckInEmojis();
+
+            emojiList.forEach((emojiItem: any, index: number) => {
+                const option = document.createElement('option');
+                option.value = emojiItem.emoji;
+                option.textContent = `${emojiItem.emoji} ${emojiItem.meaning || ''}`.trim();
+                if ((previousValue && previousValue === emojiItem.emoji) || (!previousValue && index === 0)) {
+                    option.selected = true;
+                }
+                autoCheckInEmojiSelect.appendChild(option);
+            });
+        };
+        refreshAutoCheckInEmojiOptions();
+
+        autoCheckInRow.appendChild(autoCheckInLabel);
+        autoCheckInRow.appendChild(autoCheckInEmojiSelect);
+        pomodoroWrap.appendChild(autoCheckInRow);
+        goalGroup.appendChild(pomodoroWrap);
+        form.appendChild(goalGroup);
+
+        const updateGoalTypeUI = () => {
+            const isPomodoroGoal = goalTypeSelect.value === 'pomodoro';
+            countTargetWrap.style.display = isPomodoroGoal ? 'none' : 'flex';
+            pomodoroWrap.style.display = isPomodoroGoal ? 'flex' : 'none';
+        };
+        updateGoalTypeUI();
+        goalTypeSelect.addEventListener('change', updateGoalTypeUI);
 
         // 频率选择
         const frequencyGroup = this.createFrequencyGroup();
@@ -230,10 +353,20 @@ export class HabitEditDialog {
         editCheckInBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconSettings"></use></svg>${i18n("editCheckInOptions")}`;
         editCheckInBtn.addEventListener('click', () => {
             const titleInput = form.querySelector('input[name="title"]') as HTMLInputElement | null;
+            const goalType = ((form.querySelector('select[name="goalType"]') as HTMLSelectElement | null)?.value === 'pomodoro') ? 'pomodoro' : 'count';
+            const targetValue = parseInt((form.querySelector('input[name="target"]') as HTMLInputElement | null)?.value || '1') || 1;
+            const pomodoroHours = Math.max(0, parseInt((form.querySelector('input[name="pomodoroTargetHours"]') as HTMLInputElement | null)?.value || '0') || 0);
+            const pomodoroMinutes = Math.max(0, parseInt((form.querySelector('input[name="pomodoroTargetMinutes"]') as HTMLInputElement | null)?.value || '0') || 0);
+            const pomodoroTargetTotal = Math.max(1, pomodoroHours * 60 + pomodoroMinutes);
             const tempHabit: Habit = {
                 id: this.habit?.id || `habit-temp-${Date.now()}`,
                 title: titleInput?.value?.trim() || this.habit?.title || i18n("newHabitTitle"),
-                target: parseInt((form.querySelector('input[name="target"]') as HTMLInputElement | null)?.value || '1') || 1,
+                target: goalType === 'pomodoro' ? pomodoroTargetTotal : targetValue,
+                goalType,
+                pomodoroTargetHours: pomodoroHours,
+                pomodoroTargetMinutes: pomodoroMinutes,
+                autoCheckInAfterPomodoro: !!(form.querySelector('input[name="autoCheckInAfterPomodoro"]') as HTMLInputElement | null)?.checked,
+                autoCheckInEmoji: (form.querySelector('select[name="autoCheckInEmoji"]') as HTMLSelectElement | null)?.value || undefined,
                 frequency: this.habit?.frequency || { type: 'daily', interval: 1 },
                 startDate: (form.querySelector('input[name="startDate"]') as HTMLInputElement | null)?.value || getLogicalDateString(),
                 endDate: (form.querySelector('input[name="endDate"]') as HTMLInputElement | null)?.value || undefined,
@@ -252,6 +385,7 @@ export class HabitEditDialog {
             const dialog = new HabitCheckInEmojiDialog(tempHabit, async (emojis) => {
                 draftCheckInEmojis = JSON.parse(JSON.stringify(emojis));
                 draftHideCheckedToday = !!tempHabit.hideCheckedToday;
+                refreshAutoCheckInEmojiOptions();
             });
             dialog.show();
         });
@@ -714,12 +848,30 @@ export class HabitEditDialog {
 
         const rawBlockVal = (formData.get('blockId') as string) || undefined;
         const parsedBlockId = rawBlockVal ? (this.extractBlockId(rawBlockVal) || rawBlockVal) : undefined;
+        const goalType = (formData.get('goalType') as string) === 'pomodoro' ? 'pomodoro' : 'count';
+        const targetCount = Math.max(1, parseInt(formData.get('target') as string) || 1);
+        const pomodoroTargetHours = Math.max(0, parseInt((formData.get('pomodoroTargetHours') as string) || '0') || 0);
+        const pomodoroTargetMinutesRaw = Math.max(0, parseInt((formData.get('pomodoroTargetMinutes') as string) || '0') || 0);
+        const pomodoroCarryHours = Math.floor(pomodoroTargetMinutesRaw / 60);
+        const pomodoroTargetMinutes = pomodoroTargetMinutesRaw % 60;
+        const normalizedPomodoroHours = pomodoroTargetHours + pomodoroCarryHours;
+        const pomodoroTotalMinutes = normalizedPomodoroHours * 60 + pomodoroTargetMinutes;
+
+        if (goalType === 'pomodoro' && pomodoroTotalMinutes <= 0) {
+            showMessage('番茄目标时长需要大于 0 分钟', 3000, 'error');
+            return;
+        }
 
         const habit: Habit = {
             id: this.habit?.id || `habit-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             title: title.trim(),
             // note: (formData.get('note') as string)?.trim() || undefined, // 移除全局备注
-            target: parseInt(formData.get('target') as string) || 1,
+            target: goalType === 'pomodoro' ? Math.max(1, pomodoroTotalMinutes) : targetCount,
+            goalType,
+            pomodoroTargetHours: goalType === 'pomodoro' ? normalizedPomodoroHours : undefined,
+            pomodoroTargetMinutes: goalType === 'pomodoro' ? pomodoroTargetMinutes : undefined,
+            autoCheckInAfterPomodoro: goalType === 'pomodoro' ? formData.get('autoCheckInAfterPomodoro') === 'on' : false,
+            autoCheckInEmoji: goalType === 'pomodoro' ? ((formData.get('autoCheckInEmoji') as string) || undefined) : undefined,
             frequency: {
                 type: frequencyType
             },
@@ -983,9 +1135,9 @@ export class HabitEditDialog {
 
     private getDefaultCheckInEmojis() {
         return [
-            { emoji: '✅', meaning: i18n("checkInSuccess") || '完成', promptNote: false },
-            { emoji: '❌', meaning: i18n("checkInFailed") || '未完成', promptNote: false },
-            { emoji: '⭕️', meaning: i18n("partialCompleted") || '部分完成', promptNote: false }
+            { emoji: '✅', meaning: i18n("checkInSuccess") || '完成', promptNote: false, countsAsSuccess:true },
+            { emoji: '❌', meaning: i18n("checkInFailed") || '未完成', promptNote: false, countsAsSuccess:false },
+            { emoji: '⭕️', meaning: i18n("partialCompleted") || '部分完成', promptNote: false, countsAsSuccess:false }
         ];
     }
 }

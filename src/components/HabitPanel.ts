@@ -1,4 +1,4 @@
-import { showMessage, Dialog, Menu, confirm, getBackend } from "siyuan";
+import { showMessage, Dialog, Menu, confirm, getBackend, getFrontend } from "siyuan";
 import { openBlock } from "../api";
 import { getLocalDateTimeString, getLogicalDateString, getRelativeDateString } from "../utils/dateUtils";
 import { HabitGroupManager } from "../utils/habitGroupManager";
@@ -31,6 +31,11 @@ export interface Habit {
     note?: string; // 提醒备注
     blockId?: string; // 绑定的块ID
     target: number; // 每次打卡需要打卡x次
+    goalType?: 'count' | 'pomodoro'; // 打卡目标类型：按次数或按番茄时长
+    pomodoroTargetHours?: number; // 番茄目标小时
+    pomodoroTargetMinutes?: number; // 番茄目标分钟
+    autoCheckInAfterPomodoro?: boolean; // 完成番茄后是否自动打卡
+    autoCheckInEmoji?: string; // 自动打卡使用的 emoji
     frequency: {
         type: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'ebbinghaus';
         interval?: number; // 重复间隔，比如每x天
@@ -85,6 +90,7 @@ export class HabitPanel {
     private sortButton: HTMLButtonElement;
     private groupManager: HabitGroupManager;
     private habitUpdatedHandler: () => void;
+    private habitPomodoroCompletedHandler: (event: Event) => void;
     private collapsedGroups: Set<string> = new Set();
     // 拖拽状态
     private draggingHabitId: string | null = null;
@@ -102,6 +108,9 @@ export class HabitPanel {
         this.habitUpdatedHandler = () => {
             this.loadHabits();
         };
+        this.habitPomodoroCompletedHandler = (event: Event) => {
+            this.handleHabitPomodoroCompleted(event);
+        };
 
         this.initializeAsync();
     }
@@ -117,12 +126,16 @@ export class HabitPanel {
         this.loadHabits();
 
         window.addEventListener('habitUpdated', this.habitUpdatedHandler);
+        window.addEventListener('habitPomodoroCompleted', this.habitPomodoroCompletedHandler);
     }
 
     public destroy() {
         this.saveCollapseStates();
         if (this.habitUpdatedHandler) {
             window.removeEventListener('habitUpdated', this.habitUpdatedHandler);
+        }
+        if (this.habitPomodoroCompletedHandler) {
+            window.removeEventListener('habitPomodoroCompleted', this.habitPomodoroCompletedHandler);
         }
         this.pomodoroManager.cleanupInactiveTimer();
     }
@@ -590,26 +603,46 @@ export class HabitPanel {
     }
 
     private isCompletedOnDate(habit: Habit, date: string): boolean {
-        const checkIn = habit.checkIns?.[date];
-        if (!checkIn) return false;
+        const { current, target } = this.getHabitProgressOnDate(habit, date);
+        return current >= target;
+    }
 
-        // 获取当天所有打卡的emoji
-        const emojis: string[] = [];
-        if (checkIn.entries && checkIn.entries.length > 0) {
-            // 使用新格式的entries
-            checkIn.entries.forEach(entry => {
-                if (entry.emoji) emojis.push(entry.emoji);
-            });
-        } else if (checkIn.status && checkIn.status.length > 0) {
-            // 使用旧格式的status
-            emojis.push(...checkIn.status);
+    private getHabitGoalType(habit: Habit): 'count' | 'pomodoro' {
+        return habit.goalType === 'pomodoro' ? 'pomodoro' : 'count';
+    }
+
+    private getHabitPomodoroTargetMinutes(habit: Habit): number {
+        const hours = Math.max(0, Number(habit.pomodoroTargetHours) || 0);
+        const minutes = Math.max(0, Number(habit.pomodoroTargetMinutes) || 0);
+        const total = (hours * 60) + minutes;
+        if (total > 0) return total;
+        return Math.max(1, Number(habit.target) || 1);
+    }
+
+    private getHabitProgressOnDate(habit: Habit, date: string): { current: number; target: number } {
+        if (this.getHabitGoalType(habit) === 'pomodoro') {
+            const target = this.getHabitPomodoroTargetMinutes(habit);
+            const current = this.pomodoroRecordManager.getEventFocusTime(habit.id, date) || 0;
+            return { current, target };
         }
 
-        const target = habit.target || 1;
-        const totalCount = emojis.length;
+        const checkIn = habit.checkIns?.[date];
+        if (!checkIn) {
+            return { current: 0, target: Math.max(1, Number(habit.target) || 1) };
+        }
+        const current = checkIn.count || 0;
+        const target = Math.max(1, Number(habit.target) || 1);
+        return { current, target };
+    }
 
-        // 只要打卡次数达标，就算已完成（不管是成功还是失败）
-        return totalCount >= target;
+    private formatMinutesToHourMinute(totalMinutes: number): string {
+        const minutes = Math.max(0, Math.round(totalMinutes || 0));
+        if (minutes < 60) {
+            return `${minutes}m`;
+        }
+        const hours = Math.floor(minutes / 60);
+        const remain = minutes % 60;
+        return remain > 0 ? `${hours}h${remain}m` : `${hours}h`;
     }
 
     private applyGroupFilter(habits: Habit[]): Habit[] {
@@ -704,7 +737,7 @@ export class HabitPanel {
         const isCollapsed = this.collapsedGroups.has(groupId);
 
         const collapseIcon = document.createElement('span');
-        collapseIcon.textContent = isCollapsed ? '▶' : '▼';
+        collapseIcon.textContent = isCollapsed ? '▶' : '🔽';
         collapseIcon.style.cssText = 'margin-right: 8px; font-size: 12px;';
 
         const groupTitle = document.createElement('span');
@@ -734,7 +767,7 @@ export class HabitPanel {
             const sortedHabits = this.sortHabitsInGroup(habits);
             sortedHabits.forEach(habit => {
                 const habitCard = this.createHabitCard(habit);
-                const isAndroid = getBackend().endsWith('android');
+                const isAndroid = getFrontend().endsWith('mobile') || getBackend().endsWith('android');
                 if (!isAndroid) {                // 启用拖拽：仅在同一分组内按优先级排序时可拖拽调整
                     habitCard.draggable = true;
                     habitCard.dataset.habitId = habit.id;
@@ -887,16 +920,39 @@ export class HabitPanel {
         // 打卡信息
         const today = getLogicalDateString();
         const checkIn = habit.checkIns?.[today];
-        const currentCount = checkIn?.count || 0;
-        const targetCount = habit.target;
+        const goalType = this.getHabitGoalType(habit);
+        const { current: currentProgress, target: targetProgress } = this.getHabitProgressOnDate(habit, today);
 
         const progressRow = document.createElement('div');
         progressRow.style.cssText = 'margin-bottom: 8px;';
 
-        if (targetCount > 1) {
-            // 显示进度条
+        if (goalType === 'pomodoro') {
             const progressText = document.createElement('div');
-            progressText.textContent = `${i18n("todayProgressLabel")}${currentCount}/${targetCount}`;
+            progressText.textContent = `今日番茄进度：${this.formatMinutesToHourMinute(currentProgress)}/${this.formatMinutesToHourMinute(targetProgress)}`;
+            progressText.style.cssText = 'font-size: 12px; margin-bottom: 4px; color: var(--b3-theme-on-surface-light);';
+            progressRow.appendChild(progressText);
+
+            const progressBar = document.createElement('div');
+            progressBar.style.cssText = `
+                width: 100%;
+                height: 6px;
+                background: var(--b3-theme-surface);
+                border-radius: 3px;
+                overflow: hidden;
+            `;
+            const progressFill = document.createElement('div');
+            const percentage = Math.min(100, (currentProgress / Math.max(1, targetProgress)) * 100);
+            progressFill.style.cssText = `
+                width: ${percentage}%;
+                height: 100%;
+                background: var(--b3-theme-primary);
+                transition: width 0.3s;
+            `;
+            progressBar.appendChild(progressFill);
+            progressRow.appendChild(progressBar);
+        } else if (targetProgress > 1) {
+            const progressText = document.createElement('div');
+            progressText.textContent = `${i18n("todayProgressLabel")}${currentProgress}/${targetProgress}`;
             progressText.style.cssText = 'font-size: 12px; margin-bottom: 4px; color: var(--b3-theme-on-surface-light);';
             progressRow.appendChild(progressText);
 
@@ -910,7 +966,7 @@ export class HabitPanel {
             `;
 
             const progressFill = document.createElement('div');
-            const percentage = Math.min(100, (currentCount / targetCount) * 100);
+            const percentage = Math.min(100, (currentProgress / targetProgress) * 100);
             progressFill.style.cssText = `
                 width: ${percentage}%;
                 height: 100%;
@@ -921,7 +977,7 @@ export class HabitPanel {
             progressRow.appendChild(progressBar);
         } else {
             const progressText = document.createElement('div');
-            progressText.textContent = `${i18n("todayStatusLabel")}${currentCount >= targetCount ? i18n("completed") : i18n("unfinished")}`;
+            progressText.textContent = `${i18n("todayStatusLabel")}${currentProgress >= targetProgress ? i18n("completed") : i18n("unfinished")}`;
             progressText.style.cssText = 'font-size: 12px; color: var(--b3-theme-on-surface-light);';
             progressRow.appendChild(progressText);
         }
@@ -1360,8 +1416,13 @@ export class HabitPanel {
     }
 
     private createPomodoroStartSubmenu(habit: Habit): any[] {
+        const goalType = this.getHabitGoalType(habit);
+        const pomodoroGoalMinutes = goalType === 'pomodoro' ? this.getHabitPomodoroTargetMinutes(habit) : undefined;
+        const sourceForMenu = pomodoroGoalMinutes
+            ? { ...habit, estimatedPomodoroDuration: pomodoroGoalMinutes }
+            : habit;
         return createSharedPomodoroStartSubmenu({
-            source: habit,
+            source: sourceForMenu,
             plugin: this.plugin,
             startPomodoro: (workDurationOverride?: number) => this.startPomodoro(habit, workDurationOverride)
         });
@@ -1611,7 +1672,11 @@ export class HabitPanel {
         return submenu;
     }
 
-    private async checkInHabit(habit: Habit, emojiConfig: HabitCheckInEmoji) {
+    private async checkInHabit(
+        habit: Habit,
+        emojiConfig: HabitCheckInEmoji,
+        options?: { skipPromptNote?: boolean; silent?: boolean }
+    ) {
         try {
             const today = getLogicalDateString();
             const now = getLocalDateTimeString(new Date());
@@ -1634,7 +1699,7 @@ export class HabitPanel {
             let note: string | undefined = undefined;
             let customTimestamp: string = now; // 默认使用当前时间
             let cancelled = false; // 标记用户是否取消了打卡
-            if (emojiConfig.promptNote) {
+            if (emojiConfig.promptNote && !options?.skipPromptNote) {
                 // 弹窗输入备注和打卡时间 —— 使用标准 dialog footer（.b3-dialog__action）放置按钮以保证样式与位置正确
                 let resolveFn: (() => void) | null = null;
                 const promise = new Promise<void>((resolve) => { resolveFn = resolve; });
@@ -1719,7 +1784,9 @@ export class HabitPanel {
             habit.updatedAt = now;
 
             await this.saveHabit(habit);
-            showMessage(`${i18n("checkInSuccess")}${emojiConfig.emoji}` + (note ? ` - ${note}` : ''));
+            if (!options?.silent) {
+                showMessage(`${i18n("checkInSuccess")}${emojiConfig.emoji}` + (note ? ` - ${note}` : ''));
+            }
             this.loadHabits();
         } catch (error) {
             console.error('checkIn failed:', error);
@@ -1796,6 +1863,33 @@ export class HabitPanel {
         } catch (error) {
             console.error('deleteHabit failed:', error);
             showMessage(i18n("deleteFailed"), 3000, 'error');
+        }
+    }
+
+    private async handleHabitPomodoroCompleted(event: Event) {
+        try {
+            const customEvent = event as CustomEvent<{ habitId?: string; autoCheckInEmoji?: string }>;
+            const habitId = customEvent?.detail?.habitId;
+            if (!habitId) return;
+
+            const habitData = await this.plugin.loadHabitData();
+            const habit = habitData?.[habitId] as Habit | undefined;
+            if (!habit || !habit.autoCheckInAfterPomodoro) return;
+
+            const configuredEmoji = customEvent?.detail?.autoCheckInEmoji || habit.autoCheckInEmoji;
+            let targetEmoji = habit.checkInEmojis?.find(item => item.emoji === configuredEmoji);
+            if (!targetEmoji) {
+                targetEmoji = habit.checkInEmojis?.[0];
+            }
+            if (!targetEmoji) {
+                console.warn('自动打卡失败：未找到可用打卡项', habitId);
+                return;
+            }
+
+            await this.checkInHabit(habit, targetEmoji, { skipPromptNote: true, silent: true });
+            showMessage(`番茄完成，已自动打卡 ${targetEmoji.emoji}`, 2500);
+        } catch (error) {
+            console.error('处理番茄完成自动打卡失败:', error);
         }
     }
 

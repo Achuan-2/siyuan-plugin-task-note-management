@@ -305,6 +305,24 @@ export class PomodoroSessionsDialog {
     }
 
     /**
+     * 派发更新事件：
+     * - 始终派发 reminderUpdated，确保任务相关视图刷新
+     * - 若当前 eventId 对应习惯，则额外派发 habitUpdated，确保习惯面板刷新
+     */
+    private async dispatchUpdateEvents() {
+        window.dispatchEvent(new CustomEvent('reminderUpdated'));
+
+        try {
+            const habitData = await this.plugin.loadHabitData?.();
+            if (habitData && habitData[this.reminderId]) {
+                window.dispatchEvent(new CustomEvent('habitUpdated'));
+            }
+        } catch (error) {
+            console.warn("派发习惯更新事件失败:", error);
+        }
+    }
+
+    /**
      * 添加新的番茄钟会话（补录）
      */
     private async addNewSession() {
@@ -515,8 +533,7 @@ export class PomodoroSessionsDialog {
                 await this.syncReminderPomodoroCount();
                 this.renderSessions();
 
-                // 触发reminderUpdated事件以更新界面
-                window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                await this.dispatchUpdateEvents();
 
                 if (this.onUpdate) this.onUpdate();
             } catch (error) {
@@ -657,8 +674,7 @@ export class PomodoroSessionsDialog {
                 await this.syncReminderPomodoroCount();
                 this.renderSessions();
 
-                // 触发reminderUpdated事件以更新界面
-                window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                await this.dispatchUpdateEvents();
 
                 if (this.onUpdate) this.onUpdate();
             } catch (error) {
@@ -694,8 +710,7 @@ export class PomodoroSessionsDialog {
                         await this.syncReminderPomodoroCount();
                         this.renderSessions();
 
-                        // 触发reminderUpdated事件以更新界面
-                        window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                        await this.dispatchUpdateEvents();
 
                         if (this.onUpdate) this.onUpdate();
                     } else {

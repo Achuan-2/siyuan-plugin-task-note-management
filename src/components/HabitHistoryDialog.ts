@@ -103,7 +103,7 @@ export class HabitHistoryDialog {
             header.style.cssText = 'display:flex; align-items:center; gap:12px; padding:8px; background: var(--b3-theme-surface); border-radius:6px; cursor:pointer;';
 
             const toggleIcon = document.createElement('span');
-            toggleIcon.textContent = isCollapsed ? '▶' : '▼';
+            toggleIcon.textContent = isCollapsed ? '▶' : '🔽';
             toggleIcon.style.cssText = 'margin-right:8px; font-size:12px;';
             header.appendChild(toggleIcon);
 

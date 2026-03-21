@@ -4960,6 +4960,21 @@ export class PomodoroTimer {
 
 
     // 完成番茄阶段（正计时模式）
+    private triggerHabitAutoCheckInAfterPomodoro() {
+        try {
+            if (!this.reminder || !this.reminder.id) return;
+            if (!this.reminder.autoCheckInAfterPomodoro) return;
+            window.dispatchEvent(new CustomEvent('habitPomodoroCompleted', {
+                detail: {
+                    habitId: this.reminder.id,
+                    autoCheckInEmoji: this.reminder.autoCheckInEmoji
+                }
+            }));
+        } catch (error) {
+            console.warn('触发习惯自动打卡事件失败:', error);
+        }
+    }
+
     private async completePomodoroPhase() {
         // 先取消所有已调度的移动端通知
         this.cancelAllMobileNotifications();
@@ -5043,6 +5058,7 @@ export class PomodoroTimer {
             // 更新番茄数量（正计时和倒计时都需要）
             this.completedPomodoros++;
             await this.updateReminderPomodoroCount();
+            this.triggerHabitAutoCheckInAfterPomodoro();
             // 触发 reminderUpdated 事件
             window.dispatchEvent(new CustomEvent('reminderUpdated'));
 
@@ -5211,6 +5227,7 @@ export class PomodoroTimer {
                 // 更新番茄数量计数
                 this.completedPomodoros++;
                 await this.updateReminderPomodoroCount();
+                this.triggerHabitAutoCheckInAfterPomodoro();
 
                 // 判断是否应该进入长休息
                 const shouldTakeLongBreak = this.completedPomodoros > 0 &&
