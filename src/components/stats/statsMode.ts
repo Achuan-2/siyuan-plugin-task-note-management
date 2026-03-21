@@ -1,11 +1,11 @@
 export const STATS_MODE_STORAGE_KEY = "siyuan-plugin-task-note-management:stats-mode";
 
-export type StatsMode = "pomodoro" | "task" | "habit";
+export type StatsMode = "pomodoro" | "task" | "habit" | "summary";
 
 export function getLastStatsMode(): StatsMode {
     try {
         const value = localStorage.getItem(STATS_MODE_STORAGE_KEY);
-        if (value === "task" || value === "habit") return value;
+        if (value === "task" || value === "habit" || value === "summary") return value;
         return "pomodoro";
     } catch {
         return "pomodoro";

@@ -20,7 +20,7 @@
 - **ReminderEditDialog.ts**：提醒任务编辑对话框，专门用于修改现有提醒任务
 - **RepeatSettingsDialog.ts**：重复设置对话框，配置任务的重复规则（日、周、月、年等）
 - **StatusManageDialog.ts**：状态管理对话框，管理任务的自定义状态类型
-- **TaskSummaryDialog.ts**：任务摘要对话框，生成和显示任务统计摘要信息
+- **TaskSummaryTab.svelte**：任务摘要统计标签页组件（Svelte），生成和显示任务统计摘要信息，支持按日期范围筛选、番茄钟统计和习惯打卡统计
 
 ## 专用功能组件
 - **LoadingDialog.svelte**：加载中对话框组件（Svelte），显示操作进度和加载状态

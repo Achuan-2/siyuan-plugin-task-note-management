@@ -39,6 +39,8 @@ export class HabitCheckInEmojiDialog {
         this.renderEmojiList(container);
     }
 
+    private lastScrollTop = 0;
+
     private renderEmojiList(container: HTMLElement) {
         container.innerHTML = "";
         container.style.cssText = "padding: 12px; display: flex; flex-direction: column; height: 100%;";
@@ -48,6 +50,7 @@ export class HabitCheckInEmojiDialog {
 
         const listContainer = document.createElement("div");
         listContainer.className = "b3-dialog__content";
+        listContainer.id = "emojiListContainer";
         listContainer.style.cssText = `
             flex: 1;
             overflow-y: auto;
@@ -65,8 +68,18 @@ export class HabitCheckInEmojiDialog {
             this.shouldScrollToBottom = false;
             requestAnimationFrame(() => {
                 listContainer.scrollTop = listContainer.scrollHeight;
+                this.lastScrollTop = listContainer.scrollHeight;
+            });
+        } else {
+            requestAnimationFrame(() => {
+                listContainer.scrollTop = this.lastScrollTop;
             });
         }
+
+        // 监听滚动事件保存位置
+        listContainer.addEventListener("scroll", () => {
+            this.lastScrollTop = listContainer.scrollTop;
+        });
 
         container.appendChild(listContainer);
         container.appendChild(this.createActionBar());
@@ -646,11 +659,6 @@ export class HabitCheckInEmojiDialog {
             }
         }
 
-        const emojiSet = new Set(this.emojis.map(item => item.emoji));
-        if (emojiSet.size !== this.emojis.length) {
-            showMessage(i18n("duplicateEmojiExists") || "存在重复的 Emoji，请修改", 3000, "error");
-            return;
-        }
 
         try {
             await this.onSave(this.emojis);

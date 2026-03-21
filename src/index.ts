@@ -109,6 +109,7 @@ export const DEFAULT_SETTINGS = {
     // 日历摘要设置
     showPomodoroInSummary: true,
     showHabitInSummary: true,
+    showTaskNotesInSummary: false,
     // 任务管理侧栏排序配置
     sortMethod: "priority",
     sortOrder: "desc",

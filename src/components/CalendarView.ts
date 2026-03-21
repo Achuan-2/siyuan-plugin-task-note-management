@@ -20,7 +20,7 @@ import { i18n } from "../pluginInstance";
 import { generateRepeatInstances, RepeatInstance, getDaysDifference, addDaysToDate } from "../utils/repeatUtils";
 import { getAllReminders, saveReminders, loadHolidays, loadSubscriptions } from "../utils/icsSubscription";
 import { CalendarConfigManager } from "../utils/calendarConfigManager";
-import { TaskSummaryDialog } from "@/components/TaskSummaryDialog";
+import { showStatsDialog } from "./stats/ShowStatsDialog";
 import { PomodoroManager } from "../utils/pomodoroManager";
 import { getNextLunarMonthlyDate, getNextLunarYearlyDate, getSolarDateLunarString } from "../utils/lunarUtils";
 import { BlockBindingDialog } from "./BlockBindingDialog";
@@ -40,7 +40,7 @@ export class CalendarView {
     private projectManager: ProjectManager;
     private statusManager: StatusManager; // 添加状态管理器
     private calendarConfigManager: CalendarConfigManager;
-    private taskSummaryDialog: TaskSummaryDialog;
+
     private currentCategoryFilter: Set<string> = new Set(['all']); // 当前分类过滤（支持多选）
     private currentProjectFilter: Set<string> = new Set(['all']); // 当前项目过滤（支持多选）
     private initialProjectFilter: string | null = null;
@@ -237,7 +237,7 @@ export class CalendarView {
         this.projectManager = ProjectManager.getInstance(this.plugin);
         this.statusManager = StatusManager.getInstance(plugin);
         this.calendarConfigManager = CalendarConfigManager.getInstance(this.plugin);
-        this.taskSummaryDialog = new TaskSummaryDialog(undefined, plugin);
+
         if (data?.projectFilter) {
             this.initialProjectFilter = data.projectFilter;
         }
@@ -1286,7 +1286,7 @@ export class CalendarView {
             summaryBtn.innerHTML = '<svg class="b3-button__icon" style="margin-right: 0;"><use xlink:href="#iconFile"></use></svg>';
             summaryBtn.title = i18n("taskSummary") || "任务摘要";
             summaryBtn.addEventListener('click', () => {
-                this.taskSummaryDialog.showTaskSummaryDialog();
+                showStatsDialog(this.plugin, 'summary', this.calendar);
             });
             filterGroup.appendChild(summaryBtn);
             // 更多按钮（包含管理分类、项目颜色、插件设置）
@@ -2059,10 +2059,6 @@ export class CalendarView {
         // 更新视图按钮状态
         this.updateViewButtonStates();
 
-        // 设置任务摘要对话框的引用
-        this.taskSummaryDialog.setCalendar(this.calendar);
-        this.taskSummaryDialog.setCategoryManager(this);
-
         // datesSet 会在 render 后自动触发，无需额外调用 refreshEvents
 
         // 添加自定义样式
@@ -2113,10 +2109,6 @@ export class CalendarView {
 
         // 添加滚轮缩放监听器
         this.addWheelZoomListener(calendarEl);
-
-        // 设置日历实例到任务摘要管理器
-        this.taskSummaryDialog.setCalendar(this.calendar);
-        this.taskSummaryDialog.setCategoryManager(this);
 
         this.checkVip();
     }

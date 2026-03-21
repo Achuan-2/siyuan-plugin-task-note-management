@@ -1,8 +1,8 @@
 import { Dialog, showMessage } from "siyuan";
 
-type StatsTab = "pomodoro" | "task" | "habit";
+type StatsTab = "pomodoro" | "task" | "habit" | "summary";
 
-export async function showStatsDialog(plugin: any, initialTab: StatsTab = "pomodoro") {
+export async function showStatsDialog(plugin: any, initialTab: StatsTab = "pomodoro", calendar?: any) {
     const dialog = new Dialog({
         title: "📊 统计视图",
         content: '<div id="showStatsViewContainer" style="height:100%;padding: 8px 16px 16px;box-sizing:border-box;"></div>',
@@ -24,7 +24,8 @@ export async function showStatsDialog(plugin: any, initialTab: StatsTab = "pomod
             target,
             props: {
                 plugin,
-                initialTab
+                initialTab,
+                calendar
             }
         });
 

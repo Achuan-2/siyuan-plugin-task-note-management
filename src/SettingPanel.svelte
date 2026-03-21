@@ -538,6 +538,13 @@
                     title: i18n('showHabitInSummary'),
                     description: i18n('showHabitInSummaryDesc'),
                 },
+                {
+                    key: 'showTaskNotesInSummary',
+                    value: settings.showTaskNotesInSummary,
+                    type: 'checkbox',
+                    title: i18n('showTaskNotesInSummary'),
+                    description: i18n('showTaskNotesInSummaryDesc'),
+                },
             ],
         },
         {
