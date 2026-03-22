@@ -17,7 +17,7 @@ interface MigrationPlugin {
 }
 
 const HABIT_DATA_FILE = "habit.json";
-const HABIT_CHECKIN_DIR = "habit";
+const HABIT_CHECKIN_DIR = "habitCheckin";
 
 /**
  * 执行数据迁移

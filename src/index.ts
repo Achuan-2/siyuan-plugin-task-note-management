@@ -431,7 +431,17 @@ export default class ReminderPlugin extends Plugin {
                     }
 
                     try {
-                        const checkinData = await this.loadData(this.getHabitCheckinFileName(habitId));
+                        let checkinData = await this.loadData(this.getHabitCheckinFileName(habitId));
+                        // 兼容之前错误迁移到 habit 目录的数据
+                        if (!checkinData || Object.keys(checkinData).length === 0) {
+                            const oldPathData = await this.loadData(`habit/${habitId}.json`);
+                            if (oldPathData && Object.keys(oldPathData).length > 0) {
+                                checkinData = oldPathData;
+                                // 恢复到正确的目录
+                                await this.saveData(this.getHabitCheckinFileName(habitId), checkinData);
+                                await this.removeData(`habit/${habitId}.json`);
+                            }
+                        }
                         mergedData[habitId] = this.mergeHabitWithCheckinData(habit as Record<string, any>, checkinData);
                     } catch (error) {
                         console.warn(`Failed to load habit checkin data for ${habitId}:`, error);
