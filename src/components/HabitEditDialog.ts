@@ -360,6 +360,23 @@ export class HabitEditDialog {
         const groupSelect = this.createGroupSelect();
         form.appendChild(groupSelect);
 
+        // 放弃习惯 checkbox
+        const abandonedGroup = document.createElement('div');
+        abandonedGroup.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 8px 0;';
+        const abandonedLabel = document.createElement('label');
+        abandonedLabel.style.cssText = 'display: flex; align-items: center; gap: 6px; cursor: pointer;';
+        const abandonedCheckbox = document.createElement('input');
+        abandonedCheckbox.type = 'checkbox';
+        abandonedCheckbox.name = 'abandoned';
+        abandonedCheckbox.checked = !!this.habit?.abandoned;
+        const abandonedText = document.createElement('span');
+        abandonedText.textContent = i18n("habitAbandoned") || '已放弃习惯（放弃后不在侧栏和统计视图中显示）';
+        abandonedText.style.cssText = 'font-size: 14px; color: var(--b3-theme-on-surface-light);';
+        abandonedLabel.appendChild(abandonedCheckbox);
+        abandonedLabel.appendChild(abandonedText);
+        abandonedGroup.appendChild(abandonedLabel);
+        form.appendChild(abandonedGroup);
+
         // 绑定块输入（可选）
         const blockGroup = document.createElement('div');
         blockGroup.style.cssText = 'display:flex; flex-direction: column; gap:4px;';
@@ -936,7 +953,8 @@ export class HabitEditDialog {
             totalCheckIns: this.habit?.totalCheckIns || 0,
             createdAt: this.habit?.createdAt || now,
             updatedAt: now,
-            hideCheckedToday: draftHideCheckedToday || false
+            hideCheckedToday: draftHideCheckedToday || false,
+            abandoned: formData.get('abandoned') === 'on'
         };
         // 保留已有的 hasNotify 值（编辑时），避免覆盖已有记录
         if (this.habit && this.habit.hasNotify) {

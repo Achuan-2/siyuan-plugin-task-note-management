@@ -41,11 +41,13 @@ export class HabitStatsDialog {
     private plugin?: any;
     private pomodoroRecordManager: PomodoroRecordManager | null = null;
     private pomodoroReady = false;
+    private defaultToLastCheckIn: boolean = false; // 是否默认显示最后一次打卡的月份/年份
 
-    constructor(habit: Habit, onSave?: (habit: Habit) => Promise<void>, plugin?: any) {
+    constructor(habit: Habit, onSave?: (habit: Habit) => Promise<void>, plugin?: any, defaultToLastCheckIn: boolean = false) {
         this.habit = habit;
         this.onSave = onSave;
         this.plugin = plugin;
+        this.defaultToLastCheckIn = defaultToLastCheckIn;
     }
 
     show() {
@@ -62,8 +64,30 @@ export class HabitStatsDialog {
         const container = this.dialog.element.querySelector('#habitStatsContainer') as HTMLElement;
         if (!container) return;
 
-        this.currentMonthDate = new Date();
+        // 如果设置了默认显示最后一次打卡的日期，则使用最后一次打卡的月份和年份
+        if (this.defaultToLastCheckIn) {
+            const lastCheckInDate = this.getLastCheckInDate();
+            if (lastCheckInDate) {
+                this.currentMonthDate = new Date(lastCheckInDate);
+                this.yearViewOffset = lastCheckInDate.getFullYear() - new Date().getFullYear();
+            } else {
+                this.currentMonthDate = new Date();
+                this.yearViewOffset = 0;
+            }
+        } else {
+            this.currentMonthDate = new Date();
+            this.yearViewOffset = 0;
+        }
         void this.initPomodoroAndRender(container);
+    }
+
+    private getLastCheckInDate(): Date | null {
+        const checkInDates = Object.keys(this.habit.checkIns || {})
+            .filter(dateStr => this.isCheckInComplete(dateStr))
+            .sort();
+        if (checkInDates.length === 0) return null;
+        const lastDateStr = checkInDates[checkInDates.length - 1];
+        return new Date(`${lastDateStr}T00:00:00`);
     }
 
     private async initPomodoroAndRender(container: HTMLElement) {

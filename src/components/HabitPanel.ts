@@ -80,6 +80,7 @@ export interface Habit {
     hideCheckedToday?: boolean; // 如果设置为true，今天已打卡的选项不显示在菜单中
     // 手动排序字段（用于同优先级内的自定义顺序，数值越小越靠前）
     sort?: number;
+    abandoned?: boolean; // 是否已放弃（放弃后不再在侧栏和统计视图中显示）
 }
 
 interface HabitPomodoroStats {
@@ -283,10 +284,11 @@ export class HabitPanel {
         this.filterSelect.style.cssText = 'flex: 1; min-width: 0;';
         this.filterSelect.innerHTML = `
             <option value="today" selected>${i18n("filterTodayPending")}</option>
-            <option value="tomorrow">${i18n("filterTomorrow")}</option>
-            <option value="all">${i18n("filterAll")}</option>
             <option value="todayCompleted">${i18n("filterTodayCompleted")}</option>
             <option value="yesterdayCompleted">${i18n("filterYesterdayCompleted")}</option>
+            <option value="tomorrow">${i18n("filterTomorrow")}</option>
+            <option value="all">${i18n("filterAll")}</option>
+            <option value="abandoned">${i18n("filterAbandoned") || "已放弃"}</option>
         `;
         this.filterSelect.addEventListener('change', () => {
             this.currentTab = this.filterSelect.value;
@@ -521,7 +523,15 @@ export class HabitPanel {
         const today = getLogicalDateString();
         const tomorrow = getRelativeDateString(1);
         const yesterday = getRelativeDateString(-1);
-        const todayBuckets = getTodayHabitBuckets(habits, today, {
+
+        // 已放弃习惯的筛选：单独处理
+        if (this.currentTab === 'abandoned') {
+            return habits.filter(h => h.abandoned);
+        }
+
+        // 排除已放弃的习惯
+        const activeHabits = habits.filter(h => !h.abandoned);
+        const todayBuckets = getTodayHabitBuckets(activeHabits, today, {
             getPomodoroFocusMinutes: (habitId, date) => this.pomodoroRecordManager.getEventFocusTime(habitId, date) || 0
         });
 
@@ -529,14 +539,14 @@ export class HabitPanel {
             case 'today':
                 return todayBuckets.pendingHabits as Habit[];
             case 'tomorrow':
-                return habits.filter(h => this.shouldShowOnDate(h, tomorrow));
+                return activeHabits.filter(h => this.shouldShowOnDate(h, tomorrow));
             case 'todayCompleted':
                 return todayBuckets.completedHabits as Habit[];
             case 'yesterdayCompleted':
-                return habits.filter(h => this.isCompletedOnDate(h, yesterday));
+                return activeHabits.filter(h => this.isCompletedOnDate(h, yesterday));
             case 'all':
             default:
-                return habits;
+                return activeHabits;
         }
     }
 
@@ -571,6 +581,18 @@ export class HabitPanel {
         return getHabitProgressOnDateUtil(habit, date, {
             getPomodoroFocusMinutes: (habitId, logicalDate) => this.pomodoroRecordManager.getEventFocusTime(habitId, logicalDate) || 0
         });
+    }
+
+    /**
+     * 获取当前视图对应的日期
+     * - yesterdayCompleted: 返回昨天
+     * - 其他: 返回今天
+     */
+    private getCurrentViewDate(): string {
+        if (this.currentTab === 'yesterdayCompleted') {
+            return getRelativeDateString(-1);
+        }
+        return getLogicalDateString();
     }
 
     private formatMinutesToHourMinute(totalMinutes: number): string {
@@ -711,8 +733,9 @@ export class HabitPanel {
 
         // 对分组内的习惯进行排序
         const sortedHabits = this.sortHabitsInGroup(habits);
+        const viewDate = this.getCurrentViewDate();
         sortedHabits.forEach(habit => {
-            const habitCard = this.createHabitCard(habit);
+            const habitCard = this.createHabitCard(habit, viewDate);
             const isAndroid = getFrontend().endsWith('mobile') || getBackend().endsWith('android');
             if (!isAndroid) {                // 启用拖拽：仅在同一分组内按优先级排序时可拖拽调整
                 habitCard.draggable = true;
@@ -785,7 +808,7 @@ export class HabitPanel {
         });
     }
 
-    private createHabitCard(habit: Habit): HTMLElement {
+    private createHabitCard(habit: Habit, date?: string): HTMLElement {
         const card = document.createElement('div');
         card.className = 'habit-card';
         
@@ -828,11 +851,13 @@ export class HabitPanel {
         
         card.appendChild(header);
 
-        // 打卡信息
+        // 打卡信息 - 根据当前tab显示对应日期的数据
         const today = getLogicalDateString();
-        const checkIn = habit.checkIns?.[today];
+        const displayDate = date || today;
+        const isHistoryView = displayDate !== today;
+        const checkIn = habit.checkIns?.[displayDate];
         const goalType = this.getHabitGoalType(habit);
-        const { current: currentProgress, target: targetProgress } = this.getHabitProgressOnDate(habit, today);
+        const { current: currentProgress, target: targetProgress } = this.getHabitProgressOnDate(habit, displayDate);
 
         // 进度条区域
         const progressSection = document.createElement('div');
@@ -856,11 +881,15 @@ export class HabitPanel {
         const percentage = Math.min(100, (currentProgress / Math.max(1, targetProgress)) * 100);
         
         if (goalType === 'pomodoro') {
-            progressLabel.textContent = i18n("todayProgressLabel") || '今日进度';
+            progressLabel.textContent = isHistoryView 
+                ? (i18n("historyProgressLabel") || '当日进度') 
+                : (i18n("todayProgressLabel") || '今日进度');
             progressValue.textContent = `${this.formatMinutesToHourMinute(currentProgress)}/${this.formatMinutesToHourMinute(targetProgress)}`;
         } else {
             // 统一显示为 x/target 格式，即使是1次也显示 0/1 或 1/1
-            progressLabel.textContent = i18n("todayProgressLabel") || '今日进度';
+            progressLabel.textContent = isHistoryView 
+                ? (i18n("historyProgressLabel") || '当日进度') 
+                : (i18n("todayProgressLabel") || '今日进度');
             progressValue.textContent = `${currentProgress}/${targetProgress}`;
         }
         
@@ -927,22 +956,26 @@ export class HabitPanel {
             card.appendChild(pomodoroSection);
         }
 
-        // 今日打卡 emoji（只显示当天的）
+        // 打卡 emoji 显示（根据当前视图显示对应日期的打卡记录）
         if (checkIn && ((checkIn.entries && checkIn.entries.length > 0) || (checkIn.status && checkIn.status.length > 0))) {
             const emojiSection = document.createElement('div');
             emojiSection.className = 'habit-card__emoji-section';
-            emojiSection.style.cursor = 'pointer';
-            emojiSection.title = i18n("clickToEditCheckIn") || '点击编辑今日打卡';
+            emojiSection.style.cursor = isHistoryView ? 'default' : 'pointer';
+            emojiSection.title = isHistoryView 
+                ? (i18n("historyCheckInEmoji") || '当日打卡')
+                : (i18n("clickToEditCheckIn") || '点击编辑今日打卡');
             
             const emojiLabel = document.createElement('div');
             emojiLabel.className = 'habit-card__emoji-label';
-            emojiLabel.textContent = i18n("todayCheckInEmoji") || '今日打卡';
+            emojiLabel.textContent = isHistoryView 
+                ? (i18n("historyCheckInEmoji") || '当日打卡')
+                : (i18n("todayCheckInEmoji") || '今日打卡');
             emojiSection.appendChild(emojiLabel);
             
             const emojiList = document.createElement('div');
             emojiList.className = 'habit-card__emoji-list';
             
-            // Only show today's entries, and display emoji icons (preserve order)
+            // 显示指定日期的entries，并显示emoji图标（保留顺序）
             const emojis: string[] = [];
             if (checkIn.entries && checkIn.entries.length > 0) {
                 checkIn.entries.forEach(entry => emojis.push(entry.emoji));
@@ -960,20 +993,22 @@ export class HabitPanel {
             
             emojiSection.appendChild(emojiList);
             
-            // 点击打开 HabitDayDialog 编辑今日打卡
-            emojiSection.addEventListener('click', (ev) => {
-                ev.stopPropagation();
-                const dialog = new HabitDayDialog(
-                    habit,
-                    today,
-                    async (updatedHabit) => {
-                        await this.saveHabit(updatedHabit);
-                        this.loadHabits();
-                    },
-                    this.plugin
-                );
-                dialog.show();
-            });
+            // 只有非历史视图才允许点击编辑
+            if (!isHistoryView) {
+                emojiSection.addEventListener('click', (ev) => {
+                    ev.stopPropagation();
+                    const dialog = new HabitDayDialog(
+                        habit,
+                        today,
+                        async (updatedHabit) => {
+                            await this.saveHabit(updatedHabit);
+                            this.loadHabits();
+                        },
+                        this.plugin
+                    );
+                    dialog.show();
+                });
+            }
             
             card.appendChild(emojiSection);
         }
@@ -1114,8 +1149,9 @@ export class HabitPanel {
         separator.appendChild(completedTitle);
 
         const sortedCompleted = this.sortHabitsInGroup(completedHabits);
+        // 已打卡区域始终显示今日数据
         sortedCompleted.forEach(habit => {
-            const habitCard = this.createHabitCard(habit);
+            const habitCard = this.createHabitCard(habit, today);
             habitCard.style.opacity = '0.7';
             separator.appendChild(habitCard);
         });

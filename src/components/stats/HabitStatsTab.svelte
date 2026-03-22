@@ -11,12 +11,14 @@ import { i18n } from "../../pluginInstance";
 import {
     getHabitGoalType as getHabitGoalTypeUtil,
     getHabitPomodoroTargetMinutes as getHabitPomodoroTargetMinutesUtil,
-    shouldCheckInOnDate as shouldCheckInOnDateUtil
+    shouldCheckInOnDate as shouldCheckInOnDateUtil,
+    getHabitReminderTimes
 } from "../../utils/habitUtils";
 
 export let plugin: any;
 
 type TabKey = "overview" | "week" | "month" | "year";
+type OverviewSubTab = "active" | "ended" | "abandoned"; // 概览页的子Tab
 
 type HabitOverviewStats = {
     totalCheckIns: number;
@@ -42,6 +44,7 @@ const COLOR_POOL = [
 ];
 
 let activeTab: TabKey = "overview";
+let overviewSubTab: OverviewSubTab = "active"; // 概览页子Tab：active进行中, ended已结束, abandoned已放弃
 let habits: Habit[] = [];
 let groupList: HabitGroup[] = [];
 let groupedSections: HabitGroupSection[] = [];
@@ -287,6 +290,57 @@ function hasRequiredDateInRange(habit: Habit, dates: Date[]): boolean {
     return dates.some(day => shouldCheckInOnDate(habit, getDateKey(day)));
 }
 
+function getFrequencyText(frequency: Habit["frequency"]): string {
+    const { type, interval, weekdays, monthDays, months } = frequency;
+    switch (type) {
+        case "daily":
+            return interval ? i18n("freqEveryNDays", { n: String(interval) }) : i18n("freqEveryDay");
+        case "weekly":
+            if (weekdays && weekdays.length > 0) {
+                const weekdayNamesArr = i18n("weekdayNames").split(",");
+                const days = weekdays.map((d: number) => weekdayNamesArr[d] || String(d)).join(",");
+                return i18n("freqWeekdays", { days });
+            }
+            return interval ? i18n("freqEveryNWeeks", { n: String(interval) }) : i18n("freqEveryWeek");
+        case "monthly":
+            if (monthDays && monthDays.length > 0) {
+                return i18n("freqMonthDays", { days: monthDays.join(",") });
+            }
+            return interval ? i18n("freqEveryNMonths", { n: String(interval) }) : i18n("freqEveryMonth");
+        case "yearly":
+            if (months && months.length > 0) {
+                const monthStr = months.join(",");
+                if (monthDays && monthDays.length > 0) {
+                    return i18n("freqYearMonthDays", { months: monthStr, days: monthDays.join(",") });
+                }
+                return i18n("freqYearMonths", { months: monthStr });
+            }
+            return interval ? i18n("freqEveryNYears", { n: String(interval) }) : i18n("freqEveryYear");
+        case "ebbinghaus":
+            return i18n("ebbinghausRepeat");
+        default:
+            return i18n("freqEveryDay");
+    }
+}
+
+function isHabitEnded(habit: Habit): boolean {
+    if (habit.abandoned) return false; // 已放弃的习惯不归为已结束
+    if (!habit.endDate) return false;
+    const today = getTodayDateKey();
+    return habit.endDate < today;
+}
+
+function isHabitAbandoned(habit: Habit): boolean {
+    return habit.abandoned === true;
+}
+
+function getHabitDateRangeText(habit: Habit): string {
+    if (habit.endDate) {
+        return `${habit.startDate} ~ ${habit.endDate}`;
+    }
+    return `${habit.startDate} ${i18n("timeStart") || "起"}`;
+}
+
 function isCheckInComplete(habit: Habit, dateStr: string): boolean {
     if (getHabitGoalType(habit) === "pomodoro") {
         const target = getHabitPomodoroTargetMinutes(habit);
@@ -523,6 +577,8 @@ function getMonthCells(): Array<Date | null> {
 
 async function openHabitStats(habit: Habit) {
     const habitCopy: Habit = JSON.parse(JSON.stringify(habit));
+    // 对于已结束的习惯，默认显示最后一次打卡的月份和年份视图
+    const defaultToLastCheckIn = isHabitEnded(habit);
     const dialog = new HabitStatsDialog(habitCopy, async (updatedHabit) => {
         try {
             const habitData = await plugin.loadHabitData();
@@ -533,7 +589,7 @@ async function openHabitStats(habit: Habit) {
         } catch (error) {
             console.error("保存习惯统计变更失败:", error);
         }
-    }, plugin);
+    }, plugin, defaultToLastCheckIn);
     dialog.show();
 }
 
@@ -667,7 +723,7 @@ $: yearMonthRows = (() => {
 $: weekVisibleSections = groupedSections
     .map(section => ({
         ...section,
-        habits: section.habits.filter(habit => hasRequiredDateInRange(habit, currentWeekDates))
+        habits: section.habits.filter(habit => !isHabitEnded(habit) && !isHabitAbandoned(habit) && hasRequiredDateInRange(habit, currentWeekDates))
     }))
     .filter(section => section.habits.length > 0);
 
@@ -676,7 +732,7 @@ $: monthVisibleDates = monthCells.filter((day): day is Date => day instanceof Da
 $: monthVisibleSections = groupedSections
     .map(section => ({
         ...section,
-        habits: section.habits.filter(habit => hasRequiredDateInRange(habit, monthVisibleDates))
+        habits: section.habits.filter(habit => !isHabitEnded(habit) && !isHabitAbandoned(habit) && hasRequiredDateInRange(habit, monthVisibleDates))
     }))
     .filter(section => section.habits.length > 0);
 
@@ -685,7 +741,7 @@ $: yearVisibleDates = yearMonthRows.flatMap(row => row.cells.filter((day): day i
 $: yearVisibleSections = groupedSections
     .map(section => ({
         ...section,
-        habits: section.habits.filter(habit => hasRequiredDateInRange(habit, yearVisibleDates))
+        habits: section.habits.filter(habit => !isHabitEnded(habit) && hasRequiredDateInRange(habit, yearVisibleDates))
     }))
     .filter(section => section.habits.length > 0);
 </script>
@@ -705,8 +761,27 @@ $: yearVisibleSections = groupedSections
     {:else if habits.length === 0}
         <div class="state-block">暂无习惯数据</div>
     {:else if activeTab === "overview"}
+        <div class="overview-sub-nav">
+            <button class:active={overviewSubTab === "active"} on:click={() => overviewSubTab = "active"}>
+                {i18n("habitStatusActive") || "进行中"}
+            </button>
+            <button class:active={overviewSubTab === "ended"} on:click={() => overviewSubTab = "ended"}>
+                {i18n("habitStatusEnded") || "已结束"}
+            </button>
+            <button class:active={overviewSubTab === "abandoned"} on:click={() => overviewSubTab = "abandoned"}>
+                {i18n("habitStatusAbandoned") || "已放弃"}
+            </button>
+        </div>
         <div class="overview-list" bind:this={overviewListEl}>
-            {#each groupedSections as section}
+            {#each groupedSections.map(section => ({
+                ...section,
+                habits: section.habits.filter(h => {
+                    if (overviewSubTab === "active") return !isHabitEnded(h) && !isHabitAbandoned(h);
+                    if (overviewSubTab === "ended") return isHabitEnded(h);
+                    if (overviewSubTab === "abandoned") return isHabitAbandoned(h);
+                    return true;
+                })
+            })).filter(section => section.habits.length > 0) as section}
                 <div class="hs-overview-group-block">
                     <div class="hs-overview-group-header">
                         <span class="group-name">{section.groupName} ({section.habits.length})</span>
@@ -715,11 +790,28 @@ $: yearVisibleSections = groupedSections
                     <div class="hs-overview-group-content">
                         {#each section.habits as habit}
                             {@const stats = getOverviewStats(habit, pomodoroStatsRevision)}
+                            {@const reminderTimes = getHabitReminderTimes(habit)}
                             <div class="overview-card">
                                 <div class="overview-main">
                                     <div class="habit-title-row">
                                         <div class="habit-title">{habit.icon || "🌱"} {habit.title}</div>
                                         <button class="view-btn" on:click={() => openHabitStats(habit)}>查看统计</button>
+                                    </div>
+                                    <div class="habit-meta-row">
+                                        <span class="habit-meta-item">
+                                            <span class="habit-meta-icon">🔄</span>
+                                            <span>{getFrequencyText(habit.frequency)}</span>
+                                        </span>
+                                        <span class="habit-meta-item">
+                                            <span class="habit-meta-icon">📅</span>
+                                            <span>{getHabitDateRangeText(habit)}</span>
+                                        </span>
+                                        {#if reminderTimes.length > 0}
+                                            <span class="habit-meta-item">
+                                                <span class="habit-meta-icon">⏰</span>
+                                                <span>{reminderTimes.map(t => t.time).join(', ')}</span>
+                                            </span>
+                                        {/if}
                                     </div>
                                     <div class="stat-grid">
                                         <div class="stat-item">
@@ -965,6 +1057,30 @@ $: yearVisibleSections = groupedSections
         background: var(--b3-theme-primary);
     }
 
+    .overview-sub-nav {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 10px;
+        padding: 0 2px;
+    }
+
+    .overview-sub-nav button {
+        border: 1px solid var(--b3-border-color);
+        background: var(--b3-theme-surface);
+        color: var(--b3-theme-on-surface);
+        border-radius: 6px;
+        padding: 4px 12px;
+        cursor: pointer;
+        font-size: 13px;
+    }
+
+    .overview-sub-nav button.active {
+        border-color: var(--b3-theme-primary);
+        color: var(--b3-theme-primary);
+        background: color-mix(in srgb, var(--b3-theme-primary) 10%, transparent);
+        font-weight: 600;
+    }
+
     .state-block {
         padding: 26px 12px;
         text-align: center;
@@ -1054,9 +1170,28 @@ $: yearVisibleSections = groupedSections
         align-items: center;
         justify-content: flex-start;
         gap: 8px;
-        margin-bottom: 6px;
+        margin-bottom: 4px;
         width: fit-content;
         max-width: 100%;
+    }
+
+    .habit-meta-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 12px;
+        margin-bottom: 8px;
+        font-size: 12px;
+        color: var(--b3-theme-on-surface-light);
+    }
+
+    .habit-meta-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .habit-meta-icon {
+        font-size: 11px;
     }
 
     .stat-grid {
