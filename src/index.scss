@@ -1771,6 +1771,10 @@
     --fc-today-bg-color: var(--b3-theme-primary-lightest);
 }
 
+.reminder-calendar-container.fc .fc-toolbar-title{
+    font-size: 1.3em;
+}
+
 // 选择时的临时事件样式（无优先级样式）
 .reminder-calendar-container.fc .fc-event-mirror,
 .reminder-calendar-container.fc .fc-highlight {
