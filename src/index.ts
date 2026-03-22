@@ -3527,6 +3527,9 @@ export default class ReminderPlugin extends Plugin {
                     const times = getHabitReminderTimes(habit);
                     if (times.length === 0) continue;
 
+                    // 已放弃的习惯不提醒
+                    if (habit.abandoned === true) continue;
+
                     // 如果不在起止日期内，跳过
                     if (habit.startDate && habit.startDate > today) continue;
                     if (habit.endDate && habit.endDate < today) continue;
@@ -4288,6 +4291,11 @@ export default class ReminderPlugin extends Plugin {
         if (!habit || !habit.id || habit.completed) return [];
         if (!(typeof habit.id === 'string' && habit.id.startsWith('habit'))) return [];
 
+        // 已放弃或已结束的习惯不设置通知
+        if (habit.abandoned === true) return [];
+        const today = getLogicalDateString();
+        if (habit.endDate && habit.endDate < today) return [];
+
         const systemNotificationEnabled = await this.getReminderSystemNotificationEnabled();
         if (!systemNotificationEnabled) return [];
 
@@ -4622,6 +4630,9 @@ export default class ReminderPlugin extends Plugin {
         const today = getLogicalDateString();
         const limitDate = daysLimit > 0 ? new Date(now.getTime() + daysLimit * 24 * 60 * 60 * 1000) : null;
         const scanDays = daysLimit > 0 ? daysLimit : 30;
+
+        // 已放弃的习惯不设置通知
+        if (habit?.abandoned === true) return [];
 
         const timeEntries = getHabitReminderTimes(habit);
         if (timeEntries.length === 0) return [];

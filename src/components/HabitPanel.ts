@@ -288,6 +288,7 @@ export class HabitPanel {
             <option value="yesterdayCompleted">${i18n("filterYesterdayCompleted")}</option>
             <option value="tomorrow">${i18n("filterTomorrow")}</option>
             <option value="all">${i18n("filterAll")}</option>
+            <option value="ended">${i18n("filterEnded") || "已结束"}</option>
             <option value="abandoned">${i18n("filterAbandoned") || "已放弃"}</option>
         `;
         this.filterSelect.addEventListener('change', () => {
@@ -519,6 +520,13 @@ export class HabitPanel {
         }
     }
 
+    private isHabitEnded(habit: Habit): boolean {
+        if (habit.abandoned) return false;
+        if (!habit.endDate) return false;
+        const today = getLogicalDateString();
+        return habit.endDate < today;
+    }
+
     private applyFilter(habits: Habit[]): Habit[] {
         const today = getLogicalDateString();
         const tomorrow = getRelativeDateString(1);
@@ -529,8 +537,13 @@ export class HabitPanel {
             return habits.filter(h => h.abandoned);
         }
 
-        // 排除已放弃的习惯
-        const activeHabits = habits.filter(h => !h.abandoned);
+        // 已结束习惯的筛选：单独处理
+        if (this.currentTab === 'ended') {
+            return habits.filter(h => this.isHabitEnded(h));
+        }
+
+        // 排除已放弃和已结束的习惯
+        const activeHabits = habits.filter(h => !h.abandoned && !this.isHabitEnded(h));
         const todayBuckets = getTodayHabitBuckets(activeHabits, today, {
             getPomodoroFocusMinutes: (habitId, date) => this.pomodoroRecordManager.getEventFocusTime(habitId, date) || 0
         });
@@ -812,6 +825,11 @@ export class HabitPanel {
         const card = document.createElement('div');
         card.className = 'habit-card';
         
+        // 判断习惯状态
+        const isEnded = this.isHabitEnded(habit);
+        const isAbandoned = habit.abandoned === true;
+        const isInactive = isEnded || isAbandoned;
+        
         // 卡片头部：图标、标题
         const header = document.createElement('div');
         header.className = 'habit-card__header';
@@ -824,6 +842,10 @@ export class HabitPanel {
         if (habitColor && habitColor !== 'var(--b3-theme-primary)') {
             iconEl.style.background = `linear-gradient(135deg, ${habitColor}33, ${habitColor}1a)`;
         }
+        // 已结束或已放弃的习惯，图标降低透明度
+        if (isInactive) {
+            iconEl.style.opacity = '0.6';
+        }
         header.appendChild(iconEl);
         
         // 标题
@@ -835,6 +857,9 @@ export class HabitPanel {
         }
         title.textContent = habit.title;
         title.title = habit.title;
+        if (isInactive) {
+            title.style.opacity = '0.6';
+        }
         if (habit.blockId) {
             title.style.cursor = 'pointer';
             title.addEventListener('click', (ev) => {
@@ -849,6 +874,19 @@ export class HabitPanel {
         }
         header.appendChild(title);
         
+        // 状态标签（已结束/已放弃）
+        if (isEnded) {
+            const statusBadge = document.createElement('span');
+            statusBadge.className = 'habit-card__status-badge habit-card__status-badge--ended';
+            statusBadge.textContent = i18n('habitStatusEndedBadge') || '已结束';
+            header.appendChild(statusBadge);
+        } else if (isAbandoned) {
+            const statusBadge = document.createElement('span');
+            statusBadge.className = 'habit-card__status-badge habit-card__status-badge--abandoned';
+            statusBadge.textContent = i18n('habitStatusAbandonedBadge') || '已放弃';
+            header.appendChild(statusBadge);
+        }
+        
         card.appendChild(header);
 
         // 打卡信息 - 根据当前tab显示对应日期的数据
@@ -856,83 +894,83 @@ export class HabitPanel {
         const displayDate = date || today;
         const isHistoryView = displayDate !== today;
         const checkIn = habit.checkIns?.[displayDate];
-        const goalType = this.getHabitGoalType(habit);
-        const { current: currentProgress, target: targetProgress } = this.getHabitProgressOnDate(habit, displayDate);
+        
+        // 已结束和已放弃的习惯不显示进度条
+        if (!isInactive) {
+            const goalType = this.getHabitGoalType(habit);
+            const { current: currentProgress, target: targetProgress } = this.getHabitProgressOnDate(habit, displayDate);
 
-        // 进度条区域
-        const progressSection = document.createElement('div');
-        progressSection.className = 'habit-card__progress';
-        
-        const progressHeader = document.createElement('div');
-        progressHeader.className = 'habit-card__progress-header';
-        
-        const progressLabel = document.createElement('span');
-        progressLabel.className = 'habit-card__progress-label';
-        
-        const progressValue = document.createElement('span');
-        progressValue.className = 'habit-card__progress-value';
-        
-        const progressBar = document.createElement('div');
-        progressBar.className = 'habit-card__progress-bar';
-        
-        const progressFill = document.createElement('div');
-        progressFill.className = 'habit-card__progress-fill';
-        
-        const percentage = Math.min(100, (currentProgress / Math.max(1, targetProgress)) * 100);
-        
-        if (goalType === 'pomodoro') {
-            progressLabel.textContent = isHistoryView 
-                ? (i18n("historyProgressLabel") || '当日进度') 
-                : (i18n("todayProgressLabel") || '今日进度');
-            progressValue.textContent = `${this.formatMinutesToHourMinute(currentProgress)}/${this.formatMinutesToHourMinute(targetProgress)}`;
-        } else {
-            // 统一显示为 x/target 格式，即使是1次也显示 0/1 或 1/1
-            progressLabel.textContent = isHistoryView 
-                ? (i18n("historyProgressLabel") || '当日进度') 
-                : (i18n("todayProgressLabel") || '今日进度');
-            progressValue.textContent = `${currentProgress}/${targetProgress}`;
+            // 进度条区域
+            const progressSection = document.createElement('div');
+            progressSection.className = 'habit-card__progress';
+            
+            const progressHeader = document.createElement('div');
+            progressHeader.className = 'habit-card__progress-header';
+            
+            const progressLabel = document.createElement('span');
+            progressLabel.className = 'habit-card__progress-label';
+            
+            const progressValue = document.createElement('span');
+            progressValue.className = 'habit-card__progress-value';
+            
+            const progressBar = document.createElement('div');
+            progressBar.className = 'habit-card__progress-bar';
+            
+            const progressFill = document.createElement('div');
+            progressFill.className = 'habit-card__progress-fill';
+            
+            const percentage = Math.min(100, (currentProgress / Math.max(1, targetProgress)) * 100);
+            
+            if (goalType === 'pomodoro') {
+                progressLabel.textContent = isHistoryView 
+                    ? (i18n("historyProgressLabel") || '当日进度') 
+                    : (i18n("todayProgressLabel") || '今日进度');
+                progressValue.textContent = `${this.formatMinutesToHourMinute(currentProgress)}/${this.formatMinutesToHourMinute(targetProgress)}`;
+            } else {
+                // 统一显示为 x/target 格式，即使是1次也显示 0/1 或 1/1
+                progressLabel.textContent = isHistoryView 
+                    ? (i18n("historyProgressLabel") || '当日进度') 
+                    : (i18n("todayProgressLabel") || '今日进度');
+                progressValue.textContent = `${currentProgress}/${targetProgress}`;
+            }
+            
+            progressFill.style.width = `${percentage}%`;
+            const progressColor = this.getHabitProgressColor(habit);
+            if (progressColor && progressColor !== 'var(--b3-theme-primary)') {
+                progressFill.style.background = `linear-gradient(90deg, ${progressColor}, ${progressColor}88)`;
+            }
+            
+            progressHeader.appendChild(progressLabel);
+            progressHeader.appendChild(progressValue);
+            progressSection.appendChild(progressHeader);
+            progressBar.appendChild(progressFill);
+            progressSection.appendChild(progressBar);
+            card.appendChild(progressSection);
         }
-        
-        progressFill.style.width = `${percentage}%`;
-        const progressColor = this.getHabitProgressColor(habit);
-        if (progressColor && progressColor !== 'var(--b3-theme-primary)') {
-            progressFill.style.background = `linear-gradient(90deg, ${progressColor}, ${progressColor}88)`;
-        }
-        
-        progressHeader.appendChild(progressLabel);
-        progressHeader.appendChild(progressValue);
-        progressSection.appendChild(progressHeader);
-        progressBar.appendChild(progressFill);
-        progressSection.appendChild(progressBar);
-        card.appendChild(progressSection);
 
         // 信息网格区域
         const infoGrid = document.createElement('div');
         infoGrid.className = 'habit-card__info-grid';
         
-        // 频率信息
-        const frequencyItem = document.createElement('div');
-        frequencyItem.className = 'habit-card__info-item';
-        frequencyItem.innerHTML = `<span class="habit-card__info-icon">🔄</span><span class="habit-card__info-text">${this.getFrequencyText(habit.frequency)}</span>`;
-        infoGrid.appendChild(frequencyItem);
-        
-        // 时间范围
-        const timeItem = document.createElement('div');
-        timeItem.className = 'habit-card__info-item';
+        // 频率和时间信息合并到一个格子
+        const freqTimeItem = document.createElement('div');
+        freqTimeItem.className = 'habit-card__info-item habit-card__info-item--full';
         const timeText = habit.endDate 
             ? `${habit.startDate} ~ ${habit.endDate}`
             : `${habit.startDate} ${i18n("timeStart") || '起'}`;
-        timeItem.innerHTML = `<span class="habit-card__info-icon">📅</span><span class="habit-card__info-text">${timeText}</span>`;
-        infoGrid.appendChild(timeItem);
+        freqTimeItem.innerHTML = `<span class="habit-card__info-icon">🔄</span><span class="habit-card__info-text">${this.getFrequencyText(habit.frequency)} · ${timeText}</span>`;
+        infoGrid.appendChild(freqTimeItem);
         
-        // 提醒时间（支持多个）
-        const timesList = getHabitReminderTimes(habit);
-        if (timesList && timesList.length > 0) {
-            const reminderItem = document.createElement('div');
-            reminderItem.className = 'habit-card__info-item habit-card__info-item--full';
-            const displayTimes = timesList.map(t => t.time);
-            reminderItem.innerHTML = `<span class="habit-card__info-icon">⏰</span><span class="habit-card__info-text">${displayTimes.join(', ')}</span>`;
-            infoGrid.appendChild(reminderItem);
+        // 提醒时间（支持多个）- 已结束和已放弃的习惯不显示
+        if (!isInactive) {
+            const timesList = getHabitReminderTimes(habit);
+            if (timesList && timesList.length > 0) {
+                const reminderItem = document.createElement('div');
+                reminderItem.className = 'habit-card__info-item habit-card__info-item--full';
+                const displayTimes = timesList.map(t => t.time);
+                reminderItem.innerHTML = `<span class="habit-card__info-icon">⏰</span><span class="habit-card__info-text">${displayTimes.join(', ')}</span>`;
+                infoGrid.appendChild(reminderItem);
+            }
         }
         
         card.appendChild(infoGrid);

@@ -877,6 +877,24 @@
     margin-bottom: 12px;
 }
 
+.habit-card__status-badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-left: auto;
+    white-space: nowrap;
+}
+
+.habit-card__status-badge--ended {
+    background: var(--b3-theme-surface-lighter);
+    color: var(--b3-theme-on-surface-light);
+}
+
+.habit-card__status-badge--abandoned {
+    background: color-mix(in srgb, var(--b3-theme-error) 15%, transparent);
+    color: var(--b3-theme-error);
+}
+
 .habit-card__icon {
     display: flex;
     align-items: center;
