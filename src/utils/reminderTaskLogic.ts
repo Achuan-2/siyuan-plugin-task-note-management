@@ -8,7 +8,7 @@ export class ReminderTaskLogic {
      */
     public static async getTaskCountByTabs(plugin: any, tabNames: string[], excludeDesserts: boolean = false): Promise<number> {
         const today = getLogicalDateString();
-        const reminderData = await getAllReminders(plugin);
+        const reminderData = await getAllReminders(plugin, undefined, false, 'sidebar');
         const allReminders = this.generateAllRemindersWithInstances(reminderData, today);
 
         const reminderMap = new Map<string, any>();
