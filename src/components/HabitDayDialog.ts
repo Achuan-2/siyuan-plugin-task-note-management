@@ -645,7 +645,7 @@ export class HabitDayDialog {
         let selectedMeaning: string | undefined = emojiConfigs.length > 0 ? emojiConfigs[0].meaning : undefined;
         emojiConfigs.forEach(cfg => {
             const btn = document.createElement("button");
-            btn.className = `b3-button ${cfg.emoji === selectedEmoji ? "b3-button--primary" : "b3-button--outline"}`;
+            btn.className = `b3-button ${(cfg.emoji === selectedEmoji && cfg.meaning === selectedMeaning) ? "b3-button--primary" : "b3-button--outline"}`;
             btn.innerHTML = `<span style="font-size:18px;">${cfg.emoji}</span><span style="font-size:12px; color:var(--b3-theme-on-surface-light); margin-left:6px;">${cfg.meaning || ""}</span>`;
             btn.addEventListener("click", () => {
                 selectedEmoji = cfg.emoji;

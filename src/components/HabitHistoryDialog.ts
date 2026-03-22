@@ -155,7 +155,7 @@ export class HabitHistoryDialog {
                 return timeA.localeCompare(timeB);
             });
 
-            sortedEntries.forEach((entry, idx) => {
+            sortedEntries.forEach((entry) => {
                 const originalIndex = entries.findIndex(e =>
                     e.emoji === entry.emoji &&
                     e.timestamp === entry.timestamp &&
@@ -274,7 +274,7 @@ export class HabitHistoryDialog {
         let selectedMeaning: string | undefined = emojiConfigs.length > 0 ? emojiConfigs[0].meaning : undefined;
         emojiConfigs.forEach(cfg => {
             const btn = document.createElement('button');
-            btn.className = `b3-button ${cfg.emoji === selectedEmoji ? 'b3-button--primary' : 'b3-button--outline'}`;
+            btn.className = `b3-button ${(cfg.emoji === selectedEmoji && cfg.meaning === selectedMeaning) ? 'b3-button--primary' : 'b3-button--outline'}`;
             btn.innerHTML = `<span style="font-size:18px;">${cfg.emoji}</span><span style="font-size:12px; color:var(--b3-theme-on-surface-light); margin-left:6px;">${cfg.meaning || ''}</span>`;
             btn.addEventListener('click', () => {
                 selectedEmoji = cfg.emoji;
@@ -314,7 +314,10 @@ export class HabitHistoryDialog {
 
             const checkIn = this.habit.checkIns?.[chosenDate];
             const entries = this.getEntriesForDate(checkIn);
-            entries.push({ emoji: selectedEmoji!, meaning: selectedMeaning || this.getMeaningForEmoji(selectedEmoji!), timestamp, note: noteInput.value.trim() || undefined });
+            const emojiConfigs = this.habit.checkInEmojis || [] as any[];
+            const meaning = selectedMeaning || this.getMeaningForEmoji(selectedEmoji!);
+            const group = (emojiConfigs.find(c => c.emoji === selectedEmoji && c.meaning === selectedMeaning)?.group || '').trim() || undefined;
+            entries.push({ emoji: selectedEmoji!, meaning, timestamp, note: noteInput.value.trim() || undefined, group });
             await this.setEntriesForDate(chosenDate, entries);
             this.habit.totalCheckIns = (this.habit.totalCheckIns || 0) + 1;
             this.habit.updatedAt = getLocalDateTimeString(new Date());
@@ -329,12 +332,31 @@ export class HabitHistoryDialog {
         actionDiv.appendChild(btnRow);
     }
 
-    private getEntriesForDate(checkIn: any): { emoji: string; meaning?: string; timestamp: string; note?: string }[] {
+    private getEntriesForDate(checkIn: any): { emoji: string; meaning?: string; timestamp: string; note?: string; group?: string }[] {
         if (!checkIn) return [];
         if (Array.isArray(checkIn.entries) && checkIn.entries.length > 0) {
-            return checkIn.entries.map((e: any) => ({ emoji: e.emoji, meaning: e.meaning || this.getMeaningForEmoji(e.emoji), timestamp: e.timestamp, note: e.note }));
+            return checkIn.entries.map((e: any) => ({
+                emoji: e.emoji,
+                meaning: e.meaning || this.getMeaningForEmoji(e.emoji),
+                timestamp: e.timestamp,
+                note: e.note,
+                group: e.group || this.getGroupForEmoji(e.emoji, e.meaning || this.getMeaningForEmoji(e.emoji))
+            }));
         }
-        return (checkIn.status || []).map((s: string) => ({ emoji: s, meaning: this.getMeaningForEmoji(s), timestamp: checkIn.timestamp || '', note: '' }));
+        return (checkIn.status || []).map((s: string) => ({
+            emoji: s,
+            meaning: this.getMeaningForEmoji(s),
+            timestamp: checkIn.timestamp || '',
+            note: '',
+            group: this.getGroupForEmoji(s, this.getMeaningForEmoji(s))
+        }));
+    }
+
+    private getGroupForEmoji(emoji: string | undefined, meaning: string | undefined): string | undefined {
+        if (!emoji) return undefined;
+        const configs = this.habit.checkInEmojis || [] as HabitCheckInEmoji[];
+        const cfg = configs.find(c => c.emoji === emoji && (!meaning || c.meaning === meaning));
+        return cfg ? cfg.group : undefined;
     }
 
     private getMeaningForEmoji(emoji: string | undefined): string | undefined {
@@ -378,11 +400,11 @@ export class HabitHistoryDialog {
         const wrap = document.createElement('div');
         wrap.style.cssText = 'display:flex; flex-wrap:wrap; gap:8px;';
         const emojiConfigs = this.habit.checkInEmojis || [] as HabitCheckInEmoji[];
-        let selectedEmoji: string | undefined = emojiConfigs.find(cfg => cfg.emoji === entry.emoji)?.emoji || (emojiConfigs.length > 0 ? emojiConfigs[0].emoji : undefined);
-        let selectedMeaning: string | undefined = emojiConfigs.find(cfg => cfg.emoji === entry.emoji)?.meaning || (emojiConfigs.length > 0 ? emojiConfigs[0].meaning : undefined);
+        let selectedEmoji: string | undefined = emojiConfigs.find(cfg => cfg.emoji === entry.emoji && cfg.meaning === entry.meaning)?.emoji || (emojiConfigs.length > 0 ? emojiConfigs[0].emoji : undefined);
+        let selectedMeaning: string | undefined = emojiConfigs.find(cfg => cfg.emoji === entry.emoji && cfg.meaning === entry.meaning)?.meaning || (emojiConfigs.length > 0 ? emojiConfigs[0].meaning : undefined);
         emojiConfigs.forEach(cfg => {
             const btn = document.createElement('button');
-            btn.className = `b3-button ${cfg.emoji === selectedEmoji ? 'b3-button--primary' : 'b3-button--outline'}`;
+            btn.className = `b3-button ${(cfg.emoji === selectedEmoji && cfg.meaning === selectedMeaning) ? 'b3-button--primary' : 'b3-button--outline'}`;
             btn.innerHTML = `<span style="font-size:18px;">${cfg.emoji}</span><span style="font-size:12px; color:var(--b3-theme-on-surface-light); margin-left:6px;">${cfg.meaning || ''}</span>`;
             btn.addEventListener('click', () => {
                 selectedEmoji = cfg.emoji;
@@ -446,6 +468,7 @@ export class HabitHistoryDialog {
             }
             entries[index].emoji = selectedEmoji!;
             entries[index].meaning = selectedMeaning || this.getMeaningForEmoji(selectedEmoji!);
+            entries[index].group = (emojiConfigs.find(c => c.emoji === selectedEmoji && c.meaning === selectedMeaning)?.group || '').trim() || undefined;
             const newTime = timeInput.value || currentTime;
             entries[index].timestamp = `${dateStr} ${newTime}`;
             entries[index].note = noteInput.value.trim() || undefined;
@@ -481,7 +504,7 @@ export class HabitHistoryDialog {
         if (containerMain) this.renderList(containerMain);
     }
 
-    private async setEntriesForDate(dateStr: string, entries: { emoji: string; meaning?: string; timestamp: string; note?: string }[]) {
+    private async setEntriesForDate(dateStr: string, entries: { emoji: string; meaning?: string; timestamp: string; note?: string; group?: string }[]) {
         this.habit.checkIns = this.habit.checkIns || {};
         if (!entries || entries.length === 0) {
             delete this.habit.checkIns![dateStr];
