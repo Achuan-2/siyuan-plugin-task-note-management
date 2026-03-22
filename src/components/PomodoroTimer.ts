@@ -5162,6 +5162,11 @@ export class PomodoroTimer {
                 setTimeout(() => {
                     this.updateStatsDisplay();
                 }, 100);
+
+                // 非自动模式下，休息阶段完成后恢复窗口（如果处于吸附模式）
+                if (this.isDocked) {
+                    this.restoreFromDockedMode();
+                }
             }
         } finally {
             this.isCompletingPhase = false;
@@ -5279,6 +5284,11 @@ export class PomodoroTimer {
                     this.isRunning = false;
                     this.isPaused = false;
                     this.updateDisplay();
+
+                    // 非自动模式下，工作阶段完成后恢复窗口（如果处于吸附模式）
+                    if (!this.autoMode && this.isDocked) {
+                        this.restoreFromDockedMode();
+                    }
                 }
             } else {
                 // 休息结束，关闭番茄钟结束弹窗
@@ -5343,6 +5353,11 @@ export class PomodoroTimer {
                             this.updateBrowserWindowDisplay(this.container);
                         }
                     } catch (e) { }
+
+                    // 非自动模式下，休息阶段完成后恢复窗口（如果处于吸附模式）
+                    if (this.isDocked) {
+                        this.restoreFromDockedMode();
+                    }
                 }
             }
 
@@ -8773,6 +8788,39 @@ document.body.classList.remove('mini-mode');
 
         // 调用 toggleDock 来恢复
         this.toggleBrowserWindowDock(pomodoroWindow, screen);
+    }
+
+    /**
+     * 从吸附模式恢复到正常模式（用于非自动模式下阶段完成时自动恢复）
+     * 支持 BrowserWindow 模式和 DOM 窗口模式
+     */
+    private restoreFromDockedMode() {
+        if (!this.isDocked) return;
+
+        console.log('[PomodoroTimer] 非自动模式下阶段完成，自动从吸附模式恢复');
+
+        // BrowserWindow 模式
+        const pomodoroWindow = PomodoroTimer.browserWindowInstance;
+        if (pomodoroWindow && !pomodoroWindow.isDestroyed()) {
+            try {
+                let electron: any;
+                try {
+                    electron = (window as any).require('electron');
+                } catch (e) {
+                    console.error('[PomodoroTimer] Failed to require electron', e);
+                    return;
+                }
+                const screen = electron.remote?.screen || electron.screen;
+                this.restoreFromDocked(pomodoroWindow, screen);
+                showMessage(i18n('exitDockMode') || '已自动退出吸附模式', 2000);
+            } catch (error) {
+                console.error('[PomodoroTimer] restoreFromDockedMode error:', error);
+            }
+        } else if (!this.isTabMode && this.container) {
+            // DOM 窗口模式
+            this.exitDOMWindowDock();
+            showMessage(i18n('exitDockMode') || '已自动退出吸附模式', 2000);
+        }
     }
 
     private formatTime(seconds: number): string {
