@@ -37,6 +37,8 @@ import { performDataMigration } from "./utils/dataMigration";
 import { initIcsSync, initIcsSubscriptionSync, handleIcsSyncSettingsChange, cleanupIcsSync } from "./utils/icsSync";
 import { TaskNoteDOMManager } from "./utils/taskNoteDOM";
 import { addDaysToDate, generateRepeatInstances, getDaysDifference, getRelativeReminderWindow } from "./utils/repeatUtils";
+import { getDockItemSelector, setDockBadgeByType as applyDockBadgeByType } from "./utils/addDockBadge";
+import { getHabitReminderTimes, getTodayHabitBuckets, isHabitCompletedOnDate as isHabitCompletedOnDateUtil, shouldCheckInOnDate } from "./utils/habitUtils";
 
 export const SETTINGS_FILE = "reminder-settings.json";
 export const PROJECT_DATA_FILE = "project.json";
@@ -69,39 +71,6 @@ const EISENHOWER_TAB_TYPE = "reminder_eisenhower_tab";
 export const PROJECT_KANBAN_TAB_TYPE = "project_kanban_tab";
 const POMODORO_TAB_TYPE = "pomodoro_timer_tab";
 export const STORAGE_NAME = "siyuan-plugin-task-note-management";
-
-type DockBadgeType = "reminder" | "project" | "habit";
-type DockBadgeConfig = {
-    dockKey: string;
-    badgeClass: string;
-    badgeColor: string;
-    settingKey: "enableReminderDockBadge" | "enableProjectDockBadge" | "enableHabitDockBadge";
-    displayName: string;
-};
-
-const DOCK_BADGE_CONFIGS: Record<DockBadgeType, DockBadgeConfig> = {
-    reminder: {
-        dockKey: "reminder_dock",
-        badgeClass: "reminder-dock-badge",
-        badgeColor: "var(--b3-theme-error)",
-        settingKey: "enableReminderDockBadge",
-        displayName: "提醒"
-    },
-    project: {
-        dockKey: "project_dock",
-        badgeClass: "project-dock-badge",
-        badgeColor: "#2c6a2e",
-        settingKey: "enableProjectDockBadge",
-        displayName: "项目"
-    },
-    habit: {
-        dockKey: "habit_dock",
-        badgeClass: "habit-dock-badge",
-        badgeColor: "var(--b3-theme-primary)",
-        settingKey: "enableHabitDockBadge",
-        displayName: "习惯"
-    }
-};
 
 
 // 默认设置
@@ -1329,8 +1298,7 @@ export default class ReminderPlugin extends Plugin {
     async onload() {
         // 初始化移动端检测
         this.isInMobileApp = isInMobileApp();
-        
-        await this.loadSettings();
+
 
         // 添加自定义图标
         this.addIcons(`
@@ -1344,10 +1312,13 @@ export default class ReminderPlugin extends Plugin {
             <path d="M513.088 64c10.56 0 19.456 7.04 21.76 16.448l0.64 4.864-0.064 405.312h403.2c11.84 0 21.376 10.048 21.376 22.4 0 10.624-7.04 19.52-16.448 21.824l-4.864 0.64-403.264-0.064v403.2a21.888 21.888 0 0 1-22.4 21.376 22.208 22.208 0 0 1-21.76-16.448l-0.64-4.864V535.424H85.312A21.888 21.888 0 0 1 64 513.088c0-10.56 7.04-19.456 16.448-21.76l4.864-0.64h405.312V85.312c0-11.776 10.048-21.312 22.4-21.312z m317.952 522.688c29.952 0 54.272 26.752 54.272 59.712v179.2c0 32.96-24.32 59.712-54.272 59.712h-190.08c-29.952 0-54.272-26.752-54.272-59.712v-179.2c0-32.96 24.32-59.712 54.272-59.712h190.08z m-448 0c29.952 0 54.272 26.752 54.272 59.712v179.2c0 32.96-24.32 59.712-54.272 59.712h-190.08c-29.952 0-54.272-26.752-54.272-59.712v-179.2c0-32.96 24.32-59.712 54.272-59.712h190.08z m448 59.712h-190.08v179.2h190.08v-179.2z m-448 0h-190.08v179.2h190.08v-179.2z m448-507.712c29.952 0 54.272 26.752 54.272 59.712v179.2c0 32.96-24.32 59.712-54.272 59.712h-190.08c-29.952 0-54.272-26.752-54.272-59.712V198.4c0-32.96 24.32-59.712 54.272-59.712h190.08z m-448 0c29.952 0 54.272 26.752 54.272 59.712v179.2c0 32.96-24.32 59.712-54.272 59.712h-190.08c-29.952 0-54.272-26.752-54.272-59.712V198.4c0-32.96 24.32-59.712 54.272-59.712h190.08z m448 59.712h-190.08v179.2h190.08V198.4z m-448 0h-190.08v179.2h190.08V198.4z" p-id="6019"></path>
             </symbol>
         `);
-        setPluginInstance(this);
-        this.taskNoteDOM = new TaskNoteDOMManager(this);
         // 先初始化 UI，避免加载数据记录异常/耗时影响 Dock 注册
+        setPluginInstance(this);
         await this.initializeUI();
+        // 数据加载
+        await this.loadSettings();
+        this.taskNoteDOM = new TaskNoteDOMManager(this);
+
         // 后台初始化番茄钟记录管理器，失败也不阻断插件主流程
         const pomodoroRecordManager = PomodoroRecordManager.getInstance(this);
         pomodoroRecordManager.initialize().catch((error: any) => {
@@ -2218,67 +2189,16 @@ export default class ReminderPlugin extends Plugin {
         });
     }
 
-    private getDockItemSelector(dockKey: string): string {
-        return `.dock__item[data-type="${this.name}${dockKey}"]`;
-    }
-
-    private shouldShowDockBadge(settings: any, config: DockBadgeConfig): boolean {
-        return settings.enableDockBadge !== false && settings[config.settingKey] !== false;
-    }
-
-    private applyDockBadge(dockIcon: Element, config: DockBadgeConfig, count: number) {
-        const existingBadge = dockIcon.querySelector(`.${config.badgeClass}`);
-        if (existingBadge) {
-            existingBadge.remove();
-        }
-        if (count <= 0) {
-            return;
-        }
-
-        const badge = document.createElement("span");
-        badge.className = config.badgeClass;
-        badge.textContent = count.toString();
-        badge.style.cssText = `
-            position: absolute;
-            top: 2px;
-            right: 2px;
-            background: ${config.badgeColor};
-            color: white;
-            border-radius: 50%;
-            min-width: 14px;
-            height: 14px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 10px;
-            font-weight: bold;
-            line-height: 1;
-            z-index: 1;
-            pointer-events: none;
-        `;
-        (dockIcon as HTMLElement).style.position = "relative";
-        dockIcon.appendChild(badge);
-    }
-
-    private async setDockBadgeByType(type: DockBadgeType, count: number) {
-        const config = DOCK_BADGE_CONFIGS[type];
-        const settings = await this.loadSettings();
-        const selector = this.getDockItemSelector(config.dockKey);
-
-        if (!this.shouldShowDockBadge(settings, config)) {
-            document.querySelector(selector)?.querySelector(`.${config.badgeClass}`)?.remove();
-            return;
-        }
-
-        try {
-            const dockIcon = await this.whenElementExist(selector);
-            this.applyDockBadge(dockIcon, config, count);
-        } catch (error) {
-            console.warn(`设置${config.displayName}停靠栏徽章失败:`, error);
-            const dockIcon = document.querySelector(selector);
-            if (!dockIcon) return;
-            this.applyDockBadge(dockIcon, config, count);
-        }
+    private async setDockBadgeByType(type: "reminder" | "project" | "habit", count: number) {
+        await applyDockBadgeByType({
+            plugin: {
+                name: this.name,
+                loadSettings: () => this.loadSettings(),
+                whenElementExist: (selector) => this.whenElementExist(selector)
+            },
+            type,
+            count
+        });
     }
 
     private async setDockBadge(count: number) {
@@ -2299,126 +2219,18 @@ export default class ReminderPlugin extends Plugin {
             }
 
             const today = getLogicalDateString();
-            let pendingCount = 0;
-
-            Object.values(habitData).forEach((habit: any) => {
-                if (!habit || typeof habit !== 'object') {
-                    return;
-                }
-
-                // 检查是否在有效期内
-                if (habit.startDate > today) return;
-                if (habit.endDate && habit.endDate < today) return;
-
-                // 检查今天是否应该打卡
-                if (!this.shouldCheckInOnDate(habit, today)) return;
-
-                // 检查今天是否已完成（兼容按次数/按番茄时长两种目标）
-                const { current, target } = this.getHabitProgressOnDate(habit, today);
-                if (current < target) {
-                    pendingCount++;
+            const buckets = getTodayHabitBuckets(Object.values(habitData) as any[], today, {
+                getPomodoroFocusMinutes: (habitId, date) => {
+                    const manager = PomodoroRecordManager.getInstance(this);
+                    return manager.getEventFocusTime(habitId, date) || 0;
                 }
             });
 
-            this.setHabitDockBadge(pendingCount);
+            this.setHabitDockBadge(buckets.pendingHabits.length);
         } catch (error) {
             console.error('更新习惯徽章失败:', error);
             this.setHabitDockBadge(0);
         }
-    }
-
-    private shouldCheckInOnDate(habit: any, date: string): boolean {
-        const { frequency } = habit;
-        const checkDate = new Date(date);
-        const startDate = new Date(habit.startDate);
-
-        switch (frequency.type) {
-            case 'daily':
-                if (frequency.interval) {
-                    const daysDiff = Math.floor((checkDate.getTime() - startDate.getTime()) / 86400000);
-                    return daysDiff % frequency.interval === 0;
-                }
-                return true;
-
-            case 'weekly':
-                if (frequency.weekdays && frequency.weekdays.length > 0) {
-                    return frequency.weekdays.includes(checkDate.getDay());
-                }
-                if (frequency.interval) {
-                    const weeksDiff = Math.floor((checkDate.getTime() - startDate.getTime()) / (86400000 * 7));
-                    return weeksDiff % frequency.interval === 0 && checkDate.getDay() === startDate.getDay();
-                }
-                return checkDate.getDay() === startDate.getDay();
-
-            case 'monthly':
-                if (frequency.monthDays && frequency.monthDays.length > 0) {
-                    return frequency.monthDays.includes(checkDate.getDate());
-                }
-                if (frequency.interval) {
-                    const monthsDiff = (checkDate.getFullYear() - startDate.getFullYear()) * 12 +
-                        (checkDate.getMonth() - startDate.getMonth());
-                    return monthsDiff % frequency.interval === 0 && checkDate.getDate() === startDate.getDate();
-                }
-                return checkDate.getDate() === startDate.getDate();
-
-            case 'yearly':
-                if (frequency.interval) {
-                    const yearsDiff = checkDate.getFullYear() - startDate.getFullYear();
-                    return yearsDiff % frequency.interval === 0 &&
-                        checkDate.getMonth() === startDate.getMonth() &&
-                        checkDate.getDate() === startDate.getDate();
-                }
-                return checkDate.getMonth() === startDate.getMonth() &&
-                    checkDate.getDate() === startDate.getDate();
-
-            case 'ebbinghaus':
-                const ebbinghausDaysDiff = Math.floor((checkDate.getTime() - startDate.getTime()) / 86400000);
-                const ebbinghausPattern = [1, 2, 4, 7, 15];
-                const maxPatternDay = 15;
-                if (ebbinghausDaysDiff < 0) return false;
-                if (ebbinghausDaysDiff === 0) return true;
-                if (ebbinghausPattern.includes(ebbinghausDaysDiff)) return true;
-                return ebbinghausDaysDiff > maxPatternDay && (ebbinghausDaysDiff - maxPatternDay) % 15 === 0;
-
-            case 'custom':
-                // 自定义频率：如果设置了周重复则按周判断，如果设置了月重复则按月判断；默认返回true
-                if (frequency.weekdays && frequency.weekdays.length > 0) {
-                    return frequency.weekdays.includes(checkDate.getDay());
-                }
-                if (frequency.monthDays && frequency.monthDays.length > 0) {
-                    return frequency.monthDays.includes(checkDate.getDate());
-                }
-                return true;
-
-            default:
-                return true;
-        }
-    }
-
-    private getHabitGoalType(habit: any): 'count' | 'pomodoro' {
-        return habit?.goalType === 'pomodoro' ? 'pomodoro' : 'count';
-    }
-
-    private getHabitPomodoroTargetMinutes(habit: any): number {
-        const hours = Math.max(0, Number(habit?.pomodoroTargetHours) || 0);
-        const minutes = Math.max(0, Number(habit?.pomodoroTargetMinutes) || 0);
-        const total = (hours * 60) + minutes;
-        if (total > 0) return total;
-        return Math.max(1, Number(habit?.target) || 1);
-    }
-
-    private getHabitProgressOnDate(habit: any, date: string): { current: number; target: number } {
-        if (this.getHabitGoalType(habit) === 'pomodoro') {
-            const target = this.getHabitPomodoroTargetMinutes(habit);
-            const pomodoroRecordManager = PomodoroRecordManager.getInstance(this);
-            const current = pomodoroRecordManager.getEventFocusTime(habit?.id, date) || 0;
-            return { current, target };
-        }
-
-        const checkIn = habit?.checkIns?.[date];
-        const current = checkIn?.count || 0;
-        const target = Math.max(1, Number(habit?.target) || 1);
-        return { current, target };
     }
 
     private async setHabitDockBadge(count: number) {
@@ -2428,7 +2240,7 @@ export default class ReminderPlugin extends Plugin {
     // 控制停靠栏可见性：通过隐藏停靠栏图标实现启用/禁用（不注销注册）
     private async toggleDockVisibility(dockKey: string, visible: boolean) {
         try {
-            const selector = this.getDockItemSelector(dockKey);
+            const selector = getDockItemSelector(this.name, dockKey);
             const dockIcon = await this.whenElementExist(selector) as HTMLElement;
             if (!dockIcon) return;
             dockIcon.style.display = visible ? '' : 'none';
@@ -3683,79 +3495,19 @@ export default class ReminderPlugin extends Plugin {
     }
 
     /**
-     * 检查习惯是否在给定日期应该打卡（基于 HabitPanel 的实现复制）
+     * 检查习惯是否在给定日期应该打卡（统一走 habitUtils）
      */
     private shouldCheckHabitOnDate(habit: any, date: string): boolean {
-        const frequency = habit.frequency || { type: 'daily' };
-        const checkDate = new Date(date);
-        const startDate = new Date(habit.startDate);
-
-        switch (frequency.type) {
-            case 'daily':
-                if (frequency.interval) {
-                    const daysDiff = Math.floor((checkDate.getTime() - startDate.getTime()) / 86400000);
-                    return daysDiff % frequency.interval === 0;
-                }
-                return true;
-
-            case 'weekly':
-                if (frequency.weekdays && frequency.weekdays.length > 0) {
-                    return frequency.weekdays.includes(checkDate.getDay());
-                }
-                if (frequency.interval) {
-                    const weeksDiff = Math.floor((checkDate.getTime() - startDate.getTime()) / (86400000 * 7));
-                    return weeksDiff % frequency.interval === 0 && checkDate.getDay() === startDate.getDay();
-                }
-                return checkDate.getDay() === startDate.getDay();
-
-            case 'monthly':
-                if (frequency.monthDays && frequency.monthDays.length > 0) {
-                    return frequency.monthDays.includes(checkDate.getDate());
-                }
-                if (frequency.interval) {
-                    const monthsDiff = (checkDate.getFullYear() - startDate.getFullYear()) * 12 +
-                        (checkDate.getMonth() - startDate.getMonth());
-                    return monthsDiff % frequency.interval === 0 && checkDate.getDate() === startDate.getDate();
-                }
-                return checkDate.getDate() === startDate.getDate();
-
-            case 'yearly':
-                if (frequency.interval) {
-                    const yearsDiff = checkDate.getFullYear() - startDate.getFullYear();
-                    return yearsDiff % frequency.interval === 0 &&
-                        checkDate.getMonth() === startDate.getMonth() &&
-                        checkDate.getDate() === startDate.getDate();
-                }
-                return checkDate.getMonth() === startDate.getMonth() &&
-                    checkDate.getDate() === startDate.getDate();
-
-            case 'ebbinghaus':
-                const ebbinghausDaysDiff = Math.floor((checkDate.getTime() - startDate.getTime()) / 86400000);
-                const ebbinghausPattern = [1, 2, 4, 7, 15];
-                const maxPatternDay = 15;
-                if (ebbinghausDaysDiff < 0) return false;
-                if (ebbinghausDaysDiff === 0) return true;
-                if (ebbinghausPattern.includes(ebbinghausDaysDiff)) return true;
-                return ebbinghausDaysDiff > maxPatternDay && (ebbinghausDaysDiff - maxPatternDay) % 15 === 0;
-
-            case 'custom':
-                if (frequency.weekdays && frequency.weekdays.length > 0) {
-                    return frequency.weekdays.includes(checkDate.getDay());
-                }
-                if (frequency.monthDays && frequency.monthDays.length > 0) {
-                    return frequency.monthDays.includes(checkDate.getDate());
-                }
-                return true;
-
-            default:
-                return true;
-        }
+        return shouldCheckInOnDate(habit, date);
     }
 
     private isHabitCompletedOnDate(habit: any, date: string): boolean {
-        const checkIn = habit.checkIns?.[date];
-        if (!checkIn) return false;
-        return (checkIn.count || 0) >= (habit.target || 1);
+        return isHabitCompletedOnDateUtil(habit, date, {
+            getPomodoroFocusMinutes: (habitId, logicalDate) => {
+                const manager = PomodoroRecordManager.getInstance(this);
+                return manager.getEventFocusTime(habitId, logicalDate) || 0;
+            }
+        });
     }
 
     // 检查习惯的时间提醒并触发通知
@@ -3772,18 +3524,7 @@ export default class ReminderPlugin extends Plugin {
                     if (!habit || typeof habit !== 'object') continue;
 
                     // 需要设置 reminder times 才会被触发（兼容旧属性 reminderTime）
-                    const times: { time: string; note?: string }[] = [];
-                    if (Array.isArray(habit.reminderTimes) && habit.reminderTimes.length > 0) {
-                        habit.reminderTimes.forEach((rt: any) => {
-                            if (typeof rt === 'string') {
-                                times.push({ time: rt });
-                            } else if (typeof rt === 'object' && rt.time) {
-                                times.push(rt);
-                            }
-                        });
-                    } else if (habit.reminderTime) {
-                        times.push({ time: habit.reminderTime });
-                    }
+                    const times = getHabitReminderTimes(habit);
                     if (times.length === 0) continue;
 
                     // 如果不在起止日期内，跳过
@@ -4882,18 +4623,7 @@ export default class ReminderPlugin extends Plugin {
         const limitDate = daysLimit > 0 ? new Date(now.getTime() + daysLimit * 24 * 60 * 60 * 1000) : null;
         const scanDays = daysLimit > 0 ? daysLimit : 30;
 
-        const timeEntries: { time: string; note?: string }[] = [];
-        if (Array.isArray(habit?.reminderTimes) && habit.reminderTimes.length > 0) {
-            for (const rt of habit.reminderTimes) {
-                if (typeof rt === 'string') {
-                    timeEntries.push({ time: rt });
-                } else if (rt && typeof rt === 'object' && rt.time) {
-                    timeEntries.push({ time: rt.time, note: rt.note });
-                }
-            }
-        } else if (habit?.reminderTime) {
-            timeEntries.push({ time: habit.reminderTime });
-        }
+        const timeEntries = getHabitReminderTimes(habit);
         if (timeEntries.length === 0) return [];
 
         const startDateCursor = new Date(`${today}T00:00:00`);

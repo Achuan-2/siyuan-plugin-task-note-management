@@ -13,6 +13,16 @@ import { PomodoroRecordManager } from "../utils/pomodoroRecord";
 import { createPomodoroStartSubmenu as createSharedPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
 import { showStatsDialog } from "./stats/ShowStatsDialog";
 import { HabitDayDialog } from "./HabitDayDialog";
+import {
+    getHabitGoalType as getHabitGoalTypeUtil,
+    getHabitPomodoroTargetMinutes as getHabitPomodoroTargetMinutesUtil,
+    getHabitProgressOnDate as getHabitProgressOnDateUtil,
+    getHabitReminderTimes,
+    getTodayHabitBuckets,
+    isHabitActiveOnDate,
+    isHabitCompletedOnDate as isHabitCompletedOnDateUtil,
+    shouldCheckInOnDate
+} from "../utils/habitUtils";
 
 export interface HabitCheckInEmoji {
     emoji: string;
@@ -562,7 +572,7 @@ export class HabitPanel {
             const targetCheckInCount = 1;
 
             allDates.forEach((date) => {
-                if (!this.shouldCheckInOnDate(habit, date)) return;
+                if (!shouldCheckInOnDate(habit, date)) return;
                 const focusMinutes = this.pomodoroRecordManager.getEventFocusTime(habit.id, date) || 0;
                 if (focusMinutes < targetMinutes) return;
 
@@ -604,14 +614,17 @@ export class HabitPanel {
         const today = getLogicalDateString();
         const tomorrow = getRelativeDateString(1);
         const yesterday = getRelativeDateString(-1);
+        const todayBuckets = getTodayHabitBuckets(habits, today, {
+            getPomodoroFocusMinutes: (habitId, date) => this.pomodoroRecordManager.getEventFocusTime(habitId, date) || 0
+        });
 
         switch (this.currentTab) {
             case 'today':
-                return habits.filter(h => this.shouldShowToday(h, today));
+                return todayBuckets.pendingHabits as Habit[];
             case 'tomorrow':
                 return habits.filter(h => this.shouldShowOnDate(h, tomorrow));
             case 'todayCompleted':
-                return habits.filter(h => this.isCompletedOnDate(h, today));
+                return todayBuckets.completedHabits as Habit[];
             case 'yesterdayCompleted':
                 return habits.filter(h => this.isCompletedOnDate(h, yesterday));
             case 'all':
@@ -620,104 +633,23 @@ export class HabitPanel {
         }
     }
 
-    private shouldShowToday(habit: Habit, today: string): boolean {
-        // 检查是否在有效期内
-        if (habit.startDate > today) return false;
-        if (habit.endDate && habit.endDate < today) return false;
-
-        // 检查今天是否应该打卡
-        if (!this.shouldCheckInOnDate(habit, today)) return false;
-
-        // 检查今天是否已完成
-        return !this.isCompletedOnDate(habit, today);
-    }
-
     private shouldShowOnDate(habit: Habit, date: string): boolean {
-        if (habit.startDate > date) return false;
-        if (habit.endDate && habit.endDate < date) return false;
-        return this.shouldCheckInOnDate(habit, date);
-    }
-
-    private shouldCheckInOnDate(habit: Habit, date: string): boolean {
-        const { frequency } = habit;
-        const checkDate = new Date(date);
-        const startDate = new Date(habit.startDate);
-
-        switch (frequency.type) {
-            case 'daily':
-                if (frequency.interval) {
-                    const daysDiff = Math.floor((checkDate.getTime() - startDate.getTime()) / 86400000);
-                    return daysDiff % frequency.interval === 0;
-                }
-                return true;
-
-            case 'weekly':
-                if (frequency.weekdays && frequency.weekdays.length > 0) {
-                    return frequency.weekdays.includes(checkDate.getDay());
-                }
-                if (frequency.interval) {
-                    const weeksDiff = Math.floor((checkDate.getTime() - startDate.getTime()) / (86400000 * 7));
-                    return weeksDiff % frequency.interval === 0 && checkDate.getDay() === startDate.getDay();
-                }
-                return checkDate.getDay() === startDate.getDay();
-
-            case 'monthly':
-                if (frequency.monthDays && frequency.monthDays.length > 0) {
-                    return frequency.monthDays.includes(checkDate.getDate());
-                }
-                if (frequency.interval) {
-                    const monthsDiff = (checkDate.getFullYear() - startDate.getFullYear()) * 12 +
-                        (checkDate.getMonth() - startDate.getMonth());
-                    return monthsDiff % frequency.interval === 0 && checkDate.getDate() === startDate.getDate();
-                }
-                return checkDate.getDate() === startDate.getDate();
-
-            case 'yearly':
-                if (frequency.months && frequency.months.length > 0) {
-                    if (!frequency.months.includes(checkDate.getMonth() + 1)) return false;
-                    if (frequency.monthDays && frequency.monthDays.length > 0) {
-                        return frequency.monthDays.includes(checkDate.getDate());
-                    }
-                    return checkDate.getDate() === startDate.getDate();
-                }
-                if (frequency.interval) {
-                    const yearsDiff = checkDate.getFullYear() - startDate.getFullYear();
-                    return yearsDiff % frequency.interval === 0 &&
-                        checkDate.getMonth() === startDate.getMonth() &&
-                        checkDate.getDate() === startDate.getDate();
-                }
-                return checkDate.getMonth() === startDate.getMonth() &&
-                    checkDate.getDate() === startDate.getDate();
-
-            case 'ebbinghaus':
-                const ebbinghausDaysDiff = Math.floor((checkDate.getTime() - startDate.getTime()) / 86400000);
-                const ebbinghausPattern = [1, 2, 4, 7, 15];
-                const maxPatternDay = 15;
-                if (ebbinghausDaysDiff < 0) return false;
-                if (ebbinghausDaysDiff === 0) return true;
-                if (ebbinghausPattern.includes(ebbinghausDaysDiff)) return true;
-                return ebbinghausDaysDiff > maxPatternDay && (ebbinghausDaysDiff - maxPatternDay) % 15 === 0;
-
-            default:
-                return true;
-        }
+        if (!isHabitActiveOnDate(habit, date)) return false;
+        return shouldCheckInOnDate(habit, date);
     }
 
     private isCompletedOnDate(habit: Habit, date: string): boolean {
-        const { current, target } = this.getHabitProgressOnDate(habit, date);
-        return current >= target;
+        return isHabitCompletedOnDateUtil(habit, date, {
+            getPomodoroFocusMinutes: (habitId, logicalDate) => this.pomodoroRecordManager.getEventFocusTime(habitId, logicalDate) || 0
+        });
     }
 
     private getHabitGoalType(habit: Habit): 'count' | 'pomodoro' {
-        return habit.goalType === 'pomodoro' ? 'pomodoro' : 'count';
+        return getHabitGoalTypeUtil(habit);
     }
 
     private getHabitPomodoroTargetMinutes(habit: Habit): number {
-        const hours = Math.max(0, Number(habit.pomodoroTargetHours) || 0);
-        const minutes = Math.max(0, Number(habit.pomodoroTargetMinutes) || 0);
-        const total = (hours * 60) + minutes;
-        if (total > 0) return total;
-        return Math.max(1, Number(habit.target) || 1);
+        return getHabitPomodoroTargetMinutesUtil(habit);
     }
 
     private getHabitProgressColor(habit: Habit): string {
@@ -729,19 +661,9 @@ export class HabitPanel {
     }
 
     private getHabitProgressOnDate(habit: Habit, date: string): { current: number; target: number } {
-        if (this.getHabitGoalType(habit) === 'pomodoro') {
-            const target = this.getHabitPomodoroTargetMinutes(habit);
-            const current = this.pomodoroRecordManager.getEventFocusTime(habit.id, date) || 0;
-            return { current, target };
-        }
-
-        const checkIn = habit.checkIns?.[date];
-        if (!checkIn) {
-            return { current: 0, target: Math.max(1, Number(habit.target) || 1) };
-        }
-        const current = checkIn.count || 0;
-        const target = Math.max(1, Number(habit.target) || 1);
-        return { current, target };
+        return getHabitProgressOnDateUtil(habit, date, {
+            getPomodoroFocusMinutes: (habitId, logicalDate) => this.pomodoroRecordManager.getEventFocusTime(habitId, logicalDate) || 0
+        });
     }
 
     private formatMinutesToHourMinute(totalMinutes: number): string {
@@ -1102,13 +1024,11 @@ export class HabitPanel {
         infoGrid.appendChild(timeItem);
         
         // 提醒时间（支持多个）
-        const timesList = Array.isArray(habit.reminderTimes) && habit.reminderTimes.length > 0 
-            ? habit.reminderTimes 
-            : (habit.reminderTime ? [habit.reminderTime] : []);
+        const timesList = getHabitReminderTimes(habit);
         if (timesList && timesList.length > 0) {
             const reminderItem = document.createElement('div');
             reminderItem.className = 'habit-card__info-item';
-            const displayTimes = timesList.map(t => typeof t === 'string' ? t : t.time);
+            const displayTimes = timesList.map(t => t.time);
             reminderItem.innerHTML = `<span class="habit-card__info-icon">⏰</span><span class="habit-card__info-text">${displayTimes.join(', ')}</span>`;
             infoGrid.appendChild(reminderItem);
         }
