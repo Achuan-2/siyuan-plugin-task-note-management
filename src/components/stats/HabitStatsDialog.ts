@@ -421,12 +421,10 @@ export class HabitStatsDialog {
             const isComplete = this.isCheckInComplete(dateStr);
             const isToday = dateStr === this.formatLocalDate(new Date());
 
-            // 根据打卡状态设置背景色：达标为绿色，未达标为橙色，未打卡为默认
+            // 根据打卡状态设置背景色：达标才显示颜色
             let backgroundColor = 'var(--b3-theme-surface)';
-            if (checkIn) {
-                backgroundColor = isComplete
-                    ? `color-mix(in srgb, ${habitColorSoft} 28%, white 72%)`
-                    : 'rgba(250, 200, 88, 0.3)';
+            if (isComplete) {
+                backgroundColor = `color-mix(in srgb, ${habitColorSoft} 28%, white 72%)`;
             }
 
             const dayCell = document.createElement('div');
@@ -677,7 +675,7 @@ export class HabitStatsDialog {
                     width:100%;
                     aspect-ratio:1;
                     border-radius:3px;
-                    background:${done ? `color-mix(in srgb, ${habitColorSoft} 78%, white 22%)` : 'color-mix(in srgb, var(--b3-theme-surface-lighter) 85%, white 15%)'};
+                    background:${done ? `color-mix(in srgb, ${habitColorSoft} 78%, white 22%)` : 'var(--b3-theme-surface-lighter)'};
                     border:1px solid ${isToday ? 'var(--b3-theme-primary)' : 'transparent'};
                     display:flex;
                     align-items:center;
