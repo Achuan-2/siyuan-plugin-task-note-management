@@ -929,7 +929,7 @@ export class HabitPanel {
         const timesList = getHabitReminderTimes(habit);
         if (timesList && timesList.length > 0) {
             const reminderItem = document.createElement('div');
-            reminderItem.className = 'habit-card__info-item';
+            reminderItem.className = 'habit-card__info-item habit-card__info-item--full';
             const displayTimes = timesList.map(t => t.time);
             reminderItem.innerHTML = `<span class="habit-card__info-icon">⏰</span><span class="habit-card__info-text">${displayTimes.join(', ')}</span>`;
             infoGrid.appendChild(reminderItem);

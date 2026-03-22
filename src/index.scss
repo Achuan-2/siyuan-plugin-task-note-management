@@ -1003,6 +1003,12 @@
     gap: 6px;
     font-size: 12px;
     color: var(--b3-theme-on-surface-light);
+    min-width: 0;
+    overflow: hidden;
+}
+
+.habit-card__info-item--full {
+    grid-column: span 2;
 }
 
 .habit-card__info-icon {
