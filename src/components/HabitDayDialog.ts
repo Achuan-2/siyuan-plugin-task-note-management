@@ -38,9 +38,19 @@ export class HabitDayDialog {
 
         const container = this.dialog.element.querySelector("#habitDayEditContainer") as HTMLElement;
         if (!container) return;
+        container.style.cssText = "display: flex; flex-direction: column; height: 100%;";
 
-        container.style.cssText = "padding:12px; box-sizing:border-box; display:flex; flex-direction:column; gap:8px; height:100%; overflow:auto;";
-        void this.render(container);
+        const contentDiv = document.createElement("div");
+        contentDiv.className = "b3-dialog__content";
+        contentDiv.style.cssText = "flex: 1; padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px;";
+        container.appendChild(contentDiv);
+
+        const actionDiv = document.createElement("div");
+        actionDiv.className = "b3-dialog__action";
+        actionDiv.style.cssText = "padding: 12px 16px; display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--b3-border-color);";
+        container.appendChild(actionDiv);
+
+        void this.render(contentDiv, actionDiv);
     }
 
     private getEntriesForDate(checkIn: any): HabitDayEntry[] {
@@ -116,8 +126,12 @@ export class HabitDayDialog {
         return `${hh}:${mm}`;
     }
 
-    private async render(container: HTMLElement) {
-        container.innerHTML = "";
+    private async render(contentContainer: HTMLElement, actionContainer?: HTMLElement) {
+        contentContainer.innerHTML = "";
+        if (!actionContainer) {
+            actionContainer = this.dialog.element.querySelector(".b3-dialog__action") as HTMLElement;
+        }
+        if (actionContainer) actionContainer.innerHTML = "";
 
         const header = document.createElement("div");
         header.style.cssText = "display:flex; align-items:center; justify-content:space-between; gap:8px;";
@@ -131,11 +145,11 @@ export class HabitDayDialog {
         addBtn.textContent = i18n("addDayCheckIn");
         addBtn.addEventListener("click", () => this.openAddEntryDialog());
         header.appendChild(addBtn);
-        container.appendChild(header);
+        contentContainer.appendChild(header);
 
         const listWrap = document.createElement("div");
         listWrap.style.cssText = "display:flex; flex-direction:column; gap:6px; margin-top:8px;";
-        container.appendChild(listWrap);
+        contentContainer.appendChild(listWrap);
 
         const checkIn = this.habit.checkIns?.[this.dateStr];
         const entries = this.getEntriesForDate(checkIn);
@@ -187,7 +201,7 @@ export class HabitDayDialog {
                         }),
                         async () => {
                             await this.deleteEntry(idx);
-                            await this.render(container);
+                            await this.render(contentContainer, actionContainer);
                         }
                     );
                 });
@@ -202,16 +216,15 @@ export class HabitDayDialog {
             });
         }
 
-        await this.renderPomodoroSection(container);
+        await this.renderPomodoroSection(contentContainer);
 
-        const actionBar = document.createElement("div");
-        actionBar.style.cssText = "display:flex; justify-content:flex-end; gap:8px; margin-top:8px;";
-        const closeBtn = document.createElement("button");
-        closeBtn.className = "b3-button";
-        closeBtn.textContent = i18n("close");
-        closeBtn.addEventListener("click", () => this.dialog.destroy());
-        actionBar.appendChild(closeBtn);
-        container.appendChild(actionBar);
+        if (actionContainer) {
+            const closeBtn = document.createElement("button");
+            closeBtn.className = "b3-button";
+            closeBtn.textContent = i18n("close");
+            closeBtn.addEventListener("click", () => this.dialog.destroy());
+            actionContainer.appendChild(closeBtn);
+        }
     }
 
     private async renderPomodoroSection(container: HTMLElement) {
@@ -220,7 +233,7 @@ export class HabitDayDialog {
         const totalMinutes = sessions.reduce((sum, s) => sum + (s.duration || 0), 0);
 
         const section = document.createElement("div");
-        section.style.cssText = "margin-top:4px; padding:10px; border-radius:8px; background:var(--b3-theme-surface); border:1px solid var(--b3-theme-surface-lighter);";
+        section.style.cssText = "margin-top:12px; padding-top:12px; border-top:1px solid var(--b3-border-color);";
 
         const header = document.createElement("div");
         header.style.cssText = "display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px;";
@@ -410,8 +423,9 @@ export class HabitDayDialog {
                         console.warn("刷新习惯视图失败:", error);
                     }
                 }
-                const main = this.dialog.element.querySelector("#habitDayEditContainer") as HTMLElement;
-                if (main) await this.render(main);
+                const content = this.dialog.element.querySelector(".b3-dialog__content") as HTMLElement;
+                const action = this.dialog.element.querySelector(".b3-dialog__action") as HTMLElement;
+                if (content) await this.render(content, action);
                 window.dispatchEvent(new CustomEvent("habitUpdated"));
             } catch (error) {
                 console.error("补录番茄钟失败:", error);
@@ -565,8 +579,9 @@ export class HabitDayDialog {
                 } catch (error) {
                     console.warn("刷新习惯视图失败:", error);
                 }
-                const main = this.dialog.element.querySelector("#habitDayEditContainer") as HTMLElement;
-                if (main) await this.render(main);
+                const content = this.dialog.element.querySelector(".b3-dialog__content") as HTMLElement;
+                const action = this.dialog.element.querySelector(".b3-dialog__action") as HTMLElement;
+                if (content) await this.render(content, action);
                 window.dispatchEvent(new CustomEvent("habitUpdated"));
             } catch (error) {
                 console.error("修改番茄时长失败:", error);
@@ -595,8 +610,9 @@ export class HabitDayDialog {
                     } catch (error) {
                         console.warn("刷新习惯视图失败:", error);
                     }
-                    const main = this.dialog.element.querySelector("#habitDayEditContainer") as HTMLElement;
-                    if (main) await this.render(main);
+                    const content = this.dialog.element.querySelector(".b3-dialog__content") as HTMLElement;
+                    const action = this.dialog.element.querySelector(".b3-dialog__action") as HTMLElement;
+                    if (content) await this.render(content, action);
                     window.dispatchEvent(new CustomEvent("habitUpdated"));
                 } catch (error) {
                     console.error("删除番茄记录失败:", error);
@@ -616,7 +632,17 @@ export class HabitDayDialog {
         });
         const container = dialog.element.querySelector("#habitDayAddEntry") as HTMLElement;
         if (!container) return;
-        container.style.cssText = "padding:12px; display:flex; flex-direction:column; gap:8px;";
+        container.style.cssText = "display: flex; flex-direction: column; height: 100%;";
+
+        const contentDiv = document.createElement("div");
+        contentDiv.className = "b3-dialog__content";
+        contentDiv.style.cssText = "flex: 1; padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px;";
+        container.appendChild(contentDiv);
+
+        const actionDiv = document.createElement("div");
+        actionDiv.className = "b3-dialog__action";
+        actionDiv.style.cssText = "padding: 12px 16px; display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--b3-border-color);";
+        container.appendChild(actionDiv);
 
         const timeRow = document.createElement("div");
         timeRow.style.cssText = "display:flex; gap:8px; align-items:center;";
@@ -631,12 +657,12 @@ export class HabitDayDialog {
         timeInput.style.cssText = "flex:1;";
         timeRow.appendChild(timeLabel);
         timeRow.appendChild(timeInput);
-        container.appendChild(timeRow);
+        contentDiv.appendChild(timeRow);
 
         const emojiLabel = document.createElement("div");
         emojiLabel.textContent = i18n("checkInStatusLabel");
         emojiLabel.style.cssText = "font-weight:bold;";
-        container.appendChild(emojiLabel);
+        contentDiv.appendChild(emojiLabel);
 
         const wrap = document.createElement("div");
         wrap.style.cssText = "display:flex; flex-wrap:wrap; gap:8px;";
@@ -655,17 +681,23 @@ export class HabitDayDialog {
             });
             wrap.appendChild(btn);
         });
-        container.appendChild(wrap);
+        contentDiv.appendChild(wrap);
 
         const noteLabel = document.createElement("div");
         noteLabel.textContent = i18n("noteOptionalLabel");
-        container.appendChild(noteLabel);
+        contentDiv.appendChild(noteLabel);
         const noteInput = document.createElement("textarea");
-        noteInput.style.cssText = "width:100%; height:80px;";
-        container.appendChild(noteInput);
+        noteInput.style.cssText = "width:100%; height:80px; box-sizing: border-box; padding: 8px; resize: vertical;";
+        contentDiv.appendChild(noteInput);
 
-        const action = document.createElement("div");
-        action.style.cssText = "display:flex; justify-content:flex-end; gap:8px; margin-top:8px;";
+        if (today !== this.dateStr) {
+            const tip = document.createElement("div");
+            tip.textContent = i18n("retroactiveCheckInTip");
+            tip.style.cssText = "color: var(--b3-theme-on-surface-light); font-size: 12px;";
+            contentDiv.appendChild(tip);
+        }
+
+
         const cancelBtn = document.createElement("button");
         cancelBtn.className = "b3-button";
         cancelBtn.textContent = i18n("cancel");
@@ -694,19 +726,14 @@ export class HabitDayDialog {
             await this.onSave(this.habit);
             showMessage(i18n("retroactiveSuccess"));
             dialog.destroy();
-            const main = this.dialog.element.querySelector("#habitDayEditContainer") as HTMLElement;
-            if (main) await this.render(main);
+            const content = this.dialog.element.querySelector(".b3-dialog__content") as HTMLElement;
+            const action = this.dialog.element.querySelector(".b3-dialog__action") as HTMLElement;
+            if (content) await this.render(content, action);
         });
-        action.appendChild(cancelBtn);
-        action.appendChild(saveBtn);
-        container.appendChild(action);
+        actionDiv.appendChild(cancelBtn);
+        actionDiv.appendChild(saveBtn);
 
-        if (today !== this.dateStr) {
-            const tip = document.createElement("div");
-            tip.textContent = i18n("retroactiveCheckInTip");
-            tip.style.cssText = "color: var(--b3-theme-on-surface-light); font-size: 12px;";
-            container.appendChild(tip);
-        }
+
     }
 
     private async openEditEntryDialog(index: number) {
@@ -723,7 +750,17 @@ export class HabitDayDialog {
         });
         const container = dialog.element.querySelector("#habitDayEditEntry") as HTMLElement;
         if (!container) return;
-        container.style.cssText = "padding:12px; display:flex; flex-direction:column; gap:8px;";
+        container.style.cssText = "display: flex; flex-direction: column; height: 100%;";
+
+        const contentDiv = document.createElement("div");
+        contentDiv.className = "b3-dialog__content";
+        contentDiv.style.cssText = "flex: 1; padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px;";
+        container.appendChild(contentDiv);
+
+        const actionDiv = document.createElement("div");
+        actionDiv.className = "b3-dialog__action";
+        actionDiv.style.cssText = "padding: 12px 16px; display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--b3-border-color);";
+        container.appendChild(actionDiv);
 
         const timeRow = document.createElement("div");
         timeRow.style.cssText = "display:flex; gap:8px; align-items:center;";
@@ -735,18 +772,17 @@ export class HabitDayDialog {
         timeInput.style.cssText = "flex:1;";
         timeRow.appendChild(timeLabel);
         timeRow.appendChild(timeInput);
-        container.appendChild(timeRow);
+        contentDiv.appendChild(timeRow);
 
         const noteLabel = document.createElement("div");
         noteLabel.textContent = i18n("noteOptionalLabel");
-        container.appendChild(noteLabel);
+        contentDiv.appendChild(noteLabel);
         const noteInput = document.createElement("textarea");
-        noteInput.style.cssText = "width:100%; height:80px;";
+        noteInput.style.cssText = "width:100%; height:80px; box-sizing: border-box; padding: 8px; resize: vertical;";
         noteInput.value = entry.note || "";
-        container.appendChild(noteInput);
+        contentDiv.appendChild(noteInput);
 
-        const action = document.createElement("div");
-        action.style.cssText = "display:flex; justify-content:flex-end; gap:8px; margin-top:8px;";
+
         const cancelBtn = document.createElement("button");
         cancelBtn.className = "b3-button";
         cancelBtn.textContent = i18n("cancel");
@@ -763,12 +799,12 @@ export class HabitDayDialog {
             await this.onSave(this.habit);
             showMessage(i18n("habitSaveSuccess"));
             dialog.destroy();
-            const main = this.dialog.element.querySelector("#habitDayEditContainer") as HTMLElement;
-            if (main) await this.render(main);
+            const content = this.dialog.element.querySelector(".b3-dialog__content") as HTMLElement;
+            const action = this.dialog.element.querySelector(".b3-dialog__action") as HTMLElement;
+            if (content) await this.render(content, action);
         });
-        action.appendChild(cancelBtn);
-        action.appendChild(saveBtn);
-        container.appendChild(action);
+        actionDiv.appendChild(cancelBtn);
+        actionDiv.appendChild(saveBtn);
     }
 
     private async deleteEntry(index: number) {

@@ -225,14 +225,16 @@ export class HabitHistoryDialog {
 
         const container = dialog.element.querySelector('#habitAddSingleEntryContainer') as HTMLElement;
         if (!container) return;
+        container.style.cssText = "display: flex; flex-direction: column; height: 100%;";
 
-        let contentDiv = document.createElement('div');
+        const contentDiv = document.createElement('div');
         contentDiv.className = 'b3-dialog__content';
-        contentDiv.style.cssText = 'padding:12px; display:flex; flex-direction:column; gap:8px;';
+        contentDiv.style.cssText = 'flex: 1; padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px;';
         container.appendChild(contentDiv);
-        let actionDiv = document.createElement('div');
+
+        const actionDiv = document.createElement('div');
         actionDiv.className = 'b3-dialog__action';
-        actionDiv.style.cssText = 'display:flex; justify-content:flex-end; gap:8px; margin-top:8px;';
+        actionDiv.style.cssText = 'padding: 12px 16px; display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--b3-border-color);';
         container.appendChild(actionDiv);
 
         const dateRow = document.createElement('div');
@@ -294,7 +296,6 @@ export class HabitHistoryDialog {
         noteInput.style.cssText = 'width:100%; height:80px; box-sizing:border-box; padding:8px; resize:vertical;';
         contentDiv.appendChild(noteInput);
 
-        const btnRow = document.createElement('div');
         const cancelBtn = document.createElement('button');
         cancelBtn.className = 'b3-button';
         cancelBtn.textContent = i18n("cancel");
@@ -327,9 +328,8 @@ export class HabitHistoryDialog {
             const containerMain = this.dialog.element.querySelector('#habitHistoryContainer') as HTMLElement;
             if (containerMain) this.renderList(containerMain);
         });
-        btnRow.appendChild(cancelBtn);
-        btnRow.appendChild(saveBtn);
-        actionDiv.appendChild(btnRow);
+        actionDiv.appendChild(cancelBtn);
+        actionDiv.appendChild(saveBtn);
     }
 
     private getEntriesForDate(checkIn: any): { emoji: string; meaning?: string; timestamp: string; note?: string; group?: string }[] {
@@ -382,14 +382,16 @@ export class HabitHistoryDialog {
 
         const container = dialog.element.querySelector('#habitEditSingleEntryContainer') as HTMLElement;
         if (!container) return;
+        container.style.cssText = "display: flex; flex-direction: column; height: 100%;";
 
-        let contentDiv = document.createElement('div');
+        const contentDiv = document.createElement('div');
         contentDiv.className = 'b3-dialog__content';
-        contentDiv.style.cssText = 'padding:12px;';
+        contentDiv.style.cssText = 'flex: 1; padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px;';
         container.appendChild(contentDiv);
-        let actionDiv = document.createElement('div');
+
+        const actionDiv = document.createElement('div');
         actionDiv.className = 'b3-dialog__action';
-        actionDiv.style.cssText = 'display:flex; justify-content:flex-end; gap:8px; margin-top:12px;';
+        actionDiv.style.cssText = 'padding: 12px 16px; display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--b3-border-color);';
         container.appendChild(actionDiv);
 
         const label = document.createElement('div');
@@ -442,15 +444,8 @@ export class HabitHistoryDialog {
         noteInput.value = entry.note || '';
         contentDiv.appendChild(noteInput);
 
-        const noteDiv = document.createElement('div');
-        noteDiv.style.cssText = 'color:var(--b3-theme-on-surface-light); margin-bottom:8px;';
-        if (!emojiConfigs || emojiConfigs.length === 0) {
-            noteDiv.textContent = i18n("noCheckInEmojis");
-        }
-        contentDiv.appendChild(noteDiv);
 
-        const btnRow = document.createElement('div');
-        btnRow.style.cssText = 'display:flex; justify-content:flex-end; gap:8px; margin-top:12px;';
+
         const cancelBtn = document.createElement('button');
         cancelBtn.className = 'b3-button';
         cancelBtn.textContent = i18n("cancel");
@@ -479,9 +474,8 @@ export class HabitHistoryDialog {
             const containerMain = this.dialog.element.querySelector('#habitHistoryContainer') as HTMLElement;
             if (containerMain) this.renderList(containerMain);
         });
-        btnRow.appendChild(cancelBtn);
-        btnRow.appendChild(saveBtn);
-        actionDiv.appendChild(btnRow);
+        actionDiv.appendChild(cancelBtn);
+        actionDiv.appendChild(saveBtn);
     }
 
     private async deleteEntry(dateStr: string, index: number) {
