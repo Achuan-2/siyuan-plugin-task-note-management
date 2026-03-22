@@ -1033,15 +1033,11 @@ export class HabitStatsDialog {
 
     private getHabitColor(): string {
         const raw = (this.habit as any).color;
+        const defaultColor = '#69bf77';
         if (typeof raw === 'string' && /^#[0-9a-fA-F]{6}$/.test(raw)) {
             return raw;
         }
-        const habitId = this.habit?.id || this.habit?.title || "habit";
-        let hash = 0;
-        for (let i = 0; i < habitId.length; i++) {
-            hash = (hash * 31 + habitId.charCodeAt(i)) >>> 0;
-        }
-        return COLOR_POOL[hash % COLOR_POOL.length];
+        return defaultColor;
     }
 
     private applyAlphaToColor(color: string, alpha: number): string {

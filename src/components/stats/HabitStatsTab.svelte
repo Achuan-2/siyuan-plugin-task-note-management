@@ -420,10 +420,11 @@ function applyAlphaToColor(color: string, alpha: number): string {
 
 function getHabitColor(habit: Habit): string {
     const alpha = 0.75;
+    const defaultColor = '#69bf77';
     if (habit.color && /^#[0-9a-fA-F]{6}$/.test(habit.color)) {
         return applyAlphaToColor(habit.color, alpha);
     }
-    return applyAlphaToColor(getHabitColorById(habit.id), alpha);
+    return applyAlphaToColor(defaultColor, alpha);
 }
 
 function getWeekRangeText(): string {

@@ -121,7 +121,8 @@ export class HabitEditDialog {
         const colorRow = document.createElement('div');
         colorRow.style.cssText = 'display:flex; align-items:center; gap:8px;';
 
-        const initialColor = this.habit?.color || this.generateRandomHabitColor();
+        const defaultColor = '#69bf77';
+        const initialColor = this.habit?.color || defaultColor;
         const colorInput = document.createElement('input');
         colorInput.type = 'color';
         colorInput.name = 'color';
