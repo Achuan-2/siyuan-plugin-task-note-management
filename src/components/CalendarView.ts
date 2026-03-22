@@ -1363,7 +1363,7 @@ export class CalendarView {
             },
             multiMonthMaxColumns: 1, // force a single column
             headerToolbar: {
-                left: 'prev,next myToday jumpTo',
+                left: 'prev,myToday,next jumpTo',
                 center: 'title',
                 right: ''
             },
@@ -1776,7 +1776,7 @@ export class CalendarView {
         // 将跳转到日期按钮替换为日历图标
         const jumpToBtn = calendarEl.querySelector('.fc-jumpTo-button') as HTMLButtonElement;
         if (jumpToBtn) {
-            jumpToBtn.innerHTML = '<svg class="b3-button__icon" style="width: 14px; height: 14px; margin-right: 0;"><use xlink:href="#iconCalendar"></use></svg>';
+            jumpToBtn.innerHTML = '<svg class="b3-button__icon" style="width: 14px; height: 14px; margin-right: 0;"><use xlink:href="#iconForward"></use></svg>';
             jumpToBtn.title = i18n("jumpToDate") || "跳转到日期";
         }
 
