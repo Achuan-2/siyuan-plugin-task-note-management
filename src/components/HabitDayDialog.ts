@@ -30,7 +30,7 @@ export class HabitDayDialog {
 
     show() {
         this.dialog = new Dialog({
-            title: i18n("dayDialogTitle", { title: this.habit.title, date: this.dateStr }),
+            title: this.habit.icon +i18n("dayDialogTitle", { title: this.habit.title, date: this.dateStr }),
             content: "<div id=\"habitDayEditContainer\"></div>",
             width: "560px",
             height: "560px"
@@ -136,8 +136,7 @@ export class HabitDayDialog {
         const header = document.createElement("div");
         header.style.cssText = "display:flex; align-items:center; justify-content:space-between; gap:8px;";
         const title = document.createElement("div");
-        title.textContent = `${this.dateStr}`;
-        title.style.cssText = "font-weight:bold;";
+        title.innerHTML = `<span style="font-weight:600;">✅ 当天习惯打卡记录</span>`;
         header.appendChild(title);
 
         const addBtn = document.createElement("button");
@@ -233,7 +232,7 @@ export class HabitDayDialog {
         const totalMinutes = sessions.reduce((sum, s) => sum + (s.duration || 0), 0);
 
         const section = document.createElement("div");
-        section.style.cssText = "margin-top:12px; padding-top:12px; border-top:1px solid var(--b3-border-color);";
+        section.style.cssText = "margin-top:12px; padding-top:12px; border-top:1px solid var(--b3-theme-surface-light);";
 
         const header = document.createElement("div");
         header.style.cssText = "display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px;";
@@ -628,7 +627,7 @@ export class HabitDayDialog {
             title: i18n("addDayCheckIn"),
             content: "<div id=\"habitDayAddEntry\"></div>",
             width: "420px",
-            height: "360px"
+            height: "400px"
         });
         const container = dialog.element.querySelector("#habitDayAddEntry") as HTMLElement;
         if (!container) return;
