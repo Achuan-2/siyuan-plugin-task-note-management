@@ -652,7 +652,7 @@ export class HabitPanel {
         }
     }
 
-    private toggleGroupCollapseUI(groupContainer: HTMLElement, groupId: string, isCollapsed: boolean) {
+    private toggleGroupCollapseUI(groupContainer: HTMLElement, isCollapsed: boolean) {
         const collapseIcon = groupContainer.querySelector('.habit-group__collapse-icon') as HTMLElement;
         const groupContent = groupContainer.querySelector('.habit-group__content') as HTMLElement;
         
@@ -697,7 +697,7 @@ export class HabitPanel {
             }
             this.saveCollapseStates();
             // 只更新当前分组的 UI，不刷新整个列表
-            this.toggleGroupCollapseUI(groupContainer, groupId, !isCollapsed);
+            this.toggleGroupCollapseUI(groupContainer, !isCollapsed);
         });
 
         groupContainer.appendChild(groupHeader);
