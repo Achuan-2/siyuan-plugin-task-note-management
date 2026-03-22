@@ -97,10 +97,6 @@ export class HabitPanel {
     private groupFilterButton: HTMLButtonElement;
     private currentTab: string = 'today';
     private selectedGroups: string[] = [];
-    // 排序选项
-    private sortKey: 'priority' | 'title' = 'priority';
-    private sortOrder: 'desc' | 'asc' = 'desc';
-    private sortButton: HTMLButtonElement;
     private groupManager: HabitGroupManager;
     private habitUpdatedHandler: () => void;
     private habitPomodoroCompletedHandler: (event: Event) => void;
@@ -135,7 +131,6 @@ export class HabitPanel {
         await this.restorePanelSettings();
 
         this.initUI();
-        this.updateSortButtonTitle();
         this.loadHabits();
 
         window.addEventListener('habitUpdated', this.habitUpdatedHandler);
@@ -156,8 +151,6 @@ export class HabitPanel {
     private async restorePanelSettings() {
         try {
             const settings = await this.plugin.loadSettings();
-            this.sortKey = settings.habitPanelSortKey || 'priority';
-            this.sortOrder = settings.habitPanelSortOrder || 'desc';
             if (Array.isArray(settings.habitPanelSelectedGroups)) {
                 this.selectedGroups = settings.habitPanelSelectedGroups;
             }
@@ -169,8 +162,6 @@ export class HabitPanel {
     private async savePanelSettings() {
         try {
             const settings = await this.plugin.loadSettings();
-            settings.habitPanelSortKey = this.sortKey;
-            settings.habitPanelSortOrder = this.sortOrder;
             settings.habitPanelSelectedGroups = this.selectedGroups;
             await this.plugin.saveSettings(settings);
         } catch (error) {
@@ -180,7 +171,6 @@ export class HabitPanel {
 
     private async loadCollapseStates() {
         try {
-            console.debug('HabitPanel: showSortMenu invoked', { sortKey: this.sortKey, sortOrder: this.sortOrder });
             const states = localStorage.getItem('habit-panel-collapse-states');
             if (states) {
                 this.collapsedGroups = new Set(JSON.parse(states));
@@ -256,18 +246,6 @@ export class HabitPanel {
             this.showPomodoroStatsView();
         });
         actionContainer.appendChild(habitStatsCalendarBtn);
-
-        // 添加排序按钮
-        this.sortButton = document.createElement('button');
-        this.sortButton.className = 'b3-button b3-button--outline';
-        this.sortButton.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconSort"></use></svg>';
-        this.sortButton.title = i18n("sortBy");
-        this.sortButton.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            this.showSortMenu(e);
-        });
-        actionContainer.appendChild(this.sortButton);
 
         // 刷新按钮
         const refreshBtn = document.createElement('button');
@@ -365,58 +343,6 @@ export class HabitPanel {
         }
     }
 
-    private showSortMenu(event: MouseEvent) {
-        try {
-            const menu = new Menu("habitSortMenu");
-
-            const sortOptions = [
-                { key: 'priority', label: i18n('sortByPriority'), icon: '🎯' },
-                { key: 'title', label: i18n('sortByTitle'), icon: '📝' }
-            ];
-
-            sortOptions.forEach(option => {
-                menu.addItem({
-                    iconHTML: option.icon,
-                    label: `${option.label} (${i18n('ascending')})`,
-                    current: this.sortKey === option.key && this.sortOrder === 'asc',
-                    click: () => {
-                        this.setSort(option.key as any, 'asc');
-                    }
-                });
-
-                menu.addItem({
-                    iconHTML: option.icon,
-                    label: `${option.label} (${i18n('descending')})`,
-                    current: this.sortKey === option.key && this.sortOrder === 'desc',
-                    click: () => {
-                        this.setSort(option.key as any, 'desc');
-                    }
-                });
-            });
-
-            // 使用按钮的位置定位菜单（与 ReminderPanel 保持一致）
-            if (this.sortButton) {
-                console.debug('HabitPanel: sortButton rect', this.sortButton.getBoundingClientRect());
-                const rect = this.sortButton.getBoundingClientRect();
-                const menuX = rect.left;
-                const menuY = rect.bottom + 4;
-
-                const maxX = window.innerWidth - 200;
-                const maxY = window.innerHeight - 200;
-
-                menu.open({
-                    x: Math.min(menuX, maxX),
-                    y: Math.min(menuY, maxY)
-                });
-            } else {
-                // 回退：根据事件坐标打开
-                menu.open({ x: event.clientX, y: event.clientY });
-            }
-        } catch (error) {
-            console.error('显示排序菜单失败:', error);
-        }
-    }
-
     // 显示更多菜单（包含插件设置）
     private showMoreMenu(event: MouseEvent) {
         try {
@@ -458,25 +384,6 @@ export class HabitPanel {
         } catch (error) {
             console.error('显示更多菜单失败:', error);
         }
-    }
-
-    private setSort(key: 'priority' | 'title', order: 'asc' | 'desc') {
-        this.sortKey = key;
-        this.sortOrder = order;
-        this.updateSortButtonTitle();
-        this.savePanelSettings();
-        this.loadHabits();
-    }
-
-    private updateSortButtonTitle() {
-        const sortLabels = {
-            'priority_desc': i18n("sortHighPriority"),
-            'priority_asc': i18n("sortLowPriority"),
-            'title_asc': i18n("sortTitleAZ"),
-            'title_desc': i18n("sortTitleZA")
-        };
-        const key = `${this.sortKey}_${this.sortOrder}`;
-        this.sortButton.title = `${i18n("sortPrefix")}${sortLabels[key] || i18n("sortDefault")}`;
     }
 
     private async loadHabits() {
@@ -734,9 +641,9 @@ export class HabitPanel {
         }
 
         // 如果还有其他未渲染的分组（理论上不应该有，除非有脏数据），也渲染出来
-        groupedHabits.forEach((groupHabits, groupId) => {
+        groupedHabits.forEach((groupHabits) => {
             groupHabits.forEach(h => renderedIds.add(h.id));
-            this.renderGroup(groupId, groupHabits);
+            this.renderGroup((groupHabits[0]?.groupId || 'none'), groupHabits);
         });
 
         // 如果是今日待打卡，在下方显示已打卡习惯（排除已在主区渲染的习惯）
@@ -849,8 +756,7 @@ export class HabitPanel {
                     const targetId = habit.id;
 
                     try {
-                        // 支持跨优先级排序，自动更新优先级
-                        await this.reorderHabits(groupId, habit.priority, draggedId, targetId, this.dragOverPosition || 'after');
+                        await this.reorderHabits(groupId, draggedId, targetId, this.dragOverPosition || 'after');
                         await this.loadHabits();
                         showMessage(i18n("sortUpdated"));
                     } catch (err) {
@@ -871,45 +777,12 @@ export class HabitPanel {
     }
 
     private sortHabitsInGroup(habits: Habit[]): Habit[] {
-        const priorityVal = (p?: string) => {
-            switch (p) {
-                case 'high': return 3;
-                case 'medium': return 2;
-                case 'low': return 1;
-                default: return 0;
-            }
-        };
-
-        const compare = (a: Habit, b: Habit) => {
-            if (this.sortKey === 'priority') {
-                const pa = priorityVal(a.priority);
-                const pb = priorityVal(b.priority);
-                if (pa !== pb) return pb - pa;
-                // 同优先级时，优先使用手动排序值（sort），没有则按标题
-                const sa = (a as any).sort || 0;
-                const sb = (b as any).sort || 0;
-                if (sa !== sb) return sa - sb;
-                return (a.title || '').localeCompare(b.title || '', 'zh-CN', { sensitivity: 'base' });
-            }
-            // title
-            const res = (a.title || '').localeCompare(b.title || '', 'zh-CN', { sensitivity: 'base' });
-            if (res !== 0) return res;
-            // fallback by priority, then manual sort
-            const pv = priorityVal(b.priority) - priorityVal(a.priority);
-            if (pv !== 0) return pv;
-            return ((a as any).sort || 0) - ((b as any).sort || 0);
-        };
-
-        const copy = [...habits];
-        copy.sort((a, b) => {
-            const r = compare(a, b);
-            // 当按优先级排序时，手动排序（`sort` 字段）应被视为绝对顺序，不受全局升降序切换影响
-            if (this.sortKey === 'priority') {
-                return r;
-            }
-            return this.sortOrder === 'asc' ? r : -r;
+        return [...habits].sort((a, b) => {
+            const sa = typeof (a as any).sort === 'number' ? (a as any).sort : 0;
+            const sb = typeof (b as any).sort === 'number' ? (b as any).sort : 0;
+            if (sa !== sb) return sa - sb;
+            return (a.title || '').localeCompare(b.title || '', 'zh-CN', { sensitivity: 'base' });
         });
-        return copy;
     }
 
     private createHabitCard(habit: Habit): HTMLElement {
@@ -1281,7 +1154,7 @@ export class HabitPanel {
         this.dragOverPosition = null;
     }
 
-    private async reorderHabits(groupId: string, targetPriority: Habit['priority'] | undefined, draggedId: string, targetId: string, position: 'before' | 'after') {
+    private async reorderHabits(groupId: string, draggedId: string, targetId: string, position: 'before' | 'after') {
         const habitData = await this.plugin.loadHabitData();
         const draggedHabit = habitData[draggedId];
         const targetHabit = habitData[targetId];
@@ -1291,40 +1164,9 @@ export class HabitPanel {
         }
 
         const groupKey = groupId || 'none';
-        const oldPriority = draggedHabit.priority || 'none';
-        const newPriority = targetPriority || 'none';
-
-        // 1. 如果优先级发生变化，更新被拖拽习惯的优先级
-        if (oldPriority !== newPriority) {
-            // 注意：界面显示的 'none' 对应数据可能是 'none' 或 undefined，这里统一处理
-            draggedHabit.priority = newPriority as any;
-
-            // 2. 整理旧优先级列表（移除被拖拽项并重新排序）
-            const oldList = (Object.values(habitData) as Habit[]).filter(h =>
-                ((h.groupId || 'none') === groupKey) &&
-                ((h.priority || 'none') === oldPriority) &&
-                h.id !== draggedId
-            );
-
-            // 排序旧列表
-            oldList.sort((a, b) => {
-                const sa = (a as any).sort || 0;
-                const sb = (b as any).sort || 0;
-                if (sa !== sb) return sa - sb;
-                return (a.title || '').localeCompare(b.title || '', 'zh-CN', { sensitivity: 'base' });
-            });
-
-            // 更新旧列表的 sort 值
-            oldList.forEach((h, i) => {
-                if (habitData[h.id]) habitData[h.id].sort = i + 1;
-            });
-        }
-
-        // 3. 处理目标列表（插入到新位置）
-        // 获取目标优先级的所有习惯（不包含拖拽项，以防同优先级情况）
+        // 仅按分组内手动顺序重排，不再按优先级分桶
         const targetList = (Object.values(habitData) as Habit[]).filter(h =>
             ((h.groupId || 'none') === groupKey) &&
-            ((h.priority || 'none') === newPriority) &&
             h.id !== draggedId
         );
 

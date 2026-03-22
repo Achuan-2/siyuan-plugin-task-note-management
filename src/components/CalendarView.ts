@@ -6494,50 +6494,17 @@ export class CalendarView {
         return emojis;
     }
 
-    private sortHabitsInGroupForCalendar(habits: any[], sortKey: 'priority' | 'title', sortOrder: 'asc' | 'desc'): any[] {
-        const priorityVal = (p?: string) => {
-            switch (p) {
-                case 'high': return 3;
-                case 'medium': return 2;
-                case 'low': return 1;
-                default: return 0;
-            }
-        };
-
-        const compare = (a: any, b: any) => {
-            if (sortKey === 'priority') {
-                const pa = priorityVal(a?.priority);
-                const pb = priorityVal(b?.priority);
-                if (pa !== pb) return pb - pa;
-
-                const sa = typeof a?.sort === 'number' ? a.sort : 0;
-                const sb = typeof b?.sort === 'number' ? b.sort : 0;
-                if (sa !== sb) return sa - sb;
-
-                return (a?.title || '').localeCompare(b?.title || '', 'zh-CN', { sensitivity: 'base' });
-            }
-
-            const titleCompare = (a?.title || '').localeCompare(b?.title || '', 'zh-CN', { sensitivity: 'base' });
-            if (titleCompare !== 0) return sortOrder === 'asc' ? titleCompare : -titleCompare;
-
-            const pa = priorityVal(a?.priority);
-            const pb = priorityVal(b?.priority);
-            if (pa !== pb) return pb - pa;
-
+    private sortHabitsInGroupForCalendar(habits: any[]): any[] {
+        return [...habits].sort((a, b) => {
             const sa = typeof a?.sort === 'number' ? a.sort : 0;
             const sb = typeof b?.sort === 'number' ? b.sort : 0;
-            return sa - sb;
-        };
-
-        return [...habits].sort(compare);
+            if (sa !== sb) return sa - sb;
+            return (a?.title || '').localeCompare(b?.title || '', 'zh-CN', { sensitivity: 'base' });
+        });
     }
 
     private async getOrderedHabitsForCalendar(habits: any[]): Promise<any[]> {
         if (!habits.length) return [];
-
-        const settings = await this.plugin.loadSettings();
-        const sortKey: 'priority' | 'title' = settings?.habitPanelSortKey === 'title' ? 'title' : 'priority';
-        const sortOrder: 'asc' | 'desc' = settings?.habitPanelSortOrder === 'asc' ? 'asc' : 'desc';
 
         const groupedHabits = new Map<string, any[]>();
         habits.forEach((habit: any) => {
@@ -6556,7 +6523,7 @@ export class CalendarView {
 
             sortedGroups.forEach((group) => {
                 if (!groupedHabits.has(group.id)) return;
-                ordered.push(...this.sortHabitsInGroupForCalendar(groupedHabits.get(group.id)!, sortKey, sortOrder));
+                ordered.push(...this.sortHabitsInGroupForCalendar(groupedHabits.get(group.id)!));
                 groupedHabits.delete(group.id);
             });
         } catch (e) {
@@ -6564,12 +6531,12 @@ export class CalendarView {
         }
 
         if (groupedHabits.has('none')) {
-            ordered.push(...this.sortHabitsInGroupForCalendar(groupedHabits.get('none')!, sortKey, sortOrder));
+            ordered.push(...this.sortHabitsInGroupForCalendar(groupedHabits.get('none')!));
             groupedHabits.delete('none');
         }
 
         groupedHabits.forEach((list) => {
-            ordered.push(...this.sortHabitsInGroupForCalendar(list, sortKey, sortOrder));
+            ordered.push(...this.sortHabitsInGroupForCalendar(list));
         });
 
         return ordered;
