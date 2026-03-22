@@ -231,8 +231,8 @@ function getSuccessCheckInCount(habit: Habit, dateStr: string): number {
         return config ? config.countsAsSuccess !== false : true;
     }).length;
 
-    // 兼容旧数据：只有 count，没有 status/entries
-    if (successFromEmoji === 0 && typeof checkIn.count === "number" && checkIn.count > 0) {
+    // 兼容旧数据：只有在没有 status/entries 且有 count 时才使用 count
+    if (emojis.length === 0 && typeof checkIn.count === "number" && checkIn.count > 0) {
         return checkIn.count;
     }
     return successFromEmoji;

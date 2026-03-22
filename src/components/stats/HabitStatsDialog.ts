@@ -35,6 +35,7 @@ export class HabitStatsDialog {
     private yearViewOffset: number = 0; // 用于年度视图的偏移
     private chartInstances: EChartsType[] = [];
     private resizeObservers: ResizeObserver[] = [];
+    private weekStartDay: number = 1; // 周起始日，0为周日，1为周一
 
     private onSave?: (habit: Habit) => Promise<void>;
     private plugin?: any;
@@ -71,8 +72,16 @@ export class HabitStatsDialog {
             await this.pomodoroRecordManager.initialize();
             await this.pomodoroRecordManager.refreshData();
             this.pomodoroReady = true;
+
+            // 加载设置
+            if (this.plugin && typeof this.plugin.loadSettings === 'function') {
+                const settings = await this.plugin.loadSettings();
+                if (settings && typeof settings.weekStartDay === 'number') {
+                    this.weekStartDay = settings.weekStartDay;
+                }
+            }
         } catch (error) {
-            console.warn("HabitStatsDialog 初始化番茄数据失败", error);
+            console.warn("HabitStatsDialog 初始化番茄数据或设置失败", error);
             this.pomodoroReady = false;
         }
         this.renderContainer(container);
@@ -287,12 +296,85 @@ export class HabitStatsDialog {
         });
 
         let successCount = successEmojis.length;
-        // 兼容旧数据：只有 count，没有 status/entries
-        if (successCount === 0 && typeof checkIn.count === "number" && checkIn.count > 0) {
+        // 兼容旧数据：只有在没有 status/entries 且有 count 时才使用 count
+        if (emojis.length === 0 && typeof checkIn.count === "number" && checkIn.count > 0) {
             successCount = checkIn.count;
         }
         const target = this.habit.target || 1;
         return successCount >= target;
+    }
+
+    private isHabitWithinDateRange(habit: Habit, dateStr: string): boolean {
+        if (habit.startDate && dateStr < habit.startDate) return false;
+        if (habit.endDate && dateStr > habit.endDate) return false;
+        return true;
+    }
+
+    private shouldCheckInOnDate(habit: Habit, dateStr: string): boolean {
+        if (!this.isHabitWithinDateRange(habit, dateStr)) return false;
+
+        const frequency = habit.frequency || { type: "daily" };
+        const checkDate = new Date(`${dateStr}T00:00:00`);
+        const startDate = new Date(`${habit.startDate || dateStr}T00:00:00`);
+
+        switch (frequency.type) {
+            case "daily":
+                if (frequency.interval) {
+                    const daysDiff = Math.floor((checkDate.getTime() - startDate.getTime()) / 86400000);
+                    return daysDiff >= 0 && daysDiff % frequency.interval === 0;
+                }
+                return true;
+
+            case "weekly":
+                if (frequency.weekdays && frequency.weekdays.length > 0) {
+                    return frequency.weekdays.includes(checkDate.getDay());
+                }
+                if (frequency.interval) {
+                    const weeksDiff = Math.floor((checkDate.getTime() - startDate.getTime()) / (86400000 * 7));
+                    return weeksDiff >= 0 && weeksDiff % frequency.interval === 0 && checkDate.getDay() === startDate.getDay();
+                }
+                return checkDate.getDay() === startDate.getDay();
+
+            case "monthly":
+                if (frequency.monthDays && frequency.monthDays.length > 0) {
+                    return frequency.monthDays.includes(checkDate.getDate());
+                }
+                if (frequency.interval) {
+                    const monthsDiff = (checkDate.getFullYear() - startDate.getFullYear()) * 12 +
+                        (checkDate.getMonth() - startDate.getMonth());
+                    return monthsDiff >= 0 && monthsDiff % frequency.interval === 0 && checkDate.getDate() === startDate.getDate();
+                }
+                return checkDate.getDate() === startDate.getDate();
+
+            case "yearly":
+                if (frequency.months && frequency.months.length > 0) {
+                    if (!frequency.months.includes(checkDate.getMonth() + 1)) return false;
+                    if (frequency.monthDays && frequency.monthDays.length > 0) {
+                        return frequency.monthDays.includes(checkDate.getDate());
+                    }
+                    return checkDate.getDate() === startDate.getDate();
+                }
+                if (frequency.interval) {
+                    const yearsDiff = checkDate.getFullYear() - startDate.getFullYear();
+                    return yearsDiff >= 0 &&
+                        yearsDiff % frequency.interval === 0 &&
+                        checkDate.getMonth() === startDate.getMonth() &&
+                        checkDate.getDate() === startDate.getDate();
+                }
+                return checkDate.getMonth() === startDate.getMonth() && checkDate.getDate() === startDate.getDate();
+
+            case "ebbinghaus":
+                const ebbinghausDaysDiff = Math.floor((checkDate.getTime() - startDate.getTime()) / 86400000);
+                const ebbinghausPattern = [1, 2, 4, 7, 15];
+                const maxPatternDay = 15;
+                if (ebbinghausDaysDiff < 0) return false;
+                if (ebbinghausDaysDiff === 0) return true;
+                if (ebbinghausPattern.includes(ebbinghausDaysDiff)) return true;
+                return ebbinghausDaysDiff > maxPatternDay && (ebbinghausDaysDiff - maxPatternDay) % 15 === 0;
+
+            default:
+                return true;
+        }
     }
 
     private getHabitGoalType(habit: Habit): "count" | "pomodoro" {
@@ -403,6 +485,18 @@ export class HabitStatsDialog {
         titleRow.appendChild(toolbar);
         section.appendChild(titleRow);
 
+        // 星期标题行
+        const weekdayNames = i18n("weekdayNames").split(','); // ["日", "一", "二", "三", "四", "五", "六"]
+        const weekdayGrid = document.createElement('div');
+        weekdayGrid.style.cssText = 'display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 8px; font-size: 12px; color: var(--b3-theme-on-surface-light); text-align: center; font-weight: bold;';
+        for (let i = 0; i < 7; i++) {
+            const dayIdx = (this.weekStartDay + i) % 7;
+            const span = document.createElement('span');
+            span.textContent = weekdayNames[dayIdx];
+            weekdayGrid.appendChild(span);
+        }
+        section.appendChild(weekdayGrid);
+
         const monthGrid = document.createElement('div');
         monthGrid.style.cssText = 'display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;';
 
@@ -410,7 +504,16 @@ export class HabitStatsDialog {
         const now = this.currentMonthDate || new Date();
         const year = now.getFullYear();
         const month = now.getMonth();
+        const firstDay = new Date(year, month, 1);
         const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+        // 填充月初空白
+        const leadBlanks = (firstDay.getDay() - this.weekStartDay + 7) % 7;
+        for (let i = 0; i < leadBlanks; i++) {
+            const blank = document.createElement('div');
+            blank.style.cssText = 'aspect-ratio: 1;';
+            monthGrid.appendChild(blank);
+        }
 
         const habitColor = this.getHabitColor();
         const habitColorSoft = this.applyAlphaToColor(habitColor, 0.75);
@@ -420,14 +523,21 @@ export class HabitStatsDialog {
             const checkIn = this.habit.checkIns?.[dateStr];
             const isComplete = this.isCheckInComplete(dateStr);
             const isToday = dateStr === this.formatLocalDate(new Date());
+            const required = this.shouldCheckInOnDate(this.habit, dateStr);
 
             // 根据打卡状态设置背景色：达标才显示颜色
-            let backgroundColor = 'var(--b3-theme-surface)';
+            let backgroundColor = 'var(--b3-theme-background)';
             if (isComplete) {
                 backgroundColor = `color-mix(in srgb, ${habitColorSoft} 28%, white 72%)`;
             }
 
             const dayCell = document.createElement('div');
+            // 非打卡日期添加透明度
+            let opacity = 1;
+            if (!required) {
+                opacity = isComplete ? 0.62 : 0.36;
+            }
+
             dayCell.style.cssText = `
                 aspect-ratio: 1;
                 display: flex;
@@ -437,6 +547,7 @@ export class HabitStatsDialog {
                 font-size: 12px;
                 background: ${backgroundColor};
                 border: 1px solid ${isToday ? 'var(--b3-theme-primary)' : 'var(--b3-theme-surface-lighter)'};
+                opacity: ${opacity};
             `;
 
             // 显示日期以及状态 emoji（支持多行、自动缩放字体）
@@ -669,14 +780,22 @@ export class HabitStatsDialog {
                 const done = this.isCheckInComplete(dateStr);
                 const emojis = this.getCheckInEmojis(dateStr);
                 const isToday = dateStr === this.formatLocalDate(new Date());
+                const required = this.shouldCheckInOnDate(this.habit, dateStr);
 
                 const dayCell = document.createElement('div');
+                // 非打卡日期添加透明度
+                let opacity = 1;
+                if (!required) {
+                    opacity = done ? 0.6 : 0.34;
+                }
+
                 dayCell.style.cssText = `
                     width:100%;
                     aspect-ratio:1;
                     border-radius:3px;
                     background:${done ? `color-mix(in srgb, ${habitColorSoft} 78%, white 22%)` : 'var(--b3-theme-surface-lighter)'};
                     border:1px solid ${isToday ? 'var(--b3-theme-primary)' : 'transparent'};
+                    opacity:${opacity};
                     display:flex;
                     align-items:center;
                     justify-content:center;
