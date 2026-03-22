@@ -31,6 +31,7 @@ import { createPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
 import { HabitEditDialog } from "./HabitEditDialog";
 import { HabitStatsDialog } from "./stats/HabitStatsDialog";
 import { getHabitProgressOnDate, shouldCheckInOnDate as shouldCheckInOnDateUtil } from "../utils/habitUtils";
+import { HabitGroupManager } from "../utils/habitGroupManager";
 export class CalendarView {
     private container: HTMLElement;
     private calendar: Calendar;
@@ -4449,6 +4450,13 @@ export class CalendarView {
         if (isHabitA !== isHabitB) {
             return isHabitA ? -1 : 1;
         }
+        if (isHabitA && isHabitB) {
+            const habitOrderA = typeof a.extendedProps?.habitOrder === 'number' ? a.extendedProps.habitOrder : Number.MAX_SAFE_INTEGER;
+            const habitOrderB = typeof b.extendedProps?.habitOrder === 'number' ? b.extendedProps.habitOrder : Number.MAX_SAFE_INTEGER;
+            if (habitOrderA !== habitOrderB) {
+                return habitOrderA - habitOrderB;
+            }
+        }
 
         // 如果都是订阅日历，则按照订阅日历本身的排序进行 (ics-subscriptions.json 中的顺序)
         if (isSubA && isSubB) {
@@ -6486,12 +6494,99 @@ export class CalendarView {
         return emojis;
     }
 
+    private sortHabitsInGroupForCalendar(habits: any[], sortKey: 'priority' | 'title', sortOrder: 'asc' | 'desc'): any[] {
+        const priorityVal = (p?: string) => {
+            switch (p) {
+                case 'high': return 3;
+                case 'medium': return 2;
+                case 'low': return 1;
+                default: return 0;
+            }
+        };
+
+        const compare = (a: any, b: any) => {
+            if (sortKey === 'priority') {
+                const pa = priorityVal(a?.priority);
+                const pb = priorityVal(b?.priority);
+                if (pa !== pb) return pb - pa;
+
+                const sa = typeof a?.sort === 'number' ? a.sort : 0;
+                const sb = typeof b?.sort === 'number' ? b.sort : 0;
+                if (sa !== sb) return sa - sb;
+
+                return (a?.title || '').localeCompare(b?.title || '', 'zh-CN', { sensitivity: 'base' });
+            }
+
+            const titleCompare = (a?.title || '').localeCompare(b?.title || '', 'zh-CN', { sensitivity: 'base' });
+            if (titleCompare !== 0) return sortOrder === 'asc' ? titleCompare : -titleCompare;
+
+            const pa = priorityVal(a?.priority);
+            const pb = priorityVal(b?.priority);
+            if (pa !== pb) return pb - pa;
+
+            const sa = typeof a?.sort === 'number' ? a.sort : 0;
+            const sb = typeof b?.sort === 'number' ? b.sort : 0;
+            return sa - sb;
+        };
+
+        return [...habits].sort(compare);
+    }
+
+    private async getOrderedHabitsForCalendar(habits: any[]): Promise<any[]> {
+        if (!habits.length) return [];
+
+        const settings = await this.plugin.loadSettings();
+        const sortKey: 'priority' | 'title' = settings?.habitPanelSortKey === 'title' ? 'title' : 'priority';
+        const sortOrder: 'asc' | 'desc' = settings?.habitPanelSortOrder === 'asc' ? 'asc' : 'desc';
+
+        const groupedHabits = new Map<string, any[]>();
+        habits.forEach((habit: any) => {
+            const groupId = habit?.groupId || 'none';
+            if (!groupedHabits.has(groupId)) {
+                groupedHabits.set(groupId, []);
+            }
+            groupedHabits.get(groupId)!.push(habit);
+        });
+
+        const ordered: any[] = [];
+        try {
+            const groupManager = HabitGroupManager.getInstance();
+            await groupManager.initialize();
+            const sortedGroups = groupManager.getAllGroups();
+
+            sortedGroups.forEach((group) => {
+                if (!groupedHabits.has(group.id)) return;
+                ordered.push(...this.sortHabitsInGroupForCalendar(groupedHabits.get(group.id)!, sortKey, sortOrder));
+                groupedHabits.delete(group.id);
+            });
+        } catch (e) {
+            console.warn('初始化习惯分组失败，回退到默认分组顺序:', e);
+        }
+
+        if (groupedHabits.has('none')) {
+            ordered.push(...this.sortHabitsInGroupForCalendar(groupedHabits.get('none')!, sortKey, sortOrder));
+            groupedHabits.delete('none');
+        }
+
+        groupedHabits.forEach((list) => {
+            ordered.push(...this.sortHabitsInGroupForCalendar(list, sortKey, sortOrder));
+        });
+
+        return ordered;
+    }
+
     private async addHabitEventsToList(events: any[], startDate: string, endDate: string) {
         try {
             const habitData = await this.plugin.loadHabitData();
-            const habits = Object.values(habitData || {}) as any[];
+            const habits = await this.getOrderedHabitsForCalendar(Object.values(habitData || {}) as any[]);
             if (!habits.length) return;
             const today = getLogicalDateString();
+            const habitOrderMap = new Map<string, number>();
+            habits.forEach((habit, index) => {
+                if (habit?.id) {
+                    habitOrderMap.set(habit.id, index);
+                }
+            });
 
             const start = new Date(startDate + 'T00:00:00');
             const end = new Date(endDate + 'T00:00:00');
@@ -6534,7 +6629,8 @@ export class CalendarView {
                             checkedEmojis,
                             note: habit.note || '',
                             target: habit.target || 1,
-                            frequency: habit.frequency
+                            frequency: habit.frequency,
+                            habitOrder: habitOrderMap.get(habit.id) ?? Number.MAX_SAFE_INTEGER
                         }
                     });
                 }
