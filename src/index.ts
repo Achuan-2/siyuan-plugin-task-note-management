@@ -2080,6 +2080,13 @@ export default class ReminderPlugin extends Plugin {
         };
         window.addEventListener('habitUpdated', onHabitUpdated);
         this.addCleanup(() => window.removeEventListener('habitUpdated', onHabitUpdated));
+
+        // 监听习惯关联番茄完成事件，确保番茄目标类型也能实时刷新徽章
+        const onHabitPomodoroCompleted = () => {
+            this.updateHabitBadges();
+        };
+        window.addEventListener('habitPomodoroCompleted', onHabitPomodoroCompleted);
+        this.addCleanup(() => window.removeEventListener('habitPomodoroCompleted', onHabitPomodoroCompleted));
     }
 
     async onLayoutReady() {
@@ -2431,12 +2438,9 @@ export default class ReminderPlugin extends Plugin {
                 // 检查今天是否应该打卡
                 if (!this.shouldCheckInOnDate(habit, today)) return;
 
-                // 检查今天是否已完成
-                const checkIn = habit.checkIns?.[today];
-                const currentCount = checkIn?.count || 0;
-                const targetCount = habit.target || 1;
-
-                if (currentCount < targetCount) {
+                // 检查今天是否已完成（兼容按次数/按番茄时长两种目标）
+                const { current, target } = this.getHabitProgressOnDate(habit, today);
+                if (current < target) {
                     pendingCount++;
                 }
             });
@@ -2514,6 +2518,32 @@ export default class ReminderPlugin extends Plugin {
             default:
                 return true;
         }
+    }
+
+    private getHabitGoalType(habit: any): 'count' | 'pomodoro' {
+        return habit?.goalType === 'pomodoro' ? 'pomodoro' : 'count';
+    }
+
+    private getHabitPomodoroTargetMinutes(habit: any): number {
+        const hours = Math.max(0, Number(habit?.pomodoroTargetHours) || 0);
+        const minutes = Math.max(0, Number(habit?.pomodoroTargetMinutes) || 0);
+        const total = (hours * 60) + minutes;
+        if (total > 0) return total;
+        return Math.max(1, Number(habit?.target) || 1);
+    }
+
+    private getHabitProgressOnDate(habit: any, date: string): { current: number; target: number } {
+        if (this.getHabitGoalType(habit) === 'pomodoro') {
+            const target = this.getHabitPomodoroTargetMinutes(habit);
+            const pomodoroRecordManager = PomodoroRecordManager.getInstance(this);
+            const current = pomodoroRecordManager.getEventFocusTime(habit?.id, date) || 0;
+            return { current, target };
+        }
+
+        const checkIn = habit?.checkIns?.[date];
+        const current = checkIn?.count || 0;
+        const target = Math.max(1, Number(habit?.target) || 1);
+        return { current, target };
     }
 
     private async setHabitDockBadge(count: number) {
