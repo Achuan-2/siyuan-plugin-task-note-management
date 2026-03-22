@@ -1,4 +1,4 @@
-import {
+﻿import {
     Plugin,
     getActiveEditor,
     showMessage,
@@ -1313,11 +1313,13 @@ export default class ReminderPlugin extends Plugin {
         `);
         setPluginInstance(this);
         this.taskNoteDOM = new TaskNoteDOMManager(this);
-        // 初始化番茄钟记录管理器，确保番茄数据已加载
-        const pomodoroRecordManager = PomodoroRecordManager.getInstance(this);
-        await pomodoroRecordManager.initialize();
-        // 添加dock栏和顶栏按钮
+        // 先初始化 UI，避免加载数据记录异常/耗时影响 Dock 注册
         await this.initializeUI();
+        // 后台初始化番茄钟记录管理器，失败也不阻断插件主流程
+        const pomodoroRecordManager = PomodoroRecordManager.getInstance(this);
+        pomodoroRecordManager.initialize().catch((error: any) => {
+            console.warn("番茄钟记录初始化失败（已降级，不影响 Dock 注册）:", error);
+        });
 
         // 初始化数据并缓存
         await this.loadHabitData();
