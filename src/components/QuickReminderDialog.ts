@@ -2811,11 +2811,16 @@ export class QuickReminderDialog {
         endDate?: string
     ): { time: string, note?: string, dayOffset?: number, dayIndex?: number } {
         const normalized = typeof item === 'string' ? { time: item, note: '' } : { ...item };
-        normalized.time = this.getCustomReminderTimeValue(normalized.time) || normalized.time || '';
 
         if (!this.isRepeatCustomReminderMode(date, endDate) || !date) {
+            // 对于非重复任务，保持完整的日期时间；若仅有时间则自动补全日期
+            if (normalized.time && !normalized.time.includes('T') && date) {
+                normalized.time = `${date}T${normalized.time}`;
+            }
             return normalized;
         }
+
+        normalized.time = this.getCustomReminderTimeValue(normalized.time) || normalized.time || '';
 
         const durationDays = this.getRepeatCustomReminderDurationDays(date, endDate);
         const parsedDate = this.getCustomReminderDateValue(typeof item === 'string' ? item : item?.time);
