@@ -6,7 +6,7 @@ export async function showStatsDialog(plugin: any, initialTab: StatsTab = "pomod
     const dialog = new Dialog({
         title: "📊 统计视图",
         content: '<div id="showStatsViewContainer" style="height:100%;padding: 8px 16px 16px;box-sizing:border-box;"></div>',
-        width: "min(900px,95%)",
+        width: "min(1000px,95%)",
         height: "80vh"
     });
 
