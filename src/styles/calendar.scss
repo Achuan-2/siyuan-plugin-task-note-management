@@ -1,0 +1,370 @@
+// Calendar view styles
+.reminder-calendar-view {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 8px;
+    height: 100%;
+    flex: 1;
+    container-type: inline-size;
+}
+
+// Ensure calendar dock fills height
+.dock__item[data-type="calendar_dock"] .fn__flex-1,
+.dock__item[data-type="calendar_dock"] > .fn__flex-column,
+.dock__item[data-type="calendar_dock"] > div {
+    height: 100%;
+    min-height: 100%;
+}
+
+.reminder-calendar-view-group .b3-button--primary {
+    background-color: var(--b3-theme-primary) !important;
+    color: white !important;
+    border-color: var(--b3-theme-primary) !important;
+}
+
+.reminder-calendar-view-group .b3-button--primary:hover {
+    background-color: var(--b3-theme-primary-light) !important;
+    border-color: var(--b3-theme-primary-light) !important;
+}
+
+.reminder-calendar-toolbar {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    align-items: center;
+}
+
+.reminder-calendar-toolbar--dock {
+    justify-content: flex-end;
+    gap: 4px;
+    margin-bottom: 4px;
+}
+
+.reminder-calendar-toolbar-collapsible {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 4px 0 8px;
+    border-bottom: 1px solid var(--b3-border-color);
+    margin-bottom: 8px;
+}
+
+.reminder-calendar-view-group {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.reminder-calendar-container {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    background-color: var(--b3-theme-background);
+    position: relative;
+}
+
+.reminder-calendar-container.fc .fc-popover {
+    max-width: calc(100% - 8px);
+    z-index: 10 !important;
+
+    .fc-event {
+        position: relative !important;
+        top: auto !important;
+        left: auto !important;
+        right: auto !important;
+        bottom: auto !important;
+        width: calc(100% - 8px) !important;
+        height: auto !important;
+        margin: 2px 4px !important;
+        display: block !important;
+    }
+
+    .fc-popover-body {
+        max-height: 400px;
+        overflow-y: auto;
+    }
+}
+
+.reminder-calendar-container.fc {
+    --fc-border-color: var(--b3-border-color);
+    --fc-button-bg-color: var(--b3-theme-primary);
+    --fc-button-border-color: var(--b3-theme-primary);
+    --fc-button-hover-bg-color: var(--b3-theme-primary-light);
+    --fc-button-hover-border-color: var(--b3-theme-primary-light);
+    --fc-event-bg-color: var(--b3-theme-surface-lighter);
+    --fc-event-border-color: var(--b3-theme-surface-lighter);
+    --fc-page-bg-color: var(--b3-theme-background);
+    --fc-today-bg-color: var(--b3-theme-primary-lightest);
+}
+
+.reminder-calendar-container.fc .fc-toolbar-title {
+    font-size: 1.3em;
+    margin: 0 !important;
+    line-height: 1.25;
+    font-weight: 700;
+}
+
+.reminder-calendar-container.fc .fc-header-toolbar {
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: nowrap;
+}
+
+.reminder-calendar-container.fc .fc-header-toolbar .fc-toolbar-chunk {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    flex-wrap: nowrap !important;
+}
+
+.reminder-calendar-container.fc .fc-header-toolbar .fc-toolbar-chunk > * {
+    flex-shrink: 0;
+}
+
+.reminder-calendar-container.fc .fc-toolbar .fc-button {
+    height: 34px;
+    min-width: 34px;
+    padding: 0 10px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    border: 1px solid color-mix(in srgb, var(--b3-theme-primary), black 14%);
+    box-shadow: none;
+    font-family: inherit;
+}
+
+.reminder-calendar-container.fc .fc-toolbar .fc-button-group > .fc-button {
+    border-radius: 8px;
+}
+
+@container (max-width: 760px) {
+    .reminder-calendar-container.fc .fc-header-toolbar {
+        display: grid;
+        grid-template-columns: 1fr;
+        row-gap: 8px;
+        align-items: start;
+    }
+
+    .reminder-calendar-container.fc .fc-header-toolbar .fc-toolbar-chunk {
+        width: 100%;
+        justify-content: flex-start;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+
+    .reminder-calendar-container.fc .fc-header-toolbar .fc-toolbar-chunk::-webkit-scrollbar {
+        display: none;
+    }
+}
+
+.reminder-calendar-container.fc .fc-event-mirror,
+.reminder-calendar-container.fc .fc-highlight {
+    border-color: var(--b3-theme-surface-lighter) !important;
+    background-color: var(--b3-theme-surface-lighter) !important;
+    background-color: color-mix(in srgb, var(--b3-theme-surface-lighter), transparent 70%) !important;
+    color: var(--b3-theme-on-background) !important;
+
+    .fc-event-main {
+        color: var(--b3-theme-on-background) !important;
+    }
+}
+
+.reminder-calendar-container.fc .fc-jumpTo-button {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+}
+
+.reminder-calendar-container.fc .fc-event-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.reminder-calendar-event-wrapper {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+    width: 100%;
+    padding: 2px 4px;
+    position: relative;
+}
+
+.reminder-calendar-event-checkbox {
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.reminder-calendar-event-content {
+    flex: 1;
+    overflow: hidden;
+}
+
+.reminder-calendar-event-note {
+    font-size: 0.85em;
+    opacity: 0.8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.reminder-repeat-indicator {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 12px;
+    height: 12px;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 8px;
+    z-index: 4;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.reminder-link-indicator {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 14px;
+    height: 14px;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    z-index: 3;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    cursor: help;
+}
+
+.b3-theme-dark .reminder-link-indicator {
+    background: rgba(50, 50, 50, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.reminder-calendar-event-wrapper:has(.reminder-repeat-indicator) .reminder-link-indicator {
+    right: 16px;
+}
+
+.reminder-category-indicator {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 14px;
+    height: 14px;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    z-index: 2;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    cursor: help;
+}
+
+.b3-theme-dark .reminder-category-indicator {
+    background: rgba(50, 50, 50, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.reminder-calendar-event-wrapper:has(.reminder-link-indicator) .reminder-category-indicator {
+    right: 18px;
+}
+
+.reminder-calendar-event-wrapper:has(.reminder-repeat-indicator):has(.reminder-link-indicator) .reminder-category-indicator {
+    right: 32px;
+}
+
+.reminder-calendar-event-wrapper:has(.reminder-repeat-indicator):not(:has(.reminder-link-indicator)) .reminder-category-indicator {
+    right: 16px;
+}
+
+.reminder-repeat-indicator.recurring {
+    color: #2196F3;
+}
+
+.reminder-repeat-indicator.instance {
+    color: #FF9800;
+}
+
+.fc-event.reminder-quick {
+    opacity: 0.8;
+    border-style: dashed !important;
+}
+
+.fc-event.reminder-quick::before {
+    content: "🔗";
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    font-size: 10px;
+    opacity: 0.7;
+}
+
+.reminder-calendar-view .filter-dropdown-menu > div:hover {
+    background-color: var(--b3-list-hover) !important;
+}
+
+.fc-allday-resizable-container {
+    position: relative;
+
+    .fc-scroller {
+        max-height: 200px;
+        overflow-y: auto !important;
+        transition: max-height 0.1s linear;
+    }
+}
+
+.fc-allday-resizer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 6px;
+    background: transparent;
+    cursor: row-resize;
+    z-index: 10;
+    transition: background 0.2s;
+
+    &::after {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 2px;
+        height: 1px;
+        background-color: var(--b3-border-color);
+        opacity: 0;
+        transition: opacity 0.2s;
+    }
+
+    &:hover,
+    &.resizing {
+        background: rgba(var(--b3-theme-primary-rgb), 0.1);
+
+        &::after {
+            opacity: 1;
+            background-color: var(--b3-theme-primary);
+        }
+    }
+}
+
+.fc .fc-button-primary:focus,
+.fc .fc-button:focus {
+    box-shadow: none !important;
+}
