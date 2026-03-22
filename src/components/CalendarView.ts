@@ -30,6 +30,7 @@ import { VipManager } from "../utils/vip";
 import { createPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
 import { HabitEditDialog } from "./HabitEditDialog";
 import { HabitStatsDialog } from "./stats/HabitStatsDialog";
+import { getHabitProgressOnDate, shouldCheckInOnDate as shouldCheckInOnDateUtil } from "../utils/habitUtils";
 export class CalendarView {
     private container: HTMLElement;
     private calendar: Calendar;
@@ -6457,83 +6458,17 @@ export class CalendarView {
     }
 
     private shouldCheckHabitOnDate(habit: any, date: string): boolean {
-        if (!habit || !habit.startDate) return false;
-        if (habit.startDate > date) return false;
-        if (habit.endDate && habit.endDate < date) return false;
-
-        const frequency = habit.frequency || { type: 'daily' };
-        const checkDate = new Date(date + 'T00:00:00');
-        const startDate = new Date(habit.startDate + 'T00:00:00');
-
-        switch (frequency.type) {
-            case 'daily':
-                if (frequency.interval) {
-                    const daysDiff = Math.floor((checkDate.getTime() - startDate.getTime()) / 86400000);
-                    return daysDiff >= 0 && daysDiff % frequency.interval === 0;
-                }
-                return checkDate >= startDate;
-            case 'weekly':
-                if (frequency.weekdays && frequency.weekdays.length > 0) {
-                    return frequency.weekdays.includes(checkDate.getDay());
-                }
-                if (frequency.interval) {
-                    const weeksDiff = Math.floor((checkDate.getTime() - startDate.getTime()) / (86400000 * 7));
-                    return weeksDiff >= 0 && weeksDiff % frequency.interval === 0 && checkDate.getDay() === startDate.getDay();
-                }
-                return checkDate.getDay() === startDate.getDay();
-            case 'monthly':
-                if (frequency.monthDays && frequency.monthDays.length > 0) {
-                    return frequency.monthDays.includes(checkDate.getDate());
-                }
-                if (frequency.interval) {
-                    const monthsDiff = (checkDate.getFullYear() - startDate.getFullYear()) * 12 +
-                        (checkDate.getMonth() - startDate.getMonth());
-                    return monthsDiff >= 0 && monthsDiff % frequency.interval === 0 && checkDate.getDate() === startDate.getDate();
-                }
-                return checkDate.getDate() === startDate.getDate();
-            case 'yearly':
-                if (frequency.months && frequency.months.length > 0) {
-                    if (!frequency.months.includes(checkDate.getMonth() + 1)) return false;
-                    if (frequency.monthDays && frequency.monthDays.length > 0) {
-                        return frequency.monthDays.includes(checkDate.getDate());
-                    }
-                    return checkDate.getDate() === startDate.getDate();
-                }
-                if (frequency.interval) {
-                    const yearsDiff = checkDate.getFullYear() - startDate.getFullYear();
-                    return yearsDiff >= 0 && yearsDiff % frequency.interval === 0 &&
-                        checkDate.getMonth() === startDate.getMonth() &&
-                        checkDate.getDate() === startDate.getDate();
-                }
-                return checkDate.getMonth() === startDate.getMonth() && checkDate.getDate() === startDate.getDate();
-            case 'ebbinghaus':
-                const ebbinghausDaysDiff = Math.floor((checkDate.getTime() - startDate.getTime()) / 86400000);
-                const ebbinghausPattern = [1, 2, 4, 7, 15];
-                const maxPatternDay = 15;
-                if (ebbinghausDaysDiff < 0) return false;
-                if (ebbinghausDaysDiff === 0) return true;
-                if (ebbinghausPattern.includes(ebbinghausDaysDiff)) return true;
-                return ebbinghausDaysDiff > maxPatternDay && (ebbinghausDaysDiff - maxPatternDay) % 15 === 0;
-            default:
-                return true;
-        }
+        return shouldCheckInOnDateUtil(habit, date);
     }
 
     private isHabitCompletedOnDate(habit: any, date: string): boolean {
-        const checkIn = habit?.checkIns?.[date];
-        if (!checkIn) return false;
-
-        const emojis: string[] = [];
-        if (checkIn.entries && checkIn.entries.length > 0) {
-            checkIn.entries.forEach(entry => {
-                if (entry.emoji) emojis.push(entry.emoji);
-            });
-        } else if (checkIn.status && checkIn.status.length > 0) {
-            emojis.push(...checkIn.status);
-        }
-
-        const target = habit.target || 1;
-        return emojis.length >= target;
+        const progress = getHabitProgressOnDate(habit, date, {
+            getPomodoroFocusMinutes: (habitId: string, logicalDate: string) => {
+                const manager = PomodoroRecordManager.getInstance(this.plugin);
+                return manager.getEventFocusTime(habitId, logicalDate) || 0;
+            }
+        });
+        return progress.current >= progress.target;
     }
 
     private getHabitCheckInEmojisOnDate(habit: any, date: string): string[] {

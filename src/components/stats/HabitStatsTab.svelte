@@ -8,6 +8,11 @@ import { PomodoroRecordManager } from "../../utils/pomodoroRecord";
 import { getLogicalDateString } from "../../utils/dateUtils";
 import { HabitGroupManager, type HabitGroup } from "../../utils/habitGroupManager";
 import { i18n } from "../../pluginInstance";
+import {
+    getHabitGoalType as getHabitGoalTypeUtil,
+    getHabitPomodoroTargetMinutes as getHabitPomodoroTargetMinutesUtil,
+    shouldCheckInOnDate as shouldCheckInOnDateUtil
+} from "../../utils/habitUtils";
 
 export let plugin: any;
 
@@ -239,15 +244,11 @@ function getSuccessCheckInCount(habit: Habit, dateStr: string): number {
 }
 
 function getHabitGoalType(habit: Habit): "count" | "pomodoro" {
-    return habit.goalType === "pomodoro" ? "pomodoro" : "count";
+    return getHabitGoalTypeUtil(habit);
 }
 
 function getHabitPomodoroTargetMinutes(habit: Habit): number {
-    const hours = Math.max(0, Number(habit.pomodoroTargetHours) || 0);
-    const minutes = Math.max(0, Number(habit.pomodoroTargetMinutes) || 0);
-    const total = (hours * 60) + minutes;
-    if (total > 0) return total;
-    return Math.max(1, Number(habit.target) || 1);
+    return getHabitPomodoroTargetMinutesUtil(habit);
 }
 
 function getHabitPomodoroFocusMinutes(habit: Habit, dateStr: string): number {
@@ -278,77 +279,8 @@ function getCheckInEmojis(habit: Habit, dateStr: string): string[] {
     return [];
 }
 
-function isHabitWithinDateRange(habit: Habit, dateStr: string): boolean {
-    if (habit.startDate && dateStr < habit.startDate) return false;
-    if (habit.endDate && dateStr > habit.endDate) return false;
-    return true;
-}
-
 function shouldCheckInOnDate(habit: Habit, dateStr: string): boolean {
-    if (!isHabitWithinDateRange(habit, dateStr)) return false;
-
-    const frequency = habit.frequency || { type: "daily" as const };
-    const checkDate = new Date(`${dateStr}T00:00:00`);
-    const startDate = new Date(`${habit.startDate}T00:00:00`);
-
-    switch (frequency.type) {
-        case "daily":
-            if (frequency.interval) {
-                const daysDiff = Math.floor((checkDate.getTime() - startDate.getTime()) / 86400000);
-                return daysDiff >= 0 && daysDiff % frequency.interval === 0;
-            }
-            return true;
-
-        case "weekly":
-            if (frequency.weekdays && frequency.weekdays.length > 0) {
-                return frequency.weekdays.includes(checkDate.getDay());
-            }
-            if (frequency.interval) {
-                const weeksDiff = Math.floor((checkDate.getTime() - startDate.getTime()) / (86400000 * 7));
-                return weeksDiff >= 0 && weeksDiff % frequency.interval === 0 && checkDate.getDay() === startDate.getDay();
-            }
-            return checkDate.getDay() === startDate.getDay();
-
-        case "monthly":
-            if (frequency.monthDays && frequency.monthDays.length > 0) {
-                return frequency.monthDays.includes(checkDate.getDate());
-            }
-            if (frequency.interval) {
-                const monthsDiff = (checkDate.getFullYear() - startDate.getFullYear()) * 12 +
-                    (checkDate.getMonth() - startDate.getMonth());
-                return monthsDiff >= 0 && monthsDiff % frequency.interval === 0 && checkDate.getDate() === startDate.getDate();
-            }
-            return checkDate.getDate() === startDate.getDate();
-
-        case "yearly":
-            if (frequency.months && frequency.months.length > 0) {
-                if (!frequency.months.includes(checkDate.getMonth() + 1)) return false;
-                if (frequency.monthDays && frequency.monthDays.length > 0) {
-                    return frequency.monthDays.includes(checkDate.getDate());
-                }
-                return checkDate.getDate() === startDate.getDate();
-            }
-            if (frequency.interval) {
-                const yearsDiff = checkDate.getFullYear() - startDate.getFullYear();
-                return yearsDiff >= 0 &&
-                    yearsDiff % frequency.interval === 0 &&
-                    checkDate.getMonth() === startDate.getMonth() &&
-                    checkDate.getDate() === startDate.getDate();
-            }
-            return checkDate.getMonth() === startDate.getMonth() && checkDate.getDate() === startDate.getDate();
-
-        case "ebbinghaus":
-            const ebbinghausDaysDiff = Math.floor((checkDate.getTime() - startDate.getTime()) / 86400000);
-            const ebbinghausPattern = [1, 2, 4, 7, 15];
-            const maxPatternDay = 15;
-            if (ebbinghausDaysDiff < 0) return false;
-            if (ebbinghausDaysDiff === 0) return true;
-            if (ebbinghausPattern.includes(ebbinghausDaysDiff)) return true;
-            return ebbinghausDaysDiff > maxPatternDay && (ebbinghausDaysDiff - maxPatternDay) % 15 === 0;
-
-        default:
-            return true;
-    }
+    return shouldCheckInOnDateUtil(habit, dateStr);
 }
 
 function hasRequiredDateInRange(habit: Habit, dates: Date[]): boolean {
