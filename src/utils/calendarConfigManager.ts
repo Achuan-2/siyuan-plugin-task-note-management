@@ -11,6 +11,7 @@ export interface CalendarConfig {
     dockViewType: 'timeline' | 'kanban' | 'list';
     showLunar: boolean;
     showPomodoro: boolean;
+    showPomodoroBreakTime: boolean; // 显示番茄钟休息时间
     completionFilter: 'all' | 'completed' | 'incomplete';
     showCrossDayTasks: boolean;
     crossDayThreshold: number;
@@ -38,6 +39,7 @@ export class CalendarConfigManager {
             dockViewType: 'timeline', // Dock 默认视图类型
             showLunar: true, // 默认显示农历
             showPomodoro: true, // 默认显示番茄专注时间
+            showPomodoroBreakTime: true, // 默认显示番茄钟休息时间
             completionFilter: 'all', // 默认显示全部状态
             showCrossDayTasks: true, // 默认显示跨天任务
             crossDayThreshold: -1, // 默认显示全部天数 (-1表示不限制)
@@ -72,6 +74,7 @@ export class CalendarConfigManager {
             settings.calendarDockViewType = this.config.dockViewType;
             settings.calendarShowLunar = this.config.showLunar;
             settings.calendarShowPomodoro = this.config.showPomodoro;
+            settings.calendarShowPomodoroBreakTime = this.config.showPomodoroBreakTime;
             settings.calendarCompletionFilter = this.config.completionFilter;
             settings.calendarShowCrossDayTasks = this.config.showCrossDayTasks;
             settings.calendarCrossDayThreshold = this.config.crossDayThreshold;
@@ -127,6 +130,7 @@ export class CalendarConfigManager {
                 dockViewType: settings.calendarDockViewType || 'timeline',
                 showLunar: settings.calendarShowLunar !== false, // 默认为 true
                 showPomodoro: settings.calendarShowPomodoro !== false, // 默认为 true
+                showPomodoroBreakTime: settings.calendarShowPomodoroBreakTime !== false, // 默认为 true
                 completionFilter: (settings.calendarCompletionFilter as any) || 'all',
                 showCrossDayTasks: settings.calendarShowCrossDayTasks !== false, // 默认为 true
                 crossDayThreshold: settings.calendarCrossDayThreshold !== undefined ? settings.calendarCrossDayThreshold : -1, // 默认为 -1
@@ -148,6 +152,7 @@ export class CalendarConfigManager {
                 dockViewType: 'timeline',
                 showLunar: true,
                 showPomodoro: true,
+                showPomodoroBreakTime: true,
                 completionFilter: 'all',
                 showCrossDayTasks: true,
                 crossDayThreshold: -1,
@@ -238,6 +243,15 @@ export class CalendarConfigManager {
 
     public getShowPomodoro(): boolean {
         return this.config.showPomodoro;
+    }
+
+    public async setShowPomodoroBreakTime(show: boolean) {
+        this.config.showPomodoroBreakTime = show;
+        await this.saveConfig();
+    }
+
+    public getShowPomodoroBreakTime(): boolean {
+        return this.config.showPomodoroBreakTime !== undefined ? this.config.showPomodoroBreakTime : true;
     }
 
     public async setShowCrossDayTasks(show: boolean) {

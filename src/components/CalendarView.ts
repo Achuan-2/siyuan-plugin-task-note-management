@@ -53,6 +53,7 @@ export class CalendarView {
     private showLunar: boolean = true; // 是否显示农历
     private showHoliday: boolean = true; // 是否显示节假日
     private showPomodoro: boolean = true; // 是否显示番茄专注时间
+    private showPomodoroBreakTime: boolean = true; // 是否显示番茄钟休息时间，默认显示
     private showCrossDayTasks: boolean = true; // 是否显示跨天任务
     private crossDayThreshold: number = -1; // 跨度多少天以下才显示
     private showSubtasks: boolean = true; // 是否显示子任务
@@ -158,6 +159,7 @@ export class CalendarView {
             this.repeatInstanceLimit = this.calendarConfigManager.getRepeatInstanceLimit();
             this.showHiddenTasks = this.calendarConfigManager.getShowHiddenTasks();
             this.showPomodoro = this.calendarConfigManager.getShowPomodoro();
+            this.showPomodoroBreakTime = this.calendarConfigManager.getShowPomodoroBreakTime();
             this.showCompletedTaskTime = this.calendarConfigManager.getShowCompletedTaskTime();
             this.showCompletedTaskTimeOnlyWithoutDate = this.calendarConfigManager.getShowCompletedTaskTimeOnlyWithoutDate();
 
@@ -481,6 +483,7 @@ export class CalendarView {
         this.showLunar = this.calendarConfigManager.getShowLunar();
         this.showHoliday = settings.calendarShowHoliday !== false;
         this.showPomodoro = this.calendarConfigManager.getShowPomodoro(); // Use config manager for pomodoro state
+        this.showPomodoroBreakTime = this.calendarConfigManager.getShowPomodoroBreakTime(); // 加载番茄钟休息时间显示设置
         this.showCrossDayTasks = this.calendarConfigManager.getShowCrossDayTasks();
         this.crossDayThreshold = this.calendarConfigManager.getCrossDayThreshold();
         this.showSubtasks = this.calendarConfigManager.getShowSubtasks();
@@ -1046,8 +1049,28 @@ export class CalendarView {
             this.showPomodoro = checked;
             await this.calendarConfigManager.setShowPomodoro(checked);
             this.updatePomodoroButtonState();
+            // 显示/隐藏子选项
+            pomodoroBreakTimeItem.style.display = checked ? 'flex' : 'none';
             await this.refreshEvents();
         }));
+
+        // 番茄钟休息时间显示设置（子选项）
+        const pomodoroBreakTimeItem = document.createElement('div');
+        pomodoroBreakTimeItem.className = 'fn__flex fn__flex-center';
+        pomodoroBreakTimeItem.style.padding = '4px 12px 4px 32px';
+        pomodoroBreakTimeItem.style.gap = '8px';
+        pomodoroBreakTimeItem.style.display = this.showPomodoro ? 'flex' : 'none';
+        pomodoroBreakTimeItem.innerHTML = `
+            <input class="b3-switch" type="checkbox" ${this.showPomodoroBreakTime ? 'checked' : ''}>
+            <span style="font-size: 0.9em; color: var(--b3-theme-on-surface-light);">${i18n("showPomodoroBreakTime") || "显示休息时间"}</span>
+        `;
+        const pomodoroBreakTimeCheckbox = pomodoroBreakTimeItem.querySelector('input') as HTMLInputElement;
+        pomodoroBreakTimeCheckbox.addEventListener('change', async () => {
+            this.showPomodoroBreakTime = pomodoroBreakTimeCheckbox.checked;
+            await this.calendarConfigManager.setShowPomodoroBreakTime(pomodoroBreakTimeCheckbox.checked);
+            await this.refreshEvents();
+        });
+        displaySettingsDropdown.appendChild(pomodoroBreakTimeItem);
 
         // 完成任务时间设置
         displaySettingsDropdown.appendChild(createSwitchItem(i18n("showCompletedTaskTime") || "单独显示任务完成时间", this.showCompletedTaskTime, async (checked) => {
@@ -6384,6 +6407,11 @@ export class CalendarView {
                     for (const session of sessions) {
                         // Ensure session has necessary data
                         if (!session.startTime || !session.endTime) continue;
+
+                        // 如果不显示休息时间，则跳过休息类型的 session
+                        if (!this.showPomodoroBreakTime && (session.type === 'shortBreak' || session.type === 'longBreak')) {
+                            continue;
+                        }
 
                         // 筛选项目和分类
                         let reminder = session.eventId ? reminderData[session.eventId] : null;
