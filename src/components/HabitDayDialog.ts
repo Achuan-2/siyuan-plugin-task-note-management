@@ -391,7 +391,7 @@ export class HabitDayDialog {
                 records[logicalDate].sessions.push(session);
                 records[logicalDate].workSessions += this.pomodoroManager.calculateSessionCount(session);
                 records[logicalDate].totalWorkTime += duration;
-                await (this.pomodoroManager as any).saveRecords();
+                await (this.pomodoroManager as any).saveRecords([logicalDate]);
                 this.pomodoroManager.refreshIndex();
 
                 let autoCheckInApplied = false;
@@ -511,15 +511,26 @@ export class HabitDayDialog {
             try {
                 await this.pomodoroManager.initialize();
                 const records = (this.pomodoroManager as any).records || {};
-                let found = false;
-
+                let affectedDate = "";
                 Object.keys(records).forEach(date => {
                     const record = records[date];
                     if (!record?.sessions) return;
-                    const target = record.sessions.find((s: PomodoroSession) => s.id === session.id);
-                    if (!target || found) return;
+                    const sessionIndex = record.sessions.findIndex((s: PomodoroSession) => s.id === session.id);
+                    if (sessionIndex === -1 || affectedDate) return;
 
-                    found = true;
+                    affectedDate = date;
+                    const target = record.sessions[sessionIndex];
+
+                    // 1. 还原旧统计
+                    const oldCount = this.pomodoroManager.calculateSessionCount(target);
+                    if (target.type === 'work') {
+                        record.workSessions = Math.max(0, record.workSessions - oldCount);
+                        record.totalWorkTime = Math.max(0, record.totalWorkTime - (target.duration || 0));
+                    } else {
+                        record.totalBreakTime = Math.max(0, record.totalBreakTime - (target.duration || 0));
+                    }
+
+                    // 2. 更新数据
                     target.duration = newDuration;
                     const start = new Date(target.startTime);
                     target.endTime = new Date(start.getTime() + newDuration * 60000).toISOString();
@@ -528,14 +539,23 @@ export class HabitDayDialog {
                     } else if (typeof target.count === "number") {
                         target.count = Math.max(1, target.count);
                     }
+
+                    // 3. 应用新统计
+                    const newCount = this.pomodoroManager.calculateSessionCount(target);
+                    if (target.type === 'work') {
+                        record.workSessions += newCount;
+                        record.totalWorkTime += newDuration;
+                    } else {
+                        record.totalBreakTime += newDuration;
+                    }
                 });
 
-                if (!found) {
+                if (!affectedDate) {
                     showMessage("❌ 未找到番茄记录", 3000, "error");
                     return;
                 }
 
-                await this.pomodoroManager.regenerateRecordsByDate();
+                await (this.pomodoroManager as any).saveRecords([affectedDate]);
                 this.pomodoroManager.refreshIndex();
                 showMessage("✅ " + (i18n("habitSaveSuccess") || "保存成功"), 2000);
                 dialog.destroy();

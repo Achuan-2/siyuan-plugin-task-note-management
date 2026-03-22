@@ -521,7 +521,7 @@ export class PomodoroSessionsDialog {
                 }
 
                 // 保存记录
-                await (this.recordManager as any).saveRecords();
+                await (this.recordManager as any).saveRecords([logicalDate]);
 
                 // 刷新统计索引
                 this.recordManager.refreshIndex();
@@ -662,7 +662,7 @@ export class PomodoroSessionsDialog {
                     records[logicalDate].totalBreakTime += duration;
                 }
 
-                await (this.recordManager as any).saveRecords();
+                await (this.recordManager as any).saveRecords([logicalDate]);
 
                 // 刷新统计索引
                 this.recordManager.refreshIndex();

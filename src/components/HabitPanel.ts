@@ -1942,8 +1942,9 @@ export class HabitPanel {
         const habitData = await this.plugin.loadHabitData();
         const previousHabit = this.cloneHabit(oldHabit) || this.cloneHabit(habitData[habit.id]);
 
-        // 如果编辑场景中发生了 ID 变更，清理旧 ID 的数据和通知，避免残留
+        // 使用 saveHabitPartial 进行增量保存，避免每次重刷所有习惯的打卡子文件
         if (previousHabit?.id && previousHabit.id !== habit.id) {
+            // 如果 ID 发生了变更，则仍使用全量保存以处理旧数据的清理
             delete habitData[previousHabit.id];
             try {
                 if (this.plugin && typeof this.plugin.cancelMobileNotification === 'function') {
@@ -1952,10 +1953,12 @@ export class HabitPanel {
             } catch (e) {
                 console.warn('清理旧习惯ID的移动端通知失败:', e);
             }
+            habitData[habit.id] = habit;
+            await this.plugin.saveHabitData(habitData);
+        } else {
+            // 普通更新（包括打卡），使用部分保存以提高性能
+            await this.plugin.saveHabitPartial(habit.id, habit);
         }
-
-        habitData[habit.id] = habit;
-        await this.plugin.saveHabitData(habitData);
         // 同步更新移动端系统通知（限制7天）
         try {
             if (this.plugin && typeof this.plugin.updateMobileNotification === 'function') {

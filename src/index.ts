@@ -17,6 +17,7 @@ import { BatchReminderDialog } from "./components/BatchReminderDialog";
 import { CalendarView } from "./components/CalendarView";
 import { EisenhowerMatrixView } from "./components/EisenhowerMatrixView";
 import { CategoryManager } from "./utils/categoryManager";
+import { readDir } from "./api";
 import { getLocalTimeString, getLocalDateString, compareDateStrings, getLogicalDateString, setDayStartTime } from "./utils/dateUtils";
 import { i18n, setPluginInstance } from "./pluginInstance";
 import { SettingUtils } from "./libs/setting-utils";
@@ -45,6 +46,7 @@ export const HABIT_DATA_FILE = "habit.json";
 export const HABIT_CHECKIN_DIR = "habitCheckin";
 export const NOTIFY_DATA_FILE = "notify.json";
 export const POMODORO_RECORD_DATA_FILE = "pomodoro_record.json";
+export const POMODORO_RECORD_DIR = "pomodoroRecords";
 export const HABIT_GROUP_DATA_FILE = "habitGroup.json";
 export const STATUSES_DATA_FILE = "statuses.json";
 export const HOLIDAY_DATA_FILE = "holiday.json";
@@ -228,6 +230,7 @@ export const DEFAULT_SETTINGS = {
         termTypeTransfer: false, // 是否已迁移 termType -> kanbanStatus 的转换
         audioFileTransfer: false, // 是否已迁移音频文件列表
         habitCheckinTransfer: false,
+        pomodoroRecordTransfer: false,
     },
 };
 
@@ -490,6 +493,35 @@ export default class ReminderPlugin extends Plugin {
         ]);
     }
 
+    /**
+     * 仅保存单个习惯的数据（包括其打卡文件），并更新基础索引。
+     * 用于避免打卡时重刷所有习惯的打卡文件。
+     */
+    public async saveHabitPartial(habitId: string, habit: any): Promise<void> {
+        if (!this.habitDataCache) {
+            await this.loadHabitData();
+        }
+
+        // 1. 更新内存缓存
+        this.habitDataCache[habitId] = habit;
+
+        // 2. 保存该习惯专属的打卡文件
+        await this.saveData(
+            this.getHabitCheckinFileName(habitId),
+            this.extractHabitCheckinData(habit)
+        );
+
+        // 3. 更新并保存主索引文件 habit.json (不含打卡明细)
+        const fullData = this.habitDataCache || {};
+        const baseData: Record<string, any> = {};
+        Object.entries(fullData).forEach(([hid, h]) => {
+            if (h) {
+                baseData[hid] = this.stripHabitCheckinData(h as Record<string, any>);
+            }
+        });
+        await this.saveData(HABIT_DATA_FILE, baseData);
+    }
+
     private getHabitCheckinFileName(habitId: string): string {
         return `${HABIT_CHECKIN_DIR}/${habitId}.json`;
     }
@@ -579,8 +611,29 @@ export default class ReminderPlugin extends Plugin {
     public async loadPomodoroRecords(update: boolean = false): Promise<any> {
         if (update || !this.pomodoroRecordsCache) {
             try {
-                const data = await this.loadData(POMODORO_RECORD_DATA_FILE);
-                this.pomodoroRecordsCache = data || {};
+                const dirPath = `/data/storage/petal/${this.name}/${POMODORO_RECORD_DIR}`;
+                const dirData = (await readDir(dirPath).catch(() => null)) as any[];
+                let records: any = {};
+                const fileNames = (dirData && Array.isArray(dirData)) ? dirData.filter(e => !e.isDir && e.name.endsWith('.json')).map(e => e.name) : [];
+                if (fileNames.length > 0) {
+                    const contents = await Promise.all(fileNames.map(name => this.loadData(`${POMODORO_RECORD_DIR}/${name}`)));
+                    
+                    fileNames.forEach((fileName, index) => {
+                        const record = contents[index];
+                        if (record && typeof record === 'object') {
+                            const dateMatch = fileName.match(/^(.+)\.json$/i);
+                            if (dateMatch) {
+                                records[dateMatch[1]] = record;
+                            } else {
+                                records[fileName] = record;
+                            }
+                        }
+                    });
+                } else {
+                    const data = await this.loadData(POMODORO_RECORD_DATA_FILE);
+                    records = data || {};
+                }
+                this.pomodoroRecordsCache = records;
             } catch (error) {
                 console.error('Failed to load pomodoro records:', error);
                 this.pomodoroRecordsCache = {};
@@ -590,12 +643,11 @@ export default class ReminderPlugin extends Plugin {
     }
 
     /**
-     * 保存番茄钟历史记录数据，并更新缓存
+     * 保存番茄钟历史记录数据，并更新缓存（已弃用，建议各个日期分别保存）
      * @param data 记录数据
      */
     public async savePomodoroRecords(data: any): Promise<void> {
         this.pomodoroRecordsCache = data;
-        await this.saveData(POMODORO_RECORD_DATA_FILE, data);
     }
 
     /**
@@ -1559,6 +1611,7 @@ export default class ReminderPlugin extends Plugin {
                 randomRestTransfer: true,
                 audioFileTransfer: true,
                 habitCheckinTransfer: true,
+                pomodoroRecordTransfer: true,
             }
             : { ...DEFAULT_SETTINGS.datatransfer };
 

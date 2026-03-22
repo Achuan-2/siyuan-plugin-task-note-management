@@ -118,7 +118,7 @@ export class PomodoroRecordManager {
         this.eventStats[eventId].duration += duration;
     }
 
-    private async saveRecords() {
+    private async saveRecords(dates?: string[]) {
         if (this.isSaving) {
             console.log('正在保存中，跳过本次保存请求');
             return;
@@ -127,7 +127,16 @@ export class PomodoroRecordManager {
         this.isSaving = true;
 
         try {
-            await this.plugin.savePomodoroRecords(this.records);
+            const keysToSync = dates && dates.length > 0 ? dates : Object.keys(this.records);
+            for (const date of keysToSync) {
+                const record = this.records[date];
+                if (record) {
+                    await this.plugin.saveData(`pomodoroRecords/${date}.json`, record);
+                    if (this.plugin.pomodoroRecordsCache) {
+                        this.plugin.pomodoroRecordsCache[date] = record;
+                    }
+                }
+            }
         } catch (error) {
             console.error('保存番茄钟记录失败:', error);
         } finally {
@@ -218,7 +227,7 @@ export class PomodoroRecordManager {
 
         // console.log('记录工作会话后:', JSON.stringify(this.records[today]));
 
-        await this.saveRecords();
+        await this.saveRecords([today]);
     }
 
     async recordBreakSession(breakMinutes: number, eventId: string = '', _eventTitle: string = '休息时间', plannedDuration: number = 5, isLongBreak: boolean = false, completed: boolean = true) {
@@ -259,7 +268,7 @@ export class PomodoroRecordManager {
 
         // console.log('记录休息会话后:', JSON.stringify(this.records[today]));
 
-        await this.saveRecords();
+        await this.saveRecords([today]);
     }
 
     getTodayFocusTime(): number {
@@ -669,7 +678,7 @@ export class PomodoroRecordManager {
 
                 // 保存更改
                 this.buildStatsIndex(); // 重新构建索引比较简单稳妥
-                await this.saveRecords();
+                await this.saveRecords([date]);
                 return true;
             }
         }
@@ -700,6 +709,9 @@ export class PomodoroRecordManager {
             return;
         }
 
+
+        // 保存旧有键，以防后续无法删除
+        const oldDates = Object.keys(this.records);
 
         // 清空现有记录
         this.records = {};
@@ -734,6 +746,16 @@ export class PomodoroRecordManager {
                 }
             } catch (error) {
                 console.error('处理会话时出错:', session, error);
+            }
+        }
+
+        // 删除已经无用的日期记录
+        for (const date of oldDates) {
+            if (!this.records[date]) {
+                await this.plugin.removeData(`pomodoroRecords/${date}.json`);
+                if (this.plugin.pomodoroRecordsCache) {
+                    delete this.plugin.pomodoroRecordsCache[date];
+                }
             }
         }
 

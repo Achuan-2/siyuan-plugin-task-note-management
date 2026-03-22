@@ -7,6 +7,7 @@ interface AudioFileItemLike {
 }
 
 interface MigrationPlugin {
+    name: string;
     loadSettings(update?: boolean): Promise<any>;
     saveSettings(settings: any): Promise<void>;
     loadData(file: string): Promise<any>;
@@ -15,6 +16,8 @@ interface MigrationPlugin {
     loadReminderData(update?: boolean): Promise<any>;
     saveReminderData(data: any): Promise<void>;
 }
+
+import { readDir } from "../api";
 
 const HABIT_DATA_FILE = "habit.json";
 const HABIT_CHECKIN_DIR = "habitCheckin";
@@ -213,6 +216,9 @@ export async function performDataMigration(plugin: MigrationPlugin): Promise<voi
         if (!settings.datatransfer?.habitCheckinTransfer) {
             await migrateHabitCheckinData(plugin, settings);
         }
+        if (!settings.datatransfer?.pomodoroRecordTransfer) {
+            await migratePomodoroRecords(plugin, settings);
+        }
     } catch (error) {
         console.error("数据迁移失败:", error);
     }
@@ -306,9 +312,12 @@ async function migrateHabitCheckinData(plugin: MigrationPlugin, settings: any): 
 
         await plugin.saveData(HABIT_DATA_FILE, nextHabitData);
 
-        const existingCheckinDir = await plugin.loadData(HABIT_CHECKIN_DIR);
-        if (existingCheckinDir && typeof existingCheckinDir === "object" && !Array.isArray(existingCheckinDir)) {
-            for (const fileName of Object.keys(existingCheckinDir)) {
+        const dirPath = `/data/storage/petal/${plugin.name}/${HABIT_CHECKIN_DIR}`;
+        const existingCheckinDir = await readDir(dirPath).catch(() => null);
+        if (existingCheckinDir && Array.isArray(existingCheckinDir)) {
+            for (const entry of existingCheckinDir) {
+                if (entry.isDir || !entry.name.endsWith('.json')) continue;
+                const fileName = entry.name;
                 const habitId = fileName.replace(/\.json$/i, "");
                 if (!activeHabitIds.has(habitId)) {
                     await plugin.removeData(getHabitCheckinFileName(habitId));
@@ -321,5 +330,29 @@ async function migrateHabitCheckinData(plugin: MigrationPlugin, settings: any): 
         await plugin.saveSettings(settings);
     } catch (error) {
         console.error("Failed to migrate habit checkin data:", error);
+    }
+}
+
+async function migratePomodoroRecords(plugin: MigrationPlugin, settings: any): Promise<void> {
+    try {
+        const rawData = await plugin.loadData("pomodoro_record.json");
+        if (rawData && typeof rawData === "object") {
+            for (const [date, record] of Object.entries(rawData)) {
+                if (record && typeof record === "object") {
+                    const existing = await plugin.loadData(`pomodoroRecords/${date}.json`);
+                    if (!existing || Object.keys(existing).length === 0) {
+                        await plugin.saveData(`pomodoroRecords/${date}.json`, record);
+                    }
+                }
+            }
+            await plugin.removeData("pomodoro_record.json");
+        }
+        
+        settings.datatransfer = settings.datatransfer || {};
+        settings.datatransfer.pomodoroRecordTransfer = true;
+        await plugin.saveSettings(settings);
+        console.log("Pomodoro records migration completed.");
+    } catch (error) {
+        console.error("Failed to migrate pomodoro records:", error);
     }
 }
