@@ -830,6 +830,12 @@ export class HabitPanel {
         const isAbandoned = habit.abandoned === true;
         const isInactive = isEnded || isAbandoned;
         
+        // 今日已完成或昨日已完成的筛选项，添加透明度
+        const isCompletedView = this.currentTab === 'todayCompleted' || this.currentTab === 'yesterdayCompleted';
+        if (isCompletedView && !isInactive) {
+            card.style.opacity = '0.7';
+        }
+        
         // 卡片头部：图标、标题
         const header = document.createElement('div');
         header.className = 'habit-card__header';
@@ -1062,48 +1068,50 @@ export class HabitPanel {
         streakEl.innerHTML = `<span class="habit-card__streak-icon">🔥</span><span>${i18n("persistDays", { count: checkInDaysCount.toString() })}</span>`;
         footer.appendChild(streakEl);
         
-        // 打卡按钮
-        const actionsEl = document.createElement('div');
-        actionsEl.className = 'habit-card__actions';
-        
-        const checkInBtn = document.createElement('button');
-        checkInBtn.className = 'habit-card__checkin-btn';
-        checkInBtn.innerHTML = `<span>✓</span><span>${i18n("checkInBtn")}</span>`;
-        // 使用习惯自定义颜色（支持随机颜色）
-        if (habitColor && habitColor !== 'var(--b3-theme-primary)') {
-            checkInBtn.style.background = `linear-gradient(135deg, ${habitColor}, ${habitColor}dd)`;
-            checkInBtn.style.boxShadow = `0 4px 12px ${habitColor}4d`;
-        }
-        
-        checkInBtn.addEventListener('click', (ev) => {
-            ev.preventDefault();
-            ev.stopPropagation();
-            try {
-                const menu = new Menu('habitCardCheckInMenu');
-                const submenu = this.createCheckInSubmenu(habit);
-                submenu.forEach((it: any) => {
-                    if (it && it.type === 'separator') {
-                        menu.addSeparator();
-                    } else if (it) {
-                        menu.addItem(it);
-                    }
-                });
-
-                const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
-                const menuX = rect.left;
-                const menuY = rect.top - 4;
-                const maxX = window.innerWidth - 200;
-                const maxY = window.innerHeight - 200;
-
-                menu.open({ x: Math.min(menuX, maxX), y: Math.max(0, Math.min(menuY, maxY)) });
-            } catch (err) {
-                console.error('openCheckInMenu failed', err);
-                showMessage(i18n("openCheckInMenuFailed"), 2000, 'error');
+        // 打卡按钮 - 已结束和已放弃的习惯不显示
+        if (!isInactive) {
+            const actionsEl = document.createElement('div');
+            actionsEl.className = 'habit-card__actions';
+            
+            const checkInBtn = document.createElement('button');
+            checkInBtn.className = 'habit-card__checkin-btn';
+            checkInBtn.innerHTML = `<span>✓</span><span>${i18n("checkInBtn")}</span>`;
+            // 使用习惯自定义颜色（支持随机颜色）
+            if (habitColor && habitColor !== 'var(--b3-theme-primary)') {
+                checkInBtn.style.background = `linear-gradient(135deg, ${habitColor}, ${habitColor}dd)`;
+                checkInBtn.style.boxShadow = `0 4px 12px ${habitColor}4d`;
             }
-        });
-        
-        actionsEl.appendChild(checkInBtn);
-        footer.appendChild(actionsEl);
+            
+            checkInBtn.addEventListener('click', (ev) => {
+                ev.preventDefault();
+                ev.stopPropagation();
+                try {
+                    const menu = new Menu('habitCardCheckInMenu');
+                    const submenu = this.createCheckInSubmenu(habit);
+                    submenu.forEach((it: any) => {
+                        if (it && it.type === 'separator') {
+                            menu.addSeparator();
+                        } else if (it) {
+                            menu.addItem(it);
+                        }
+                    });
+
+                    const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+                    const menuX = rect.left;
+                    const menuY = rect.top - 4;
+                    const maxX = window.innerWidth - 200;
+                    const maxY = window.innerHeight - 200;
+
+                    menu.open({ x: Math.min(menuX, maxX), y: Math.max(0, Math.min(menuY, maxY)) });
+                } catch (err) {
+                    console.error('openCheckInMenu failed', err);
+                    showMessage(i18n("openCheckInMenuFailed"), 2000, 'error');
+                }
+            });
+            
+            actionsEl.appendChild(checkInBtn);
+            footer.appendChild(actionsEl);
+        }
         card.appendChild(footer);
 
         // 右键菜单
