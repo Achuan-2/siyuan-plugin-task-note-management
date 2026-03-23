@@ -1,4 +1,4 @@
-import { Dialog, showMessage } from "siyuan";
+﻿import { Dialog, showMessage } from "siyuan";
 import { i18n } from "../pluginInstance";
 import { autoDetectDateTimeFromTitle, getLocalDateTimeString } from "../utils/dateUtils";
 import { getBlockByID, updateBindBlockAtrrs, addBlockProjectId } from "../api";
@@ -231,7 +231,7 @@ export class PasteTaskDialog {
                                 <span class="b3-checkbox__graphic"></span>
                                 <span class="b3-checkbox__label">${i18n("autoDetectDateTime")}</span>
                             </label>
-                            <button id="previewDateBtn" class="b3-button b3-button--text" style="display: none; padding: 4px; min-width: auto; margin-left: 8px; font-size: 12px;" title="${i18n("previewRecognizedDates") || "预览识别结果"}">✨ ${i18n("preview") || "预览"}</button>
+                            <button id="previewDateBtn" class="b3-button b3-button--text ariaLabel" style="display: none; padding: 4px; min-width: auto; margin-left: 8px; font-size: 12px;" aria-label="${i18n("previewRecognizedDates") || "预览识别结果"}">✨ ${i18n("preview") || "预览"}</button>
                         </div>
                         <div id="removeDateContainer" style="display: flex; align-items: center; gap: 8px; margin-left: 24px;">
                             <span style="font-size: 14px; color: var(--b3-theme-on-surface); cursor: default;">${i18n("removeDateAfterDetection")}</span>
@@ -697,7 +697,7 @@ export class PasteTaskDialog {
 
             let html = `
                 <div style="padding: 8px 12px; border-bottom: 1px solid var(--b3-theme-surface-lighter); display: flex; align-items: center; gap: 8px; margin-left: ${level * 16}px;">
-                    <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--b3-theme-on-surface); font-size: 13px;" title="${task.title}">${task.title}</span>
+                    <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--b3-theme-on-surface); font-size: 13px;" class="ariaLabel" aria-label="${task.title}">${task.title}</span>
                     <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 11px; min-width: 140px; flex-shrink: 0;">
                         ${dateStr ? `<span style="color: var(--b3-theme-primary);">${dateStr}</span>` : ''}
                         ${endDateStr ? `<span style="color: var(--b3-theme-info);">${endDateStr}</span>` : ''}

@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2024 by frostime. All Rights Reserved.
  * @Author       : frostime
  * @Date         : 2026-01-10
@@ -252,7 +252,7 @@ export class PomodoroSessionsDialog {
                 <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <span style="font-size: 18px;">${typeIcon}</span>
-                        <span style="font-weight: 500; width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${session.eventTitle}">${session.eventTitle}</span>
+                        <span style="font-weight: 500; width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" class="ariaLabel" aria-label="${session.eventTitle}">${session.eventTitle}</span>
                         ${statusBadge}
                         ${extraBadges}
                     </div>
@@ -263,10 +263,10 @@ export class PomodoroSessionsDialog {
                     </div>
                 </div>
                 <div style="display: flex; gap: 4px;">
-                    <button class="b3-button b3-button--outline edit-pomodoro-btn" title="${i18n("edit")}" style="padding: 4px 8px;">
+                    <button class="b3-button b3-button--outline edit-pomodoro-btn ariaLabel" aria-label="${i18n("edit")}" style="padding: 4px 8px;">
                         <svg class="b3-button__icon"><use xlink:href="#iconEdit"></use></svg>
                     </button>
-                    <button class="b3-button b3-button--outline delete-pomodoro-btn" title="${i18n("delete")}" style="padding: 4px 8px;">
+                    <button class="b3-button b3-button--outline delete-pomodoro-btn ariaLabel" aria-label="${i18n("delete")}" style="padding: 4px 8px;">
                         <svg class="b3-button__icon"><use xlink:href="#iconTrashcan"></use></svg>
                     </button>
                 </div>

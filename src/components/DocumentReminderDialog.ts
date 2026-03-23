@@ -1,4 +1,4 @@
-import { Dialog, showMessage, confirm } from "siyuan";
+﻿import { Dialog, showMessage, confirm } from "siyuan";
 import { updateBindBlockAtrrs, sql, getBlockByID, openBlock } from "../api";
 import { getLocalDateString, compareDateStrings, getLocalDateTimeString, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../utils/dateUtils";
 import { CategoryManager } from "../utils/categoryManager";
@@ -77,12 +77,12 @@ export class DocumentReminderDialog {
                                 <option value="completedTime" selected>${i18n("sortByCreated")}</option>
                             </select>
                             
-                            <button class="b3-button b3-button--outline doc-sort-order-btn" title="${i18n("sortDirection")}">
+                            <button class="b3-button b3-button--outline doc-sort-order-btn ariaLabel" aria-label="${i18n("sortDirection")}">
                                 <svg class="b3-button__icon"><use xlink:href="#iconSort"></use></svg>
                                 <span>${i18n("descending")}</span>
                             </button>
                             
-                            <button class="b3-button b3-button--primary doc-add-reminder-btn" title="${i18n("setTimeReminder")}">
+                            <button class="b3-button b3-button--primary doc-add-reminder-btn ariaLabel" aria-label="${i18n("setTimeReminder")}">
                                 <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
                                 <span>${i18n("reminder")}</span>
                             </button>
@@ -200,7 +200,7 @@ export class DocumentReminderDialog {
         if (span) {
             span.textContent = this.currentSortOrder === 'asc' ? i18n("ascending") : i18n("descending");
         }
-        this.sortOrderBtn.title = `${i18n("sortDirection")}: ${this.currentSortOrder === 'asc' ? i18n("ascending") : i18n("descending")}`;
+        this.sortOrderBtn.classList.add('ariaLabel'); this.sortOrderBtn.setAttribute('aria-label', `${i18n("sortDirection")}: ${this.currentSortOrder === 'asc' ? i18n("ascending") : i18n("descending")}`);
     }
 
     private async loadReminders() {
@@ -589,9 +589,9 @@ export class DocumentReminderDialog {
             const repeatIcon = document.createElement('span');
             repeatIcon.className = 'doc-reminder-repeat-icon';
             repeatIcon.textContent = '🔄';
-            repeatIcon.title = reminder.repeat?.enabled ?
+            repeatIcon.classList.add('ariaLabel'); repeatIcon.setAttribute('aria-label', reminder.repeat?.enabled ?
                 getRepeatDescription(reminder.repeat) :
-                i18n("repeatInstance");
+                i18n("repeatInstance"));
             repeatIcon.style.cssText = `
                 font-size: 12px;
                 opacity: 0.7;
@@ -742,8 +742,8 @@ export class DocumentReminderDialog {
                     const extraCount = '';
                     const focusText = focusMinutes > 0 ? ` ⏱ ${pomodoroManager.formatTime(focusMinutes)}` : '';
                     pomodoroDisplay.innerHTML = `
-                        <span title="${i18n("completedPomodoroCount")}: ${count}">${tomatoEmojis}${extraCount}</span>
-                        <span title="总专注时长: ${focusMinutes} 分钟" style="margin-left:8px; opacity:0.9;">${focusText}</span>
+                        <span class="ariaLabel" aria-label="${i18n("completedPomodoroCount")}: ${count}">${tomatoEmojis}${extraCount}</span>
+                        <span class="ariaLabel" aria-label="总专注时长: ${focusMinutes} 分钟" style="margin-left:8px; opacity:0.9;">${focusText}</span>
                     `;
                     pomodoroDisplay.style.display = '';
                 } else {

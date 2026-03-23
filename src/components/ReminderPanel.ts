@@ -1,4 +1,4 @@
-import { colorWithOpacity } from "../utils/uiUtils";
+﻿import { colorWithOpacity } from "../utils/uiUtils";
 import { showMessage, confirm, Dialog, Menu, Constants, getFrontend, getBackend, platformUtils } from "siyuan";
 import { refreshSql, sql, getBlockKramdown, getBlockByID, updateBindBlockAtrrs, openBlock } from "../api";
 import { getLocalDateString, compareDateStrings, getLocalDateTimeString, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../utils/dateUtils";
@@ -289,7 +289,7 @@ export class ReminderPanel {
         const newTaskBtn = document.createElement('button');
         newTaskBtn.className = 'b3-button b3-button--outline';
         newTaskBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>';
-        newTaskBtn.title = i18n("newTask") || "新建任务";
+        newTaskBtn.classList.add('ariaLabel'); newTaskBtn.setAttribute('aria-label', i18n("newTask") || "新建任务");
         newTaskBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -301,7 +301,7 @@ export class ReminderPanel {
         this.sortButton = document.createElement('button');
         this.sortButton.className = 'b3-button b3-button--outline';
         this.sortButton.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconSort"></use></svg>';
-        this.sortButton.title = i18n("sortBy");
+        this.sortButton.classList.add('ariaLabel'); this.sortButton.setAttribute('aria-label', i18n("sortBy"));
         this.sortButton.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -314,7 +314,7 @@ export class ReminderPanel {
             const calendarBtn = document.createElement('button');
             calendarBtn.className = 'b3-button b3-button--outline';
             calendarBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconCalendar"></use></svg>';
-            calendarBtn.title = i18n("calendarView");
+            calendarBtn.classList.add('ariaLabel'); calendarBtn.setAttribute('aria-label', i18n("calendarView"));
             calendarBtn.addEventListener('click', () => {
                 this.plugin.openCalendarTab();
             });
@@ -324,7 +324,7 @@ export class ReminderPanel {
             const eisenhowerBtn = document.createElement('button');
             eisenhowerBtn.className = 'b3-button b3-button--outline';
             eisenhowerBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconGrid"></use></svg>';
-            eisenhowerBtn.title = i18n("eisenhowerMatrix") || "四象限面板";
+            eisenhowerBtn.classList.add('ariaLabel'); eisenhowerBtn.setAttribute('aria-label', i18n("eisenhowerMatrix") || "四象限面板");
             eisenhowerBtn.addEventListener('click', () => {
                 this.openEisenhowerMatrix();
             });
@@ -334,7 +334,7 @@ export class ReminderPanel {
             const pomodoroStatsBtn = document.createElement('button');
             pomodoroStatsBtn.className = 'b3-button b3-button--outline';
             pomodoroStatsBtn.innerHTML = '📊';
-            pomodoroStatsBtn.title = i18n("statsView");
+            pomodoroStatsBtn.classList.add('ariaLabel'); pomodoroStatsBtn.setAttribute('aria-label', i18n("statsView"));
             pomodoroStatsBtn.addEventListener('click', () => {
                 this.showPomodoroStatsView();
             });
@@ -346,7 +346,7 @@ export class ReminderPanel {
             const refreshBtn = document.createElement('button');
             refreshBtn.className = 'b3-button b3-button--outline';
             refreshBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconRefresh"></use></svg>';
-            refreshBtn.title = i18n("refresh") || "刷新";
+            refreshBtn.classList.add('ariaLabel'); refreshBtn.setAttribute('aria-label', i18n("refresh") || "刷新");
             refreshBtn.addEventListener('click', () => {
                 // 刷新时清空当前 Tab 的文档标题缓存，再强制重载提醒
                 try {
@@ -365,7 +365,7 @@ export class ReminderPanel {
         const moreBtn = document.createElement('button');
         moreBtn.className = 'b3-button b3-button--outline';
         moreBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconMore"></use></svg>';
-        moreBtn.title = i18n("more") || "更多";
+        moreBtn.classList.add('ariaLabel'); moreBtn.setAttribute('aria-label', i18n("more") || "更多");
         moreBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -1171,7 +1171,7 @@ export class ReminderPanel {
     private updateSortButtonTitle() {
         if (this.sortButton) {
             const summary = getSortConfigSummary({ criteria: this.currentSortCriteria });
-            this.sortButton.title = `${i18n("sortBy")}: ${summary}`;
+            this.sortButton.classList.add('ariaLabel'); this.sortButton.setAttribute('aria-label', `${i18n("sortBy")}: ${summary}`);
         }
     }
 
@@ -1218,7 +1218,7 @@ export class ReminderPanel {
                 docTitleLink.setAttribute('data-type', 'a');
                 docTitleLink.setAttribute('data-href', `siyuan://blocks/${docId}`);
                 docTitleLink.textContent = cachedTitle;
-                docTitleLink.title = `所属文档: ${cachedTitle}`;
+                docTitleLink.classList.add('ariaLabel'); docTitleLink.setAttribute('aria-label', `所属文档: ${cachedTitle}`);
                 docTitleLink.style.cssText = `
                     cursor: pointer;
                     color: var(--b3-theme-on-background);
@@ -1272,7 +1272,7 @@ export class ReminderPanel {
                 docTitleLink.setAttribute('data-type', 'a');
                 docTitleLink.setAttribute('data-href', `siyuan://blocks/${docId}`);
                 docTitleLink.textContent = title;
-                docTitleLink.title = `所属文档: ${title}`;
+                docTitleLink.classList.add('ariaLabel'); docTitleLink.setAttribute('aria-label', `所属文档: ${title}`);
                 docTitleLink.style.cssText = `
                     cursor: pointer;
                     color: var(--b3-theme-on-background);
@@ -1342,7 +1342,7 @@ export class ReminderPanel {
                 // 创建项目标题链接
                 const projectLink = document.createElement('span');
                 projectLink.textContent = project.title;
-                projectLink.title = `所属项目: ${project.title}`;
+                projectLink.classList.add('ariaLabel'); projectLink.setAttribute('aria-label', `所属项目: ${project.title}`);
                 projectLink.style.cssText = `
                     cursor: pointer;
                     color: var(--b3-theme-on-background);
@@ -1694,8 +1694,8 @@ export class ReminderPanel {
                                 };
                                 const totalFocusText = focusTimeMinutes > 0 ? ` ⏱ ${formatMinutesToString(focusTimeMinutes)}` : '';
                                 const todayFocusText = (todayFocusMinutes > 0 || totalCount > 0) ? ` ⏱ ${formatMinutesToString(todayFocusMinutes)}` : '';
-                                const totalLine = (totalCount > 0 || focusTimeMinutes > 0) ? `<span title="累计完成的番茄钟: ${totalCount}">🍅 ${totalCount}</span><span title="总专注时长: ${focusTimeMinutes} 分钟" style="margin-left:8px; opacity:0.9;">${totalFocusText}</span>` : '';
-                                const todayLine = (todayCount > 0 || todayFocusMinutes > 0 || totalCount > 0) ? `<div style="margin-top:6px; font-size:12px; opacity:0.95;"><span title='今日完成的番茄钟: ${todayCount}'>今日: 🍅 ${todayCount}</span><span title='今日专注时长: ${todayFocusMinutes} 分钟' style='margin-left:8px'>${todayFocusText}</span></div>` : '';
+                                const totalLine = (totalCount > 0 || focusTimeMinutes > 0) ? `<span class="ariaLabel" aria-label="累计完成的番茄钟: ${totalCount}">🍅 ${totalCount}</span><span class="ariaLabel" aria-label="总专注时长: ${focusTimeMinutes} 分钟" style="margin-left:8px; opacity:0.9;">${totalFocusText}</span>` : '';
+                                const todayLine = (todayCount > 0 || todayFocusMinutes > 0 || totalCount > 0) ? `<div style="margin-top:6px; font-size:12px; opacity:0.95;"><span class="ariaLabel" aria-label='今日完成的番茄钟: ${todayCount}'>今日: 🍅 ${todayCount}</span><span class="ariaLabel" aria-label='今日专注时长: ${todayFocusMinutes} 分钟' style='margin-left:8px'>${todayFocusText}</span></div>` : '';
 
                                 const focusTimeText = focusTimeMinutes > 0 ? ` ⏱ ${formatMinutesToString(focusTimeMinutes)}` : '';
                                 pomEl.innerHTML = `${totalLine}${todayLine}`;
@@ -2238,7 +2238,7 @@ export class ReminderPanel {
         const formattedTotalTomato = `🍅 ${totalCount}`;
         const totalFocusText = totalFocus > 0 ? ` 🕒 ${this.formatPomodoroMinutes(totalFocus)}` : '';
         const todayFocusText = (todayFocus > 0 || totalCount > 0) ? ` 🕒 ${this.formatPomodoroMinutes(todayFocus)}` : '';
-        const estimatedLine = reminder.estimatedPomodoroDuration ? `<span title='${i18n('estimatedPomodoro')}'>${i18n('estimated')}: ${reminder.estimatedPomodoroDuration}</span>` : '';
+        const estimatedLine = reminder.estimatedPomodoroDuration ? `<span class="ariaLabel" aria-label='${i18n('estimatedPomodoro')}'>${i18n('estimated')}: ${reminder.estimatedPomodoroDuration}</span>` : '';
 
         let totalLine = '';
         let todayLine = '';
@@ -2250,23 +2250,23 @@ export class ReminderPanel {
             const instanceFocusText = totalFocus > 0 ? ` 🕒 ${this.formatPomodoroMinutes(totalFocus)}` : '';
 
             totalLine = `<div style="margin-top:${estimatedLine ? '6px' : '0'}; font-size:12px;">
-                <div title="${i18n('seriesTotalTomatoTitle')}${repeatingTotal}">
+                <div class="ariaLabel" aria-label="${i18n('seriesTotalTomatoTitle')}${repeatingTotal}">
                     <span>${i18n('series')}: 🍅 ${repeatingTotal}</span>
                     <span style="margin-left:8px; opacity:0.9;">${repeatingFocusText}</span>
                 </div>
-                <div title="${i18n('instanceTomatoTitle')}${totalCount}" style="margin-top:4px; opacity:0.95;">
+                <div class="ariaLabel" aria-label="${i18n('instanceTomatoTitle')}${totalCount}" style="margin-top:4px; opacity:0.95;">
                     <span>${i18n('currentInstance')}: 🍅 ${totalCount}</span>
                     <span style="margin-left:8px; opacity:0.9;">${instanceFocusText}</span>
                 </div>
              </div>`;
         } else {
             totalLine = (totalCount > 0 || totalFocus > 0)
-                ? `<div style="margin-top:${estimatedLine ? '6px' : '0'}; font-size:12px;"><span title="${i18n('totalCompletedPomodoroTitle')}${totalCount}">${i18n('total')}: ${formattedTotalTomato}</span><span title="${i18n('totalFocusDurationTitle')}${totalFocus} ${i18n('minutes')}" style="margin-left:8px; opacity:0.9;">${totalFocusText}</span></div>`
+                ? `<div style="margin-top:${estimatedLine ? '6px' : '0'}; font-size:12px;"><span class="ariaLabel" aria-label="${i18n('totalCompletedPomodoroTitle')}${totalCount}">${i18n('total')}: ${formattedTotalTomato}</span><span class="ariaLabel" aria-label="${i18n('totalFocusDurationTitle')}${totalFocus} ${i18n('minutes')}" style="margin-left:8px; opacity:0.9;">${totalFocusText}</span></div>`
                 : '';
 
             const hasHistoricalData = (totalCount > todayCount) || (totalFocus > todayFocus);
             todayLine = hasHistoricalData && (todayCount > 0 || todayFocus > 0)
-                ? `<div style="margin-top:6px; font-size:12px; opacity:0.95;"><span title='${i18n('todayCompletedPomodoroTitle')}${todayCount}'>${i18n('today')}: 🍅 ${todayCount}</span><span title='${i18n('todayFocusTimeTitle')}${todayFocus} ${i18n('minutes')}' style='margin-left:8px'>${todayFocusText}</span></div>`
+                ? `<div style="margin-top:6px; font-size:12px; opacity:0.95;"><span class="ariaLabel" aria-label='${i18n('todayCompletedPomodoroTitle')}${todayCount}'>${i18n('today')}: 🍅 ${todayCount}</span><span class="ariaLabel" aria-label='${i18n('todayFocusTimeTitle')}${todayFocus} ${i18n('minutes')}' style='margin-left:8px'>${todayFocusText}</span></div>`
                 : '';
         }
 
@@ -2501,7 +2501,7 @@ export class ReminderPanel {
             const collapseBtn = document.createElement('button');
             collapseBtn.className = 'b3-button b3-button--text collapse-btn';
             collapseBtn.innerHTML = isCollapsed ? '<svg><use xlink:href="#iconRight"></use></svg>' : '<svg><use xlink:href="#iconDown"></use></svg>';
-            collapseBtn.title = isCollapsed ? i18n("expand") : i18n("collapse");
+            collapseBtn.classList.add('ariaLabel'); collapseBtn.setAttribute('aria-label', isCollapsed ? i18n("expand") : i18n("collapse"));
             collapseBtn.addEventListener('click', async (e) => {
                 e.stopPropagation();
 
@@ -2525,7 +2525,7 @@ export class ReminderPanel {
                     await this.showChildrenRecursively(reminder.id);
                     // 更新按钮图标与标题
                     collapseBtn.innerHTML = '<svg><use xlink:href="#iconDown"></use></svg>';
-                    collapseBtn.title = i18n("collapse");
+                    collapseBtn.classList.add('ariaLabel'); collapseBtn.setAttribute('aria-label', i18n("collapse"));
                 } else {
                     // 当前是展开 -> 折叠
                     if (targetReminder) targetReminder.fold = true;
@@ -2538,7 +2538,7 @@ export class ReminderPanel {
                     this.hideAllDescendants(reminder.id);
                     // 更新按钮图标与标题
                     collapseBtn.innerHTML = '<svg><use xlink:href="#iconRight"></use></svg>';
-                    collapseBtn.title = i18n("expand");
+                    collapseBtn.classList.add('ariaLabel'); collapseBtn.setAttribute('aria-label', i18n("expand"));
                 }
 
                 // 持久化保存
@@ -2586,7 +2586,7 @@ export class ReminderPanel {
         }
 
         titleEl.textContent = reminder.title || i18n("unnamedNote");
-        titleEl.title = reminder.blockId ? `点击打开绑定块: ${reminder.title || i18n("unnamedNote")}` : (reminder.title || i18n("unnamedNote"));
+        titleEl.classList.add('ariaLabel'); titleEl.setAttribute('aria-label', reminder.blockId ? `点击打开绑定块: ${reminder.title || i18n("unnamedNote")}` : (reminder.title || i18n("unnamedNote")));
         titleContainer.appendChild(titleEl);
 
         // 添加URL链接图标
@@ -2595,7 +2595,7 @@ export class ReminderPanel {
             urlIcon.className = 'reminder-item__url-icon';
             urlIcon.href = reminder.url;
             urlIcon.target = '_blank';
-            urlIcon.title = i18n("openUrl") + ': ' + reminder.url;
+            urlIcon.classList.add('ariaLabel'); urlIcon.setAttribute('aria-label', i18n("openUrl") + ': ' + reminder.url);
             urlIcon.innerHTML = '<svg style="width: 14px; height: 14px; vertical-align: middle; margin-left: 4px;"><use xlink:href="#iconLink"></use></svg>';
             urlIcon.style.cssText = 'color: var(--b3-theme-primary); cursor: pointer; text-decoration: none; display: inline-flex; align-items: center;';
             urlIcon.addEventListener('click', (e) => {
@@ -2612,7 +2612,7 @@ export class ReminderPanel {
             const repeatIcon = document.createElement('span');
             repeatIcon.className = 'reminder-repeat-icon';
             repeatIcon.textContent = '🔄';
-            repeatIcon.title = reminder.repeat?.enabled ? getRepeatDescription(reminder.repeat) : i18n("repeatInstance");
+            repeatIcon.classList.add('ariaLabel'); repeatIcon.setAttribute('aria-label', reminder.repeat?.enabled ? getRepeatDescription(reminder.repeat) : i18n("repeatInstance"));
             timeContainer.appendChild(repeatIcon);
         }
 
@@ -2625,7 +2625,7 @@ export class ReminderPanel {
             const timeText = this.formatReminderTime(displayDate, displayTime, today, reminder.endDate, reminder.endTime, reminder);
             timeEl.textContent = '🗓' + timeText;
             timeEl.style.cursor = 'pointer';
-            timeEl.title = i18n("clickToModifyTime");
+            timeEl.classList.add('ariaLabel'); timeEl.setAttribute('aria-label', i18n("clickToModifyTime"));
             if (!reminder.isSubscribed) {
                 timeEl.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -2633,7 +2633,7 @@ export class ReminderPanel {
                     this.showTimeEditDialog(reminder);
                 });
             } else {
-                timeEl.title = i18n("subscribedTaskReadOnly") || "订阅任务（只读）";
+                timeEl.classList.add('ariaLabel'); timeEl.setAttribute('aria-label', i18n("subscribedTaskReadOnly") || "订阅任务（只读）");
                 timeEl.style.cursor = 'default';
             }
             timeContainer.appendChild(timeEl);
@@ -2683,7 +2683,7 @@ export class ReminderPanel {
             const todayFocusText = (todayFocus > 0 || totalCount > 0) ? ` ⏱ ${formatMinutesToString(todayFocus)}` : '';
 
             // 第一行：预计番茄时长
-            const estimatedLine = reminder.estimatedPomodoroDuration ? `<span title='${i18n('estimatedPomodoro')}'>${i18n('estimated')}: ${reminder.estimatedPomodoroDuration}</span>` : '';
+            const estimatedLine = reminder.estimatedPomodoroDuration ? `<span class="ariaLabel" aria-label='${i18n('estimatedPomodoro')}'>${i18n('estimated')}: ${reminder.estimatedPomodoroDuration}</span>` : '';
             // 第二行：累计/总计
             // 第二行：累计/总计
             let totalLine = '';
@@ -2704,11 +2704,11 @@ export class ReminderPanel {
                 const instanceFocusText = totalFocus > 0 ? ` ⏱ ${formatMinutesToString(totalFocus)}` : '';
 
                 totalLine = `<div style="margin-top:${estimatedLine ? '6px' : '0'}; font-size:12px;">
-                    <div title="${i18n('seriesTotalTomatoTitle')}${repeatingTotal}">
+                    <div class="ariaLabel" aria-label="${i18n('seriesTotalTomatoTitle')}${repeatingTotal}">
                         <span>${i18n('series')}: 🍅 ${repeatingTotal}</span>
                         <span style="margin-left:8px; opacity:0.9;">${repeatingFocusText}</span>
                     </div>
-                    <div title="${i18n('instanceTomatoTitle')}${instanceCount}" style="margin-top:4px; opacity:0.95;">
+                    <div class="ariaLabel" aria-label="${i18n('instanceTomatoTitle')}${instanceCount}" style="margin-top:4px; opacity:0.95;">
                         <span>${i18n('currentInstance')}: 🍅 ${instanceCount}</span>
                         <span style="margin-left:8px; opacity:0.9;">${instanceFocusText}</span>
                     </div>
@@ -2717,12 +2717,12 @@ export class ReminderPanel {
                 // Do not show todayLine for repeat instances as requested
                 todayLine = '';
             } else {
-                totalLine = (totalCount > 0 || totalFocus > 0) ? `<div style="margin-top:${estimatedLine ? '6px' : '0'}; font-size:12px;"><span title="${i18n('totalCompletedPomodoroTitle')}${totalCount}">${i18n('total')}: ${formattedTotalTomato}${extraCount}</span><span title="${i18n('totalFocusDurationTitle')}${totalFocus} ${i18n('minutes')}" style="margin-left:8px; opacity:0.9;">${totalFocusText}</span></div>` : '';
+                totalLine = (totalCount > 0 || totalFocus > 0) ? `<div style="margin-top:${estimatedLine ? '6px' : '0'}; font-size:12px;"><span class="ariaLabel" aria-label="${i18n('totalCompletedPomodoroTitle')}${totalCount}">${i18n('total')}: ${formattedTotalTomato}${extraCount}</span><span class="ariaLabel" aria-label="${i18n('totalFocusDurationTitle')}${totalFocus} ${i18n('minutes')}" style="margin-left:8px; opacity:0.9;">${totalFocusText}</span></div>` : '';
 
                 // 第三行：今日数据（只在总番茄不等于今日番茄时显示，即有历史数据时）
                 // 判断条件：总数量大于今日数量，或者总时长大于今日时长
                 const hasHistoricalData = (totalCount > todayCount) || (totalFocus > todayFocus);
-                todayLine = hasHistoricalData && (todayCount > 0 || todayFocus > 0) ? `<div style="margin-top:6px; font-size:12px; opacity:0.95;"><span title='${i18n('todayCompletedPomodoroTitle')}${todayCount}'>${i18n('today')}: 🍅 ${todayCount}</span><span title='${i18n('todayFocusTimeTitle')}${todayFocus} ${i18n('minutes')}' style='margin-left:8px'>${todayFocusText}</span></div>` : '';
+                todayLine = hasHistoricalData && (todayCount > 0 || todayFocus > 0) ? `<div style="margin-top:6px; font-size:12px; opacity:0.95;"><span class="ariaLabel" aria-label='${i18n('todayCompletedPomodoroTitle')}${todayCount}'>${i18n('today')}: 🍅 ${todayCount}</span><span class="ariaLabel" aria-label='${i18n('todayFocusTimeTitle')}${todayFocus} ${i18n('minutes')}' style='margin-left:8px'>${todayFocusText}</span></div>` : '';
             }
 
             pomodoroDisplay.innerHTML = `${estimatedLine}${totalLine}${todayLine}`;
@@ -2974,7 +2974,7 @@ export class ReminderPanel {
                 projectInfo.appendChild(nameSpan);
 
                 // 设置标题提示
-                projectInfo.title = `点击打开项目: ${displayProjectName}`;
+                projectInfo.classList.add('ariaLabel'); projectInfo.setAttribute('aria-label', `点击打开项目: ${displayProjectName}`);
 
                 // 点击事件：打开项目看板
                 projectInfo.addEventListener('click', (e) => {
@@ -3026,7 +3026,7 @@ export class ReminderPanel {
                     milestoneTag.style.textDecoration = 'underline dotted';
                 }
                 milestoneTag.innerHTML = `<span>${milestone.icon || '🚩'}</span><span>${milestone.name}</span>`;
-                milestoneTag.title = `${i18n('milestone') || '里程碑'}: ${milestone.name}`;
+                milestoneTag.classList.add('ariaLabel'); milestoneTag.setAttribute('aria-label', `${i18n('milestone') || '里程碑'}: ${milestone.name}`);
                 infoEl.appendChild(milestoneTag);
             }
         }
@@ -3072,7 +3072,7 @@ export class ReminderPanel {
                     categoryTag.appendChild(nameSpan);
 
                     // 设置标题提示
-                    categoryTag.title = `分类: ${category.name}`;
+                    categoryTag.classList.add('ariaLabel'); categoryTag.setAttribute('aria-label', `分类: ${category.name}`);
 
                     // 将分类标签添加到信息容器底部
                     infoEl.appendChild(categoryTag);
@@ -3128,7 +3128,7 @@ export class ReminderPanel {
                                 font-weight: 500;
                             `;
                             tagEl.textContent = `#${tag.name}`;
-                            tagEl.title = tag.name;
+                            tagEl.classList.add('ariaLabel'); tagEl.setAttribute('aria-label', tag.name);
                             tagsContainer.appendChild(tagEl);
                         }
                     });
@@ -7997,7 +7997,7 @@ export class ReminderPanel {
                                     categoryTag.appendChild(nameSpan);
 
                                     // 设置标题提示
-                                    categoryTag.title = `分类: ${category.name}`;
+                                    categoryTag.classList.add('ariaLabel'); categoryTag.setAttribute('aria-label', `分类: ${category.name}`);
 
                                     // 将分类标签添加到信息容器底部
                                     infoEl.appendChild(categoryTag);
@@ -10281,13 +10281,13 @@ export class ReminderPanel {
                             <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                                 <div style="display: flex; align-items: center; gap: 8px; flex: 1 1 140px; min-width: 120px;">
                                     <input type="date" id="panelBatchStartDate" class="b3-text-field" max="9999-12-31" style="flex: 1; min-width: 0;" lang="${langTag}">
-                                    <button type="button" id="panelClearStartDateBtn" class="b3-button b3-button--outline" title="${i18n('clearDate') || '清除日期'}" style="padding: 4px 8px; font-size: 12px; flex: 0 0 auto;">
+                                    <button type="button" id="panelClearStartDateBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n('clearDate') || '清除日期'}" style="padding: 4px 8px; font-size: 12px; flex: 0 0 auto;">
                                         <svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
                                     </button>
                                 </div>
                                 <div style="display: flex; align-items: center; gap: 8px; flex: 0 0 auto; white-space: nowrap; min-width: 110px; margin-left: auto;">
                                     <input type="time" id="panelBatchStartTime" class="b3-text-field" style="flex: 0 0 auto; min-width: 100px;" lang="${langTag}">
-                                    <button type="button" id="panelClearStartTimeBtn" class="b3-button b3-button--outline" title="${i18n('clearTime') || '清除时间'}" style="padding: 4px 8px; font-size: 12px;">
+                                    <button type="button" id="panelClearStartTimeBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n('clearTime') || '清除时间'}" style="padding: 4px 8px; font-size: 12px;">
                                         <svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
                                     </button>
                                 </div>
@@ -10300,13 +10300,13 @@ export class ReminderPanel {
                         <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                             <div style="display: flex; align-items: center; gap: 8px; flex: 1 1 140px; min-width: 120px;">
                                 <input type="date" id="panelBatchEndDate" class="b3-text-field" placeholder="${i18n('endDateOptional') || '结束日期（可选）'}" max="9999-12-31" style="flex: 1; min-width: 0;" lang="${langTag}">
-                                <button type="button" id="panelClearEndDateBtn" class="b3-button b3-button--outline" title="${i18n('clearDate') || '清除日期'}" style="padding: 4px 8px; font-size: 12px; flex: 0 0 auto;">
+                                <button type="button" id="panelClearEndDateBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n('clearDate') || '清除日期'}" style="padding: 4px 8px; font-size: 12px; flex: 0 0 auto;">
                                     <svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
                                 </button>
                             </div>
                             <div style="display: flex; align-items: center; gap: 8px; flex: 0 0 auto; white-space: nowrap; min-width: 110px; margin-left: auto;">
                                 <input type="time" id="panelBatchEndTime" class="b3-text-field" placeholder="${i18n('endTimeOptional') || '结束时间 (可选)'}" style="flex: 0 0 auto; min-width: 100px;" lang="${langTag}">
-                                <button type="button" id="panelClearEndTimeBtn" class="b3-button b3-button--outline" title="${i18n('clearTime') || '清除时间'}" style="padding: 4px 8px; font-size: 12px;">
+                                <button type="button" id="panelClearEndTimeBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n('clearTime') || '清除时间'}" style="padding: 4px 8px; font-size: 12px;">
                                     <svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
                                 </button>
                             </div>

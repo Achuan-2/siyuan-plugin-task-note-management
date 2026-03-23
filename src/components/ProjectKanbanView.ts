@@ -285,7 +285,7 @@ export class ProjectKanbanView {
                         <label class="b3-form__label">${i18n('bindBlockId')} (${i18n('optional')})</label>
                         <div style="display: flex; gap: 8px;">
                             <input type="text" id="newGroupBlockId" class="b3-text-field" placeholder="${i18n('pleaseEnterBlockId')}" style="flex: 1;">
-                            <button class="b3-button b3-button--outline" id="editGroupBindBlockBtn" title="${i18n('bindBlock')}">
+                            <button class="b3-button b3-button--outline ariaLabel" id="editGroupBindBlockBtn" aria-label="${i18n('bindBlock')}">
                                 <svg class="b3-button__icon" style="width: 16px; height: 16px;"><use xlink:href="#iconAdd"></use></svg>
                             </button>
                         </div>
@@ -976,7 +976,7 @@ export class ProjectKanbanView {
                     padding: 2px 4px;
                     user-select: none;
                 `;
-                dragHandle.title = i18n('dragToSort');
+                dragHandle.classList.add('ariaLabel'); dragHandle.setAttribute('aria-label', i18n('dragToSort'));
                 statusItem.appendChild(dragHandle);
 
                 // 颜色圆点
@@ -1022,7 +1022,7 @@ export class ProjectKanbanView {
                     const moveUpBtn = document.createElement('button');
                     moveUpBtn.className = 'b3-button b3-button--text';
                     moveUpBtn.innerHTML = '<svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconUp"></use></svg>';
-                    moveUpBtn.title = i18n('moveUp');
+                    moveUpBtn.classList.add('ariaLabel'); moveUpBtn.setAttribute('aria-label', i18n('moveUp'));
                     moveUpBtn.style.cssText = 'padding: 2px; min-width: unset;';
                     moveUpBtn.addEventListener('click', async () => {
                         const currentIndex = statuses.findIndex(s => s.id === status.id);
@@ -1049,7 +1049,7 @@ export class ProjectKanbanView {
                     const moveDownBtn = document.createElement('button');
                     moveDownBtn.className = 'b3-button b3-button--text';
                     moveDownBtn.innerHTML = '<svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconDown"></use></svg>';
-                    moveDownBtn.title = i18n('moveDown');
+                    moveDownBtn.classList.add('ariaLabel'); moveDownBtn.setAttribute('aria-label', i18n('moveDown'));
                     moveDownBtn.style.cssText = 'padding: 2px; min-width: unset;';
                     moveDownBtn.addEventListener('click', async () => {
                         const currentIndex = statuses.findIndex(s => s.id === status.id);
@@ -1075,7 +1075,7 @@ export class ProjectKanbanView {
                 const editBtn = document.createElement('button');
                 editBtn.className = 'b3-button b3-button--text';
                 editBtn.innerHTML = '<svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconEdit"></use></svg>';
-                editBtn.title = status.isFixed ? i18n('editColor') : (i18n('edit') || '编辑');
+                editBtn.classList.add('ariaLabel'); editBtn.setAttribute('aria-label', status.isFixed ? i18n('editColor') : (i18n('edit') || '编辑'));
                 editBtn.style.cssText = 'padding: 2px; min-width: unset;';
                 editBtn.addEventListener('click', () => showEditStatusDialog(status));
                 actionsDiv.appendChild(editBtn);
@@ -1085,7 +1085,7 @@ export class ProjectKanbanView {
                     const deleteBtn = document.createElement('button');
                     deleteBtn.className = 'b3-button b3-button--text';
                     deleteBtn.innerHTML = '<svg class="b3-button__icon" style="width: 14px; height: 14px; color: var(--b3-theme-error);"><use xlink:href="#iconTrashcan"></use></svg>';
-                    deleteBtn.title = i18n('delete');
+                    deleteBtn.classList.add('ariaLabel'); deleteBtn.setAttribute('aria-label', i18n('delete'));
                     deleteBtn.style.cssText = 'padding: 2px; min-width: unset;';
                     deleteBtn.addEventListener('click', () => {
                         const confirmMsg = i18n('confirmDeleteStatus', { name: status.name });
@@ -1428,7 +1428,7 @@ export class ProjectKanbanView {
                     const editBtn = document.createElement('button');
                     editBtn.className = 'b3-button b3-button--text';
                     editBtn.innerHTML = '<svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconEdit"></use></svg>';
-                    editBtn.title = i18n('edit');
+                    editBtn.classList.add('ariaLabel'); editBtn.setAttribute('aria-label', i18n('edit'));
                     editBtn.style.cssText = `
                         padding: 2px;
                         min-width: unset;
@@ -1444,7 +1444,7 @@ export class ProjectKanbanView {
                     const deleteBtn = document.createElement('button');
                     deleteBtn.className = 'b3-button b3-button--text';
                     deleteBtn.innerHTML = '<svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconClose"></use></svg>';
-                    deleteBtn.title = i18n('delete');
+                    deleteBtn.classList.add('ariaLabel'); deleteBtn.setAttribute('aria-label', i18n('delete'));
                     deleteBtn.style.cssText = `
                         padding: 2px;
                         min-width: unset;
@@ -1815,7 +1815,7 @@ export class ProjectKanbanView {
                 const viewTasksBtn = document.createElement('button');
                 viewTasksBtn.className = 'b3-button b3-button--text';
                 viewTasksBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconEye"></use></svg>';
-                viewTasksBtn.title = i18n('viewTasks');
+                viewTasksBtn.classList.add('ariaLabel'); viewTasksBtn.setAttribute('aria-label', i18n('viewTasks'));
                 viewTasksBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     this.showMilestoneTasksDialog(ms, groupId);
@@ -2293,7 +2293,7 @@ export class ProjectKanbanView {
                 }
 
                 titleEl.textContent = task.title || i18n('noContentHint');
-                titleEl.title = (task.blockId || task.docId) ? i18n('clickToOpenBoundBlock', { title: task.title || i18n('noContentHint') }) : (task.title || i18n('noContentHint'));
+                titleEl.classList.add('ariaLabel'); titleEl.setAttribute('aria-label', (task.blockId || task.docId) ? i18n('clickToOpenBoundBlock', { title: task.title || i18n('noContentHint') }) : (task.title || i18n('noContentHint')));
 
                 // 子任务数量（根据设置过滤已完成的子任务）
                 let children = childMap.get(task.id) || [];
@@ -2304,7 +2304,7 @@ export class ProjectKanbanView {
                     const subtaskIndicator = document.createElement('span');
                     subtaskIndicator.className = 'subtask-indicator';
                     subtaskIndicator.textContent = ` (${children.length})`;
-                    subtaskIndicator.title = i18n('containsNSubtasks', { count: String(children.length) });
+                    subtaskIndicator.classList.add('ariaLabel'); subtaskIndicator.setAttribute('aria-label', i18n('containsNSubtasks', { count: String(children.length) }));
                     subtaskIndicator.style.cssText = `
                         font-size: 12px;
                         color: var(--b3-theme-on-surface);
@@ -2342,7 +2342,7 @@ export class ProjectKanbanView {
                     if (task.repeat?.enabled || task.isRepeatInstance) {
                         const repeatIcon = document.createElement('span');
                         repeatIcon.textContent = '🔄';
-                        repeatIcon.title = task.repeat?.enabled ? getRepeatDescription(task.repeat) : '周期事件实例';
+                        repeatIcon.classList.add('ariaLabel'); repeatIcon.setAttribute('aria-label', task.repeat?.enabled ? getRepeatDescription(task.repeat) : '周期事件实例');
                         repeatIcon.style.cssText = 'cursor: help;';
                         dateEl.appendChild(repeatIcon);
                     }
@@ -2478,7 +2478,7 @@ export class ProjectKanbanView {
                 const editBtn = document.createElement('button');
                 editBtn.className = 'b3-button b3-button--text';
                 editBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconEdit"></use></svg>';
-                editBtn.title = i18n('edit');
+                editBtn.classList.add('ariaLabel'); editBtn.setAttribute('aria-label', i18n('edit'));
                 editBtn.style.cssText = `
                     color: var(--b3-theme-on-surface-light);
                     padding: 4px;
@@ -2546,7 +2546,7 @@ export class ProjectKanbanView {
                         <label class="b3-form__label">${i18n('milestoneBlockId')}</label>
                         <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px;">
                             <input type="text" id="msBlockId" class="b3-text-field" value="${milestone?.blockId || ''}" placeholder="." style="flex: 1;">
-                            <button class="b3-button b3-button--outline" id="msBindBlockBtn" title="${i18n('bindBlock')}">
+                            <button class="b3-button b3-button--outline ariaLabel" id="msBindBlockBtn" aria-label="${i18n('bindBlock')}">
                                 <svg class="b3-button__icon" style="width: 16px; height: 16px;"><use xlink:href="#iconAdd"></use></svg>
                             </button>
                         </div>
@@ -2960,7 +2960,7 @@ export class ProjectKanbanView {
                     transition: all 0.2s ease;
                     user-select: none;
                 `;
-                dragHandle.title = i18n('dragToSort');
+                dragHandle.classList.add('ariaLabel'); dragHandle.setAttribute('aria-label', i18n('dragToSort'));
 
                 // 添加悬停效果
                 dragHandle.draggable = true;
@@ -3016,9 +3016,9 @@ export class ProjectKanbanView {
                 if (hasBlockId) {
                     groupName.dataset.type = 'a';
                     groupName.dataset.href = `siyuan://blocks/${group.blockId}`;
-                    groupName.title = `${group.name} (点击打开绑定块)`;
+                    groupName.classList.add('ariaLabel'); groupName.setAttribute('aria-label', `${group.name} (点击打开绑定块)`);
                 } else {
-                    groupName.title = group.name;
+                    groupName.classList.add('ariaLabel'); groupName.setAttribute('aria-label', group.name);
                 }
 
                 // 归档标签
@@ -3066,9 +3066,9 @@ export class ProjectKanbanView {
                 archiveBtn.innerHTML = group.archived
                     ? '<svg class="b3-button__icon"><use xlink:href="#iconUndo"></use></svg>'
                     : '<svg class="b3-button__icon"><use xlink:href="#iconLock"></use></svg>';
-                archiveBtn.title = group.archived
+                archiveBtn.classList.add('ariaLabel'); archiveBtn.setAttribute('aria-label', group.archived
                     ? (i18n('unarchiveGroup') || '取消归档')
-                    : (i18n('archiveGroup') || '归档分组');
+                    : (i18n('archiveGroup') || '归档分组'));
                 archiveBtn.style.cssText = `
                     display: inline-flex;
                     align-items: center;
@@ -3100,7 +3100,7 @@ export class ProjectKanbanView {
                 const editBtn = document.createElement('button');
                 editBtn.className = 'b3-button b3-button--small b3-button--outline';
                 editBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconEdit"></use></svg>';
-                editBtn.title = i18n('editGroup');
+                editBtn.classList.add('ariaLabel'); editBtn.setAttribute('aria-label', i18n('editGroup'));
                 editBtn.style.cssText = `
                     display: inline-flex;
                     align-items: center;
@@ -3114,7 +3114,7 @@ export class ProjectKanbanView {
                 const deleteBtn = document.createElement('button');
                 deleteBtn.className = 'b3-button b3-button--outline';
                 deleteBtn.innerHTML = '<svg class="b3-button__icon" style="color: var(--b3-theme-error);"><use xlink:href="#iconTrashcan"></use></svg>';
-                deleteBtn.title = i18n('deleteGroup');
+                deleteBtn.classList.add('ariaLabel'); deleteBtn.setAttribute('aria-label', i18n('deleteGroup'));
                 deleteBtn.style.cssText = `
                     display: inline-flex;
                     align-items: center;
@@ -3167,7 +3167,7 @@ export class ProjectKanbanView {
                         <label class="b3-form__label">${i18n('bindBlockId')} (${i18n('optional')})</label>
                         <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px;">
                             <input type="text" id="editGroupBlockId" class="b3-text-field" value="${group.blockId || ''}" placeholder="${i18n('pleaseEnterBlockId')}" style="flex: 1;">
-                            <button class="b3-button b3-button--outline" id="editGroupBindBlockBtn" title="${i18n('bindBlock')}">
+                            <button class="b3-button b3-button--outline ariaLabel" id="editGroupBindBlockBtn" aria-label="${i18n('bindBlock')}">
                                 <svg class="b3-button__icon" style="width: 16px; height: 16px;"><use xlink:href="#iconAdd"></use></svg>
                             </button>
                         </div>
@@ -3298,7 +3298,7 @@ export class ProjectKanbanView {
                                 titleEl.style.cursor = 'pointer';
                                 titleEl.style.textDecoration = 'underline dotted';
                                 titleEl.style.paddingBottom = '2px';
-                                titleEl.title = i18n('clickToJumpToBlock');
+                                titleEl.classList.add('ariaLabel'); titleEl.setAttribute('aria-label', i18n('clickToJumpToBlock'));
                                 titleEl.addEventListener('click', (e) => {
                                     e.stopPropagation();
                                     openBlock(newBlockId);
@@ -3518,7 +3518,7 @@ export class ProjectKanbanView {
             titleEl.style.cursor = 'pointer';
             titleEl.style.textDecoration = 'underline dotted';
             titleEl.style.textDecorationStyle = 'dotted';
-            titleEl.title = i18n('clickToJumpToProjectNote');
+            titleEl.classList.add('ariaLabel'); titleEl.setAttribute('aria-label', i18n('clickToJumpToProjectNote'));
             titleEl.setAttribute('data-has-note', 'true');
 
             titleEl.addEventListener('click', () => {
@@ -3591,7 +3591,7 @@ export class ProjectKanbanView {
         displaySettingsButton.className = 'b3-button b3-button--outline';
         displaySettingsButton.style.padding = '6px';
         displaySettingsButton.innerHTML = '<svg class="b3-button__icon" style="margin-right: 0;"><use xlink:href="#iconEye"></use></svg>';
-        displaySettingsButton.title = i18n("displaySettings") || "显示设置";
+        displaySettingsButton.classList.add('ariaLabel'); displaySettingsButton.setAttribute('aria-label', i18n("displaySettings") || "显示设置");
         displaySettingsContainer.appendChild(displaySettingsButton);
 
         const displaySettingsDropdown = document.createElement('div');
@@ -3683,7 +3683,7 @@ export class ProjectKanbanView {
         const searchBtn = document.createElement('button');
         searchBtn.className = 'b3-button b3-button--outline search-btn';
         searchBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconSearch"></use></svg>';
-        searchBtn.title = i18n('searchReminders');
+        searchBtn.classList.add('ariaLabel'); searchBtn.setAttribute('aria-label', i18n('searchReminders'));
 
         searchBtn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -3730,7 +3730,7 @@ export class ProjectKanbanView {
         const refreshBtn = document.createElement('button');
         refreshBtn.className = 'b3-button b3-button--outline';
         refreshBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconRefresh"></use></svg>';
-        refreshBtn.title = i18n('refresh');
+        refreshBtn.classList.add('ariaLabel'); refreshBtn.setAttribute('aria-label', i18n('refresh'));
         refreshBtn.addEventListener('click', async () => {
             // 重新加载项目信息（包括分组信息）
             await this.loadProject();
@@ -3745,7 +3745,7 @@ export class ProjectKanbanView {
         const calendarBtn = document.createElement('button');
         calendarBtn.className = 'b3-button b3-button--outline';
         calendarBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconCalendar"></use></svg>';
-        calendarBtn.title = i18n('openCalendarView');
+        calendarBtn.classList.add('ariaLabel'); calendarBtn.setAttribute('aria-label', i18n('openCalendarView'));
         calendarBtn.addEventListener('click', () => this.openCalendarForProject());
         controlsGroup.appendChild(calendarBtn);
 
@@ -3810,7 +3810,7 @@ export class ProjectKanbanView {
         // 更多设置按钮
         const moreBtn = document.createElement('button');
         moreBtn.className = 'b3-button b3-button--outline';
-        moreBtn.title = i18n('more');
+        moreBtn.classList.add('ariaLabel'); moreBtn.setAttribute('aria-label', i18n('more'));
         moreBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconMore"></use></svg>';
         moreBtn.addEventListener('click', async (e) => {
             e.stopPropagation();
@@ -3895,7 +3895,7 @@ export class ProjectKanbanView {
         multiSelectBtn.className = 'b3-button b3-button--outline';
         multiSelectBtn.id = 'multiSelectBtn';
         multiSelectBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconCheck"></use></svg> ${i18n('batchSelect')}`;
-        multiSelectBtn.title = i18n('batchSelectMode');
+        multiSelectBtn.classList.add('ariaLabel'); multiSelectBtn.setAttribute('aria-label', i18n('batchSelectMode'));
         multiSelectBtn.addEventListener('click', () => this.toggleMultiSelectMode());
         controlsGroup.appendChild(multiSelectBtn);
 
@@ -3937,7 +3937,7 @@ export class ProjectKanbanView {
             if (!milestoneFilterBtn) {
                 milestoneFilterBtn = document.createElement('button');
                 milestoneFilterBtn.className = 'b3-button b3-button--outline milestone-filter-btn b3-button--small';
-                milestoneFilterBtn.title = i18n('filterMilestone');
+                milestoneFilterBtn.classList.add('ariaLabel'); milestoneFilterBtn.setAttribute('aria-label', i18n('filterMilestone'));
                 milestoneFilterBtn.innerHTML = '🚩';
                 milestoneFilterBtn.dataset.groupId = groupId;
                 milestoneFilterBtn.addEventListener('click', (e) => {
@@ -4365,7 +4365,7 @@ export class ProjectKanbanView {
             this.doneSortButton = document.createElement('button');
             this.doneSortButton.className = 'b3-button b3-button--text';
             this.doneSortButton.innerHTML = '<svg style="width: 14px; height: 14px;"><use xlink:href="#iconSort"></use></svg>';
-            this.doneSortButton.title = '排序';
+            this.doneSortButton.classList.add('ariaLabel'); this.doneSortButton.setAttribute('aria-label', '排序');
             this.doneSortButton.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.showDoneSortMenu(e);
@@ -4397,7 +4397,7 @@ export class ProjectKanbanView {
         if (status !== 'completed') {
             const addTaskBtn = document.createElement('button');
             addTaskBtn.className = 'b3-button b3-button--outline';
-            addTaskBtn.title = i18n('newTask');
+            addTaskBtn.classList.add('ariaLabel'); addTaskBtn.setAttribute('aria-label', i18n('newTask'));
             addTaskBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>`;
             addTaskBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -4409,7 +4409,7 @@ export class ProjectKanbanView {
             // 粘贴新建任务按钮
             const pasteTaskBtn = document.createElement('button');
             pasteTaskBtn.className = 'b3-button b3-button--outline';
-            pasteTaskBtn.title = i18n('pasteNew');
+            pasteTaskBtn.classList.add('ariaLabel'); pasteTaskBtn.setAttribute('aria-label', i18n('pasteNew'));
             pasteTaskBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconPaste"></use></svg>`;
             pasteTaskBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -6226,7 +6226,7 @@ export class ProjectKanbanView {
                 'asc': i18n('ascendingOrder'),
                 'desc': i18n('descendingOrder')
             };
-            this.sortButton.title = `${i18n('sortBy')}: ${sortNames[this.currentSort]} (${orderNames[this.currentSortOrder]})`;
+            this.sortButton.classList.add('ariaLabel'); this.sortButton.setAttribute('aria-label', `${i18n('sortBy')}: ${sortNames[this.currentSort]} (${orderNames[this.currentSortOrder]})`);
         }
     }
 
@@ -6242,7 +6242,7 @@ export class ProjectKanbanView {
                 'asc': i18n('ascendingOrder'),
                 'desc': i18n('descendingOrder')
             };
-            this.doneSortButton.title = `${i18n('sortBy')}: ${sortNames[this.doneSort] || i18n('sortByCompletedTime')} (${orderNames[this.doneSortOrder] || i18n('descendingOrder')})`;
+            this.doneSortButton.classList.add('ariaLabel'); this.doneSortButton.setAttribute('aria-label', `${i18n('sortBy')}: ${sortNames[this.doneSort] || i18n('sortByCompletedTime')} (${orderNames[this.doneSortOrder] || i18n('descendingOrder')})`);
         }
     }
 
@@ -7365,7 +7365,7 @@ export class ProjectKanbanView {
             const addBtn = document.createElement('button');
             addBtn.className = 'b3-button b3-button--outline';
             addBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>`;
-            addBtn.title = i18n('newTask');
+            addBtn.classList.add('ariaLabel'); addBtn.setAttribute('aria-label', i18n('newTask'));
             addBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.showCreateTaskDialog(undefined, undefined, 'doing');
@@ -7376,7 +7376,7 @@ export class ProjectKanbanView {
             const pasteBtn = document.createElement('button');
             pasteBtn.className = 'b3-button b3-button--outline';
             pasteBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconPaste"></use></svg>`;
-            pasteBtn.title = i18n('pasteNew');
+            pasteBtn.classList.add('ariaLabel'); pasteBtn.setAttribute('aria-label', i18n('pasteNew'));
             pasteBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.showPasteTaskDialog(undefined, undefined, 'doing', true);
@@ -7916,7 +7916,7 @@ export class ProjectKanbanView {
                 if (hasMilestonesInThisStatus) {
                     const milestoneFilterBtn = document.createElement('button');
                     milestoneFilterBtn.className = 'b3-button b3-button--outline milestone-filter-btn b3-button--small';
-                    milestoneFilterBtn.title = i18n('filterMilestone');
+                    milestoneFilterBtn.classList.add('ariaLabel'); milestoneFilterBtn.setAttribute('aria-label', i18n('filterMilestone'));
                     milestoneFilterBtn.innerHTML = '🚩';
                     milestoneFilterBtn.dataset.groupId = status;
                     milestoneFilterBtn.addEventListener('click', (e) => {
@@ -7939,7 +7939,7 @@ export class ProjectKanbanView {
                 if (status !== 'completed') {
                     const addGroupTaskBtn = document.createElement('button');
                     addGroupTaskBtn.className = 'b3-button b3-button--small b3-button--primary';
-                    addGroupTaskBtn.title = i18n('newTask');
+                    addGroupTaskBtn.classList.add('ariaLabel'); addGroupTaskBtn.setAttribute('aria-label', i18n('newTask'));
                     addGroupTaskBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>`;
                     addGroupTaskBtn.addEventListener('click', (e) => {
                         e.stopPropagation();
@@ -8136,7 +8136,7 @@ export class ProjectKanbanView {
             titleEl.style.cursor = 'pointer';
             titleEl.style.textDecoration = 'underline dotted';
             titleEl.style.paddingBottom = '2px';
-            titleEl.title = i18n('clickToJumpToBlock');
+            titleEl.classList.add('ariaLabel'); titleEl.setAttribute('aria-label', i18n('clickToJumpToBlock'));
             titleEl.addEventListener('click', (e) => {
                 e.stopPropagation();
                 openBlock(group.blockId);
@@ -8163,7 +8163,7 @@ export class ProjectKanbanView {
         // 新建任务按钮（对应该自定义分组）
         const addGroupTaskBtn = document.createElement('button');
         addGroupTaskBtn.className = 'b3-button b3-button--outline';
-        addGroupTaskBtn.title = i18n('newTask');
+        addGroupTaskBtn.classList.add('ariaLabel'); addGroupTaskBtn.setAttribute('aria-label', i18n('newTask'));
         addGroupTaskBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>`;
         addGroupTaskBtn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -8174,7 +8174,7 @@ export class ProjectKanbanView {
         // 粘贴新建任务按钮（对应该自定义分组）
         const pasteGroupTaskBtn = document.createElement('button');
         pasteGroupTaskBtn.className = 'b3-button b3-button--outline';
-        pasteGroupTaskBtn.title = i18n('pasteNew');
+        pasteGroupTaskBtn.classList.add('ariaLabel'); pasteGroupTaskBtn.setAttribute('aria-label', i18n('pasteNew'));
         pasteGroupTaskBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconPaste"></use></svg>`;
         pasteGroupTaskBtn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -8435,7 +8435,7 @@ export class ProjectKanbanView {
             const addTaskBtn = document.createElement('button');
             addTaskBtn.className = 'b3-button b3-button--text';
             addTaskBtn.style.cssText = 'padding: 2px; margin-left: 4px;';
-            addTaskBtn.title = i18n('newTask');
+            addTaskBtn.classList.add('ariaLabel'); addTaskBtn.setAttribute('aria-label', i18n('newTask'));
             addTaskBtn.innerHTML = `<svg style="width: 14px; height: 14px;"><use xlink:href="#iconAdd"></use></svg>`;
             addTaskBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -8446,7 +8446,7 @@ export class ProjectKanbanView {
             const pasteTaskBtn = document.createElement('button');
             pasteTaskBtn.className = 'b3-button b3-button--text';
             pasteTaskBtn.style.cssText = 'padding: 2px; margin-left: 2px;';
-            pasteTaskBtn.title = i18n('pasteNew');
+            pasteTaskBtn.classList.add('ariaLabel'); pasteTaskBtn.setAttribute('aria-label', i18n('pasteNew'));
             pasteTaskBtn.innerHTML = `<svg style="width: 14px; height: 14px;"><use xlink:href="#iconPaste"></use></svg>`;
             pasteTaskBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -8479,7 +8479,7 @@ export class ProjectKanbanView {
         const collapseBtn = document.createElement('button');
         collapseBtn.className = 'b3-button b3-button--text custom-status-group-collapse-btn';
         collapseBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconDown"></use></svg>';
-        collapseBtn.title = '折叠分组';
+        collapseBtn.classList.add('ariaLabel'); collapseBtn.setAttribute('aria-label', '折叠分组');
         collapseBtn.style.cssText = `
             padding: 2px;
             min-width: auto;
@@ -8501,13 +8501,13 @@ export class ProjectKanbanView {
         // 设置初始显示状态
         groupTasksContainer.style.display = isCollapsed ? 'none' : 'block';
         collapseBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#icon${isCollapsed ? 'Right' : 'Down'}"></use></svg>`;
-        collapseBtn.title = isCollapsed ? '展开分组' : '折叠分组';
+        collapseBtn.classList.add('ariaLabel'); collapseBtn.setAttribute('aria-label', isCollapsed ? '展开分组' : '折叠分组');
 
         collapseBtn.addEventListener('click', () => {
             isCollapsed = !isCollapsed;
             groupTasksContainer.style.display = isCollapsed ? 'none' : 'block';
             collapseBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#icon${isCollapsed ? 'Right' : 'Down'}"></use></svg>`;
-            collapseBtn.title = isCollapsed ? '展开分组' : '折叠分组';
+            collapseBtn.classList.add('ariaLabel'); collapseBtn.setAttribute('aria-label', isCollapsed ? '展开分组' : '折叠分组');
 
             // 更新持久化状态
             if (isCollapsed) {
@@ -8708,7 +8708,7 @@ export class ProjectKanbanView {
             const addTaskBtn = document.createElement('button');
             addTaskBtn.className = 'b3-button b3-button--text';
             addTaskBtn.style.cssText = 'padding: 2px; margin-left: 2px;';
-            addTaskBtn.title = i18n('newTask');
+            addTaskBtn.classList.add('ariaLabel'); addTaskBtn.setAttribute('aria-label', i18n('newTask'));
             addTaskBtn.innerHTML = `<svg style="width: 14px; height: 14px;"><use xlink:href="#iconAdd"></use></svg>`;
             addTaskBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -8720,7 +8720,7 @@ export class ProjectKanbanView {
             const pasteTaskBtn = document.createElement('button');
             pasteTaskBtn.className = 'b3-button b3-button--text';
             pasteTaskBtn.style.cssText = 'padding: 2px; margin-left: 2px;';
-            pasteTaskBtn.title = i18n('pasteNew');
+            pasteTaskBtn.classList.add('ariaLabel'); pasteTaskBtn.setAttribute('aria-label', i18n('pasteNew'));
             pasteTaskBtn.innerHTML = `<svg style="width: 14px; height: 14px;"><use xlink:href="#iconPaste"></use></svg>`;
             pasteTaskBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -8746,7 +8746,7 @@ export class ProjectKanbanView {
         const collapseBtn = document.createElement('button');
         collapseBtn.className = 'b3-button b3-button--text custom-group-collapse-btn';
         collapseBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#icon${isCollapsedDefault ? 'Right' : 'Down'}"></use></svg>`;
-        collapseBtn.title = isCollapsedDefault ? '展开分组' : '折叠分组';
+        collapseBtn.classList.add('ariaLabel'); collapseBtn.setAttribute('aria-label', isCollapsedDefault ? '展开分组' : '折叠分组');
         collapseBtn.style.cssText = `
             padding: 2px;
             min-width: auto;
@@ -8769,13 +8769,13 @@ export class ProjectKanbanView {
         // 设置初始效果
         groupTasksContainer.style.display = isCollapsed ? 'none' : 'block';
         collapseBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#icon${isCollapsed ? 'Right' : 'Down'}"></use></svg>`;
-        collapseBtn.title = isCollapsed ? '展开分组' : '折叠分组';
+        collapseBtn.classList.add('ariaLabel'); collapseBtn.setAttribute('aria-label', isCollapsed ? '展开分组' : '折叠分组');
 
         collapseBtn.addEventListener('click', () => {
             isCollapsed = !isCollapsed;
             groupTasksContainer.style.display = isCollapsed ? 'none' : 'block';
             collapseBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#icon${isCollapsed ? 'Right' : 'Down'}"></use></svg>`;
-            collapseBtn.title = isCollapsed ? '展开分组' : '折叠分组';
+            collapseBtn.classList.add('ariaLabel'); collapseBtn.setAttribute('aria-label', isCollapsed ? '展开分组' : '折叠分组');
 
             // 更新持久化状态
             if (isCollapsed) {
@@ -8986,7 +8986,7 @@ export class ProjectKanbanView {
             const collapseBtn = document.createElement('button');
             collapseBtn.className = 'b3-button b3-button--text kanban-task-collapse-btn';
             collapseBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#icon${isCollapsed ? 'Right' : 'Down'}"></use></svg>`;
-            collapseBtn.title = isCollapsed ? i18n('expandSubtasks') : i18n('collapseSubtasks');
+            collapseBtn.classList.add('ariaLabel'); collapseBtn.setAttribute('aria-label', isCollapsed ? i18n('expandSubtasks') : i18n('collapseSubtasks'));
             collapseBtn.addEventListener('click', async (e) => {
                 e.stopPropagation();
 
@@ -9023,10 +9023,10 @@ export class ProjectKanbanView {
             checkboxEl.type = 'checkbox';
             checkboxEl.className = 'kanban-task-checkbox';
             checkboxEl.checked = task.completed;
-            checkboxEl.title = '点击完成/取消完成任务';
+            checkboxEl.classList.add('ariaLabel'); checkboxEl.setAttribute('aria-label', '点击完成/取消完成任务');
             if (task.isSubscribed) {
                 checkboxEl.disabled = true;
-                checkboxEl.title = i18n("subscribedTaskReadOnly") || "订阅任务（只读）";
+                checkboxEl.classList.add('ariaLabel'); checkboxEl.setAttribute('aria-label', i18n("subscribedTaskReadOnly") || "订阅任务（只读）");
             } else {
                 checkboxEl.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -9074,7 +9074,7 @@ export class ProjectKanbanView {
                         text-overflow: ellipsis;
                         white-space: nowrap;
                     `;
-                    parentTitle.title = i18n('parentTask') + ': ' + (parentTask.title || i18n('noContentHint'));
+                    parentTitle.classList.add('ariaLabel'); parentTitle.setAttribute('aria-label', i18n('parentTask') + ': ' + (parentTask.title || i18n('noContentHint')));
 
                     // 如果父任务有绑定块，可以点击跳转
                     if (parentTask.blockId || parentTask.docId) {
@@ -9139,7 +9139,7 @@ export class ProjectKanbanView {
         }
 
         titleEl.textContent = task.title || i18n('noContentHint');
-        titleEl.title = (task.blockId || task.docId) ? i18n('clickToOpenBoundBlock', { title: task.title || i18n('noContentHint') }) : (task.title || i18n('noContentHint'));
+        titleEl.classList.add('ariaLabel'); titleEl.setAttribute('aria-label', (task.blockId || task.docId) ? i18n('clickToOpenBoundBlock', { title: task.title || i18n('noContentHint') }) : (task.title || i18n('noContentHint')));
 
         // 如果有子任务，添加数量指示器（根据设置过滤已完成的子任务）
         const visibleChildTasks = this.showCompletedSubtasks ? childTasks : childTasks.filter(t => !t.completed);
@@ -9147,7 +9147,7 @@ export class ProjectKanbanView {
             const subtaskIndicator = document.createElement('span');
             subtaskIndicator.className = 'subtask-indicator';
             subtaskIndicator.textContent = ` (${visibleChildTasks.length})`;
-            subtaskIndicator.title = i18n('containsNSubtasks', { count: String(visibleChildTasks.length) });
+            subtaskIndicator.classList.add('ariaLabel'); subtaskIndicator.setAttribute('aria-label', i18n('containsNSubtasks', { count: String(visibleChildTasks.length) }));
             subtaskIndicator.style.cssText = `
                 font-size: 12px;
                 color: var(--b3-theme-on-surface);
@@ -9167,7 +9167,7 @@ export class ProjectKanbanView {
             urlIcon.className = 'kanban-task-url-icon';
             urlIcon.href = task.url;
             urlIcon.target = '_blank';
-            urlIcon.title = i18n("openUrl") + ': ' + task.url;
+            urlIcon.classList.add('ariaLabel'); urlIcon.setAttribute('aria-label', i18n("openUrl") + ': ' + task.url);
             urlIcon.innerHTML = '<svg style="width: 14px; height: 14px;"><use xlink:href="#iconLink"></use></svg>';
             urlIcon.style.cssText = 'color: var(--b3-theme-primary); cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; flex-shrink: 0;';
             urlIcon.addEventListener('click', (e) => {
@@ -9221,7 +9221,7 @@ export class ProjectKanbanView {
             if (task.repeat?.enabled || task.isRepeatInstance) {
                 const repeatIcon = document.createElement('span');
                 repeatIcon.textContent = '🔄';
-                repeatIcon.title = task.repeat?.enabled ? getRepeatDescription(task.repeat) : '周期事件实例';
+                repeatIcon.classList.add('ariaLabel'); repeatIcon.setAttribute('aria-label', task.repeat?.enabled ? getRepeatDescription(task.repeat) : '周期事件实例');
                 repeatIcon.style.cssText = 'cursor: help;';
                 dateEl.appendChild(repeatIcon);
             }
@@ -9555,7 +9555,7 @@ export class ProjectKanbanView {
                                 font-weight: 500;
                             `;
                             tagEl.textContent = `#${tag.name}`;
-                            tagEl.title = tag.name;
+                            tagEl.classList.add('ariaLabel'); tagEl.setAttribute('aria-label', tag.name);
                             tagsContainer.appendChild(tagEl);
                         }
                     });
@@ -9592,7 +9592,7 @@ export class ProjectKanbanView {
             const extraCount = '';
 
             // 预计番茄时长（第一行）
-            const estimatedLine = task.estimatedPomodoroDuration ? `<span title='预计番茄时长'>预计: ${task.estimatedPomodoroDuration}</span>` : '';
+            const estimatedLine = task.estimatedPomodoroDuration ? `<span class="ariaLabel" aria-label='预计番茄时长'>预计: ${task.estimatedPomodoroDuration}</span>` : '';
 
             // 实际番茄钟数量和专注时长（第二行）
             let actualLine = '';
@@ -9606,17 +9606,17 @@ export class ProjectKanbanView {
                 const instanceFocusText = focusMinutes > 0 ? ` ⏱ ${formatMinutesToString(focusMinutes)}` : '';
 
                 actualLine = `<div style="margin-top:${estimatedLine ? '6px' : '0'}">
-                    <div title="系列累计番茄钟: ${repeatingTotal}">
+                    <div class="ariaLabel" aria-label="系列累计番茄钟: ${repeatingTotal}">
                         <span>系列: 🍅 ${repeatingTotal}</span>
                         <span style="margin-left:8px; opacity:0.9;">${repeatingFocusText}</span>
                     </div>
-                    <div title="本实例番茄钟: ${instanceCount}" style="margin-top:4px; opacity:0.95;">
+                    <div class="ariaLabel" aria-label="本实例番茄钟: ${instanceCount}" style="margin-top:4px; opacity:0.95;">
                         <span>本次: 🍅 ${instanceCount}</span>
                         <span style="margin-left:8px; opacity:0.9;">${instanceFocusText}</span>
                     </div>
                  </div>`;
             } else {
-                actualLine = (task.pomodoroCount > 0 || focusMinutes > 0) ? `<div style="margin-top:${estimatedLine ? '6px' : '0'}"><span title="完成的番茄钟数量: ${task.pomodoroCount}">总共：${tomatoEmojis}${extraCount}</span><span title="总专注时长: ${focusMinutes} 分钟" style="margin-left:8px; opacity:0.9;">${focusText}</span></div>` : '';
+                actualLine = (task.pomodoroCount > 0 || focusMinutes > 0) ? `<div style="margin-top:${estimatedLine ? '6px' : '0'}"><span class="ariaLabel" aria-label="完成的番茄钟数量: ${task.pomodoroCount}">总共：${tomatoEmojis}${extraCount}</span><span class="ariaLabel" aria-label="总专注时长: ${focusMinutes} 分钟" style="margin-left:8px; opacity:0.9;">${focusText}</span></div>` : '';
             }
 
             pomodoroDisplay.innerHTML = `${estimatedLine}${actualLine}`;
@@ -10864,7 +10864,7 @@ export class ProjectKanbanView {
                                 overflow: hidden;
                                 text-overflow: ellipsis;
                                 white-space: nowrap;
-                            " title="${tag.name}">#${tag.name}</span>
+                            " class="ariaLabel" aria-label="${tag.name}">#${tag.name}</span>
                         </div>
                     `;
 
@@ -13696,7 +13696,7 @@ export class ProjectKanbanView {
                 titleEl.style.color = 'var(--b3-theme-primary)';
                 titleEl.style.textDecoration = 'underline dotted';
                 titleEl.style.cursor = 'pointer';
-                titleEl.title = i18n('clickToOpenBoundBlock', { title: reminder.title || i18n('noContentHint') });
+                titleEl.classList.add('ariaLabel'); titleEl.setAttribute('aria-label', i18n('clickToOpenBoundBlock', { title: reminder.title || i18n('noContentHint') }));
 
                 const newTitleEl = titleEl.cloneNode(true) as HTMLElement;
                 newTitleEl.addEventListener('click', (e) => {
@@ -16846,13 +16846,13 @@ export class ProjectKanbanView {
                             <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                                 <div style="display: flex; align-items: center; gap: 8px; flex: 1 1 140px; min-width: 120px;">
                                     <input type="date" id="batchStartDate" class="b3-text-field" max="9999-12-31" style="flex: 1; min-width: 0;" lang="${langTag}">
-                                    <button type="button" id="batchClearStartDateBtn" class="b3-button b3-button--outline" title="${i18n('clearDate') || '清除日期'}" style="padding: 4px 8px; font-size: 12px; flex: 0 0 auto;">
+                                    <button type="button" id="batchClearStartDateBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n('clearDate') || '清除日期'}" style="padding: 4px 8px; font-size: 12px; flex: 0 0 auto;">
                                         <svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
                                     </button>
                                 </div>
                                 <div style="display: flex; align-items: center; gap: 8px; flex: 0 0 auto; white-space: nowrap; min-width: 110px; margin-left: auto;">
                                     <input type="time" id="batchStartTime" class="b3-text-field" style="flex: 0 0 auto; min-width: 100px;" lang="${langTag}">
-                                    <button type="button" id="batchClearStartTimeBtn" class="b3-button b3-button--outline" title="${i18n('clearTime') || '清除时间'}" style="padding: 4px 8px; font-size: 12px;">
+                                    <button type="button" id="batchClearStartTimeBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n('clearTime') || '清除时间'}" style="padding: 4px 8px; font-size: 12px;">
                                         <svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
                                     </button>
                                 </div>
@@ -16865,13 +16865,13 @@ export class ProjectKanbanView {
                         <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                             <div style="display: flex; align-items: center; gap: 8px; flex: 1 1 140px; min-width: 120px;">
                                 <input type="date" id="batchEndDate" class="b3-text-field" placeholder="${i18n('endDateOptional') || '结束日期（可选）'}" max="9999-12-31" style="flex: 1; min-width: 0;" lang="${langTag}">
-                                <button type="button" id="batchClearEndDateBtn" class="b3-button b3-button--outline" title="${i18n('clearDate') || '清除日期'}" style="padding: 4px 8px; font-size: 12px; flex: 0 0 auto;">
+                                <button type="button" id="batchClearEndDateBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n('clearDate') || '清除日期'}" style="padding: 4px 8px; font-size: 12px; flex: 0 0 auto;">
                                     <svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
                                 </button>
                             </div>
                             <div style="display: flex; align-items: center; gap: 8px; flex: 0 0 auto; white-space: nowrap; min-width: 110px; margin-left: auto;">
                                 <input type="time" id="batchEndTime" class="b3-text-field" placeholder="${i18n('endTimeOptional') || '结束时间 (可选)'}" style="flex: 0 0 auto; min-width: 100px;" lang="${langTag}">
-                                <button type="button" id="batchClearEndTimeBtn" class="b3-button b3-button--outline" title="${i18n('clearTime') || '清除时间'}" style="padding: 4px 8px; font-size: 12px;">
+                                <button type="button" id="batchClearEndTimeBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n('clearTime') || '清除时间'}" style="padding: 4px 8px; font-size: 12px;">
                                     <svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
                                 </button>
                             </div>

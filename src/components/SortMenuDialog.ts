@@ -1,4 +1,4 @@
-import { Dialog } from "siyuan";
+﻿import { Dialog } from "siyuan";
 import { i18n } from "../pluginInstance";
 import { SortCriterion, AVAILABLE_SORT_METHODS, getSortCriterionName } from "../utils/sortConfig";
 
@@ -133,7 +133,7 @@ export class SortMenuDialog {
             const orderBtn = document.createElement('button');
             orderBtn.className = 'b3-button b3-button--text';
             orderBtn.innerHTML = criterion.order === 'asc' ? '↑' : '↓';
-            orderBtn.title = criterion.order === 'asc' ? (i18n("ascending") || "升序") : (i18n("descending") || "降序");
+            orderBtn.classList.add('ariaLabel'); orderBtn.setAttribute('aria-label', criterion.order === 'asc' ? (i18n("ascending") || "升序") : (i18n("descending") || "降序"));
             orderBtn.style.cssText = 'padding: 4px 8px; font-size: 14px;';
             orderBtn.addEventListener('click', () => {
                 this.toggleOrder(index);
@@ -143,7 +143,7 @@ export class SortMenuDialog {
             const removeBtn = document.createElement('button');
             removeBtn.className = 'b3-button b3-button--text';
             removeBtn.innerHTML = '✕';
-            removeBtn.title = i18n("remove") || "移除";
+            removeBtn.classList.add('ariaLabel'); removeBtn.setAttribute('aria-label', i18n("remove") || "移除");
             removeBtn.style.cssText = 'padding: 4px 8px; color: var(--b3-theme-error);';
             removeBtn.addEventListener('click', () => {
                 this.removeCriterion(index);
@@ -187,7 +187,7 @@ export class SortMenuDialog {
             const orderBtn = document.createElement('button');
             orderBtn.className = 'b3-button b3-button--text';
             orderBtn.innerHTML = criterion.order === 'asc' ? '↑' : '↓';
-            orderBtn.title = criterion.order === 'asc' ? (i18n("ascending") || "升序") : (i18n("descending") || "降序");
+            orderBtn.classList.add('ariaLabel'); orderBtn.setAttribute('aria-label', criterion.order === 'asc' ? (i18n("ascending") || "升序") : (i18n("descending") || "降序"));
             orderBtn.style.cssText = 'padding: 4px 8px; font-size: 14px;';
             orderBtn.addEventListener('click', () => {
                 this.toggleOrder(0);

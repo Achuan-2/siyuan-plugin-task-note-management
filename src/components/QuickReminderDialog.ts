@@ -1,4 +1,4 @@
-import { showMessage, Dialog, platformUtils } from "siyuan";
+﻿import { showMessage, Dialog, platformUtils } from "siyuan";
 import { getBlockByID, getBlockDOM, refreshSql, updateBindBlockAtrrs, updateBlock } from "../api";
 import { compareDateStrings, getLogicalDateString, autoDetectDateTimeFromTitle } from "../utils/dateUtils";
 import { CategoryManager } from "../utils/categoryManager";
@@ -1732,7 +1732,7 @@ export class QuickReminderDialog {
                             <label class="b3-form__label">${i18n("parentTask")}</label>
                             <div style="display: flex; gap: 8px; align-items: center;">
                                 <input type="text" id="quickParentTaskDisplay" class="b3-text-field" readonly style="flex: 1; background: var(--b3-theme-background-light); cursor: default;" placeholder="${i18n("noParentTask")}">
-                                <button type="button" id="quickViewParentBtn" class="b3-button b3-button--outline" title="${i18n("viewParentTask")}" style="display: none;">
+                                <button type="button" id="quickViewParentBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("viewParentTask")}" style="display: none;">
                                     <svg class="b3-button__icon"><use xlink:href="#iconEye"></use></svg>
                                 </button>
                             </div>
@@ -1744,7 +1744,7 @@ export class QuickReminderDialog {
                             <label class="b3-form__label">${i18n("eventTitle")}</label>
                             <div class="title-input-container" style="display: flex; gap: 8px; align-items: flex-start;">
                                 <textarea id="quickReminderTitle" class="b3-text-field" rows="1" placeholder="${i18n("enterReminderTitle")}" spellcheck="false" style="flex: 1; max-height: 200px; resize: vertical; overflow-y: auto; padding: 4px 8px; line-height: 1.5;" required autofocus></textarea>
-                                <button type="button" id="quickNlBtn" class="b3-button b3-button--outline" title="${i18n("smartDateRecognition")}">
+                                <button type="button" id="quickNlBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("smartDateRecognition")}">
                                     ✨
                                 </button>
                             </div>
@@ -1770,13 +1770,13 @@ export class QuickReminderDialog {
                                     <span style="font-size: 13px; color: var(--b3-theme-on-surface); white-space: nowrap; flex: 0 0 auto;">${i18n("startLabel")}</span>
                                     <div style="display: flex; align-items: center; gap: 8px; flex: 1 1 140px; min-width: 120px;">
                                         <input type="date" id="quickReminderDate" class="b3-text-field" value="${this.initialDate || ''}" max="9999-12-31" style="flex: 1; min-width: 0;" lang="${langTag}">
-                                        <button type="button" id="quickClearStartDateBtn" class="b3-button b3-button--outline" title="${i18n("clearDate")}" style="padding: 4px 8px; font-size: 12px; flex: 0 0 auto;">
+                                        <button type="button" id="quickClearStartDateBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("clearDate")}" style="padding: 4px 8px; font-size: 12px; flex: 0 0 auto;">
                                             <svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
                                         </button>
                                     </div>
                                     <div style="display: flex; align-items: center; gap: 8px; flex: 0 0 auto; white-space: nowrap; min-width: 110px;margin-left: auto;">
                                         <input type="time" id="quickReminderTime" class="b3-text-field" value="${this.initialTime || ''}" style="flex: 0 0 auto; min-width: 100px;" lang="${langTag}">
-                                        <button type="button" id="quickClearStartTimeBtn" class="b3-button b3-button--outline" title="${i18n("clearTime")}" style="padding: 4px 8px; font-size: 12px;">
+                                        <button type="button" id="quickClearStartTimeBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("clearTime")}" style="padding: 4px 8px; font-size: 12px;">
                                             <svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
                                         </button>
                                     </div>
@@ -1791,14 +1791,14 @@ export class QuickReminderDialog {
                                 <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                                     <span style="font-size: 13px; color: var(--b3-theme-on-surface); white-space: nowrap; flex: 0 0 auto;">${i18n("endLabel")}</span>
                                     <div style="display: flex; align-items: center; gap: 8px; flex: 1 1 140px; min-width: 120px;">
-                                        <input type="date" id="quickReminderEndDate" class="b3-text-field" placeholder="${i18n("endDateOptional")}" title="${i18n("spanningEventDesc")}" max="9999-12-31" style="flex: 1; min-width: 0;" lang="${langTag}">
-                                        <button type="button" id="quickClearEndDateBtn" class="b3-button b3-button--outline" title="${i18n("clearDate")}" style="padding: 4px 8px; font-size: 12px; flex: 0 0 auto;">
+                                        <input type="date" id="quickReminderEndDate" class="b3-text-field ariaLabel" placeholder="${i18n("endDateOptional")}" aria-label="${i18n("spanningEventDesc")}" max="9999-12-31" style="flex: 1; min-width: 0;" lang="${langTag}">
+                                        <button type="button" id="quickClearEndDateBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("clearDate")}" style="padding: 4px 8px; font-size: 12px; flex: 0 0 auto;">
                                             <svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
                                         </button>
                                     </div>
                                     <div style="display: flex; align-items: center; gap: 8px; flex: 0 0 auto; white-space: nowrap; min-width: 110px;margin-left: auto;">
                                         <input type="time" id="quickReminderEndTime" class="b3-text-field" placeholder="${i18n("endTimeOptional")}" style="flex: 0 0 auto; min-width: 100px;" lang="${langTag}">
-                                        <button type="button" id="quickClearEndTimeBtn" class="b3-button b3-button--outline" title="${i18n("clearTime")}" style="padding: 4px 8px; font-size: 12px;">
+                                        <button type="button" id="quickClearEndTimeBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("clearTime")}" style="padding: 4px 8px; font-size: 12px;">
                                             <svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
                                         </button>
                                     </div>
@@ -1811,10 +1811,10 @@ export class QuickReminderDialog {
                             <label class="b3-form__label">${i18n("completedAt")}</label>
                             <div style="display: flex; gap: 8px; align-items: center;">
                                 <input type="datetime-local" id="quickCompletedTime" class="b3-text-field" style="flex: 1;" lang="${langTag}">
-                                <button type="button" id="quickSetCompletedNowBtn" class="b3-button b3-button--outline" title="${i18n("setToNow")}">
+                                <button type="button" id="quickSetCompletedNowBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("setToNow")}">
                                     <svg class="b3-button__icon"><use xlink:href="#iconClock"></use></svg>
                                 </button>
-                                <button type="button" id="quickClearCompletedBtn" class="b3-button b3-button--outline" title="${i18n("clearCompletedTime")}">
+                                <button type="button" id="quickClearCompletedBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("clearCompletedTime")}">
                                     <svg class="b3-button__icon"><use xlink:href="#iconTrashcan"></use></svg>
                                 </button>
                             </div>
@@ -1855,7 +1855,7 @@ export class QuickReminderDialog {
                                     </div>
                                     <input type="datetime-local" id="quickCustomReminderTime" class="b3-text-field" style="flex: 1 1 140px; min-width: 0;" lang="${langTag}">
                                     <input type="text" id="quickCustomReminderNote" class="b3-text-field" placeholder="${i18n("note")}" style="flex: 1 1 80px; min-width: 0;" spellcheck="false">
-                                    <button type="button" id="quickCancelCustomTimeBtn" class="b3-button b3-button--outline" title="${i18n("cancel")}" style="padding: 4px 8px; flex: 0 0 auto;">
+                                    <button type="button" id="quickCancelCustomTimeBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("cancel")}" style="padding: 4px 8px; flex: 0 0 auto;">
                                         <svg class="b3-button__icon"><use xlink:href="#iconClose"></use></svg>
                                     </button>
                                 </div>
@@ -1878,10 +1878,10 @@ export class QuickReminderDialog {
                             <label class="b3-form__label">${i18n("bindToBlock") || '块或文档 ID'}</label>
                             <div style="display: flex; gap: 8px; flex-wrap: wrap; ">
                                 <input type="text" id="quickBlockInput" class="b3-text-field" value="${this.defaultBlockId || ''}" placeholder="${i18n("enterBlockId")}" style="flex: 1;" spellcheck="false">
-                                <button type="button" id="quickCopyBlockRefBtn" class="b3-button b3-button--outline" title="${i18n("copyBlockRef")}">
+                                <button type="button" id="quickCopyBlockRefBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("copyBlockRef")}">
                                     <svg class="b3-button__icon"><use xlink:href="#iconCopy"></use></svg>
                                 </button>
-                                <button type="button" id="quickCreateDocBtn" class="b3-button b3-button--outline" title="${i18n("createNewDocument")}">
+                                <button type="button" id="quickCreateDocBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("createNewDocument")}">
                                     <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
                                 </button>
                             </div>
@@ -1901,7 +1901,7 @@ export class QuickReminderDialog {
                             <label class="b3-form__label">${i18n("bindUrl")}</label>
                             <div style="display: flex; gap: 8px;">
                                 <input type="url" id="quickUrlInput" class="b3-text-field" placeholder="${i18n("enterUrl")}" style="flex: 1;" spellcheck="false">
-                                <button type="button" id="quickOpenUrlBtn" class="b3-button b3-button--outline" title="${i18n("openUrl") || '在浏览器中打开'}">
+                                <button type="button" id="quickOpenUrlBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("openUrl") || '在浏览器中打开'}">
                                     <svg class="b3-button__icon"><use xlink:href="#iconLink"></use></svg>
                                 </button>
                             </div>
@@ -1945,7 +1945,7 @@ export class QuickReminderDialog {
 
                         <div class="b3-form__group">
                             <label class="b3-form__label">${i18n("eventCategory")}
-                                <button type="button" id="quickManageCategoriesBtn" class="b3-button b3-button--outline" title="${i18n("manageCategories")}">
+                                <button type="button" id="quickManageCategoriesBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("manageCategories")}">
                                     <svg class="b3-button__icon"><use xlink:href="#iconSettings"></use></svg>
                                 </button>
                             </label>
@@ -2196,7 +2196,10 @@ export class QuickReminderDialog {
                 .use($view(imageSchema.node, () => (node, view, getPos) => {
                     const dom = document.createElement("img");
                     if (node.attrs.alt) dom.alt = node.attrs.alt;
-                    if (node.attrs.title) dom.title = node.attrs.title;
+                    if (node.attrs.title) {
+                        dom.classList.add('ariaLabel');
+                        dom.setAttribute('aria-label', node.attrs.title);
+                    }
                     dom.style.maxWidth = "100%";
 
                     const src = node.attrs.src;
@@ -2233,8 +2236,10 @@ export class QuickReminderDialog {
                                 dom.src = newSrc;
                             }
                             if (updatedNode.attrs.alt) dom.alt = updatedNode.attrs.alt;
-                            if (updatedNode.attrs.title) dom.title = updatedNode.attrs.title;
-                            else dom.removeAttribute('title');
+                            if (updatedNode.attrs.title) {
+                                dom.classList.add('ariaLabel');
+                                dom.setAttribute('aria-label', updatedNode.attrs.title);
+                            } else dom.removeAttribute('title');
                             return true;
                         }
                     };
@@ -2720,7 +2725,7 @@ export class QuickReminderDialog {
                 `;
 
                 tagEl.textContent = `#${tag.name}`;
-                tagEl.title = tag.name;
+                tagEl.classList.add('ariaLabel'); tagEl.setAttribute('aria-label', tag.name);
 
                 // 点击切换选中状态
                 tagEl.addEventListener('click', () => {
@@ -2997,7 +3002,7 @@ export class QuickReminderDialog {
 
             if (addPresetBtn) {
                 addPresetBtn.disabled = true;
-                addPresetBtn.title = '重复任务请直接设置提醒日与时间';
+                addPresetBtn.classList.add('ariaLabel'); addPresetBtn.setAttribute('aria-label', '重复任务请直接设置提醒日与时间');
             }
         } else {
             customReminderInput.type = 'datetime-local';
@@ -3009,7 +3014,7 @@ export class QuickReminderDialog {
             beforeDaysInput.value = '1';
             if (addPresetBtn) {
                 addPresetBtn.disabled = false;
-                addPresetBtn.title = '';
+                addPresetBtn.classList.add('ariaLabel'); addPresetBtn.setAttribute('aria-label', '');
             }
         }
     }
@@ -3111,7 +3116,7 @@ export class QuickReminderDialog {
             removeBtn.type = 'button';
             removeBtn.className = 'b3-button b3-button--outline';
             removeBtn.style.cssText = 'flex: 0 0 auto; padding: 4px 8px; font-size: 12px;';
-            removeBtn.title = i18n("remove");
+            removeBtn.classList.add('ariaLabel'); removeBtn.setAttribute('aria-label', i18n("remove"));
             removeBtn.innerHTML = '<svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>';
 
             // 绑定事件：更新模型并避免空时间项
@@ -5693,14 +5698,14 @@ export class QuickReminderDialog {
                 // 显示父任务标题
                 const displayTitle = instanceDate ? `${parentTask.title} (${instanceDate})` : (parentTask.title || '(无标题)');
                 parentTaskDisplay.value = displayTitle;
-                parentTaskDisplay.title = instanceDate ? `父任务实例: ${displayTitle}` : `父任务: ${displayTitle}`;
+                parentTaskDisplay.classList.add('ariaLabel'); parentTaskDisplay.setAttribute('aria-label', instanceDate ? `父任务实例: ${displayTitle}` : `父任务: ${displayTitle}`);
 
                 // 显示查看按钮
                 viewParentBtn.style.display = '';
             } else {
                 // 父任务不存在
                 parentTaskDisplay.value = '(父任务不存在)';
-                parentTaskDisplay.title = '父任务已被删除或不存在';
+                parentTaskDisplay.classList.add('ariaLabel'); parentTaskDisplay.setAttribute('aria-label', '父任务已被删除或不存在');
                 viewParentBtn.style.display = 'none';
             }
         } catch (error) {

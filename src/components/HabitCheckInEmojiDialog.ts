@@ -1,4 +1,4 @@
-import { Dialog, openEmoji, showMessage, confirm } from "siyuan";
+﻿import { Dialog, openEmoji, showMessage, confirm } from "siyuan";
 import { Habit, HabitCheckInEmoji } from "./HabitPanel";
 import { i18n } from "../pluginInstance";
 
@@ -169,7 +169,7 @@ export class HabitCheckInEmojiDialog {
         renameBtn.className = "b3-button b3-button--text";
         renameBtn.style.cssText = "padding: 2px 4px; margin-left: auto;";
         renameBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconEdit"></use></svg>';
-        renameBtn.title = i18n("renameGroup") || "重命名分组";
+        renameBtn.classList.add('ariaLabel'); renameBtn.setAttribute('aria-label', i18n("renameGroup") || "重命名分组");
         renameBtn.addEventListener("click", (event) => {
             event.stopPropagation();
             this.renameGroup(groupName).catch((error) => {
@@ -181,7 +181,7 @@ export class HabitCheckInEmojiDialog {
         delBtn.className = "b3-button b3-button--text";
         delBtn.style.cssText = "padding: 2px 4px;";
         delBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconTrashcan"></use></svg>';
-        delBtn.title = i18n("deleteGroup") || "删除分组";
+        delBtn.classList.add('ariaLabel'); delBtn.setAttribute('aria-label', i18n("deleteGroup") || "删除分组");
         delBtn.addEventListener("click", (event) => {
             event.stopPropagation();
             this.deleteGroup(groupName);
@@ -202,7 +202,7 @@ export class HabitCheckInEmojiDialog {
                 const removeBtn = document.createElement("button");
                 removeBtn.className = "b3-button b3-button--text";
                 removeBtn.style.cssText = "position:absolute; right:2px; top:50%; transform:translateY(-50%); width:16px; height:16px; min-width:16px; padding:0; border-radius:50%; display:none; color:var(--b3-theme-on-surface-light);";
-                removeBtn.title = i18n("removeFromGroup") || "移出分组";
+                removeBtn.classList.add('ariaLabel'); removeBtn.setAttribute('aria-label', i18n("removeFromGroup") || "移出分组");
                 removeBtn.textContent = "×";
                 removeBtn.addEventListener("click", (event) => {
                     event.preventDefault();
@@ -333,7 +333,7 @@ export class HabitCheckInEmojiDialog {
             item.style.backgroundColor = "var(--b3-theme-surface)";
         });
 
-        item.title = i18n("dragToSortAndGroup") || "拖动可排序，拖到上方分组可归组";
+        item.classList.add('ariaLabel'); item.setAttribute('aria-label', i18n("dragToSortAndGroup") || "拖动可排序，拖到上方分组可归组");
 
         const emojiCircle = document.createElement("div");
         emojiCircle.style.cssText = `
@@ -345,11 +345,14 @@ export class HabitCheckInEmojiDialog {
             display: flex;
             align-items: center;
             justify-content: center;
+            text-align: center;
             font-size: 20px;
+            line-height: 1;
             cursor: pointer;
             transition: all 0.2s;
             flex-shrink: 0;
             user-select: none;
+            overflow: hidden;
         `;
         emojiCircle.textContent = emojiConfig.emoji;
         emojiCircle.addEventListener("mouseenter", () => {
@@ -443,7 +446,7 @@ export class HabitCheckInEmojiDialog {
         const deleteBtn = document.createElement("button");
         deleteBtn.className = "b3-button b3-button--text";
         deleteBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconTrashcan"></use></svg>';
-        deleteBtn.title = i18n("delete") || "删除";
+        deleteBtn.classList.add('ariaLabel'); deleteBtn.setAttribute('aria-label', i18n("delete") || "删除");
         deleteBtn.style.cssText = `
             padding: 6px;
             width: 32px;

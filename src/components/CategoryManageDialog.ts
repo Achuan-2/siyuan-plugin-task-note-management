@@ -1,4 +1,4 @@
-import { Dialog, showMessage, confirm, openEmoji } from "siyuan";
+﻿import { Dialog, showMessage, confirm, openEmoji } from "siyuan";
 import { CategoryManager, Category } from "../utils/categoryManager";
 import { i18n } from "../pluginInstance";
 export class CategoryManageDialog {
@@ -258,7 +258,7 @@ export class CategoryManageDialog {
         categoryEl.draggable = true;
         categoryEl.dataset.categoryId = category.id;
         categoryEl.innerHTML = `
-            <div class="category-drag-handle" title="拖拽排序"></div>
+            <div class="category-drag-handle ariaLabel" aria-label="拖拽排序"></div>
             <div class="category-info">
                 <div class="category-visual">
                     <div class="category-icon" style="background-color: ${category.color};">
@@ -269,18 +269,18 @@ export class CategoryManageDialog {
                 <div class="category-name">${category.name}</div>
             </div>
             <div class="category-actions">
-                <button class="b3-button b3-button--outline category-edit-btn" data-action="edit" data-id="${category.id}" title="编辑分类">
+                <button class="b3-button b3-button--outline category-edit-btn ariaLabel" data-action="edit" data-id="${category.id}" aria-label="编辑分类">
                     <svg class="b3-button__icon"><use xlink:href="#iconEdit"></use></svg>
                 </button>
-                <button class="b3-button b3-button--outline category-delete-btn" data-action="delete" data-id="${category.id}" title="删除分类">
+                <button class="b3-button b3-button--outline category-delete-btn ariaLabel" data-action="delete" data-id="${category.id}" aria-label="删除分类">
                     <svg class="b3-button__icon"><use xlink:href="#iconTrashcan"></use></svg>
                 </button>
             </div>
             <div class="category-move-actions">
-                <button class="b3-button b3-button--text category-move-up-btn" data-action="moveUp" data-id="${category.id}" title="上移">
+                <button class="b3-button b3-button--text category-move-up-btn ariaLabel" data-action="moveUp" data-id="${category.id}" aria-label="上移">
                     <svg class="b3-button__icon"><use xlink:href="#iconUp"></use></svg>
                 </button>
-                <button class="b3-button b3-button--text category-move-down-btn" data-action="moveDown" data-id="${category.id}" title="下移">
+                <button class="b3-button b3-button--text category-move-down-btn ariaLabel" data-action="moveDown" data-id="${category.id}" aria-label="下移">
                     <svg class="b3-button__icon"><use xlink:href="#iconDown"></use></svg>
                 </button>
             </div>

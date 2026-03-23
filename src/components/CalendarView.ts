@@ -1,4 +1,4 @@
-import { Calendar } from '@fullcalendar/core';
+﻿import { Calendar } from '@fullcalendar/core';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import multiMonthPlugin from '@fullcalendar/multimonth';
@@ -408,7 +408,7 @@ export class CalendarView {
 
             const resizer = document.createElement('div');
             resizer.className = 'fc-allday-resizer';
-            resizer.title = i18n("dragToResize") || "拖动调整高度";
+            resizer.classList.add('ariaLabel'); resizer.setAttribute('aria-label', i18n("dragToResize") || "拖动调整高度");
             harness.appendChild(resizer);
 
             resizer.addEventListener('mousedown', (e: MouseEvent) => {
@@ -538,7 +538,7 @@ export class CalendarView {
             openTabBtn.className = 'b3-button b3-button--outline';
             openTabBtn.style.padding = '4px 8px';
             openTabBtn.innerHTML = '<svg class="b3-button__icon" style="margin-right: 0;"><use xlink:href="#iconOpen"></use></svg>';
-            openTabBtn.title = i18n("openCalendarInTab") || "在标签页中打开";
+            openTabBtn.classList.add('ariaLabel'); openTabBtn.setAttribute('aria-label', i18n("openCalendarInTab") || "在标签页中打开");
             openTabBtn.addEventListener('click', () => {
                 this.plugin.openCalendarTab();
             });
@@ -549,7 +549,7 @@ export class CalendarView {
             toggleBtn.className = 'b3-button b3-button--outline reminder-calendar-toolbar-toggle';
             toggleBtn.style.padding = '4px 8px';
             toggleBtn.innerHTML = '<svg class="b3-button__icon" style="margin-right: 0;"><use xlink:href="#iconDown"></use></svg>';
-            toggleBtn.title = i18n("toggleToolbar") || "展开/收起工具栏";
+            toggleBtn.classList.add('ariaLabel'); toggleBtn.setAttribute('aria-label', i18n("toggleToolbar") || "展开/收起工具栏");
             toolbar.appendChild(toggleBtn);
 
             // 可折叠内容容器
@@ -828,7 +828,7 @@ export class CalendarView {
         this.pomodoroToggleBtn.style.marginRight = '8px';
         this.pomodoroToggleBtn.style.display = 'none'; // Initially hidden, logic controls visibility based on view
         this.pomodoroToggleBtn.innerHTML = '🍅';
-        this.pomodoroToggleBtn.title = i18n("togglePomodoroRecords") || "显示/隐藏番茄专注记录";
+        this.pomodoroToggleBtn.classList.add('ariaLabel'); this.pomodoroToggleBtn.setAttribute('aria-label', i18n("togglePomodoroRecords") || "显示/隐藏番茄专注记录");
         this.pomodoroToggleBtn.onclick = async () => {
             this.showPomodoro = !this.showPomodoro;
             await this.calendarConfigManager.setShowPomodoro(this.showPomodoro);
@@ -951,7 +951,7 @@ export class CalendarView {
         displaySettingsButton.className = 'b3-button b3-button--outline';
         displaySettingsButton.style.padding = '6px';
         displaySettingsButton.innerHTML = '<svg class="b3-button__icon" style="margin-right: 0;"><use xlink:href="#iconEye"></use></svg>';
-        displaySettingsButton.title = i18n("displaySettings") || "显示设置";
+        displaySettingsButton.classList.add('ariaLabel'); displaySettingsButton.setAttribute('aria-label', i18n("displaySettings") || "显示设置");
         displaySettingsContainer.appendChild(displaySettingsButton);
 
         const displaySettingsDropdown = document.createElement('div');
@@ -1268,7 +1268,7 @@ export class CalendarView {
         refreshBtn.className = 'b3-button b3-button--outline';
         refreshBtn.style.padding = '6px';
         refreshBtn.innerHTML = '<svg class="b3-button__icon" style="margin-right: 0;"><use xlink:href="#iconRefresh"></use></svg>';
-        refreshBtn.title = i18n("refresh");
+        refreshBtn.classList.add('ariaLabel'); refreshBtn.setAttribute('aria-label', i18n("refresh"));
         refreshBtn.addEventListener('click', async () => {
             refreshBtn.disabled = true;
             try {
@@ -1292,7 +1292,7 @@ export class CalendarView {
             openTaskCalendarBtn.className = 'b3-button b3-button--outline';
             openTaskCalendarBtn.style.padding = '6px';
             openTaskCalendarBtn.innerHTML = '<svg class="b3-button__icon" style="margin-right: 0;"><use xlink:href="#iconCalendar"></use></svg>';
-            openTaskCalendarBtn.title = i18n("calendarView") || "任务日历视图";
+            openTaskCalendarBtn.classList.add('ariaLabel'); openTaskCalendarBtn.setAttribute('aria-label', i18n("calendarView") || "任务日历视图");
             openTaskCalendarBtn.addEventListener('click', () => {
                 this.plugin.openCalendarTab();
             });
@@ -1309,7 +1309,7 @@ export class CalendarView {
             summaryBtn.className = 'b3-button b3-button--outline';
             summaryBtn.style.padding = '6px';
             summaryBtn.innerHTML = '<svg class="b3-button__icon" style="margin-right: 0;"><use xlink:href="#iconFile"></use></svg>';
-            summaryBtn.title = i18n("taskSummary") || "任务摘要";
+            summaryBtn.classList.add('ariaLabel'); summaryBtn.setAttribute('aria-label', i18n("taskSummary") || "任务摘要");
             summaryBtn.addEventListener('click', () => {
                 showStatsDialog(this.plugin, 'summary', this.calendar);
             });
@@ -1317,7 +1317,7 @@ export class CalendarView {
             // 更多按钮（包含管理分类、项目颜色、插件设置）
             const moreBtn = document.createElement('button');
             moreBtn.className = 'b3-button b3-button--outline';
-            moreBtn.title = i18n('more') || '更多';
+            moreBtn.classList.add('ariaLabel'); moreBtn.setAttribute('aria-label', i18n('more') || '更多');
             moreBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconMore"></use></svg>';
             moreBtn.addEventListener('click', (e) => {
                 try {
@@ -1522,7 +1522,7 @@ export class CalendarView {
                             const lunarSpan = document.createElement('span');
                             lunarSpan.className = `day-lunar ${isFestival ? 'festival' : ''}`;
                             lunarSpan.textContent = displayLunar;
-                            lunarSpan.title = isFestival && festivalName ? `${fullLunarDate} ${festivalName}` : fullLunarDate;
+                            lunarSpan.classList.add('ariaLabel'); lunarSpan.setAttribute('aria-label', isFestival && festivalName ? `${fullLunarDate} ${festivalName}` : fullLunarDate);
                             lunarSpan.style.cssText = `${isFestival ? 'color: var(--b3-theme-primary); font-weight: bold;' : 'color: var(--b3-theme-on-surface-light); opacity: 0.8; font-size: 0.9em;'} z-index: 1; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; text-align: right;`;
                             extraInfoWrapper.appendChild(lunarSpan);
                         }
@@ -1532,7 +1532,7 @@ export class CalendarView {
                             const holidaySpan = document.createElement('span');
                             holidaySpan.className = 'day-holiday';
                             holidaySpan.textContent = isWorkday ? i18n('workdayMarker') : i18n('holidayMarker');
-                            holidaySpan.title = typeof holidayName === 'object' ? holidayName.title : holidayName;
+                            holidaySpan.classList.add('ariaLabel'); holidaySpan.setAttribute('aria-label', typeof holidayName === 'object' ? holidayName.title : holidayName);
                             holidaySpan.style.cssText = `background-color: ${isWorkday ? 'var(--b3-theme-error)' : colorWithOpacity("var(--b3-card-success-color)", 0.5)}; color: var(--b3-theme-background); font-size: 0.75em; padding: 2px 4px; border-radius: 50%; cursor: help; font-weight: normal; line-height: 1; flex-shrink: 0;`;
                             extraInfoWrapper.appendChild(holidaySpan);
                         }
@@ -1580,7 +1580,7 @@ export class CalendarView {
                             const lunarSpan = document.createElement('span');
                             lunarSpan.className = `day-header-lunar ${isFestival ? 'festival' : ''}`;
                             lunarSpan.textContent = displayLunar;
-                            lunarSpan.title = isFestival && festivalName ? `${fullLunarDate} ${festivalName}` : fullLunarDate;
+                            lunarSpan.classList.add('ariaLabel'); lunarSpan.setAttribute('aria-label', isFestival && festivalName ? `${fullLunarDate} ${festivalName}` : fullLunarDate);
                             lunarSpan.style.cssText = `font-size: 0.8em; ${isFestival ? 'color: var(--b3-theme-primary);' : 'color: var(--b3-theme-on-surface-light); opacity: 0.8;'} white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex-shrink: 1;`;
                             extraInfoWrapper.appendChild(lunarSpan);
                         }
@@ -1590,7 +1590,7 @@ export class CalendarView {
                             const holidaySpan = document.createElement('span');
                             holidaySpan.className = 'day-header-holiday';
                             holidaySpan.textContent = isWorkday ? i18n('workdayMarker') : i18n('holidayMarker');
-                            holidaySpan.title = typeof holidayName === 'object' ? holidayName.title : holidayName;
+                            holidaySpan.classList.add('ariaLabel'); holidaySpan.setAttribute('aria-label', typeof holidayName === 'object' ? holidayName.title : holidayName);
                             holidaySpan.style.cssText = `background-color: ${isWorkday ? 'var(--b3-theme-error)' : colorWithOpacity("var(--b3-card-success-color)", 0.5)}; color: var(--b3-theme-background); font-size: 0.75em; padding: 2px 4px; border-radius: 50%; cursor: help; font-weight: normal; line-height: 1; flex-shrink: 0;`;
                             extraInfoWrapper.appendChild(holidaySpan);
                         }
@@ -1684,7 +1684,7 @@ export class CalendarView {
                                     const lunarSpan = document.createElement('span');
                                     lunarSpan.className = `day-lunar ${isFestival ? 'festival' : ''}`;
                                     lunarSpan.textContent = displayLunar;
-                                    lunarSpan.title = isFestival && festivalName ? `${fullLunarDate} ${festivalName}` : fullLunarDate;
+                                    lunarSpan.classList.add('ariaLabel'); lunarSpan.setAttribute('aria-label', isFestival && festivalName ? `${fullLunarDate} ${festivalName}` : fullLunarDate);
                                     lunarSpan.style.cssText = `${isFestival ? 'color: var(--b3-theme-primary); font-weight: bold;' : 'color: var(--b3-theme-on-surface-light); opacity: 0.8; font-size: 0.9em;'} margin-left: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; max-width: 200px; display: inline-block;`;
                                     textContainer.appendChild(lunarSpan);
                                 }
@@ -1702,7 +1702,7 @@ export class CalendarView {
                                     const holidaySpan = document.createElement('span');
                                     holidaySpan.className = 'day-holiday';
                                     holidaySpan.textContent = isWorkday ? i18n('workdayMarker') : i18n('holidayMarker');
-                                    holidaySpan.title = typeof holidayName === 'object' ? holidayName.title : holidayName;
+                                    holidaySpan.classList.add('ariaLabel'); holidaySpan.setAttribute('aria-label', typeof holidayName === 'object' ? holidayName.title : holidayName);
                                     holidaySpan.style.cssText = `background-color: ${isWorkday ? 'var(--b3-theme-error)' : 'var(--b3-card-success-color)'}; color: #fff; font-size: 0.75em; padding: 2px 4px; border-radius: 4px; cursor: help; font-weight: normal; line-height: 1; margin-left: 8px;`;
                                     textContainer.appendChild(holidaySpan);
                                 }
@@ -1800,7 +1800,7 @@ export class CalendarView {
         const jumpToBtn = calendarEl.querySelector('.fc-jumpTo-button') as HTMLButtonElement;
         if (jumpToBtn) {
             jumpToBtn.innerHTML = '<svg class="b3-button__icon" style="width: 14px; height: 14px; margin-right: 0;"><use xlink:href="#iconForward"></use></svg>';
-            jumpToBtn.title = i18n("jumpToDate") || "跳转到日期";
+            jumpToBtn.classList.add('ariaLabel'); jumpToBtn.setAttribute('aria-label', i18n("jumpToDate") || "跳转到日期");
         }
 
         // Fix fc-more-popover overflow: when the "+N more" popover appears near the right edge,
@@ -3836,9 +3836,9 @@ export class CalendarView {
             const customColor = isHabit ? props.color : null;
             
             subIcon.innerHTML = customIcon || (isHabit ? '🌱' : '🗓');
-            subIcon.title = isHabit
+            subIcon.classList.add('ariaLabel'); subIcon.setAttribute('aria-label', isHabit
                 ? (i18n("habitPanelTitle") || "习惯")
-                : (i18n("subscribedTaskReadOnly") || "订阅任务（只读）");
+                : (i18n("subscribedTaskReadOnly") || "订阅任务（只读）"));
             subIcon.style.width = '14px';
             subIcon.style.height = '14px';
             subIcon.style.display = 'flex';
@@ -3876,7 +3876,7 @@ export class CalendarView {
             textSpan.style.paddingBottom = '2px';
             textSpan.style.borderBottom = `2px dashed currentColor `;
             textSpan.style.cursor = 'pointer';
-            textSpan.title = '已绑定块';
+            textSpan.classList.add('ariaLabel'); textSpan.setAttribute('aria-label', '已绑定块');
 
             let hoverTimeout: number | null = null;
 
@@ -3915,10 +3915,10 @@ export class CalendarView {
             repeatIcon.style.flexShrink = '0';
             if (props.isRepeated) {
                 repeatIcon.innerHTML = '🔄';
-                repeatIcon.title = i18n("repeatInstance");
+                repeatIcon.classList.add('ariaLabel'); repeatIcon.setAttribute('aria-label', i18n("repeatInstance"));
             } else {
                 repeatIcon.innerHTML = '🔁';
-                repeatIcon.title = i18n("repeatSeries");
+                repeatIcon.classList.add('ariaLabel'); repeatIcon.setAttribute('aria-label', i18n("repeatSeries"));
             }
             topRow.appendChild(repeatIcon);
         }
@@ -3961,7 +3961,7 @@ export class CalendarView {
                     const catIcon = document.createElement('span');
                     catIcon.className = 'reminder-event-icon';
                     catIcon.innerHTML = category.icon;
-                    catIcon.title = category.name;
+                    catIcon.classList.add('ariaLabel'); catIcon.setAttribute('aria-label', category.name);
                     indicatorsRow.appendChild(catIcon);
                 }
             });
@@ -7180,7 +7180,7 @@ export class CalendarView {
                 eventObj.allDay = true;
 
                 if (reminder.time) {
-                    eventObj.title = `${reminder.title || i18n("unnamedNote")} (${reminder.time})`;
+                    eventObj.classList.add('ariaLabel'); eventObj.setAttribute('aria-label', `${reminder.title || i18n("unnamedNote")} (${reminder.time})`);
                 }
             }
         } else if (endDate && !reminder.date) {
@@ -7529,7 +7529,7 @@ export class CalendarView {
                 htmlParts.push(
                     `<div style="color: var(--b3-theme-on-background); font-size: 12px; margin-bottom: 6px; display: flex; align-items: center; gap: 4px; text-align: left;">`,
                     `<span>${labelIcon}</span>`,
-                    `<span title="${i18n("belongsToDocument")}">${this.escapeHtml(labelText)}</span>`,
+                    `<span class="ariaLabel" aria-label="${i18n("belongsToDocument")}">${this.escapeHtml(labelText)}</span>`,
                     `</div>`
                 );
             }
@@ -8032,7 +8032,7 @@ export class CalendarView {
             newReminder.endDate = modifiedReminder.nextCycleEndDate;
             newReminder.time = originalReminder.time;
             newReminder.endTime = originalReminder.endTime;
-            newReminder.title = originalReminder.title;
+            newReminder.classList.add('ariaLabel'); newReminder.setAttribute('aria-label', originalReminder.title);
             newReminder.note = originalReminder.note;
             newReminder.priority = originalReminder.priority;
 

@@ -595,9 +595,9 @@
                     </div>
                     <div class="filter-item-actions">
                         <button
-                            class="b3-button b3-button--outline"
+                            class="b3-button b3-button--outline ariaLabel"
                             on:click|stopPropagation={() => deleteFilter(filter)}
-                            title={i18n('deleteFilter')}
+                            aria-label={i18n('deleteFilter')}
                         >
                             <svg class="b3-button__icon">
                                 <use xlink:href="#iconTrashcan"></use>

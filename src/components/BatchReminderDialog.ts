@@ -1,4 +1,4 @@
-import { Dialog, showMessage } from "siyuan";
+﻿import { Dialog, showMessage } from "siyuan";
 import { i18n } from "../pluginInstance";
 import { updateBindBlockAtrrs, getBlockByID } from "../api";
 import { getRepeatDescription } from "../utils/repeatUtils";
@@ -315,7 +315,7 @@ class SmartBatchDialog {
                                         <button type="button" id="batchApplyDateBtn" class="b3-button b3-button--primary">
                                             ${i18n("applyDateToAll")}
                                         </button>
-                                        <button type="button" id="batchNlDateBtn" class="b3-button b3-button--outline" title="${i18n('smartDateRecognition')}">
+                                        <button type="button" id="batchNlDateBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n('smartDateRecognition')}">
                                             ✨
                                         </button>
                                     </div>
@@ -1417,7 +1417,7 @@ class SmartBatchDialog {
                     };
 
                     // 更新字段
-                    reminder.title = setting.cleanTitle;
+                    reminder.classList.add('ariaLabel'); reminder.setAttribute('aria-label', setting.cleanTitle);
                     reminder.date = setting.date;
                     reminder.priority = setting.priority;
                     reminder.categoryId = setting.categoryId || undefined;
@@ -1597,7 +1597,7 @@ class BlockEditDialog {
                         <label class="b3-form__label">${i18n("eventTitle")}</label>
                         <div class="title-input-container" style="display: flex; gap: 8px;">
                             <input type="text" id="editReminderTitle" class="b3-text-field" value="${this.setting.cleanTitle}" placeholder="${i18n("enterReminderTitle")}" style="flex: 1;">
-                            <button type="button" id="editNlBtn" class="b3-button b3-button--outline" title="${i18n("smartDateRecognition")}">
+                            <button type="button" id="editNlBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("smartDateRecognition")}">
                                 ✨
                             </button>
                         </div>
@@ -1610,7 +1610,7 @@ class BlockEditDialog {
                     
                     <div class="b3-form__group">
                         <label class="b3-form__label">${i18n("eventCategory")}
-                            <button type="button" id="editManageCategoriesBtn" class="b3-button b3-button--outline" title="管理分类">
+                            <button type="button" id="editManageCategoriesBtn" class="b3-button b3-button--outline ariaLabel" aria-label="管理分类">
                                 <svg class="b3-button__icon"><use xlink:href="#iconSettings"></use></svg>
                             </button>
                         </label>

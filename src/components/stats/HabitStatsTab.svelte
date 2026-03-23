@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
 import { onMount, tick } from "svelte";
 import type { Habit } from "../HabitPanel";
 import { HabitDayDialog } from "../HabitDayDialog";
@@ -282,6 +282,28 @@ function getCheckInEmojis(habit: Habit, dateStr: string): string[] {
     return [];
 }
 
+// 获取打卡详情，返回时间和备注的格式化字符串数组
+function getCheckInDetails(habit: Habit, dateStr: string): string[] {
+    const checkIn = habit.checkIns?.[dateStr];
+    if (!checkIn) return [];
+
+    if (checkIn.entries && checkIn.entries.length > 0) {
+        return checkIn.entries.map(entry => {
+            const timeText = entry.timestamp ? entry.timestamp.slice(11, 16) : ''; // HH:MM 格式
+            const noteText = entry.note?.trim();
+            if (timeText && noteText) {
+                return `${entry.emoji || '📝'} ${timeText} ${noteText}`;
+            } else if (timeText) {
+                return `${entry.emoji || '📝'} ${timeText}`;
+            } else if (noteText) {
+                return `${entry.emoji || '📝'} ${noteText}`;
+            }
+            return entry.emoji || '📝';
+        });
+    }
+    return [];
+}
+
 function shouldCheckInOnDate(habit: Habit, dateStr: string): boolean {
     return shouldCheckInOnDateUtil(habit, dateStr);
 }
@@ -446,19 +468,15 @@ function formatMinutes(minutes: number): string {
     return `${mins}m`;
 }
 
-function getEmojiFontSize(count: number, view: "week" | "month"): string {
-    const base = view === "week" ? 12 : 10;
-    const shrinkPerEmoji = view === "week" ? 1.2 : 1.0;
-    const size = base - Math.max(0, count - 1) * shrinkPerEmoji;
-    return `${Math.max(6, size)}px`;
-}
 
-function getHabitColorById(habitId: string): string {
-    let hash = 0;
-    for (let i = 0; i < habitId.length; i++) {
-        hash = (hash * 31 + habitId.charCodeAt(i)) >>> 0;
-    }
-    return COLOR_POOL[hash % COLOR_POOL.length];
+
+// 根据 emoji 数量获取对应的字体大小类名
+function getEmojiCountClass(count: number): string {
+    if (count === 1) return 'emoji-count-1';
+    if (count <= 4) return 'emoji-count-2-4';
+    if (count <= 8) return 'emoji-count-5-8';
+    if (count <= 12) return 'emoji-count-9-12';
+    return 'emoji-count-12plus';
 }
 
 function applyAlphaToColor(color: string, alpha: number): string {
@@ -865,7 +883,7 @@ $: yearVisibleSections = groupedSections
                         <div class="group-mini-header">{section.groupName} ({section.habits.length})</div>
                         {#each section.habits as habit}
                             <div class="week-row">
-                                <div class="week-habit-name" title={habit.title}>{habit.icon || "🌱"} {habit.title}</div>
+                                <div class="week-habit-name ariaLabel" aria-label={habit.title}>{habit.icon || "🌱"} {habit.title}</div>
                                 <div class="week-cells">
                                     {#each currentWeekDates as day, dayIndex}
                                     {@const dateStr = getDateKey(day)}
@@ -873,14 +891,15 @@ $: yearVisibleSections = groupedSections
                                     {@const required = shouldCheckInOnDate(habit, dateStr)}
                                     {@const done = isCheckInComplete(habit, dateStr)}
                                     {@const emojis = getCheckInEmojis(habit, dateStr)}
+                                    {@const checkInDetails = getCheckInDetails(habit, dateStr)}
                                     <div
-                                        class="week-cell {done ? 'done' : ''} {!required ? 'not-required' : ''} {isToday ? 'today' : ''}"
+                                        class="week-cell {done ? 'done' : ''} {!required ? 'not-required' : ''} {isToday ? 'today' : ''} ariaLabel"
                                         style={`--habit-color: ${getHabitColor(habit)};`}
-                                        title={`${WEEKDAY_NAMES[(weekStartDay + dayIndex) % 7]} ${dateStr} ${emojis.length > 0 ? emojis.join(" ") : (done ? "已打卡" : "未打卡")}`}
+                                        aria-label={`${WEEKDAY_NAMES[(weekStartDay + dayIndex) % 7]}${checkInDetails.length > 0 ? '\n' + checkInDetails.join('\n') : (done ? "\n已打卡" : "\n未打卡")}`}
                                         on:click={() => openHabitDayEditor(habit, dateStr)}
                                     >
                                             {#if emojis.length > 0}
-                                                <div class="week-cell-emojis {emojis.length >= 6 ? 'wrap-bottom' : ''}" style={`font-size:${getEmojiFontSize(emojis.length, "week")};`}>
+                                                <div class="week-cell-emojis {getEmojiCountClass(emojis.length)} {emojis.length >= 6 ? 'wrap-bottom' : ''}">
                                                     {#each emojis as emoji}
                                                         <span class="week-cell-emoji-item">{emoji}</span>
                                                     {/each}
@@ -930,16 +949,17 @@ $: yearVisibleSections = groupedSections
                                             {@const required = shouldCheckInOnDate(habit, dateStr)}
                                             {@const done = isCheckInComplete(habit, dateStr)}
                                             {@const dayEmojis = getCheckInEmojis(habit, dateStr)}
+                                            {@const dayCheckInDetails = getCheckInDetails(habit, dateStr)}
                                             <div
-                                                class="month-day {done ? 'done' : ''} {!required ? 'not-required' : ''} {isToday ? 'today' : ''}"
+                                                class="month-day {done ? 'done' : ''} {!required ? 'not-required' : ''} {isToday ? 'today' : ''} ariaLabel"
                                                 style={`--habit-color: ${getHabitColor(habit)};`}
-                                                title={`${dateStr}${dayEmojis.length > 0 ? `\n打卡: ${dayEmojis.join(" ")}` : "\n未打卡"}`}
+                                                aria-label={`${dateStr}${dayCheckInDetails.length > 0 ? '\n' + dayCheckInDetails.join('\n') : (done ? "\n已打卡" : "\n未打卡")}`}
                                                 on:click={() => openHabitDayEditor(habit, dateStr)}
                                             >
                                                 <div class="month-day-content">
                                                     <div class="month-day-date">{day.getDate()}</div>
                                                     {#if dayEmojis.length > 0}
-                                                        <div class="month-day-emojis {dayEmojis.length >= 6 ? 'wrap-bottom' : ''}" style={`font-size:${getEmojiFontSize(dayEmojis.length, "month")};`}>
+                                                        <div class="month-day-emojis {getEmojiCountClass(dayEmojis.length)} {dayEmojis.length >= 6 ? 'wrap-bottom' : ''}">
                                                             {#each dayEmojis as emoji}
                                                                 <span>{emoji}</span>
                                                             {/each}
@@ -998,13 +1018,14 @@ $: yearVisibleSections = groupedSections
                                                         {@const required = shouldCheckInOnDate(habit, dateStr)}
                                                         {@const done = isCheckInComplete(habit, dateStr)}
                                                         {@const dayEmojis = getCheckInEmojis(habit, dateStr)}
+                                                        {@const dayCheckInDetails = getCheckInDetails(habit, dateStr)}
                                                         <div
-                                                            class="year-day {done ? 'done' : ''} {!required ? 'not-required' : ''} {isToday ? 'today' : ''}"
-                                                            title={`${dateStr}${dayEmojis.length > 0 ? `\n打卡: ${dayEmojis.join(" ")}` : "\n未打卡"}`}
+                                                            class="year-day {done ? 'done' : ''} {!required ? 'not-required' : ''} {isToday ? 'today' : ''} ariaLabel"
+                                                            aria-label={`${dateStr}${dayCheckInDetails.length > 0 ? '\n' + dayCheckInDetails.join('\n') : (done ? "\n已打卡" : "\n未打卡")}`}
                                                             on:click={() => openHabitDayEditor(habit, dateStr)}
                                                         >
                                                             {#if dayEmojis.length > 0}
-                                                                <div class="year-day-emojis {dayEmojis.length >= 4 ? 'dense' : ''} {dayEmojis.length >= 7 ? 'tiny' : ''}">
+                                                                <div class="year-day-emojis {getEmojiCountClass(dayEmojis.length)} {dayEmojis.length >= 4 ? 'dense' : ''} {dayEmojis.length >= 7 ? 'tiny' : ''}">
                                                                     {#each dayEmojis as emoji}
                                                                         <span>{emoji}</span>
                                                                     {/each}
@@ -1342,6 +1363,7 @@ $: yearVisibleSections = groupedSections
         overflow: hidden;
         padding: 1px;
         box-sizing: border-box;
+        contain: layout style;
     }
 
     .week-cell.done {
@@ -1371,13 +1393,29 @@ $: yearVisibleSections = groupedSections
         gap: 0 1px;
         line-height: 1;
         text-align: center;
+        font-size: clamp(8px, 40%, 12px);
+    }
+
+    .week-cell-emojis.emoji-count-1 {
+        font-size: clamp(12px, 60%, 18px);
+    }
+    .week-cell-emojis.emoji-count-2-4 {
+        font-size: clamp(10px, 50%, 14px);
+    }
+    .week-cell-emojis.emoji-count-5-8 {
+        font-size: clamp(8px, 40%, 11px);
+    }
+    .week-cell-emojis.emoji-count-9-12 {
+        font-size: clamp(6px, 30%, 9px);
+    }
+    .week-cell-emojis.emoji-count-12plus {
+        font-size: clamp(5px, 25%, 7px);
     }
 
     .week-cell-emojis.wrap-bottom {
-        align-items: flex-end;
-        align-content: flex-end;
         justify-content: center;
         padding-bottom: 1px;
+        font-size: clamp(6px, 30%, 9px);
     }
 
     .week-cell-emoji-item {
@@ -1395,7 +1433,7 @@ $: yearVisibleSections = groupedSections
 
     .month-card-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
         gap: 12px;
         margin-bottom: 8px;
     }
@@ -1405,6 +1443,8 @@ $: yearVisibleSections = groupedSections
         background: var(--b3-theme-surface);
         border-radius: 14px;
         padding: 12px;
+        container-type: inline-size;
+        min-width: 280px;
     }
 
     .month-card-title {
@@ -1443,6 +1483,8 @@ $: yearVisibleSections = groupedSections
         border: 1px solid transparent;
         padding: 2px;
         box-sizing: border-box;
+        min-height: 32px;
+        contain: layout style;
     }
 
     .month-day.done {
@@ -1482,30 +1524,58 @@ $: yearVisibleSections = groupedSections
         line-height: 1;
         color: var(--b3-theme-on-surface-light);
         margin-top: 1px;
+        flex-shrink: 0;
+        z-index: 1;
+        background: inherit;
+        border-radius: 2px;
+        padding: 0 2px;
     }
 
     .month-day-emojis {
         display: flex;
         flex-wrap: wrap;
         justify-content: center;
-        align-content: flex-start;
+        align-content: center;
         gap: 0 1px;
         line-height: 1;
+        flex: 1;
+        width: 100%;
+        min-height: 0;
+        overflow: hidden;
+        mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
+        -webkit-mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
     }
 
     .month-day-emojis.wrap-bottom {
         align-content: flex-end;
         justify-content: center;
-        height: 100%;
-        max-height: calc(100% - 10px);
         padding-bottom: 1px;
+        mask-image: none;
+        -webkit-mask-image: none;
     }
 
-    .month-day-emojis span {
-        font-size: inherit;
-        transform: none;
-        line-height: 1;
+
+
+    /* 月视图 emoji 字体大小 - 基于 month-card 容器查询 */
+    .month-card .month-day-emojis {
+        font-size: clamp(6px, 4cqw, 12px);
     }
+    .month-card .month-day-emojis.emoji-count-1 {
+        font-size: clamp(10px, 4cqw, 18px);
+    }
+    .month-card .month-day-emojis.emoji-count-2-4 {
+        font-size: clamp(8px, 2.5cqw, 14px);
+    }
+    .month-card .month-day-emojis.emoji-count-5-8 {
+        font-size: clamp(6px, 2cqw, 11px);
+    }
+    .month-card .month-day-emojis.emoji-count-9-12 {
+        font-size: clamp(5px, 2cqw, 9px);
+    }
+    .month-card .month-day-emojis.emoji-count-12plus {
+        font-size: clamp(4px, 1.5cqw, 7px);
+    }
+
 
     .year-panel {
         display: flex;
@@ -1577,6 +1647,7 @@ $: yearVisibleSections = groupedSections
         display: grid;
         grid-template-columns: repeat(31, minmax(0, 1fr));
         gap: 2px;
+        container-type: inline-size;
     }
 
     .year-day {
@@ -1590,6 +1661,8 @@ $: yearVisibleSections = groupedSections
         overflow: hidden;
         padding: 1px;
         box-sizing: border-box;
+        min-height: 16px;
+        contain: layout style;
     }
 
     .year-day.done {
@@ -1621,8 +1694,24 @@ $: yearVisibleSections = groupedSections
         justify-content: center;
         align-content: center;
         gap: 0 1px;
-        font-size: 8px;
+        font-size: clamp(4px, 2.5cqw, 10px);
         line-height: 1;
+    }
+
+    .year-day-emojis.emoji-count-1 {
+        font-size: clamp(6px, 4cqw, 12px);
+    }
+    .year-day-emojis.emoji-count-2-4 {
+        font-size: clamp(5px, 3cqw, 9px);
+    }
+    .year-day-emojis.emoji-count-5-8 {
+        font-size: clamp(4px, 2.5cqw, 8px);
+    }
+    .year-day-emojis.emoji-count-9-12 {
+        font-size: clamp(3px, 2cqw, 6px);
+    }
+    .year-day-emojis.emoji-count-12plus {
+        font-size: clamp(2px, 1.5cqw, 5px);
     }
 
     .year-day-emojis span {
@@ -1632,10 +1721,10 @@ $: yearVisibleSections = groupedSections
     }
 
     .year-day-emojis.dense {
-        font-size: 7px;
+        font-size: clamp(3px, 2cqw, 8px);
     }
 
     .year-day-emojis.tiny {
-        font-size: 6px;
+        font-size: clamp(2px, 1.5cqw, 6px);
     }
 </style>

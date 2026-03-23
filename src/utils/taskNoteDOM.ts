@@ -1,4 +1,4 @@
-import { i18n } from "../pluginInstance";
+﻿import { i18n } from "../pluginInstance";
 
 const PROJECT_KANBAN_TAB_TYPE = "project_kanban_tab";
 
@@ -618,7 +618,7 @@ export class TaskNoteDOMManager {
         btn.dataset.projectId = projectId;
         btn.dataset.blockId = blockId;
         btn.setAttribute("data-plugin-added", "reminder-plugin");
-        btn.title = i18n("openProjectKanban");
+        btn.classList.add('ariaLabel'); btn.setAttribute('aria-label', i18n("openProjectKanban"));
 
         btn.addEventListener("click", async (e) => {
             e.preventDefault();
@@ -660,7 +660,7 @@ export class TaskNoteDOMManager {
         btn.innerHTML = `<span style="font-size:14px;line-height:1">📋</span>`;
         btn.dataset.blockId = blockId;
         btn.setAttribute("data-plugin-added", "reminder-plugin");
-        btn.title = "查看绑定任务";
+        btn.classList.add('ariaLabel'); btn.setAttribute('aria-label', "查看绑定任务");
 
         btn.addEventListener("click", async (e) => {
             e.preventDefault();
@@ -702,7 +702,7 @@ export class TaskNoteDOMManager {
         btn.dataset.projectId = projectId;
         btn.dataset.milestoneIds = milestoneIds.join(",");
         btn.setAttribute("data-plugin-added", "reminder-plugin");
-        btn.title = "查看里程碑任务";
+        btn.classList.add('ariaLabel'); btn.setAttribute('aria-label', "查看里程碑任务");
 
         btn.addEventListener("click", async (e) => {
             e.preventDefault();

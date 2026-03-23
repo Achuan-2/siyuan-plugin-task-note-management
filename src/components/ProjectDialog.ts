@@ -1,4 +1,4 @@
-import { Dialog, showMessage } from "siyuan";
+﻿import { Dialog, showMessage } from "siyuan";
 import { getBlockByID } from "../api";
 import { getLogicalDateString } from "../utils/dateUtils";
 import { CategoryManager } from "../utils/categoryManager";
@@ -80,10 +80,10 @@ export class ProjectDialog {
                         <label>${i18n("bindToBlock") || '块或文档 ID'}:</label>
                         <div style="display: flex; gap: 8px;">
                             <input type="text" id="projectBlockInput" class="b3-text-field" value="${existingProject ? (existingProject.blockId || '') : (this.blockId || '')}" placeholder="${i18n("enterBlockId") || '请输入块或文档 ID'}" style="flex: 1;">
-                            <button type="button" id="projectPasteBlockRefBtn" class="b3-button b3-button--outline" title="${i18n("pasteBlockRef")}">
+                            <button type="button" id="projectPasteBlockRefBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("pasteBlockRef")}">
                                 <svg class="b3-button__icon"><use xlink:href="#iconPaste"></use></svg>
                             </button>
-                            <button type="button" id="projectBindBlockBtn" class="b3-button b3-button--outline" title="${i18n("newDocument") || '新建文档'}">
+                            <button type="button" id="projectBindBlockBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("newDocument") || '新建文档'}">
                                 <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
                             </button>
                         </div>

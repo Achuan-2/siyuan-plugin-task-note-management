@@ -1,4 +1,4 @@
-import { showMessage, confirm, Menu, Dialog, getAllModels, platformUtils } from "siyuan";
+﻿import { showMessage, confirm, Menu, Dialog, getAllModels, platformUtils } from "siyuan";
 import { getLastStatsMode } from "./stats/statsMode";
 import { showStatsDialog } from "./stats/ShowStatsDialog";
 
@@ -140,7 +140,7 @@ export class ProjectPanel {
         const createProjectBtn = document.createElement('button');
         createProjectBtn.className = 'b3-button b3-button--outline';
         createProjectBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>';
-        createProjectBtn.title = i18n("createProject") || "创建项目";
+        createProjectBtn.classList.add('ariaLabel'); createProjectBtn.setAttribute('aria-label', i18n("createProject") || "创建项目");
         createProjectBtn.addEventListener('click', () => {
             this.createQuickProject();
         });
@@ -150,7 +150,7 @@ export class ProjectPanel {
         this.sortButton = document.createElement('button');
         this.sortButton.className = 'b3-button b3-button--outline';
         this.sortButton.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconSort"></use></svg>';
-        this.sortButton.title = i18n("sortBy") || "排序";
+        this.sortButton.classList.add('ariaLabel'); this.sortButton.setAttribute('aria-label', i18n("sortBy") || "排序");
         this.sortButton.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -163,7 +163,7 @@ export class ProjectPanel {
             const calendarBtn = document.createElement('button');
             calendarBtn.className = 'b3-button b3-button--outline';
             calendarBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconCalendar"></use></svg>';
-            calendarBtn.title = i18n("calendarView") || "日历视图";
+            calendarBtn.classList.add('ariaLabel'); calendarBtn.setAttribute('aria-label', i18n("calendarView") || "日历视图");
             calendarBtn.addEventListener('click', () => {
                 this.plugin.openCalendarTab();
             });
@@ -173,7 +173,7 @@ export class ProjectPanel {
             const eisenhowerBtn = document.createElement('button');
             eisenhowerBtn.className = 'b3-button b3-button--outline';
             eisenhowerBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconGrid"></use></svg>';
-            eisenhowerBtn.title = i18n("eisenhowerMatrix") || "四象限面板";
+            eisenhowerBtn.classList.add('ariaLabel'); eisenhowerBtn.setAttribute('aria-label', i18n("eisenhowerMatrix") || "四象限面板");
             eisenhowerBtn.addEventListener('click', () => {
                 this.openEisenhowerMatrix();
             });
@@ -183,7 +183,7 @@ export class ProjectPanel {
             const pomodoroStatsBtn = document.createElement('button');
             pomodoroStatsBtn.className = 'b3-button b3-button--outline';
             pomodoroStatsBtn.innerHTML = '📊';
-            pomodoroStatsBtn.title = i18n("statsView") || "统计视图";
+            pomodoroStatsBtn.classList.add('ariaLabel'); pomodoroStatsBtn.setAttribute('aria-label', i18n("statsView") || "统计视图");
             pomodoroStatsBtn.addEventListener('click', () => {
                 this.showPomodoroStatsView();
             });
@@ -193,7 +193,7 @@ export class ProjectPanel {
             const refreshBtn = document.createElement('button');
             refreshBtn.className = 'b3-button b3-button--outline';
             refreshBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconRefresh"></use></svg>';
-            refreshBtn.title = i18n("refresh") || "刷新";
+            refreshBtn.classList.add('ariaLabel'); refreshBtn.setAttribute('aria-label', i18n("refresh") || "刷新");
             refreshBtn.addEventListener('click', () => {
                 this.loadProjects();
             });
@@ -204,7 +204,7 @@ export class ProjectPanel {
         const moreBtn = document.createElement('button');
         moreBtn.className = 'b3-button b3-button--outline';
         moreBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconMore"></use></svg>';
-        moreBtn.title = i18n("more") || "更多";
+        moreBtn.classList.add('ariaLabel'); moreBtn.setAttribute('aria-label', i18n("more") || "更多");
         moreBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -391,7 +391,7 @@ export class ProjectPanel {
                 'asc': i18n("ascending") || '升序',
                 'desc': i18n("descending") || '降序'
             };
-            this.sortButton.title = `${i18n("sortBy") || "排序"}: ${sortNames[this.currentSort]} (${orderNames[this.currentSortOrder]})`;
+            this.sortButton.classList.add('ariaLabel'); this.sortButton.setAttribute('aria-label', `${i18n("sortBy") || "排序"}: ${sortNames[this.currentSort]} (${orderNames[this.currentSortOrder]})`);
         }
     }
 
@@ -757,7 +757,7 @@ export class ProjectPanel {
             transition: opacity 0.2s ease;
             z-index: 10;
         `;
-        dragHandle.title = "拖拽排序";
+        dragHandle.classList.add('ariaLabel'); dragHandle.setAttribute('aria-label', "拖拽排序");
 
         // 添加hover效果
         projectEl.addEventListener('mouseenter', () => {
@@ -2427,7 +2427,7 @@ export class ProjectPanel {
         // toggle button as chevron icon on the right
         const toggleBtn = document.createElement('button');
         toggleBtn.className = 'b3-button b3-button--tiny b3-button--outline project-group__toggle';
-        toggleBtn.title = this.groupCollapsedState[statusId] ? '展开该分组' : '折叠该分组';
+        toggleBtn.classList.add('ariaLabel'); toggleBtn.setAttribute('aria-label', this.groupCollapsedState[statusId] ? '展开该分组' : '折叠该分组');
         toggleBtn.style.display = 'inline-flex';
         toggleBtn.style.alignItems = 'center';
         toggleBtn.style.justifyContent = 'center';
@@ -2469,11 +2469,11 @@ export class ProjectPanel {
             if (this.groupCollapsedState[statusId]) {
                 listContainer.style.display = 'none';
                 if (iconEl) iconEl.style.transform = 'rotate(-180deg)';
-                toggleBtn.title = '展开该分组';
+                toggleBtn.classList.add('ariaLabel'); toggleBtn.setAttribute('aria-label', '展开该分组');
             } else {
                 listContainer.style.display = 'flex';
                 if (iconEl) iconEl.style.transform = 'rotate(0deg)';
-                toggleBtn.title = '折叠该分组';
+                toggleBtn.classList.add('ariaLabel'); toggleBtn.setAttribute('aria-label', '折叠该分组');
             }
         });
 

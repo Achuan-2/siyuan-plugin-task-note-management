@@ -1,4 +1,4 @@
-import { Dialog, showMessage } from "siyuan";
+﻿import { Dialog, showMessage } from "siyuan";
 import { HabitGroupManager, HabitGroup } from "../utils/habitGroupManager";
 import { confirm } from "siyuan";
 import { getLocaleTag } from "../utils/dateUtils";
@@ -160,7 +160,7 @@ export class HabitGroupManageDialog {
         const editBtn = document.createElement('button');
         editBtn.className = 'b3-button b3-button--outline';
         editBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconEdit"></use></svg>';
-        editBtn.title = i18n("edit");
+        editBtn.classList.add('ariaLabel'); editBtn.setAttribute('aria-label', i18n("edit"));
         editBtn.addEventListener('click', (e) => {
             e.stopPropagation(); // Prevent drag start
             this.showEditGroupDialog(group);
@@ -169,7 +169,7 @@ export class HabitGroupManageDialog {
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'b3-button b3-button--outline';
         deleteBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconTrashcan"></use></svg>';
-        deleteBtn.title = i18n("delete");
+        deleteBtn.classList.add('ariaLabel'); deleteBtn.setAttribute('aria-label', i18n("delete"));
         deleteBtn.addEventListener('click', (e) => {
             e.stopPropagation(); // Prevent drag start
             this.deleteGroup(group);

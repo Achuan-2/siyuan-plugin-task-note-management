@@ -1,4 +1,4 @@
-import { showMessage, Dialog, Menu, confirm, getBackend, getFrontend } from "siyuan";
+﻿import { showMessage, Dialog, Menu, confirm, getBackend, getFrontend } from "siyuan";
 import { openBlock } from "../api";
 import { getLocalDateTimeString, getLogicalDateString, getRelativeDateString } from "../utils/dateUtils";
 import { HabitGroupManager } from "../utils/habitGroupManager";
@@ -220,7 +220,7 @@ export class HabitPanel {
         const newHabitBtn = document.createElement('button');
         newHabitBtn.className = 'b3-button b3-button--outline';
         newHabitBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>';
-        newHabitBtn.title = i18n("newHabit");
+        newHabitBtn.classList.add('ariaLabel'); newHabitBtn.setAttribute('aria-label', i18n("newHabit"));
         newHabitBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -232,7 +232,7 @@ export class HabitPanel {
         const calendarBtn = document.createElement('button');
         calendarBtn.className = 'b3-button b3-button--outline';
         calendarBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconCalendar"></use></svg>';
-        calendarBtn.title = i18n("habitCalendar");
+        calendarBtn.classList.add('ariaLabel'); calendarBtn.setAttribute('aria-label', i18n("habitCalendar"));
         calendarBtn.addEventListener('click', () => {
             this.openHabitCalendarView();
         });
@@ -242,7 +242,7 @@ export class HabitPanel {
         const habitStatsCalendarBtn = document.createElement('button');
         habitStatsCalendarBtn.className = 'b3-button b3-button--outline';
         habitStatsCalendarBtn.textContent = '📊';
-        habitStatsCalendarBtn.title = i18n("statsView");
+        habitStatsCalendarBtn.classList.add('ariaLabel'); habitStatsCalendarBtn.setAttribute('aria-label', i18n("statsView"));
         habitStatsCalendarBtn.addEventListener('click', () => {
             this.showPomodoroStatsView();
         });
@@ -252,7 +252,7 @@ export class HabitPanel {
         const refreshBtn = document.createElement('button');
         refreshBtn.className = 'b3-button b3-button--outline';
         refreshBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconRefresh"></use></svg>';
-        refreshBtn.title = i18n("refresh");
+        refreshBtn.classList.add('ariaLabel'); refreshBtn.setAttribute('aria-label', i18n("refresh"));
         refreshBtn.addEventListener('click', () => {
             this.loadHabits();
         });
@@ -262,7 +262,7 @@ export class HabitPanel {
         const moreBtn = document.createElement('button');
         moreBtn.className = 'b3-button b3-button--outline';
         moreBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconMore"></use></svg>';
-        moreBtn.title = i18n("more");
+        moreBtn.classList.add('ariaLabel'); moreBtn.setAttribute('aria-label', i18n("more"));
         moreBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -862,7 +862,7 @@ export class HabitPanel {
             title.setAttribute('data-href', `siyuan://blocks/${habit.blockId}`);
         }
         title.textContent = habit.title;
-        title.title = habit.title;
+        title.classList.add('ariaLabel'); title.setAttribute('aria-label', habit.title);
         if (isInactive) {
             title.style.opacity = '0.6';
         }
@@ -988,11 +988,11 @@ export class HabitPanel {
             pomodoroSection.style.cssText = 'margin-top:0; margin-bottom:12px; font-size:12px;';
             pomodoroSection.style.color = 'var(--b3-theme-on-surface-light)';
             pomodoroSection.innerHTML = `
-                <div title="总计番茄钟: ${pomodoroStats.totalCount}">
+                <div class="ariaLabel" aria-label="总计番茄钟: ${pomodoroStats.totalCount}">
                     <span>系列: 🍅 ${pomodoroStats.totalCount}</span>
                     <span style="margin-left:8px; opacity:0.9;">⏱ ${this.formatPomodoroFocusTime(pomodoroStats.totalFocusMinutes)}</span>
                 </div>
-                <div title="今日番茄钟: ${pomodoroStats.todayCount}" style="margin-top:4px; opacity:0.95;">
+                <div class="ariaLabel" aria-label="今日番茄钟: ${pomodoroStats.todayCount}" style="margin-top:4px; opacity:0.95;">
                     <span>今日: 🍅 ${pomodoroStats.todayCount}</span>
                     <span style="margin-left:8px; opacity:0.9;">⏱ ${this.formatPomodoroFocusTime(pomodoroStats.todayFocusMinutes)}</span>
                 </div>
@@ -1005,9 +1005,9 @@ export class HabitPanel {
             const emojiSection = document.createElement('div');
             emojiSection.className = 'habit-card__emoji-section';
             emojiSection.style.cursor = isHistoryView ? 'default' : 'pointer';
-            emojiSection.title = isHistoryView 
+            emojiSection.classList.add('ariaLabel'); emojiSection.setAttribute('aria-label', isHistoryView 
                 ? (i18n("historyCheckInEmoji") || '当日打卡')
-                : (i18n("clickToEditCheckIn") || '点击编辑今日打卡');
+                : (i18n("clickToEditCheckIn") || '点击编辑今日打卡'));
             
             const emojiLabel = document.createElement('div');
             emojiLabel.className = 'habit-card__emoji-label';
@@ -1031,7 +1031,7 @@ export class HabitPanel {
                 const emojiEl = document.createElement('span');
                 emojiEl.className = 'habit-card__emoji-item';
                 emojiEl.textContent = emojiStr;
-                emojiEl.title = emojiStr;
+                emojiEl.classList.add('ariaLabel'); emojiEl.setAttribute('aria-label', emojiStr);
                 emojiList.appendChild(emojiEl);
             });
             

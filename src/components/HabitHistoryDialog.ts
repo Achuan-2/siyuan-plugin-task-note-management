@@ -1,4 +1,4 @@
-import { Dialog, confirm, showMessage } from "siyuan";
+﻿import { Dialog, confirm, showMessage } from "siyuan";
 import type { Habit, HabitCheckInEmoji } from "./HabitPanel";
 import { getLocalDateTimeString, getLogicalDateString } from "../utils/dateUtils";
 import { i18n } from "../pluginInstance";
@@ -117,7 +117,7 @@ export class HabitHistoryDialog {
             entries.slice(0, 5).forEach(e => {
                 const span = document.createElement('span');
                 span.textContent = e.emoji;
-                span.title = e.meaning || '';
+                span.classList.add('ariaLabel'); span.setAttribute('aria-label', e.meaning || '');
                 span.style.cssText = 'font-size:18px; margin-right:6px;';
                 previewDiv.appendChild(span);
             });

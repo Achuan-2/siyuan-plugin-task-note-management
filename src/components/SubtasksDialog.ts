@@ -1,4 +1,4 @@
-import { Dialog, showMessage, confirm } from "siyuan";
+﻿import { Dialog, showMessage, confirm } from "siyuan";
 import { } from "../api";
 import { i18n } from "../pluginInstance";
 import { QuickReminderDialog } from "./QuickReminderDialog";
@@ -235,10 +235,10 @@ export class SubtasksDialog {
                     ${priorityIcon} ${task.title}
                 </div>
                 <div class="subtask-ops" style="display: flex; gap: 4px; opacity: 0.6;">
-                    <button class="b3-button b3-button--outline b3-button--small edit-subtask-btn" title="${i18n("edit")}" style="padding: 4px;">
+                    <button class="b3-button b3-button--outline b3-button--small edit-subtask-btn ariaLabel" aria-label="${i18n("edit")}" style="padding: 4px;">
                         <svg class="b3-button__icon" style="width: 12px; height: 12px;"><use xlink:href="#iconEdit"></use></svg>
                     </button>
-                    <button class="b3-button b3-button--outline b3-button--small delete-subtask-btn" title="${i18n("delete")}" style="padding: 4px;">
+                    <button class="b3-button b3-button--outline b3-button--small delete-subtask-btn ariaLabel" aria-label="${i18n("delete")}" style="padding: 4px;">
                         <svg class="b3-button__icon" style="width: 12px; height: 12px;"><use xlink:href="#iconTrashcan"></use></svg>
                     </button>
                 </div>
@@ -368,7 +368,7 @@ export class SubtasksDialog {
                 ${isDescActive ? 'background: var(--b3-theme-primary); color: white;' : ''}
             `;
             descBtn.textContent = '↓';
-            descBtn.title = i18n('descendingOrder') || '降序';
+            descBtn.classList.add('ariaLabel'); descBtn.setAttribute('aria-label', i18n('descendingOrder') || '降序');
             descBtn.addEventListener('click', () => {
                 this.currentSort = option.key;
                 this.currentSortOrder = 'desc';
@@ -394,7 +394,7 @@ export class SubtasksDialog {
                 ${isAscActive ? 'background: var(--b3-theme-primary); color: white;' : ''}
             `;
             ascBtn.textContent = '↑';
-            ascBtn.title = i18n('ascendingOrder') || '升序';
+            ascBtn.classList.add('ariaLabel'); ascBtn.setAttribute('aria-label', i18n('ascendingOrder') || '升序');
             ascBtn.addEventListener('click', () => {
                 this.currentSort = option.key;
                 this.currentSortOrder = 'asc';

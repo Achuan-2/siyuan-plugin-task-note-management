@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
 import { onMount, onDestroy } from "svelte";
 
 export let plugin: any;
@@ -449,7 +449,7 @@ class PomodoroStatsView {
                     </div>
                 </div>
                 <div class="record-actions">
-                    <button class="delete-btn" data-session-id="${session.id}" title="${i18n("delete")}">🗑️</button>
+                    <button class="delete-btn ariaLabel" data-session-id="${session.id}" aria-label="${i18n("delete")}">🗑️</button>
                 </div>
             </div>
         `;

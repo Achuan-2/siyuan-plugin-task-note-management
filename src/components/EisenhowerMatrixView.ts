@@ -159,26 +159,26 @@ export class EisenhowerMatrixView {
         headerEl.className = 'matrix-header';
         headerEl.innerHTML = `
             <div class="matrix-header-buttons">
-                <button class="b3-button b3-button--primary new-task-btn" title="${i18n("newTask")}">
+                <button class="b3-button b3-button--primary new-task-btn ariaLabel" aria-label="${i18n("newTask")}">
                     <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
                     ${i18n("newTask")}
                 </button>
-                <button class="b3-button b3-button--primary kanban-status-filter-btn" title="${i18n("statusFilter")}">
+                <button class="b3-button b3-button--primary kanban-status-filter-btn ariaLabel" aria-label="${i18n("statusFilter")}">
                     <svg class="b3-button__icon"><use xlink:href="#iconList"></use></svg>
                     ${i18n("eisenhowerDoingTasks")}
                     <svg class="dropdown-arrow" style="margin-left: 4px; width: 12px; height: 12px;"><use xlink:href="#iconDown"></use></svg>
                 </button>
                 <div class="header-v-separator"></div>
-                <button class="b3-button b3-button--outline project-sort-btn" title="${i18n("projectSorting")}">
+                <button class="b3-button b3-button--outline project-sort-btn ariaLabel" aria-label="${i18n("projectSorting")}">
                     <svg class="b3-button__icon"><use xlink:href="#iconSort"></use></svg>
                 </button>
-                <button class="b3-button b3-button--outline filter-btn" title="${i18n("eisenhowerFilter")}">
+                <button class="b3-button b3-button--outline filter-btn ariaLabel" aria-label="${i18n("eisenhowerFilter")}">
                     <svg class="b3-button__icon"><use xlink:href="#iconFilter"></use></svg>
                 </button>
-                <button class="b3-button b3-button--outline settings-btn" title="${i18n("eisenhowerSettingsBtn")}">
+                <button class="b3-button b3-button--outline settings-btn ariaLabel" aria-label="${i18n("eisenhowerSettingsBtn")}">
                     <svg class="b3-button__icon"><use xlink:href="#iconSettings"></use></svg>
                 </button>
-                <button class="b3-button b3-button--outline refresh-btn" title="${i18n("refresh")}">
+                <button class="b3-button b3-button--outline refresh-btn ariaLabel" aria-label="${i18n("refresh")}">
                     <svg class="b3-button__icon"><use xlink:href="#iconRefresh"></use></svg>
                 </button>
             </div>
@@ -969,7 +969,7 @@ export class EisenhowerMatrixView {
                 const collapseBtn = document.createElement('button');
                 collapseBtn.className = 'project-collapse-btn b3-button b3-button--text';
                 collapseBtn.innerHTML = `<svg class="b3-button__icon" style="width: 12px; height: 12px;"><use xlink:href="#${isProjectCollapsed ? 'iconRight' : 'iconDown'}"></use></svg>`;
-                collapseBtn.title = isProjectCollapsed ? '展开' : '折叠';
+                collapseBtn.classList.add('ariaLabel'); collapseBtn.setAttribute('aria-label', isProjectCollapsed ? '展开' : '折叠');
                 collapseBtn.addEventListener('click', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -984,7 +984,7 @@ export class EisenhowerMatrixView {
                     projectNameSpan.textContent = tasks[0].projectName || i18n('noProject');
                     projectNameSpan.style.cursor = 'pointer';
                     projectNameSpan.style.color = 'var(--b3-theme-primary)';
-                    projectNameSpan.title = i18n('openProjectKanban');
+                    projectNameSpan.classList.add('ariaLabel'); projectNameSpan.setAttribute('aria-label', i18n('openProjectKanban'));
 
                     // 添加点击事件打开项目看板
                     projectNameSpan.addEventListener('click', () => {
@@ -1095,7 +1095,7 @@ export class EisenhowerMatrixView {
         checkbox.checked = task.completed;
         if (task.isSubscribed) {
             checkbox.disabled = true;
-            checkbox.title = i18n("subscribedTaskReadonly");
+            checkbox.classList.add('ariaLabel'); checkbox.setAttribute('aria-label', i18n("subscribedTaskReadonly"));
         }
         checkboxContainer.appendChild(checkbox);
 
@@ -1107,7 +1107,7 @@ export class EisenhowerMatrixView {
         if (task.isSubscribed) {
             const subBadge = document.createElement('span');
             subBadge.innerHTML = `<svg style="width: 12px; height: 12px; margin-right: 4px; vertical-align: middle;"><use xlink:href="#iconCloud"></use></svg>`;
-            subBadge.title = i18n("icsSubscribedTask");
+            subBadge.classList.add('ariaLabel'); subBadge.setAttribute('aria-label', i18n("icsSubscribedTask"));
             taskInfo.appendChild(subBadge);
         }
 
@@ -1130,7 +1130,7 @@ export class EisenhowerMatrixView {
             collapseBtn.className = 'task-collapse-btn b3-button b3-button--outline';
             const isCollapsed = this.collapsedTasks.has(task.id);
             collapseBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#${isCollapsed ? 'iconRight' : 'iconDown'}"></use></svg>`;
-            collapseBtn.title = isCollapsed ? '展开子任务' : '折叠子任务';
+            collapseBtn.classList.add('ariaLabel'); collapseBtn.setAttribute('aria-label', isCollapsed ? '展开子任务' : '折叠子任务');
             collapseBtn.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -1161,7 +1161,7 @@ export class EisenhowerMatrixView {
         }
 
         taskTitle.textContent = task.title;
-        taskTitle.title = task.blockId ? `点击打开绑定块: ${task.title}` : task.title;
+        taskTitle.classList.add('ariaLabel'); taskTitle.setAttribute('aria-label', task.blockId ? `点击打开绑定块: ${task.title}` : task.title);
 
         // 如果有子任务，添加数量指示器
         if (childTasks.length > 0) {
@@ -1251,7 +1251,7 @@ export class EisenhowerMatrixView {
             if (task.extendedProps?.repeat?.enabled || task.extendedProps?.isRepeatInstance) {
                 const repeatIcon = document.createElement('span');
                 repeatIcon.textContent = '🔄';
-                repeatIcon.title = task.extendedProps?.repeat?.enabled ? getRepeatDescription(task.extendedProps.repeat) : '周期事件实例';
+                repeatIcon.classList.add('ariaLabel'); repeatIcon.setAttribute('aria-label', task.extendedProps?.repeat?.enabled ? getRepeatDescription(task.extendedProps.repeat) : '周期事件实例');
                 repeatIcon.style.cssText = 'cursor: help;';
                 dateSpan.appendChild(repeatIcon);
             }
@@ -1363,7 +1363,7 @@ export class EisenhowerMatrixView {
                 const completedSpan = document.createElement('span');
                 completedSpan.className = 'task-completed-time';
                 completedSpan.textContent = `✅ ${this.formatCompletedTime(completedTimeStr)}`;
-                completedSpan.title = this.formatCompletedTime(completedTimeStr);
+                completedSpan.classList.add('ariaLabel'); completedSpan.setAttribute('aria-label', this.formatCompletedTime(completedTimeStr));
                 taskMeta.appendChild(completedSpan);
             }
         }
@@ -1537,7 +1537,7 @@ export class EisenhowerMatrixView {
             const percentText = document.createElement('span');
             percentText.className = 'task-progress-percent';
             percentText.textContent = `${percent}%`;
-            percentText.title = `${percent}% 完成`;
+            percentText.classList.add('ariaLabel'); percentText.setAttribute('aria-label', `${percent}% 完成`);
 
             progressContainer.appendChild(progressWrap);
             progressContainer.appendChild(percentText);
@@ -1995,7 +1995,7 @@ export class EisenhowerMatrixView {
 
             if (percentText) {
                 percentText.textContent = `${percent}%`;
-                percentText.title = `${percent}% 完成`;
+                percentText.classList.add('ariaLabel'); percentText.setAttribute('aria-label', `${percent}% 完成`);
             }
         } catch (error) {
             console.error('更新父任务进度UI失败:', error);

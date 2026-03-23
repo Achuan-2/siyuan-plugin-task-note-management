@@ -1,4 +1,4 @@
-import { Dialog, showMessage, confirm } from "siyuan";
+﻿import { Dialog, showMessage, confirm } from "siyuan";
 import { getBlockByID, updateBindBlockAtrrs, getBlockReminderIds } from "../api";
 // import { getLocalDateTimeString, getRelativeDateString } from "../utils/dateUtils";
 import { getLocaleTag } from "../utils/dateUtils";
@@ -226,7 +226,7 @@ export class BlockRemindersDialog {
         if (reminder.repeat?.enabled) {
             const repeatIcon = document.createElement('span');
             repeatIcon.textContent = '🔄';
-            repeatIcon.title = i18n("repeatTask") || '重复任务';
+            repeatIcon.classList.add('ariaLabel'); repeatIcon.setAttribute('aria-label', i18n("repeatTask") || '重复任务');
             timeContainer.appendChild(repeatIcon);
         }
 
@@ -416,7 +416,7 @@ export class BlockRemindersDialog {
         const editBtn = document.createElement('button');
         editBtn.className = 'b3-button b3-button--text';
         editBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconEdit"></use></svg>';
-        editBtn.title = i18n("edit") || '编辑';
+        editBtn.classList.add('ariaLabel'); editBtn.setAttribute('aria-label', i18n("edit") || '编辑');
         editBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -440,7 +440,7 @@ export class BlockRemindersDialog {
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'b3-button b3-button--text';
         deleteBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconTrashcan"></use></svg>';
-        deleteBtn.title = i18n("delete") || '删除';
+        deleteBtn.classList.add('ariaLabel'); deleteBtn.setAttribute('aria-label', i18n("delete") || '删除');
         deleteBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             e.stopPropagation();

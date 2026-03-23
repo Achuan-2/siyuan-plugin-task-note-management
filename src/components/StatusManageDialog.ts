@@ -1,4 +1,4 @@
-import { Dialog, showMessage, confirm, openEmoji } from "siyuan";
+﻿import { Dialog, showMessage, confirm, openEmoji } from "siyuan";
 import { StatusManager, Status } from "../utils/statusManager";
 import { i18n } from "../pluginInstance";
 export class StatusManageDialog {
@@ -181,17 +181,17 @@ export class StatusManageDialog {
         statusEl.draggable = true;
         statusEl.dataset.statusId = status.id;
         statusEl.innerHTML = `
-            <div class="status-drag-handle" title="拖拽排序"></div>
+            <div class="status-drag-handle ariaLabel" aria-label="拖拽排序"></div>
             <div class="status-info">
                 <div class="status-icon">${status.icon || '📝'}</div>
                 <div class="status-name">${status.name}</div>
             </div>
             <div class="status-actions">
-                <button class="b3-button b3-button--outline status-edit-btn" data-action="edit" data-id="${status.id}" title="${i18n("editStatus") || "编辑状态"}">
+                <button class="b3-button b3-button--outline status-edit-btn ariaLabel" data-action="edit" data-id="${status.id}" aria-label="${i18n("editStatus") || "编辑状态"}">
                     <svg class="b3-button__icon"><use xlink:href="#iconEdit"></use></svg>
                 </button>
                 ${!status.isArchived ? `
-                <button class="b3-button b3-button--outline status-delete-btn" data-action="delete" data-id="${status.id}" title="${i18n("deleteStatus") || "删除状态"}">
+                <button class="b3-button b3-button--outline status-delete-btn ariaLabel" data-action="delete" data-id="${status.id}" aria-label="${i18n("deleteStatus") || "删除状态"}">
                     <svg class="b3-button__icon"><use xlink:href="#iconTrashcan"></use></svg>
                 </button>
                 ` : ''}

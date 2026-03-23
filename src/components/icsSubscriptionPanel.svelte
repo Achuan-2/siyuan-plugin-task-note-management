@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
     import { onMount } from 'svelte';
     import { Dialog, confirm } from 'siyuan';
     import { i18n } from '../pluginInstance';
@@ -229,7 +229,7 @@
                                         })
                                         .join('')}
                                 </select>
-                                <button class="b3-button b3-button--outline" id="sub-create-project" title="${i18n('createProject') || '新建项目'}">
+                                <button class="b3-button b3-button--outline ariaLabel" id="sub-create-project" aria-label="${i18n('createProject') || '新建项目'}">
                                     <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
                                 </button>
                             </div>
@@ -454,7 +454,7 @@
                     <div class="card-content">
                         <div class="sub-info">
                             <div class="sub-name">{sub.name}</div>
-                            <div class="sub-url" title={sub.url}>{sub.url}</div>
+                            <div class="sub-url ariaLabel" aria-label={sub.url}>{sub.url}</div>
                             <div class="sub-meta">
                                 {i18n('subscriptionSyncInterval')}: 
                                 {#if sub.syncInterval === 'dailyAt' && sub.dailySyncTime}
@@ -485,9 +485,9 @@
                         </div>
                         <div class="card-actions">
                             <button
-                                class="b3-button b3-button--outline"
+                                class="b3-button b3-button--outline ariaLabel"
                                 on:click={() => handleToggle(sub)}
-                                title={sub.enabled
+                                aria-label={sub.enabled
                                     ? i18n('disableSubscription')
                                     : i18n('enableSubscription')}
                             >
@@ -498,10 +498,10 @@
                                 </svg>
                             </button>
                             <button
-                                class="b3-button b3-button--outline"
+                                class="b3-button b3-button--outline ariaLabel"
                                 on:click={() => handleSync(sub)}
                                 disabled={syncingSubIds[sub.id]}
-                                title={i18n('syncNow')}
+                                aria-label={i18n('syncNow')}
                             >
                                 <svg
                                     class="b3-button__icon {syncingSubIds[sub.id]
@@ -512,18 +512,18 @@
                                 </svg>
                             </button>
                             <button
-                                class="b3-button b3-button--outline"
+                                class="b3-button b3-button--outline ariaLabel"
                                 on:click={() => showEditSubscriptionDialog(sub)}
-                                title={i18n('editSubscription')}
+                                aria-label={i18n('editSubscription')}
                             >
                                 <svg class="b3-button__icon">
                                     <use xlink:href="#iconEdit"></use>
                                 </svg>
                             </button>
                             <button
-                                class="b3-button b3-button--outline"
+                                class="b3-button b3-button--outline ariaLabel"
                                 on:click={() => handleDelete(sub)}
-                                title={i18n('deleteSubscription')}
+                                aria-label={i18n('deleteSubscription')}
                             >
                                 <svg class="b3-button__icon">
                                     <use xlink:href="#iconTrashcan"></use>

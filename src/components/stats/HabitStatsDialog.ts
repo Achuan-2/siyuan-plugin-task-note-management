@@ -1,4 +1,4 @@
-import { Dialog } from "siyuan";
+﻿import { Dialog } from "siyuan";
 import type { Habit } from "../HabitPanel";
 import { HabitDayDialog } from "../HabitDayDialog";
 import { PomodoroRecordManager } from "../../utils/pomodoroRecord";
@@ -128,7 +128,54 @@ export class HabitStatsDialog {
     }
 
     private renderContainer(container: HTMLElement) {
-        container.style.cssText = 'padding: 20px; overflow-y: auto; height: 100%;';
+        container.style.cssText = 'padding: 20px; overflow-y: auto; height: 100%; container-type: inline-size;';
+
+        // 添加全局样式用于 emoji 字体大小（如果还没有添加）
+        const styleId = 'habitStatsAdaptiveFont';
+        if (!document.getElementById(styleId)) {
+            const style = document.createElement('style');
+            style.id = styleId;
+            style.textContent = `
+                /* 月视图 emoji 字体大小：基于容器宽度的自适应 */
+                .habit-month-grid .habit-emoji-item {
+                    font-size: clamp(2px, 3.5cqw, 90px);
+                }
+                .habit-month-grid .habit-emoji-item.count-5-8 {
+                    font-size: clamp(2px, 2.5cqw, 90px);
+                }
+                .habit-month-grid .habit-emoji-item.count-9-12 {
+                    font-size: clamp(2px, 2cqw, 90px);
+                }
+                .habit-month-grid .habit-emoji-item.count-12plus {
+                    font-size: clamp(2px, 1.5cqw, 90px);
+                }
+                /* 年视图 emoji 字体大小 */
+                .habit-year-grid .habit-emoji-item {
+                    font-size: clamp(2px, 1cqw, 8px);
+                }
+                .habit-year-grid .habit-emoji-item.count-1 {
+                    font-size: clamp(2px, 2cqw, 90px);
+                }
+                .habit-year-grid .habit-emoji-item.count-2-4 {
+                    font-size: clamp(2px, 0.5cqw, 90px);
+                }
+                .habit-year-grid .habit-emoji-item.count-5-8 {
+                    font-size: clamp(2px, 0.5cqw, 90px);
+                }
+                .habit-year-grid .habit-emoji-item.count-9-12 {
+                    font-size: clamp(2px, 0.5cqw, 90px);
+                }
+                .habit-year-grid .habit-emoji-item.count-12plus {
+                    font-size: clamp(2px, 0.5cqw, 90px);
+                }
+                /* 打卡状态分布 emoji 字体大小 */
+                .habit-emoji-stat-icon {
+                    font-size: clamp(24px, 3.5cqw, 32px);
+                    margin-bottom: 8px;
+                }
+            `;
+            document.head.appendChild(style);
+        }
         container.innerHTML = '';
 
         // Tab 导航
@@ -218,9 +265,10 @@ export class HabitStatsDialog {
 
             emojiStats.forEach(stat => {
                 const card = document.createElement('div');
+                card.className = 'habit-emoji-stat-card';
                 card.style.cssText = 'padding: 12px; background: var(--b3-theme-surface); border-radius: 8px; text-align: center; display: flex; flex-direction: column; align-items: center;';
                 card.innerHTML = `
-                    <div style="font-size: 32px; margin-bottom: 8px;">${stat.emoji}</div>
+                    <div class="habit-emoji-stat-icon">${stat.emoji}</div>
                     <div style="font-size: 14px; font-weight: bold; margin-bottom: 4px;">${stat.count}次</div>
                     <div style="font-size: 12px; color: var(--b3-theme-on-surface-light); margin-bottom: 8px;">${stat.percentage.toFixed(1)}%</div>
                     <div style="width: 60px; height: 80px; background: var(--b3-theme-surface-lighter); border-radius: 4px; position: relative; margin-top: auto;">
@@ -439,6 +487,53 @@ export class HabitStatsDialog {
         return [];
     }
 
+    // 获取打卡详情，返回时间和备注的格式化字符串数组
+    private getCheckInDetails(dateStr: string): string[] {
+        const checkIn = this.habit.checkIns?.[dateStr];
+        if (!checkIn) return [];
+
+        if (checkIn.entries && checkIn.entries.length > 0) {
+            return checkIn.entries.map(entry => {
+                const timeText = entry.timestamp ? entry.timestamp.slice(11, 16) : ''; // HH:MM 格式
+                const noteText = entry.note?.trim();
+                if (timeText && noteText) {
+                    return `${entry.emoji || '📝'} ${timeText} ${noteText}`;
+                } else if (timeText) {
+                    return `${entry.emoji || '📝'} ${timeText}`;
+                } else if (noteText) {
+                    return `${entry.emoji || '📝'} ${noteText}`;
+                }
+                return entry.emoji || '📝';
+            });
+        }
+        return [];
+    }
+
+    // 获取 emoji 字体大小的 CSS 类名（基于容器查询）
+    private getEmojiFontClass(emojiCount: number, isYearView: boolean = false): string {
+        if (isYearView) {
+            if (emojiCount === 1) return 'habit-emoji-item count-1';
+            if (emojiCount <= 4) return 'habit-emoji-item count-2-4';
+            if (emojiCount <= 8) return 'habit-emoji-item count-5-8';
+            if (emojiCount <= 12) return 'habit-emoji-item count-9-12';
+            return 'habit-emoji-item count-12plus';
+        }
+        if (emojiCount > 12) return 'habit-emoji-item count-12plus';
+        if (emojiCount > 8) return 'habit-emoji-item count-9-12';
+        if (emojiCount > 4) return 'habit-emoji-item count-5-8';
+        return 'habit-emoji-item';
+    }
+
+    // 检查指定日期是否有备注
+    private hasNote(dateStr: string): boolean {
+        const checkIn = this.habit.checkIns?.[dateStr];
+        if (!checkIn) return false;
+        if (checkIn.entries && checkIn.entries.length > 0) {
+            return checkIn.entries.some(entry => entry.note?.trim());
+        }
+        return false;
+    }
+
     private calculateEmojiStats(): Array<{ emoji: string; count: number; percentage: number }> {
         const emojiCount: Record<string, number> = {};
         let total = 0;
@@ -522,6 +617,7 @@ export class HabitStatsDialog {
         section.appendChild(weekdayGrid);
 
         const monthGrid = document.createElement('div');
+        monthGrid.className = 'habit-month-grid';
         monthGrid.style.cssText = 'display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;';
 
         // 获取当前月份的所有日期
@@ -576,12 +672,19 @@ export class HabitStatsDialog {
 
             // 显示日期以及状态 emoji（支持多行、自动缩放字体）
             const contentWrap = document.createElement('div');
-            contentWrap.style.cssText = 'display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; width:100%; height:100%; padding:6px; box-sizing:border-box; overflow:hidden;';
+            contentWrap.style.cssText = 'display:flex; flex-direction:column; align-items:center; justify-content:flex-start; gap:1px; width:100%; height:100%; padding:6px; box-sizing:border-box; overflow:hidden; position:relative;';
 
             const dateSpan = document.createElement('div');
             dateSpan.textContent = String(day);
-            dateSpan.style.cssText = 'font-size:12px; color: var(--b3-theme-on-surface-light); width:100%; text-align:center;';
+            dateSpan.style.cssText = 'font-size:12px; color: var(--b3-theme-on-surface-light); width:100%; text-align:center; flex-shrink:0; z-index:1; background:inherit; border-radius:2px; padding:0 2px;';
             contentWrap.appendChild(dateSpan);
+
+            // 如果有备注，在下方中间显示一个点
+            if (this.hasNote(dateStr)) {
+                const noteDot = document.createElement('div');
+                noteDot.style.cssText = 'position:absolute; top:2px; right:2px; width:6px; height:6px; border-radius:50%; background:var(--b3-theme-primary);';
+                contentWrap.appendChild(noteDot);
+            }
 
             if (checkIn) {
                 // 优先使用 entries（包含时间与备注），否则回退到旧的 status 数组
@@ -589,28 +692,19 @@ export class HabitStatsDialog {
                 const statuses = entries ? entries.map(e => e.emoji).filter(Boolean) : (checkIn.status || []).filter(Boolean);
                 const count = statuses.length;
 
-                // 根据 emoji 数量计算字体大小
-                let fontSize = 18;
-                if (count > 12) fontSize = 10;
-                else if (count > 8) fontSize = 12;
-                else if (count > 4) fontSize = 14;
-                else fontSize = 18;
+                // emoji 字体大小通过 CSS 容器查询自动适应（.habit-emoji-item 类）
 
                 const emojiContainer = document.createElement('div');
-                emojiContainer.style.cssText = `display:flex; flex-wrap:wrap; gap:2px; justify-content:center; align-items:center; width:100%;`;
+                emojiContainer.style.cssText = `display:flex; flex-wrap:wrap; gap:2px; justify-content:center; align-content:center; width:100%; flex:1; min-height:0; overflow:hidden; mask-image: linear-gradient(to bottom, black 70%, transparent 100%); -webkit-mask-image: linear-gradient(to bottom, black 70%, transparent 100%);`;
 
                 if (entries) {
                     // 每条 entry 都可能包含备注 note 与 timestamp
+                    const emojiClass = this.getEmojiFontClass(count);
                     entries.forEach(entry => {
                         const span = document.createElement('span');
                         span.textContent = entry.emoji || '';
-                        const timeText = entry.timestamp ? entry.timestamp : '';
-                        const noteText = entry.note ? entry.note : '';
-                        const titleParts = [] as string[];
-                        if (timeText) titleParts.push(timeText);
-                        if (noteText) titleParts.push(noteText);
-                        span.title = titleParts.length > 0 ? `${entry.emoji || ''} - ${titleParts.join(' / ')}` : (entry.emoji || '');
-                        span.style.cssText = `font-size:${fontSize}px; line-height:1;`; // 自动换行
+                        span.className = emojiClass;
+                        span.style.cssText = 'line-height:1;';
                         emojiContainer.appendChild(span);
                     });
 
@@ -618,15 +712,27 @@ export class HabitStatsDialog {
                     const checkInCount = checkIn.count || 0;
                     const target = this.habit.target || 1;
                     const statusText = isComplete ? i18n("habitComplete") : `${checkInCount}/${target}`;
-                    // 将每条 entry 的 emoji 与备注合并到 title 中，便于鼠标悬停查看
-                    const entrySummary = entries.map(e => e.note ? `${e.emoji} (${e.note})` : e.emoji).join(' ');
-                    dayCell.title = `${day}: ${entrySummary}\n${statusText}`;
+                    // 将每条 entry 的时间、emoji与备注合并到 aria-label 中，便于鼠标悬停查看
+                    const entryDetails = entries.map(e => {
+                        const timeText = e.timestamp ? e.timestamp.slice(11, 16) : ''; // HH:MM 格式
+                        const noteText = e.note?.trim();
+                        if (timeText && noteText) {
+                            return `${e.emoji || '📝'} ${timeText} ${noteText}`;
+                        } else if (timeText) {
+                            return `${e.emoji || '📝'} ${timeText}`;
+                        } else if (noteText) {
+                            return `${e.emoji || '📝'} ${noteText}`;
+                        }
+                        return e.emoji || '📝';
+                    }).join('\n');
+                    dayCell.classList.add('ariaLabel'); dayCell.setAttribute('aria-label', `${dateStr}\n${entryDetails}`);
                 } else if (statuses.length > 0) {
+                    const emojiClass = this.getEmojiFontClass(count);
                     statuses.forEach(s => {
                         const span = document.createElement('span');
                         span.textContent = s;
-                        span.title = s;
-                        span.style.cssText = `font-size:${fontSize}px; line-height:1;`;
+                        span.className = emojiClass;
+                        span.style.cssText = 'line-height:1;';
                         emojiContainer.appendChild(span);
                     });
 
@@ -634,7 +740,7 @@ export class HabitStatsDialog {
                     const checkInCount = checkIn.count || 0;
                     const target = this.habit.target || 1;
                     const statusText = isComplete ? i18n("habitComplete") : `${checkInCount}/${target}`;
-                    dayCell.title = `${day}: ${statuses.join(' ')}\n${statusText}`;
+                    dayCell.classList.add('ariaLabel'); dayCell.setAttribute('aria-label', `${dateStr}\n${statuses.join('\n')}`);
                 } else {
                     const emptyPlaceholder = document.createElement('div');
                     emptyPlaceholder.style.cssText = 'width:12px; height:12px; border-radius:50%; background:var(--b3-theme-surface); margin-top:4px;';
@@ -788,6 +894,7 @@ export class HabitStatsDialog {
             row.appendChild(label);
 
             const cells = document.createElement('div');
+            cells.className = 'habit-year-grid';
             cells.style.cssText = 'display:grid; grid-template-columns:repeat(31, minmax(0, 1fr)); gap:2px;';
             const daysInMonth = new Date(year, month + 1, 0).getDate();
 
@@ -803,6 +910,7 @@ export class HabitStatsDialog {
                 const dateStr = this.formatLocalDate(date);
                 const done = this.isCheckInComplete(dateStr);
                 const emojis = this.getCheckInEmojis(dateStr);
+                const checkInDetails = this.getCheckInDetails(dateStr);
                 const isToday = dateStr === this.formatLocalDate(new Date());
                 const required = this.shouldCheckInOnDate(this.habit, dateStr);
 
@@ -827,11 +935,13 @@ export class HabitStatsDialog {
                     padding:1px;
                     box-sizing:border-box;
                     cursor:pointer;
+                    position:relative;
                 `;
-                dayCell.title = `${dateStr}${emojis.length > 0 ? `\n打卡: ${emojis.join(" ")}` : "\n未打卡"}`;
+                dayCell.classList.add('ariaLabel'); dayCell.setAttribute('aria-label', `${dateStr}${checkInDetails.length > 0 ? '\n' + checkInDetails.join('\n') : ''}`);
 
                 if (emojis.length > 0) {
-                    const fontSize = emojis.length >= 7 ? 6 : (emojis.length >= 4 ? 7 : 8);
+                    // emoji 字体大小通过 CSS 容器查询自动适应（.habit-emoji-item 类）
+                    const emojiClass = this.getEmojiFontClass(emojis.length, true);
                     const emojiWrap = document.createElement('div');
                     emojiWrap.style.cssText = `
                         width:100%;
@@ -842,13 +952,13 @@ export class HabitStatsDialog {
                         justify-content:center;
                         align-content:center;
                         gap:0 1px;
-                        font-size:${fontSize}px;
                         line-height:1;
                     `;
                     emojis.forEach(emoji => {
                         const span = document.createElement('span');
                         span.textContent = emoji;
-                        span.style.cssText = 'font-size:inherit; line-height:1;';
+                        span.className = emojiClass;
+                        span.style.cssText = 'line-height:1;';
                         emojiWrap.appendChild(span);
                     });
                     dayCell.appendChild(emojiWrap);

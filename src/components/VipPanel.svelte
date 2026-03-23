@@ -383,13 +383,13 @@
                             {showUserId ? userId : '••••••••'}
                         </span>
                         <div
-                            class="eye-icon"
+                            class="eye-icon ariaLabel"
                             on:click={() => (showUserId = !showUserId)}
                             role="button"
                             tabindex="0"
                             on:keydown={e =>
                                 (e.key === 'Enter' || e.key === ' ') && (showUserId = !showUserId)}
-                            title={showUserId ? i18n('vipHide') : i18n('vipShow')}
+                            aria-label={showUserId ? i18n('vipHide') : i18n('vipShow')}
                         >
                             {#if showUserId}
                                 <svg><use xlink:href="#iconEyeoff"></use></svg>

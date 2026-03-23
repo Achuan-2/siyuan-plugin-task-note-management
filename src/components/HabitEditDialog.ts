@@ -1,4 +1,4 @@
-import { Dialog, showMessage, platformUtils, openEmoji } from "siyuan";
+﻿import { Dialog, showMessage, platformUtils, openEmoji } from "siyuan";
 import { getBlockByID, getBlockDOM } from "../api";
 import { Habit } from "./HabitPanel";
 import { getLocalDateTimeString, getLogicalDateString } from "../utils/dateUtils";
@@ -85,12 +85,14 @@ export class HabitEditDialog {
                 border-radius: 50%;
                 font-size: 20px;
                 line-height: 1;
-                display:flex;
-                align-items:center;
-                justify-content:center;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                text-align: center;
+                overflow: hidden;
             `;
             iconBtn.textContent = this.habit?.icon || '🌱';
-            iconBtn.title = '点击选择图标';
+            iconBtn.classList.add('ariaLabel'); iconBtn.setAttribute('aria-label', '点击选择图标');
             iconBtn.addEventListener('click', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -401,13 +403,13 @@ export class HabitEditDialog {
         const copyBtn = document.createElement('button');
         copyBtn.type = 'button';
         copyBtn.className = 'b3-button b3-button--outline';
-        copyBtn.title = i18n("copyBlockRef");
+        copyBtn.classList.add('ariaLabel'); copyBtn.setAttribute('aria-label', i18n("copyBlockRef"));
         copyBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconCopy"></use></svg>';
 
         const clearBtn = document.createElement('button');
         clearBtn.type = 'button';
         clearBtn.className = 'b3-button b3-button--outline';
-        clearBtn.title = i18n("clearBlock");
+        clearBtn.classList.add('ariaLabel'); clearBtn.setAttribute('aria-label', i18n("clearBlock"));
         clearBtn.textContent = i18n("clearBlock");
 
         blockInputRow.appendChild(blockInput);
