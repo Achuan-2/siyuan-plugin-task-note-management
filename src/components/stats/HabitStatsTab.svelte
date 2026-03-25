@@ -1542,8 +1542,6 @@ $: yearVisibleSections = groupedSections
         width: 100%;
         min-height: 0;
         overflow: hidden;
-        mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
-        -webkit-mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
     }
 
     .month-day-emojis.wrap-bottom {

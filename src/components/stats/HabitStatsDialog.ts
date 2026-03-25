@@ -695,7 +695,7 @@ export class HabitStatsDialog {
                 // emoji 字体大小通过 CSS 容器查询自动适应（.habit-emoji-item 类）
 
                 const emojiContainer = document.createElement('div');
-                emojiContainer.style.cssText = `display:flex; flex-wrap:wrap; gap:2px; justify-content:center; align-content:center; width:100%; flex:1; min-height:0; overflow:hidden; mask-image: linear-gradient(to bottom, black 70%, transparent 100%); -webkit-mask-image: linear-gradient(to bottom, black 70%, transparent 100%);`;
+                emojiContainer.style.cssText = `display:flex; flex-wrap:wrap; gap:2px; justify-content:center; align-content:center; width:100%; flex:1; min-height:0; overflow:hidden;`;
 
                 if (entries) {
                     // 每条 entry 都可能包含备注 note 与 timestamp
