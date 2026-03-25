@@ -2,7 +2,7 @@
 import { showMessage, confirm, Dialog, Menu, Constants, getFrontend, getBackend, platformUtils } from "siyuan";
 import { refreshSql, sql, getBlockKramdown, getBlockByID, updateBindBlockAtrrs, openBlock } from "../api";
 import { getLocalDateString, compareDateStrings, getLocalDateTimeString, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../utils/dateUtils";
-import { loadSortConfig, saveSortConfig, getSortConfigSummary, SortCriterion, loadFilterConfig, saveFilterConfig } from "../utils/sortConfig";
+import { loadSortConfig, saveSortConfig, getSortConfigSummary, getSortCriterionName, SortCriterion, loadFilterConfig, saveFilterConfig } from "../utils/sortConfig";
 import { SortMenuDialog } from "./SortMenuDialog";
 import { QuickReminderDialog } from "./QuickReminderDialog";
 import { CategoryManager } from "../utils/categoryManager";
@@ -1170,8 +1170,22 @@ export class ReminderPanel {
     // 更新排序按钮的提示文本
     private updateSortButtonTitle() {
         if (this.sortButton) {
-            const summary = getSortConfigSummary({ criteria: this.currentSortCriteria });
-            this.sortButton.classList.add('ariaLabel'); this.sortButton.setAttribute('aria-label', `${i18n("sortBy")}: ${summary}`);
+            // 构建完整的排序方式描述（用于 aria-label）
+            let fullSortDescription: string;
+            if (!this.currentSortCriteria || this.currentSortCriteria.length === 0) {
+                fullSortDescription = i18n("sortBy") || "排序";
+            } else if (this.currentSortCriteria.length === 1) {
+                fullSortDescription = getSortCriterionName(this.currentSortCriteria[0]);
+            } else {
+                // 多选排序时，显示所有排序条件，使用<br>换行
+                const criteriaNames = this.currentSortCriteria.map((c, index) => {
+                    const name = getSortCriterionName(c);
+                    return `${index + 1}. ${name}`;
+                });
+                fullSortDescription = criteriaNames.join('<br>');
+            }
+            this.sortButton.classList.add('ariaLabel');
+            this.sortButton.setAttribute('aria-label', `${i18n("sortBy")}:<br>${fullSortDescription}`);
         }
     }
 
