@@ -390,7 +390,16 @@
         if (selectedFilter) {
             const index = filters.findIndex(f => f.id === selectedFilter.id);
             if (index !== -1) {
-                filters[index] = newFilter;
+                // 如果修改的是内置过滤器，需要特殊处理
+                if (selectedFilter.isBuiltIn) {
+                    // 1. 将原内置过滤器添加到隐藏列表
+                    hiddenBuiltInFilters = [...hiddenBuiltInFilters, selectedFilter.id];
+                    // 2. 在相同位置插入新的自定义过滤器（替换）
+                    filters[index] = newFilter;
+                } else {
+                    // 修改自定义过滤器，直接替换
+                    filters[index] = newFilter;
+                }
             }
         } else {
             filters = [...filters, newFilter];
