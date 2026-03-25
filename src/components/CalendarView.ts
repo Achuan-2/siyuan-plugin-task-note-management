@@ -3113,7 +3113,7 @@ export class CalendarView {
                 window.dispatchEvent(new CustomEvent('habitUpdated'));
                 await this.refreshEvents(true);
             }, this.plugin);
-            dialog.show();
+            await dialog.show();
         } catch (error) {
             console.error('打开习惯编辑失败:', error);
             showMessage(i18n("habitSaveFailed") || "保存习惯失败", 3000, 'error');
