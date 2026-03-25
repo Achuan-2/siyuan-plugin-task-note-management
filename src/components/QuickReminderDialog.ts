@@ -216,6 +216,7 @@ export class QuickReminderDialog {
     private hideProjectSelector: boolean = false;
     private existingReminders: any[] = [];
     private selectedCategoryIds: string[] = [];
+    private isMultiSelectCategory: boolean = false; // 分类是否多选
     private currentKanbanStatuses: import('../utils/projectManager').KanbanStatus[] = []; // 当前项目的kanbanStatuses
     private durationManuallyChanged: boolean = false; // 标记用户是否手动修改了持续天数
     private tempSubtasks: any[] = []; // 新建模式下的临时子任务列表
@@ -986,6 +987,13 @@ export class QuickReminderDialog {
                 this.selectedCategoryIds = typeof this.reminder.categoryId === 'string'
                     ? this.reminder.categoryId.split(',').filter((id: string) => id.trim())
                     : [this.reminder.categoryId];
+
+                // 根据分类数量自动设置多选状态
+                this.isMultiSelectCategory = this.selectedCategoryIds.length > 1;
+                const multiSelectCheckbox = this.dialog.element.querySelector('#quickMultiSelectCategory') as HTMLInputElement;
+                if (multiSelectCheckbox) {
+                    multiSelectCheckbox.checked = this.isMultiSelectCategory;
+                }
 
                 const categoryOptions = this.dialog.element.querySelectorAll('.category-option');
                 categoryOptions.forEach(option => {
@@ -1944,12 +1952,18 @@ export class QuickReminderDialog {
                         </div>
 
                         <div class="b3-form__group">
-                            <label class="b3-form__label">${i18n("eventCategory")}
-                                <button type="button" id="quickManageCategoriesBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("manageCategories")}">
-                                    <svg class="b3-button__icon"><use xlink:href="#iconSettings"></use></svg>
-                                </button>
-                            </label>
-                            <div class="category-selector" id="quickCategorySelector" style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                <label class="b3-form__label" style="margin-bottom: 0;">${i18n("eventCategory")}
+                                    <button type="button" id="quickManageCategoriesBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("manageCategories")}">
+                                        <svg class="b3-button__icon"><use xlink:href="#iconSettings"></use></svg>
+                                    </button>
+                                </label>
+                                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; color: var(--b3-theme-on-surface);">
+                                    <input type="checkbox" class="b3-switch" id="quickMultiSelectCategory">
+                                    <span>${i18n('multiSelect') || '多选'}</span>
+                                </label>
+                            </div>
+                            <div class="category-selector" id="quickCategorySelector" style="display: flex; flex-wrap: wrap; gap: 6px;">
                                 <!-- 分类选择器将在这里渲染 -->
                             </div>
                         </div>
@@ -3725,6 +3739,12 @@ export class QuickReminderDialog {
             }
         });
 
+        // 多选分类 checkbox 事件
+        const multiSelectCategoryCheckbox = this.dialog.element.querySelector('#quickMultiSelectCategory') as HTMLInputElement;
+        multiSelectCategoryCheckbox?.addEventListener('change', (e) => {
+            this.isMultiSelectCategory = (e.target as HTMLInputElement).checked;
+        });
+
         // 分类选择事件
         categorySelector?.addEventListener('click', (e) => {
             const target = e.target as HTMLElement;
@@ -3741,8 +3761,14 @@ export class QuickReminderDialog {
                         // 如果已选中，则取消选中
                         this.selectedCategoryIds = this.selectedCategoryIds.filter(id => id !== categoryId);
                     } else {
-                        // 如果未选中，则添加
-                        this.selectedCategoryIds.push(categoryId);
+                        // 如果未选中
+                        if (this.isMultiSelectCategory) {
+                            // 多选模式：添加到已选列表
+                            this.selectedCategoryIds.push(categoryId);
+                        } else {
+                            // 单选模式：只保留当前选择
+                            this.selectedCategoryIds = [categoryId];
+                        }
                     }
                 }
 
