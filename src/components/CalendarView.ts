@@ -1,4 +1,4 @@
-﻿import { Calendar } from '@fullcalendar/core';
+import { Calendar } from '@fullcalendar/core';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import multiMonthPlugin from '@fullcalendar/multimonth';
@@ -4459,8 +4459,23 @@ export class CalendarView {
         } else if (typeA === 'completedTaskTime' || typeB === 'completedTaskTime') {
             return typeA === 'completedTaskTime' ? 1 : -1;
         }
+        // 0. 全天任务置顶，定时任务其次
+        if (a.allDay !== b.allDay) {
+            return a.allDay ? -1 : 1;
+        }
 
-        // 0. 订阅日历置顶
+        // 0.1. 如果是定时任务，优先按时间排序（除非时间一样）
+        if (!a.allDay) {
+            const timeA = a.extendedProps?.time || '';
+            const timeB = b.extendedProps?.time || '';
+            if (timeA !== timeB) {
+                if (!timeA) return 1;
+                if (!timeB) return -1;
+                return timeA.localeCompare(timeB);
+            }
+        }
+
+        // 0.2. 订阅日历置顶
         const isSubA = a.extendedProps?.isSubscribed || false;
         const isSubB = b.extendedProps?.isSubscribed || false;
         if (isSubA !== isSubB) {
