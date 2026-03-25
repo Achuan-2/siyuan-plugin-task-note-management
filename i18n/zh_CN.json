@@ -1983,5 +1983,6 @@
     "habitCheckinLabel": "打卡",
     "deleteCheckInOptionTitle": "删除打卡项",
     "confirmDeleteCheckInOption": "确定要删除打卡项「${emoji} ${meaning}」吗？",
-    "partialCompleted": "部分完成"
+    "partialCompleted": "部分完成",
+    "multiSelect": "多选"
 }
