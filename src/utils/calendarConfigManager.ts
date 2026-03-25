@@ -21,6 +21,8 @@ export interface CalendarConfig {
     showHiddenTasks: boolean; // 显示不在日历视图显示的任务
     showCompletedTaskTime: boolean; // 显示已完成任务时间
     showCompletedTaskTimeOnlyWithoutDate: boolean; // 只显示没有日期的任务的完成时间
+    showTasks: boolean; // 是否显示任务
+    showHabits: boolean; // 是否显示习惯
     multiDaysCount: number; // 多天视图显示的天数，默认为3天
 }
 
@@ -49,6 +51,8 @@ export class CalendarConfigManager {
             showHiddenTasks: false, // 默认不显示隐藏任务
             showCompletedTaskTime: true, // 默认显示已完成任务时间
             showCompletedTaskTimeOnlyWithoutDate: false, // 默认显示所有已完成任务的时间
+            showTasks: true, // 默认显示任务
+            showHabits: true, // 默认显示习惯
             multiDaysCount: 3 // 默认显示3天
         };
     }
@@ -84,6 +88,8 @@ export class CalendarConfigManager {
             settings.calendarShowHiddenTasks = this.config.showHiddenTasks;
             settings.calendarShowCompletedTaskTime = this.config.showCompletedTaskTime;
             settings.calendarShowCompletedTaskTimeOnlyWithoutDate = this.config.showCompletedTaskTimeOnlyWithoutDate;
+            settings.calendarShowTasks = this.config.showTasks;
+            settings.calendarShowHabits = this.config.showHabits;
             settings.calendarMultiDaysCount = this.config.multiDaysCount;
             await (this.plugin as any).saveSettings(settings);
         } catch (error) {
@@ -140,6 +146,8 @@ export class CalendarConfigManager {
                 showHiddenTasks: settings.calendarShowHiddenTasks === true, // 默认为 false
                 showCompletedTaskTime: settings.calendarShowCompletedTaskTime !== false, // 默认为 true
                 showCompletedTaskTimeOnlyWithoutDate: settings.calendarShowCompletedTaskTimeOnlyWithoutDate === true, // 默认为 false
+                showTasks: settings.calendarShowTasks !== false, // 默认为 true
+                showHabits: settings.calendarShowHabits !== false, // 默认为 true
                 multiDaysCount: settings.calendarMultiDaysCount !== undefined ? settings.calendarMultiDaysCount : 3 // 默认为3天
             };
         } catch (error) {
@@ -162,6 +170,8 @@ export class CalendarConfigManager {
                 showHiddenTasks: false,
                 showCompletedTaskTime: true,
                 showCompletedTaskTimeOnlyWithoutDate: false,
+                showTasks: true,
+                showHabits: true,
                 multiDaysCount: 3
             };
             try {
@@ -333,6 +343,24 @@ export class CalendarConfigManager {
 
     public getMultiDaysCount(): number {
         return this.config.multiDaysCount !== undefined ? this.config.multiDaysCount : 3;
+    }
+
+    public async setShowTasks(show: boolean) {
+        this.config.showTasks = show;
+        await this.saveConfig();
+    }
+
+    public getShowTasks(): boolean {
+        return this.config.showTasks !== false;
+    }
+
+    public async setShowHabits(show: boolean) {
+        this.config.showHabits = show;
+        await this.saveConfig();
+    }
+
+    public getShowHabits(): boolean {
+        return this.config.showHabits !== false;
     }
 
     public getConfig(): CalendarConfig {

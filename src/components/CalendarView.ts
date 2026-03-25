@@ -141,6 +141,8 @@ export class CalendarView {
     private async updateSettings() {
         const settings = await this.plugin.loadSettings();
         this.showCategoryAndProject = settings.calendarShowCategoryAndProject !== false;
+        this.showTasks = this.calendarConfigManager.getShowTasks();
+        this.showHabits = this.calendarConfigManager.getShowHabits();
         if (this.openedFromHabitPanel) {
             this.showTasks = false;
             this.showHabits = true;
@@ -162,6 +164,8 @@ export class CalendarView {
             this.showPomodoroBreakTime = this.calendarConfigManager.getShowPomodoroBreakTime();
             this.showCompletedTaskTime = this.calendarConfigManager.getShowCompletedTaskTime();
             this.showCompletedTaskTimeOnlyWithoutDate = this.calendarConfigManager.getShowCompletedTaskTimeOnlyWithoutDate();
+            this.showTasks = this.calendarConfigManager.getShowTasks();
+            this.showHabits = this.calendarConfigManager.getShowHabits();
 
             try {
                 this.currentCompletionFilter = this.calendarConfigManager.getCompletionFilter();
@@ -476,6 +480,8 @@ export class CalendarView {
         this.colorBy = this.calendarConfigManager.getColorBy();
         const settings = await this.plugin.loadSettings();
         this.showCategoryAndProject = settings.calendarShowCategoryAndProject !== false;
+        this.showTasks = this.calendarConfigManager.getShowTasks();
+        this.showHabits = this.calendarConfigManager.getShowHabits();
         if (this.openedFromHabitPanel) {
             this.showTasks = false;
             this.showHabits = true;
@@ -1106,15 +1112,17 @@ export class CalendarView {
             await this.refreshEvents();
         }));
 
-        // 任务显示开关（仅当前日历视图会话生效）
+        // 任务显示开关
         displaySettingsDropdown.appendChild(createSwitchItem(i18n("showTasks") || "显示任务", this.showTasks, async (checked) => {
             this.showTasks = checked;
+            await this.calendarConfigManager.setShowTasks(checked);
             await this.refreshEvents();
         }));
 
-        // 习惯显示开关（仅当前日历视图会话生效）
+        // 习惯显示开关
         displaySettingsDropdown.appendChild(createSwitchItem(i18n("showHabits") || "显示习惯", this.showHabits, async (checked) => {
             this.showHabits = checked;
+            await this.calendarConfigManager.setShowHabits(checked);
             await this.refreshEvents();
         }));
 
