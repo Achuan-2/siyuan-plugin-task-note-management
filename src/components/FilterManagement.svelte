@@ -73,6 +73,7 @@
 
     let filterName = '';
     let selectedDateFilters: DateFilterType[] = [];
+    let isMultiSelectDateFilter = false;
     let customRangeStart = '';
     let customRangeEnd = '';
     let futureDays: number = 14;
@@ -308,6 +309,8 @@
 
         filterName = filter.name;
         selectedDateFilters = filter.dateFilters.map(df => df.type);
+        // 根据日期筛选器数量自动设置多选状态
+        isMultiSelectDateFilter = filter.dateFilters.length > 1;
         statusFilter = filter.statusFilter;
         selectedProjects = [...filter.projectFilters];
         selectedCategories = [...filter.categoryFilters];
@@ -349,6 +352,7 @@
 
         filterName = '';
         selectedDateFilters = ['all']; // 默认为全部日期
+        isMultiSelectDateFilter = false; // 新建过滤器默认为单选模式
         customRangeStart = '';
         customRangeEnd = '';
         statusFilter = 'all';
@@ -443,7 +447,13 @@
             } else {
                 // 选择该日期，同时移除"全部"选项
                 selectedDateFilters = selectedDateFilters.filter(t => t !== 'all');
-                selectedDateFilters = [...selectedDateFilters, type];
+                if (isMultiSelectDateFilter) {
+                    // 多选模式：添加到已选列表
+                    selectedDateFilters = [...selectedDateFilters, type];
+                } else {
+                    // 单选模式：只保留当前选择
+                    selectedDateFilters = [type];
+                }
             }
         }
     }
@@ -637,7 +647,17 @@
 
             <div class="filter-editor-content">
                 <div class="b3-form__group">
-                    <span class="b3-form__label">{i18n('dateFilters')}</span>
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                        <span class="b3-form__label" style="margin-bottom: 0;">{i18n('dateFilters')}</span>
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; color: var(--b3-theme-on-surface);">
+                            <input
+                                type="checkbox"
+                                class="b3-switch"
+                                bind:checked={isMultiSelectDateFilter}
+                            />
+                            <span>{i18n('multiSelect') || '多选'}</span>
+                        </label>
+                    </div>
                     <div class="filter-options">
                         <div
                             class="filter-option"
