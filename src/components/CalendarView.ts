@@ -30,7 +30,7 @@ import { VipManager } from "../utils/vip";
 import { createPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
 import { HabitEditDialog } from "./HabitEditDialog";
 import { HabitStatsDialog } from "./stats/HabitStatsDialog";
-import { getHabitProgressOnDate, shouldCheckInOnDate as shouldCheckInOnDateUtil } from "../utils/habitUtils";
+import { getHabitProgressOnDate, shouldCheckInOnDate as shouldCheckInOnDateUtil, isHabitActiveOnDate } from "../utils/habitUtils";
 import { HabitGroupManager } from "../utils/habitGroupManager";
 export class CalendarView {
     private container: HTMLElement;
@@ -6517,6 +6517,8 @@ export class CalendarView {
     }
 
     private shouldCheckHabitOnDate(habit: any, date: string): boolean {
+        if (habit.abandoned) return false;
+        if (!isHabitActiveOnDate(habit, date)) return false;
         return shouldCheckInOnDateUtil(habit, date);
     }
 
@@ -6614,12 +6616,16 @@ export class CalendarView {
 
                 for (const current = new Date(start); current <= end; current.setDate(current.getDate() + 1)) {
                     const dateStr = getLocalDateString(current);
-                    if (!this.shouldCheckHabitOnDate(habit, dateStr)) continue;
-
                     const completed = this.isHabitCompletedOnDate(habit, dateStr);
                     const checkedEmojis = this.getHabitCheckInEmojisOnDate(habit, dateStr);
+                    const isDue = this.shouldCheckHabitOnDate(habit, dateStr);
+
+                    // 如果既不是该日期的任务，也没有任何打卡记录，则跳过
+                    if (!isDue && !completed && checkedEmojis.length === 0) continue;
+
                     // 过去日期：未完成且无打卡记录不显示；有打卡记录则显示
                     if (compareDateStrings(dateStr, today) < 0 && !completed && checkedEmojis.length === 0) continue;
+                    
                     if (this.currentCompletionFilter === 'completed' && !completed) continue;
                     if (this.currentCompletionFilter === 'incomplete' && completed) continue;
 
