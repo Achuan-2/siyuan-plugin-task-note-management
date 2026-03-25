@@ -1,4 +1,4 @@
-﻿import { colorWithOpacity } from "../utils/uiUtils";
+import { colorWithOpacity } from "../utils/uiUtils";
 import { showMessage, confirm, Dialog, Menu, Constants, getFrontend, getBackend, platformUtils } from "siyuan";
 import { refreshSql, sql, getBlockKramdown, getBlockByID, updateBindBlockAtrrs, openBlock } from "../api";
 import { getLocalDateString, compareDateStrings, getLocalDateTimeString, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../utils/dateUtils";
@@ -2750,6 +2750,9 @@ export class ReminderPanel {
         const virtualTodayCompletedTime = !reminder.completed && this.currentTab === 'todayCompleted' && this.isTodayCompleted(reminder, today)
             ? this.getCompletedTime(reminder)
             : null;
+        const startLogical_rendering = this.getReminderLogicalDate(reminder.date, reminder.time);
+        const isBeforePeriod_rendering = !reminder.date || compareDateStrings(today, startLogical_rendering) < 0;
+
         if (reminder.completed || virtualTodayCompletedTime) {
             // 添加已完成类
             reminderEl.classList.add('reminder-completed');
@@ -2783,7 +2786,7 @@ export class ReminderPanel {
                 completedEl.style.cssText = 'font-size:12px;  margin-top:6px; opacity:0.95;';
                 infoEl.appendChild(completedEl);
             }
-        } else if (reminder.isAvailableToday) {
+        } else if (reminder.isAvailableToday && isBeforePeriod_rendering) {
             const currentToday = getLogicalDateString();
             const dailyCompletedList = Array.isArray(reminder.dailyDessertCompleted) ? reminder.dailyDessertCompleted : [];
             const dailyIgnoredList = Array.isArray(reminder.dailyDessertIgnored) ? reminder.dailyDessertIgnored : [];
@@ -6441,20 +6444,24 @@ export class ReminderPanel {
 
         // 判断是否为重复/循环任务或重复实例
         const isRecurring = reminder.isRepeatInstance || (reminder.repeat && reminder.repeat.enabled);
-        const isDessert = reminder.isAvailableToday && (!reminder.date || reminder.date !== today);
-
-        // --- 每日可做任务专用菜单 ---
-        // 只有当今天还没完成时才显示 "今日已完成"
-        const dailyCompletedList = Array.isArray(reminder.dailyDessertCompleted) ? reminder.dailyDessertCompleted : [];
-        const isAlreadyCompletedToday = dailyCompletedList.includes(today);
-        // 计算逻辑起止日期并检查是否为跨天事件且在今日任务中
+        
+        // 计算逻辑起止日期并检查是否为跨天事件
         const startLogical = this.getReminderLogicalDate(reminder.date, reminder.time);
         const endLogical = this.getReminderLogicalDate(reminder.endDate || reminder.date, reminder.endTime || reminder.time);
         const isSpanningInToday = isSpanningDays && compareDateStrings(startLogical, today) <= 0 && compareDateStrings(today, endLogical) <= 0;
         const isFutureReminderInToday = this.isFutureTaskRemindedOnDate(reminder, today);
         const canToggleTodayCompleted = !reminder.completed && (isSpanningInToday || isFutureReminderInToday);
 
-        // 添加"今日已完成"选项
+        // 如果在任务期内或逾期，则不将其视为每日可做（Dessert）
+        const isInOrAfterPeriod = reminder.date && compareDateStrings(startLogical, today) <= 0;
+        const isDessert = reminder.isAvailableToday && !isInOrAfterPeriod;
+
+        // --- 每日可做任务专用菜单 ---
+        // 只有当今天还没完成时才显示 "今日已完成"
+        const dailyCompletedList = Array.isArray(reminder.dailyDessertCompleted) ? reminder.dailyDessertCompleted : [];
+        const isAlreadyCompletedToday = dailyCompletedList.includes(today);
+
+        // 添加"今日已完成"选项 (普通任务/跨天任务)
         if (canToggleTodayCompleted) {
             const isTodayCompleted = this.hasDailyCompletionMark(reminder, today);
             menu.addItem({
@@ -8786,7 +8793,7 @@ export class ReminderPanel {
                 const startLogical_cur = this.getReminderLogicalDate(reminder.date, reminder.time);
                 const endLogical_cur = this.getReminderLogicalDate(reminder.endDate || reminder.date, reminder.endTime || reminder.time);
 
-                // 常规今日任务
+                // 常规今日任务（包含期内任务和逾期任务）
                 const isNormalToday = reminder.date && (
                     (compareDateStrings(startLogical_cur, today) <= 0 && compareDateStrings(today, endLogical_cur) <= 0) ||
                     compareDateStrings(endLogical_cur, today) < 0
@@ -8799,7 +8806,9 @@ export class ReminderPanel {
                 }
 
                 // 今日可做 (Daily Dessert)
-                if (reminder.isAvailableToday && !reminder.completed) {
+                // 只有当任务还没到任务期时，才显示为每日可做
+                const isBeforePeriod = !reminder.date || compareDateStrings(today, startLogical_cur) < 0;
+                if (reminder.isAvailableToday && isBeforePeriod && !reminder.completed) {
                     const availDate = reminder.availableStartDate || today;
                     if (compareDateStrings(availDate, today) <= 0) {
                         // 检查今天是否已完成
@@ -8820,8 +8829,11 @@ export class ReminderPanel {
             case 'completed':
                 return reminder.completed;
             case 'todayCompleted':
-                // 特殊处理 Daily Dessert: 如果它今天被标记完成了 (dailyDessertCompleted includes today)，也应该显示
-                if (reminder.isAvailableToday) {
+                // 特殊处理 Daily Dessert: 只有当不在任务期时，才按每日可做逻辑显示
+                const startLogical_tc_logic = this.getReminderLogicalDate(reminder.date, reminder.time);
+                const isBeforePeriod_tc = !reminder.date || compareDateStrings(today, startLogical_tc_logic) < 0;
+
+                if (reminder.isAvailableToday && isBeforePeriod_tc) {
                     const dailyCompleted = Array.isArray(reminder.dailyDessertCompleted) ? reminder.dailyDessertCompleted : [];
                     if (dailyCompleted.includes(today)) return true;
                 }
