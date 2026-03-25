@@ -884,12 +884,12 @@ export class HabitPanel {
         if (isEnded) {
             const statusBadge = document.createElement('span');
             statusBadge.className = 'habit-card__status-badge habit-card__status-badge--ended';
-            statusBadge.textContent = i18n('habitStatusEndedBadge') || '已结束';
+            statusBadge.textContent = i18n('habitStatusEnded') || '已结束';
             header.appendChild(statusBadge);
         } else if (isAbandoned) {
             const statusBadge = document.createElement('span');
             statusBadge.className = 'habit-card__status-badge habit-card__status-badge--abandoned';
-            statusBadge.textContent = i18n('habitStatusAbandonedBadge') || '已放弃';
+            statusBadge.textContent = i18n('habitStatusAbandoned') || '已放弃';
             header.appendChild(statusBadge);
         }
         
