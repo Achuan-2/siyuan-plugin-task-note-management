@@ -24,7 +24,7 @@ export class HabitEditDialog {
         }
     }
 
-    show() {
+    async show() {
         const isNew = !this.habit;
         const title = isNew ? i18n("newHabitTitle") : i18n("editHabitTitle");
 
@@ -54,10 +54,10 @@ export class HabitEditDialog {
         }
 
         // delegate the rendering of the form inside the contentDiv and the action area
-        this.renderForm(contentDiv, isNew, actionDiv);
+        await this.renderForm(contentDiv, isNew, actionDiv);
     }
 
-    private renderForm(container: HTMLElement, isNew: boolean, actionContainer?: HTMLElement) {
+    private async renderForm(container: HTMLElement, isNew: boolean, actionContainer?: HTMLElement) {
         // the container here is the content area
         container.style.cssText = 'padding: 20px; overflow-y: auto; height: calc(100% - 56px);';
         // 设置class
@@ -186,9 +186,21 @@ export class HabitEditDialog {
 
         const pomodoroDurationRow = document.createElement('div');
         pomodoroDurationRow.style.cssText = 'display: flex; align-items: center; gap: 8px; flex-wrap: wrap;';
-        const defaultPomodoroTargetMinutes = this.habit?.goalType === 'pomodoro'
-            ? Math.max(1, this.habit?.target || 30)
-            : 30;
+        
+        // 获取默认番茄钟时长：编辑时取原值，新建时取全局设置
+        let defaultPomodoroTargetMinutes: number;
+        if (this.habit?.goalType === 'pomodoro') {
+            defaultPomodoroTargetMinutes = Math.max(1, this.habit?.target || 30);
+        } else if (isNew && this.plugin?.getPomodoroSettings) {
+            try {
+                const pomodoroSettings = await this.plugin.getPomodoroSettings();
+                defaultPomodoroTargetMinutes = pomodoroSettings?.workDuration || 30;
+            } catch (e) {
+                defaultPomodoroTargetMinutes = 30;
+            }
+        } else {
+            defaultPomodoroTargetMinutes = 30;
+        }
         const defaultPomodoroHours = Math.floor(defaultPomodoroTargetMinutes / 60);
         const defaultPomodoroMinutes = defaultPomodoroTargetMinutes % 60;
 
@@ -634,6 +646,14 @@ export class HabitEditDialog {
         });
 
         this.updateHabitPomodorosDisplay();
+
+        // 自动聚焦到标题输入框
+        setTimeout(() => {
+            const titleInput = container.querySelector('input[name="title"]') as HTMLInputElement | null;
+            if (titleInput) {
+                titleInput.focus();
+            }
+        }, 0);
     }
 
     private async updateHabitPomodorosDisplay() {

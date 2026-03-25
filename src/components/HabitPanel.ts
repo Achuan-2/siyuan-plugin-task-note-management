@@ -1914,21 +1914,21 @@ export class HabitPanel {
         }
     }
 
-    private showNewHabitDialog() {
+    private async showNewHabitDialog() {
         const dialog = new HabitEditDialog(null, async (habit) => {
             await this.saveHabit(habit);
             this.loadHabits();
         }, this.plugin);
-        dialog.show();
+        await dialog.show();
     }
 
-    private showEditHabitDialog(habit: Habit) {
+    private async showEditHabitDialog(habit: Habit) {
         const oldHabitSnapshot = this.cloneHabit(habit);
         const dialog = new HabitEditDialog(habit, async (updatedHabit) => {
             await this.saveHabit(updatedHabit, oldHabitSnapshot);
             this.loadHabits();
         }, this.plugin);
-        dialog.show();
+        await dialog.show();
     }
 
     private openHabitCalendarView() {
