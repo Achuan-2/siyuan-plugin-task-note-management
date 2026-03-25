@@ -49,6 +49,7 @@ export interface Habit {
     pomodoroTargetMinutes?: number; // 番茄目标分钟
     autoCheckInAfterPomodoro?: boolean; // 完成番茄后是否自动打卡
     autoCheckInEmoji?: string; // 自动打卡使用的 emoji
+    checkInButtonType?: 'pomodoro' | 'countup'; // 打卡按钮类型：番茄钟或正计时（仅番茄目标类型有效）
     frequency: {
         type: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'ebbinghaus';
         interval?: number; // 重复间隔，比如每x天
@@ -1075,7 +1076,28 @@ export class HabitPanel {
             
             const checkInBtn = document.createElement('button');
             checkInBtn.className = 'habit-card__checkin-btn';
-            checkInBtn.innerHTML = `<span>✓</span><span>${i18n("checkInBtn")}</span>`;
+            
+            // 判断是否为番茄钟目标类型以及打卡按钮类型
+            const goalType = this.getHabitGoalType(habit);
+            const isPomodoroGoal = goalType === 'pomodoro';
+            // checkInButtonType: 'pomodoro' | 'countup'，默认为 'pomodoro'
+            const buttonType = isPomodoroGoal ? (habit.checkInButtonType || 'pomodoro') : 'normal';
+            
+            if (isPomodoroGoal && buttonType === 'countup') {
+                // 正计时按钮
+                checkInBtn.innerHTML = `<span>⏱️</span><span>正计时</span>`;
+                checkInBtn.classList.add('ariaLabel');
+                checkInBtn.setAttribute('aria-label', '开始正计时');
+            } else if (isPomodoroGoal && buttonType === 'pomodoro') {
+                // 番茄钟按钮
+                checkInBtn.innerHTML = `<span>🍅</span><span>番茄钟</span>`;
+                checkInBtn.classList.add('ariaLabel');
+                checkInBtn.setAttribute('aria-label', '开始番茄钟');
+            } else {
+                // 默认打卡按钮
+                checkInBtn.innerHTML = `<span>✓</span><span>${i18n("checkInBtn")}</span>`;
+            }
+            
             // 使用习惯自定义颜色（支持随机颜色）
             if (habitColor && habitColor !== 'var(--b3-theme-primary)') {
                 checkInBtn.style.background = `linear-gradient(135deg, ${habitColor}, ${habitColor}dd)`;
@@ -1085,27 +1107,37 @@ export class HabitPanel {
             checkInBtn.addEventListener('click', (ev) => {
                 ev.preventDefault();
                 ev.stopPropagation();
-                try {
-                    const menu = new Menu('habitCardCheckInMenu');
-                    const submenu = this.createCheckInSubmenu(habit);
-                    submenu.forEach((it: any) => {
-                        if (it && it.type === 'separator') {
-                            menu.addSeparator();
-                        } else if (it) {
-                            menu.addItem(it);
-                        }
-                    });
+                
+                if (isPomodoroGoal && buttonType === 'countup') {
+                    // 正计时按钮直接启动正计时
+                    this.startPomodoroCountUp(habit);
+                } else if (isPomodoroGoal && buttonType === 'pomodoro') {
+                    // 番茄钟按钮直接启动番茄钟
+                    this.startPomodoro(habit);
+                } else {
+                    // 默认显示打卡菜单
+                    try {
+                        const menu = new Menu('habitCardCheckInMenu');
+                        const submenu = this.createCheckInSubmenu(habit);
+                        submenu.forEach((it: any) => {
+                            if (it && it.type === 'separator') {
+                                menu.addSeparator();
+                            } else if (it) {
+                                menu.addItem(it);
+                            }
+                        });
 
-                    const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
-                    const menuX = rect.left;
-                    const menuY = rect.top - 4;
-                    const maxX = window.innerWidth - 200;
-                    const maxY = window.innerHeight - 200;
+                        const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+                        const menuX = rect.left;
+                        const menuY = rect.top - 4;
+                        const maxX = window.innerWidth - 200;
+                        const maxY = window.innerHeight - 200;
 
-                    menu.open({ x: Math.min(menuX, maxX), y: Math.max(0, Math.min(menuY, maxY)) });
-                } catch (err) {
-                    console.error('openCheckInMenu failed', err);
-                    showMessage(i18n("openCheckInMenuFailed"), 2000, 'error');
+                        menu.open({ x: Math.min(menuX, maxX), y: Math.max(0, Math.min(menuY, maxY)) });
+                    } catch (err) {
+                        console.error('openCheckInMenu failed', err);
+                        showMessage(i18n("openCheckInMenuFailed"), 2000, 'error');
+                    }
                 }
             });
             

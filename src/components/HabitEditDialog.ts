@@ -262,6 +262,29 @@ export class HabitEditDialog {
         autoCheckInRow.appendChild(autoCheckInLabel);
         autoCheckInRow.appendChild(autoCheckInEmojiSelect);
         pomodoroWrap.appendChild(autoCheckInRow);
+
+        // 打卡按钮类型选择（番茄钟/正计时）
+        const checkInButtonTypeRow = document.createElement('div');
+        checkInButtonTypeRow.style.cssText = 'display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px;';
+
+        const checkInButtonTypeLabel = document.createElement('span');
+        checkInButtonTypeLabel.textContent = '打卡按钮：';
+
+        const checkInButtonTypeSelect = document.createElement('select');
+        checkInButtonTypeSelect.name = 'checkInButtonType';
+        checkInButtonTypeSelect.className = 'b3-select';
+        checkInButtonTypeSelect.style.cssText = 'min-width: 120px;';
+        checkInButtonTypeSelect.innerHTML = `
+            <option value="pomodoro">🍅 番茄钟</option>
+            <option value="countup">⏱️ 正计时</option>
+        `;
+        const initialButtonType = this.habit?.checkInButtonType || 'pomodoro';
+        checkInButtonTypeSelect.value = initialButtonType;
+
+        checkInButtonTypeRow.appendChild(checkInButtonTypeLabel);
+        checkInButtonTypeRow.appendChild(checkInButtonTypeSelect);
+        pomodoroWrap.appendChild(checkInButtonTypeRow);
+
         goalGroup.appendChild(pomodoroWrap);
         form.appendChild(goalGroup);
 
@@ -457,6 +480,7 @@ export class HabitEditDialog {
                 pomodoroTargetMinutes: pomodoroMinutes,
                 autoCheckInAfterPomodoro: !!(form.querySelector('input[name="autoCheckInAfterPomodoro"]') as HTMLInputElement | null)?.checked,
                 autoCheckInEmoji: (form.querySelector('select[name="autoCheckInEmoji"]') as HTMLSelectElement | null)?.value || undefined,
+                checkInButtonType: (form.querySelector('select[name="checkInButtonType"]') as HTMLSelectElement | null)?.value as 'pomodoro' | 'countup' || 'pomodoro',
                 frequency: this.habit?.frequency || { type: 'daily', interval: 1 },
                 startDate: (form.querySelector('input[name="startDate"]') as HTMLInputElement | null)?.value || getLogicalDateString(),
                 endDate: (form.querySelector('input[name="endDate"]') as HTMLInputElement | null)?.value || undefined,
@@ -939,6 +963,7 @@ export class HabitEditDialog {
             pomodoroTargetMinutes: goalType === 'pomodoro' ? pomodoroTargetMinutes : undefined,
             autoCheckInAfterPomodoro: goalType === 'pomodoro' ? formData.get('autoCheckInAfterPomodoro') === 'on' : false,
             autoCheckInEmoji: goalType === 'pomodoro' ? ((formData.get('autoCheckInEmoji') as string) || undefined) : undefined,
+            checkInButtonType: goalType === 'pomodoro' ? ((formData.get('checkInButtonType') as 'pomodoro' | 'countup') || 'pomodoro') : undefined,
             frequency: {
                 type: frequencyType
             },
