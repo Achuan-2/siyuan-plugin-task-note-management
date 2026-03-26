@@ -501,9 +501,10 @@
                 <p>
                     {i18n('vipDiscountNotice1')}
                 </p>
-                <p>
+                <p style="margin-top: 8px;">
                     {i18n('vipDiscountNotice2')}
                 </p>
+                <p class="contribution-reward">{i18n('vipContributionRewardDesc')}</p>
                 {#if isZhCN || selectedTerm === '7d'}
                     <button
                         class="b3-button b3-button--text pay-btn"
@@ -945,6 +946,7 @@
         color: var(--b3-theme-on-surface-light);
         line-height: 1.6;
     }
+
 
     .pay-btn {
         width: 100%;
