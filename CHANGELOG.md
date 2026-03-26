@@ -1,3 +1,26 @@
+
+## v6.5.7 / 20260326
+- 🎨 项目看板：任务右键支持查看番茄钟
+- 🎨 项目看板：增强完成任务的性能
+- 🎨 任务侧栏：任务的分类样式和任务勾选框优化
+
+  <img alt="PixPin_2026-03-26_21-50-55" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2026-03-26_21-50-55-20260326215057-droerne.png" />
+- 🎨 日历视图：打开日历摘要默认为今天
+- 🎨 任务查看番茄钟弹窗：默认隐藏休息时间
+- 🐛 日历视图：如果有任务设置了开始日期和时间，并设置了结束日期但没有结束时间，日历视图会打不开
+
+---
+
+- 🎨 Project Kanban: Right-click on tasks to view Pomodoro timer
+- 🎨 Project Kanban: Enhanced performance for completing tasks
+- 🎨 Task Sidebar: Optimized styling for task categories
+  
+  <img alt="PixPin_2026-03-26_21-50-55" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2026-03-26_21-50-55-20260326215057-droerne.png" />
+- 🎨 Calendar View: Open calendar summary defaults to today
+- 🎨 Task Pomodoro Timer Pop-up: Rest time hidden by default
+- 🐛 Calendar View: If a task has a start date and time set, and an end date but no end time, the calendar view fails to open
+
+
 ## v6.5.6 / 20260326
 
 - ✨ 新增版本更新提醒
