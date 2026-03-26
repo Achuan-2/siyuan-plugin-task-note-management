@@ -118,7 +118,7 @@ export class ChangelogUtils {
     /**
      * 解析版本范围内的所有更新日志
      * @param content CHANGELOG.md 内容
-     * @param fromVersion 起始版本（不包含）
+     * @param fromVersion 起始版本（包含）
      * @param toVersion 目标版本（包含）
      * @returns 所有符合条件的版本更新内容
      */
