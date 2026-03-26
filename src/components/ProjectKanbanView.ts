@@ -9270,6 +9270,64 @@ export class ProjectKanbanView {
             }
         }
 
+        // 番茄钟数量 + 总专注时长 + 预计番茄时长
+        // 位置：标题下方，且紧跟在时间信息（日期/提醒时间）后
+        if ((task.pomodoroCount && task.pomodoroCount > 0) || (typeof task.focusTime === 'number' && task.focusTime > 0) || task.estimatedPomodoroDuration || (task.totalRepeatingPomodoroCount && task.totalRepeatingPomodoroCount > 0)) {
+            const pomodoroDisplay = document.createElement('div');
+            pomodoroDisplay.className = 'kanban-task-pomodoro-count';
+            pomodoroDisplay.style.cssText = `
+                font-size: 12px;
+                display: block;
+                background: rgba(255, 99, 71, 0.1);
+                color: rgb(255, 99, 71);
+                padding: 4px 8px;
+                border-radius: 4px;
+                margin-top: 4px;
+                width: fit-content;
+            `;
+            const tomatoEmojis = `🍅 ${task.pomodoroCount || 0}`;
+            const focusMinutes = task.focusTime || 0;
+            const formatMinutesToString = (minutes: number) => {
+                const hours = Math.floor(minutes / 60);
+                const mins = Math.floor(minutes % 60);
+                return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+            };
+            const focusText = focusMinutes > 0 ? ` ⏱ ${formatMinutesToString(focusMinutes)}` : '';
+            const extraCount = '';
+
+            // 预计番茄时长（第一行）
+            const estimatedLine = task.estimatedPomodoroDuration ? `<span class="ariaLabel" aria-label='预计番茄时长'>预计: ${task.estimatedPomodoroDuration}</span>` : '';
+
+            // 实际番茄钟数量和专注时长（第二行）
+            let actualLine = '';
+
+            if (task.isRepeatInstance) {
+                const repeatingTotal = task.totalRepeatingPomodoroCount || 0;
+                const repeatingFocus = task.totalRepeatingFocusTime || 0;
+                const instanceCount = task.pomodoroCount || 0;
+
+                const repeatingFocusText = repeatingFocus > 0 ? ` ⏱ ${formatMinutesToString(repeatingFocus)}` : '';
+                const instanceFocusText = focusMinutes > 0 ? ` ⏱ ${formatMinutesToString(focusMinutes)}` : '';
+
+                actualLine = `<div style="margin-top:${estimatedLine ? '6px' : '0'}">
+                    <div class="ariaLabel" aria-label="系列累计番茄钟: ${repeatingTotal}">
+                        <span>系列: 🍅 ${repeatingTotal}</span>
+                        <span style="margin-left:8px; opacity:0.9;">${repeatingFocusText}</span>
+                    </div>
+                    <div class="ariaLabel" aria-label="本实例番茄钟: ${instanceCount}" style="margin-top:4px; opacity:0.95;">
+                        <span>本次: 🍅 ${instanceCount}</span>
+                        <span style="margin-left:8px; opacity:0.9;">${instanceFocusText}</span>
+                    </div>
+                 </div>`;
+            } else {
+                actualLine = (task.pomodoroCount > 0 || focusMinutes > 0) ? `<div style="margin-top:${estimatedLine ? '6px' : '0'}"><span class="ariaLabel" aria-label="完成的番茄钟数量: ${task.pomodoroCount}">总共：${tomatoEmojis}${extraCount}</span><span class="ariaLabel" aria-label="总专注时长: ${focusMinutes} 分钟" style="margin-left:8px; opacity:0.9;">${focusText}</span></div>` : '';
+            }
+
+            pomodoroDisplay.innerHTML = `${estimatedLine}${actualLine}`;
+
+            infoEl.appendChild(pomodoroDisplay);
+        }
+
         // 优先级
         if (priority !== 'none') {
             const priorityEl = document.createElement('div');
@@ -9557,63 +9615,6 @@ export class ProjectKanbanView {
             })();
 
             infoEl.appendChild(tagsContainer);
-        }
-
-        // 番茄钟数量 + 总专注时长 + 预计番茄时长
-        if ((task.pomodoroCount && task.pomodoroCount > 0) || (typeof task.focusTime === 'number' && task.focusTime > 0) || task.estimatedPomodoroDuration || (task.totalRepeatingPomodoroCount && task.totalRepeatingPomodoroCount > 0)) {
-            const pomodoroDisplay = document.createElement('div');
-            pomodoroDisplay.className = 'kanban-task-pomodoro-count';
-            pomodoroDisplay.style.cssText = `
-                font-size: 12px;
-                display: block;
-                background: rgba(255, 99, 71, 0.1);
-                color: rgb(255, 99, 71);
-                padding: 4px 8px;
-                border-radius: 4px;
-                margin-top: 4px;
-                width: fit-content;
-            `;
-            const tomatoEmojis = `🍅 ${task.pomodoroCount || 0}`;
-            const focusMinutes = task.focusTime || 0;
-            const formatMinutesToString = (minutes: number) => {
-                const hours = Math.floor(minutes / 60);
-                const mins = Math.floor(minutes % 60);
-                return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
-            };
-            const focusText = focusMinutes > 0 ? ` ⏱ ${formatMinutesToString(focusMinutes)}` : '';
-            const extraCount = '';
-
-            // 预计番茄时长（第一行）
-            const estimatedLine = task.estimatedPomodoroDuration ? `<span class="ariaLabel" aria-label='预计番茄时长'>预计: ${task.estimatedPomodoroDuration}</span>` : '';
-
-            // 实际番茄钟数量和专注时长（第二行）
-            let actualLine = '';
-
-            if (task.isRepeatInstance) {
-                const repeatingTotal = task.totalRepeatingPomodoroCount || 0;
-                const repeatingFocus = task.totalRepeatingFocusTime || 0;
-                const instanceCount = task.pomodoroCount || 0;
-
-                const repeatingFocusText = repeatingFocus > 0 ? ` ⏱ ${formatMinutesToString(repeatingFocus)}` : '';
-                const instanceFocusText = focusMinutes > 0 ? ` ⏱ ${formatMinutesToString(focusMinutes)}` : '';
-
-                actualLine = `<div style="margin-top:${estimatedLine ? '6px' : '0'}">
-                    <div class="ariaLabel" aria-label="系列累计番茄钟: ${repeatingTotal}">
-                        <span>系列: 🍅 ${repeatingTotal}</span>
-                        <span style="margin-left:8px; opacity:0.9;">${repeatingFocusText}</span>
-                    </div>
-                    <div class="ariaLabel" aria-label="本实例番茄钟: ${instanceCount}" style="margin-top:4px; opacity:0.95;">
-                        <span>本次: 🍅 ${instanceCount}</span>
-                        <span style="margin-left:8px; opacity:0.9;">${instanceFocusText}</span>
-                    </div>
-                 </div>`;
-            } else {
-                actualLine = (task.pomodoroCount > 0 || focusMinutes > 0) ? `<div style="margin-top:${estimatedLine ? '6px' : '0'}"><span class="ariaLabel" aria-label="完成的番茄钟数量: ${task.pomodoroCount}">总共：${tomatoEmojis}${extraCount}</span><span class="ariaLabel" aria-label="总专注时长: ${focusMinutes} 分钟" style="margin-left:8px; opacity:0.9;">${focusText}</span></div>` : '';
-            }
-
-            pomodoroDisplay.innerHTML = `${estimatedLine}${actualLine}`;
-
-            infoEl.appendChild(pomodoroDisplay);
         }
 
         taskContentContainer.appendChild(infoEl);
@@ -10333,6 +10334,11 @@ export class ProjectKanbanView {
             label: i18n("startCountUp") || "开始正向计时",
             click: () => this.startPomodoroCountUp(task)
         });
+        menu.addItem({
+            iconHTML: "📊",
+            label: i18n("viewPomodoros") || "查看番茄钟",
+            click: () => this.showPomodoroSessions(task)
+        });
 
         menu.open({
             x: event.clientX,
@@ -10942,6 +10948,11 @@ export class ProjectKanbanView {
             label: i18n('startStopwatch'),
             click: () => this.startPomodoroCountUp(task)
         });
+        menu.addItem({
+            iconHTML: "📊",
+            label: i18n("viewPomodoros") || "查看番茄钟",
+            click: () => this.showPomodoroSessions(task)
+        });
 
         menu.addSeparator();
 
@@ -10971,6 +10982,20 @@ export class ProjectKanbanView {
             x: event.clientX,
             y: event.clientY
         });
+    }
+
+    /**
+     * 显示任务的番茄钟会话记录
+     */
+    private async showPomodoroSessions(task: any) {
+        const { PomodoroSessionsDialog } = await import("./PomodoroSessionsDialog");
+
+        // 重复实例查看原始任务的番茄钟记录，和其他面板保持一致
+        const reminderId = task.isRepeatInstance ? task.originalId : task.id;
+        const dialog = new PomodoroSessionsDialog(reminderId, this.plugin, () => {
+            // 关闭后可按需刷新，这里保持轻量不主动刷新
+        });
+        dialog.show();
     }
 
     private async toggleTaskCompletion(task: any, completed: boolean) {
