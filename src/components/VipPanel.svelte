@@ -947,7 +947,6 @@
         line-height: 1.6;
     }
 
-
     .pay-btn {
         width: 100%;
         margin-top: 12px;
