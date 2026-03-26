@@ -615,7 +615,6 @@ export async function putFile(path: string, isDir: boolean, file: any) {
     let form = new FormData();
     form.append('path', path);
     form.append('isDir', isDir.toString());
-    form.append('modTime', Date.now().toString());
     form.append('file', file);
     let url = '/api/file/putFile';
     return request(url, form);
