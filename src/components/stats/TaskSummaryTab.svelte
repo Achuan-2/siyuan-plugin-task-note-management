@@ -87,7 +87,7 @@
         { id: "lastMonth", label: i18n("lastMonth") },
     ];
 
-    let currentFilter: FilterType = calendar ? "current" : "today";
+    let currentFilter: FilterType = "today";
     let customStartDate: string = getLocalDateString(new Date());
     let customEndDate: string = getLocalDateString(new Date());
     let showCustomDatePicker: boolean = false;
