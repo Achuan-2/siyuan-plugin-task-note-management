@@ -7209,7 +7209,9 @@ export class CalendarView {
                 eventObj.allDay = true;
 
                 if (reminder.time) {
-                    eventObj.classList.add('ariaLabel'); eventObj.setAttribute('aria-label', `${reminder.title || i18n("unnamedNote")} (${reminder.time})`);
+                    const startMonthDay = startDate.length >= 10 ? startDate.substring(5) : startDate;
+                    const endMonthDay = endDate.length >= 10 ? endDate.substring(5) : endDate;
+                    eventObj.title = `${reminder.title || i18n("unnamedNote")} (${startMonthDay} ${reminder.time} - ${endMonthDay})`;
                 }
             }
         } else if (endDate && !reminder.date) {
@@ -8061,7 +8063,7 @@ export class CalendarView {
             newReminder.endDate = modifiedReminder.nextCycleEndDate;
             newReminder.time = originalReminder.time;
             newReminder.endTime = originalReminder.endTime;
-            newReminder.classList.add('ariaLabel'); newReminder.setAttribute('aria-label', originalReminder.title);
+            newReminder.title = originalReminder.title;
             newReminder.note = originalReminder.note;
             newReminder.priority = originalReminder.priority;
 
