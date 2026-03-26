@@ -3,6 +3,9 @@ import { getFile } from "../api";
 import versionInfo from "../../plugin.json";
 import { i18n } from "../pluginInstance";
 
+// 更新日志功能的起始版本
+const CHANGELOG_START_VERSION = "6.5.5";
+
 export class ChangelogUtils {
     /**
      * 检查并显示版本更新日志说明
@@ -22,11 +25,20 @@ export class ChangelogUtils {
             console.error("Failed to load changelog notify data", e);
         }
 
-        if (notifiedData.lastNotifiedVersion === currentVersion) {
+        const lastNotifiedVersion = notifiedData.lastNotifiedVersion;
+
+        // 如果已经通知过当前版本，则不显示
+        if (lastNotifiedVersion === currentVersion) {
             return;
         }
 
-        await this.showChangelog(plugin);
+        // 如果没有通知过任何版本（首次安装），或者版本低于起始版本，则从起始版本开始显示
+        // 否则从上次通知的版本开始显示
+        const fromVersion = !lastNotifiedVersion || this.compareVersions(lastNotifiedVersion, CHANGELOG_START_VERSION) < 0
+            ? CHANGELOG_START_VERSION
+            : lastNotifiedVersion;
+
+        await this.showChangelog(plugin, fromVersion, currentVersion);
 
         // 更新已通知标记
         notifiedData.lastNotifiedVersion = currentVersion;
@@ -37,8 +49,9 @@ export class ChangelogUtils {
      * 手动显示当前版本的更新日志
      * @param plugin 插件实例
      */
-    static async showChangelog(plugin: any) {
-        const currentVersion = versionInfo.version;
+    static async showChangelog(plugin: any, fromVersion?: string, toVersion?: string) {
+        const currentVersion = toVersion || versionInfo.version;
+        const startVersion = fromVersion || currentVersion;
         const pluginId = plugin.name; 
         const changelogPath = `/data/plugins/${pluginId}/CHANGELOG.md`;
         let changelogContent: any = "";
@@ -50,11 +63,40 @@ export class ChangelogUtils {
 
         let versionNotes = i18n("noUpdateNotes") || "无更新内容";
         if (changelogContent && typeof changelogContent === 'string') {
-            versionNotes = this.parseChangelog(changelogContent, currentVersion);
+            // 如果是跨版本更新，显示多个版本的更新内容
+            if (startVersion !== currentVersion) {
+                versionNotes = this.parseChangelogRange(changelogContent, startVersion, currentVersion);
+            } else {
+                versionNotes = this.parseChangelog(changelogContent, currentVersion);
+            }
         }
 
         // 显示弹窗
-        this.showDialog(currentVersion, versionNotes);
+        const titleVersion = startVersion !== currentVersion 
+            ? `${startVersion} → ${currentVersion}` 
+            : currentVersion;
+        this.showDialog(titleVersion, versionNotes);
+    }
+
+    /**
+     * 比较两个版本号
+     * @returns 负数表示 v1 < v2，0 表示相等，正数表示 v1 > v2
+     */
+    private static compareVersions(v1: string, v2: string): number {
+        const parts1 = v1.split('.').map(Number);
+        const parts2 = v2.split('.').map(Number);
+        
+        const maxLength = Math.max(parts1.length, parts2.length);
+        
+        for (let i = 0; i < maxLength; i++) {
+            const part1 = parts1[i] || 0;
+            const part2 = parts2[i] || 0;
+            
+            if (part1 < part2) return -1;
+            if (part1 > part2) return 1;
+        }
+        
+        return 0;
     }
 
 
@@ -70,6 +112,46 @@ export class ChangelogUtils {
         if (match && match[0]) {
             return match[0].trim();
         }
+        return i18n("noUpdateNotes") || "无更新内容";
+    }
+
+    /**
+     * 解析版本范围内的所有更新日志
+     * @param content CHANGELOG.md 内容
+     * @param fromVersion 起始版本（不包含）
+     * @param toVersion 目标版本（包含）
+     * @returns 所有符合条件的版本更新内容
+     */
+    private static parseChangelogRange(content: string, fromVersion: string, toVersion: string): string {
+        if (typeof content !== 'string') {
+            return i18n("noUpdateNotes") || "无更新内容";
+        }
+
+        // 匹配所有版本段落
+        const versionRegex = /## (v[\d.]+)[^\n]*[\s\S]*?(?=\n## |$)/gi;
+        const matches = content.matchAll(versionRegex);
+        
+        const results: string[] = [];
+        
+        for (const match of matches) {
+            const versionHeader = match[0];
+            const versionMatch = versionHeader.match(/## (v[\d.]+)/i);
+            
+            if (!versionMatch) continue;
+            
+            const version = versionMatch[1].substring(1); // 去掉 'v' 前缀
+            
+            // 只包含大于等于 fromVersion 且小于等于 toVersion 的版本
+            if (this.compareVersions(version, fromVersion) >= 0 && 
+                this.compareVersions(version, toVersion) <= 0) {
+                results.push(match[0].trim());
+            }
+        }
+        
+        if (results.length > 0) {
+            return results.join('\n\n---\n\n');
+        }
+        
         return i18n("noUpdateNotes") || "无更新内容";
     }
 
