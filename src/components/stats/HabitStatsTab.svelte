@@ -1,4 +1,4 @@
-﻿<script lang="ts">
+<script lang="ts">
 import { onMount, tick } from "svelte";
 import type { Habit } from "../HabitPanel";
 import { HabitDayDialog } from "../HabitDayDialog";
@@ -131,6 +131,12 @@ function getDateKey(date: Date): string {
 
 function getTodayDateKey(): string {
     return getDateKey(new Date());
+}
+
+function formatFullDateLabel(day: Date): string {
+    const dateStr = getDateKey(day);
+    const dayName = WEEKDAY_NAMES[day.getDay()];
+    return `${dateStr} 星期${dayName}`;
 }
 
 function addDays(date: Date, days: number): Date {
@@ -885,7 +891,7 @@ $: yearVisibleSections = groupedSections
                             <div class="week-row">
                                 <div class="week-habit-name ariaLabel" aria-label={habit.title}>{habit.icon || "🌱"} {habit.title}</div>
                                 <div class="week-cells">
-                                    {#each currentWeekDates as day, dayIndex}
+                                    {#each currentWeekDates as day}
                                     {@const dateStr = getDateKey(day)}
                                     {@const isToday = dateStr === getTodayDateKey()}
                                     {@const required = shouldCheckInOnDate(habit, dateStr)}
@@ -893,9 +899,9 @@ $: yearVisibleSections = groupedSections
                                     {@const emojis = getCheckInEmojis(habit, dateStr)}
                                     {@const checkInDetails = getCheckInDetails(habit, dateStr)}
                                     <div
-                                        class="week-cell {done ? 'done' : ''} {!required ? 'not-required' : ''} {isToday ? 'today' : ''} ariaLabel"
+                                        class="week-cell {done ? 'done' : ''} {!required ? 'not-required' : ''} {isToday && required ? 'today' : ''} ariaLabel"
                                         style={`--habit-color: ${getHabitColor(habit)};`}
-                                        aria-label={`${WEEKDAY_NAMES[(weekStartDay + dayIndex) % 7]}${checkInDetails.length > 0 ? '\n' + checkInDetails.join('\n') : (done ? "\n已打卡" : "\n未打卡")}`}
+                                        aria-label={`${formatFullDateLabel(day)}${checkInDetails.length > 0 ? '\n' + checkInDetails.join('\n') : (done ? "\n已打卡" : "\n未打卡")}`}
                                         on:click={() => openHabitDayEditor(habit, dateStr)}
                                     >
                                             {#if emojis.length > 0}
@@ -951,9 +957,9 @@ $: yearVisibleSections = groupedSections
                                             {@const dayEmojis = getCheckInEmojis(habit, dateStr)}
                                             {@const dayCheckInDetails = getCheckInDetails(habit, dateStr)}
                                             <div
-                                                class="month-day {done ? 'done' : ''} {!required ? 'not-required' : ''} {isToday ? 'today' : ''} ariaLabel"
+                                                class="month-day {done ? 'done' : ''} {!required ? 'not-required' : ''} {isToday && required ? 'today' : ''} ariaLabel"
                                                 style={`--habit-color: ${getHabitColor(habit)};`}
-                                                aria-label={`${dateStr}${dayCheckInDetails.length > 0 ? '\n' + dayCheckInDetails.join('\n') : (done ? "\n已打卡" : "\n未打卡")}`}
+                                                aria-label={`${formatFullDateLabel(day)}${dayCheckInDetails.length > 0 ? '\n' + dayCheckInDetails.join('\n') : (done ? "\n已打卡" : "\n未打卡")}`}
                                                 on:click={() => openHabitDayEditor(habit, dateStr)}
                                             >
                                                 <div class="month-day-content">
@@ -1020,8 +1026,8 @@ $: yearVisibleSections = groupedSections
                                                         {@const dayEmojis = getCheckInEmojis(habit, dateStr)}
                                                         {@const dayCheckInDetails = getCheckInDetails(habit, dateStr)}
                                                         <div
-                                                            class="year-day {done ? 'done' : ''} {!required ? 'not-required' : ''} {isToday ? 'today' : ''} ariaLabel"
-                                                            aria-label={`${dateStr}${dayCheckInDetails.length > 0 ? '\n' + dayCheckInDetails.join('\n') : (done ? "\n已打卡" : "\n未打卡")}`}
+                                                            class="year-day {done ? 'done' : ''} {!required ? 'not-required' : ''} {isToday && required ? 'today' : ''} ariaLabel"
+                                                            aria-label={`${formatFullDateLabel(day)}${dayCheckInDetails.length > 0 ? '\n' + dayCheckInDetails.join('\n') : (done ? "\n已打卡" : "\n未打卡")}`}
                                                             on:click={() => openHabitDayEditor(habit, dateStr)}
                                                         >
                                                             {#if dayEmojis.length > 0}
