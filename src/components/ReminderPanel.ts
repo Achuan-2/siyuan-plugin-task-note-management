@@ -2497,8 +2497,13 @@ export class ReminderPanel {
         // 复选框
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
+        checkbox.className = 'reminder-task-checkbox';
         checkbox.checked = reminder.completed || false;
-        checkbox.addEventListener('change', () => {
+        checkbox.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+        checkbox.addEventListener('change', (e) => {
+            e.stopPropagation();
             if (reminder.isRepeatInstance) {
                 // 使用原始实例日期（从 ID 中提取），而非可能被 instanceModifications 修改后的 date
                 const originalInstanceDate = (reminder.id && reminder.id.includes('_')) ? reminder.id.split('_').pop() : reminder.date;

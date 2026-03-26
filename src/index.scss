@@ -1421,12 +1421,51 @@
     cursor: default; // 覆盖父元素的 grab 光标
 
     input[type="checkbox"] {
-        width: 14px;
-        height: 14px;
-        margin: 0;
-        flex-shrink: 0;
         order: 1; // 复选框在上方
-        cursor: pointer; // 复选框显示指针光标
+    }
+
+    .reminder-task-checkbox {
+        -webkit-appearance: none;
+        appearance: none;
+        margin: 0;
+        margin-top: 3px;
+        font: inherit;
+        color: var(--b3-theme-on-surface);
+        width: 1.15em;
+        height: 1.15em;
+        border: 0.1em solid var(--b3-theme-on-surface);
+        border-radius: 0.25em;
+        transform: translateY(-0.075em);
+        display: grid;
+        place-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        flex-shrink: 0;
+    }
+
+    .reminder-task-checkbox:hover {
+        border-color: var(--b3-theme-primary);
+    }
+
+    .reminder-task-checkbox::before {
+        content: "";
+        width: 0.65em;
+        height: 0.65em;
+        transform: scale(0);
+        transition: 120ms transform ease-in-out;
+        box-shadow: inset 1em 1em var(--b3-theme-primary);
+        transform-origin: bottom left;
+        clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+    }
+
+    .reminder-task-checkbox:checked {
+        background: var(--b3-theme-primary);
+        border-color: var(--b3-theme-primary);
+    }
+
+    .reminder-task-checkbox:checked::before {
+        transform: scale(1);
+        box-shadow: inset 1em 1em var(--b3-theme-surface);
     }
 }
 
