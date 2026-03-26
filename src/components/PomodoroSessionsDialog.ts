@@ -18,6 +18,7 @@ export class PomodoroSessionsDialog {
     private plugin: any;
     private recordManager: PomodoroRecordManager;
     private sessions: PomodoroSession[] = [];
+    private showBreakSessions: boolean = false; // 默认隐藏休息记录
     private onUpdate?: () => void;
     private includeInstances: boolean; // 是否包含所有实例的番茄钟
 
@@ -86,6 +87,12 @@ export class PomodoroSessionsDialog {
             title: "🍅 " + (i18n("pomodoros") || "番茄钟记录"),
             content: `
                 <div class="pomodoro-sessions-dialog" style="padding: 16px; display: flex; flex-direction: column; gap: 16px; max-height: 80vh;">
+                    <div class="pomodoro-filters" style="display: flex; justify-content: flex-end; align-items: center;">
+                        <label for="showBreakSessionsToggle" style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;">
+                            <span style="font-size: 13px; color: var(--b3-theme-on-surface);">${i18n("showBreakSessions") || "显示休息记录"}</span>
+                            <input type="checkbox" id="showBreakSessionsToggle" class="b3-switch" ${this.showBreakSessions ? "checked" : ""}>
+                        </label>
+                    </div>
                     <div id="pomodoroSessionsList" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; min-height: 100px;">
                         <!-- 番茄钟列表 -->
                     </div>
@@ -146,10 +153,18 @@ export class PomodoroSessionsDialog {
         const listEl = this.dialog.element.querySelector("#pomodoroSessionsList") as HTMLElement;
         if (!listEl) return;
 
-        if (this.sessions.length === 0) {
+        const displayedSessions = this.showBreakSessions
+            ? this.sessions
+            : this.sessions.filter(session => session.type === "work");
+
+        if (displayedSessions.length === 0) {
+            const emptyText = this.sessions.length === 0
+                ? (i18n("noPomodoros") || "暂无番茄钟记录")
+                : (i18n("noVisiblePomodoros") || "当前已隐藏休息记录");
+
             listEl.innerHTML = `
                 <div style="text-align: center; color: var(--b3-theme-on-surface-light); padding: 20px;">
-                    ${i18n("noPomodoros") || "暂无番茄钟记录"}
+                    ${emptyText}
                 </div>
             `;
             return;
@@ -179,7 +194,7 @@ export class PomodoroSessionsDialog {
                     </div>
                 </div>
             </div>
-            ${this.sessions.map(session => this.renderSessionItem(session)).join("")}
+            ${displayedSessions.map(session => this.renderSessionItem(session)).join("")}
         `;
 
         // 绑定每个会话项的事件
@@ -298,9 +313,15 @@ export class PomodoroSessionsDialog {
 
     private bindEvents() {
         const addBtn = this.dialog.element.querySelector("#addPomodoroBtn") as HTMLButtonElement;
+        const showBreakSessionsToggle = this.dialog.element.querySelector("#showBreakSessionsToggle") as HTMLInputElement;
 
         addBtn?.addEventListener("click", () => {
             this.addNewSession();
+        });
+
+        showBreakSessionsToggle?.addEventListener("change", () => {
+            this.showBreakSessions = showBreakSessionsToggle.checked;
+            this.renderSessions();
         });
     }
 
