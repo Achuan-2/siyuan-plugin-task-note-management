@@ -1,5 +1,13 @@
 {
+    "viewChangelog": "查看更新日志",
     "cancel": "取消",
+
+    "changelogNotification": "任务笔记管理插件：版本更新提醒",
+    "noUpdateNotes": "无更新内容",
+    "iKnow": "知道啦",
+    "moreChangelog": "更多版本更新日志请查看：",
+
+
     "save": "保存",
     "name": "任务笔记管理",
     "timeReminder": "任务笔记管理",

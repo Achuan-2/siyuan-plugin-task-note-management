@@ -32,7 +32,9 @@ export default defineConfig({
         viteStaticCopy({
             targets: [
                 { src: "./README*.md", dest: "./" },
+                { src: "./CHANGELOG.md", dest: "./" },
                 { src: "./plugin.json", dest: "./" },
+
                 { src: "./preview.png", dest: "./" },
                 { src: "./icon.png", dest: "./" },
                 { src: "./audios/*", dest: "./audios/" },
@@ -93,7 +95,9 @@ export default defineConfig({
                             const files = await fg([
                                 './i18n/**',
                                 './README*.md',
+                                './CHANGELOG.md',
                                 './plugin.json'
+
                             ]);
                             for (let file of files) {
                                 this.addWatchFile(file);

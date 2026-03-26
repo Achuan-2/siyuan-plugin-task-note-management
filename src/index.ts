@@ -1,4 +1,4 @@
-﻿import {
+import {
     Plugin,
     getActiveEditor,
     showMessage,
@@ -39,6 +39,8 @@ import { TaskNoteDOMManager } from "./utils/taskNoteDOM";
 import { addDaysToDate, generateRepeatInstances, getDaysDifference, getRelativeReminderWindow } from "./utils/repeatUtils";
 import { getDockItemSelector, setDockBadgeByType as applyDockBadgeByType } from "./utils/addDockBadge";
 import { getHabitReminderTimes, getTodayHabitBuckets, isHabitCompletedOnDate as isHabitCompletedOnDateUtil, shouldCheckInOnDate } from "./utils/habitUtils";
+import { ChangelogUtils } from "./utils/changelogNotify";
+
 
 export const SETTINGS_FILE = "reminder-settings.json";
 export const PROJECT_DATA_FILE = "project.json";
@@ -1318,6 +1320,9 @@ export default class ReminderPlugin extends Plugin {
         // 数据加载
         await this.loadSettings();
         this.taskNoteDOM = new TaskNoteDOMManager(this);
+        // 检查版本更新提醒
+        ChangelogUtils.checkAndNotify(this);
+
 
         // 后台初始化番茄钟记录管理器，失败也不阻断插件主流程
         const pomodoroRecordManager = PomodoroRecordManager.getInstance(this);

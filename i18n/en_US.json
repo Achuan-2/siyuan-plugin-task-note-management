@@ -1,5 +1,13 @@
 {
+    "viewChangelog": "View Changelog",
     "cancel": "Cancel",
+
+    "changelogNotification": "Task Note Management Plugin: Update Notification",
+    "noUpdateNotes": "No update notes",
+    "iKnow": "I know",
+    "moreChangelog": "For more update logs, please visit: ",
+
+
     "save": "Save",
     "name": "Task Note Management",
     "timeReminder": "Task Reminder",
