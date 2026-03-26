@@ -241,7 +241,8 @@ export class HabitEditDialog {
         const autoCheckInCheckbox = document.createElement('input');
         autoCheckInCheckbox.type = 'checkbox';
         autoCheckInCheckbox.name = 'autoCheckInAfterPomodoro';
-        autoCheckInCheckbox.checked = !!this.habit?.autoCheckInAfterPomodoro;
+        // 新建习惯时，如果目标类型是番茄钟，默认勾选自动打卡
+        autoCheckInCheckbox.checked = this.habit ? !!this.habit.autoCheckInAfterPomodoro : initialGoalType === 'pomodoro';
         const autoCheckInText = document.createElement('span');
         autoCheckInText.textContent = '番茄完成后自动打卡';
         autoCheckInLabel.appendChild(autoCheckInCheckbox);
