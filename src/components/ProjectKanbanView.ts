@@ -2222,31 +2222,23 @@ export class ProjectKanbanView {
                     e.stopPropagation();
                 });
 
-                checkbox.addEventListener('change', async (e) => {
+                checkbox.addEventListener('change', (e) => {
                     e.stopPropagation();
                     const isChecked = checkbox.checked;
-                    try {
-                        const reminderData = await this.getReminders();
-                        if (reminderData[task.id]) {
-                            const t = reminderData[task.id];
-                            if (isChecked) {
-                                t.completed = true;
-                                t.completedTime = getLocalDateTimeString(new Date());
-                                t.kanbanStatus = 'completed';
-                            } else {
-                                t.completed = false;
-                                delete t.completedTime;
-                                t.kanbanStatus = 'doing';
-                            }
-                            await saveReminders(this.plugin, reminderData);
-                            this.dispatchReminderUpdate(true);
-                            updateItemStyle(isChecked);
-                            this.queueLoadTasks();
-                        }
-                    } catch (err) {
-                        console.error(i18n('updateTaskStatusFailed'), err);
-                        checkbox.checked = !isChecked;
+
+                    // 先本地乐观更新，保证交互即时反馈
+                    task.completed = isChecked;
+                    if (isChecked) {
+                        task.completedTime = getLocalDateTimeString(new Date());
+                        task.kanbanStatus = 'completed';
+                    } else {
+                        delete task.completedTime;
+                        task.kanbanStatus = 'doing';
                     }
+                    updateItemStyle(isChecked);
+
+                    // 后台异步落盘，失败时由 toggleTaskCompletion 内部统一回滚刷新
+                    this.toggleTaskCompletion(task, isChecked);
                 });
                 taskMainContainer.appendChild(checkbox);
 
@@ -10993,9 +10985,9 @@ export class ProjectKanbanView {
                 delete optimisticTask.completedTime;
             }
 
-            // 重新渲染：统一通过防抖刷新以保证数据一致性，避免局部渲染留下旧 DOM
-            // 这会在短延迟后调用 loadTasks()，并由事件广播/队列保证最终一致性。
-            this.queueLoadTasks();
+            // 立即重排并渲染，避免用户体感被防抖/IO 延迟影响
+            this.sortTasks();
+            this.renderKanban();
         }
 
         // 2. 后台执行保存逻辑
