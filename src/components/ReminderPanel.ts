@@ -3065,9 +3065,9 @@ export class ReminderPanel {
                         align-items: center;
                         gap: 2px;
                         font-size: 11px;
-                        background-color: ${category.color}20;
-                        color: ${category.color};
-                        border: 1px solid ${category.color}40;
+                        background-color: ${category.color};
+                        color: var(--b3-theme-background);
+                        border: none;
                         border-radius: 12px;
                         padding: 2px 8px;
                         margin-top: 4px;
@@ -7995,9 +7995,9 @@ export class ReminderPanel {
                                         align-items: center;
                                         gap: 2px;
                                         font-size: 11px;
-                                        background-color: ${category.color}20;
-                                        color: ${category.color};
-                                        border: 1px solid ${category.color}40;
+                                        background-color: ${category.color};
+                                        color: var(--b3-theme-background);
+                                        border: none;
                                         border-radius: 12px;
                                         padding: 2px 8px;
                                         margin-top: 4px;
