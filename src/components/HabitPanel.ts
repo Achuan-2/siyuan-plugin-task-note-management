@@ -10,12 +10,11 @@ import { HabitCheckInEmojiDialog } from "./HabitCheckInEmojiDialog";
 import { PomodoroTimer } from "./PomodoroTimer";
 import { PomodoroManager } from "../utils/pomodoroManager";
 import { PomodoroRecordManager } from "../utils/pomodoroRecord";
-import { createPomodoroStartSubmenu as createSharedPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
+import { createPomodoroStartSubmenu as createSharedPomodoroStartSubmenu, resolveDefaultPomodoroDuration } from "../utils/pomodoroPresets";
 import { showStatsDialog } from "./stats/ShowStatsDialog";
 import { HabitDayDialog } from "./HabitDayDialog";
 import {
     Habit,
-    HabitCheckIn,
     HabitEmojiConfig as HabitCheckInEmoji,
     getHabitGoalType as getHabitGoalTypeUtil,
     getHabitPomodoroTargetMinutes as getHabitPomodoroTargetMinutesUtil,
@@ -1250,10 +1249,23 @@ export class HabitPanel {
         });
     }
 
-    private startPomodoro(habit: Habit, workDurationOverride?: number) {
+    private async startPomodoro(habit: Habit, workDurationOverride?: number) {
         if (!this.plugin) {
             showMessage("无法启动番茄钟：插件实例不可用");
             return;
+        }
+
+        // 默认时长优化：若未指定，且习惯有番茄目标，在目标小于全局时长时优先使用目标时长
+        let finalDuration = workDurationOverride;
+        if (!finalDuration) {
+            const goalType = this.getHabitGoalType(habit);
+            if (goalType === "pomodoro") {
+                const targetMinutes = this.getHabitPomodoroTargetMinutes(habit);
+                const settings = await this.plugin.loadSettings();
+                finalDuration = resolveDefaultPomodoroDuration({ 
+                    estimatedPomodoroDuration: targetMinutes 
+                }, settings);
+            }
         }
 
         if (this.pomodoroManager.hasActivePomodoroTimer()) {
@@ -1274,7 +1286,7 @@ export class HabitPanel {
                 "切换番茄钟任务",
                 confirmMessage,
                 () => {
-                    this.performStartPomodoro(habit, currentState, workDurationOverride);
+                    this.performStartPomodoro(habit, currentState, finalDuration);
                 },
                 () => {
                     if (currentState.isRunning && !currentState.isPaused) {
@@ -1286,7 +1298,7 @@ export class HabitPanel {
             );
         } else {
             this.pomodoroManager.cleanupInactiveTimer();
-            this.performStartPomodoro(habit, undefined, workDurationOverride);
+            this.performStartPomodoro(habit, undefined, finalDuration);
         }
     }
 
