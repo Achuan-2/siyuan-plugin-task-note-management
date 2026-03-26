@@ -33,6 +33,70 @@ export interface HabitLike {
     };
 }
 
+export interface HabitEmojiConfig {
+    emoji: string;
+    meaning: string;
+    value?: number;
+    group?: string;
+    promptNote?: boolean;
+    countsAsSuccess?: boolean;
+}
+
+export interface HabitCheckInEntry {
+    emoji: string;
+    timestamp: string;
+    note?: string;
+    meaning?: string;
+    group?: string;
+}
+
+export interface HabitCheckIn {
+    count: number;
+    status: string[];
+    timestamp: string;
+    entries?: HabitCheckInEntry[];
+}
+
+export interface Habit extends HabitLike {
+    id: string;
+    title: string;
+    icon?: string;
+    color?: string;
+    note?: string;
+    blockId?: string;
+    target: number;
+    goalType?: HabitGoalType;
+    pomodoroTargetHours?: number;
+    pomodoroTargetMinutes?: number;
+    autoCheckInAfterPomodoro?: boolean;
+    autoCheckInEmoji?: string;
+    checkInButtonType?: 'pomodoro' | 'countup';
+    frequency: {
+        type: HabitFrequencyType;
+        interval?: number;
+        weekdays?: number[];
+        monthDays?: number[];
+        months?: number[];
+    };
+    startDate: string;
+    endDate?: string;
+    reminderTime?: string;
+    reminderTimes?: (string | HabitReminderTimeEntry)[];
+    groupId?: string;
+    priority?: 'high' | 'medium' | 'low' | 'none';
+    checkInEmojis: HabitEmojiConfig[];
+    checkIns: {
+        [date: string]: HabitCheckIn;
+    };
+    hasNotify?: { [date: string]: boolean | { [time: string]: boolean } };
+    totalCheckIns: number;
+    createdAt: string;
+    updatedAt: string;
+    hideCheckedToday?: boolean;
+    sort?: number;
+    abandoned?: boolean;
+}
+
 export function getHabitGoalType(habit: HabitLike): HabitGoalType {
     return habit?.goalType === "pomodoro" ? "pomodoro" : "count";
 }
