@@ -32,13 +32,12 @@ export class ChangelogUtils {
             return;
         }
 
-        // 如果没有通知过任何版本（首次安装），或者版本低于起始版本，则从起始版本开始显示
-        // 否则从上次通知的版本开始显示
-        const fromVersion = !lastNotifiedVersion || this.compareVersions(lastNotifiedVersion, CHANGELOG_START_VERSION) < 0
-            ? CHANGELOG_START_VERSION
-            : lastNotifiedVersion;
+        // 如果没有通知过任何版本（首次安装），或者版本低于起始版本，则从起始版本开始显示（包含起始版本）
+        // 否则从上次通知的版本之后开始显示（不包含上次通知版本）
+        const shouldIncludeFromVersion = !lastNotifiedVersion || this.compareVersions(lastNotifiedVersion, CHANGELOG_START_VERSION) < 0;
+        const fromVersion = shouldIncludeFromVersion ? CHANGELOG_START_VERSION : lastNotifiedVersion;
 
-        await this.showChangelog(plugin, fromVersion, currentVersion);
+        await this.showChangelog(plugin, fromVersion, currentVersion, shouldIncludeFromVersion);
 
         // 更新已通知标记
         notifiedData.lastNotifiedVersion = currentVersion;
@@ -49,7 +48,7 @@ export class ChangelogUtils {
      * 手动显示当前版本的更新日志
      * @param plugin 插件实例
      */
-    static async showChangelog(plugin: any, fromVersion?: string, toVersion?: string) {
+    static async showChangelog(plugin: any, fromVersion?: string, toVersion?: string, includeFromVersion = true) {
         const currentVersion = toVersion || versionInfo.version;
         const startVersion = fromVersion || currentVersion;
         const pluginId = plugin.name; 
@@ -65,7 +64,7 @@ export class ChangelogUtils {
         if (changelogContent && typeof changelogContent === 'string') {
             // 如果是跨版本更新，显示多个版本的更新内容
             if (startVersion !== currentVersion) {
-                versionNotes = this.parseChangelogRange(changelogContent, startVersion, currentVersion);
+                versionNotes = this.parseChangelogRange(changelogContent, startVersion, currentVersion, includeFromVersion);
             } else {
                 versionNotes = this.parseChangelog(changelogContent, currentVersion);
             }
@@ -118,11 +117,12 @@ export class ChangelogUtils {
     /**
      * 解析版本范围内的所有更新日志
      * @param content CHANGELOG.md 内容
-     * @param fromVersion 起始版本（包含）
+     * @param fromVersion 起始版本（是否包含由 includeFromVersion 控制）
      * @param toVersion 目标版本（包含）
+     * @param includeFromVersion 是否包含起始版本
      * @returns 所有符合条件的版本更新内容
      */
-    private static parseChangelogRange(content: string, fromVersion: string, toVersion: string): string {
+    private static parseChangelogRange(content: string, fromVersion: string, toVersion: string, includeFromVersion = true): string {
         if (typeof content !== 'string') {
             return i18n("noUpdateNotes") || "无更新内容";
         }
@@ -141,8 +141,12 @@ export class ChangelogUtils {
             
             const version = versionMatch[1].substring(1); // 去掉 'v' 前缀
             
-            // 只包含大于等于 fromVersion 且小于等于 toVersion 的版本
-            if (this.compareVersions(version, fromVersion) >= 0 && 
+            const isAfterFromVersion = includeFromVersion
+                ? this.compareVersions(version, fromVersion) >= 0
+                : this.compareVersions(version, fromVersion) > 0;
+
+            // 仅包含起始版本之后（或包含起始版本）且小于等于 toVersion 的版本
+            if (isAfterFromVersion &&
                 this.compareVersions(version, toVersion) <= 0) {
                 results.push(match[0].trim());
             }
