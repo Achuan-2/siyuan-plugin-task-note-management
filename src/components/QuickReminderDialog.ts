@@ -222,6 +222,7 @@ export class QuickReminderDialog {
     private tempSubtasks: any[] = []; // 新建模式下的临时子任务列表
     private skipSave: boolean = false; // 是否跳过保存到数据库（用于临时子任务创建）
     private dateOnly: boolean = false; // 是否只显示日期相关设置（用于快速编辑日期）
+    private eventSource?: string; // 事件来源标识（用于避免同源视图重复刷新）
 
 
     constructor(
@@ -255,6 +256,7 @@ export class QuickReminderDialog {
             defaultSort?: number;
             skipSave?: boolean; // 是否跳过保存到数据库
             dateOnly?: boolean; // 是否只显示日期相关设置
+            eventSource?: string; // reminderUpdated 事件来源
         }
     ) {
         this.initialDate = date;
@@ -291,6 +293,7 @@ export class QuickReminderDialog {
             this.defaultSort = options.defaultSort;
             this.skipSave = options.skipSave || false;
             this.dateOnly = options.dateOnly || false;
+            this.eventSource = options.eventSource;
         }
 
         // 如果是编辑模式，确保有reminder
@@ -4988,7 +4991,10 @@ export class QuickReminderDialog {
                         // 触发更新事件
                         window.dispatchEvent(new CustomEvent('reminderUpdated', {
                             detail: {
-                                projectId: this.reminder.projectId
+                                projectId: this.reminder.projectId,
+                                oldProjectId: this.reminder.projectId,
+                                newProjectId: this.reminder.projectId,
+                                source: this.eventSource
                             }
                         }));
 
@@ -5412,7 +5418,14 @@ export class QuickReminderDialog {
 
                 // 如果项目发生了变更，不传递 projectId 以触发全量刷新；否则传递 projectId 进行增量刷新
                 const isProjectChanged = this.mode === 'edit' && this.reminder && this.reminder.projectId !== projectId;
-                const eventDetail = isProjectChanged ? {} : { projectId: projectId };
+                const oldProjectId = this.mode === 'edit' && this.reminder ? this.reminder.projectId : undefined;
+                const newProjectId = projectId;
+                const eventDetail = isProjectChanged
+                    ? { oldProjectId, newProjectId }
+                    : { projectId: projectId, oldProjectId, newProjectId };
+                if (this.eventSource) {
+                    (eventDetail as any).source = this.eventSource;
+                }
 
                 // 触发更新事件
                 window.dispatchEvent(new CustomEvent('reminderUpdated', {
@@ -5774,8 +5787,13 @@ export class QuickReminderDialog {
                     mode: 'edit',
                     plugin: this.plugin,
                     isInstanceEdit: false, // 明确设置为非实例编辑模式，即修改所有实例
+                    eventSource: this.eventSource,
                     onSaved: async () => {
-                        window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                        window.dispatchEvent(new CustomEvent('reminderUpdated', {
+                            detail: {
+                                source: this.eventSource
+                            }
+                        }));
                     }
                 }
             );
@@ -5867,12 +5885,17 @@ export class QuickReminderDialog {
                     plugin: this.plugin,
                     isInstanceEdit: isInstanceEdit,
                     instanceDate: isInstanceEdit ? instanceDate : undefined,
+                    eventSource: this.eventSource,
                     onSaved: async () => {
                         // 父任务保存后，刷新当前对话框的父任务显示
                         await this.updateParentTaskDisplay();
 
                         // 触发全局刷新事件
-                        window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                        window.dispatchEvent(new CustomEvent('reminderUpdated', {
+                            detail: {
+                                source: this.eventSource
+                            }
+                        }));
                     }
                 }
             );

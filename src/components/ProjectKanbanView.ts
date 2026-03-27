@@ -384,10 +384,24 @@ export class ProjectKanbanView {
         // 监听提醒更新事件（使用防抖加载以避免频繁重绘导致滚动重置）
         // 只有外部触发的事件才重新加载任务
         window.addEventListener('reminderUpdated', async (e: CustomEvent) => {
+            const detail = e.detail || {};
             // 如果是自己触发的更新，忽略
-            if (e.detail?.source === this.kanbanInstanceId) {
+            if (detail?.source === this.kanbanInstanceId) {
                 return;
             }
+
+            // 若事件携带项目信息，则只在“影响当前项目”时刷新
+            const projectId = detail?.projectId;
+            const oldProjectId = detail?.oldProjectId;
+            const newProjectId = detail?.newProjectId;
+            const hasProjectHints = projectId !== undefined || oldProjectId !== undefined || newProjectId !== undefined;
+            if (hasProjectHints) {
+                const affectsCurrentProject = [projectId, oldProjectId, newProjectId].some(pid => pid === this.projectId);
+                if (!affectsCurrentProject) {
+                    return;
+                }
+            }
+
             // 外部触发的更新，需要刷新缓存 (但不强制读取文件，只使用插件内存缓存)
             this.reminderData = null;
             await this.getReminders(false);
@@ -9512,6 +9526,7 @@ export class ProjectKanbanView {
                     undefined, undefined, undefined, undefined,
                     {
                         plugin: this.plugin,
+                        eventSource: this.kanbanInstanceId,
                         mode: 'note',
                         reminder: task,
                         onSaved: async (updatedReminder) => {
@@ -9544,9 +9559,8 @@ export class ProjectKanbanView {
                                 }
                             }));
 
-                            // 刷新当前看板视图
-                            // 使用 queueLoadTasks 以防抖方式刷新
-                            this.queueLoadTasks();
+                            // 刷新当前任务卡片，避免整页队列刷新
+                            this.refreshTaskElement(task.id);
                         }
                     }
                 ).show();
@@ -10589,7 +10603,7 @@ export class ProjectKanbanView {
 
                         await saveReminders(this.plugin, reminderData);
                         this.dispatchReminderUpdate(true);
-                        this.queueLoadTasks();
+                        await this.loadTasks();
                         showMessage(i18n("instanceTimeUpdated") || "实例时间已更新");
                     } else {
                         const targetId = targetTask.isRepeatInstance ? targetTask.originalId : targetTask.id;
@@ -10618,7 +10632,7 @@ export class ProjectKanbanView {
 
                         await saveReminders(this.plugin, reminderData);
                         this.dispatchReminderUpdate(true);
-                        this.queueLoadTasks();
+                        await this.loadTasks();
                         showMessage(i18n("operationSuccessful"));
                     }
                 } catch (err) {
@@ -10653,7 +10667,7 @@ export class ProjectKanbanView {
 
                         await saveReminders(this.plugin, reminderData);
                         this.dispatchReminderUpdate(true);
-                        this.queueLoadTasks();
+                        await this.loadTasks();
                         showMessage(i18n("instanceTimeUpdated") || "实例时间已更新");
                     } else {
                         const targetId = targetTask.isRepeatInstance ? targetTask.originalId : targetTask.id;
@@ -10674,7 +10688,7 @@ export class ProjectKanbanView {
 
                         await saveReminders(this.plugin, reminderData);
                         this.dispatchReminderUpdate(true);
-                        this.queueLoadTasks();
+                        await this.loadTasks();
                         showMessage(i18n("operationSuccessful"));
                     }
                 } catch (err) {
@@ -10697,6 +10711,7 @@ export class ProjectKanbanView {
                     undefined, undefined, undefined, undefined,
                     {
                         mode: 'edit',
+                        eventSource: this.kanbanInstanceId,
                         reminder: isInstanceEdit ? {
                             ...targetTask,
                             isInstance: true,
@@ -10708,7 +10723,7 @@ export class ProjectKanbanView {
                         dateOnly: true,
                         onSaved: async () => {
                             this.dispatchReminderUpdate(true);
-                            await this.queueLoadTasks();
+                            await this.loadTasks();
                         }
                     }
                 );
@@ -11019,9 +11034,11 @@ export class ProjectKanbanView {
                 delete optimisticTask.completedTime;
             }
 
-            // 立即重排并渲染，避免用户体感被防抖/IO 延迟影响
-            this.sortTasks();
-            this.renderKanban();
+            // 仅更新当前任务的 DOM，避免整页重渲染引发滚动条跳动
+            this.updateTaskElementDOM(task.id, {
+                completed,
+                completedTime: optimisticTask.completedTime
+            });
         }
 
         // 2. 后台执行保存逻辑
@@ -11073,10 +11090,13 @@ export class ProjectKanbanView {
                             }
                         }
 
-                        // 广播更新事件并刷新
+                        // 广播更新事件
                         this.dispatchReminderUpdate(true);
-                        // 确保最终一致
-                        this.queueLoadTasks();
+                        // 标记完成后不再触发整页 queueLoadTasks 刷新，避免滚动条跳动
+                        // 取消完成时仍保留兜底刷新，确保状态回退一致
+                        if (!completed) {
+                            this.queueLoadTasks();
+                        }
                     }
                 }
             } catch (error) {
@@ -12089,31 +12109,39 @@ export class ProjectKanbanView {
                         // 立即排序，确保乐观更新时顺序正确
                         this.sortTasks();
 
-                        // 2. 刷新对应列（增量渲染）
-                        if (this.kanbanMode === 'custom') {
-                            const group = this.project?.customGroups?.find((g: any) => g.id === savedTask.customGroupId);
-                            if (group) {
-                                const groupTasks = this.tasks.filter(t => t.customGroupId === group.id);
-                                this.renderCustomGroupColumn(group, groupTasks);
+                        // 2. 优先只插入单张任务卡片，避免整列重绘导致滚动抖动
+                        const inserted = this.insertCreatedTaskCard(savedTask);
+                        if (!inserted) {
+                            // 回退：无法局部插入时再做整列增量渲染
+                            this.captureScrollState();
+                            if (this.kanbanMode === 'custom') {
+                                const group = this.project?.customGroups?.find((g: any) => g.id === savedTask.customGroupId);
+                                if (group) {
+                                    const groupTasks = this.tasks.filter(t => t.customGroupId === group.id);
+                                    this.renderCustomGroupColumn(group, groupTasks);
+                                } else {
+                                    const ungroupedTasks = this.tasks.filter(t => !t.customGroupId);
+                                    this.renderUngroupedColumn(ungroupedTasks);
+                                }
                             } else {
-                                const ungroupedTasks = this.tasks.filter(t => !t.customGroupId);
-                                this.renderUngroupedColumn(ungroupedTasks);
+                                const status = this.getTaskStatus(savedTask);
+                                // 过滤出该状态列的所有任务
+                                // 使用 getTaskStatus 确保逻辑一致（处理完成状态、日期自动归档、忽略自定义分组ID对列的影响）
+                                const tasksInColumn = this.tasks.filter(t => this.getTaskStatus(t) === status);
+                                this.renderColumn(status, tasksInColumn);
                             }
-                        } else {
-                            const status = this.getTaskStatus(savedTask);
-                            // 过滤出该状态列的所有任务
-                            // 使用 getTaskStatus 确保逻辑一致（处理完成状态、日期自动归档、忽略自定义分组ID对列的影响）
-                            const tasksInColumn = this.tasks.filter(t => this.getTaskStatus(t) === status);
-                            this.renderColumn(status, tasksInColumn);
+
+                            // 渲染后恢复滚动位置，避免新建任务导致分组滚动条跳回顶部
+                            this.restoreScrollState();
                         }
 
                         this.dispatchReminderUpdate(true);
                     } catch (e) {
                         console.error("增量更新新任务失败，回退到完整重载", e);
-                        this.queueLoadTasks();
+                        await this.loadTasks();
                     }
                 } else {
-                    this.queueLoadTasks();
+                    await this.loadTasks();
                 }
             },
             undefined, // 无时间段选项
@@ -12132,6 +12160,7 @@ export class ProjectKanbanView {
                 // 使用父任务的状态优先；否则使用传入的 defaultStatus 或上一次选择的 status
                 defaultStatus: parentTask ? this.getTaskStatus(parentTask) : (defaultStatus || this.lastSelectedStatus),
                 plugin: this.plugin, // 传入plugin实例
+                eventSource: this.kanbanInstanceId,
                 defaultSort: defaultSort
             }
         );
@@ -12249,6 +12278,7 @@ export class ProjectKanbanView {
                 mode: 'edit',
                 reminder: taskToEdit,
                 plugin: this.plugin,
+                eventSource: this.kanbanInstanceId,
                 defaultProjectId: taskToEdit.projectId,
                 defaultCustomGroupId: taskToEdit.customGroupId
             });
@@ -12288,10 +12318,10 @@ export class ProjectKanbanView {
             projectGroups,
             projectMilestones,
             kanbanStatuses,
-            onSuccess: (totalCount) => {
+            onSuccess: async (totalCount) => {
                 showMessage(`${totalCount} 个任务已创建`);
-                this.reminderData = null; // 清理缓存，确保 queueLoadTasks 读取最新数据
-                this.queueLoadTasks();
+                this.reminderData = null; // 清理缓存，确保 loadTasks 读取最新数据
+                await this.loadTasks();
                 this.dispatchReminderUpdate(true);
             }
         });
@@ -12398,15 +12428,12 @@ export class ProjectKanbanView {
                     // 触发更新事件
                     this.dispatchReminderUpdate(true);
 
-                    // 重新加载任务（使用防抖队列，确保最终一致性）
-                    await this.queueLoadTasks();
-
                     // showMessage("任务已删除");
                 } catch (error) {
                     console.error('删除任务失败:', error);
                     showMessage("删除任务失败");
                     // Keep UI consistent or facilitate retry by reloading
-                    await this.queueLoadTasks();
+                    await this.loadTasks();
                 }
             }
         );
@@ -15304,6 +15331,7 @@ export class ProjectKanbanView {
                     mode: 'edit',
                     reminder: instanceData,
                     plugin: this.plugin,
+                    eventSource: this.kanbanInstanceId,
                     isInstanceEdit: true
                 }
             );
@@ -15349,12 +15377,11 @@ export class ProjectKanbanView {
                     }
 
                     showMessage("实例已删除");
-                    await this.queueLoadTasks();
                     this.dispatchReminderUpdate(true);
                 } catch (error) {
                     console.error('删除周期实例失败:', error);
                     showMessage("删除实例失败");
-                    await this.queueLoadTasks();
+                    await this.loadTasks();
                 }
             }
         );
@@ -16193,6 +16220,105 @@ export class ProjectKanbanView {
             countEl.textContent = newCount.toString();
         } catch (error) {
             console.error('更新列计数失败:', error);
+        }
+    }
+
+    /**
+     * 新建任务后优先做局部插入，避免整列重绘造成滚动抖动
+     */
+    private insertCreatedTaskCard(task: any): boolean {
+        try {
+            if (!task || task.parentId) return false;
+
+            const status = this.getTaskStatus(task);
+
+            const bumpCount = (el: HTMLElement | null, delta: number = 1) => {
+                if (!el) return;
+                const current = parseInt(el.textContent || '0', 10);
+                el.textContent = Math.max(0, current + delta).toString();
+            };
+
+            if (this.kanbanMode === 'custom') {
+                const groupId = task.customGroupId || 'ungrouped';
+                const column = this.container.querySelector(`.kanban-column[data-group-id="${groupId}"]`) as HTMLElement | null;
+                if (!column) return false;
+
+                const statusGroup = column.querySelector(`.custom-status-group[data-status="${status}"]`) as HTMLElement | null;
+                const tasksContainer = statusGroup?.querySelector('.custom-status-group-tasks') as HTMLElement | null;
+                if (!tasksContainer) return false;
+
+                this.insertTaskElementIntoContainer(tasksContainer, task, status);
+
+                bumpCount(statusGroup?.querySelector('.custom-status-group-count') as HTMLElement | null, 1);
+                bumpCount(column.querySelector('.kanban-column-count') as HTMLElement | null, 1);
+                return true;
+            }
+
+            if (this.kanbanMode === 'status') {
+                const column = this.container.querySelector(`.kanban-column-${status}`) as HTMLElement | null;
+                if (!column) return false;
+
+                const stableGroup = column.querySelector(`.status-stable-group[data-status="${status}"]`) as HTMLElement | null;
+                if (!stableGroup) return false;
+
+                const groupId = task.customGroupId || 'ungrouped';
+                const customGroup = stableGroup.querySelector(`.custom-group-in-status[data-group-id="${groupId}"]`) as HTMLElement | null;
+
+                let tasksContainer: HTMLElement | null = null;
+                if (customGroup) {
+                    tasksContainer = customGroup.querySelector('.custom-group-tasks') as HTMLElement | null;
+                } else {
+                    tasksContainer = stableGroup.querySelector('.status-stable-group-tasks') as HTMLElement | null;
+                }
+                if (!tasksContainer) return false;
+
+                this.insertTaskElementIntoContainer(tasksContainer, task, status);
+
+                if (customGroup) {
+                    bumpCount(customGroup.querySelector('.custom-group-count') as HTMLElement | null, 1);
+                } else {
+                    bumpCount(stableGroup.querySelector('.status-stable-group-count') as HTMLElement | null, 1);
+                }
+                bumpCount(column.querySelector('.kanban-column-count') as HTMLElement | null, 1);
+                return true;
+            }
+
+            return false;
+        } catch (error) {
+            console.warn('局部插入新任务失败，回退整列渲染:', error);
+            return false;
+        }
+    }
+
+    private insertTaskElementIntoContainer(container: HTMLElement, task: any, status: string) {
+        const taskEl = this.createTaskElement(task, 0);
+        const loadMoreEl = container.querySelector('.kanban-load-more') as HTMLElement | null;
+
+        // 已完成列保持按完成时间倒序插入
+        if (status === 'completed' && task.completedTime) {
+            const children = Array.from(container.children) as HTMLElement[];
+            const existingTaskEls = children.filter(el => el.classList?.contains('kanban-task'));
+
+            const insertBeforeEl = existingTaskEls.find(el => {
+                const id = el.dataset.taskId;
+                if (!id) return false;
+                const existing = this.tasks.find(t => t.id === id);
+                if (!existing || !existing.completedTime) return false;
+                const currentTime = new Date(task.completedTime).getTime();
+                const existingTime = new Date(existing.completedTime).getTime();
+                return currentTime > existingTime;
+            });
+
+            if (insertBeforeEl) {
+                container.insertBefore(taskEl, insertBeforeEl);
+                return;
+            }
+        }
+
+        if (loadMoreEl) {
+            container.insertBefore(taskEl, loadMoreEl);
+        } else {
+            container.appendChild(taskEl);
         }
     }
 
