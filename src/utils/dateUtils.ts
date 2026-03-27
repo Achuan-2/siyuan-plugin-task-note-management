@@ -70,6 +70,33 @@ export function getRelativeDateString(daysOffset: number, baseDate?: Date): stri
 }
 
 /**
+ * 将中文相对日期词归一化为具体日期字符串，便于后续统一解析
+ */
+function normalizeRelativeDateKeywords(text: string): { normalizedText: string; hasRelativeDateKeyword: boolean } {
+    const relativeDateKeywords: Array<{ pattern: RegExp; offset: number }> = [
+        { pattern: /大后天/g, offset: 3 },
+        { pattern: /后天/g, offset: 2 },
+        { pattern: /明天|明日/g, offset: 1 },
+        { pattern: /今天|今日/g, offset: 0 },
+    ];
+
+    let normalizedText = text;
+    let hasRelativeDateKeyword = false;
+
+    relativeDateKeywords.forEach(({ pattern, offset }) => {
+        normalizedText = normalizedText.replace(pattern, () => {
+            hasRelativeDateKeyword = true;
+            return `${getRelativeDateString(offset)} `;
+        });
+    });
+
+    return {
+        normalizedText: normalizedText.trim(),
+        hasRelativeDateKeyword
+    };
+}
+
+/**
  * 获取本地时间字符串（HH:MM格式）
  */
 export function getLocalTimeString(date?: Date): string {
@@ -404,6 +431,11 @@ export function parseNaturalDateTime(text: string): ParseResult {
 function parseNaturalDateTimeInner(text: string): ParseResult {
     try {
         let processedText = preprocessTimeText(text.trim());
+        const normalizedRelativeDate = normalizeRelativeDateKeywords(processedText);
+        if (normalizedRelativeDate.hasRelativeDateKeyword) {
+            processedText = normalizedRelativeDate.normalizedText;
+        }
+
         // --- 优先提取末尾时间 (针对 "任务0：14:20" 这种场景) ---
         // 匹配模式：(起始/空格/中英文冒号) + (1-2位数字) + (中英文冒号/点) + (2位数字) + (可选分) + 结尾
         const trailingTimePattern = /(?:^|[\s:：])(\d{1,2})[:：点](\d{2})(?:分)?$/;
