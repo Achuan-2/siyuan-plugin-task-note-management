@@ -569,8 +569,8 @@ export class ReminderPanel {
                 const today = getLogicalDateString();
 
                 // 只有被忽略的任务才强制排在最后，已完成的每日可做参与正常排序
-                const aIsIgnored = a.isAvailableToday && Array.isArray(a.dailyDessertIgnored) && a.dailyDessertIgnored.includes(today);
-                const bIsIgnored = b.isAvailableToday && Array.isArray(b.dailyDessertIgnored) && b.dailyDessertIgnored.includes(today);
+                const aIsIgnored = this.hasTodayIgnoreMark(a, today);
+                const bIsIgnored = this.hasTodayIgnoreMark(b, today);
 
                 if (this.currentTab === 'todayCompleted') {
                     const aGroup = aIsIgnored ? 2 : (a.isSubscribed ? 1 : 0);
@@ -2140,9 +2140,15 @@ export class ReminderPanel {
                         if (this.currentTab === 'today') {
                             isBottomGroup = item.isAvailableToday && (!item.date && !item.endDate || (item.date || item.endDate) !== today);
                         } else if (this.currentTab === 'todayCompleted') {
-                            const dailyIgnored = Array.isArray(item.dailyDessertIgnored) ? item.dailyDessertIgnored : [];
-                            const dailyCompleted = Array.isArray(item.dailyDessertCompleted) ? item.dailyDessertCompleted : [];
-                            isBottomGroup = item.isAvailableToday && dailyIgnored.includes(today) && !dailyCompleted.includes(today);
+                            const isIgnoredToday = this.hasTodayIgnoreMark(item, today);
+                            if (isIgnoredToday) {
+                                if (item.isAvailableToday) {
+                                    const dailyCompleted = Array.isArray(item.dailyDessertCompleted) ? item.dailyDessertCompleted : [];
+                                    isBottomGroup = !dailyCompleted.includes(today);
+                                } else if (this.canApplyTodayIgnore(item, today)) {
+                                    isBottomGroup = !this.hasDailyCompletionMark(item, today);
+                                }
+                            }
                         }
 
                         if (isBottomGroup) return 2;
@@ -2791,33 +2797,47 @@ export class ReminderPanel {
                 completedEl.style.cssText = 'font-size:12px;  margin-top:6px; opacity:0.95;';
                 infoEl.appendChild(completedEl);
             }
-        } else if (reminder.isAvailableToday && isBeforePeriod_rendering) {
+        } else {
             const currentToday = getLogicalDateString();
-            const dailyCompletedList = Array.isArray(reminder.dailyDessertCompleted) ? reminder.dailyDessertCompleted : [];
-            const dailyIgnoredList = Array.isArray(reminder.dailyDessertIgnored) ? reminder.dailyDessertIgnored : [];
+            const canRenderDessertStatus = reminder.isAvailableToday && isBeforePeriod_rendering;
+            const canRenderTodayIgnoreStatus = this.canApplyTodayIgnore(reminder, currentToday);
 
-            if (dailyCompletedList.includes(currentToday)) {
-                reminderEl.classList.add('reminder-completed');
-                try {
-                    reminderEl.style.setProperty('opacity', '0.5', 'important');
-                } catch (e) { }
-                const completedEl = document.createElement('div');
-                completedEl.className = 'reminder-item__completed-time';
+            if (canRenderDessertStatus) {
+                const dailyCompletedList = Array.isArray(reminder.dailyDessertCompleted) ? reminder.dailyDessertCompleted : [];
 
-                // 尝试获取今日完成时间
-                const dailyTimes = reminder.dailyDessertCompletedTimes || {};
-                const timeStr = dailyTimes[currentToday];
-                if (timeStr) {
-                    const formatted = this.formatCompletedTime(timeStr);
-                    const timeOnly = formatted.includes(' ') ? formatted.substring(formatted.indexOf(' ') + 1) : formatted;
-                    completedEl.textContent = i18n('todayCompletedWithTime', { time: timeOnly });
-                } else {
-                    completedEl.textContent = i18n('todayCompleted');
+                if (dailyCompletedList.includes(currentToday)) {
+                    reminderEl.classList.add('reminder-completed');
+                    try {
+                        reminderEl.style.setProperty('opacity', '0.5', 'important');
+                    } catch (e) { }
+                    const completedEl = document.createElement('div');
+                    completedEl.className = 'reminder-item__completed-time';
+
+                    // 尝试获取今日完成时间
+                    const dailyTimes = reminder.dailyDessertCompletedTimes || {};
+                    const timeStr = dailyTimes[currentToday];
+                    if (timeStr) {
+                        const formatted = this.formatCompletedTime(timeStr);
+                        const timeOnly = formatted.includes(' ') ? formatted.substring(formatted.indexOf(' ') + 1) : formatted;
+                        completedEl.textContent = i18n('todayCompletedWithTime', { time: timeOnly });
+                    } else {
+                        completedEl.textContent = i18n('todayCompleted');
+                    }
+
+                    completedEl.style.cssText = 'font-size:12px;  margin-top:6px; opacity:0.95;';
+                    infoEl.appendChild(completedEl);
+                } else if (this.hasTodayIgnoreMark(reminder, currentToday)) {
+                    reminderEl.classList.add('reminder-ignored');
+                    try {
+                        reminderEl.style.setProperty('opacity', '0.5', 'important');
+                    } catch (e) { }
+                    const ignoredEl = document.createElement('div');
+                    ignoredEl.className = 'reminder-item__ignored-time';
+                    ignoredEl.textContent = `⭕ 今日已忽略`;
+                    ignoredEl.style.cssText = 'font-size:12px;  margin-top:6px; opacity:0.95;';
+                    infoEl.appendChild(ignoredEl);
                 }
-
-                completedEl.style.cssText = 'font-size:12px;  margin-top:6px; opacity:0.95;';
-                infoEl.appendChild(completedEl);
-            } else if (dailyIgnoredList.includes(currentToday)) {
+            } else if (canRenderTodayIgnoreStatus && this.hasTodayIgnoreMark(reminder, currentToday)) {
                 reminderEl.classList.add('reminder-ignored');
                 try {
                     reminderEl.style.setProperty('opacity', '0.5', 'important');
@@ -3282,15 +3302,16 @@ export class ReminderPanel {
 
             if (reminderData[targetId]) {
                 const todayStr = getLogicalDateString();
+                const ignoreKey = this.getTodayIgnoreStorageKey(reminder, todayStr);
 
-                // 初始化 dailyDessertIgnored 数组
-                if (!Array.isArray(reminderData[targetId].dailyDessertIgnored)) {
-                    reminderData[targetId].dailyDessertIgnored = [];
+                // 初始化忽略数组
+                if (!Array.isArray(reminderData[targetId][ignoreKey])) {
+                    reminderData[targetId][ignoreKey] = [];
                 }
 
                 // 添加今天到忽略列表 (如果还未添加)
-                if (!reminderData[targetId].dailyDessertIgnored.includes(todayStr)) {
-                    reminderData[targetId].dailyDessertIgnored.push(todayStr);
+                if (!reminderData[targetId][ignoreKey].includes(todayStr)) {
+                    reminderData[targetId][ignoreKey].push(todayStr);
                 }
 
                 await saveReminders(this.plugin, reminderData);
@@ -3300,7 +3321,7 @@ export class ReminderPanel {
                 showMessage("今日已忽略该任务");
             }
         } catch (e) {
-            console.error("忽略每日可做任务失败", e);
+            console.error("忽略今日任务失败", e);
             showMessage("操作失败", 3000, "error");
         }
     }
@@ -3312,20 +3333,21 @@ export class ReminderPanel {
 
             if (reminderData[targetId]) {
                 const todayStr = getLogicalDateString();
+                const ignoreKey = this.getTodayIgnoreStorageKey(reminder, todayStr);
 
-                if (Array.isArray(reminderData[targetId].dailyDessertIgnored)) {
+                if (Array.isArray(reminderData[targetId][ignoreKey])) {
                     // 从数组中移除今天
-                    reminderData[targetId].dailyDessertIgnored = reminderData[targetId].dailyDessertIgnored.filter((d: string) => d !== todayStr);
-
-                    await saveReminders(this.plugin, reminderData);
-                    window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
-                    // 刷新界面显示
-                    this.loadReminders();
-                    showMessage("已取消今日忽略");
+                    reminderData[targetId][ignoreKey] = reminderData[targetId][ignoreKey].filter((d: string) => d !== todayStr);
                 }
+
+                await saveReminders(this.plugin, reminderData);
+                window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
+                // 刷新界面显示
+                this.loadReminders();
+                showMessage("已取消今日忽略");
             }
         } catch (e) {
-            console.error("取消忽略每日可做任务失败", e);
+            console.error("取消忽略今日任务失败", e);
             showMessage("操作失败", 3000, "error");
         }
     }
@@ -3642,6 +3664,7 @@ export class ReminderPanel {
                 return reminders.filter(r => {
                     const isCompleted = isEffectivelyCompleted(r);
                     if (isCompleted) return false;
+                    const hasIgnoreMark = this.hasTodayIgnoreMark(r, today);
 
                     // 1. 常规今日任务：有日期且 (在日期范围内 或 已逾期)
                     const hasDate = r.date || r.endDate;
@@ -3651,11 +3674,15 @@ export class ReminderPanel {
                     if (hasDate && startLogical && endLogical) {
                         const inRange = compareDateStrings(startLogical, today) <= 0 && compareDateStrings(today, endLogical) <= 0;
                         const isOverdue = compareDateStrings(endLogical, today) < 0;
-                        if (inRange || isOverdue) return true;
+                        if (inRange || isOverdue) {
+                            if (this.canApplyTodayIgnore(r, today) && hasIgnoreMark) return false;
+                            return true;
+                        }
                     }
 
                     // 2. 今日可做任务 (Daily Dessert): 
                     if (this.isFutureTaskRemindedOnDate(r, today)) {
+                        if (hasIgnoreMark) return false;
                         return !this.hasDailyCompletionMark(r, today);
                     }
 
@@ -3669,8 +3696,7 @@ export class ReminderPanel {
                             if (dailyCompleted.includes(today)) return false;
 
                             // 检查今天是否已忽略
-                            const dailyIgnored = Array.isArray(r.dailyDessertIgnored) ? r.dailyDessertIgnored : [];
-                            if (dailyIgnored.includes(today)) return false;
+                            if (hasIgnoreMark) return false;
 
                             return true;
                         }
@@ -3709,6 +3735,10 @@ export class ReminderPanel {
                     // 1. 常规任务的今日完成
                     if (this.isTodayCompleted(r, today)) return true;
 
+                    if (this.canApplyTodayIgnore(r, today) && this.hasTodayIgnoreMark(r, today) && !this.hasDailyCompletionMark(r, today)) {
+                        return true;
+                    }
+
                     // 2. 特殊处理 Daily Dessert: 
                     if (r.isAvailableToday) {
                         // 如果它今天被标记完成了 (dailyDessertCompleted includes today)，也应该显示
@@ -3716,8 +3746,7 @@ export class ReminderPanel {
                         if (dailyCompleted.includes(today)) return true;
 
                         // 如果它今天被忽略了，也应该显示
-                        const dailyIgnored = Array.isArray(r.dailyDessertIgnored) ? r.dailyDessertIgnored : [];
-                        if (dailyIgnored.includes(today)) return true;
+                        if (this.hasTodayIgnoreMark(r, today)) return true;
                     }
 
                     return false;
@@ -4283,6 +4312,44 @@ export class ReminderPanel {
         }
 
         return !!(reminder?.dailyCompletions && reminder.dailyCompletions[targetDate] === true);
+    }
+
+    private isDailyDessertTaskForDate(reminder: any, targetDate: string): boolean {
+        if (!reminder?.isAvailableToday) return false;
+        const startLogical = this.getReminderLogicalDate(reminder.date, reminder.time);
+        const isInOrAfterPeriod = reminder.date && compareDateStrings(startLogical, targetDate) <= 0;
+        return !isInOrAfterPeriod;
+    }
+
+    private getTodayIgnoreStorageKey(reminder: any, targetDate: string): 'todayIgnored' | 'dailyDessertIgnored' {
+        return this.isDailyDessertTaskForDate(reminder, targetDate) ? 'dailyDessertIgnored' : 'todayIgnored';
+    }
+
+    private hasTodayIgnoreMark(reminder: any, targetDate: string): boolean {
+        const ignoreKey = this.getTodayIgnoreStorageKey(reminder, targetDate);
+        if (reminder?.isRepeatInstance) {
+            const originalReminder = this.getOriginalReminder(reminder.originalId);
+            const originalIgnored = Array.isArray(originalReminder?.[ignoreKey]) ? originalReminder[ignoreKey] : [];
+            return originalIgnored.includes(targetDate);
+        }
+
+        const ignoredList = Array.isArray(reminder?.[ignoreKey]) ? reminder[ignoreKey] : [];
+        return ignoredList.includes(targetDate);
+    }
+
+    private canApplyTodayIgnore(reminder: any, targetDate: string): boolean {
+        if (!reminder || reminder.completed) return false;
+
+        const isSpanningDays = reminder.endDate && reminder.endDate !== reminder.date;
+        if (isSpanningDays) {
+            const startLogical = this.getReminderLogicalDate(reminder.date || reminder.endDate, reminder.time || reminder.endTime);
+            const endLogical = this.getReminderLogicalDate(reminder.endDate || reminder.date, reminder.endTime || reminder.time);
+            if (startLogical && endLogical && compareDateStrings(startLogical, targetDate) <= 0 && compareDateStrings(targetDate, endLogical) <= 0) {
+                return true;
+            }
+        }
+
+        return this.isFutureTaskRemindedOnDate(reminder, targetDate);
     }
 
     private compareByCompletedTime(a: any, b: any): number {
@@ -6453,13 +6520,13 @@ export class ReminderPanel {
         // 计算逻辑起止日期并检查是否为跨天事件
         const startLogical = this.getReminderLogicalDate(reminder.date, reminder.time);
         const endLogical = this.getReminderLogicalDate(reminder.endDate || reminder.date, reminder.endTime || reminder.time);
-        const isSpanningInToday = isSpanningDays && compareDateStrings(startLogical, today) <= 0 && compareDateStrings(today, endLogical) <= 0;
-        const isFutureReminderInToday = this.isFutureTaskRemindedOnDate(reminder, today);
-        const canToggleTodayCompleted = !reminder.completed && (isSpanningInToday || isFutureReminderInToday);
-
         // 如果在任务期内或逾期，则不将其视为每日可做（Dessert）
         const isInOrAfterPeriod = reminder.date && compareDateStrings(startLogical, today) <= 0;
         const isDessert = reminder.isAvailableToday && !isInOrAfterPeriod;
+        const isSpanningInToday = isSpanningDays && compareDateStrings(startLogical, today) <= 0 && compareDateStrings(today, endLogical) <= 0;
+        const isFutureReminderInToday = this.isFutureTaskRemindedOnDate(reminder, today);
+        const canToggleTodayCompleted = !reminder.completed && !isDessert && (isSpanningInToday || isFutureReminderInToday);
+        const isIgnoredToday = this.hasTodayIgnoreMark(reminder, today);
 
         // --- 每日可做任务专用菜单 ---
         // 只有当今天还没完成时才显示 "今日已完成"
@@ -6469,17 +6536,37 @@ export class ReminderPanel {
         // 添加"今日已完成"选项 (普通任务/跨天任务)
         if (canToggleTodayCompleted) {
             const isTodayCompleted = this.hasDailyCompletionMark(reminder, today);
-            menu.addItem({
-                iconHTML: isTodayCompleted ? "↩️" : "✅",
-                label: isTodayCompleted ? i18n("unmarkTodayCompleted") : i18n("markTodayCompleted"),
-                click: () => {
-                    if (isTodayCompleted) {
-                        this.unmarkSpanningEventTodayCompleted(reminder);
-                    } else {
-                        this.markSpanningEventTodayCompleted(reminder);
+            if (!isIgnoredToday) {
+                menu.addItem({
+                    iconHTML: isTodayCompleted ? "↩️" : "✅",
+                    label: isTodayCompleted ? i18n("unmarkTodayCompleted") : i18n("markTodayCompleted"),
+                    click: () => {
+                        if (isTodayCompleted) {
+                            this.unmarkSpanningEventTodayCompleted(reminder);
+                        } else {
+                            this.markSpanningEventTodayCompleted(reminder);
+                        }
                     }
+                });
+
+                if (!isTodayCompleted) {
+                    menu.addItem({
+                        iconHTML: "⭕",
+                        label: i18n("todayIgnored").replace('⭕ ', ''),
+                        click: () => {
+                            this.ignoreDailyDessertToday(reminder);
+                        }
+                    });
                 }
-            });
+            } else {
+                menu.addItem({
+                    iconHTML: "↩️",
+                    label: i18n("undoDailyDessertIgnore") || "取消今日忽略",
+                    click: () => {
+                        this.undoDailyDessertIgnore(reminder);
+                    }
+                });
+            }
             menu.addSeparator();
         }
 
@@ -6494,8 +6581,6 @@ export class ReminderPanel {
             });
 
             // --- ❌ 今日忽略 ---
-            const dailyIgnoredList = Array.isArray(reminder.dailyDessertIgnored) ? reminder.dailyDessertIgnored : [];
-            const isIgnoredToday = dailyIgnoredList.includes(today);
             if (!isIgnoredToday) {
                 menu.addItem({
                     iconHTML: "⭕",
@@ -8797,6 +8882,7 @@ export class ReminderPanel {
             case 'today':
                 const startLogical_cur = this.getReminderLogicalDate(reminder.date, reminder.time);
                 const endLogical_cur = this.getReminderLogicalDate(reminder.endDate || reminder.date, reminder.endTime || reminder.time);
+                const hasIgnoreMarkToday = this.hasTodayIgnoreMark(reminder, today);
 
                 // 常规今日任务（包含期内任务和逾期任务）
                 const isNormalToday = reminder.date && (
@@ -8804,9 +8890,13 @@ export class ReminderPanel {
                     compareDateStrings(endLogical_cur, today) < 0
                 );
 
-                if (isNormalToday && !reminder.completed) return true;
+                if (isNormalToday && !reminder.completed) {
+                    if (this.canApplyTodayIgnore(reminder, today) && hasIgnoreMarkToday) return false;
+                    return true;
+                }
 
                 if (this.isFutureTaskRemindedOnDate(reminder, today)) {
+                    if (hasIgnoreMarkToday) return false;
                     return !this.hasDailyCompletionMark(reminder, today);
                 }
 
@@ -8819,6 +8909,7 @@ export class ReminderPanel {
                         // 检查今天是否已完成
                         const dailyCompleted = Array.isArray(reminder.dailyDessertCompleted) ? reminder.dailyDessertCompleted : [];
                         if (dailyCompleted.includes(today)) return false;
+                        if (hasIgnoreMarkToday) return false;
 
                         return true;
                     }
@@ -8841,6 +8932,11 @@ export class ReminderPanel {
                 if (reminder.isAvailableToday && isBeforePeriod_tc) {
                     const dailyCompleted = Array.isArray(reminder.dailyDessertCompleted) ? reminder.dailyDessertCompleted : [];
                     if (dailyCompleted.includes(today)) return true;
+                    if (this.hasTodayIgnoreMark(reminder, today)) return true;
+                }
+
+                if (this.canApplyTodayIgnore(reminder, today) && this.hasTodayIgnoreMark(reminder, today) && !this.hasDailyCompletionMark(reminder, today)) {
+                    return true;
                 }
 
                 if (this.hasDailyCompletionMark(reminder, today) && this.isFutureTaskRemindedOnDate(reminder, today)) {
