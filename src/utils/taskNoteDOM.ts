@@ -269,16 +269,30 @@ export class TaskNoteDOMManager {
     public _processSingleBlock(protyle: any, node: Element) {
         if (!node || !(node as any).getAttribute) return;
 
-        const blockEl = (node.hasAttribute("data-node-id") ? node : node.closest("[data-node-id]")) as HTMLElement;
-        if (!blockEl) return;
-
-        const blockId = blockEl.getAttribute("data-node-id");
+        const isDocumentLevel = node.classList.contains("protyle-wysiwyg");
+        const hasTrackedAttrsOnNode =
+            node.hasAttribute("custom-task-projectid") ||
+            node.hasAttribute("custom-bind-reminders") ||
+            node.hasAttribute("custom-bind-milestones");
+        const blockEl = (node.hasAttribute("data-node-id") ? node : node.closest("[data-node-id]")) as HTMLElement | null;
+        const blockId = node.getAttribute("data-node-id") || this._getBlockIdFromElement(node);
         if (!blockId) return;
+        if (!isDocumentLevel && !blockEl) return;
 
-        const rawAttr = blockEl.getAttribute("custom-task-projectid");
-        const hasBind = blockEl.hasAttribute("custom-bind-reminders");
-        const rawMilestones = blockEl.getAttribute("custom-bind-milestones");
-        const milestoneProjectId = blockEl.getAttribute("custom-task-projectid");
+        // 对于非文档级且不带目标属性的节点变更，不直接执行删除；先尝试定位真实属性载体节点
+        if (!isDocumentLevel && !hasTrackedAttrsOnNode) {
+            const trackedSource = this._findTrackedSourceForBlock(protyle, blockId);
+            if (trackedSource && trackedSource !== node) {
+                this._processSingleBlock(protyle, trackedSource);
+            }
+            return;
+        }
+
+        const attrSource = (isDocumentLevel || hasTrackedAttrsOnNode ? node : blockEl) as Element;
+        const rawAttr = attrSource.getAttribute("custom-task-projectid");
+        const hasBind = attrSource.hasAttribute("custom-bind-reminders");
+        const rawMilestones = attrSource.getAttribute("custom-bind-milestones");
+        const milestoneProjectId = attrSource.getAttribute("custom-task-projectid");
 
         const projectIds = rawAttr ? rawAttr.split(",").map((s) => s.trim()).filter((s) => s) : [];
         const milestoneIds = rawMilestones ? rawMilestones.split(",").map((s) => s.trim()).filter((s) => s) : [];
@@ -288,10 +302,12 @@ export class TaskNoteDOMManager {
             hasBind,
             milestoneIds,
             milestoneProjectId: milestoneProjectId || undefined,
-            element: blockEl,
+            element: attrSource,
         };
 
         if (!rawAttr && !hasBind && !rawMilestones) {
+            const trackedSource = this._findTrackedSourceForBlock(protyle, blockId);
+            if (trackedSource && trackedSource !== attrSource) return;
             const btns = protyle.element.querySelectorAll(`[data-block-id="${blockId}"][data-plugin-added="reminder-plugin"]`);
             if (btns.length > 0) {
                 btns.forEach((b: Element) => b.remove());
@@ -313,7 +329,7 @@ export class TaskNoteDOMManager {
         try {
             if (!protyle || !protyle.element) return;
 
-            const selector = "div[data-node-id][custom-task-projectid], .protyle-wysiwyg[custom-task-projectid], div[data-node-id][custom-bind-reminders], .protyle-wysiwyg[custom-bind-reminders], div[data-node-id][custom-bind-milestones], .protyle-wysiwyg[custom-bind-milestones]";
+            const selector = "[custom-task-projectid], [custom-bind-reminders], [custom-bind-milestones]";
             const allBlocks = Array.from(protyle.element.querySelectorAll(selector)) as Element[];
 
             if (allBlocks.length === 0) {
@@ -334,13 +350,26 @@ export class TaskNoteDOMManager {
                 const milestoneIds = rawMilestones ? rawMilestones.split(",").map((s) => s.trim()).filter((s) => s) : [];
                 const milestoneProjectId = node.getAttribute("custom-task-projectid") || undefined;
 
-                blocksToProcess.set(blockId, {
-                    projectIds,
-                    hasBind,
-                    milestoneIds,
-                    milestoneProjectId,
-                    element: node,
-                });
+                const existing = blocksToProcess.get(blockId);
+                if (existing) {
+                    const mergedProjectIds = Array.from(new Set([...existing.projectIds, ...projectIds]));
+                    const mergedMilestoneIds = Array.from(new Set([...(existing.milestoneIds || []), ...milestoneIds]));
+                    blocksToProcess.set(blockId, {
+                        projectIds: mergedProjectIds,
+                        hasBind: existing.hasBind || hasBind,
+                        milestoneIds: mergedMilestoneIds,
+                        milestoneProjectId: milestoneProjectId || existing.milestoneProjectId,
+                        element: existing.element.classList.contains("protyle-wysiwyg") ? existing.element : node,
+                    });
+                } else {
+                    blocksToProcess.set(blockId, {
+                        projectIds,
+                        hasBind,
+                        milestoneIds,
+                        milestoneProjectId,
+                        element: node,
+                    });
+                }
             }
 
             this._cleanupOrphanedButtons(protyle, blocksToProcess);
@@ -379,7 +408,7 @@ export class TaskNoteDOMManager {
                                 if (node.nodeType === 1) {
                                     const el = node as Element;
                                     this._processSingleBlock(protyle, el);
-                                    const relevantChildren = el.querySelectorAll?.("div[data-node-id][custom-task-projectid], div[data-node-id][custom-bind-reminders], .protyle-wysiwyg[custom-task-projectid], .protyle-wysiwyg[custom-bind-reminders]");
+                                    const relevantChildren = el.querySelectorAll?.("[custom-task-projectid], [custom-bind-reminders], [custom-bind-milestones]");
                                     if (relevantChildren && relevantChildren.length > 0) {
                                         relevantChildren.forEach((child) => this._processSingleBlock(protyle, child));
                                     }
@@ -437,11 +466,35 @@ export class TaskNoteDOMManager {
         }
     }
 
+    public _findTrackedSourceForBlock(protyle: any, blockId: string): Element | null {
+        if (!protyle?.element || !blockId) return null;
+
+        const trackedCandidates = Array.from(
+            protyle.element.querySelectorAll("[custom-task-projectid], [custom-bind-reminders], [custom-bind-milestones]")
+        ) as Element[];
+        for (const candidate of trackedCandidates) {
+            if (this._getBlockIdFromElement(candidate) === blockId) {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
     public _getBlockIdFromElement(element: Element): string | null {
         let id = element.getAttribute("data-node-id");
         if (id) return id;
 
         if (element.classList.contains("protyle-wysiwyg")) {
+            const protyleRoot = element.closest(".protyle") as any;
+            const titleEl = protyleRoot?.querySelector(".protyle-top .protyle-title[data-node-id], .protyle-top .protyle-title");
+            id = titleEl?.getAttribute("data-node-id") || titleEl?.closest("[data-node-id]")?.getAttribute("data-node-id") || null;
+            if (!id) {
+                id = protyleRoot?.protyle?.block?.rootID || null;
+            }
+        }
+
+        if (!id && element.classList.contains("protyle-wysiwyg")) {
             const prev = element.previousElementSibling;
             if (prev?.classList.contains("protyle-top")) {
                 const titleEl = prev.querySelector(".protyle-title");
@@ -460,6 +513,18 @@ export class TaskNoteDOMManager {
         if (!activeBlocks) return;
 
         const activeBlockIds = new Set(activeBlocks.keys());
+        const rootId = protyle?.block?.rootID;
+        const trackedCandidates = Array.from(
+            protyle?.element?.querySelectorAll?.("[custom-task-projectid], [custom-bind-reminders], [custom-bind-milestones]") || []
+        ) as Element[];
+        const docLevelAttrNode = trackedCandidates.find((node) => {
+            const id = this._getBlockIdFromElement(node);
+            return rootId ? id === rootId : !!id;
+        }) || null;
+        if (docLevelAttrNode) {
+            const docBlockId = this._getBlockIdFromElement(docLevelAttrNode) || rootId;
+            if (docBlockId) activeBlockIds.add(docBlockId);
+        }
 
         const projectButtons = Array.from(protyle.element.querySelectorAll(".block-project-btn")) as HTMLElement[];
         const seen = new Set<string>();

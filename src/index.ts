@@ -2108,37 +2108,25 @@ export default class ReminderPlugin extends Plugin {
             this.syncHabitPomodoroAutoCheckIns().catch(e => console.error('Startup habit sync failed:', e));
         }, 3000);
 
-        // 在布局准备就绪后监听protyle切换事件
-        // 注册 switch-protyle 事件处理：仅在此事件中调用 addBlockProjectButtonsToProtyle
-        const onSwitchProtyle = (e: any) => {
-            // 延迟添加按钮，确保protyle完全切换完成
+        // 在布局准备就绪后监听 protyle 相关事件，统一初始化按钮
+        const initProtyleButtons = (protyle: any) => {
+            if (!protyle) return;
+            // 延迟添加按钮，确保 protyle 切换/加载已完成
             setTimeout(() => {
-                // 保持原有面包屑按钮初始化
-                this.taskNoteDOM.addBreadcrumbReminderButton(e.detail.protyle);
-                // 将块按钮逻辑限定为 switch-protyle 事件中调用
-                this.taskNoteDOM.addBlockProjectButtonsToProtyle(e.detail.protyle);
+                this.taskNoteDOM.addBreadcrumbReminderButton(protyle);
+                this.taskNoteDOM.addBlockProjectButtonsToProtyle(protyle);
             }, 500);
         };
-        this.eventBus.on('switch-protyle', onSwitchProtyle);
-        this.addCleanup(() => this.eventBus.off('switch-protyle', onSwitchProtyle));
 
-        const onLoadedProtyleDynamic = (e: any) => {
-            // 延迟添加按钮，确保protyle完全加载完成
-            setTimeout(() => {
-                this.taskNoteDOM.addBlockProjectButtonsToProtyle(e.detail.protyle);
-            }, 500);
+        const onProtyleReady = (e: any) => {
+            initProtyleButtons(e?.detail?.protyle);
         };
-        this.eventBus.on('loaded-protyle-dynamic', onLoadedProtyleDynamic);
-        this.addCleanup(() => this.eventBus.off('loaded-protyle-dynamic', onLoadedProtyleDynamic));
 
-        const onLoadedProtyleStatic = (e: any) => {
-            // 延迟添加按钮，确保protyle完全加载完成
-            setTimeout(() => {
-                this.taskNoteDOM.addBlockProjectButtonsToProtyle(e.detail.protyle);
-            }, 500);
-        };
-        this.eventBus.on('loaded-protyle-static', onLoadedProtyleStatic);
-        this.addCleanup(() => this.eventBus.off('loaded-protyle-static', onLoadedProtyleStatic));
+        const protyleEvents = ['switch-protyle', 'loaded-protyle-dynamic', 'loaded-protyle-static'] as const;
+        protyleEvents.forEach((eventName) => {
+            this.eventBus.on(eventName, onProtyleReady);
+            this.addCleanup(() => this.eventBus.off(eventName, onProtyleReady));
+        });
         // 为当前已存在的protyle添加按钮
         this.taskNoteDOM.addBreadcrumbButtonsToExistingProtyles();
 
