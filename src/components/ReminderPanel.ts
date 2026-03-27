@@ -852,37 +852,7 @@ export class ReminderPanel {
         return primary === 'created' || primary === 'title';
     }
 
-    // 新增：优先级排序与手动排序结合（支持重复实例）
-    private compareByPriorityWithManualSort(a: any, b: any): number {
-        const priorityOrder = { 'high': 3, 'medium': 2, 'low': 1, 'none': 0 };
-        const priorityA = priorityOrder[a.priority || 'none'] || 0;
-        const priorityB = priorityOrder[b.priority || 'none'] || 0;
 
-        // 首先按优先级排序
-        const priorityDiff = priorityB - priorityA;
-        if (priorityDiff !== 0) {
-            return priorityDiff;
-        }
-
-        // 同优先级内按手动排序（支持重复实例从 instanceModifications 读取）
-        const sortA = this.getReminderSortValue(a);
-        const sortB = this.getReminderSortValue(b);
-
-        if (sortA !== sortB) {
-            return sortA - sortB; // 手动排序值小的在前
-        }
-
-        // 修改：如果手动排序值也相同，按时间排序
-        const timeResult = this.compareByTime(a, b);
-        if (timeResult !== 0) {
-            return timeResult;
-        }
-
-        // 最后兜底：按创建时间排序 (借鉴 ProjectKanbanView)
-        const timeA = a.createdTime ? new Date(a.createdTime).getTime() : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
-        const timeB = b.createdTime ? new Date(b.createdTime).getTime() : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
-        return timeB - timeA; // 最新创建的在前
-    }
 
     private createQuickDateContextMenuItems(targetReminder: any, onlyThisInstance: boolean = false): any[] {
         const items: any[] = [];
@@ -1331,72 +1301,6 @@ export class ReminderPanel {
         }
     }
 
-    /**
-     * 异步添加项目信息显示
-     * @param container 信息容器元素
-     * @param projectId 项目ID
-     */
-    private async addProjectInfo(container: HTMLElement, projectId: string) {
-        try {
-            const projectData = await this.plugin.loadProjectData();
-            const project = projectData[projectId];
-
-            if (project && project.title) {
-                // 创建项目信息元素
-                const projectEl = document.createElement('div');
-                projectEl.className = 'reminder-item__project';
-                projectEl.style.cssText = `
-                    font-size: 11px;
-                    color: var(--b3-theme-on-background);
-                    margin-top: 4px;
-                    opacity: 0.8;
-                    display: flex;
-                    align-items: center;
-                    gap: 4px;
-                `;
-
-                // 添加项目图标
-                const projectIcon = document.createElement('span');
-                projectIcon.textContent = '📂';
-                projectIcon.style.fontSize = '12px';
-
-                // 创建项目标题链接
-                const projectLink = document.createElement('span');
-                projectLink.textContent = project.title;
-                projectLink.classList.add('ariaLabel'); projectLink.setAttribute('aria-label', `所属项目: ${project.title}`);
-                projectLink.style.cssText = `
-                    cursor: pointer;
-                    color: var(--b3-theme-on-background);
-                    text-decoration: underline;
-                    text-decoration-style: dotted;
-                `;
-
-                // 点击事件：打开项目看板
-                projectEl.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    this.openProjectKanban(projectId);
-                });
-
-                // 鼠标悬停效果
-                projectLink.addEventListener('mouseenter', () => {
-                    projectLink.style.color = 'var(--b3-theme-primary)';
-                });
-                projectLink.addEventListener('mouseleave', () => {
-                    projectLink.style.color = 'var(--b3-theme-on-background)';
-                });
-
-                projectEl.appendChild(projectIcon);
-                projectEl.appendChild(projectLink);
-
-                // 将项目信息添加到容器底部
-                container.appendChild(projectEl);
-            }
-        } catch (error) {
-            console.warn('获取项目信息失败:', error);
-            // 静默失败，不影响主要功能
-        }
-    }
 
 
 
@@ -1616,6 +1520,62 @@ export class ReminderPanel {
      * 更新父任务底部的进度条显示（如果父任务当前显示）
      * @param parentId 父任务ID
      */
+    private updateParentTaskProgressDom(parentId: string): void {
+        const parentEl = this.remindersContainer.querySelector(`[data-reminder-id="${parentId}"]`) as HTMLElement | null;
+        if (!parentEl) return;
+
+        const allChildren: any[] = [];
+        this.allRemindersMap.forEach((r: any) => {
+            if (r.parentId === parentId) allChildren.push(r);
+        });
+
+        const existing = parentEl.querySelector('.reminder-progress-container') as HTMLElement | null;
+        if (allChildren.length === 0) {
+            if (existing) existing.remove();
+            return;
+        }
+
+        const completedCount = allChildren.filter(c => c.completed).length;
+        const percent = Math.round((completedCount / allChildren.length) * 100);
+
+        let progressContainer = existing;
+        if (!progressContainer) {
+            progressContainer = document.createElement('div');
+            progressContainer.className = 'reminder-progress-container';
+
+            const progressWrap = document.createElement('div');
+            progressWrap.className = 'reminder-progress-wrap';
+
+            const progressBar = document.createElement('div');
+            progressBar.className = 'reminder-progress-bar';
+            progressWrap.appendChild(progressBar);
+
+            const percentLabel = document.createElement('div');
+            percentLabel.className = 'reminder-progress-text';
+
+            progressContainer.appendChild(progressWrap);
+            progressContainer.appendChild(percentLabel);
+            parentEl.appendChild(progressContainer);
+        }
+
+        const progressBarEl = progressContainer.querySelector('.reminder-progress-bar') as HTMLElement | null;
+        const percentLabelEl = progressContainer.querySelector('.reminder-progress-text') as HTMLElement | null;
+        if (progressBarEl) progressBarEl.style.width = `${percent}%`;
+        if (percentLabelEl) percentLabelEl.textContent = `${percent}%`;
+    }
+
+    private updateAncestorProgressBars(changedReminderIds: string[]): void {
+        if (!changedReminderIds || changedReminderIds.length === 0) return;
+        const reminderMap = new Map<string, any>(this.allRemindersMap);
+        const ancestorIds = new Set<string>();
+
+        for (const id of changedReminderIds) {
+            const ancestors = this.getAllAncestorIds(id, reminderMap);
+            ancestors.forEach(ancestorId => ancestorIds.add(ancestorId));
+        }
+
+        ancestorIds.forEach(parentId => this.updateParentTaskProgressDom(parentId));
+    }
 
 
     /**
@@ -1682,6 +1642,12 @@ export class ReminderPanel {
                     if (r.parentId === parentId) children.push(r);
                 });
                 children.sort((a, b) => (a.sort || 0) - (b.sort || 0));
+            }
+
+            // 与全量渲染保持一致：当父任务未完成且未开启“显示已完成子任务”时，展开不显示已完成子任务
+            const parentReminder = this.currentRemindersCache.find(r => r.id === parentId) || this.allRemindersMap.get(parentId);
+            if (parentReminder && !parentReminder.completed && !this.showCompletedSubtasks) {
+                children = children.filter(c => !c.completed);
             }
 
             // 找到父元素用于插入位置和层级计算
@@ -1808,7 +1774,6 @@ export class ReminderPanel {
 
             const reminderData = await getAllReminders(this.plugin, undefined, force, 'sidebar');
             if (!reminderData || typeof reminderData !== 'object') {
-                this.updateReminderCounts(0, 0, 0, 0, 0, 0);
                 this.renderReminders([]);
                 return;
             }
@@ -2399,7 +2364,16 @@ export class ReminderPanel {
 
         const isSpanningDays = reminder.endDate && reminder.endDate !== reminder.date;
         const priority = reminder.priority || 'none';
-        const hasChildren = allVisibleReminders.some(r => r.parentId === reminder.id);
+        const hasVisibleChildren = allVisibleReminders.some(r => r.parentId === reminder.id);
+        // 使用完整任务映射判断是否存在子任务，避免“隐藏已完成子任务”时全量刷新把折叠按钮/进度条一起隐藏
+        let hasChildren = hasVisibleChildren;
+        if (!hasChildren) {
+            this.allRemindersMap.forEach((r: any) => {
+                if (!hasChildren && r.parentId === reminder.id) {
+                    hasChildren = true;
+                }
+            });
+        }
         // 使用统一的方法判断任务是否应该被折叠
         const isCollapsed: boolean = this.isTaskCollapsed(reminder.id, hasChildren);
 
@@ -2520,9 +2494,9 @@ export class ReminderPanel {
             if (reminder.isRepeatInstance) {
                 // 使用原始实例日期（从 ID 中提取），而非可能被 instanceModifications 修改后的 date
                 const originalInstanceDate = (reminder.id && reminder.id.includes('_')) ? reminder.id.split('_').pop() : reminder.date;
-                this.toggleReminder(reminder.originalId, checkbox.checked, true, originalInstanceDate);
+                this.toggleReminder(reminder.originalId, checkbox.checked, true, originalInstanceDate, reminder.id);
             } else {
-                this.toggleReminder(reminder.id, checkbox.checked);
+                this.toggleReminder(reminder.id, checkbox.checked, false, undefined, reminder.id);
             }
         });
 
@@ -4492,15 +4466,7 @@ export class ReminderPanel {
         return 0;
     }
 
-    // 按优先级比较（优先级相同时按时间）
-    private compareByPriority(a: any, b: any): number {
-        const priorityDiff = this.compareByPriorityValue(a, b);
-        if (priorityDiff !== 0) {
-            return priorityDiff;
-        }
-        // 优先级相同时按时间排序
-        return this.compareByTime(a, b);
-    }
+
 
     // 优先级数值比较
     private compareByPriorityValue(a: any, b: any): number {
@@ -4517,8 +4483,79 @@ export class ReminderPanel {
         return titleA.localeCompare(titleB, 'zh-CN');
     }
 
-    private async toggleReminder(reminderId: string, completed: boolean, isRepeatInstance?: boolean, instanceDate?: string) {
+    private updateReminderCompletionDom(reminderId: string, completed: boolean, completedTime?: string): void {
+        const el = this.remindersContainer.querySelector(`[data-reminder-id="${reminderId}"]`) as HTMLElement | null;
+        if (!el) return;
+
+        const checkbox = el.querySelector('.reminder-task-checkbox') as HTMLInputElement | null;
+        if (checkbox) checkbox.checked = completed;
+
+        const infoEl = el.querySelector('.reminder-item__info') as HTMLElement | null;
+        const existingCompletedEl = infoEl?.querySelector('.reminder-item__completed-time') as HTMLElement | null;
+        if (existingCompletedEl) existingCompletedEl.remove();
+
+        if (completed) {
+            el.classList.add('reminder-completed');
+            el.style.setProperty('opacity', '0.5', 'important');
+            if (infoEl) {
+                const completedEl = document.createElement('div');
+                completedEl.className = 'reminder-item__completed-time';
+                const timeText = completedTime || getLocalDateTimeString(new Date());
+                completedEl.textContent = `✅ ${this.formatCompletedTime(timeText)}`;
+                completedEl.style.cssText = 'font-size:12px; margin-top:6px; opacity:0.95;';
+                infoEl.appendChild(completedEl);
+            }
+        } else {
+            el.classList.remove('reminder-completed');
+            el.style.removeProperty('opacity');
+            el.style.opacity = '';
+        }
+    }
+
+    private applyOptimisticCompletionForIds(reminderIds: string[], completed: boolean, completedTime?: string): void {
+        const uniqueIds = Array.from(new Set(reminderIds));
+        const optimisticTime = completedTime || (completed ? getLocalDateTimeString(new Date()) : undefined);
+
+        for (const id of uniqueIds) {
+            const cacheIndex = this.currentRemindersCache.findIndex(r => r.id === id);
+            if (cacheIndex < 0) continue;
+
+            const updatedReminder = { ...this.currentRemindersCache[cacheIndex], completed };
+            if (completed) {
+                updatedReminder.completedTime = optimisticTime;
+            } else {
+                delete updatedReminder.completedTime;
+            }
+            this.currentRemindersCache[cacheIndex] = updatedReminder;
+            this.allRemindersMap.set(id, { ...(this.allRemindersMap.get(id) || {}), ...updatedReminder });
+
+            if (!this.shouldShowInCurrentView(updatedReminder)) {
+                const el = this.remindersContainer.querySelector(`[data-reminder-id="${id}"]`) as HTMLElement | null;
+                if (el) el.remove();
+                this.currentRemindersCache = this.currentRemindersCache.filter(r => r.id !== id);
+                continue;
+            }
+
+            this.updateReminderCompletionDom(id, completed, updatedReminder.completedTime);
+        }
+
+        // 子任务完成/取消后，立即刷新其所有祖先任务的进度条
+        this.updateAncestorProgressBars(uniqueIds);
+    }
+
+    private async applyOptimisticReminderUpdates(reminders: any[]): Promise<void> {
+        for (const reminder of reminders) {
+            await this.handleOptimisticSavedReminder({ ...reminder });
+        }
+    }
+
+    private async toggleReminder(reminderId: string, completed: boolean, isRepeatInstance?: boolean, instanceDate?: string, optimisticReminderId?: string) {
         try {
+            const optimisticRootId = optimisticReminderId || (isRepeatInstance && instanceDate ? `${reminderId}_${instanceDate}` : reminderId);
+            const optimisticIds = [optimisticRootId, ...this.getDescendantIdsFromCache(optimisticRootId)];
+            const optimisticCompletedTime = completed ? getLocalDateTimeString(new Date()) : undefined;
+            this.applyOptimisticCompletionForIds(optimisticIds, completed, optimisticCompletedTime);
+
             const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
 
             if (isRepeatInstance && instanceDate) {
@@ -4541,7 +4578,7 @@ export class ReminderPanel {
                 const completedTaskIds: string[] = [];
                 if (completed) {
                     if (!completedInstances.includes(instanceDate)) completedInstances.push(instanceDate);
-                    completedTimes[instanceDate] = getLocalDateTimeString(new Date());
+                    completedTimes[instanceDate] = optimisticCompletedTime || getLocalDateTimeString(new Date());
 
                     // 如果需要，自动完成子任务（收集受影响的块ID和任务ID）
                     const childIds = await this.completeAllChildTasks(originalId, reminderData, affectedBlockIds, instanceDate);
@@ -4589,9 +4626,8 @@ export class ReminderPanel {
                     this.plugin.updateBadges();
                 }
 
-                // 触发UI刷新
+                // 通知其他组件刷新
                 window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
-                this.loadReminders();
                 return;
             }
 
@@ -4605,7 +4641,7 @@ export class ReminderPanel {
             const completedTaskIds: string[] = [];
             reminder.completed = completed;
             if (completed) {
-                reminder.completedTime = getLocalDateTimeString(new Date());
+                reminder.completedTime = optimisticCompletedTime || getLocalDateTimeString(new Date());
                 // 自动完成子任务
                 const childIds = await this.completeAllChildTasks(reminderId, reminderData, affectedBlockIds);
                 completedTaskIds.push(reminderId, ...childIds);
@@ -4649,15 +4685,12 @@ export class ReminderPanel {
                 this.plugin.updateBadges();
             }
 
-            // 触发UI刷新
+            // 通知其他组件刷新
             window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
-            this.loadReminders();
         } catch (error) {
             console.error('切换提醒状态失败:', error);
             showMessage(i18n("operationFailed"));
-            // 即使出错也要触发UI刷新，确保界面状态同步
-            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
-            this.loadReminders();
+            await this.loadReminders(true);
         }
     }
     /**
@@ -7942,19 +7975,6 @@ export class ReminderPanel {
         }
     }
 
-    private updateReminderCounts(overdueCount: number, todayCount: number, tomorrowCount: number, future7Count: number, completedCount: number, todayCompletedCount: number) {
-        // 更新各个标签的提醒数量 - 添加未来7天和今日已完成的数量更新
-        // 这里可以根据需要添加UI更新逻辑
-        // console.log('提醒数量统计:', {
-        //     overdue: overdueCount,
-        //     today: todayCount,
-        //     tomorrow: tomorrowCount,
-        //     future7: future7Count,
-        //     completed: completedCount,
-        //     todayCompleted: todayCompletedCount
-        // });
-    }
-
     private async setPriority(reminderId: string, priority: string) {
         try {
             const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
@@ -8226,287 +8246,9 @@ export class ReminderPanel {
         }
     }
 
-    /**
-     * [NEW] Ends the current recurring series and starts a new one from the next cycle.
-     * @param reminder The original recurring reminder to split.
-     */
-    private async splitRecurringReminder(reminder: any) {
-        try {
-            const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
-            // Handle instance ID: if it's an instance, use originalId
-            const targetId = (reminder.isRepeatInstance && reminder.originalId) ? reminder.originalId : reminder.id;
-            const originalReminder = reminderData[targetId];
-            if (!originalReminder || !originalReminder.repeat?.enabled) {
-                showMessage(i18n("operationFailed"));
-                return;
-            }
 
-            // 计算原始事件的下一个周期日期
-            const nextDate = this.calculateNextDate(originalReminder.date, originalReminder.repeat);
-            if (!nextDate) {
-                showMessage(i18n("operationFailed") + ": " + i18n("invalidRepeatConfig"));
-                return;
-            }
-            const nextDateStr = getLocalDateString(nextDate);
 
-            // 创建用于编辑的临时数据，用于修改原始事件（第一次发生）
-            const editData = {
-                ...originalReminder,
-                // 保持原始事件的日期和时间，用户可以修改这个单次事件
-                // 保持原始ID用于识别这是分割操作
-                isSplitOperation: true,
-                originalId: reminder.id,
-                nextCycleDate: nextDateStr, // 保存下一个周期日期，用于创建新系列
-            };
 
-            // 打开编辑对话框
-            const editDialog = new QuickReminderDialog(
-                undefined,
-                undefined,
-                async (modifiedReminder) => {
-                    // 编辑完成后执行分割逻辑
-                    await this.performSplitOperation(originalReminder, modifiedReminder);
-                },
-                undefined,
-                {
-                    mode: 'edit',
-                    reminder: editData,
-                    plugin: this.plugin
-                }
-            );
-            editDialog.show();
-
-        } catch (error) {
-            console.error('开始分割重复事件系列失败:', error);
-            showMessage(i18n("operationFailed"));
-        }
-    }
-
-    /**
-     * [MODIFIED] Performs the actual split operation after user edits the reminder
-     * @param originalReminder The original recurring reminder
-     * @param modifiedReminder The modified reminder data from edit dialog
-     */
-    private async performSplitOperation(originalReminder: any, modifiedReminder: any) {
-        try {
-            const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
-
-            // 1. 修改原始事件为单次事件（应用用户的修改）
-            const singleReminder = {
-                ...originalReminder,
-                // 应用用户修改的数据到单次事件
-                title: modifiedReminder.title,
-                date: modifiedReminder.date,
-                time: modifiedReminder.time,
-                endDate: modifiedReminder.endDate,
-                endTime: modifiedReminder.endTime,
-                note: modifiedReminder.note,
-                priority: modifiedReminder.priority,
-                // 移除重复设置，变成单次事件
-                repeat: undefined
-            };
-
-            // 2. 创建新的重复事件系列，保持原始时间设置
-            const newReminder = JSON.parse(JSON.stringify(originalReminder));
-
-            // 清理新提醒的重复历史数据
-            delete newReminder.repeat.endDate;
-            delete newReminder.repeat.excludeDates;
-            delete newReminder.repeat.instanceModifications;
-            delete newReminder.repeat.completedInstances;
-
-            // 生成新的提醒ID
-            const blockId = originalReminder.blockId || originalReminder.id;
-            const newId = `reminder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-            newReminder.id = newId;
-
-            // 3. 设置新系列从下一个周期开始，保持原始时间设置
-            newReminder.date = modifiedReminder.nextCycleDate;
-            newReminder.endDate = modifiedReminder.nextCycleEndDate;
-            // 保持原始的时间设置，不应用用户修改
-            newReminder.time = originalReminder.time;
-            newReminder.endTime = originalReminder.endTime;
-            newReminder.title = originalReminder.title;
-            newReminder.note = originalReminder.note;
-            newReminder.priority = originalReminder.priority;
-
-            // 如果用户修改了重复设置，应用到新系列
-            if (modifiedReminder.repeat && modifiedReminder.repeat.enabled) {
-                newReminder.repeat = { ...modifiedReminder.repeat };
-                // 确保新系列没有结束日期限制
-                delete newReminder.repeat.endDate;
-            } else {
-                // 如果用户禁用了重复，保持原始重复设置
-                newReminder.repeat = { ...originalReminder.repeat };
-                delete newReminder.repeat.endDate;
-            }
-
-            // 4. 保存修改
-            reminderData[originalReminder.id] = singleReminder;
-            reminderData[newId] = newReminder;
-            await saveReminders(this.plugin, reminderData);
-
-            // 5. 更新界面
-            this.loadReminders();
-            window.dispatchEvent(new CustomEvent('reminderUpdated', {
-                detail: { source: this.panelId }
-            }));
-            showMessage(i18n("seriesSplitSuccess"));
-
-        } catch (error) {
-            console.error('执行分割重复事件系列失败:', error);
-            showMessage(i18n("operationFailed"));
-        }
-    }
-
-    // 新增：将实例作为新系列编辑（分割系列）
-    private async editInstanceAsNewSeries(reminder: any) {
-        try {
-            const originalId = reminder.originalId;
-            const instanceDate = reminder.date;
-
-            const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
-            const originalReminder = reminderData[originalId];
-
-            if (!originalReminder) {
-                showMessage(i18n("reminderDataNotExist"));
-                return;
-            }
-
-            // 1. 在当前实例日期的前一天结束原始系列
-            // 计算原始系列应该结束的日期（当前实例的前一天）
-            const untilDate = new Date(instanceDate);
-            untilDate.setDate(untilDate.getDate() - 1);
-            const newEndDateStr = getLocalDateString(untilDate);
-
-            // 更新原始系列的结束日期
-            if (!originalReminder.repeat) {
-                originalReminder.repeat = {};
-            }
-            originalReminder.repeat.endDate = newEndDateStr;
-
-            // 2. 创建新的重复事件系列
-            const newReminder = JSON.parse(JSON.stringify(originalReminder));
-
-            // 清理新提醒
-            delete newReminder.repeat.endDate;
-            delete newReminder.repeat.excludeDates;
-            delete newReminder.repeat.instanceModifications;
-            delete newReminder.repeat.completedInstances;
-
-            // 生成新的提醒ID
-            const newId = `reminder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-            newReminder.id = newId;
-
-            // 3. 设置新系列的开始日期为当前实例日期
-            newReminder.date = instanceDate;
-            newReminder.endDate = reminder.endDate;
-            newReminder.time = reminder.time;
-            newReminder.endTime = reminder.endTime;
-
-            // 4. 保存修改
-            reminderData[originalId] = originalReminder;
-            reminderData[newId] = newReminder;
-            await saveReminders(this.plugin, reminderData);
-
-            // 5. 打开编辑对话框编辑新系列
-            const editDialog = new QuickReminderDialog(
-                undefined,
-                undefined,
-                async (savedReminder?: any) => {
-                    try {
-                        if (savedReminder && typeof savedReminder === 'object') {
-                            await this.handleOptimisticSavedReminder(savedReminder);
-                        } else {
-                            await this.loadReminders();
-                        }
-                        window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
-                    } catch (e) {
-                        console.error('实例编辑乐观更新失败，回退刷新', e);
-                        this.loadReminders();
-                    }
-                },
-                undefined,
-                {
-                    mode: 'edit',
-                    reminder: newReminder,
-                    plugin: this.plugin
-                }
-            );
-            editDialog.show();
-
-        } catch (error) {
-            console.error('分割重复事件系列失败:', error);
-            showMessage(i18n("operationFailed"));
-        }
-    }
-
-    // 新增：编辑重复事件实例
-    private async editInstanceReminder(reminder: any) {
-        try {
-            const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
-            const originalReminder = reminderData[reminder.originalId];
-
-            if (!originalReminder) {
-                showMessage(i18n("reminderDataNotExist"));
-                return;
-            }
-
-            // 从 instanceId 提取原始日期（格式：originalId_YYYY-MM-DD）
-            const parsedInstance = this.parseReminderInstanceId(reminder.id);
-            const originalInstanceDate = parsedInstance?.instanceDate || reminder.date;
-
-            // 检查实例级别的修改（包括备注）
-            const instanceModifications = originalReminder.repeat?.instanceModifications || {};
-            const instanceMod = instanceModifications[originalInstanceDate];
-
-            // 创建实例数据，包含当前实例的特定信息
-            const instanceData = {
-                ...originalReminder,
-                id: reminder.id,
-                date: reminder.date,
-                endDate: reminder.endDate,
-                time: reminder.time,
-                endTime: reminder.endTime,
-                // 如果实例有修改，使用实例的值；否则使用原始值
-                note: instanceMod?.note !== undefined ? instanceMod.note : (originalReminder.note || ''),
-                priority: instanceMod?.priority !== undefined ? instanceMod.priority : originalReminder.priority,
-                categoryId: instanceMod?.categoryId !== undefined ? instanceMod.categoryId : originalReminder.categoryId,
-                projectId: instanceMod?.projectId !== undefined ? instanceMod.projectId : originalReminder.projectId,
-                customGroupId: instanceMod?.customGroupId !== undefined ? instanceMod.customGroupId : originalReminder.customGroupId,
-                kanbanStatus: instanceMod?.kanbanStatus !== undefined ? instanceMod.kanbanStatus : originalReminder.kanbanStatus,
-                // 提醒时间相关字段
-                reminderTimes: instanceMod?.reminderTimes !== undefined ? instanceMod.reminderTimes : originalReminder.reminderTimes,
-                customReminderPreset: instanceMod?.customReminderPreset !== undefined ? instanceMod.customReminderPreset : originalReminder.customReminderPreset,
-                isInstance: true,
-                originalId: reminder.originalId,
-                instanceDate: originalInstanceDate // 使用从 instanceId 提取的原始日期
-
-            };
-
-            const editDialog = new QuickReminderDialog(
-                undefined,
-                undefined,
-                async () => {
-                    this.loadReminders();
-                    window.dispatchEvent(new CustomEvent('reminderUpdated', {
-                        detail: { source: this.panelId }
-                    }));
-                },
-                undefined,
-                {
-                    mode: 'edit',
-                    reminder: instanceData,
-                    plugin: this.plugin,
-                    isInstanceEdit: true
-                }
-            );
-            editDialog.show();
-        } catch (error) {
-            console.error('打开实例编辑对话框失败:', error);
-            showMessage(i18n("openModifyDialogFailed"));
-        }
-    }
 
     // 新增：删除单个重复事件实例
     private async deleteInstanceOnly(reminder: any) {
@@ -8670,78 +8412,7 @@ export class ReminderPanel {
         }
     }
 
-    /**
-     * [MODIFIED] Skip the first occurrence of a recurring reminder
-     * This method advances the start date of the recurring reminder to the next cycle
-     * @param reminder The original recurring reminder
-     */
-    private async skipFirstOccurrence(reminder: any) {
-        await confirm(
-            i18n("deleteThisInstance"),
-            i18n("confirmSkipFirstOccurrence"),
-            async () => {
-                try {
-                    const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
-                    const originalReminder = reminderData[reminder.id];
 
-                    if (!originalReminder || !originalReminder.repeat?.enabled) {
-                        showMessage(i18n("operationFailed"));
-                        return;
-                    }
-
-                    // 计算下一个周期的日期
-                    const nextDate = this.calculateNextDate(originalReminder.date, originalReminder.repeat);
-                    if (!nextDate) {
-                        showMessage(i18n("operationFailed") + ": " + i18n("invalidRepeatConfig"));
-                        return;
-                    }
-
-                    // 将周期事件的开始日期更新为下一个周期
-                    originalReminder.date = getLocalDateString(nextDate);
-
-                    // 如果是跨天事件，也需要更新结束日期
-                    if (originalReminder.endDate) {
-                        const originalStartDate = new Date(reminder.date + 'T12:00:00');
-                        const originalEndDate = new Date(originalReminder.endDate + 'T12:00:00');
-                        const daysDiff = Math.floor((originalEndDate.getTime() - originalStartDate.getTime()) / (1000 * 60 * 60 * 24));
-
-                        const newEndDate = new Date(nextDate);
-                        newEndDate.setDate(newEndDate.getDate() + daysDiff);
-                        originalReminder.endDate = getLocalDateString(newEndDate);
-                    }
-
-                    // 清理可能存在的首次发生相关的历史数据
-                    if (originalReminder.repeat.completedInstances) {
-                        const firstOccurrenceIndex = originalReminder.repeat.completedInstances.indexOf(reminder.date);
-                        if (firstOccurrenceIndex > -1) {
-                            originalReminder.repeat.completedInstances.splice(firstOccurrenceIndex, 1);
-                        }
-                    }
-
-                    if (originalReminder.repeat.instanceModifications && originalReminder.repeat.instanceModifications[reminder.date]) {
-                        delete originalReminder.repeat.instanceModifications[reminder.date];
-                    }
-
-                    if (originalReminder.repeat.excludeDates) {
-                        const firstOccurrenceIndex = originalReminder.repeat.excludeDates.indexOf(reminder.date);
-                        if (firstOccurrenceIndex > -1) {
-                            originalReminder.repeat.excludeDates.splice(firstOccurrenceIndex, 1);
-                        }
-                    }
-
-                    await saveReminders(this.plugin, reminderData);
-                    showMessage(i18n("firstOccurrenceSkipped"));
-                    this.loadReminders();
-                    window.dispatchEvent(new CustomEvent('reminderUpdated', {
-                        detail: { source: this.panelId }
-                    }));
-                } catch (error) {
-                    console.error('跳过首次发生失败:', error);
-                    showMessage(i18n("operationFailed"));
-                }
-            }
-        );
-    }
     private async copyBlockRef(reminder: any) {
         try {
             // 获取块ID（对于重复事件实例，使用原始事件的blockId）
@@ -8975,40 +8646,6 @@ export class ReminderPanel {
 
 
 
-    private renderCategorySelector(container: HTMLElement, defaultCategoryId?: string) {
-        container.innerHTML = '';
-        const categories = this.categoryManager.getCategories();
-
-        const noCategoryEl = document.createElement('div');
-        noCategoryEl.className = 'category-option';
-        noCategoryEl.setAttribute('data-category', '');
-        noCategoryEl.innerHTML = `<span>${i18n("noCategory")}</span>`;
-        if (!defaultCategoryId) {
-            noCategoryEl.classList.add('selected');
-        }
-        container.appendChild(noCategoryEl);
-
-        categories.forEach(category => {
-            const categoryEl = document.createElement('div');
-            categoryEl.className = 'category-option';
-            categoryEl.setAttribute('data-category', category.id);
-            categoryEl.style.backgroundColor = category.color;
-            categoryEl.innerHTML = `<span>${category.icon ? category.icon + ' ' : ''}${category.name}</span>`;
-            if (category.id === defaultCategoryId) {
-                categoryEl.classList.add('selected');
-            }
-            container.appendChild(categoryEl);
-        });
-
-        container.addEventListener('click', (e) => {
-            const target = e.target as HTMLElement;
-            const option = target.closest('.category-option') as HTMLElement;
-            if (option) {
-                container.querySelectorAll('.category-option').forEach(opt => opt.classList.remove('selected'));
-                option.classList.add('selected');
-            }
-        });
-    }
 
     private addReminderDialogStyles() {
         // 检查是否已经添加过样式
@@ -9136,52 +8773,6 @@ export class ReminderPanel {
         document.head.appendChild(style);
     }
 
-    /**
-     * 创建文档并绑定提醒
-     */
-    private async createDocumentAndBind(reminder: any, title: string, content: string): Promise<string> {
-        try {
-            // 获取插件设置
-            const settings = await this.plugin.loadSettings();
-            const notebook = settings.newDocNotebook;
-            const pathTemplate = settings.newDocPath || '/{{now | date "2006/200601"}}/';
-
-            if (!notebook) {
-                throw new Error(i18n("pleaseConfigureNotebook"));
-            }
-
-            // 导入API函数
-            const { renderSprig, createDocWithMd } = await import("../api");
-
-            // 渲染路径模板
-            let renderedPath: string;
-            try {
-                // 需要检测pathTemplate是否以/结尾，如果不是，则添加/
-                if (!pathTemplate.endsWith('/')) {
-                    renderedPath += pathTemplate + '/';
-                } else {
-                    renderedPath = pathTemplate;
-                }
-                renderedPath = await renderSprig(renderedPath + title);
-            } catch (error) {
-                console.error('渲染路径模板失败:', error);
-                throw new Error(i18n("renderPathFailed"));
-            }
-
-            // 准备文档内容
-            const docContent = content;
-
-            // 创建文档
-            const docId = await createDocWithMd(notebook, renderedPath, docContent);
-            // 绑定提醒到新创建的文档
-            await this.bindReminderToBlock(reminder, docId);
-
-            return docId;
-        } catch (error) {
-            console.error('创建文档并绑定失败:', error);
-            throw error;
-        }
-    }
 
     /**
      * 将提醒绑定到指定的块
@@ -10372,14 +9963,96 @@ export class ReminderPanel {
         const ids = Array.from(this.selectedReminderIds);
         if (ids.length === 0) return;
         try {
-            for (const id of ids) {
-                await this.toggleReminder(id, true);
+            const selectedReminders = ids.map(id =>
+                this.currentRemindersCache.find(r => r.id === id) ||
+                this.allRemindersMap.get(id) ||
+                { id }
+            );
+            const completedTime = getLocalDateTimeString(new Date());
+
+            // 先本地乐观更新，避免批量操作导致界面等待与抖动
+            for (const reminder of selectedReminders) {
+                const rootId = reminder.id;
+                const affectedIds = [rootId, ...this.getDescendantIdsFromCache(rootId)];
+                this.applyOptimisticCompletionForIds(affectedIds, true, completedTime);
             }
-            showMessage(i18n('operationSuccessful') || '操作成功');
+
+            const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
+            const affectedBlockIds = new Set<string>();
+            const completedTaskIds = new Set<string>();
+            let changedCount = 0;
+
+            for (const reminder of selectedReminders) {
+                if (reminder.isRepeatInstance) {
+                    const originalId = reminder.originalId;
+                    const originalInstanceDate = (reminder.id && reminder.id.includes('_')) ? reminder.id.split('_').pop() : reminder.date;
+                    if (!originalId || !originalInstanceDate) continue;
+
+                    const original = reminderData[originalId];
+                    if (!original) continue;
+
+                    if (!original.repeat) original.repeat = {};
+                    if (!original.repeat.completedInstances) original.repeat.completedInstances = [];
+                    if (!original.repeat.completedTimes) original.repeat.completedTimes = {};
+
+                    if (!original.repeat.completedInstances.includes(originalInstanceDate)) {
+                        original.repeat.completedInstances.push(originalInstanceDate);
+                        changedCount++;
+                    }
+                    original.repeat.completedTimes[originalInstanceDate] = completedTime;
+                    if (original.blockId) affectedBlockIds.add(original.blockId);
+
+                    const childIds = await this.completeAllChildTasks(originalId, reminderData, affectedBlockIds, originalInstanceDate);
+                    completedTaskIds.add(reminder.id);
+                    childIds.forEach(id => completedTaskIds.add(id));
+                    continue;
+                }
+
+                const target = reminderData[reminder.id];
+                if (!target) continue;
+
+                if (!target.completed) changedCount++;
+                target.completed = true;
+                target.completedTime = completedTime;
+                if (target.blockId) affectedBlockIds.add(target.blockId);
+                completedTaskIds.add(reminder.id);
+
+                const childIds = await this.completeAllChildTasks(reminder.id, reminderData, affectedBlockIds);
+                childIds.forEach(id => completedTaskIds.add(id));
+            }
+
+            await saveReminders(this.plugin, reminderData);
+
+            if (this.plugin?.cancelMobileNotification) {
+                for (const taskId of completedTaskIds) {
+                    try {
+                        await this.plugin.cancelMobileNotification(taskId);
+                    } catch (e) {
+                        console.warn('取消移动端通知失败:', taskId, e);
+                    }
+                }
+            }
+
+            for (const bId of affectedBlockIds) {
+                try {
+                    await updateBindBlockAtrrs(bId, this.plugin);
+                    await this.handleTaskListCompletion(bId);
+                } catch (err) {
+                    console.warn('批量完成后更新任务块属性失败:', bId, err);
+                }
+            }
+
+            if (this.plugin && typeof this.plugin.updateBadges === 'function') {
+                this.plugin.updateBadges();
+            }
+
+            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
+            showMessage(i18n('batchUpdateSuccess', { count: String(changedCount || ids.length) }) || `成功更新 ${changedCount || ids.length} 个任务`);
             this.exitPanelMultiSelectMode();
-            this.loadReminders();
         } catch (e) {
+            console.error('批量完成任务失败:', e);
             showMessage(i18n('operationFailed') || '操作失败');
+            await this.loadReminders(true);
         }
     }
 
@@ -10387,14 +10060,52 @@ export class ReminderPanel {
         const ids = Array.from(this.selectedReminderIds);
         if (ids.length === 0) return;
         try {
+            const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
+            const affectedBlockIds = new Set<string>();
+            const changedReminders: any[] = [];
+
             for (const id of ids) {
-                await this.setReminderBaseDate(id, newDate);
+                const reminder = reminderData[id];
+                if (!reminder) continue;
+
+                const oldDate: string | undefined = reminder.date;
+                const oldEndDate: string | undefined = reminder.endDate;
+
+                if (newDate === null) {
+                    delete reminder.date;
+                    delete reminder.time;
+                    delete reminder.endDate;
+                    delete reminder.endTime;
+                } else {
+                    reminder.date = newDate;
+                    if (oldEndDate && oldDate) {
+                        const span = getDaysDifference(oldDate, oldEndDate);
+                        reminder.endDate = addDaysToDate(newDate, span);
+                    }
+                }
+
+                if (reminder.blockId) affectedBlockIds.add(reminder.blockId);
+                changedReminders.push({ ...reminder });
             }
-            showMessage(i18n('operationSuccessful') || '操作成功');
+
+            await this.applyOptimisticReminderUpdates(changedReminders);
+            await saveReminders(this.plugin, reminderData);
+
+            for (const bId of affectedBlockIds) {
+                try {
+                    await updateBindBlockAtrrs(bId, this.plugin);
+                } catch (e) {
+                    console.warn('批量设置日期后更新块属性失败:', bId, e);
+                }
+            }
+
+            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
+            showMessage(i18n('batchUpdateSuccess', { count: String(changedReminders.length) }) || `成功更新 ${changedReminders.length} 个任务`);
             this.exitPanelMultiSelectMode();
-            this.loadReminders();
         } catch (e) {
+            console.error('批量设置日期失败:', e);
             showMessage(i18n('operationFailed') || '操作失败');
+            await this.loadReminders(true);
         }
     }
 
@@ -10518,6 +10229,8 @@ export class ReminderPanel {
 
             try {
                 const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
+                const changedReminders: any[] = [];
+                const affectedBlockIds = new Set<string>();
                 for (const id of ids) {
                     const reminder = reminderData[id];
                     if (!reminder) continue;
@@ -10532,18 +10245,28 @@ export class ReminderPanel {
                         if (endDate) reminder.endDate = endDate; else delete reminder.endDate;
                         if (endTime) reminder.endTime = endTime; else delete reminder.endTime;
                     }
-                    if (reminder.blockId) {
-                        try { await updateBindBlockAtrrs(reminder.blockId, this.plugin); } catch (e) { /* ignore */ }
+                    changedReminders.push({ ...reminder });
+                    if (reminder.blockId) affectedBlockIds.add(reminder.blockId);
+                }
+
+                await this.applyOptimisticReminderUpdates(changedReminders);
+                await saveReminders(this.plugin, reminderData);
+
+                for (const bId of affectedBlockIds) {
+                    try {
+                        await updateBindBlockAtrrs(bId, this.plugin);
+                    } catch (e) {
+                        console.warn('批量日期对话框更新块属性失败:', bId, e);
                     }
                 }
-                await saveReminders(this.plugin, reminderData);
+
                 showMessage(i18n('batchUpdateSuccess', { count: String(ids.length) }) || `成功更新 ${ids.length} 个任务`);
                 window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
                 this.exitPanelMultiSelectMode();
-                this.loadReminders();
             } catch (e) {
                 console.error('批量设置日期失败:', e);
                 showMessage(i18n('operationFailed') || '操作失败');
+                await this.loadReminders(true);
             }
         });
     }
@@ -10552,14 +10275,36 @@ export class ReminderPanel {
         const ids = Array.from(this.selectedReminderIds);
         if (ids.length === 0) return;
         try {
+            const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
+            const changedReminders: any[] = [];
+
             for (const id of ids) {
-                await this.setPriority(id, priority);
+                const reminder = reminderData[id];
+                if (!reminder) continue;
+
+                const isRecurringEvent = reminder.repeat?.enabled;
+                reminder.priority = priority;
+                if (isRecurringEvent && reminder.repeat?.instanceModifications) {
+                    const modifications = reminder.repeat.instanceModifications;
+                    Object.keys(modifications).forEach(date => {
+                        if (modifications[date].priority !== undefined) {
+                            delete modifications[date].priority;
+                        }
+                    });
+                }
+                changedReminders.push({ ...reminder });
             }
-            showMessage(i18n('operationSuccessful') || '操作成功');
+
+            await this.applyOptimisticReminderUpdates(changedReminders);
+            await saveReminders(this.plugin, reminderData);
+
+            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
+            showMessage(i18n('batchUpdateSuccess', { count: String(changedReminders.length) }) || `成功更新 ${changedReminders.length} 个任务`);
             this.exitPanelMultiSelectMode();
-            this.loadReminders();
         } catch (e) {
+            console.error('批量设置优先级失败:', e);
             showMessage(i18n('operationFailed') || '操作失败');
+            await this.loadReminders(true);
         }
     }
 
@@ -10567,26 +10312,40 @@ export class ReminderPanel {
         const ids = Array.from(this.selectedReminderIds);
         if (ids.length === 0) return;
         try {
+            const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
+            const changedReminders: any[] = [];
+
             for (const id of ids) {
-                await this.setCategory(id, categoryId);
+                const reminder = reminderData[id];
+                if (!reminder) continue;
+
+                const isRecurringEvent = reminder.repeat?.enabled;
+                reminder.categoryId = categoryId;
+                if (isRecurringEvent && reminder.repeat?.instanceModifications) {
+                    const modifications = reminder.repeat.instanceModifications;
+                    Object.keys(modifications).forEach(date => {
+                        if (modifications[date].categoryId !== undefined) {
+                            delete modifications[date].categoryId;
+                        }
+                    });
+                }
+                changedReminders.push({ ...reminder });
             }
-            showMessage(i18n('operationSuccessful') || '操作成功');
+
+            await this.applyOptimisticReminderUpdates(changedReminders);
+            await saveReminders(this.plugin, reminderData);
+
+            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
+            showMessage(i18n('batchUpdateSuccess', { count: String(changedReminders.length) }) || `成功更新 ${changedReminders.length} 个任务`);
             this.exitPanelMultiSelectMode();
-            this.loadReminders();
         } catch (e) {
+            console.error('批量设置分类失败:', e);
             showMessage(i18n('operationFailed') || '操作失败');
+            await this.loadReminders(true);
         }
     }
 
-    private panelSelectAll(): void {
-        this.currentRemindersCache.forEach(r => {
-            if (!r.isSubscribed) {
-                this.selectedReminderIds.add(r.id);
-                const el = this.container.querySelector(`[data-reminder-id="${r.id}"]`) as HTMLElement;
-                if (el) el.classList.add('reminder-item--selected');
-            }
-        });
-    }
+
 
     private panelBatchDelete(): void {
         const ids = Array.from(this.selectedReminderIds);
@@ -10596,14 +10355,88 @@ export class ReminderPanel {
             i18n('confirmBatchDeleteMessage', { count: String(ids.length) }) || `确定要删除选中的 ${ids.length} 个任务吗？此操作不可恢复。`,
             async () => {
                 try {
-                    for (const id of ids) {
-                        await this.performDeleteReminder(id);
+                    const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
+                    const allValues = Object.values(reminderData) as any[];
+                    const childMap = new Map<string, string[]>();
+                    allValues.forEach((r: any) => {
+                        if (!r?.id || !r.parentId) return;
+                        if (!childMap.has(r.parentId)) childMap.set(r.parentId, []);
+                        childMap.get(r.parentId)!.push(r.id);
+                    });
+
+                    const toDelete = new Set<string>();
+                    const stack = [...ids];
+                    while (stack.length > 0) {
+                        const currentId = stack.pop()!;
+                        if (toDelete.has(currentId)) continue;
+                        if (reminderData[currentId]) toDelete.add(currentId);
+                        const children = childMap.get(currentId) || [];
+                        children.forEach(childId => {
+                            if (!toDelete.has(childId)) stack.push(childId);
+                        });
                     }
-                    showMessage(i18n('batchDeleteSuccess', { count: String(ids.length) }) || `成功删除 ${ids.length} 个任务`);
+
+                    // 同步删除实例形态记录（${id}_${date}）
+                    const allKeys = Object.keys(reminderData);
+                    const expandQueue = Array.from(toDelete);
+                    while (expandQueue.length > 0) {
+                        const baseId = expandQueue.pop()!;
+                        for (const key of allKeys) {
+                            if (toDelete.has(key)) continue;
+                            if (key.startsWith(baseId + '_')) {
+                                toDelete.add(key);
+                                expandQueue.push(key);
+                            }
+                        }
+                    }
+
+                    const affectedBlockIds = new Set<string>();
+                    const notificationIds = new Set<string>();
+                    for (const id of toDelete) {
+                        const rem = reminderData[id];
+                        if (!rem) continue;
+                        if (rem.blockId) affectedBlockIds.add(rem.blockId);
+                        notificationIds.add(id);
+                    }
+
+                    // 乐观更新：立即移除 DOM，避免等待写盘导致列表跳动
+                    const allIds = Array.from(toDelete);
+                    if (allIds.length > 0) {
+                        this.removeReminderFromDOM(ids[0], allIds);
+                        allIds.forEach(id => this.allRemindersMap.delete(id));
+                    }
+
+                    allIds.forEach(id => {
+                        delete reminderData[id];
+                    });
+
+                    if (this.plugin?.cancelMobileNotification) {
+                        for (const taskId of notificationIds) {
+                            try {
+                                await this.plugin.cancelMobileNotification(taskId);
+                            } catch (e) {
+                                console.warn('批量删除取消通知失败:', taskId, e);
+                            }
+                        }
+                    }
+
+                    await saveReminders(this.plugin, reminderData);
+
+                    for (const bId of affectedBlockIds) {
+                        try {
+                            await updateBindBlockAtrrs(bId, this.plugin);
+                        } catch (e) {
+                            console.warn('批量删除更新块书签失败:', bId, e);
+                        }
+                    }
+
+                    window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
+                    showMessage(i18n('batchDeleteSuccess', { count: String(allIds.length) }) || `成功删除 ${allIds.length} 个任务`);
                     this.exitPanelMultiSelectMode();
-                    this.loadReminders();
                 } catch (e) {
+                    console.error('批量删除失败:', e);
                     showMessage(i18n('batchDeleteFailed') || '批量删除失败');
+                    await this.loadReminders(true);
                 }
             }
         );
