@@ -3,6 +3,7 @@ import { onMount, tick } from "svelte";
 import type { Habit } from "../HabitPanel";
 import { HabitDayDialog } from "../HabitDayDialog";
 import { HabitStatsDialog } from "./HabitStatsDialog";
+import { HabitEditDialog } from "../HabitEditDialog";
 import { DEFAULT_SETTINGS } from "../../index";
 import { PomodoroRecordManager } from "../../utils/pomodoroRecord";
 import { getLogicalDateString } from "../../utils/dateUtils";
@@ -599,6 +600,22 @@ function getMonthCells(): Array<Date | null> {
     return cells;
 }
 
+async function openHabitEdit(habit: Habit) {
+    const habitCopy: Habit = JSON.parse(JSON.stringify(habit));
+    const dialog = new HabitEditDialog(habitCopy, async (updatedHabit) => {
+        try {
+            const habitData = await plugin.loadHabitData();
+            habitData[updatedHabit.id] = updatedHabit;
+            await plugin.saveHabitData(habitData);
+            window.dispatchEvent(new CustomEvent("habitUpdated"));
+            await loadHabits();
+        } catch (error) {
+            console.error("保存习惯编辑失败:", error);
+        }
+    }, plugin);
+    dialog.show();
+}
+
 async function openHabitStats(habit: Habit) {
     const habitCopy: Habit = JSON.parse(JSON.stringify(habit));
     // 对于已结束的习惯，默认显示最后一次打卡的月份和年份视图
@@ -820,6 +837,7 @@ $: yearVisibleSections = groupedSections
                                     <div class="habit-title-row">
                                         <div class="habit-title">{habit.icon || "🌱"} {habit.title}</div>
                                         <button class="view-btn" on:click={() => openHabitStats(habit)}>查看统计</button>
+                                        <button class="edit-btn" on:click={() => openHabitEdit(habit)}>编辑习惯</button>
                                     </div>
                                     <div class="habit-meta-row">
                                         <span class="habit-meta-item">
@@ -1277,6 +1295,22 @@ $: yearVisibleSections = groupedSections
         padding: 6px 10px;
         cursor: pointer;
         white-space: nowrap;
+    }
+
+    .edit-btn {
+        border: 1px solid var(--b3-border-color);
+        color: var(--b3-theme-on-surface);
+        background: var(--b3-theme-surface);
+        border-radius: 8px;
+        padding: 6px 10px;
+        cursor: pointer;
+        white-space: nowrap;
+        font-size: 13px;
+    }
+
+    .edit-btn:hover {
+        border-color: var(--b3-theme-primary);
+        color: var(--b3-theme-primary);
     }
 
     .panel-toolbar {
