@@ -1994,5 +1994,6 @@
     "deleteCheckInOptionTitle": "Delete Check-in Option",
     "confirmDeleteCheckInOption": "Are you sure you want to delete check-in option \"${emoji} ${meaning}\"?",
     "partialCompleted": "Partially Completed",
-    "multiSelect": "Multi Select"
+    "multiSelect": "Multi Select",
+    "refreshSuccess": "Refresh successfully"
 }

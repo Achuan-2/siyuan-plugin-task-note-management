@@ -6,7 +6,7 @@ import listPlugin from '@fullcalendar/list';
 import interactionPlugin from '@fullcalendar/interaction';
 import { colorWithOpacity } from "../utils/uiUtils";
 import { showMessage, confirm, openTab, Menu, Dialog, Constants, platformUtils } from "siyuan";
-import { refreshSql, getBlockByID, sql, updateBlock, getBlockKramdown, updateBindBlockAtrrs, openBlock } from "../api";
+import { refreshSql, getBlockByID, sql, updateBlock, getBlockKramdown, updateBindBlockAtrrs, openBlock, pushMsg } from "../api";
 import { getLocalDateString, getLocalDateTime, getLocalDateTimeString, compareDateStrings, getLogicalDateString, getRelativeDateString, getDayStartAdjustedDate, getLocaleTag } from "../utils/dateUtils";
 import { QuickReminderDialog } from "./QuickReminderDialog";
 import { CategoryManager, Category } from "../utils/categoryManager";
@@ -1278,14 +1278,17 @@ export class CalendarView {
         refreshBtn.innerHTML = '<svg class="b3-button__icon" style="margin-right: 0;"><use xlink:href="#iconRefresh"></use></svg>';
         refreshBtn.classList.add('ariaLabel'); refreshBtn.setAttribute('aria-label', i18n("refresh"));
         refreshBtn.addEventListener('click', async () => {
+            const svgIcon = refreshBtn.querySelector('svg');
+            svgIcon?.classList.add('fn__rotate');
             refreshBtn.disabled = true;
             try {
-                showMessage(i18n("refreshing") || "正在刷新...", 500);
                 await this.refreshEvents(true);
+                showMessage(i18n("refreshSuccess"));
             } catch (error) {
                 console.error('手动刷新失败:', error);
                 showMessage(i18n("refreshFailed") || "刷新失败");
             } finally {
+                svgIcon?.classList.remove('fn__rotate');
                 refreshBtn.disabled = false;
             }
         });

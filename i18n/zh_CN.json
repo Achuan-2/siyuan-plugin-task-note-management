@@ -1660,7 +1660,7 @@
     "deadline": "截止",
     "showCompletedSubtasks": "显示已完成子任务",
     "taskManagement": "任务管理",
-    "todayIgnored": "⭕ 今日已忽略",
+    "todayIgnored": "⭕ 今日忽略",
     "dailyAvailable": "🍰 每日可做",
     "currentInstance": "本次",
     "total": "总共",
@@ -1994,5 +1994,6 @@
     "deleteCheckInOptionTitle": "删除打卡项",
     "confirmDeleteCheckInOption": "确定要删除打卡项「${emoji} ${meaning}」吗？",
     "partialCompleted": "部分完成",
-    "multiSelect": "多选"
+    "multiSelect": "多选",
+    "refreshSuccess": "刷新成功"
 }

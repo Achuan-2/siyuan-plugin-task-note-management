@@ -1,5 +1,5 @@
 import { showMessage, Dialog, Menu, confirm, getBackend, getFrontend } from "siyuan";
-import { openBlock } from "../api";
+import { openBlock, pushMsg } from "../api";
 import { getLocalDateTimeString, getLogicalDateString, getRelativeDateString } from "../utils/dateUtils";
 import { HabitGroupManager } from "../utils/habitGroupManager";
 import { i18n } from "../pluginInstance";
@@ -188,8 +188,15 @@ export class HabitPanel {
         refreshBtn.className = 'b3-button b3-button--outline';
         refreshBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconRefresh"></use></svg>';
         refreshBtn.classList.add('ariaLabel'); refreshBtn.setAttribute('aria-label', i18n("refresh"));
-        refreshBtn.addEventListener('click', () => {
-            this.loadHabits();
+        refreshBtn.addEventListener('click', async () => {
+            const svgIcon = refreshBtn.querySelector('svg');
+            svgIcon?.classList.add('fn__rotate');
+            try {
+                await this.loadHabits();
+                pushMsg(i18n("refreshSuccess"));
+            } finally {
+                svgIcon?.classList.remove('fn__rotate');
+            }
         });
         actionContainer.appendChild(refreshBtn);
 

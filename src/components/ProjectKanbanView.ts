@@ -2,7 +2,7 @@
 import { showMessage, confirm, Menu, Dialog, Constants, openEmoji, platformUtils } from "siyuan";
 
 
-import { refreshSql, getBlockByID, updateBindBlockAtrrs, openBlock, addBlockProjectId } from "../api";
+import { refreshSql, getBlockByID, updateBindBlockAtrrs, openBlock, addBlockProjectId, pushMsg } from "../api";
 import { i18n } from "../pluginInstance";
 import { getLocalDateString, getLocalDateTimeString, compareDateStrings, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../utils/dateUtils";
 import { CategoryManager } from "../utils/categoryManager";
@@ -3724,13 +3724,22 @@ export class ProjectKanbanView {
         refreshBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconRefresh"></use></svg>';
         refreshBtn.classList.add('ariaLabel'); refreshBtn.setAttribute('aria-label', i18n('refresh'));
         refreshBtn.addEventListener('click', async () => {
-            // 重新加载项目信息（包括分组信息）
-            await this.loadProject();
-            // 重新加载任务数据
-            await this.getReminders(true);
-            // 强制触发看板重绘
-            this._lastRenderedProjectId = null;
-            this.queueLoadTasks();
+            // 添加旋转动画到 SVG 图标
+            const svgIcon = refreshBtn.querySelector('svg');
+            svgIcon?.classList.add('fn__rotate');
+            try {
+                // 重新加载项目信息（包括分组信息）
+                await this.loadProject();
+                // 重新加载任务数据
+                await this.getReminders(true);
+                // 强制触发看板重绘
+                this._lastRenderedProjectId = null;
+                this.queueLoadTasks();
+                pushMsg(i18n("refreshSuccess"));
+            } finally {
+                // 移除旋转动画
+                svgIcon?.classList.remove('fn__rotate');
+            }
         });
         controlsGroup.appendChild(refreshBtn);
 

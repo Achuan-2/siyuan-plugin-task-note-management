@@ -1,6 +1,6 @@
 import { colorWithOpacity } from "../utils/uiUtils";
 import { showMessage, confirm, Dialog, Menu, Constants, getFrontend, getBackend, platformUtils } from "siyuan";
-import { refreshSql, sql, getBlockKramdown, getBlockByID, updateBindBlockAtrrs, openBlock } from "../api";
+import { refreshSql, sql, getBlockKramdown, getBlockByID, updateBindBlockAtrrs, openBlock, pushMsg } from "../api";
 import { getLocalDateString, compareDateStrings, getLocalDateTimeString, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../utils/dateUtils";
 import { loadSortConfig, saveSortConfig, getSortConfigSummary, getSortCriterionName, SortCriterion, loadFilterConfig, saveFilterConfig } from "../utils/sortConfig";
 import { SortMenuDialog } from "./SortMenuDialog";
@@ -347,16 +347,23 @@ export class ReminderPanel {
             refreshBtn.className = 'b3-button b3-button--outline';
             refreshBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconRefresh"></use></svg>';
             refreshBtn.classList.add('ariaLabel'); refreshBtn.setAttribute('aria-label', i18n("refresh") || "刷新");
-            refreshBtn.addEventListener('click', () => {
-                // 刷新时清空当前 Tab 的文档标题缓存，再强制重载提醒
+            refreshBtn.addEventListener('click', async () => {
+                const svgIcon = refreshBtn.querySelector('svg');
+                svgIcon?.classList.add('fn__rotate');
                 try {
-                    if (this.currentTab) {
-                        this.docTitleCache.delete(this.currentTab);
+                    // 刷新时清空当前 Tab 的文档标题缓存，再强制重载提醒
+                    try {
+                        if (this.currentTab) {
+                            this.docTitleCache.delete(this.currentTab);
+                        }
+                    } catch (e) {
+                        // ignore
                     }
-                } catch (e) {
-                    // ignore
+                    await this.loadReminders(true);
+                    pushMsg(i18n("refreshSuccess"));
+                } finally {
+                    svgIcon?.classList.remove('fn__rotate');
                 }
-                this.loadReminders(true);
             });
             actionContainer.appendChild(refreshBtn);
         }
