@@ -1417,7 +1417,7 @@ class SmartBatchDialog {
                     };
 
                     // 更新字段
-                    reminder.classList.add('ariaLabel'); reminder.setAttribute('aria-label', setting.cleanTitle);
+                    reminder.title = setting.cleanTitle;
                     reminder.date = setting.date;
                     reminder.priority = setting.priority;
                     reminder.categoryId = setting.categoryId || undefined;
