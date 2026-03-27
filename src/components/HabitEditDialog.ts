@@ -500,6 +500,7 @@ export class HabitEditDialog {
                 reminderTime: this.habit?.reminderTime,
                 reminderTimes: this.habit?.reminderTimes || [],
                 groupId: this.habit?.groupId,
+                sort: this.habit?.sort,
                 priority: this.habit?.priority || 'none',
                 checkInEmojis: JSON.parse(JSON.stringify(draftCheckInEmojis)),
                 checkIns: this.habit?.checkIns || {},
@@ -993,6 +994,7 @@ export class HabitEditDialog {
             reminderTime: undefined, // deprecated: will keep first value for compatibility below
             reminderTimes: [],
             blockId: parsedBlockId || undefined,
+            sort: this.habit?.sort,
             // 保留兼容字段，不再在编辑界面展示优先级
             priority: this.habit?.priority || 'none',
             groupId: formData.get('groupId') as string === 'none' ? undefined : formData.get('groupId') as string,
