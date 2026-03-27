@@ -4015,6 +4015,8 @@ export class ReminderPanel {
                         const ed = df.yearlyEndDay || 31;
                         const rDate = this.getReminderLogicalDate(r.date || r.endDate, r.time || r.endTime);
                         const rDateObj = new Date(rDate + 'T00:00:00');
+                        const currentYear = new Date().getFullYear();
+                        if (rDateObj.getFullYear() !== currentYear) return false;
                         const rMonth = rDateObj.getMonth() + 1;
                         const rDay = rDateObj.getDate();
                         const rMD = rMonth * 100 + rDay;
