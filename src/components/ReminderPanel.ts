@@ -573,7 +573,7 @@ export class ReminderPanel {
         this.updateFilterSelect();
     }
     private normalizeSortCriteria(criteria: any): SortCriterion[] {
-        const availableMethods = new Set(['priority', 'category', 'time', 'completed', 'created', 'title']);
+        const availableMethods = new Set(['priority', 'project', 'category', 'time', 'completed', 'created', 'title']);
         if (!Array.isArray(criteria) || criteria.length === 0) {
             return [{ method: 'time', order: 'asc' }];
         }
@@ -760,6 +760,9 @@ export class ReminderPanel {
                     return sortA - sortB;
                 }
                 return criterion.order === 'desc' ? -result : result;
+
+            case 'project':
+                return this.compareByProject(a, b, criterion.order);
 
             case 'title':
                 result = this.compareByTitle(a, b);
@@ -1932,6 +1935,10 @@ export class ReminderPanel {
 
             const today = getLogicalDateString();
             const allRemindersWithInstances = this.generateAllRemindersWithInstances(reminderData, today);
+            const activeSortCriteria = this.getActiveSortCriteria();
+            if (activeSortCriteria.some(c => c.method === 'project')) {
+                await this.refreshProjectSortMetaCache();
+            }
 
             // 过滤已归档分组的未完成任务
             const filteredReminders = await this.filterArchivedGroupTasks(allRemindersWithInstances);
@@ -4335,6 +4342,8 @@ export class ReminderPanel {
     private originalRemindersCache: { [id: string]: any } = {};
     // 缓存异步加载数据（番茄数、专注时长、项目等）以减少重复请求
     private asyncDataCache: Map<string, any> = new Map();
+    // 项目排序缓存：项目ID -> 状态顺序/项目优先级/项目手动排序值
+    private projectSortMetaCache: Map<string, { statusOrder: number; priorityOrder: number; projectSort: number }> = new Map();
 
     /**
      * 获取原始提醒数据（用于重复事件实例）
@@ -4615,6 +4624,115 @@ export class ReminderPanel {
         }
 
         // 时间相同且类型相同时，按优先级排序
+        return 0;
+    }
+
+    private async refreshProjectSortMetaCache(): Promise<void> {
+        try {
+            const [projectDataRaw, statusDataRaw] = await Promise.all([
+                this.plugin?.loadProjectData?.(),
+                this.plugin?.loadProjectStatus?.()
+            ]);
+
+            const statusData = Array.isArray(statusDataRaw) && statusDataRaw.length > 0
+                ? statusDataRaw
+                : [
+                    { id: 'active' },
+                    { id: 'someday' },
+                    { id: 'archived' }
+                ];
+
+            const statusOrderMap = new Map<string, number>();
+            statusData.forEach((status: any, index: number) => {
+                if (status?.id) {
+                    statusOrderMap.set(String(status.id), index);
+                }
+            });
+
+            const priorityOrder: Record<string, number> = { high: 3, medium: 2, low: 1, none: 0 };
+            const projectSortMap = new Map<string, { statusOrder: number; priorityOrder: number; projectSort: number }>();
+            const projectData = projectDataRaw && typeof projectDataRaw === 'object' ? projectDataRaw : {};
+
+            Object.entries(projectData).forEach(([projectId, project]) => {
+                const projectObj = project as any;
+                const statusId = typeof projectObj?.status === 'string' ? projectObj.status : 'active';
+                const priorityId = typeof projectObj?.priority === 'string' ? projectObj.priority : 'none';
+
+                projectSortMap.set(projectId, {
+                    statusOrder: statusOrderMap.get(statusId) ?? Number.MAX_SAFE_INTEGER,
+                    priorityOrder: priorityOrder[priorityId] ?? 0,
+                    projectSort: typeof projectObj?.sort === 'number' ? projectObj.sort : 0
+                });
+            });
+
+            this.projectSortMetaCache = projectSortMap;
+        } catch (error) {
+            console.warn('刷新项目排序缓存失败:', error);
+            this.projectSortMetaCache = new Map();
+        }
+    }
+
+    private getProjectSortMeta(reminder: any): { hasProject: boolean; projectId: string; statusOrder: number; priorityOrder: number; projectSort: number } {
+        const projectId = typeof reminder?.projectId === 'string' ? reminder.projectId : '';
+        if (!projectId) {
+            return {
+                hasProject: false,
+                projectId: '',
+                statusOrder: Number.MAX_SAFE_INTEGER,
+                priorityOrder: -1,
+                projectSort: Number.MAX_SAFE_INTEGER
+            };
+        }
+
+        const projectMeta = this.projectSortMetaCache.get(projectId);
+        if (!projectMeta) {
+            return {
+                hasProject: true,
+                projectId,
+                statusOrder: Number.MAX_SAFE_INTEGER,
+                priorityOrder: 0,
+                projectSort: 0
+            };
+        }
+
+        return {
+            hasProject: true,
+            projectId,
+            statusOrder: projectMeta.statusOrder,
+            priorityOrder: projectMeta.priorityOrder,
+            projectSort: projectMeta.projectSort
+        };
+    }
+
+    // 项目排序：有项目始终在前；同为有项目时按状态、优先级、项目 sort 比较
+    private compareByProject(a: any, b: any, order: 'asc' | 'desc' = 'asc'): number {
+        const metaA = this.getProjectSortMeta(a);
+        const metaB = this.getProjectSortMeta(b);
+
+        if (metaA.hasProject !== metaB.hasProject) {
+            return metaA.hasProject ? -1 : 1;
+        }
+
+        if (metaA.statusOrder !== metaB.statusOrder) {
+            const statusDiff = metaA.statusOrder - metaB.statusOrder;
+            return order === 'desc' ? statusDiff : -statusDiff;
+        }
+
+        if (metaA.priorityOrder !== metaB.priorityOrder) {
+            const priorityDiff = metaA.priorityOrder - metaB.priorityOrder;
+            return order === 'desc' ? priorityDiff : -priorityDiff;
+        }
+
+        if (metaA.projectSort !== metaB.projectSort) {
+            const projectSortDiff = metaA.projectSort - metaB.projectSort;
+            return order === 'desc' ? projectSortDiff : -projectSortDiff;
+        }
+
+        if (metaA.projectId && metaB.projectId && metaA.projectId !== metaB.projectId) {
+            const projectIdDiff = metaA.projectId.localeCompare(metaB.projectId);
+            return order === 'desc' ? projectIdDiff : -projectIdDiff;
+        }
+
         return 0;
     }
 
@@ -9102,6 +9220,13 @@ export class ReminderPanel {
             }
 
             // 3. 应用当前排序规则到缓存，确定 sibling 间的相对顺序
+            const activeSortCriteria = this.getActiveSortCriteria();
+            if (activeSortCriteria.some(c => c.method === 'project')) {
+                const projectId = typeof savedReminder?.projectId === 'string' ? savedReminder.projectId : '';
+                if (!projectId || !this.projectSortMetaCache.has(projectId)) {
+                    await this.refreshProjectSortMetaCache();
+                }
+            }
             this.sortReminders(this.currentRemindersCache);
 
             // 4. 如果任务不满足当前视图筛选条件，且 DOM 中已存在则移除，然后退出
