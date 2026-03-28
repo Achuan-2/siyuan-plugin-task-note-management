@@ -6908,17 +6908,16 @@ export class ReminderPanel {
                 submenu: this.createQuickDateContextMenuItems(reminder, true)
             });
 
-            // 优先级默认只修改此实例（因为不同实例的优先级可能不同）
-            // 分类默认修改所有实例（因为分类一般不变）
+            // 重复实例右键修改优先级/分类时，统一修改原始任务（影响所有实例）
             menu.addItem({
                 iconHTML: "🎯",
                 label: i18n("setPriority"),
-                submenu: createPriorityMenuItems(true) // true 表示只修改此实例
+                submenu: createPriorityMenuItems(false)
             });
             menu.addItem({
                 iconHTML: "🏷️",
                 label: i18n("setCategory"),
-                submenu: createCategoryMenuItems(false) // false 表示修改所有实例
+                submenu: createCategoryMenuItems(false)
             });
             menu.addSeparator();
             menu.addItem({
@@ -10277,9 +10276,18 @@ export class ReminderPanel {
         try {
             const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
             const changedReminders: any[] = [];
+            const handledTargetIds = new Set<string>();
 
             for (const id of ids) {
-                const reminder = reminderData[id];
+                const selectedReminder = this.currentRemindersCache.find(r => r.id === id);
+                const targetId = (selectedReminder?.isRepeatInstance && selectedReminder.originalId)
+                    ? selectedReminder.originalId
+                    : ((reminderData[id]?.isRepeatInstance && reminderData[id].originalId) ? reminderData[id].originalId : id);
+
+                if (handledTargetIds.has(targetId)) continue;
+                handledTargetIds.add(targetId);
+
+                const reminder = reminderData[targetId];
                 if (!reminder) continue;
 
                 const isRecurringEvent = reminder.repeat?.enabled;
@@ -10314,9 +10322,18 @@ export class ReminderPanel {
         try {
             const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
             const changedReminders: any[] = [];
+            const handledTargetIds = new Set<string>();
 
             for (const id of ids) {
-                const reminder = reminderData[id];
+                const selectedReminder = this.currentRemindersCache.find(r => r.id === id);
+                const targetId = (selectedReminder?.isRepeatInstance && selectedReminder.originalId)
+                    ? selectedReminder.originalId
+                    : ((reminderData[id]?.isRepeatInstance && reminderData[id].originalId) ? reminderData[id].originalId : id);
+
+                if (handledTargetIds.has(targetId)) continue;
+                handledTargetIds.add(targetId);
+
+                const reminder = reminderData[targetId];
                 if (!reminder) continue;
 
                 const isRecurringEvent = reminder.repeat?.enabled;
