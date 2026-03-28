@@ -1,3 +1,48 @@
+## v6.6.0 / 20260328
+
+- 🎨 任务支持绑定习惯，自动完成打卡和番茄钟记录
+  
+  <img alt="PixPin_2026-03-28_20-38-41" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2026-03-28_20-38-41-20260328203853-hxpcn81.png" />
+
+  <img alt="PixPin_2026-03-28_19-03-47" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2026-03-28_19-03-47-20260328190402-4sb5432.png" />
+
+- 🎨 文档页签支持直接拖入任务侧栏和日历侧栏来快速新建任务
+- 🎨 项目看板：支持多选排序
+
+  <img alt="PixPin_2026-03-28_20-39-57" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2026-03-28_20-39-57-20260328204013-gcl2j4q.png" />
+- 🎨 项目侧栏：支持多选排序
+- 🎨 任务侧栏：支持按项目排序
+- 🎨 任务侧栏：过滤器支持指定排序方式
+- 🎨 任务侧栏：右键修改重复任务实例的分类默认修改的是全部重复任务，只有调整日期、修改优先级才是只修改实例
+- 🎨 任务侧栏：今日已完成根据逻辑天计算日期，一天开始时间设置为03:00, 02:00完成的任务也算作今天完成
+- 🎨 任务侧栏：增强完成任务、批量编辑任务性能
+- 🎨 任务侧栏: 跨天任务支持今日忽略
+- 🎨 项目看板：增强完成任务性能
+- 🎨 统计视图：习惯统计Tab支持编辑习惯
+- 🐛 文档设置为任务，添加的图标刷新后会消失
+- 🐛 日期智能识别：“后天”无法识别
+- 🐛 任务侧栏: 每年指定日期范围错误筛选出未来年份，应该只筛选今年日期
+- 🐛 习惯打卡：编辑习惯之后习惯排序会错误重置
+
+---
+
+- 🎨 Tasks support habit binding, automatically completing check-ins and Pomodoro timer records
+- 🎨 Document tabs can be directly dragged into the task sidebar or calendar sidebar to quickly create new tasks
+- 🎨 Project board: Supports multi-select sorting
+- 🎨 Project sidebar: Supports multi-select sorting
+- 🎨 Task sidebar: Supports sorting by project
+- 🎨 Task sidebar: Filters support specifying sorting methods
+- 🎨 Task sidebar: Right-clicking to modify the category of a recurring task instance defaults to modifying all recurring tasks; only adjusting dates or changing priority will modify the single instance
+- 🎨 Task sidebar: "Completed today" is calculated based on the logical day, with the start time set at 03:00. Tasks completed by 02:00 are also counted as completed today
+- 🎨 Task sidebar: Enhanced performance for completing tasks and batch editing tasks
+- 🎨 Task sidebar: Cross-day tasks support "ignore today"
+- 🎨 Project board: Enhanced performance for completing tasks
+- 🎨 Statistics view: Habit tracking tab supports editing habits
+- 🐛 When a document is set as a task, the added icon disappears after refresh
+- 🐛 Smart date recognition: "Day after tomorrow" cannot be recognized
+- 🐛 Task sidebar: Yearly specified date range incorrectly filters future years; should only filter this year's dates
+- 🐛 Habit tracking: After editing a habit, the habit order is incorrectly reset
+
 ## v6.5.8 / 20260327
 - 🐛 批量新建任务失败
 
