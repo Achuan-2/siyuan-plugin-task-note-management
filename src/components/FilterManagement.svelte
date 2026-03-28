@@ -4,6 +4,8 @@
     import { CategoryManager } from '../utils/categoryManager';
     import { ProjectManager } from '../utils/projectManager';
     import { showMessage, confirm } from 'siyuan';
+    import { AVAILABLE_SORT_METHODS } from '../utils/sortConfig';
+    import type { SortCriterion } from '../utils/sortConfig';
 
     export let plugin: any;
     export let onFilterApplied: (filter: FilterConfig) => void;
@@ -42,7 +44,11 @@
         projectFilters: string[];
         categoryFilters: string[];
         priorityFilters: string[];
+        sortMode?: 'global' | 'custom';
+        sortCriteria?: SortCriterion[];
     }
+
+    type SortMode = 'global' | 'custom';
 
     let filters: FilterConfig[] = [];
     let selectedFilter: FilterConfig | null = null;
@@ -85,6 +91,133 @@
     let selectedProjects: string[] = [];
     let selectedCategories: string[] = [];
     let selectedPriorities: string[] = [];
+    let sortMode: SortMode = 'global';
+    let selectedSortCriteria: SortCriterion[] = [{ method: 'time', order: 'asc' }];
+    let isMultiSelectSort = false;
+
+    function getBuiltInSortDefaults(filterId: string): { sortMode: SortMode; sortCriteria: SortCriterion[] } {
+        if (filterId === 'builtin_todayCompleted' || filterId === 'builtin_yesterdayCompleted') {
+            return {
+                sortMode: 'custom',
+                sortCriteria: [{ method: 'completed', order: 'desc' }],
+            };
+        }
+
+        return {
+            sortMode: 'global',
+            sortCriteria: [],
+        };
+    }
+
+    function normalizeSortCriteria(criteria: any): SortCriterion[] {
+        const availableMethods = new Set(AVAILABLE_SORT_METHODS.map(item => item.key));
+        if (!Array.isArray(criteria) || criteria.length === 0) {
+            return [{ method: 'time', order: 'asc' }];
+        }
+
+        const normalized = criteria
+            .map((item: any) => {
+                const method = typeof item?.method === 'string' ? item.method : '';
+                const order = item?.order === 'desc' ? 'desc' : 'asc';
+                return { method, order };
+            })
+            .filter((item: SortCriterion) => availableMethods.has(item.method));
+
+        return normalized.length > 0 ? normalized : [{ method: 'time', order: 'asc' }];
+    }
+
+    function normalizeFilterConfig(filter: FilterConfig): FilterConfig {
+        const builtInDefaults = getBuiltInSortDefaults(filter.id);
+        const defaults =
+            filter.isBuiltIn || builtInDefaults.sortMode === 'custom'
+                ? builtInDefaults
+                : { sortMode: 'global' as SortMode, sortCriteria: [] as SortCriterion[] };
+        const mode: SortMode = filter.sortMode === 'custom' ? 'custom' : 'global';
+        const finalMode: SortMode = filter.sortMode ? mode : defaults.sortMode;
+        const finalCriteria = finalMode === 'custom'
+            ? normalizeSortCriteria(
+                Array.isArray(filter.sortCriteria) && filter.sortCriteria.length > 0
+                    ? filter.sortCriteria
+                    : defaults.sortCriteria
+            )
+            : [];
+
+        return {
+            ...filter,
+            sortMode: finalMode,
+            sortCriteria: finalCriteria,
+        };
+    }
+
+    function getSortMethodLabel(method: string): string {
+        const methodDef = AVAILABLE_SORT_METHODS.find(item => item.key === method);
+        return methodDef ? methodDef.label() : method;
+    }
+
+    function setSortMode(mode: SortMode) {
+        sortMode = mode;
+        if (sortMode === 'custom' && selectedSortCriteria.length === 0) {
+            selectedSortCriteria = [{ method: 'time', order: 'asc' }];
+        }
+    }
+
+    function toggleSortMethod(method: string) {
+        const existingIndex = selectedSortCriteria.findIndex(item => item.method === method);
+
+        if (isMultiSelectSort) {
+            if (existingIndex >= 0) {
+                selectedSortCriteria = selectedSortCriteria.filter(item => item.method !== method);
+                if (selectedSortCriteria.length === 0) {
+                    selectedSortCriteria = [{ method: 'time', order: 'asc' }];
+                }
+            } else {
+                selectedSortCriteria = [...selectedSortCriteria, { method, order: 'asc' }];
+            }
+            return;
+        }
+
+        if (existingIndex >= 0) {
+            const order = selectedSortCriteria[existingIndex].order;
+            selectedSortCriteria = [{ method, order }];
+        } else {
+            selectedSortCriteria = [{ method, order: 'asc' }];
+        }
+    }
+
+    function toggleSortOrder(index: number) {
+        selectedSortCriteria = selectedSortCriteria.map((criterion, i) => {
+            if (i !== index) return criterion;
+            return {
+                ...criterion,
+                order: criterion.order === 'asc' ? 'desc' : 'asc',
+            };
+        });
+    }
+
+    function removeSortCriterion(index: number) {
+        selectedSortCriteria = selectedSortCriteria.filter((_, i) => i !== index);
+        if (selectedSortCriteria.length === 0) {
+            selectedSortCriteria = [{ method: 'time', order: 'asc' }];
+        }
+    }
+
+    function moveSortCriterion(index: number, direction: -1 | 1) {
+        const targetIndex = index + direction;
+        if (targetIndex < 0 || targetIndex >= selectedSortCriteria.length) return;
+
+        const next = [...selectedSortCriteria];
+        [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+        selectedSortCriteria = next;
+    }
+
+    function handleSortMultiSelectChange() {
+        if (!isMultiSelectSort && selectedSortCriteria.length > 1) {
+            selectedSortCriteria = [selectedSortCriteria[0]];
+        }
+        if (isMultiSelectSort && selectedSortCriteria.length === 0) {
+            selectedSortCriteria = [{ method: 'time', order: 'asc' }];
+        }
+    }
 
     onMount(async () => {
         categoryManager = CategoryManager.getInstance(plugin);
@@ -264,10 +397,17 @@
             },
         ];
 
-        let allFilters = [
-            ...builtInFilters.filter(f => !hiddenBuiltInFilters.includes(f.id)),
-            ...customFilters,
-        ];
+        const normalizedBuiltInFilters = builtInFilters
+            .filter(f => !hiddenBuiltInFilters.includes(f.id))
+            .map(f => normalizeFilterConfig(f));
+        const normalizedCustomFilters = customFilters.map((f: any) =>
+            normalizeFilterConfig({
+                ...f,
+                isBuiltIn: false,
+            } as FilterConfig)
+        );
+
+        let allFilters = [...normalizedBuiltInFilters, ...normalizedCustomFilters];
 
         if (filterOrder && filterOrder.length > 0) {
             const filterMap = new Map(allFilters.map(f => [f.id, f]));
@@ -316,6 +456,13 @@
         selectedCategories = [...filter.categoryFilters];
         selectedPriorities = [...filter.priorityFilters];
 
+        const normalizedFilter = normalizeFilterConfig(filter);
+        sortMode = normalizedFilter.sortMode || 'global';
+        selectedSortCriteria = sortMode === 'custom'
+            ? normalizeSortCriteria(normalizedFilter.sortCriteria)
+            : [{ method: 'time', order: 'asc' }];
+        isMultiSelectSort = selectedSortCriteria.length > 1;
+
         const customRange = filter.dateFilters.find(df => df.type === 'custom_range');
         if (customRange) {
             customRangeStart = customRange.startDate || '';
@@ -359,6 +506,9 @@
         selectedProjects = ['all']; // 默认为全部项目
         selectedCategories = ['all']; // 默认为全部分类
         selectedPriorities = ['all']; // 默认为全部优先级
+        sortMode = 'global';
+        selectedSortCriteria = [{ method: 'time', order: 'asc' }];
+        isMultiSelectSort = false;
     }
 
     async function saveFilter() {
@@ -389,6 +539,8 @@
             projectFilters: selectedProjects,
             categoryFilters: selectedCategories,
             priorityFilters: selectedPriorities,
+            sortMode,
+            sortCriteria: sortMode === 'custom' ? normalizeSortCriteria(selectedSortCriteria) : [],
         };
 
         if (selectedFilter) {
@@ -848,6 +1000,123 @@
                 {/if}
 
                 <div class="b3-form__group">
+                    <span class="b3-form__label">{i18n('sortBy') || '排序方式'}</span>
+                    <div class="filter-options">
+                        <div
+                            class="filter-option"
+                            class:selected={sortMode === 'global'}
+                            on:click={() => setSortMode('global')}
+                        >
+                            {i18n('followGlobalSort') || '跟随侧栏全局排序'}
+                        </div>
+                        <div
+                            class="filter-option"
+                            class:selected={sortMode === 'custom'}
+                            on:click={() => setSortMode('custom')}
+                        >
+                            {i18n('customSort') || '自定义排序'}
+                        </div>
+                    </div>
+
+                    {#if sortMode === 'custom'}
+                        <div style="margin-top: 12px;">
+                            <div
+                                style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;"
+                            >
+                                <span class="b3-form__label" style="margin-bottom: 0;">
+                                    {i18n('sortBy') || '排序方式'}
+                                </span>
+                                <label
+                                    style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; color: var(--b3-theme-on-surface);"
+                                >
+                                    <input
+                                        type="checkbox"
+                                        class="b3-switch"
+                                        bind:checked={isMultiSelectSort}
+                                        on:change={handleSortMultiSelectChange}
+                                    />
+                                    <span>{i18n('multiSelectSortMode') || '多选排序模式'}</span>
+                                </label>
+                            </div>
+
+                            <div class="sort-selected-list">
+                                {#if selectedSortCriteria.length === 0}
+                                    <div class="sort-empty">
+                                        {i18n('noSortCriteriaSelected') || '未选择排序条件'}
+                                    </div>
+                                {:else}
+                                    {#each selectedSortCriteria as criterion, index}
+                                        <div class="sort-selected-item">
+                                            {#if isMultiSelectSort}
+                                                <span class="sort-order-num">{index + 1}</span>
+                                            {/if}
+                                            <span class="sort-method-name">
+                                                {getSortMethodLabel(criterion.method)}
+                                            </span>
+                                            <button
+                                                class="b3-button b3-button--outline"
+                                                on:click={() => toggleSortOrder(index)}
+                                            >
+                                                {criterion.order === 'asc'
+                                                    ? i18n('ascending') || '升序'
+                                                    : i18n('descending') || '降序'}
+                                            </button>
+                                            {#if isMultiSelectSort}
+                                                <button
+                                                    class="b3-button b3-button--outline"
+                                                    disabled={index === 0}
+                                                    on:click={() => moveSortCriterion(index, -1)}
+                                                >
+                                                    ↑
+                                                </button>
+                                                <button
+                                                    class="b3-button b3-button--outline"
+                                                    disabled={index === selectedSortCriteria.length - 1}
+                                                    on:click={() => moveSortCriterion(index, 1)}
+                                                >
+                                                    ↓
+                                                </button>
+                                                <button
+                                                    class="b3-button b3-button--outline"
+                                                    on:click={() => removeSortCriterion(index)}
+                                                >
+                                                    {i18n('remove') || '移除'}
+                                                </button>
+                                            {/if}
+                                        </div>
+                                    {/each}
+                                {/if}
+                            </div>
+
+                            <div style="margin-top: 10px;">
+                                <span
+                                    class="b3-form__label"
+                                    style="margin-bottom: 8px; font-size: 13px; font-weight: 500;"
+                                >
+                                    {isMultiSelectSort
+                                        ? i18n('availableSortMethods') || '可用的排序方式'
+                                        : i18n('clickToSelectSort') || '点击选择排序方式'}
+                                </span>
+                                <div class="filter-options">
+                                    {#each AVAILABLE_SORT_METHODS as method}
+                                        <div
+                                            class="filter-option"
+                                            class:selected={selectedSortCriteria.some(
+                                                criterion => criterion.method === method.key
+                                            )}
+                                            on:click={() => toggleSortMethod(method.key)}
+                                        >
+                                            {method.icon}
+                                            {method.label()}
+                                        </div>
+                                    {/each}
+                                </div>
+                            </div>
+                        </div>
+                    {/if}
+                </div>
+
+                <div class="b3-form__group">
                     <span class="b3-form__label">{i18n('statusFilters')}</span>
                     <div class="filter-options">
                         <div
@@ -1197,6 +1466,46 @@
         color: var(--b3-theme-on-primary);
         border-color: var(--b3-theme-primary);
         box-shadow: 0 2px 4px rgba(var(--b3-theme-primary-rgb), 0.2);
+    }
+
+    .sort-selected-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .sort-selected-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        border: 1px solid var(--b3-theme-surface-lighter);
+        border-radius: 8px;
+        background: var(--b3-theme-surface);
+    }
+
+    .sort-order-num {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: var(--b3-theme-primary);
+        color: var(--b3-theme-on-primary);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        flex-shrink: 0;
+    }
+
+    .sort-method-name {
+        flex: 1;
+        font-size: 13px;
+    }
+
+    .sort-empty {
+        font-size: 13px;
+        color: var(--b3-theme-on-surface-light);
+        padding: 6px 0;
     }
 
     .b3-form__group {

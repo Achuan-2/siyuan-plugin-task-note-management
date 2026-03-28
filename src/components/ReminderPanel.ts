@@ -2,7 +2,7 @@ import { colorWithOpacity } from "../utils/uiUtils";
 import { showMessage, confirm, Dialog, Menu, Constants, getFrontend, getBackend, platformUtils } from "siyuan";
 import { refreshSql, sql, getBlockKramdown, getBlockByID, updateBindBlockAtrrs, openBlock, pushMsg } from "../api";
 import { getLocalDateString, compareDateStrings, getLocalDateTimeString, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../utils/dateUtils";
-import { loadSortConfig, saveSortConfig, getSortConfigSummary, getSortCriterionName, SortCriterion, loadFilterConfig, saveFilterConfig } from "../utils/sortConfig";
+import { loadSortConfig, saveSortConfig, getSortCriterionName, SortCriterion, loadFilterConfig, saveFilterConfig } from "../utils/sortConfig";
 import { SortMenuDialog } from "./SortMenuDialog";
 import { QuickReminderDialog } from "./QuickReminderDialog";
 import { CategoryManager } from "../utils/categoryManager";
@@ -21,6 +21,11 @@ import { isEventPast } from "../utils/icsImport";
 import { PasteTaskDialog } from "./PasteTaskDialog";
 import { createPomodoroStartSubmenu as createSharedPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
 
+interface ReminderPanelFilterSortConfig {
+    sortMode?: 'global' | 'custom';
+    sortCriteria?: SortCriterion[];
+}
+
 export class ReminderPanel {
     private container: HTMLElement;
     private remindersContainer: HTMLElement;
@@ -35,6 +40,9 @@ export class ReminderPanel {
     private currentSearchQuery: string = '';
     // 排序条件数组（支持多选和拖拽排序）
     private currentSortCriteria: SortCriterion[] = [{ method: 'time', order: 'asc' }];
+    // 临时排序覆盖（仅当前筛选器会话有效，切换筛选器后清除）
+    private temporarySortOverrideTab: string | null = null;
+    private temporarySortCriteria: SortCriterion[] | null = null;
     private reminderUpdatedHandler: (event?: CustomEvent) => void;
     private sortConfigUpdatedHandler: (event: CustomEvent) => void;
     private categoryManager: CategoryManager; // 添加分类管理器
@@ -235,6 +243,7 @@ export class ReminderPanel {
                     this.filterSelect.value = savedTab;
                 }
             }
+            this.updateSortButtonTitle();
         } catch (error) {
             console.error('加载筛选配置失败:', error);
         }
@@ -305,7 +314,7 @@ export class ReminderPanel {
         this.sortButton.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            this.showSortMenu(e);
+            void this.showSortMenu(e);
         });
         actionContainer.appendChild(this.sortButton);
 
@@ -419,7 +428,9 @@ export class ReminderPanel {
             const newTab = this.filterSelect.value;
             const isOldTabCustom = this.currentTab.startsWith('custom_');
             const isNewTabCustom = newTab.startsWith('custom_');
+            this.clearTemporarySortOverride();
             this.currentTab = newTab;
+            this.updateSortButtonTitle();
 
             // 保存筛选配置
             saveFilterConfig(this.plugin, newTab);
@@ -561,16 +572,106 @@ export class ReminderPanel {
         // 初始化自定义过滤器
         this.updateFilterSelect();
     }
+    private normalizeSortCriteria(criteria: any): SortCriterion[] {
+        const availableMethods = new Set(['priority', 'category', 'time', 'completed', 'created', 'title']);
+        if (!Array.isArray(criteria) || criteria.length === 0) {
+            return [{ method: 'time', order: 'asc' }];
+        }
+
+        const normalized = criteria
+            .map((criterion: any) => ({
+                method: typeof criterion?.method === 'string' ? criterion.method : '',
+                order: criterion?.order === 'desc' ? 'desc' : 'asc',
+            }))
+            .filter((criterion: SortCriterion) => availableMethods.has(criterion.method));
+
+        return normalized.length > 0 ? normalized : [{ method: 'time', order: 'asc' }];
+    }
+
+    private getBuiltInDefaultSortCriteria(targetTab: string): SortCriterion[] | null {
+        if (targetTab === 'todayCompleted' || targetTab === 'yesterdayCompleted') {
+            return [{ method: 'completed', order: 'desc' }];
+        }
+        return null;
+    }
+
+    private getActiveSortCriteria(targetTab: string = this.currentTab): SortCriterion[] {
+        if (this.temporarySortOverrideTab === targetTab && this.temporarySortCriteria && this.temporarySortCriteria.length > 0) {
+            return this.normalizeSortCriteria(this.temporarySortCriteria);
+        }
+
+        if (targetTab.startsWith('custom_')) {
+            const filterId = targetTab.replace('custom_', '');
+            const filterConfig = this.getCustomFilterConfig(filterId) as ReminderPanelFilterSortConfig | undefined;
+            if (filterConfig) {
+                if (filterConfig.sortMode === 'custom') {
+                    return this.normalizeSortCriteria(filterConfig.sortCriteria);
+                }
+                if (!filterConfig.sortMode) {
+                    const legacyBuiltInCriteria = this.getBuiltInDefaultSortCriteria(filterId);
+                    if (legacyBuiltInCriteria && legacyBuiltInCriteria.length > 0) {
+                        return legacyBuiltInCriteria;
+                    }
+                }
+            }
+        }
+
+        const builtInCriteria = this.getBuiltInDefaultSortCriteria(targetTab);
+        if (builtInCriteria && builtInCriteria.length > 0) {
+            return builtInCriteria;
+        }
+
+        return this.normalizeSortCriteria(this.currentSortCriteria);
+    }
+
+    private setTemporarySortOverride(tab: string, criteria: SortCriterion[]) {
+        this.temporarySortOverrideTab = tab;
+        this.temporarySortCriteria = this.normalizeSortCriteria(criteria);
+    }
+
+    private clearTemporarySortOverride() {
+        this.temporarySortOverrideTab = null;
+        this.temporarySortCriteria = null;
+    }
+
+    private isCurrentFilterUsingCustomSort(): boolean {
+        // 内置过滤器默认自定义排序（如今日已完成/昨日已完成）
+        const builtInCriteria = this.getBuiltInDefaultSortCriteria(this.currentTab);
+        if (builtInCriteria && builtInCriteria.length > 0) {
+            return true;
+        }
+
+        if (!this.currentTab.startsWith('custom_')) {
+            return false;
+        }
+
+        const filterId = this.currentTab.replace('custom_', '');
+        const filterConfig = this.getCustomFilterConfig(filterId) as ReminderPanelFilterSortConfig | undefined;
+        if (!filterConfig) return false;
+
+        if (filterConfig.sortMode === 'custom') {
+            return true;
+        }
+
+        // 兼容旧数据：由内置过滤器转换出来但未写入 sortMode 时
+        if (!filterConfig.sortMode) {
+            const legacyBuiltInCriteria = this.getBuiltInDefaultSortCriteria(filterId);
+            return !!legacyBuiltInCriteria && legacyBuiltInCriteria.length > 0;
+        }
+
+        return false;
+    }
+
     // 修改排序方法以支持多条件排序
     private sortReminders(reminders: any[]) {
-        const criteria = this.currentSortCriteria;
+        const criteria = this.getActiveSortCriteria();
         // console.log('应用排序方式:', criteria, '提醒数量:', reminders.length);
 
         // 特殊处理已完成相关的筛选器（包括昨日已完成）
         const isCompletedFilter = this.currentTab === 'completed' || this.currentTab === 'todayCompleted' || this.currentTab === 'yesterdayCompleted';
         const isPast7Filter = this.currentTab === 'all';
 
-        // 如果当前视图是"今日已完成"或"全部已完成"，始终按完成时间降序显示
+        // 已完成筛选器下保留分组逻辑，其余排序由当前有效排序规则决定
         if (isCompletedFilter) {
             reminders.sort((a: any, b: any) => {
                 const today = getLogicalDateString();
@@ -588,9 +689,7 @@ export class ReminderPanel {
                     if (!aIsIgnored && bIsIgnored) return -1;
                 }
 
-                // 直接使用 compareByCompletedTime 的结果作为最终排序依据
-                let result = this.compareByCompletedTime(a, b);
-                return result;
+                return this.sortByCriteria(a, b, criteria, isPast7Filter);
             });
 
             return;
@@ -673,6 +772,9 @@ export class ReminderPanel {
             case 'category':
                 result = this.compareByCategory(a, b);
                 break;
+
+            case 'completed':
+                return this.compareByCompletedTime(a, b, criterion.order);
 
             default:
                 result = 0;
@@ -791,7 +893,7 @@ export class ReminderPanel {
 
     // 当前排序模式下的主分组键（用于限制跨分组拖拽）
     private getNonPrioritySortGroupKey(reminder: any): string {
-        const primary = this.currentSortCriteria?.[0];
+        const primary = this.getActiveSortCriteria()?.[0];
         if (!primary || primary.method === 'priority') return '__ALLOW_ALL__';
 
         if (primary.method === 'time') {
@@ -837,7 +939,8 @@ export class ReminderPanel {
     }
 
     private isSameNonPrioritySortGroup(a: any, b: any): boolean {
-        const hasPriorityCriterion = this.currentSortCriteria?.some(c => c.method === 'priority');
+        const activeCriteria = this.getActiveSortCriteria();
+        const hasPriorityCriterion = activeCriteria?.some(c => c.method === 'priority');
         if (hasPriorityCriterion) return true;
 
         const keyA = this.getNonPrioritySortGroupKey(a);
@@ -848,7 +951,7 @@ export class ReminderPanel {
 
     // 创建时间/标题排序下禁用拖拽重排
     private isDragDisabledBySortMode(): boolean {
-        const primary = this.currentSortCriteria?.[0]?.method;
+        const primary = this.getActiveSortCriteria()?.[0]?.method;
         return primary === 'created' || primary === 'title';
     }
 
@@ -1140,6 +1243,8 @@ export class ReminderPanel {
                 }
             }
         }
+
+        this.updateSortButtonTitle();
     }
 
 
@@ -1147,15 +1252,16 @@ export class ReminderPanel {
     // 更新排序按钮的提示文本
     private updateSortButtonTitle() {
         if (this.sortButton) {
+            const activeCriteria = this.getActiveSortCriteria();
             // 构建完整的排序方式描述（用于 aria-label）
             let fullSortDescription: string;
-            if (!this.currentSortCriteria || this.currentSortCriteria.length === 0) {
+            if (!activeCriteria || activeCriteria.length === 0) {
                 fullSortDescription = i18n("sortBy") || "排序";
-            } else if (this.currentSortCriteria.length === 1) {
-                fullSortDescription = getSortCriterionName(this.currentSortCriteria[0]);
+            } else if (activeCriteria.length === 1) {
+                fullSortDescription = getSortCriterionName(activeCriteria[0]);
             } else {
                 // 多选排序时，显示所有排序条件，使用<br>换行
-                const criteriaNames = this.currentSortCriteria.map((c, index) => {
+                const criteriaNames = activeCriteria.map((c, index) => {
                     const name = getSortCriterionName(c);
                     return `${index + 1}. ${name}`;
                 });
@@ -1376,11 +1482,57 @@ export class ReminderPanel {
 
 
     // 显示排序菜单对话框（支持多选和拖拽排序）
-    private showSortMenu(event: MouseEvent) {
+    private async showSortMenu(event: MouseEvent) {
         try {
+            if (this.isCurrentFilterUsingCustomSort()) {
+                const currentFilterName = this.filterSelect?.selectedOptions?.[0]?.textContent || this.currentTab;
+                const confirmTitle = i18n("customFilterSortTemporaryConfirmTitle") || "临时修改排序";
+                const confirmContentTemplate =
+                    i18n("customFilterSortTemporaryConfirmContent") ||
+                    '当前筛选器「${name}」使用自定义排序。是否临时修改排序？切换筛选器后将恢复筛选器设置的排序方式。';
+                const confirmContent = confirmContentTemplate.replace('${name}', currentFilterName);
+
+                await confirm(
+                    confirmTitle,
+                    confirmContent,
+                    async () => {
+                        const dialog = new SortMenuDialog({
+                            plugin: this.plugin,
+                            currentCriteria: this.getActiveSortCriteria(),
+                            onSave: async (criteria) => {
+                                try {
+                                    this.setTemporarySortOverride(this.currentTab, criteria);
+                                    this.updateSortButtonTitle();
+                                } catch (error) {
+                                    console.error('临时保存排序配置失败:', error);
+                                }
+                            },
+                            onChange: async (criteria) => {
+                                try {
+                                    this.setTemporarySortOverride(this.currentTab, criteria);
+                                    this.updateSortButtonTitle();
+                                    // 重置分页状态
+                                    this.currentPage = 1;
+                                    this.totalPages = 1;
+                                    this.totalItems = 0;
+                                    await this.loadReminders();
+                                } catch (error) {
+                                    console.error('临时更新排序失败:', error);
+                                }
+                            }
+                        });
+                        dialog.show();
+                    },
+                    async () => {
+                        // 用户取消，不做操作
+                    }
+                );
+                return;
+            }
+
             const dialog = new SortMenuDialog({
                 plugin: this.plugin,
-                currentCriteria: this.currentSortCriteria,
+                currentCriteria: this.getActiveSortCriteria(),
                 onSave: async (criteria) => {
                     // 点击关闭时也会触发，确保配置已保存
                     try {
@@ -4335,16 +4487,16 @@ export class ReminderPanel {
         return this.isFutureTaskRemindedOnDate(reminder, targetDate);
     }
 
-    private compareByCompletedTime(a: any, b: any): number {
+    private compareByCompletedTime(a: any, b: any, order: 'asc' | 'desc' = 'desc'): number {
         // 获取完成时间
         const completedTimeA = this.getCompletedTime(a);
         const completedTimeB = this.getCompletedTime(b);
 
-        // 如果都有完成时间，按完成时间比较（默认降序：最近完成的在前）
+        // 如果都有完成时间，按完成时间比较
         if (completedTimeA && completedTimeB) {
             const timeA = new Date(completedTimeA).getTime();
             const timeB = new Date(completedTimeB).getTime();
-            return timeB - timeA; // 返回基础比较结果，升降序由调用方处理
+            return order === 'desc' ? (timeB - timeA) : (timeA - timeB);
         }
 
         // 如果只有一个有完成时间，有完成时间的在前
@@ -4365,7 +4517,7 @@ export class ReminderPanel {
             const dateValueA = new Date(a.date + (a.time ? `T${a.time}` : 'T00:00')).getTime();
             const dateValueB = new Date(b.date + (b.time ? `T${b.time}` : 'T00:00')).getTime();
             if (!isNaN(dateValueA) && !isNaN(dateValueB) && dateValueA !== dateValueB) {
-                return dateValueA - dateValueB;
+                return order === 'desc' ? (dateValueB - dateValueA) : (dateValueA - dateValueB);
             }
         }
 
@@ -4373,7 +4525,7 @@ export class ReminderPanel {
         const timeA = a.createdTime ? new Date(a.createdTime).getTime() : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
         const timeB = b.createdTime ? new Date(b.createdTime).getTime() : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
         if (timeA !== timeB) {
-            return timeB - timeA; // 最新创建的在前
+            return order === 'desc' ? (timeB - timeA) : (timeA - timeB);
         }
 
         return (a.id || '').localeCompare(b.id || '');
@@ -6133,7 +6285,8 @@ export class ReminderPanel {
             }
 
             const reminderData = providedReminderData || await getAllReminders(this.plugin, undefined, false, 'sidebar');
-            const hasPriorityCriterion = this.currentSortCriteria.some(c => c.method === 'priority');
+            const activeCriteria = this.getActiveSortCriteria();
+            const hasPriorityCriterion = activeCriteria.some(c => c.method === 'priority');
 
             // 兜底保护：非优先级模式禁止跨分组拖拽
             if (!hasPriorityCriterion && !this.isSameNonPrioritySortGroup(draggedReminder, targetReminder)) {
