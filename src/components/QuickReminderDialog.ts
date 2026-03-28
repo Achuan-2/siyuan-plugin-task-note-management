@@ -3557,7 +3557,12 @@ export class QuickReminderDialog {
                         const joined = meaningfulLines.join(' ');
                         const detected = autoDetectDateTimeFromTitle(joined, 'none');
                         if (detected && (detected.date || detected.endDate)) {
-                            this.applyNaturalLanguageResult(detected);
+                            // 粘贴识别时不要直接用“粘贴文本”的 cleanTitle 覆盖整个标题，
+                            // 否则会丢失用户原有内容。标题清理统一基于当前完整标题处理。
+                            this.applyNaturalLanguageResult({
+                                ...detected,
+                                cleanTitle: undefined
+                            });
 
                             // 识别后移除日期
                             this.plugin.getRemoveDateAfterDetectionMode().then((mode: 'none' | 'date' | 'all') => {
