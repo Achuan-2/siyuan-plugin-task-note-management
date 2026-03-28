@@ -10,6 +10,12 @@ import { getLogicalDateString } from "../../utils/dateUtils";
 import { HabitGroupManager, type HabitGroup } from "../../utils/habitGroupManager";
 import { i18n } from "../../pluginInstance";
 import {
+    buildLinkedHabitPomodoroData,
+    getLinkedTaskPomodoroStatsByDate as getLinkedTaskPomodoroStatsByDateUtil,
+    getLinkedTaskPomodoroTotalStats as getLinkedTaskPomodoroTotalStatsUtil,
+    type LinkedTaskPomodoroDayStats
+} from "../../utils/linkedHabitPomodoro";
+import {
     getHabitGoalType as getHabitGoalTypeUtil,
     getHabitPomodoroTargetMinutes as getHabitPomodoroTargetMinutesUtil,
     shouldCheckInOnDate as shouldCheckInOnDateUtil,
@@ -58,6 +64,7 @@ let yearOffset = 0;
 let pomodoroRecordManager: PomodoroRecordManager | null = null;
 let pomodoroReady = false;
 let pomodoroStatsRevision = 0;
+let linkedTaskPomodoroStats: Map<string, Map<string, LinkedTaskPomodoroDayStats>> = new Map();
 let overviewListEl: HTMLDivElement | null = null;
 let weekListEl: HTMLDivElement | null = null;
 let monthPanelEl: HTMLDivElement | null = null;
@@ -108,9 +115,23 @@ async function loadHabits() {
     loading = true;
     errorMessage = "";
     try {
+        let reminderData: Record<string, any> = {};
+        if (plugin && typeof plugin.loadReminderData === "function") {
+            reminderData = (await plugin.loadReminderData()) || {};
+        }
+
         if (pomodoroRecordManager) {
             await pomodoroRecordManager.refreshData();
             pomodoroStatsRevision += 1;
+            const records = pomodoroRecordManager.getSaveData() || {};
+            const linkedData = buildLinkedHabitPomodoroData(
+                reminderData,
+                records,
+                (session) => pomodoroRecordManager!.calculateSessionCount(session)
+            );
+            linkedTaskPomodoroStats = linkedData.statsByHabit;
+        } else {
+            linkedTaskPomodoroStats = new Map();
         }
         const habitData = await plugin.loadHabitData();
         habits = Object.values(habitData || {}) as Habit[];
@@ -118,6 +139,7 @@ async function loadHabits() {
         console.error("加载习惯数据失败:", error);
         errorMessage = "加载习惯数据失败";
         habits = [];
+        linkedTaskPomodoroStats = new Map();
     } finally {
         loading = false;
     }
@@ -268,7 +290,8 @@ function getHabitPomodoroFocusMinutes(habit: Habit, dateStr: string): number {
     const fromInstances = sessions
         .filter(s => s.type === "work" && s.eventId && s.eventId.startsWith(`${habit.id}_`))
         .reduce((sum, s) => sum + (s.duration || 0), 0);
-    return Math.max(direct, fromInstances);
+    const linked = getLinkedTaskPomodoroStatsByDateUtil(linkedTaskPomodoroStats, habit.id, dateStr).focusMinutes;
+    return Math.max(direct, fromInstances) + linked;
 }
 
 function getCheckInEmojis(habit: Habit, dateStr: string): string[] {
@@ -453,6 +476,13 @@ function getOverviewStats(habit: Habit, _revision: number): HabitOverviewStats {
         todayPomodoro = Math.max(todayPomodoro, pomodoroRecordManager.getEventPomodoroCount(habit.id, today) || 0);
         todayPomodoroMinutes = Math.max(todayPomodoroMinutes, pomodoroRecordManager.getEventFocusTime(habit.id, today) || 0);
     }
+
+    const linkedToday = getLinkedTaskPomodoroStatsByDateUtil(linkedTaskPomodoroStats, habit.id, today);
+    const linkedTotal = getLinkedTaskPomodoroTotalStatsUtil(linkedTaskPomodoroStats, habit.id);
+    todayPomodoro += linkedToday.count;
+    todayPomodoroMinutes += linkedToday.focusMinutes;
+    totalPomodoro += linkedTotal.count;
+    totalPomodoroMinutes += linkedTotal.focusMinutes;
 
     return {
         totalCheckIns: countTotalCheckIns(habit),

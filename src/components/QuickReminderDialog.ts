@@ -1,8 +1,9 @@
-﻿import { showMessage, Dialog, platformUtils } from "siyuan";
+import { showMessage, Dialog, platformUtils } from "siyuan";
 import { getBlockByID, getBlockDOM, refreshSql, updateBindBlockAtrrs, updateBlock } from "../api";
 import { compareDateStrings, getLogicalDateString, autoDetectDateTimeFromTitle } from "../utils/dateUtils";
 import { CategoryManager } from "../utils/categoryManager";
 import { ProjectManager } from "../utils/projectManager";
+import { HabitGroupManager } from "../utils/habitGroupManager";
 import { i18n } from "../pluginInstance";
 import { RepeatSettingsDialog, RepeatConfig } from "./RepeatSettingsDialog";
 import { getRepeatDescription, getDaysDifference, getReminderTaskDurationDays } from "../utils/repeatUtils";
@@ -21,6 +22,7 @@ import { clipboard } from "@milkdown/kit/plugin/clipboard";
 import { listener, listenerCtx } from "@milkdown/kit/plugin/listener";
 import { replaceAll, $view } from "@milkdown/utils";
 import { listItemSchema, imageSchema } from "@milkdown/kit/preset/commonmark";
+import { getHabitGoalType } from "../utils/habitUtils";
 
 export class QuickReminderDialog {
     private dialog: Dialog;
@@ -187,6 +189,7 @@ export class QuickReminderDialog {
     private repeatConfig: RepeatConfig;
     private categoryManager: CategoryManager;
     private projectManager: ProjectManager;
+    private habitGroupManager: HabitGroupManager;
     private pomodoroRecordManager: PomodoroRecordManager;
     private autoDetectDateTime?: boolean; // 是否自动识别日期时间（undefined 表示未指定，使用插件设置）
     private defaultProjectId?: string;
@@ -329,6 +332,7 @@ export class QuickReminderDialog {
 
         this.categoryManager = CategoryManager.getInstance(this.plugin);
         this.projectManager = ProjectManager.getInstance(this.plugin);
+        this.habitGroupManager = HabitGroupManager.getInstance();
         this.pomodoroRecordManager = PomodoroRecordManager.getInstance(this.plugin);
         this.repeatConfig = this.reminder?.repeat || {
             enabled: false,
@@ -969,6 +973,37 @@ export class QuickReminderDialog {
             await this.renderMilestoneSelector(this.reminder.projectId, this.reminder.customGroupId);
         }
 
+        // 填充绑定习惯
+        const habitSelector = this.dialog.element.querySelector('#quickHabitSelector') as HTMLInputElement;
+        const habitSearchInput = this.dialog.element.querySelector('#quickHabitSearchInput') as HTMLInputElement;
+        const habitDropdown = this.dialog.element.querySelector('#quickHabitDropdown') as HTMLElement;
+        const syncPomodoroCheckbox = this.dialog.element.querySelector('#quickHabitSyncPomodoroToday') as HTMLInputElement;
+        const autoCheckInCheckbox = this.dialog.element.querySelector('#quickHabitAutoCheckInOnComplete') as HTMLInputElement;
+        const autoCheckInOptionSelect = this.dialog.element.querySelector('#quickHabitAutoCheckInOption') as HTMLSelectElement;
+
+        if (habitSelector) {
+            habitSelector.value = this.reminder.linkedHabitId || '';
+        }
+        if (habitSearchInput && habitDropdown && this.reminder.linkedHabitId) {
+            const item = habitDropdown.querySelector(`.b3-menu__item[data-value="${this.reminder.linkedHabitId}"]`);
+            if (item) {
+                habitSearchInput.value = item.getAttribute('data-label') || '';
+            } else {
+                habitSearchInput.value = this.reminder.linkedHabitId;
+            }
+        }
+        if (syncPomodoroCheckbox) {
+            syncPomodoroCheckbox.checked = !!this.reminder.linkedHabitId && !!this.reminder.linkedHabitSyncPomodoroToday;
+        }
+        if (autoCheckInCheckbox) {
+            autoCheckInCheckbox.checked = !!this.reminder.linkedHabitId && !!this.reminder.linkedHabitAutoCheckInOnComplete;
+        }
+        if (autoCheckInOptionSelect) {
+            autoCheckInOptionSelect.innerHTML = '';
+        }
+        this.updateHabitBindingOptionsVisibility();
+        await this.refreshHabitAutoCheckInOptionSelector(this.reminder.linkedHabitAutoCheckInOptionKey, this.reminder.linkedHabitAutoCheckInEmoji);
+
 
         // 填充重复设置
         if (this.reminder.repeat) {
@@ -1133,6 +1168,10 @@ export class QuickReminderDialog {
         // 隐藏项目选择器组
         const projectGroup = dialog.querySelector('#quickProjectGroup') as HTMLElement;
         if (projectGroup) projectGroup.style.display = 'none';
+
+        // 隐藏习惯绑定组
+        const habitGroup = dialog.querySelector('#quickHabitGroup') as HTMLElement;
+        if (habitGroup) habitGroup.style.display = 'none';
 
         // 隐藏自定义分组
         const customGroup = dialog.querySelector('#quickCustomGroup') as HTMLElement;
@@ -1657,6 +1696,7 @@ export class QuickReminderDialog {
     public async show() {
         await this.categoryManager.initialize();
         await this.projectManager.initialize();
+        await this.habitGroupManager.initialize();
 
         // 如果未通过构造器显式指定 autoDetectDateTime，则从插件设置中读取（如果有传入 plugin）
         if (this.autoDetectDateTime === undefined) {
@@ -2006,6 +2046,34 @@ export class QuickReminderDialog {
                                 </div>
                             </div>
                         </div>
+                        <div class="b3-form__group" id="quickHabitGroup">
+                            <label class="b3-form__label">${i18n("bindHabit") || "绑定习惯"}</label>
+                            <div class="custom-select" id="quickHabitSelectCustom" style="position: relative;">
+                                <div style="position: relative;">
+                                    <input type="text" id="quickHabitSearchInput" class="b3-text-field" placeholder="${i18n("searchHabit") || "搜索习惯"}" autocomplete="off" style="width: 100%; padding-right: 30px; background: var(--b3-select-background);" spellcheck="false">
+                                    <input type="hidden" id="quickHabitSelector">
+                                </div>
+                                <div id="quickHabitDropdown" class="b3-menu" style="display: none; position: absolute; width: 100%; max-height: 200px; overflow-y: auto; z-index: 10; margin-top: 4px; box-shadow: var(--b3-menu-shadow); background: var(--b3-menu-background); border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius);">
+                                    <!-- 习惯选项将在这里渲染 -->
+                                </div>
+                            </div>
+                            <div id="quickHabitBindingOptions" style="display: none; margin-top: 8px; padding: 8px; border-radius: 6px; background: var(--b3-theme-background-light);">
+                                <label class="b3-checkbox" style="display: flex; align-items: center; margin-bottom: 6px;">
+                                    <input type="checkbox" class="b3-switch" id="quickHabitSyncPomodoroToday">
+                                    <span class="b3-checkbox__graphic"></span>
+                                    <span class="b3-checkbox__label">${i18n("taskPomodoroSyncToHabitToday") || "将任务今日番茄钟计入习惯今日番茄钟"}</span>
+                                </label>
+                                <label class="b3-checkbox" style="display: flex; align-items: center;">
+                                    <input type="checkbox" class="b3-switch" id="quickHabitAutoCheckInOnComplete">
+                                    <span class="b3-checkbox__graphic"></span>
+                                    <span class="b3-checkbox__label">${i18n("taskAutoCheckInHabitOnComplete") || "任务完成时自动完成习惯打卡"}</span>
+                                </label>
+                                <div id="quickHabitAutoCheckInOptionRow" style="display: none; margin-top: 8px; gap: 8px; align-items: center;">
+                                    <label class="b3-form__label" style="margin: 0; white-space: nowrap;">${i18n("taskAutoCheckInOption") || "打卡选项"}</label>
+                                    <select id="quickHabitAutoCheckInOption" class="b3-select" style="flex: 1; min-width: 0;"></select>
+                                </div>
+                            </div>
+                        </div>
                         <!-- 任务状态渲染 -->
                         ${this.renderStatusSelector()}
                         <div class="b3-form__group" id="quickTagsGroup" style="display: none;">
@@ -2017,21 +2085,21 @@ export class QuickReminderDialog {
                         <div class="b3-form__group">
                             <label class="b3-form__label">${i18n("priority")}</label>
                             <div class="priority-selector" id="quickPrioritySelector">
-                                <div class="priority-option" data-priority="high">
-                                    <div class="priority-dot high"></div>
-                                    <span>${i18n("highPriority")}</span>
-                                </div>
-                                <div class="priority-option" data-priority="medium">
-                                    <div class="priority-dot medium"></div>
-                                    <span>${i18n("mediumPriority")}</span>
+                                <div class="priority-option" data-priority="none">
+                                    <div class="priority-dot none"></div>
+                                    <span>${i18n("noPriority")}</span>
                                 </div>
                                 <div class="priority-option" data-priority="low">
                                     <div class="priority-dot low"></div>
                                     <span>${i18n("lowPriority")}</span>
                                 </div>
-                                <div class="priority-option" data-priority="none">
-                                    <div class="priority-dot none"></div>
-                                    <span>${i18n("noPriority")}</span>
+                                <div class="priority-option" data-priority="medium">
+                                    <div class="priority-dot medium"></div>
+                                    <span>${i18n("mediumPriority")}</span>
+                                </div>
+                                <div class="priority-option" data-priority="high">
+                                    <div class="priority-dot high"></div>
+                                    <span>${i18n("highPriority")}</span>
                                 </div>
                             </div>
                         </div>
@@ -2362,6 +2430,7 @@ export class QuickReminderDialog {
         this.bindEvents();
         await this.renderCategorySelector();
         await this.renderProjectSelector();
+        await this.renderHabitSelector();
         await this.renderPrioritySelector();
         await this.renderTagsSelector();
 
@@ -3248,6 +3317,7 @@ export class QuickReminderDialog {
         const durationInput = this.dialog.element.querySelector('#quickDurationDays') as HTMLInputElement;
         const estimatedPomodoroHoursInput = this.dialog.element.querySelector('#quickEstimatedPomodoroHours') as HTMLInputElement;
         const estimatedPomodoroMinutesInput = this.dialog.element.querySelector('#quickEstimatedPomodoroMinutes') as HTMLInputElement;
+        const habitAutoCheckInCheckbox = this.dialog.element.querySelector('#quickHabitAutoCheckInOnComplete') as HTMLInputElement;
         const syncBlockTitleBtn = this.dialog.element.querySelector('#quickSyncBlockTitleBtn') as HTMLButtonElement;
         const syncTitleToBlockBtn = this.dialog.element.querySelector('#quickSyncTitleToBlockBtn') as HTMLButtonElement;
 
@@ -3812,6 +3882,13 @@ export class QuickReminderDialog {
             }
         });
 
+        habitAutoCheckInCheckbox?.addEventListener('change', async () => {
+            this.updateHabitBindingOptionsVisibility();
+            if (habitAutoCheckInCheckbox.checked) {
+                await this.refreshHabitAutoCheckInOptionSelector();
+            }
+        });
+
         // 取消按钮
         cancelBtn?.addEventListener('click', () => {
             this.destroyDialog();
@@ -4130,6 +4207,255 @@ export class QuickReminderDialog {
             this.renderCategorySelector();
         });
         categoryDialog.show();
+    }
+
+    private updateHabitBindingOptionsVisibility() {
+        const hiddenInput = this.dialog.element.querySelector('#quickHabitSelector') as HTMLInputElement;
+        const optionsContainer = this.dialog.element.querySelector('#quickHabitBindingOptions') as HTMLElement;
+        const syncPomodoroCheckbox = this.dialog.element.querySelector('#quickHabitSyncPomodoroToday') as HTMLInputElement;
+        const autoCheckInCheckbox = this.dialog.element.querySelector('#quickHabitAutoCheckInOnComplete') as HTMLInputElement;
+        const autoCheckInOptionRow = this.dialog.element.querySelector('#quickHabitAutoCheckInOptionRow') as HTMLElement;
+        const autoCheckInOptionSelect = this.dialog.element.querySelector('#quickHabitAutoCheckInOption') as HTMLSelectElement;
+
+        if (!optionsContainer || !hiddenInput) return;
+
+        const hasLinkedHabit = !!hiddenInput.value;
+        optionsContainer.style.display = hasLinkedHabit ? 'block' : 'none';
+        if (autoCheckInOptionRow) {
+            autoCheckInOptionRow.style.display = hasLinkedHabit && !!autoCheckInCheckbox?.checked ? 'flex' : 'none';
+        }
+
+        if (!hasLinkedHabit) {
+            if (syncPomodoroCheckbox) syncPomodoroCheckbox.checked = false;
+            if (autoCheckInCheckbox) autoCheckInCheckbox.checked = false;
+            if (autoCheckInOptionSelect) autoCheckInOptionSelect.innerHTML = '';
+        }
+    }
+
+    private buildHabitCheckInOptionKey(option: any): string {
+        const emoji = option?.emoji || '';
+        const meaning = option?.meaning || '';
+        const group = (option?.group || '').trim();
+        return `${emoji}\u001f${meaning}\u001f${group}`;
+    }
+
+    private async applyHabitBindingDefaultsByGoalType(habitId: string, habitData?: Record<string, any>) {
+        if (!habitId) return;
+
+        const syncPomodoroCheckbox = this.dialog.element.querySelector('#quickHabitSyncPomodoroToday') as HTMLInputElement;
+        const autoCheckInCheckbox = this.dialog.element.querySelector('#quickHabitAutoCheckInOnComplete') as HTMLInputElement;
+        if (!syncPomodoroCheckbox || !autoCheckInCheckbox) return;
+
+        try {
+            const data = habitData || await this.plugin.loadHabitData();
+            const habit = data?.[habitId];
+            if (!habit) return;
+
+            const goalType = getHabitGoalType(habit);
+            if (goalType === 'pomodoro') {
+                syncPomodoroCheckbox.checked = true;
+                autoCheckInCheckbox.checked = false;
+            } else {
+                syncPomodoroCheckbox.checked = false;
+                autoCheckInCheckbox.checked = true;
+            }
+        } catch (error) {
+            console.warn('根据习惯目标类型设置默认绑定选项失败:', error);
+        }
+    }
+
+    private async refreshHabitAutoCheckInOptionSelector(preferredKey?: string, preferredEmoji?: string) {
+        const hiddenInput = this.dialog.element.querySelector('#quickHabitSelector') as HTMLInputElement;
+        const autoCheckInCheckbox = this.dialog.element.querySelector('#quickHabitAutoCheckInOnComplete') as HTMLInputElement;
+        const autoCheckInOptionSelect = this.dialog.element.querySelector('#quickHabitAutoCheckInOption') as HTMLSelectElement;
+
+        if (!autoCheckInOptionSelect || !hiddenInput) return;
+
+        autoCheckInOptionSelect.innerHTML = '';
+        if (!hiddenInput.value || !autoCheckInCheckbox?.checked) return;
+
+        try {
+            const habitData = await this.plugin.loadHabitData();
+            const habit = habitData?.[hiddenInput.value];
+            const emojiList = (habit?.checkInEmojis && habit.checkInEmojis.length > 0)
+                ? habit.checkInEmojis
+                : [{ emoji: '✅', meaning: i18n("checkInSuccess") || '打卡', countsAsSuccess: true, promptNote: false }];
+
+            emojiList.forEach((emojiItem: any, index: number) => {
+                const option = document.createElement('option');
+                const key = this.buildHabitCheckInOptionKey(emojiItem);
+                const label = `${emojiItem.emoji || '✅'} ${emojiItem.meaning || ''}`.trim();
+                option.value = key;
+                option.textContent = label;
+                option.setAttribute('data-emoji', emojiItem.emoji || '✅');
+                option.setAttribute('data-meaning', emojiItem.meaning || '');
+                option.setAttribute('data-group', (emojiItem.group || '').trim());
+
+                if ((preferredKey && preferredKey === key) || (!preferredKey && preferredEmoji && preferredEmoji === (emojiItem.emoji || '✅')) || (!preferredKey && !preferredEmoji && index === 0)) {
+                    option.selected = true;
+                }
+                autoCheckInOptionSelect.appendChild(option);
+            });
+        } catch (error) {
+            console.warn('加载习惯打卡选项失败:', error);
+        }
+    }
+
+    private async renderHabitSelector() {
+        const searchInput = this.dialog.element.querySelector('#quickHabitSearchInput') as HTMLInputElement;
+        const hiddenInput = this.dialog.element.querySelector('#quickHabitSelector') as HTMLInputElement;
+        const dropdown = this.dialog.element.querySelector('#quickHabitDropdown') as HTMLElement;
+
+        if (!searchInput || !hiddenInput || !dropdown) return;
+
+        try {
+            await this.habitGroupManager.initialize();
+            const habitData = await this.plugin.loadHabitData();
+            const allHabits = Object.values(habitData || {}) as any[];
+            const today = getLogicalDateString();
+            const groups = this.habitGroupManager.getAllGroups();
+            const groupNameMap = new Map<string, string>();
+            groups.forEach(group => {
+                groupNameMap.set(group.id, group.name);
+            });
+
+            const groupedHabits = new Map<string, any[]>();
+            allHabits.forEach((habit) => {
+                if (!habit || !habit.id) return;
+                const groupId = habit.groupId || 'none';
+                if (!groupedHabits.has(groupId)) {
+                    groupedHabits.set(groupId, []);
+                }
+                groupedHabits.get(groupId)!.push(habit);
+            });
+
+            groupedHabits.forEach((habits) => {
+                habits.sort((a, b) => {
+                    const sortA = typeof a.sort === 'number' ? a.sort : 0;
+                    const sortB = typeof b.sort === 'number' ? b.sort : 0;
+                    if (sortA !== sortB) return sortA - sortB;
+                    return String(a.title || '').localeCompare(String(b.title || ''), 'zh-CN', { sensitivity: 'base' });
+                });
+            });
+
+            const orderedGroupIds: string[] = ['none', ...groups.map(group => group.id)];
+            groupedHabits.forEach((_, groupId) => {
+                if (!orderedGroupIds.includes(groupId)) {
+                    orderedGroupIds.push(groupId);
+                }
+            });
+
+            let html = '';
+            html += `<div class="b3-menu__item" data-value="" data-label="${i18n('noHabit') || '不绑定习惯'}"><span class="b3-menu__label">${i18n('noHabit') || '不绑定习惯'}</span></div>`;
+
+            orderedGroupIds.forEach((groupId) => {
+                const habits = groupedHabits.get(groupId) || [];
+                if (habits.length === 0) return;
+                const groupName = groupId === 'none'
+                    ? (i18n("noneGroupName") || '无分组')
+                    : (groupNameMap.get(groupId) || groupId);
+
+                html += `<div class="habit-group">
+                    <div class="b3-menu__separator"></div>
+                    <div class="b3-menu__item b3-menu__item--readonly" style="font-size: 12px; opacity: 0.6; cursor: default;">${groupName}</div>
+                    ${habits.map((habit) => {
+                    const title = habit.title || habit.id;
+                    const statusText = habit.abandoned
+                        ? (i18n('filterAbandoned') || '已放弃')
+                        : (habit.endDate && habit.endDate < today ? (i18n('filterEnded') || '已结束') : '');
+                    const displayLabel = statusText ? `${title} (${statusText})` : title;
+                    return `<div class="b3-menu__item" data-value="${habit.id}" data-label="${displayLabel}"><span class="b3-menu__label">${habit.icon || '🌱'} ${displayLabel}</span></div>`;
+                }
+                ).join('')}
+                </div>`;
+            });
+
+            dropdown.innerHTML = html;
+
+            const showAllOptions = () => {
+                dropdown.style.display = 'block';
+                const items = dropdown.querySelectorAll('.b3-menu__item[data-value]');
+                items.forEach((item: HTMLElement) => {
+                    item.style.display = 'block';
+                });
+                const groups = dropdown.querySelectorAll('.habit-group');
+                groups.forEach((group: HTMLElement) => {
+                    group.style.display = 'block';
+                });
+            };
+
+            const hideDropdown = () => {
+                setTimeout(() => {
+                    dropdown.style.display = 'none';
+                    const currentId = hiddenInput.value;
+                    const item = dropdown.querySelector(`.b3-menu__item[data-value="${currentId}"]`);
+                    if (item) {
+                        searchInput.value = item.getAttribute('data-label') || '';
+                    } else if (!currentId) {
+                        searchInput.value = '';
+                    }
+                }, 200);
+            };
+
+            const filterOptions = (term: string) => {
+                const terms = term.toLowerCase().split(/\s+/).filter(t => t);
+                const items = dropdown.querySelectorAll('.b3-menu__item[data-value]');
+                items.forEach((item: HTMLElement) => {
+                    const label = item.getAttribute('data-label')?.toLowerCase() || '';
+                    const match = terms.length === 0 || terms.every(t => label.includes(t));
+                    item.style.display = match ? 'block' : 'none';
+                });
+
+                const groups = dropdown.querySelectorAll('.habit-group');
+                groups.forEach((group: HTMLElement) => {
+                    const visibleItems = group.querySelectorAll('.b3-menu__item[data-value]:not([style*="display: none"])');
+                    group.style.display = visibleItems.length > 0 ? 'block' : 'none';
+                });
+            };
+
+            searchInput.addEventListener('focus', showAllOptions);
+            searchInput.addEventListener('click', showAllOptions);
+            searchInput.addEventListener('blur', hideDropdown);
+            searchInput.addEventListener('input', () => {
+                dropdown.style.display = 'block';
+                filterOptions(searchInput.value);
+            });
+
+            dropdown.addEventListener('mousedown', (e) => {
+                if (e.button === 0) e.preventDefault();
+            });
+
+            dropdown.addEventListener('click', async (e) => {
+                const target = (e.target as HTMLElement).closest('.b3-menu__item');
+                if (target && !target.classList.contains('b3-menu__item--readonly')) {
+                    const val = target.getAttribute('data-value');
+                    const label = target.getAttribute('data-label');
+
+                    hiddenInput.value = val || '';
+                    searchInput.value = val ? (label || '') : '';
+
+                    await this.applyHabitBindingDefaultsByGoalType(hiddenInput.value, habitData || {});
+                    dropdown.style.display = 'none';
+                    this.updateHabitBindingOptionsVisibility();
+                    await this.refreshHabitAutoCheckInOptionSelector();
+                }
+            });
+
+            if (this.reminder?.linkedHabitId) {
+                hiddenInput.value = this.reminder.linkedHabitId;
+                const item = dropdown.querySelector(`.b3-menu__item[data-value="${this.reminder.linkedHabitId}"]`);
+                if (item) {
+                    searchInput.value = item.getAttribute('data-label') || '';
+                } else {
+                    searchInput.value = this.reminder.linkedHabitId;
+                }
+            }
+
+            this.updateHabitBindingOptionsVisibility();
+            await this.refreshHabitAutoCheckInOptionSelector(this.reminder?.linkedHabitAutoCheckInOptionKey, this.reminder?.linkedHabitAutoCheckInEmoji);
+        } catch (error) {
+            console.error('渲染习惯选择器失败:', error);
+        }
     }
 
     private async renderProjectSelector() {
@@ -4699,6 +5025,10 @@ export class QuickReminderDialog {
         const timeInput = this.dialog.element.querySelector('#quickReminderTime') as HTMLInputElement;
         const endTimeInput = this.dialog.element.querySelector('#quickReminderEndTime') as HTMLInputElement;
         const projectSelector = this.dialog.element.querySelector('#quickProjectSelector') as HTMLInputElement;
+        const habitSelector = this.dialog.element.querySelector('#quickHabitSelector') as HTMLInputElement;
+        const syncPomodoroToHabitCheckbox = this.dialog.element.querySelector('#quickHabitSyncPomodoroToday') as HTMLInputElement;
+        const autoCheckInOnCompleteCheckbox = this.dialog.element.querySelector('#quickHabitAutoCheckInOnComplete') as HTMLInputElement;
+        const autoCheckInOptionSelect = this.dialog.element.querySelector('#quickHabitAutoCheckInOption') as HTMLSelectElement;
         const selectedPriority = this.dialog.element.querySelector('#quickPrioritySelector .priority-option.selected') as HTMLElement;
         // const selectedCategory = this.dialog.element.querySelector('#quickCategorySelector .category-option.selected') as HTMLElement;
         const selectedStatus = this.dialog.element.querySelector('#quickStatusSelector .task-status-option.selected') as HTMLElement;
@@ -4716,6 +5046,13 @@ export class QuickReminderDialog {
         const categoryId = this.selectedCategoryIds.length > 0 ? this.selectedCategoryIds.join(',') : undefined;
 
         const projectId = projectSelector.value || undefined;
+        const linkedHabitId = habitSelector?.value || undefined;
+        const linkedHabitSyncPomodoroToday = !!linkedHabitId && !!syncPomodoroToHabitCheckbox?.checked;
+        const linkedHabitAutoCheckInOnComplete = !!linkedHabitId && !!autoCheckInOnCompleteCheckbox?.checked;
+        const linkedHabitAutoCheckInOptionKey = linkedHabitAutoCheckInOnComplete ? (autoCheckInOptionSelect?.value || undefined) : undefined;
+        const linkedHabitAutoCheckInEmoji = linkedHabitAutoCheckInOnComplete
+            ? (autoCheckInOptionSelect?.selectedOptions?.[0]?.getAttribute('data-emoji') || undefined)
+            : undefined;
         // 获取选中的kanbanStatus，如果没有选中则使用第一个可用状态
         let kanbanStatus = selectedStatus?.getAttribute('data-status-type');
         if (!kanbanStatus) {
@@ -4797,6 +5134,11 @@ export class QuickReminderDialog {
                 priority: priority,
                 categoryId: categoryId,
                 projectId: projectId,
+                linkedHabitId: linkedHabitId,
+                linkedHabitSyncPomodoroToday: linkedHabitSyncPomodoroToday || undefined,
+                linkedHabitAutoCheckInOnComplete: linkedHabitAutoCheckInOnComplete || undefined,
+                linkedHabitAutoCheckInOptionKey: linkedHabitAutoCheckInOptionKey,
+                linkedHabitAutoCheckInEmoji: linkedHabitAutoCheckInEmoji,
                 customGroupId: customGroupId,
                 milestoneId: milestoneId,
                 kanbanStatus: kanbanStatus,
@@ -4862,6 +5204,11 @@ export class QuickReminderDialog {
             optimisticReminder.priority = priority;
             optimisticReminder.categoryId = categoryId;
             optimisticReminder.projectId = projectId;
+            optimisticReminder.linkedHabitId = linkedHabitId;
+            optimisticReminder.linkedHabitSyncPomodoroToday = linkedHabitSyncPomodoroToday || undefined;
+            optimisticReminder.linkedHabitAutoCheckInOnComplete = linkedHabitAutoCheckInOnComplete || undefined;
+            optimisticReminder.linkedHabitAutoCheckInOptionKey = linkedHabitAutoCheckInOptionKey;
+            optimisticReminder.linkedHabitAutoCheckInEmoji = linkedHabitAutoCheckInEmoji;
             optimisticReminder.customGroupId = customGroupId;
             optimisticReminder.milestoneId = milestoneId;
             optimisticReminder.tagIds = tagIds.length > 0 ? tagIds : undefined;
@@ -4914,6 +5261,11 @@ export class QuickReminderDialog {
                 priority: priority,
                 categoryId: categoryId,
                 projectId: projectId,
+                linkedHabitId: linkedHabitId,
+                linkedHabitSyncPomodoroToday: linkedHabitSyncPomodoroToday || undefined,
+                linkedHabitAutoCheckInOnComplete: linkedHabitAutoCheckInOnComplete || undefined,
+                linkedHabitAutoCheckInOptionKey: linkedHabitAutoCheckInOptionKey,
+                linkedHabitAutoCheckInEmoji: linkedHabitAutoCheckInEmoji,
                 customGroupId: customGroupId,
                 tagIds: tagIds.length > 0 ? tagIds : undefined,
                 createdAt: nowStr,
@@ -4971,6 +5323,11 @@ export class QuickReminderDialog {
                             priority: priority,
                             notified: false, // 重置通知状态
                             projectId: projectId,
+                            linkedHabitId: linkedHabitId,
+                            linkedHabitSyncPomodoroToday: linkedHabitSyncPomodoroToday || undefined,
+                            linkedHabitAutoCheckInOnComplete: linkedHabitAutoCheckInOnComplete || undefined,
+                            linkedHabitAutoCheckInOptionKey: linkedHabitAutoCheckInOptionKey,
+                            linkedHabitAutoCheckInEmoji: linkedHabitAutoCheckInEmoji,
                             customGroupId: customGroupId,
                             milestoneId: milestoneId,
                             kanbanStatus: kanbanStatus,
@@ -5020,6 +5377,11 @@ export class QuickReminderDialog {
                         reminder.priority = priority;
                         reminder.categoryId = categoryId;
                         reminder.projectId = projectId;
+                        reminder.linkedHabitId = linkedHabitId;
+                        reminder.linkedHabitSyncPomodoroToday = linkedHabitSyncPomodoroToday || undefined;
+                        reminder.linkedHabitAutoCheckInOnComplete = linkedHabitAutoCheckInOnComplete || undefined;
+                        reminder.linkedHabitAutoCheckInOptionKey = linkedHabitAutoCheckInOptionKey;
+                        reminder.linkedHabitAutoCheckInEmoji = linkedHabitAutoCheckInEmoji;
                         reminder.customGroupId = customGroupId;
                         reminder.milestoneId = milestoneId;
                         reminder.tagIds = tagIds.length > 0 ? tagIds : undefined;
@@ -5259,6 +5621,11 @@ export class QuickReminderDialog {
                         priority: priority,
                         categoryId: categoryId,
                         projectId: projectId,
+                        linkedHabitId: linkedHabitId,
+                        linkedHabitSyncPomodoroToday: linkedHabitSyncPomodoroToday || undefined,
+                        linkedHabitAutoCheckInOnComplete: linkedHabitAutoCheckInOnComplete || undefined,
+                        linkedHabitAutoCheckInOptionKey: linkedHabitAutoCheckInOptionKey,
+                        linkedHabitAutoCheckInEmoji: linkedHabitAutoCheckInEmoji,
                         customGroupId: customGroupId,
                         milestoneId: milestoneId,
                         tagIds: tagIds.length > 0 ? tagIds : undefined,

@@ -2148,6 +2148,14 @@ export class ReminderPanel {
      */
     private async preprocessAsyncData(reminders: any[], reminderDataFull?: any): Promise<Map<string, any>> {
         const asyncDataCache = new Map<string, any>();
+        let habitData: any = {};
+
+        try {
+            habitData = await this.plugin.loadHabitData();
+        } catch (error) {
+            console.warn('批量获取习惯数据失败:', error);
+            habitData = {};
+        }
 
         // 批量获取番茄钟计数和总专注时长（分钟）
         const pomodoroPromises = reminders.map(async (reminder) => {
@@ -2190,6 +2198,14 @@ export class ReminderPanel {
                 }
             });
 
+        // 批量获取习惯绑定信息
+        const habitResults = reminders.map((reminder) => {
+            if (!reminder.linkedHabitId) {
+                return { id: reminder.id, habit: null };
+            }
+            return { id: reminder.id, habit: habitData?.[reminder.linkedHabitId] || null };
+        });
+
         // 并行执行所有异步操作
         const [pomodoroResults, projectResults] = await Promise.all([
             Promise.all(pomodoroPromises),
@@ -2205,7 +2221,8 @@ export class ReminderPanel {
                 todayFocusTime: result.todayFocusTime || 0,
                 totalRepeatingPomodoroCount: result.totalRepeatingPomodoroCount || 0,
                 totalRepeatingFocusTime: result.totalRepeatingFocusTime || 0,
-                project: null
+                project: null,
+                habit: null
             });
         });
 
@@ -2217,7 +2234,22 @@ export class ReminderPanel {
                     pomodoroCount: 0,
                     todayPomodoroCount: 0,
                     todayFocusTime: 0,
-                    project: result.project
+                    project: result.project,
+                    habit: null
+                });
+            }
+        });
+
+        habitResults.forEach(result => {
+            if (asyncDataCache.has(result.id)) {
+                asyncDataCache.get(result.id).habit = result.habit;
+            } else {
+                asyncDataCache.set(result.id, {
+                    pomodoroCount: 0,
+                    todayPomodoroCount: 0,
+                    todayFocusTime: 0,
+                    project: null,
+                    habit: result.habit
                 });
             }
         });
@@ -3149,7 +3181,7 @@ export class ReminderPanel {
 
                 // 添加项目名称
                 const nameSpan = document.createElement('span');
-                nameSpan.textContent = '📂' + displayProjectName;
+                nameSpan.textContent = `📂${i18n("project") || "项目"}：${displayProjectName}`;
                 nameSpan.style.cssText = `
                     text-decoration: underline;
                     text-decoration-style: dotted;
@@ -3180,6 +3212,71 @@ export class ReminderPanel {
                 infoEl.appendChild(projectInfo);
             }
         }
+
+        // 显示习惯绑定状态
+        {
+            const linkedHabitId = reminder.linkedHabitId;
+            const habit = cachedData?.habit;
+            const hasBinding = !!linkedHabitId;
+
+            const habitInfo = document.createElement('div');
+            habitInfo.className = 'reminder-item__habit';
+
+            const baseStyle = `
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                font-size: 11px;
+                border-radius: 12px;
+                padding: 2px 8px;
+                margin-top: 4px;
+                font-weight: 500;
+            `;
+
+            if (hasBinding) {
+                const habitName = habit?.title || linkedHabitId;
+                const habitIcon = habit?.icon || '✅';
+                const linkModes: string[] = [];
+                if (reminder.linkedHabitSyncPomodoroToday) {
+                    linkModes.push(i18n('pomodoroSync') || '番茄联动');
+                }
+                if (reminder.linkedHabitAutoCheckInOnComplete) {
+                    const autoEmoji = reminder.linkedHabitAutoCheckInEmoji;
+                    linkModes.push(autoEmoji ? `${i18n('autoCheckIn') || '自动打卡'}(${autoEmoji})` : (i18n('autoCheckIn') || '自动打卡'));
+                }
+                const modeText = linkModes.length > 0 ? ` · ${linkModes.join(' / ')}` : '';
+
+                habitInfo.style.cssText = `
+                    ${baseStyle}
+                    background-color: rgba(76, 175, 80, 0.14);
+                    color: var(--b3-theme-on-surface);
+                    border: 1px solid rgba(76, 175, 80, 0.35);
+                `;
+                habitInfo.textContent = `${habitIcon} 习惯: ${habitName}${modeText}`;
+                habitInfo.classList.add('ariaLabel');
+                habitInfo.setAttribute('aria-label', `已绑定习惯: ${habitName}${modeText}，点击查看习惯统计`);
+                habitInfo.style.cursor = 'pointer';
+                habitInfo.style.textDecoration = 'underline dotted';
+
+                habitInfo.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (linkedHabitId) {
+                        void this.openHabitStatsDialog(linkedHabitId);
+                    }
+                });
+
+                habitInfo.addEventListener('mouseenter', () => {
+                    habitInfo.style.opacity = '0.82';
+                });
+                habitInfo.addEventListener('mouseleave', () => {
+                    habitInfo.style.opacity = '1';
+                });
+            }
+
+            infoEl.appendChild(habitInfo);
+        }
+
         // 里程碑显示
         if (reminder.milestoneId) {
             const milestone = this.milestoneMap.get(reminder.milestoneId);
@@ -9138,6 +9235,40 @@ export class ReminderPanel {
         } catch (error) {
             console.error('打开项目看板失败:', error);
             showMessage("打开项目看板失败");
+        }
+    }
+
+    /**
+     * 打开习惯统计弹窗
+     */
+    private async openHabitStatsDialog(habitId: string) {
+        try {
+            if (!habitId) {
+                showMessage(i18n("operationFailed") || "操作失败");
+                return;
+            }
+
+            const habitData = await this.plugin.loadHabitData();
+            const habit = habitData?.[habitId];
+            if (!habit) {
+                showMessage(i18n("noHabits") || "未找到习惯");
+                return;
+            }
+
+            const { HabitStatsDialog } = await import("./stats/HabitStatsDialog");
+            const dialog = new HabitStatsDialog(habit, async (updatedHabit: any) => {
+                const latestData = await this.plugin.loadHabitData();
+                latestData[updatedHabit.id] = updatedHabit;
+                await this.plugin.saveHabitData(latestData);
+                window.dispatchEvent(new CustomEvent('habitUpdated'));
+                window.dispatchEvent(new CustomEvent('reminderUpdated', {
+                    detail: { source: this.panelId }
+                }));
+            }, this.plugin);
+            dialog.show();
+        } catch (error) {
+            console.error('打开习惯统计失败:', error);
+            showMessage(i18n("operationFailed") || "操作失败", 3000, 'error');
         }
     }
 

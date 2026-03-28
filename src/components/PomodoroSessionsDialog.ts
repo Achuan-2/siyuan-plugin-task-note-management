@@ -12,6 +12,11 @@ import { PomodoroRecordManager, PomodoroSession } from "../utils/pomodoroRecord"
 import { i18n } from "../pluginInstance";
 import { getLocaleTag } from "../utils/dateUtils";
 
+interface PomodoroSessionsDialogOptions {
+    includeEventIds?: string[];
+    dialogTitle?: string;
+}
+
 export class PomodoroSessionsDialog {
     private dialog: Dialog;
     private reminderId: string;
@@ -21,18 +26,30 @@ export class PomodoroSessionsDialog {
     private showBreakSessions: boolean = false; // 默认隐藏休息记录
     private onUpdate?: () => void;
     private includeInstances: boolean; // 是否包含所有实例的番茄钟
+    private includeEventIds: Set<string>;
+    private dialogTitle?: string;
 
     /**
      * @param reminderId 任务ID
      * @param plugin 插件实例
      * @param onUpdate 更新回调
      * @param includeInstances 是否包含该任务所有实例的番茄钟（用于"修改全部实例"模式）
+     * @param options 可选参数（额外纳入的 eventId、标题覆写等）
      */
-    constructor(reminderId: string, plugin: any, onUpdate?: () => void, includeInstances: boolean = false) {
+    constructor(
+        reminderId: string,
+        plugin: any,
+        onUpdate?: () => void,
+        includeInstances: boolean = false,
+        options?: PomodoroSessionsDialogOptions
+    ) {
         this.reminderId = reminderId;
         this.plugin = plugin;
         this.onUpdate = onUpdate;
         this.includeInstances = includeInstances;
+        this.includeEventIds = new Set((options?.includeEventIds || []).filter(Boolean));
+        this.includeEventIds.delete(reminderId);
+        this.dialogTitle = options?.dialogTitle;
         this.recordManager = PomodoroRecordManager.getInstance(plugin);
     }
 
@@ -84,7 +101,7 @@ export class PomodoroSessionsDialog {
         await this.loadSessions();
 
         this.dialog = new Dialog({
-            title: "🍅 " + (i18n("pomodoros") || "番茄钟记录"),
+            title: this.dialogTitle || ("🍅 " + (i18n("pomodoros") || "番茄钟记录")),
             content: `
                 <div class="pomodoro-sessions-dialog" style="padding: 16px; display: flex; flex-direction: column; gap: 16px; max-height: 80vh;">
                     <div class="pomodoro-filters" style="display: flex; justify-content: flex-end; align-items: center;">
@@ -129,15 +146,7 @@ export class PomodoroSessionsDialog {
             if (record && record.sessions) {
                 // 筛选出属于当前提醒的会话
                 const eventSessions = record.sessions.filter((session: PomodoroSession) => {
-                    if (session.eventId === this.reminderId) return true;
-
-                    // 如果启用了 includeInstances，还匹配该任务的所有实例（ID格式: reminderId_YYYY-MM-DD）
-                    if (this.includeInstances && session.eventId.startsWith(this.reminderId + '_')) {
-                        const suffix = session.eventId.substring(this.reminderId.length + 1);
-                        return /^\d{4}-\d{2}-\d{2}$/.test(suffix);
-                    }
-
-                    return false;
+                    return this.shouldIncludeEventId(session.eventId);
                 });
                 allSessions.push(...eventSessions);
             }
@@ -147,6 +156,28 @@ export class PomodoroSessionsDialog {
         this.sessions = allSessions.sort((a, b) =>
             new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
         );
+    }
+
+    private matchesEventId(eventId: string, targetId: string): boolean {
+        if (!eventId || !targetId) return false;
+        if (eventId === targetId) return true;
+        if (!this.includeInstances) return false;
+        if (!eventId.startsWith(targetId + '_')) return false;
+
+        const suffix = eventId.substring(targetId.length + 1);
+        return /^\d{4}-\d{2}-\d{2}$/.test(suffix);
+    }
+
+    private shouldIncludeEventId(eventId: string): boolean {
+        if (this.matchesEventId(eventId, this.reminderId)) {
+            return true;
+        }
+        for (const linkedId of this.includeEventIds) {
+            if (this.matchesEventId(eventId, linkedId)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private renderSessions() {
@@ -633,7 +664,8 @@ export class PomodoroSessionsDialog {
                 await this.recordManager.deleteSession(session.id);
 
                 // 创建新会话
-                const eventTitle = await this.resolveEventTitle(this.reminderId, session.eventTitle);
+                const targetEventId = session.eventId || this.reminderId;
+                const eventTitle = await this.resolveEventTitle(targetEventId, session.eventTitle);
 
                 const startTime = new Date(startTimeStr);
                 const endTime = new Date(startTime.getTime() + duration * 60000);
@@ -641,7 +673,7 @@ export class PomodoroSessionsDialog {
                 const newSession: PomodoroSession = {
                     id: session.id, // 保持原ID
                     type,
-                    eventId: this.reminderId,
+                    eventId: targetEventId,
                     eventTitle,
                     startTime: startTime.toISOString(),
                     endTime: endTime.toISOString(),

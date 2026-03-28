@@ -48,6 +48,10 @@ import {
     isHabitCompletedOnDate as isHabitCompletedOnDateUtil,
     shouldCheckInOnDate
 } from "./utils/habitUtils";
+import {
+    buildLinkedHabitPomodoroData,
+    getLinkedTaskPomodoroStatsByDate as getLinkedTaskPomodoroStatsByDateUtil
+} from "./utils/linkedHabitPomodoro";
 import { ChangelogUtils } from "./utils/changelogNotify";
 
 
@@ -66,6 +70,8 @@ export const HOLIDAY_DATA_FILE = "holiday.json";
 export const LICENSE_DATA_FILE = "license.json";
 
 const HABIT_CHECKIN_DATA_KEYS = ["checkIns", "hasNotify", "totalCheckIns"] as const;
+const POMODORO_TARGET_AUTO_CHECKIN_MEANING = "番茄达标自动补录";
+const POMODORO_PER_SESSION_AUTO_CHECKIN_MEANING = "自动番茄打卡";
 
 export interface AudioFileItem {
     path: string;
@@ -299,6 +305,7 @@ export default class ReminderPlugin extends Plugin {
     private notifiedReminders: Map<string, boolean> = new Map();
     // 格式: "habitId_date_time" -> true
     private notifiedHabits: Map<string, boolean> = new Map();
+    private habitPomodoroAutoSyncTimer: number | null = null;
 
     private instanceId: string = Math.random().toString(36).substring(2, 11);
     private coordinatorChannel: BroadcastChannel;
@@ -2057,6 +2064,7 @@ export default class ReminderPlugin extends Plugin {
         // 监听提醒更新事件，更新徽章
         const onReminderUpdated = () => {
             this.updateBadges();
+            this.scheduleHabitPomodoroAutoSync();
             this.taskNoteDOM.addBreadcrumbButtonsToExistingProtyles();
             const currentProtyle = getActiveEditor(false)?.protyle;
             // 500ms之后调用
@@ -2066,6 +2074,12 @@ export default class ReminderPlugin extends Plugin {
         };
         window.addEventListener('reminderUpdated', onReminderUpdated);
         this.addCleanup(() => window.removeEventListener('reminderUpdated', onReminderUpdated));
+        this.addCleanup(() => {
+            if (this.habitPomodoroAutoSyncTimer) {
+                clearTimeout(this.habitPomodoroAutoSyncTimer);
+                this.habitPomodoroAutoSyncTimer = null;
+            }
+        });
 
         // 监听项目更新事件，更新项目徽章并重新扫描protyle块按钮
         const onProjectUpdated = () => {
@@ -2078,6 +2092,7 @@ export default class ReminderPlugin extends Plugin {
         // 监听习惯更新事件，更新习惯徽章
         const onHabitUpdated = () => {
             this.updateHabitBadges();
+            this.scheduleHabitPomodoroAutoSync();
         };
         window.addEventListener('habitUpdated', onHabitUpdated);
         this.addCleanup(() => window.removeEventListener('habitUpdated', onHabitUpdated));
@@ -4954,6 +4969,74 @@ export default class ReminderPlugin extends Plugin {
         return settings.removeDateAfterDetection || 'all';
     }
 
+    private scheduleHabitPomodoroAutoSync() {
+        if (this.habitPomodoroAutoSyncTimer) {
+            clearTimeout(this.habitPomodoroAutoSyncTimer);
+        }
+        this.habitPomodoroAutoSyncTimer = window.setTimeout(() => {
+            this.habitPomodoroAutoSyncTimer = null;
+            this.syncHabitPomodoroAutoCheckIns().catch(error => {
+                console.warn('[HabitSync] reminderUpdated 同步番茄自动打卡失败:', error);
+            });
+        }, 1200);
+    }
+
+    private isPomodoroTargetAutoCheckInEntry(entry: any, configuredEmoji?: string): boolean {
+        if (!entry || typeof entry !== "object") return false;
+        const meaning = String(entry.meaning || "");
+        const matchedMeaning = meaning === POMODORO_TARGET_AUTO_CHECKIN_MEANING || meaning === POMODORO_PER_SESSION_AUTO_CHECKIN_MEANING;
+        if (!matchedMeaning) return false;
+        if (configuredEmoji && entry.emoji !== configuredEmoji) return false;
+        return true;
+    }
+
+    private removePomodoroTargetAutoCheckInFromDate(
+        habit: Habit,
+        date: string,
+        configuredEmoji: string,
+        now: string
+    ): boolean {
+        const dayData = habit.checkIns?.[date];
+        if (!dayData) return false;
+
+        const entries = Array.isArray(dayData.entries) ? dayData.entries : [];
+        let removedCount = 0;
+
+        if (entries.length > 0) {
+            const remained = entries.filter((entry: any) => {
+                const shouldRemove = this.isPomodoroTargetAutoCheckInEntry(entry, configuredEmoji);
+                if (shouldRemove) removedCount += 1;
+                return !shouldRemove;
+            });
+            if (removedCount === 0) return false;
+
+            dayData.entries = remained;
+            dayData.status = remained.map((entry: any) => entry?.emoji).filter(Boolean);
+            dayData.count = remained.length;
+        } else {
+            const status = Array.isArray(dayData.status) ? dayData.status : [];
+            const index = status.indexOf(configuredEmoji);
+            if (index === -1) return false;
+            status.splice(index, 1);
+            dayData.status = status;
+            dayData.count = Math.max(0, Number(dayData.count || 0) - 1);
+            removedCount = 1;
+        }
+
+        dayData.timestamp = now;
+        habit.totalCheckIns = Math.max(0, Number(habit.totalCheckIns || 0) - removedCount);
+        habit.updatedAt = now;
+
+        const leftEntries = Array.isArray(dayData.entries) ? dayData.entries.length : 0;
+        const leftStatus = Array.isArray(dayData.status) ? dayData.status.length : 0;
+        const leftCount = Math.max(0, Number(dayData.count || 0));
+        if (leftEntries === 0 && leftStatus === 0 && leftCount === 0) {
+            delete habit.checkIns[date];
+        }
+
+        return true;
+    }
+
     /**
      * 处理习惯关联的番茄钟完成后的同步逻辑
      * @param habitId 习惯ID
@@ -4977,11 +5060,15 @@ export default class ReminderPlugin extends Plugin {
                     };
                 }
 
-                await this.performHabitCheckIn(habit, emojiConfig, { silent: true });
+                const autoCheckInConfig: HabitEmojiConfig = {
+                    ...emojiConfig,
+                    meaning: POMODORO_PER_SESSION_AUTO_CHECKIN_MEANING
+                };
+                await this.performHabitCheckIn(habit, autoCheckInConfig, { silent: true });
                 showMessage(`番茄完成，已自动打卡 ${emojiConfig.emoji}`, 2500);
             }
 
-            // 2. 无论是否开启每番茄打卡，只要是番茄目标型，都触发一次全量同步检查（达标补录）
+            // 2. 番茄目标型习惯触发一次同步检查（会在 sync 内判断是否开启自动打卡）
             if (getHabitGoalType(habit) === 'pomodoro') {
                 await this.syncHabitPomodoroAutoCheckIns(habitData, habitId);
             }
@@ -5000,9 +5087,17 @@ export default class ReminderPlugin extends Plugin {
         let changed = false;
         const now = getLocalDateTimeString(new Date());
         const recordManager = PomodoroRecordManager.getInstance(this);
+        await recordManager.initialize();
         const records = recordManager.getSaveData() || {};
         const allDates = Object.keys(records);
-        if (allDates.length === 0) return;
+
+        const reminderData = (await this.loadReminderData()) || {};
+        const linkedPomodoroData = buildLinkedHabitPomodoroData(
+            reminderData,
+            records,
+            (session) => recordManager.calculateSessionCount(session)
+        );
+        const linkedTaskPomodoroStats = linkedPomodoroData.statsByHabit;
 
         const habitsToProcess = targetHabitId ? [habitData[targetHabitId]].filter(Boolean) : Object.values(habitData);
 
@@ -5010,6 +5105,8 @@ export default class ReminderPlugin extends Plugin {
             if (!habit || !habit.id) continue;
             // 仅对番茄目标型习惯自动补录
             if (getHabitGoalType(habit) !== 'pomodoro') continue;
+            // 仅在开启「番茄达标自动打卡」时执行
+            if (!habit.autoCheckInAfterPomodoro) continue;
 
             const targetMinutes = getHabitPomodoroTargetMinutes(habit);
             if (targetMinutes <= 0) continue;
@@ -5017,27 +5114,54 @@ export default class ReminderPlugin extends Plugin {
             // 确定补录使用的 Emoji
             const configuredEmoji = habit.autoCheckInEmoji || habit.checkInEmojis?.[0]?.emoji || '✅';
             let autoEmojiConfig = habit.checkInEmojis?.find(item => item.emoji === configuredEmoji);
-            
-            allDates.forEach((date) => {
-                if (!shouldCheckInOnDate(habit, date)) return;
-                
-                const focusMinutes = recordManager.getEventFocusTime(habit.id, date) || 0;
-                if (focusMinutes < targetMinutes) return;
 
-                // 检查当天是否已有成功打卡（番茄目标型习惯当天达标后至少应有1次打卡记录）
+            const habitCheckInDates = Object.keys(habit.checkIns || {});
+            const datesToCheck = new Set<string>([...allDates, ...habitCheckInDates]);
+
+            datesToCheck.forEach((date) => {
+                const shouldCheckOnDate = shouldCheckInOnDate(habit, date);
+                const linkedFocusMinutes = getLinkedTaskPomodoroStatsByDateUtil(linkedTaskPomodoroStats, habit.id, date).focusMinutes;
+                const focusMinutes = (recordManager.getEventFocusTime(habit.id, date) || 0) + linkedFocusMinutes;
+                const isPomodoroTargetMet = shouldCheckOnDate && focusMinutes >= targetMinutes;
+
                 const dayData = habit.checkIns?.[date];
-                const successCount = (dayData?.entries || []).filter(e => {
-                    const config = habit.checkInEmojis.find(c => c.emoji === e.emoji);
-                    return config ? config.countsAsSuccess !== false : true;
-                }).length;
+                const entries = Array.isArray(dayData?.entries) ? dayData.entries : [];
+                const autoSyncedCount = entries.filter((entry: any) =>
+                    this.isPomodoroTargetAutoCheckInEntry(entry, configuredEmoji)
+                ).length;
 
-                if (successCount >= 1) return;
+                // 番茄不达标（或该日不需要打卡）时，回收此前自动补录的打卡
+                if (!isPomodoroTargetMet) {
+                    if (autoSyncedCount > 0 && this.removePomodoroTargetAutoCheckInFromDate(habit, date, configuredEmoji, now)) {
+                        changed = true;
+                    }
+                    return;
+                }
+
+                // 检查当天是否已有成功打卡（忽略当前机制自动补录的项）
+                let successCount = 0;
+                if (entries.length > 0) {
+                    successCount = entries.filter((entry: any) => {
+                        if (this.isPomodoroTargetAutoCheckInEntry(entry, configuredEmoji)) return false;
+                        const config = habit.checkInEmojis.find(c => c.emoji === entry?.emoji);
+                        return config ? config.countsAsSuccess !== false : true;
+                    }).length;
+                } else if (Array.isArray(dayData?.status) && dayData.status.length > 0) {
+                    successCount = dayData.status.filter((emoji: string) => {
+                        const config = habit.checkInEmojis.find(c => c.emoji === emoji);
+                        return config ? config.countsAsSuccess !== false : true;
+                    }).length;
+                } else if (typeof dayData?.count === 'number' && dayData.count > 0) {
+                    successCount = dayData.count;
+                }
+
+                if (successCount + autoSyncedCount >= 1) return;
 
                 // 补录一条自动打卡
                 if (!autoEmojiConfig) {
                     autoEmojiConfig = {
                         emoji: configuredEmoji,
-                        meaning: '番茄达标自动补录',
+                        meaning: POMODORO_TARGET_AUTO_CHECKIN_MEANING,
                         countsAsSuccess: true,
                         promptNote: false
                     };
@@ -5050,8 +5174,8 @@ export default class ReminderPlugin extends Plugin {
                 }
                 const dayCheckIn = habit.checkIns[date];
                 dayCheckIn.entries = dayCheckIn.entries || [];
-                dayCheckIn.entries.push({ 
-                    emoji: autoEmojiConfig.emoji, 
+                dayCheckIn.entries.push({
+                    emoji: autoEmojiConfig.emoji,
                     timestamp: now,
                     meaning: autoEmojiConfig.meaning,
                     group: (autoEmojiConfig.group || '').trim() || undefined

@@ -5168,6 +5168,13 @@ export class ProjectKanbanView {
             await this.buildMilestoneMap();
 
             const reminderData = await this.getReminders();
+            let habitData: Record<string, any> = {};
+            try {
+                habitData = await this.plugin.loadHabitData();
+            } catch (error) {
+                console.warn("加载习惯数据失败:", error);
+                habitData = {};
+            }
             let projectTasks = Object.values(reminderData).filter((reminder: any) => reminder && reminder.projectId === this.projectId);
 
             // 过滤已归档分组的未完成任务
@@ -5437,6 +5444,7 @@ export class ProjectKanbanView {
                     status: status,
                     pomodoroCount: pomodoroCount,
                     focusTime: focusTime || 0,
+                    linkedHabit: reminder.linkedHabitId ? (habitData?.[reminder.linkedHabitId] || null) : null,
                     totalRepeatingPomodoroCount,
                     totalRepeatingFocusTime
                 };
@@ -9519,6 +9527,45 @@ export class ProjectKanbanView {
             pomodoroDisplay.innerHTML = `${estimatedLine}${actualLine}`;
 
             infoEl.appendChild(pomodoroDisplay);
+        }
+
+        // 习惯绑定信息（仅绑定时显示）
+        if (task.linkedHabitId) {
+            const habit = task.linkedHabit;
+            const habitName = habit?.title || task.linkedHabitId;
+            const habitIcon = habit?.icon || '✅';
+            const modes: string[] = [];
+            if (task.linkedHabitSyncPomodoroToday) {
+                modes.push(i18n('pomodoroSync') || '番茄联动');
+            }
+            if (task.linkedHabitAutoCheckInOnComplete) {
+                const autoEmoji = task.linkedHabitAutoCheckInEmoji;
+                modes.push(autoEmoji
+                    ? `${i18n('autoCheckIn') || '自动打卡'}(${autoEmoji})`
+                    : (i18n('autoCheckIn') || '自动打卡'));
+            }
+            const modeText = modes.length > 0 ? ` · ${modes.join(' / ')}` : '';
+
+            const habitEl = document.createElement('div');
+            habitEl.className = 'kanban-task-habit';
+            habitEl.style.cssText = `
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                font-size: 11px;
+                background-color: rgba(76, 175, 80, 0.14);
+                color: var(--b3-theme-on-surface);
+                border: 1px solid rgba(76, 175, 80, 0.35);
+                border-radius: 12px;
+                padding: 2px 8px;
+                margin-top: 4px;
+                width: fit-content;
+                font-weight: 500;
+            `;
+            habitEl.textContent = `${habitIcon} 习惯: ${habitName}${modeText}`;
+            habitEl.classList.add('ariaLabel');
+            habitEl.setAttribute('aria-label', `已绑定习惯: ${habitName}${modeText}`);
+            infoEl.appendChild(habitEl);
         }
 
         // 优先级

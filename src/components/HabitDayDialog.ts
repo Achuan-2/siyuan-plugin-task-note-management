@@ -3,6 +3,7 @@ import type { Habit, HabitCheckInEmoji } from "./HabitPanel";
 import { getLocalDateTimeString, getLogicalDateString } from "../utils/dateUtils";
 import { PomodoroRecordManager, type PomodoroSession } from "../utils/pomodoroRecord";
 import { i18n, getPluginInstance } from "../pluginInstance";
+import { buildLinkedHabitTaskMaps, isEventIdFromTaskWithInstances } from "../utils/linkedHabitPomodoro";
 
 type HabitDayEntry = {
     emoji: string;
@@ -10,6 +11,11 @@ type HabitDayEntry = {
     timestamp: string;
     note?: string;
     group?: string;
+};
+
+type HabitDayPomodoroSessionItem = {
+    session: PomodoroSession;
+    source: "habit" | "task";
 };
 
 export class HabitDayDialog {
@@ -92,17 +98,32 @@ export class HabitDayDialog {
         this.habit.checkIns[dateStr].timestamp = entries[entries.length - 1].timestamp || this.habit.checkIns[dateStr].timestamp;
     }
 
-    private async getHabitPomodoroSessionsByDate(dateStr: string): Promise<PomodoroSession[]> {
+    private async getHabitPomodoroSessionsByDate(dateStr: string): Promise<HabitDayPomodoroSessionItem[]> {
         try {
             await this.pomodoroManager.initialize();
             await this.pomodoroManager.refreshData();
             const sessions = this.pomodoroManager.getDateSessions(dateStr) || [];
+
+            const reminderData = this.plugin && typeof this.plugin.loadReminderData === "function"
+                ? ((await this.plugin.loadReminderData()) || {})
+                : {};
+            const { taskIdsByHabit } = buildLinkedHabitTaskMaps(reminderData);
+            const linkedTaskIdSet = taskIdsByHabit.get(this.habit.id) || new Set<string>();
+
             return sessions
-                .filter(session =>
-                    session.type === "work" &&
-                    (session.eventId === this.habit.id || session.eventId.startsWith(`${this.habit.id}_`))
-                )
-                .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+                .filter(session => session.type === "work")
+                .map(session => {
+                    const isHabitSession = session.eventId === this.habit.id || session.eventId.startsWith(`${this.habit.id}_`);
+                    if (isHabitSession) {
+                        return { session, source: "habit" as const };
+                    }
+                    if (isEventIdFromTaskWithInstances(session.eventId, linkedTaskIdSet)) {
+                        return { session, source: "task" as const };
+                    }
+                    return null;
+                })
+                .filter((item): item is HabitDayPomodoroSessionItem => !!item)
+                .sort((a, b) => new Date(a.session.startTime).getTime() - new Date(b.session.startTime).getTime());
         } catch (error) {
             console.warn("加载习惯番茄记录失败:", error);
             return [];
@@ -228,8 +249,8 @@ export class HabitDayDialog {
 
     private async renderPomodoroSection(container: HTMLElement) {
         const sessions = await this.getHabitPomodoroSessionsByDate(this.dateStr);
-        const totalCount = sessions.reduce((sum, s) => sum + this.pomodoroManager.calculateSessionCount(s), 0);
-        const totalMinutes = sessions.reduce((sum, s) => sum + (s.duration || 0), 0);
+        const totalCount = sessions.reduce((sum, item) => sum + this.pomodoroManager.calculateSessionCount(item.session), 0);
+        const totalMinutes = sessions.reduce((sum, item) => sum + (item.session.duration || 0), 0);
 
         const section = document.createElement("div");
         section.style.cssText = "margin-top:12px; padding-top:12px; border-top:1px solid var(--b3-theme-surface-light);";
@@ -257,13 +278,23 @@ export class HabitDayDialog {
         if (sessions.length > 0) {
             const list = document.createElement("div");
             list.style.cssText = "display:flex; flex-direction:column; gap:6px;";
-            sessions.forEach(session => {
+            sessions.forEach(item => {
+                const session = item.session;
                 const row = document.createElement("div");
                 const count = this.pomodoroManager.calculateSessionCount(session);
                 row.style.cssText = "display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12px; padding:6px 8px; border-radius:6px; background:var(--b3-theme-background);";
 
-                const left = document.createElement("span");
-                left.textContent = `${this.formatHm(session.startTime)} - ${this.formatHm(session.endTime)}`;
+                const left = document.createElement("div");
+                left.style.cssText = "display:flex; flex-direction:column; gap:2px;";
+                const timeSpan = document.createElement("span");
+                timeSpan.textContent = `${this.formatHm(session.startTime)} - ${this.formatHm(session.endTime)}`;
+                const sourceSpan = document.createElement("span");
+                sourceSpan.style.cssText = "font-size:11px; color:var(--b3-theme-on-surface-light);";
+                sourceSpan.textContent = item.source === "task"
+                    ? `任务绑定：${session.eventTitle || "未命名任务"}`
+                    : `习惯：${session.eventTitle || this.habit.title}`;
+                left.appendChild(timeSpan);
+                left.appendChild(sourceSpan);
 
                 const right = document.createElement("div");
                 right.style.cssText = "display:flex; align-items:center; gap:6px;";
@@ -426,6 +457,7 @@ export class HabitDayDialog {
                 const action = this.dialog.element.querySelector(".b3-dialog__action") as HTMLElement;
                 if (content) await this.render(content, action);
                 window.dispatchEvent(new CustomEvent("habitUpdated"));
+                window.dispatchEvent(new CustomEvent("reminderUpdated"));
             } catch (error) {
                 console.error("补录番茄钟失败:", error);
                 showMessage("❌ " + (i18n("addPomodoroFailed") || "补录番茄钟失败"), 3000, "error");
@@ -582,6 +614,7 @@ export class HabitDayDialog {
                 const action = this.dialog.element.querySelector(".b3-dialog__action") as HTMLElement;
                 if (content) await this.render(content, action);
                 window.dispatchEvent(new CustomEvent("habitUpdated"));
+                window.dispatchEvent(new CustomEvent("reminderUpdated"));
             } catch (error) {
                 console.error("修改番茄时长失败:", error);
                 showMessage("❌ 修改番茄时长失败", 3000, "error");
@@ -613,6 +646,7 @@ export class HabitDayDialog {
                     const action = this.dialog.element.querySelector(".b3-dialog__action") as HTMLElement;
                     if (content) await this.render(content, action);
                     window.dispatchEvent(new CustomEvent("habitUpdated"));
+                    window.dispatchEvent(new CustomEvent("reminderUpdated"));
                 } catch (error) {
                     console.error("删除番茄记录失败:", error);
                     showMessage("❌ 删除番茄记录失败", 3000, "error");

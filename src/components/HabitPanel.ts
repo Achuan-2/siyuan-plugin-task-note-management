@@ -14,6 +14,13 @@ import { createPomodoroStartSubmenu as createSharedPomodoroStartSubmenu, resolve
 import { showStatsDialog } from "./stats/ShowStatsDialog";
 import { HabitDayDialog } from "./HabitDayDialog";
 import {
+    buildLinkedHabitPomodoroData,
+    getLinkedTaskIdsForHabit as getLinkedTaskIdsForHabitUtil,
+    getLinkedTaskPomodoroStatsByDate as getLinkedTaskPomodoroStatsByDateUtil,
+    getLinkedTaskPomodoroTotalStats as getLinkedTaskPomodoroTotalStatsUtil,
+    type LinkedTaskPomodoroDayStats
+} from "../utils/linkedHabitPomodoro";
+import {
     Habit,
     HabitEmojiConfig as HabitCheckInEmoji,
     getHabitGoalType as getHabitGoalTypeUtil,
@@ -43,6 +50,7 @@ export class HabitPanel {
     private selectedGroups: string[] = [];
     private groupManager: HabitGroupManager;
     private habitUpdatedHandler: () => void;
+    private reminderUpdatedHandler: () => void;
     private collapsedGroups: Set<string> = new Set();
     // 拖拽状态
     private draggingHabitId: string | null = null;
@@ -50,6 +58,8 @@ export class HabitPanel {
     private dragOverPosition: 'before' | 'after' | null = null;
     private pomodoroManager: PomodoroManager = PomodoroManager.getInstance();
     private pomodoroRecordManager: PomodoroRecordManager;
+    private linkedTaskPomodoroStats: Map<string, Map<string, LinkedTaskPomodoroDayStats>> = new Map();
+    private linkedTaskIdsByHabit: Map<string, Set<string>> = new Map();
 
     constructor(container: HTMLElement, plugin?: any) {
         this.container = container;
@@ -58,6 +68,9 @@ export class HabitPanel {
         this.pomodoroRecordManager = PomodoroRecordManager.getInstance(this.plugin);
 
         this.habitUpdatedHandler = () => {
+            this.loadHabits();
+        };
+        this.reminderUpdatedHandler = () => {
             this.loadHabits();
         };
 
@@ -74,12 +87,16 @@ export class HabitPanel {
         this.loadHabits();
 
         window.addEventListener('habitUpdated', this.habitUpdatedHandler);
+        window.addEventListener('reminderUpdated', this.reminderUpdatedHandler);
     }
 
     public destroy() {
         this.saveCollapseStates();
         if (this.habitUpdatedHandler) {
             window.removeEventListener('habitUpdated', this.habitUpdatedHandler);
+        }
+        if (this.reminderUpdatedHandler) {
+            window.removeEventListener('reminderUpdated', this.reminderUpdatedHandler);
         }
         this.pomodoroManager.cleanupInactiveTimer();
     }
@@ -342,7 +359,14 @@ export class HabitPanel {
                 console.warn('刷新番茄钟数据失败:', error);
             }
 
-            const habitData = await this.plugin.loadHabitData();
+            const [habitData, reminderData] = await Promise.all([
+                this.plugin.loadHabitData(),
+                this.plugin.loadReminderData()
+            ]);
+
+            await this.syncTaskCompletionAutoCheckIns(habitData || {}, reminderData || {});
+            this.rebuildLinkedTaskPomodoroStats(reminderData || {});
+
             const habits: Habit[] = Object.values(habitData || {});
 
             // 应用筛选
@@ -362,6 +386,158 @@ export class HabitPanel {
             console.error('loadHabits failed:', error);
             this.habitsContainer.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--b3-theme-error);">${i18n("loadHabitFailed")}</div>`;
         }
+    }
+
+    private getCompletedDateFromReminder(reminder: any): string {
+        const completedTime = typeof reminder?.completedTime === 'string' ? reminder.completedTime.trim() : '';
+        if (/^\d{4}-\d{2}-\d{2}/.test(completedTime)) {
+            return completedTime.substring(0, 10);
+        }
+
+        if (completedTime) {
+            const parsed = new Date(completedTime.replace(' ', 'T'));
+            if (!Number.isNaN(parsed.getTime())) {
+                return getLogicalDateString(parsed);
+            }
+        }
+
+        return getLogicalDateString();
+    }
+
+    private buildHabitCheckInOptionKey(option: any): string {
+        const emoji = option?.emoji || '';
+        const meaning = option?.meaning || '';
+        const group = (option?.group || '').trim();
+        return `${emoji}\u001f${meaning}\u001f${group}`;
+    }
+
+    private resolveTaskAutoCheckInOption(habit: Habit, reminder: any): HabitCheckInEmoji | undefined {
+        const emojiList = habit.checkInEmojis || [];
+        if (emojiList.length === 0) return undefined;
+
+        const preferredKey = reminder?.linkedHabitAutoCheckInOptionKey;
+        if (preferredKey) {
+            const matchedByKey = emojiList.find(item => this.buildHabitCheckInOptionKey(item) === preferredKey);
+            if (matchedByKey) return matchedByKey as HabitCheckInEmoji;
+        }
+
+        const preferredEmoji = reminder?.linkedHabitAutoCheckInEmoji;
+        if (preferredEmoji) {
+            const matchedByEmoji = emojiList.find(item => item.emoji === preferredEmoji);
+            if (matchedByEmoji) return matchedByEmoji as HabitCheckInEmoji;
+        }
+
+        return undefined;
+    }
+
+    private async syncTaskCompletionAutoCheckIns(habitData: Record<string, Habit>, reminderData: Record<string, any>) {
+        if (!habitData || !reminderData) return;
+
+        let hasHabitChange = false;
+        let hasReminderChange = false;
+        const now = getLocalDateTimeString(new Date());
+
+        for (const reminder of Object.values(reminderData || {}) as any[]) {
+            if (!reminder || !reminder.id) continue;
+
+            const linkedHabitId = reminder.linkedHabitId;
+            if (!linkedHabitId || !reminder.linkedHabitAutoCheckInOnComplete) continue;
+            if (!reminder.completed) {
+                if (reminder.linkedHabitLastAutoCheckInKey !== undefined) {
+                    delete reminder.linkedHabitLastAutoCheckInKey;
+                    hasReminderChange = true;
+                }
+                continue;
+            }
+
+            const habit = habitData[linkedHabitId];
+            if (!habit) continue;
+
+            const syncMarker = reminder.completedTime || 'completed';
+            if (reminder.linkedHabitLastAutoCheckInKey === syncMarker) continue;
+
+            const targetDate = this.getCompletedDateFromReminder(reminder);
+            let emojiConfig = this.resolveTaskAutoCheckInOption(habit, reminder);
+            const configuredEmoji = reminder.linkedHabitAutoCheckInEmoji || habit.autoCheckInEmoji || habit.checkInEmojis?.[0]?.emoji || '✅';
+            if (!emojiConfig) {
+                emojiConfig = habit.checkInEmojis?.find(item => item.emoji === configuredEmoji);
+            }
+            if (!emojiConfig) {
+                emojiConfig = {
+                    emoji: configuredEmoji,
+                    meaning: i18n("taskAutoCheckInFromTask") || '任务完成自动打卡',
+                    countsAsSuccess: true,
+                    promptNote: false
+                } as HabitCheckInEmoji;
+                habit.checkInEmojis = [...(habit.checkInEmojis || []), emojiConfig];
+            }
+
+            habit.checkIns = habit.checkIns || {};
+            if (!habit.checkIns[targetDate]) {
+                habit.checkIns[targetDate] = {
+                    count: 0,
+                    status: [],
+                    timestamp: now,
+                    entries: []
+                };
+            }
+
+            const dayCheckIn = habit.checkIns[targetDate];
+            dayCheckIn.entries = dayCheckIn.entries || [];
+            dayCheckIn.entries.push({
+                emoji: emojiConfig.emoji,
+                timestamp: now,
+                meaning: emojiConfig.meaning,
+                note: `${i18n("taskAutoCheckInNotePrefix") || '来自任务'}: ${reminder.title || i18n("unnamedTask") || '未命名任务'}`,
+                group: (emojiConfig.group || '').trim() || undefined
+            });
+            dayCheckIn.status = (dayCheckIn.status || []).concat([emojiConfig.emoji]);
+            dayCheckIn.count = (dayCheckIn.count || 0) + 1;
+            dayCheckIn.timestamp = now;
+            habit.totalCheckIns = (habit.totalCheckIns || 0) + 1;
+            habit.updatedAt = now;
+
+            reminder.linkedHabitLastAutoCheckInKey = syncMarker;
+            hasHabitChange = true;
+            hasReminderChange = true;
+        }
+
+        if (hasHabitChange) {
+            await this.plugin.saveHabitData(habitData);
+        }
+        if (hasReminderChange) {
+            await this.plugin.saveReminderData(reminderData);
+        }
+    }
+
+    private rebuildLinkedTaskPomodoroStats(reminderData: Record<string, any>) {
+        const records = this.pomodoroRecordManager.getSaveData() || {};
+        const linkedData = buildLinkedHabitPomodoroData(
+            reminderData || {},
+            records,
+            (session) => this.pomodoroRecordManager.calculateSessionCount(session)
+        );
+
+        this.linkedTaskPomodoroStats = linkedData.statsByHabit;
+        this.linkedTaskIdsByHabit = linkedData.taskIdsByHabit;
+    }
+
+    private getLinkedTaskPomodoroStatsByDate(habitId: string, date: string): LinkedTaskPomodoroDayStats {
+        return getLinkedTaskPomodoroStatsByDateUtil(this.linkedTaskPomodoroStats, habitId, date);
+    }
+
+    private getLinkedTaskPomodoroTotalStats(habitId: string): LinkedTaskPomodoroDayStats {
+        return getLinkedTaskPomodoroTotalStatsUtil(this.linkedTaskPomodoroStats, habitId);
+    }
+
+    private getLinkedTaskIdsForHabit(habitId: string): string[] {
+        return getLinkedTaskIdsForHabitUtil(this.linkedTaskIdsByHabit, habitId);
+    }
+
+    private getHabitFocusMinutesByDate(habitId: string, date: string): number {
+        const direct = this.pomodoroRecordManager.getEventFocusTime(habitId, date) || 0;
+        const linked = this.getLinkedTaskPomodoroStatsByDate(habitId, date).focusMinutes;
+        return direct + linked;
     }
 
 
@@ -393,7 +569,7 @@ export class HabitPanel {
         // 排除已放弃和已结束的习惯
         const activeHabits = habits.filter(h => !h.abandoned && !this.isHabitEnded(h));
         const todayBuckets = getTodayHabitBuckets(activeHabits, today, {
-            getPomodoroFocusMinutes: (habitId, date) => this.pomodoroRecordManager.getEventFocusTime(habitId, date) || 0
+            getPomodoroFocusMinutes: (habitId, date) => this.getHabitFocusMinutesByDate(habitId, date)
         });
 
         switch (this.currentTab) {
@@ -418,7 +594,7 @@ export class HabitPanel {
 
     private isCompletedOnDate(habit: Habit, date: string): boolean {
         return isHabitCompletedOnDateUtil(habit, date, {
-            getPomodoroFocusMinutes: (habitId, logicalDate) => this.pomodoroRecordManager.getEventFocusTime(habitId, logicalDate) || 0
+            getPomodoroFocusMinutes: (habitId, logicalDate) => this.getHabitFocusMinutesByDate(habitId, logicalDate)
         });
     }
 
@@ -440,7 +616,7 @@ export class HabitPanel {
 
     private getHabitProgressOnDate(habit: Habit, date: string): { current: number; target: number } {
         return getHabitProgressOnDateUtil(habit, date, {
-            getPomodoroFocusMinutes: (habitId, logicalDate) => this.pomodoroRecordManager.getEventFocusTime(habitId, logicalDate) || 0
+            getPomodoroFocusMinutes: (habitId, logicalDate) => this.getHabitFocusMinutesByDate(habitId, logicalDate)
         });
     }
 
@@ -1415,7 +1591,16 @@ export class HabitPanel {
 
     private async showPomodoroSessions(habit: Habit) {
         const { PomodoroSessionsDialog } = await import("./PomodoroSessionsDialog");
-        const dialog = new PomodoroSessionsDialog(habit.id, this.plugin);
+        const linkedTaskIds = this.getLinkedTaskIdsForHabit(habit.id);
+        const dialog = new PomodoroSessionsDialog(
+            habit.id,
+            this.plugin,
+            undefined,
+            true,
+            {
+                includeEventIds: linkedTaskIds
+            }
+        );
         dialog.show();
     }
 
@@ -1432,6 +1617,13 @@ export class HabitPanel {
             totalFocusMinutes = this.pomodoroRecordManager.getEventTotalFocusTime(habitId) || 0;
             todayCount = this.pomodoroRecordManager.getEventPomodoroCount(habitId, today) || 0;
             todayFocusMinutes = this.pomodoroRecordManager.getEventFocusTime(habitId, today) || 0;
+
+            const linkedTodayStats = this.getLinkedTaskPomodoroStatsByDate(habitId, today);
+            const linkedTotalStats = this.getLinkedTaskPomodoroTotalStats(habitId);
+            totalCount += linkedTotalStats.count;
+            totalFocusMinutes += linkedTotalStats.focusMinutes;
+            todayCount += linkedTodayStats.count;
+            todayFocusMinutes += linkedTodayStats.focusMinutes;
         } catch (error) {
             console.warn(`获取习惯 ${habitId} 的番茄统计失败:`, error);
         }

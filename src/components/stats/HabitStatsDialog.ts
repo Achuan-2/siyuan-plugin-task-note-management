@@ -2,6 +2,11 @@
 import type { Habit } from "../HabitPanel";
 import { HabitDayDialog } from "../HabitDayDialog";
 import { PomodoroRecordManager } from "../../utils/pomodoroRecord";
+import {
+    buildLinkedHabitPomodoroData,
+    getLinkedTaskPomodoroStatsByDate as getLinkedTaskPomodoroStatsByDateUtil,
+    type LinkedTaskPomodoroDayStats
+} from "../../utils/linkedHabitPomodoro";
 import { init, use, EChartsType } from 'echarts/core';
 import { ScatterChart, CustomChart } from 'echarts/charts';
 import { TooltipComponent, GridComponent, TitleComponent, LegendComponent } from 'echarts/components';
@@ -41,6 +46,7 @@ export class HabitStatsDialog {
     private plugin?: any;
     private pomodoroRecordManager: PomodoroRecordManager | null = null;
     private pomodoroReady = false;
+    private linkedTaskPomodoroStats: Map<string, Map<string, LinkedTaskPomodoroDayStats>> = new Map();
     private defaultToLastCheckIn: boolean = false; // 是否默认显示最后一次打卡的月份/年份
 
     constructor(habit: Habit, onSave?: (habit: Habit) => Promise<void>, plugin?: any, defaultToLastCheckIn: boolean = false) {
@@ -97,6 +103,17 @@ export class HabitStatsDialog {
             await this.pomodoroRecordManager.refreshData();
             this.pomodoroReady = true;
 
+            const reminderData = this.plugin && typeof this.plugin.loadReminderData === 'function'
+                ? ((await this.plugin.loadReminderData()) || {})
+                : {};
+            const records = this.pomodoroRecordManager.getSaveData() || {};
+            const linkedData = buildLinkedHabitPomodoroData(
+                reminderData,
+                records,
+                (session) => this.pomodoroRecordManager!.calculateSessionCount(session)
+            );
+            this.linkedTaskPomodoroStats = linkedData.statsByHabit;
+
             // 加载设置
             if (this.plugin && typeof this.plugin.loadSettings === 'function') {
                 const settings = await this.plugin.loadSettings();
@@ -107,6 +124,7 @@ export class HabitStatsDialog {
         } catch (error) {
             console.warn("HabitStatsDialog 初始化番茄数据或设置失败", error);
             this.pomodoroReady = false;
+            this.linkedTaskPomodoroStats = new Map();
         }
         this.renderContainer(container);
     }
@@ -157,7 +175,7 @@ export class HabitStatsDialog {
                     font-size: clamp(2px, 2cqw, 90px);
                 }
                 .habit-year-grid .habit-emoji-item.count-2-4 {
-                    font-size: clamp(2px, 0.5cqw, 90px);
+                    font-size: clamp(2px, 0.9cqw, 90px);
                 }
                 .habit-year-grid .habit-emoji-item.count-5-8 {
                     font-size: clamp(2px, 0.5cqw, 90px);
@@ -468,7 +486,8 @@ export class HabitStatsDialog {
         const fromInstances = sessions
             .filter(s => s.type === "work" && s.eventId && s.eventId.startsWith(`${habit.id}_`))
             .reduce((sum, s) => sum + (s.duration || 0), 0);
-        return Math.max(direct, fromInstances);
+        const linked = getLinkedTaskPomodoroStatsByDateUtil(this.linkedTaskPomodoroStats, habit.id, dateStr).focusMinutes;
+        return Math.max(direct, fromInstances) + linked;
     }
 
     private getCheckInEmojis(dateStr: string): string[] {
