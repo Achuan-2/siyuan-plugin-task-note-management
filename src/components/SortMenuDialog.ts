@@ -7,6 +7,7 @@ export interface SortMenuDialogOptions {
     currentCriteria: SortCriterion[];
     onSave: (criteria: SortCriterion[]) => void;
     onChange?: (criteria: SortCriterion[]) => void; // 实时变更回调
+    availableMethods?: Array<{ key: string; label: () => string; icon: string }>;
 }
 
 export class SortMenuDialog {
@@ -15,9 +16,11 @@ export class SortMenuDialog {
     private selectedCriteria: SortCriterion[] = [];
     private draggedIndex: number = -1;
     private isMultiSelect: boolean = false;
+    private availableMethods: Array<{ key: string; label: () => string; icon: string }>;
 
     constructor(options: SortMenuDialogOptions) {
         this.options = options;
+        this.availableMethods = options.availableMethods || AVAILABLE_SORT_METHODS;
         // 深拷贝当前排序条件
         this.selectedCriteria = JSON.parse(JSON.stringify(options.currentCriteria));
         // 根据当前条件数量判断是否为多选模式（多于1个条件则为多选）
@@ -216,7 +219,7 @@ export class SortMenuDialog {
         // 获取已选择的方法
         const selectedMethods = new Set(this.selectedCriteria.map(c => c.method));
 
-        AVAILABLE_SORT_METHODS.forEach(method => {
+        this.availableMethods.forEach(method => {
             const isSelected = selectedMethods.has(method.key);
             
             const btn = document.createElement('button');

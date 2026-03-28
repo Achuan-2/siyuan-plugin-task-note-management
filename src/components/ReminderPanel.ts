@@ -20,6 +20,7 @@ import { getAllReminders, saveReminders } from "../utils/icsSubscription";
 import { isEventPast } from "../utils/icsImport";
 import { PasteTaskDialog } from "./PasteTaskDialog";
 import { createPomodoroStartSubmenu as createSharedPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
+import { buildProjectCategoryOrderMap, buildProjectStatusOrderMap, compareProjectsByPanelSort, normalizeProjectPanelSortCriteria } from "./ProjectPanel";
 
 interface ReminderPanelFilterSortConfig {
     sortMode?: 'global' | 'custom';
@@ -4342,8 +4343,10 @@ export class ReminderPanel {
     private originalRemindersCache: { [id: string]: any } = {};
     // 缓存异步加载数据（番茄数、专注时长、项目等）以减少重复请求
     private asyncDataCache: Map<string, any> = new Map();
-    // 项目排序缓存：项目ID -> 状态顺序/项目优先级/项目手动排序值
-    private projectSortMetaCache: Map<string, { statusOrder: number; priorityOrder: number; projectSort: number }> = new Map();
+    // 项目面板排序设置缓存（支持多条件）
+    private projectPanelSortCriteria: SortCriterion[] = [{ method: 'priority', order: 'desc' }];
+    // 项目排序缓存：项目ID -> 状态顺序 + 状态内顺序（用于保持状态顺序不受升降序影响）
+    private projectSortMetaCache: Map<string, { statusOrder: number; orderInStatus: number }> = new Map();
 
     /**
      * 获取原始提醒数据（用于重复事件实例）
@@ -4629,58 +4632,67 @@ export class ReminderPanel {
 
     private async refreshProjectSortMetaCache(): Promise<void> {
         try {
-            const [projectDataRaw, statusDataRaw] = await Promise.all([
+            const [projectDataRaw, settings, statusDataRaw] = await Promise.all([
                 this.plugin?.loadProjectData?.(),
+                this.plugin?.loadSettings?.(),
                 this.plugin?.loadProjectStatus?.()
             ]);
 
-            const statusData = Array.isArray(statusDataRaw) && statusDataRaw.length > 0
-                ? statusDataRaw
-                : [
-                    { id: 'active' },
-                    { id: 'someday' },
-                    { id: 'archived' }
-                ];
+            this.projectPanelSortCriteria = normalizeProjectPanelSortCriteria(
+                settings?.projectPanelSortCriteria,
+                settings?.projectPanelSort,
+                settings?.projectPanelSortOrder
+            );
 
-            const statusOrderMap = new Map<string, number>();
-            statusData.forEach((status: any, index: number) => {
-                if (status?.id) {
-                    statusOrderMap.set(String(status.id), index);
-                }
-            });
-
-            const priorityOrder: Record<string, number> = { high: 3, medium: 2, low: 1, none: 0 };
-            const projectSortMap = new Map<string, { statusOrder: number; priorityOrder: number; projectSort: number }>();
+            const projectSortMap = new Map<string, { statusOrder: number; orderInStatus: number }>();
             const projectData = projectDataRaw && typeof projectDataRaw === 'object' ? projectDataRaw : {};
+            const categoryOrderMap = buildProjectCategoryOrderMap(this.categoryManager.getCategories());
+            const statusOrderMap = buildProjectStatusOrderMap(Array.isArray(statusDataRaw) ? statusDataRaw : []);
 
-            Object.entries(projectData).forEach(([projectId, project]) => {
-                const projectObj = project as any;
-                const statusId = typeof projectObj?.status === 'string' ? projectObj.status : 'active';
-                const priorityId = typeof projectObj?.priority === 'string' ? projectObj.priority : 'none';
-
-                projectSortMap.set(projectId, {
-                    statusOrder: statusOrderMap.get(statusId) ?? Number.MAX_SAFE_INTEGER,
-                    priorityOrder: priorityOrder[priorityId] ?? 0,
-                    projectSort: typeof projectObj?.sort === 'number' ? projectObj.sort : 0
+            const sortableProjects = Object.entries(projectData).map(([id, project]) => ({
+                id,
+                ...(project as any)
+            }));
+            sortableProjects.sort((a: any, b: any) => {
+                const result = compareProjectsByPanelSort(a, b, this.projectPanelSortCriteria, categoryOrderMap, statusOrderMap);
+                if (result !== 0) {
+                    return result;
+                }
+                return String(a.id || '').localeCompare(String(b.id || ''));
+            });
+            const statusCounters = new Map<number, number>();
+            sortableProjects.forEach((project: any) => {
+                const statusId = String(project?.status || 'active');
+                const statusOrder = statusOrderMap.get(statusId) ?? Number.MAX_SAFE_INTEGER;
+                const currentCount = statusCounters.get(statusOrder) ?? 0;
+                projectSortMap.set(String(project.id), {
+                    statusOrder,
+                    orderInStatus: currentCount
                 });
+                statusCounters.set(statusOrder, currentCount + 1);
             });
 
             this.projectSortMetaCache = projectSortMap;
         } catch (error) {
             console.warn('刷新项目排序缓存失败:', error);
+            this.projectPanelSortCriteria = [{ method: 'priority', order: 'desc' }];
             this.projectSortMetaCache = new Map();
         }
     }
 
-    private getProjectSortMeta(reminder: any): { hasProject: boolean; projectId: string; statusOrder: number; priorityOrder: number; projectSort: number } {
+    private getProjectSortMeta(reminder: any): {
+        hasProject: boolean;
+        projectId: string;
+        statusOrder: number;
+        orderInStatus: number;
+    } {
         const projectId = typeof reminder?.projectId === 'string' ? reminder.projectId : '';
         if (!projectId) {
             return {
                 hasProject: false,
                 projectId: '',
                 statusOrder: Number.MAX_SAFE_INTEGER,
-                priorityOrder: -1,
-                projectSort: Number.MAX_SAFE_INTEGER
+                orderInStatus: Number.MAX_SAFE_INTEGER
             };
         }
 
@@ -4690,8 +4702,7 @@ export class ReminderPanel {
                 hasProject: true,
                 projectId,
                 statusOrder: Number.MAX_SAFE_INTEGER,
-                priorityOrder: 0,
-                projectSort: 0
+                orderInStatus: Number.MAX_SAFE_INTEGER
             };
         }
 
@@ -4699,13 +4710,12 @@ export class ReminderPanel {
             hasProject: true,
             projectId,
             statusOrder: projectMeta.statusOrder,
-            priorityOrder: projectMeta.priorityOrder,
-            projectSort: projectMeta.projectSort
+            orderInStatus: projectMeta.orderInStatus
         };
     }
 
-    // 项目排序：有项目始终在前；同为有项目时按状态、优先级、项目 sort 比较
-    private compareByProject(a: any, b: any, order: 'asc' | 'desc' = 'asc'): number {
+    // 项目排序：有项目始终在前；同为有项目时按 ProjectPanel 选择的排序方式排序
+    private compareByProject(a: any, b: any, order?: 'asc' | 'desc'): number {
         const metaA = this.getProjectSortMeta(a);
         const metaB = this.getProjectSortMeta(b);
 
@@ -4713,24 +4723,23 @@ export class ReminderPanel {
             return metaA.hasProject ? -1 : 1;
         }
 
-        if (metaA.statusOrder !== metaB.statusOrder) {
-            const statusDiff = metaA.statusOrder - metaB.statusOrder;
-            return order === 'desc' ? statusDiff : -statusDiff;
+        if (!metaA.hasProject && !metaB.hasProject) {
+            return 0;
         }
 
-        if (metaA.priorityOrder !== metaB.priorityOrder) {
-            const priorityDiff = metaA.priorityOrder - metaB.priorityOrder;
-            return order === 'desc' ? priorityDiff : -priorityDiff;
+        const statusDiff = metaA.statusOrder - metaB.statusOrder;
+        if (statusDiff !== 0) {
+            return statusDiff;
         }
 
-        if (metaA.projectSort !== metaB.projectSort) {
-            const projectSortDiff = metaA.projectSort - metaB.projectSort;
-            return order === 'desc' ? projectSortDiff : -projectSortDiff;
+        let projectSortDiff = metaA.orderInStatus - metaB.orderInStatus;
+        if (order === 'desc') {
+            projectSortDiff = -projectSortDiff;
         }
+        if (projectSortDiff !== 0) return projectSortDiff;
 
         if (metaA.projectId && metaB.projectId && metaA.projectId !== metaB.projectId) {
-            const projectIdDiff = metaA.projectId.localeCompare(metaB.projectId);
-            return order === 'desc' ? projectIdDiff : -projectIdDiff;
+            return metaA.projectId.localeCompare(metaB.projectId);
         }
 
         return 0;
@@ -9223,7 +9232,7 @@ export class ReminderPanel {
             const activeSortCriteria = this.getActiveSortCriteria();
             if (activeSortCriteria.some(c => c.method === 'project')) {
                 const projectId = typeof savedReminder?.projectId === 'string' ? savedReminder.projectId : '';
-                if (!projectId || !this.projectSortMetaCache.has(projectId)) {
+                if (projectId && !this.projectSortMetaCache.has(projectId)) {
                     await this.refreshProjectSortMetaCache();
                 }
             }

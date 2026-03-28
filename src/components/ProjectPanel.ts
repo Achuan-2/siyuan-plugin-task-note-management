@@ -16,7 +16,188 @@ import { ProjectKanbanView } from "./ProjectKanbanView";
 import { BlockBindingDialog } from "./BlockBindingDialog";
 import { i18n } from "../pluginInstance";
 import { getAllReminders } from "../utils/icsSubscription";
+import { SortMenuDialog } from "./SortMenuDialog";
+import { SortCriterion, getSortCriterionName } from "../utils/sortConfig";
 
+const PROJECT_PANEL_SORT_METHODS = new Set(['category', 'priority', 'time', 'created', 'title']);
+
+export function normalizeProjectPanelSortCriteria(
+    criteriaRaw: any,
+    legacySortType?: any,
+    legacySortOrder?: any
+): SortCriterion[] {
+    const normalized = Array.isArray(criteriaRaw)
+        ? criteriaRaw
+            .map((criterion: any) => ({
+                method: String(criterion?.method || ''),
+                order: criterion?.order === 'desc' ? 'desc' : 'asc'
+            }))
+            .filter((criterion: SortCriterion) => PROJECT_PANEL_SORT_METHODS.has(criterion.method))
+        : [];
+
+    if (normalized.length > 0) {
+        return normalized;
+    }
+
+    const fallbackMethod = PROJECT_PANEL_SORT_METHODS.has(String(legacySortType || ''))
+        ? String(legacySortType)
+        : 'priority';
+    const fallbackOrder = legacySortOrder === 'asc' ? 'asc' : 'desc';
+    return [{ method: fallbackMethod, order: fallbackOrder }];
+}
+
+export function buildProjectCategoryOrderMap(categories: any[]): Map<string, number> {
+    const categoryOrderMap = new Map<string, number>();
+    (categories || []).forEach((cat: any, index: number) => {
+        if (cat?.id) {
+            categoryOrderMap.set(String(cat.id), index);
+        }
+    });
+    return categoryOrderMap;
+}
+
+export function buildProjectStatusOrderMap(statuses: any[]): Map<string, number> {
+    const source = Array.isArray(statuses) && statuses.length > 0
+        ? statuses
+        : [{ id: 'active' }, { id: 'someday' }, { id: 'archived' }];
+    const statusOrderMap = new Map<string, number>();
+    source.forEach((status: any, index: number) => {
+        if (status?.id) {
+            statusOrderMap.set(String(status.id), index);
+        }
+    });
+    return statusOrderMap;
+}
+
+function getProjectPrimaryCategoryOrder(project: any, categoryOrderMap: Map<string, number>): { hasCategory: boolean; order: number } {
+    const ids = String(project?.categoryId || '')
+        .split(',')
+        .map((id: string) => id.trim())
+        .filter((id: string) => id);
+
+    if (ids.length === 0) {
+        return { hasCategory: false, order: Number.MAX_SAFE_INTEGER };
+    }
+
+    let bestOrder = Number.MAX_SAFE_INTEGER;
+    ids.forEach((id: string) => {
+        const order = categoryOrderMap.get(id) ?? Number.MAX_SAFE_INTEGER;
+        if (order < bestOrder) {
+            bestOrder = order;
+        }
+    });
+
+    return { hasCategory: true, order: bestOrder };
+}
+
+function compareProjectBySetTime(a: any, b: any): number {
+    const hasStartDateA = !!a?.startDate;
+    const hasStartDateB = !!b?.startDate;
+
+    if (!hasStartDateA && !hasStartDateB) return 0;
+    if (!hasStartDateA) return 1;
+    if (!hasStartDateB) return -1;
+    return String(a.startDate).localeCompare(String(b.startDate));
+}
+
+function compareProjectByCreatedAt(a: any, b: any): number {
+    const timeA = a?.createdTime ? new Date(a.createdTime).getTime() : (a?.createdAt ? new Date(a.createdAt).getTime() : 0);
+    const timeB = b?.createdTime ? new Date(b.createdTime).getTime() : (b?.createdAt ? new Date(b.createdAt).getTime() : 0);
+    return timeA - timeB;
+}
+
+function compareProjectByPriorityWithManualSort(a: any, b: any, order: 'asc' | 'desc'): number {
+    const priorityOrder = { high: 3, medium: 2, low: 1, none: 0 };
+    const priorityA = priorityOrder[a?.priority || 'none'] || 0;
+    const priorityB = priorityOrder[b?.priority || 'none'] || 0;
+    const priorityDiff = priorityA - priorityB;
+
+    if (priorityDiff !== 0) {
+        return order === 'desc' ? -priorityDiff : priorityDiff;
+    }
+
+    const sortDiff = (a?.sort || 0) - (b?.sort || 0);
+    if (sortDiff !== 0) return sortDiff;
+
+    const timeDiff = compareProjectBySetTime(a, b);
+    if (timeDiff !== 0) return timeDiff;
+
+    return compareProjectByCreatedAt(a, b);
+}
+
+function compareProjectByCriterion(
+    a: any,
+    b: any,
+    criterion: SortCriterion,
+    categoryOrderMap: Map<string, number>
+): number {
+    let result = 0;
+
+    switch (criterion.method) {
+        case 'priority':
+            return compareProjectByPriorityWithManualSort(a, b, criterion.order);
+        case 'category': {
+            const catA = getProjectPrimaryCategoryOrder(a, categoryOrderMap);
+            const catB = getProjectPrimaryCategoryOrder(b, categoryOrderMap);
+            if (!catA.hasCategory && !catB.hasCategory) result = 0;
+            else if (!catA.hasCategory) result = 1;
+            else if (!catB.hasCategory) result = -1;
+            else result = catA.order - catB.order;
+            break;
+        }
+        case 'time':
+            result = compareProjectBySetTime(a, b);
+            break;
+        case 'created':
+            result = compareProjectByCreatedAt(a, b);
+            break;
+        case 'title': {
+            const titleA = String(a?.title || '').toLowerCase();
+            const titleB = String(b?.title || '').toLowerCase();
+            result = titleA.localeCompare(titleB, getLocaleTag());
+            break;
+        }
+        default:
+            result = 0;
+            break;
+    }
+
+    return criterion.order === 'desc' ? -result : result;
+}
+
+export function compareProjectsByPanelSort(
+    a: any,
+    b: any,
+    criteriaInput: SortCriterion[],
+    categoryOrderMap: Map<string, number>,
+    statusOrderMap?: Map<string, number>
+): number {
+    const statusA = String(a?.status || 'active');
+    const statusB = String(b?.status || 'active');
+    const orderA = statusOrderMap?.get(statusA) ?? Number.MAX_SAFE_INTEGER;
+    const orderB = statusOrderMap?.get(statusB) ?? Number.MAX_SAFE_INTEGER;
+    if (orderA !== orderB) {
+        return orderA - orderB;
+    }
+
+    const criteria = normalizeProjectPanelSortCriteria(criteriaInput);
+
+    for (const criterion of criteria) {
+        const result = compareProjectByCriterion(a, b, criterion, categoryOrderMap);
+        if (result !== 0) {
+            return result;
+        }
+    }
+
+    if (!criteria.some(c => c.method === 'priority')) {
+        const sortDiff = (a?.sort || 0) - (b?.sort || 0);
+        if (sortDiff !== 0) {
+            return sortDiff;
+        }
+    }
+
+    return compareProjectByCreatedAt(a, b);
+}
 
 export class ProjectPanel {
     private container: HTMLElement;
@@ -31,6 +212,7 @@ export class ProjectPanel {
     private selectedCategories: string[] = [];
     private currentSort: string = 'priority';
     private currentSortOrder: 'asc' | 'desc' = 'desc';
+    private currentSortCriteria: SortCriterion[] = [{ method: 'priority', order: 'desc' }];
     private currentSearchQuery: string = '';
     private showOnlyWithDoingTasks: boolean = false;
     private categoryManager: CategoryManager;
@@ -380,79 +562,82 @@ export class ProjectPanel {
         }
     }
 
+    private getProjectSortAvailableMethods() {
+        return [
+            { key: 'category', label: () => i18n("sortByCategory") || '分类', icon: '🏷️' },
+            { key: 'priority', label: () => i18n("sortByPriority") || '优先级', icon: '🎯' },
+            { key: 'time', label: () => i18n("sortBySetTime") || i18n("sortByTime") || '设定时间', icon: '🕐' },
+            { key: 'created', label: () => i18n("sortByCreated") || '创建时间', icon: '📅' },
+            { key: 'title', label: () => i18n("sortByTitle") || '标题', icon: '📝' }
+        ];
+    }
+
+    private normalizeSortCriteria(criteria: any): SortCriterion[] {
+        return normalizeProjectPanelSortCriteria(criteria);
+    }
+
+    private getActiveSortCriteria(): SortCriterion[] {
+        return this.normalizeSortCriteria(this.currentSortCriteria);
+    }
+
+    private syncLegacySortStateFromCriteria() {
+        const primary = this.getActiveSortCriteria()[0] || { method: 'priority', order: 'desc' as const };
+        this.currentSort = primary.method;
+        this.currentSortOrder = primary.order;
+    }
+
+    private isPriorityPrimarySort(): boolean {
+        return this.getActiveSortCriteria()?.[0]?.method === 'priority';
+    }
+
     private updateSortButtonTitle() {
         if (this.sortButton) {
-            const sortNames = {
-                'time': i18n("sortByTime") || '时间',
-                'priority': i18n("sortByPriority") || '优先级',
-                'title': i18n("sortByTitle") || '标题'
-            };
-            const orderNames = {
-                'asc': i18n("ascending") || '升序',
-                'desc': i18n("descending") || '降序'
-            };
-            this.sortButton.classList.add('ariaLabel'); this.sortButton.setAttribute('aria-label', `${i18n("sortBy") || "排序"}: ${sortNames[this.currentSort]} (${orderNames[this.currentSortOrder]})`);
+            const activeCriteria = this.getActiveSortCriteria();
+            let fullSortDescription: string;
+
+            if (!activeCriteria || activeCriteria.length === 0) {
+                fullSortDescription = i18n("sortBy") || "排序";
+            } else if (activeCriteria.length === 1) {
+                fullSortDescription = getSortCriterionName(activeCriteria[0]);
+            } else {
+                fullSortDescription = activeCriteria.map((criterion, index) => `${index + 1}. ${getSortCriterionName(criterion)}`).join('<br>');
+            }
+
+            this.sortButton.classList.add('ariaLabel');
+            this.sortButton.setAttribute('aria-label', `${i18n("sortBy") || "排序"}:<br>${fullSortDescription}`);
         }
     }
 
-    private showSortMenu(event: MouseEvent) {
+    private showSortMenu(_event: MouseEvent) {
         try {
-            const menu = new Menu("projectSortMenu");
-
-            const sortOptions = [
-                { key: 'time', label: i18n("sortByTime") || '时间', icon: '🕐' },
-                { key: 'priority', label: i18n("sortByPriority") || '优先级', icon: '🎯' },
-                { key: 'title', label: i18n("sortByTitle") || '标题', icon: '📝' }
-            ];
-
-            sortOptions.forEach(option => {
-                // 升序
-                menu.addItem({
-                    iconHTML: option.icon,
-                    label: `${option.label} (${i18n("ascending") || "升序"}↑)`,
-                    current: this.currentSort === option.key && this.currentSortOrder === 'asc',
-                    click: () => {
-                        this.currentSort = option.key;
-                        this.currentSortOrder = 'asc';
+            const dialog = new SortMenuDialog({
+                plugin: this.plugin,
+                currentCriteria: this.getActiveSortCriteria(),
+                availableMethods: this.getProjectSortAvailableMethods(),
+                onSave: async (criteria) => {
+                    try {
+                        this.currentSortCriteria = this.normalizeSortCriteria(criteria);
+                        this.syncLegacySortStateFromCriteria();
                         this.updateSortButtonTitle();
-                        this.savePanelSettings();
+                        await this.savePanelSettings();
                         this.loadProjects();
+                    } catch (error) {
+                        console.error('保存项目排序配置失败:', error);
                     }
-                });
-
-                // 降序
-                menu.addItem({
-                    iconHTML: option.icon,
-                    label: `${option.label} (${i18n("descending") || "降序"}↓)`,
-                    current: this.currentSort === option.key && this.currentSortOrder === 'desc',
-                    click: () => {
-                        this.currentSort = option.key;
-                        this.currentSortOrder = 'desc';
+                },
+                onChange: async (criteria) => {
+                    try {
+                        this.currentSortCriteria = this.normalizeSortCriteria(criteria);
+                        this.syncLegacySortStateFromCriteria();
                         this.updateSortButtonTitle();
-                        this.savePanelSettings();
+                        await this.savePanelSettings();
                         this.loadProjects();
+                    } catch (error) {
+                        console.error('实时更新项目排序配置失败:', error);
                     }
-                });
+                }
             });
-
-            if (this.sortButton) {
-                const rect = this.sortButton.getBoundingClientRect();
-                const menuX = rect.left;
-                const menuY = rect.bottom + 4;
-
-                const maxX = window.innerWidth - 200;
-                const maxY = window.innerHeight - 200;
-
-                menu.open({
-                    x: Math.min(menuX, maxX),
-                    y: Math.min(menuY, maxY)
-                });
-            } else {
-                menu.open({
-                    x: event.clientX,
-                    y: event.clientY
-                });
-            }
+            dialog.show();
         } catch (error) {
             console.error('显示排序菜单失败:', error);
         }
@@ -585,71 +770,10 @@ export class ProjectPanel {
 
 
     private sortProjects(projects: any[]) {
-        const sortType = this.currentSort;
-        const sortOrder = this.currentSortOrder;
-
-        projects.sort((a: any, b: any) => {
-            let result = 0;
-
-            switch (sortType) {
-                case 'time':
-                    result = this.compareByTime(a, b);
-                    break;
-                case 'priority':
-                    result = this.compareByPriorityWithManualSort(a, b);
-                    break;
-                case 'title':
-                    result = this.compareByTitle(a, b);
-                    break;
-                default:
-                    result = this.compareByTime(a, b);
-            }
-
-            // 优先级排序的结果相反
-            if (sortType === 'priority') {
-                result = -result;
-            }
-
-            return sortOrder === 'desc' ? -result : result;
-        });
-    }
-
-    // 新增：优先级排序与手动排序结合
-    private compareByPriorityWithManualSort(a: any, b: any): number {
-        const priorityOrder = { 'high': 3, 'medium': 2, 'low': 1, 'none': 0 };
-        const priorityA = priorityOrder[a.priority || 'none'] || 0;
-        const priorityB = priorityOrder[b.priority || 'none'] || 0;
-
-        // 首先按优先级排序
-        const priorityDiff = priorityB - priorityA;
-        if (priorityDiff !== 0) {
-            return priorityDiff;
-        }
-
-        // 同优先级内按手动排序
-        const sortA = a.sort || 0;
-        const sortB = b.sort || 0;
-
-        if (sortA !== sortB) {
-            return sortA - sortB; // 手动排序值小的在前
-        }
-
-        // 如果手动排序值也相同，按时间排序
-        return this.compareByTime(a, b);
-    }
-
-    private compareByTime(a: any, b: any): number {
-        const dateA = a.startDate || a.createdTime || '';
-        const dateB = b.startDate || b.createdTime || '';
-        return dateA.localeCompare(dateB);
-    }
-
-    // ...existing code...
-
-    private compareByTitle(a: any, b: any): number {
-        const titleA = (a.title || '').toLowerCase();
-        const titleB = (b.title || '').toLowerCase();
-        return titleA.localeCompare(titleB, getLocaleTag());
+        const criteria = this.getActiveSortCriteria();
+        const categoryOrderMap = buildProjectCategoryOrderMap(this.categoryManager.getCategories());
+        const statusOrderMap = buildProjectStatusOrderMap(this.statusManager.getStatuses());
+        projects.sort((a: any, b: any) => compareProjectsByPanelSort(a, b, criteria, categoryOrderMap, statusOrderMap));
     }
 
     private renderProjects(projects: any[]) {
@@ -770,8 +894,8 @@ export class ProjectPanel {
         // 将拖拽手柄添加到project-item
         projectEl.appendChild(dragHandle);
 
-        // 在优先级排序模式下添加拖拽功能
-        if (this.currentSort === 'priority') {
+        // 仅在主排序为优先级时启用拖拽排序
+        if (this.isPriorityPrimarySort()) {
             this.addDragFunctionality(projectEl, dragHandle, project);
         }
 
@@ -2538,8 +2662,13 @@ export class ProjectPanel {
     private async restorePanelSettings() {
         try {
             const settings = await this.plugin.loadSettings();
-            this.currentSort = settings.projectPanelSort || 'priority';
-            this.currentSortOrder = settings.projectPanelSortOrder || 'desc';
+            const savedCriteria = this.normalizeSortCriteria(
+                settings.projectPanelSortCriteria && Array.isArray(settings.projectPanelSortCriteria) && settings.projectPanelSortCriteria.length > 0
+                    ? settings.projectPanelSortCriteria
+                    : [{ method: settings.projectPanelSort || 'priority', order: settings.projectPanelSortOrder || 'desc' }]
+            );
+            this.currentSortCriteria = savedCriteria;
+            this.syncLegacySortStateFromCriteria();
             this.showOnlyWithDoingTasks = settings.projectPanelShowOnlyDoing || false;
             this.selectedCategories = settings.projectPanelSelectedCategories || [];
         } catch (error) {
@@ -2550,8 +2679,11 @@ export class ProjectPanel {
     private async savePanelSettings() {
         try {
             const settings = await this.plugin.loadSettings();
-            settings.projectPanelSort = this.currentSort;
-            settings.projectPanelSortOrder = this.currentSortOrder;
+            const activeCriteria = this.getActiveSortCriteria();
+            const primary = activeCriteria[0] || { method: 'priority', order: 'desc' };
+            settings.projectPanelSortCriteria = activeCriteria;
+            settings.projectPanelSort = primary.method;
+            settings.projectPanelSortOrder = primary.order;
             settings.projectPanelShowOnlyDoing = this.showOnlyWithDoingTasks;
             settings.projectPanelSelectedCategories = this.selectedCategories;
             await this.plugin.saveSettings(settings);
