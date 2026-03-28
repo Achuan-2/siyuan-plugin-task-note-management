@@ -3739,7 +3739,7 @@ export class ReminderPanel {
                         try {
                             const completedTime = this.getCompletedTime(r);
                             if (completedTime) {
-                                const completedDate = completedTime.split(' ')[0];
+                                const completedDate = getLogicalDateString(new Date(completedTime.replace(' ', 'T')));
                                 if (completedDate === yesterdayStr) return true;
                             }
                         } catch (e) {
@@ -4088,7 +4088,7 @@ export class ReminderPanel {
             try {
                 const completedTime = this.getCompletedTime(reminder);
                 if (completedTime) {
-                    const completedDate = completedTime.split(' ')[0];
+                    const completedDate = getLogicalDateString(new Date(completedTime.replace(' ', 'T')));
                     if (completedDate === today) return true;
                 }
             } catch (e) {
@@ -8627,7 +8627,7 @@ export class ReminderPanel {
                 try {
                     const completedTime = this.getCompletedTime(reminder);
                     if (completedTime) {
-                        const completedDate = completedTime.split(' ')[0];
+                        const completedDate = getLogicalDateString(new Date(completedTime.replace(' ', 'T')));
                         return completedDate === today;
                     }
                 } catch (e) {
