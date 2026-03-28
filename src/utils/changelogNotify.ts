@@ -7,6 +7,35 @@ import { i18n } from "../pluginInstance";
 const CHANGELOG_START_VERSION = "6.5.5";
 
 export class ChangelogUtils {
+    private static getCurrentLang(): string {
+        return (window as any)?.siyuan?.config?.lang || "";
+    }
+
+    private static getLocalizedVersionNotes(versionContent: string): string {
+        const normalizedContent = versionContent.trim();
+        if (!normalizedContent) {
+            return i18n("noUpdateNotes") || "无更新内容";
+        }
+
+        // 每个版本日志约定：分割线前是中文，分割线后是英文
+        const dividerMatch = normalizedContent.match(/\r?\n\s*---\s*\r?\n/);
+        if (!dividerMatch || dividerMatch.index === undefined) {
+            return normalizedContent;
+        }
+
+        const dividerStart = dividerMatch.index;
+        const dividerEnd = dividerStart + dividerMatch[0].length;
+        const chineseNotes = normalizedContent.slice(0, dividerStart).trim();
+        const englishNotes = normalizedContent.slice(dividerEnd).trim();
+
+        if (this.getCurrentLang() === "zh_CN") {
+            return chineseNotes || (i18n("noUpdateNotes") || "无更新内容");
+        }
+
+        // 非中文优先英文，英文为空则回退中文
+        return englishNotes || chineseNotes || (i18n("noUpdateNotes") || "无更新内容");
+    }
+
     /**
      * 检查并显示版本更新日志说明
      * @param plugin 插件实例
@@ -109,7 +138,7 @@ export class ChangelogUtils {
         const match = content.match(regex);
         
         if (match && match[0]) {
-            return match[0].trim();
+            return this.getLocalizedVersionNotes(match[0]);
         }
         return i18n("noUpdateNotes") || "无更新内容";
     }
@@ -148,7 +177,7 @@ export class ChangelogUtils {
             // 仅包含起始版本之后（或包含起始版本）且小于等于 toVersion 的版本
             if (isAfterFromVersion &&
                 this.compareVersions(version, toVersion) <= 0) {
-                results.push(match[0].trim());
+                results.push(this.getLocalizedVersionNotes(match[0]));
             }
         }
         
