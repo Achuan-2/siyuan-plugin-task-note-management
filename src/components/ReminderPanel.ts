@@ -8879,7 +8879,7 @@ export class ReminderPanel {
             const maxSort = allReminders.reduce((max, r) => Math.max(max, r.sort || 0), 0);
             const defaultSort = maxSort + 10000;
 
-            const today = getLocalDateString();
+            const today = getLogicalDateString();
             const quickDialog = new QuickReminderDialog(
                 today, // 初始日期为今天
                 undefined, // 不指定初始时间
