@@ -6912,7 +6912,7 @@ export class ReminderPanel {
             menu.addItem({
                 iconHTML: "🎯",
                 label: i18n("setPriority"),
-                submenu: createPriorityMenuItems(false)
+                submenu: createPriorityMenuItems(true)
             });
             menu.addItem({
                 iconHTML: "🏷️",

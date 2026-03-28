@@ -97,7 +97,6 @@ export class PomodoroTimer {
     private randomRestCheckTimer: number = null; // 定期检查定时器
     private randomRestNextTriggerTime: number = 0; // 下次触发时间
     private randomRestWindow: any = null; // 新增：随机微休息弹窗
-    private randomRestWindowAutoCloseTimer: number = null; // 随机微休息弹窗自动关闭定时器
     private pomodoroEndWindow: any = null; // 新增：番茄钟结束弹窗
 
     private systemNotificationEnabled: boolean = true; // 新增：系统弹窗开关
@@ -862,11 +861,6 @@ export class PomodoroTimer {
 
 
     private closeRandomRestWindow() {
-        // 清理自动关闭定时器
-        if (this.randomRestWindowAutoCloseTimer) {
-            clearTimeout(this.randomRestWindowAutoCloseTimer);
-            this.randomRestWindowAutoCloseTimer = null;
-        }
         if (this.randomRestWindow) {
             try {
                 this.randomRestWindow.destroy();
@@ -1402,7 +1396,8 @@ export class PomodoroTimer {
                     nodeIntegration: false,
                     contextIsolation: true,
                     webSecurity: false, // 允许加载本地资源
-                    autoplayPolicy: 'no-user-gesture-required'
+                    autoplayPolicy: 'no-user-gesture-required',
+                    backgroundThrottling: false // 让弹窗自己的倒计时在后台也不中断
                 },
                 title: title,
                 show: false,
@@ -1493,20 +1488,36 @@ export class PomodoroTimer {
                     </div>
                     <script>
                         const delay = ${autoCloseDelay || 0};
-                        if (delay > 0) {
-                            let remaining = delay;
-                            const el = document.getElementById('countdown');
-                            if (el) {
-                                el.textContent = remaining;
-                                const timer = setInterval(() => {
-                                    remaining--;
-                                    if (remaining >= 0) {
-                                        el.textContent = remaining;
-                                    } else {
-                                        clearInterval(timer);
-                                    }
-                                }, 1000);
+                        const closeWindow = () => {
+                            try {
+                                window.close();
+                            } catch (e) {
+                                // ignore
                             }
+                        };
+                        if (delay > 0) {
+                            const closeAt = Date.now() + (delay * 1000);
+                            const el = document.getElementById('countdown');
+                            const updateCountdown = () => {
+                                if (!el) return;
+                                const remainingSeconds = Math.max(0, Math.ceil((closeAt - Date.now()) / 1000));
+                                el.textContent = String(remainingSeconds);
+                            };
+
+                            updateCountdown();
+                            const interval = setInterval(() => {
+                                updateCountdown();
+                                if (Date.now() >= closeAt) {
+                                    clearInterval(interval);
+                                    closeWindow();
+                                }
+                            }, 200);
+
+                            // 再加一层本窗口内兜底，确保最终会关闭
+                            setTimeout(() => {
+                                clearInterval(interval);
+                                closeWindow();
+                            }, delay * 1000 + 1200);
                         }
                     </script>
                 </body>
@@ -1546,16 +1557,6 @@ export class PomodoroTimer {
             });
 
             this.randomRestWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(htmlContent));
-
-            // 安全网：用独立定时器确保弹窗最终关闭（比主定时器多2秒余量）
-            if (autoCloseDelay) {
-                if (this.randomRestWindowAutoCloseTimer) {
-                    clearTimeout(this.randomRestWindowAutoCloseTimer);
-                }
-                this.randomRestWindowAutoCloseTimer = window.setTimeout(() => {
-                    this.closeRandomRestWindow();
-                }, (autoCloseDelay + 2) * 1000);
-            }
 
 
         } catch (e) {
