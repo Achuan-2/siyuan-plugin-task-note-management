@@ -5533,9 +5533,27 @@ export class ReminderPanel {
                     if (data) {
                         try {
                             const parsed = JSON.parse(data);
-                            if (parsed && parsed.id) blockIds = [parsed.id];
-                            else if (typeof parsed === 'string') blockIds = [parsed];
-                        } catch (e) { blockIds = [data]; }
+                            const extractId = (item: any) => {
+                                if (item.children && item.children.blockId) return item.children.blockId;
+                                if (item.children && item.children.rootId) return item.children.rootId;
+                                if (item.blockId) return item.blockId;
+                                if (item.rootId) return item.rootId;
+                                return item.id;
+                            };
+
+                            if (Array.isArray(parsed)) {
+                                blockIds = parsed.map(extractId).filter(id => id);
+                            } else if (parsed) {
+                                const bid = extractId(parsed);
+                                if (bid) blockIds = [bid];
+                            }
+
+                            if (blockIds.length === 0 && typeof parsed === 'string') {
+                                blockIds = [parsed];
+                            }
+                        } catch (e) {
+                            blockIds = [data];
+                        }
                     }
                 }
 
