@@ -14,9 +14,9 @@ export interface SortConfig {
 
 // 所有可用的排序方法
 export const AVAILABLE_SORT_METHODS = [
-    { key: 'priority', label: () => i18n("sortByPriority"), icon: '🎯' },
-    { key: 'project', label: () => i18n("projectSorting") || "按项目排序", icon: '📁' },
     { key: 'category', label: () => i18n("sortByCategory") || "按分类排序", icon: '🏷️' },
+    { key: 'project', label: () => i18n("projectSorting") || "按项目排序", icon: '📁' },
+    { key: 'priority', label: () => i18n("sortByPriority"), icon: '🎯' },
     { key: 'time', label: () => i18n("sortByTime"), icon: '🗓' },
     { key: 'completed', label: () => i18n("sortByCompletedTime") || "按完成时间排序", icon: '✅' },
     { key: 'created', label: () => i18n("sortByCreated"), icon: '🗓' },

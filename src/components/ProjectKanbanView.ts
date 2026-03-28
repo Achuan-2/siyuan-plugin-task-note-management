@@ -21,6 +21,14 @@ import { PasteTaskDialog } from "./PasteTaskDialog";
 import { ProjectDialog } from "./ProjectDialog";
 import { getFrontend,getBackend } from "siyuan";
 import { createPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
+import { SortMenuDialog } from "./SortMenuDialog";
+import { SortCriterion, getSortCriterionName } from "../utils/sortConfig";
+
+interface KanbanSortConfigProjectData {
+    sortRule?: string;
+    sortOrder?: 'asc' | 'desc';
+    sortCriteria?: SortCriterion[];
+}
 
 export class ProjectKanbanView {
     private container: HTMLElement;
@@ -30,6 +38,7 @@ export class ProjectKanbanView {
     private categoryManager: CategoryManager;
     private projectManager: ProjectManager;
     private currentSort: string = 'priority';
+    private currentSortCriteria: SortCriterion[] = [{ method: 'priority', order: 'desc' }];
     private kanbanMode: 'status' | 'custom' | 'list' = 'status';
     private currentSortOrder: 'asc' | 'desc' = 'desc';
     private doneSort: string = 'completedTime';
@@ -374,9 +383,8 @@ export class ProjectKanbanView {
         await this.loadProject();
         await this.loadKanbanMode();
 
-        // 加载项目排序设置
-        this.currentSort = await this.projectManager.getProjectSortRule(this.projectId) || 'priority';
-        this.currentSortOrder = await this.projectManager.getProjectSortOrder(this.projectId) || 'desc';
+        // 加载项目排序设置（兼容旧版单条件）
+        await this.loadKanbanSortConfig();
 
         this.initUI();
         await this.loadTasks();
@@ -6230,18 +6238,119 @@ export class ProjectKanbanView {
         return level;
     }
 
+    private getKanbanSortAvailableMethods() {
+        return [
+            { key: 'priority', label: () => i18n('sortByPriority') || i18n('sortingPriority'), icon: '🎯' },
+            { key: 'category', label: () => i18n('sortByCategory') || '分类', icon: '🏷️' },
+            { key: 'time', label: () => i18n('sortBySetTime') || i18n('sortByTime') || i18n('sortingTime'), icon: '🕐' },
+            { key: 'created', label: () => i18n('sortByCreated'), icon: '📅' },
+            { key: 'title', label: () => i18n('sortByTitle') || i18n('sortingTitle'), icon: '📝' },
+        ];
+    }
+
+    private normalizeKanbanSortCriteria(criteria: any): SortCriterion[] {
+        const availableMethods = new Set(this.getKanbanSortAvailableMethods().map(method => method.key));
+        const normalized = Array.isArray(criteria)
+            ? criteria
+                .map((criterion: any) => {
+                    const rawMethod = String(criterion?.method || '');
+                    const method = rawMethod === 'createdAt' ? 'created' : rawMethod;
+                    return {
+                        method,
+                        order: criterion?.order === 'desc' ? 'desc' : 'asc'
+                    };
+                })
+                .filter((criterion: SortCriterion) => availableMethods.has(criterion.method))
+            : [];
+
+        if (normalized.length > 0) {
+            return normalized;
+        }
+        return [{ method: 'priority', order: 'desc' }];
+    }
+
+    private getActiveSortCriteria(): SortCriterion[] {
+        return this.normalizeKanbanSortCriteria(this.currentSortCriteria);
+    }
+
+    private syncLegacySortStateFromCriteria() {
+        const primary = this.getActiveSortCriteria()[0] || { method: 'priority', order: 'desc' as const };
+        this.currentSort = primary.method;
+        this.currentSortOrder = primary.order;
+    }
+
+    private isPriorityPrimarySort(): boolean {
+        return this.getActiveSortCriteria()?.[0]?.method === 'priority';
+    }
+
+    private async loadKanbanSortConfig() {
+        try {
+            const projectData = await this.plugin.loadProjectData() || {};
+            const project = (projectData[this.projectId] || {}) as KanbanSortConfigProjectData;
+            const legacySortRule = project.sortRule || await this.projectManager.getProjectSortRule(this.projectId) || 'priority';
+            const legacySortOrder = project.sortOrder || await this.projectManager.getProjectSortOrder(this.projectId) || 'desc';
+            const criteria = this.normalizeKanbanSortCriteria(
+                project.sortCriteria && Array.isArray(project.sortCriteria) && project.sortCriteria.length > 0
+                    ? project.sortCriteria
+                    : [{ method: legacySortRule, order: legacySortOrder }]
+            );
+
+            this.currentSortCriteria = criteria;
+            this.syncLegacySortStateFromCriteria();
+        } catch (error) {
+            console.warn('加载看板排序配置失败，使用默认排序', error);
+            this.currentSortCriteria = [{ method: 'priority', order: 'desc' }];
+            this.syncLegacySortStateFromCriteria();
+        }
+    }
+
+    private async saveKanbanSortConfig(criteria: SortCriterion[]) {
+        const normalized = this.normalizeKanbanSortCriteria(criteria);
+        this.currentSortCriteria = normalized;
+        this.syncLegacySortStateFromCriteria();
+
+        try {
+            const projectData = await this.plugin.loadProjectData() || {};
+            const project = (projectData[this.projectId] || {}) as KanbanSortConfigProjectData;
+            const primary = normalized[0] || { method: 'priority', order: 'desc' as const };
+
+            project.sortCriteria = normalized;
+            project.sortRule = primary.method;
+            project.sortOrder = primary.order;
+            projectData[this.projectId] = project;
+            await this.plugin.saveProjectData(projectData);
+        } catch (error) {
+            console.warn('保存看板排序配置失败', error);
+        }
+    }
+
+    private async ensurePriorityPrimarySortForManualReorder() {
+        if (this.isPriorityPrimarySort()) {
+            return;
+        }
+
+        const order = this.currentSortOrder === 'asc' ? 'asc' : 'desc';
+        const rest = this.getActiveSortCriteria().filter(c => c.method !== 'priority');
+        await this.saveKanbanSortConfig([{ method: 'priority', order }, ...rest]);
+        this.updateSortButtonTitle();
+        showMessage("已切换为手动操作排序模式");
+    }
+
     private updateSortButtonTitle() {
         if (this.sortButton) {
-            const sortNames = {
-                'time': i18n('sortingTime'),
-                'priority': i18n('sortingPriority'),
-                'title': i18n('sortingTitle')
-            };
-            const orderNames = {
-                'asc': i18n('ascendingOrder'),
-                'desc': i18n('descendingOrder')
-            };
-            this.sortButton.classList.add('ariaLabel'); this.sortButton.setAttribute('aria-label', `${i18n('sortBy')}: ${sortNames[this.currentSort]} (${orderNames[this.currentSortOrder]})`);
+            const activeCriteria = this.getActiveSortCriteria();
+            let fullSortDescription: string;
+
+            if (!activeCriteria || activeCriteria.length === 0) {
+                fullSortDescription = i18n('sortBy');
+            } else if (activeCriteria.length === 1) {
+                fullSortDescription = getSortCriterionName(activeCriteria[0]);
+            } else {
+                fullSortDescription = activeCriteria.map((criterion, index) => `${index + 1}. ${getSortCriterionName(criterion)}`).join('<br>');
+            }
+
+            this.sortButton.classList.add('ariaLabel');
+            this.sortButton.setAttribute('aria-label', `${i18n('sortBy')}:<br>${fullSortDescription}`);
         }
     }
 
@@ -6262,45 +6371,54 @@ export class ProjectKanbanView {
     }
 
     private sortTasks() {
-        this.tasks.sort((a, b) => {
-            // 特殊处理时间排序：无日期任务总是排在最后
-            if (this.currentSort === 'time') {
-                const hasDateA = !!a.date;
-                const hasDateB = !!b.date;
+        const criteria = this.getActiveSortCriteria();
+        this.tasks.sort((a, b) => this.sortByCriteria(a, b, criteria));
+    }
 
-                if (hasDateA && !hasDateB) return -1;
-                if (!hasDateA && hasDateB) return 1;
-                if (!hasDateA && !hasDateB) {
-                    return this.compareByCreatedAt(b, a);
-                }
+    private compareByCriterion(a: any, b: any, criterion: SortCriterion): number {
+        let result = 0;
 
-                const result = this.compareByTime(a, b);
-                return this.currentSortOrder === 'desc' ? -result : result;
+        switch (criterion.method) {
+            case 'priority':
+                // 多选排序中，priority 只比较优先级本身，让后续条件（如分类）可以生效
+                result = this.compareByPriorityValue(a, b); // 默认高优先级在前
+                return criterion.order === 'desc' ? result : -result;
+            case 'category':
+                result = this.compareByCategory(a, b);
+                break;
+            case 'time':
+                // 多选排序中，time 只比较时间本身，不在这里追加优先级兜底
+                result = this.compareByTimeForCriteria(a, b);
+                break;
+            case 'created':
+                result = this.compareByCreatedAt(a, b);
+                break;
+            case 'title':
+                // 多选排序中，title 只比较标题本身
+                result = this.compareByTitleForCriteria(a, b);
+                break;
+            default:
+                result = 0;
+        }
+
+        return criterion.order === 'desc' ? -result : result;
+    }
+
+    private sortByCriteria(a: any, b: any, criteria: SortCriterion[]): number {
+        for (const criterion of criteria) {
+            const result = this.compareByCriterion(a, b, criterion);
+            if (result !== 0) {
+                return result;
             }
+        }
 
-            let result = 0;
+        // 所有排序条件都相同时，按手动 sort 保持稳定顺序（无论是否包含 priority）
+        const sortDiff = this.getTaskSortValue(a) - this.getTaskSortValue(b);
+        if (sortDiff !== 0) {
+            return sortDiff;
+        }
 
-            switch (this.currentSort) {
-                case 'priority':
-                    result = this.compareByPriority(a, b);
-                    break;
-                case 'title':
-                    result = this.compareByTitle(a, b);
-                    break;
-                case 'createdAt':
-                    result = this.compareByCreatedAt(a, b);
-                    break;
-                default:
-                    result = this.compareByPriority(a, b);
-            }
-
-            // 优先级排序的结果相反
-            if (this.currentSort === 'priority') {
-                result = -result;
-            }
-
-            return this.currentSortOrder === 'desc' ? -result : result;
-        });
+        return this.compareByCreatedAt(a, b);
     }
 
     private compareByPriority(a: any, b: any): number {
@@ -6332,6 +6450,54 @@ export class ProjectKanbanView {
         const timeA = a.createdTime ? new Date(a.createdTime).getTime() : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
         const timeB = b.createdTime ? new Date(b.createdTime).getTime() : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
         return timeB - timeA; // 最新创建的在前
+    }
+
+    private compareByCategory(a: any, b: any): number {
+        const categories = this.categoryManager.getCategories();
+        const categoryOrder = new Map<string, number>();
+        categories.forEach((cat, index) => {
+            categoryOrder.set(cat.id, index);
+        });
+
+        const getPrimaryCategoryId = (task: any): string => {
+            let categoryId = task?.categoryId;
+
+            // 重复实例没有 categoryId 时，回退原始任务分类
+            if (!categoryId && task?.isRepeatInstance && task?.originalId && this.reminderData) {
+                const originalTask = this.reminderData[task.originalId];
+                if (originalTask) {
+                    categoryId = originalTask.categoryId;
+                }
+            }
+
+            if (!categoryId) return 'none';
+            const ids = String(categoryId).split(',').map((id: string) => id.trim()).filter((id: string) => id);
+            if (ids.length === 0) return 'none';
+            if (ids.length === 1) return ids[0];
+
+            let bestId = ids[0];
+            let bestOrder = categoryOrder.get(bestId) ?? Number.MAX_SAFE_INTEGER;
+            for (let i = 1; i < ids.length; i++) {
+                const id = ids[i];
+                const order = categoryOrder.get(id) ?? Number.MAX_SAFE_INTEGER;
+                if (order < bestOrder) {
+                    bestOrder = order;
+                    bestId = id;
+                }
+            }
+            return bestId;
+        };
+
+        const catA = getPrimaryCategoryId(a);
+        const catB = getPrimaryCategoryId(b);
+
+        if (catA === 'none' && catB === 'none') return 0;
+        if (catA === 'none') return 1;
+        if (catB === 'none') return -1;
+
+        const orderA = categoryOrder.get(catA) ?? Number.MAX_SAFE_INTEGER;
+        const orderB = categoryOrder.get(catB) ?? Number.MAX_SAFE_INTEGER;
+        return orderA - orderB;
     }
 
     /**
@@ -6399,6 +6565,41 @@ export class ProjectKanbanView {
         return this.compareByPriorityValue(a, b);
     }
 
+    private compareByTimeForCriteria(a: any, b: any): number {
+        const hasDateA = !!a.date;
+        const hasDateB = !!b.date;
+
+        if (!hasDateA && !hasDateB) return 0;
+        if (!hasDateA) return 1;
+        if (!hasDateB) return -1;
+
+        const dateA = new Date(a.date + (a.time ? `T${a.time}` : 'T00:00'));
+        const dateB = new Date(b.date + (b.time ? `T${b.time}` : 'T00:00'));
+
+        if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
+            if (isNaN(dateA.getTime()) && isNaN(dateB.getTime())) return 0;
+            return isNaN(dateA.getTime()) ? 1 : -1;
+        }
+
+        const timeDiff = dateA.getTime() - dateB.getTime();
+        if (timeDiff !== 0) return timeDiff;
+
+        const isSpanningA = a.endDate && a.endDate !== a.date;
+        const isSpanningB = b.endDate && b.endDate !== b.date;
+        const isAllDayA = !a.time;
+        const isAllDayB = !b.time;
+
+        if (isSpanningA && !isSpanningB) return -1;
+        if (!isSpanningA && isSpanningB) return 1;
+
+        if (!isSpanningA && !isSpanningB) {
+            if (!isAllDayA && isAllDayB) return -1;
+            if (isAllDayA && !isAllDayB) return 1;
+        }
+
+        return 0;
+    }
+
     // 优先级数值比较（用于时间相同时的排序）
     private compareByPriorityValue(a: any, b: any): number {
         const priorityOrder = { 'high': 3, 'medium': 2, 'low': 1, 'none': 0 };
@@ -6429,6 +6630,12 @@ export class ProjectKanbanView {
         const timeA = a.createdTime ? new Date(a.createdTime).getTime() : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
         const timeB = b.createdTime ? new Date(b.createdTime).getTime() : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
         return timeB - timeA; // 最新创建的在前
+    }
+
+    private compareByTitleForCriteria(a: any, b: any): number {
+        const titleA = (a.title || '').toLowerCase();
+        const titleB = (b.title || '').toLowerCase();
+        return titleA.localeCompare(titleB, getLocaleTag());
     }
 
     private compareByCreatedAt(a: any, b: any): number {
@@ -7988,26 +8195,8 @@ export class ProjectKanbanView {
         // 子任务排序函数：根据当前排序设置排序
         const sortChildren = (children: any[]) => {
             const sorted = [...children];
-            switch (this.currentSort) {
-                case 'priority':
-                    sorted.sort((a, b) => this.compareByPriority(a, b));
-                    break;
-                case 'time':
-                    sorted.sort((a, b) => this.compareByTime(a, b));
-                    break;
-                case 'title':
-                    sorted.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
-                    break;
-                case 'createdAt':
-                    sorted.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-                    break;
-                default:
-                    sorted.sort((a, b) => (a.sort || 0) - (b.sort || 0));
-            }
-            // 应用排序方向
-            if (this.currentSortOrder === 'asc') {
-                sorted.reverse();
-            }
+            const criteria = this.getActiveSortCriteria();
+            sorted.sort((a, b) => this.sortByCriteria(a, b, criteria));
             return sorted;
         };
 
@@ -8564,27 +8753,8 @@ export class ProjectKanbanView {
         // 子任务排序函数：根据当前排序设置排序
         const sortChildren = (children: any[]) => {
             const sorted = [...children];
-            switch (this.currentSort) {
-                case 'priority':
-                    sorted.sort((a, b) => this.compareByPriority(a, b));
-                    break;
-                case 'time':
-                    sorted.sort((a, b) => this.compareByTime(a, b));
-                    break;
-                case 'title':
-                    sorted.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
-                    break;
-                case 'createdAt':
-                    sorted.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-                    break;
-                default:
-                    // 默认按 sort 字段排序（与 SubtasksDialog 一致）
-                    sorted.sort((a, b) => (a.sort || 0) - (b.sort || 0));
-            }
-            // 应用排序方向
-            if (this.currentSortOrder === 'asc') {
-                sorted.reverse();
-            }
+            const criteria = this.getActiveSortCriteria();
+            sorted.sort((a, b) => this.sortByCriteria(a, b, criteria));
             return sorted;
         };
 
@@ -11936,105 +12106,29 @@ export class ProjectKanbanView {
         }
     }
 
-    private showSortMenu(event: MouseEvent) {
-        if (document.querySelector('.kanban-sort-menu')) {
-            return;
-        }
-
-        const menuEl = document.createElement('div');
-        menuEl.className = 'kanban-sort-menu';
-        menuEl.style.cssText = `
-            position: absolute;
-            background: var(--b3-theme-background);
-            border: 1px solid var(--b3-theme-border);
-            border-radius: 6px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-                padding: 8px;
-            z-index: 100;
-                display: flex;
-            flex-direction: column;
-                gap: 4px;
-                `;
-
-        const sortOptions = [
-            { key: 'priority', label: i18n('sortByPriority'), icon: '🎯' },
-            { key: 'time', label: i18n('sortByTime'), icon: '🕐' },
-            { key: 'createdAt', label: i18n('sortByCreated'), icon: '📅' },
-            { key: 'title', label: i18n('sortByTitle'), icon: '📝' },
-        ];
-
-        const createOption = (option: any, order: 'asc' | 'desc') => {
-            const button = document.createElement('button');
-            button.className = 'b3-button b3-button--outline';
-            const isActive = this.currentSort === option.key && this.currentSortOrder === order;
-            button.style.cssText = `
-                width: 100%;
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                justify-content: flex-start;
-                text-align: left;
-                background-color: ${isActive ? 'var(--b3-theme-primary-lightest)' : 'transparent'};
-                color: ${isActive ? 'var(--b3-theme-primary)' : 'var(--b3-theme-on-surface)'};
-                `;
-            // Use valid <span> tags (no stray spaces in tag names), and keep layout compact
-            button.innerHTML = `
-                    <span style="font-size: 16px; margin-right: 8px;">${option.icon}</span>
-                    <span>${option.label} (${order === 'asc' ? i18n('ascendingOrder') : i18n('descendingOrder')})</span>
-                `;
-            button.addEventListener('click', async () => {
-                this.currentSort = option.key;
-                this.currentSortOrder = order;
-
-                // 保存排序设置
-                await this.projectManager.setProjectSortRule(this.projectId, option.key);
-                await this.projectManager.setProjectSortOrder(this.projectId, order);
-
-                this.updateSortButtonTitle();
-                this.sortTasks();
-                this.renderKanban();
-                closeMenu();
+    private showSortMenu(_event: MouseEvent) {
+        try {
+            const dialog = new SortMenuDialog({
+                plugin: this.plugin,
+                currentCriteria: this.getActiveSortCriteria(),
+                availableMethods: this.getKanbanSortAvailableMethods(),
+                onSave: async (criteria) => {
+                    await this.saveKanbanSortConfig(criteria);
+                    this.updateSortButtonTitle();
+                    this.sortTasks();
+                    await this.renderKanban();
+                },
+                onChange: async (criteria) => {
+                    await this.saveKanbanSortConfig(criteria);
+                    this.updateSortButtonTitle();
+                    this.sortTasks();
+                    await this.renderKanban();
+                }
             });
-            return button;
-        };
-
-        sortOptions.forEach(option => {
-            menuEl.appendChild(createOption(option, 'desc'));
-            menuEl.appendChild(createOption(option, 'asc'));
-        });
-
-        document.body.appendChild(menuEl);
-
-        const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-        // Remove stray whitespace before 'px' (invalid CSS) and ensure the menu stays aligned to trigger element
-        menuEl.style.top = `${rect.bottom + 4}px`;
-        menuEl.style.left = `${rect.right - menuEl.offsetWidth}px`;
-        // Ensure a minimum width so the content doesn't wrap awkwardly
-        menuEl.style.minWidth = '180px';
-        // preferable box-sizing for predictable width calculations
-        menuEl.style.boxSizing = 'border-box';
-
-        // Prevent the menu from going outside the viewport
-        let left = rect.right - menuEl.offsetWidth;
-        let top = rect.bottom + 4;
-        if (left < 4) left = 4;
-        if (left + menuEl.offsetWidth > window.innerWidth - 4) left = Math.max(4, window.innerWidth - menuEl.offsetWidth - 4);
-        if (top + menuEl.offsetHeight > window.innerHeight - 4) top = Math.max(4, rect.top - menuEl.offsetHeight - 4);
-        menuEl.style.left = `${left}px`;
-        menuEl.style.top = `${top}px`;
-
-        const closeMenu = () => {
-            menuEl.remove();
-            document.removeEventListener('click', handleClickOutside);
-        };
-
-        const handleClickOutside = (e: MouseEvent) => {
-            if (!menuEl.contains(e.target as Node) && e.target !== event.currentTarget) {
-                closeMenu();
-            }
-        };
-
-        setTimeout(() => document.addEventListener('click', handleClickOutside), 0);
+            dialog.show();
+        } catch (error) {
+            console.error('显示排序菜单失败:', error);
+        }
     }
 
     private showDoneSortMenu(event: MouseEvent) {
@@ -14709,13 +14803,8 @@ export class ProjectKanbanView {
     }
 
     private async reorderTasks(draggedTask: any, targetTask: any, insertBefore: boolean): Promise<boolean> {
-        // [New Logic] If not in 'priority' sort mode, switch to it automatically when manual reorder is triggered
-        if (this.currentSort !== 'priority') {
-            this.currentSort = 'priority';
-            this.projectManager.setProjectSortRule(this.projectId, 'priority');
-            this.updateSortButtonTitle();
-            showMessage("已切换为手动操作排序模式");
-        }
+        // 非优先级主排序时，拖拽会自动切换到优先级主排序
+        await this.ensurePriorityPrimarySortForManualReorder();
 
         try {
             const reminderData = await this.getReminders();
@@ -16451,13 +16540,8 @@ export class ProjectKanbanView {
     }
 
     private async batchReorderTasks(taskIds: string[], targetTask: any, insertBefore: boolean): Promise<boolean> {
-        // [New Logic] If not in 'priority' sort mode, switch to it automatically
-        if (this.currentSort !== 'priority') {
-            this.currentSort = 'priority';
-            this.projectManager.setProjectSortRule(this.projectId, 'priority');
-            this.updateSortButtonTitle();
-            showMessage("已切换为手动操作排序模式");
-        }
+        // 非优先级主排序时，拖拽会自动切换到优先级主排序
+        await this.ensurePriorityPrimarySortForManualReorder();
         try {
             const reminderData = await this.getReminders();
             const blocksToUpdate = new Set<string>();
