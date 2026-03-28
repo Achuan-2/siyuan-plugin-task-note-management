@@ -6242,7 +6242,7 @@ export class ProjectKanbanView {
         return [
             { key: 'priority', label: () => i18n('sortByPriority') || i18n('sortingPriority'), icon: '🎯' },
             { key: 'category', label: () => i18n('sortByCategory') || '分类', icon: '🏷️' },
-            { key: 'time', label: () => i18n('sortBySetTime') || i18n('sortByTime') || i18n('sortingTime'), icon: '🕐' },
+            { key: 'time', label: () =>  i18n('sortByTime'), icon: '🕐' },
             { key: 'created', label: () => i18n('sortByCreated'), icon: '📅' },
             { key: 'title', label: () => i18n('sortByTitle') || i18n('sortingTitle'), icon: '📝' },
         ];
