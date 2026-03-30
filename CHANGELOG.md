@@ -4,6 +4,15 @@
 - 🎨 任务侧栏：重复任务编辑所有实例的抖动优化
 - 🎨 习惯打卡：重复任务支持绑定习惯完成打卡和记录番茄钟
 - 🎨 日历上传：手机端/浏览器端支持S3上传ICS
+- 🎨 银河麒麟系统番茄钟emoji丢失
+
+---
+
+- ✨ Task Editing: Supports custom task progress bars
+- 🎨 Task Sidebar: Jitter optimization for editing all instances of recurring tasks
+- 🎨 Habit Check-ins: Recurring tasks support binding habits for completing check-ins and recording Pomodoros
+- 🎨 Calendar Upload: Mobile/Browser support for S3 uploading of ICS files
+- 🎨 Galaxy Kylin system Pomodoro emoji missing
 
 ## v6.6.0 / 20260328
 
