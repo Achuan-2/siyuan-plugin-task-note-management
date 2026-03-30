@@ -383,6 +383,31 @@ export class PomodoroTimer {
     }
 
     /**
+     * Emoji 跨平台回退字体链（尤其用于 Linux/银河麒麟）
+     */
+    private getEmojiFontFallbackList(): string {
+        return `"Emojis Additional", "Emojis Reset", BlinkMacSystemFont, Helvetica, "PingFang SC", "Luxi Sans", "DejaVu Sans", Arial, "Microsoft Yahei", "Hiragino Sans GB", "Source Han Sans SC", sans-serif, emojis`;
+    }
+
+    /**
+     * DOM 模式下使用的字体（仅使用思源字体变量）
+     */
+    private getPomodoroDomFontFamilyCss(): string {
+        return `var(--b3-font-family)`;
+    }
+
+    /**
+     * BrowserWindow 模式下的实际字体值（将变量解析后注入到独立页面）
+     */
+    private getPomodoroBrowserWindowFontFamily(): string {
+        const baseFont = this.getCssVariable('--b3-font-family');
+        if (baseFont) {
+            return `${baseFont}, ${this.getEmojiFontFallbackList()}`;
+        }
+        return this.getEmojiFontFallbackList();
+    }
+
+    /**
      * 调整颜色亮度（简单实现）
      */
     private adjustColor(color: string, amount: number): string {
@@ -1034,6 +1059,7 @@ export class PomodoroTimer {
             const btnHoverBgColor = colors.surface ? this.adjustColor(colors.surface, -10) : '#e0e0e0';
             const confirmBtnColor = '#4CAF50';
             const confirmBtnHoverColor = '#45a049';
+            const fontFamily = this.getPomodoroBrowserWindowFontFamily();
 
             const htmlContent = `
                 <!DOCTYPE html>
@@ -1050,7 +1076,7 @@ export class PomodoroTimer {
                             justify-content: center;
                             height: 100vh;
                             margin: 0;
-                            font-family: "Segoe UI", "Microsoft YaHei", -apple-system, sans-serif;
+                            font-family: ${fontFamily};
                             padding: 20px;
                             box-sizing: border-box;
                         }
@@ -1225,6 +1251,7 @@ export class PomodoroTimer {
 
             const bgColor = this.getCssVariable('--b3-theme-background');
             const textColor = this.getCssVariable('--b3-theme-on-background');
+            const fontFamily = this.getPomodoroBrowserWindowFontFamily();
 
             const htmlContent = `
                 <!DOCTYPE html>
@@ -1242,7 +1269,7 @@ export class PomodoroTimer {
                             justify-content: center;
                             height: 100vh;
                             margin: 0;
-                            font-family: "Segoe UI", "Microsoft YaHei", -apple-system, sans-serif;
+                            font-family: ${fontFamily};
                             overflow: hidden;
                             user-select: none;
                             box-sizing: border-box;
@@ -1409,6 +1436,7 @@ export class PomodoroTimer {
 
             const bgColor = this.getCssVariable('--b3-theme-background');
             const textColor = this.getCssVariable('--b3-theme-on-background');
+            const fontFamily = this.getPomodoroBrowserWindowFontFamily();
 
             const htmlContent = `
                 <!DOCTYPE html>
@@ -1427,7 +1455,7 @@ export class PomodoroTimer {
                             justify-content: center;
                             height: 100vh;
                             margin: 0;
-                            font-family: "Segoe UI", "Microsoft YaHei", -apple-system, sans-serif;
+                            font-family: ${fontFamily};
                             overflow: hidden;
                             user-select: none;
                             box-sizing: border-box;
@@ -2136,6 +2164,7 @@ export class PomodoroTimer {
                 background: var(--b3-theme-background);
                 overflow: hidden;
                 box-sizing: border-box;
+                font-family: ${this.getPomodoroDomFontFamilyCss()};
             `;
         } else {
             // 悬浮窗口模式
@@ -2153,6 +2182,7 @@ export class PomodoroTimer {
                 backdrop-filter: blur(16px);
                 transition: transform 0.2s ease, opacity 0.2s ease;
                 overflow: hidden;
+                font-family: ${this.getPomodoroDomFontFamilyCss()};
             `;
         }
 
@@ -2504,7 +2534,7 @@ export class PomodoroTimer {
             cursor: pointer;
             transition: background-color 0.2s ease, transform 0.2s ease;
             padding: 4px 8px;
-            font-family: var(--b3-font-family) !important;
+            font-family: ${this.getPomodoroDomFontFamilyCss()} !important;
             max-width: 100%;
             box-sizing: border-box;
             pointer-events: auto;
@@ -6984,7 +7014,7 @@ export class PomodoroTimer {
             const controlChannel = `pomodoro-control-${pomodoroWindow.id}`;
             const ipcMain = (remote as any).ipcMain;
 
-            const htmlContent = this.generateBrowserWindowHTML(actionChannel, controlChannel, currentState, timeStr, statusText, todayTimeStr, weekTimeStr, bgColor, textColor, surfaceColor, borderColor, hoverColor, this.getCssVariable('--b3-theme-background-light'), this.reminder.title || (i18n('unnamedNote') || '未命名笔记'), this.isBackgroundAudioMuted, this.randomRestEnabled, this.randomRestCount, successColor, dailyFocusGoal);
+            const htmlContent = this.generateBrowserWindowHTML(actionChannel, controlChannel, currentState, timeStr, statusText, todayTimeStr, weekTimeStr, bgColor, textColor, surfaceColor, borderColor, hoverColor, this.getCssVariable('--b3-theme-background-light'), this.reminder.title || (i18n('unnamedNote') || '未命名笔记'), this.isBackgroundAudioMuted, this.randomRestEnabled, this.randomRestCount, successColor, dailyFocusGoal, this.getPomodoroBrowserWindowFontFamily());
 
             this.container = pomodoroWindow as any;
 
@@ -7592,6 +7622,7 @@ document.body.classList.remove('docked-mode');
         randomRestCount: number,
         successColor: string,
         dailyFocusGoal: number,
+        fontFamily: string,
         miniModeTitle?: string,
         dockModeTitle?: string
     ): string {
@@ -7618,7 +7649,7 @@ document.body.classList.remove('docked-mode');
         body {
             background: ${this.isDocked ? 'transparent !important' : bgColor};
             color: ${textColor};
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: ${fontFamily};
             overflow: hidden;
             user-select: none;
             height: 100vh;
@@ -8388,7 +8419,8 @@ document.body.classList.remove('docked-mode');
                 this.randomRestEnabled,
                 this.randomRestCount,
                 colors.successBackground,
-                (this.settings.dailyFocusGoal || 0)
+                (this.settings.dailyFocusGoal || 0),
+                this.getPomodoroBrowserWindowFontFamily()
             );
 
             // 重新加载窗口内容
