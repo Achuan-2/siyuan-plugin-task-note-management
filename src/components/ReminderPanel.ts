@@ -9345,6 +9345,19 @@ export class ReminderPanel {
         try {
             if (!savedReminder || typeof savedReminder !== 'object') return;
 
+            // 重复任务模板在列表中是“按实例渲染”，不能像普通任务一样直接插入。
+            // 否则在 today/todayCompleted 视图会短暂出现“多出一条模板任务”后又被刷新移除。
+            const isRepeatTemplate = !!savedReminder.repeat?.enabled && !savedReminder.isRepeatInstance;
+            if (isRepeatTemplate) {
+                // 先乐观更新缓存，再走普通刷新（不强制），避免编辑整组重复任务时出现闪烁/跳动
+                this.allRemindersMap.set(savedReminder.id, savedReminder);
+                if (this.originalRemindersCache) {
+                    this.originalRemindersCache[savedReminder.id] = savedReminder;
+                }
+                await this.loadReminders();
+                return;
+            }
+
             // 1. 补齐 createdTime 字段以便排序显示
             if (savedReminder.createdAt && !savedReminder.createdTime) {
                 savedReminder.createdTime = savedReminder.createdAt;
