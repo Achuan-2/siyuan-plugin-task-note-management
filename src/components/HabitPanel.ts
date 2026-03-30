@@ -430,6 +430,93 @@ export class HabitPanel {
         return undefined;
     }
 
+    private getCompletedDateFromRepeatInstance(reminder: any, instanceDate: string): string {
+        const completedTimes = reminder?.repeat?.completedTimes;
+        const completedTime = typeof completedTimes?.[instanceDate] === 'string'
+            ? completedTimes[instanceDate]
+            : '';
+
+        if (completedTime) {
+            return this.getCompletedDateFromReminder({ completedTime });
+        }
+
+        if (/^\d{4}-\d{2}-\d{2}$/.test(instanceDate || '')) {
+            return instanceDate;
+        }
+
+        return getLogicalDateString();
+    }
+
+    private normalizeLinkedHabitInstanceSyncMap(reminder: any): Record<string, string> {
+        const rawMap = reminder?.linkedHabitLastAutoCheckInInstanceKeys;
+        if (!rawMap || typeof rawMap !== 'object' || Array.isArray(rawMap)) {
+            return {};
+        }
+
+        const normalized: Record<string, string> = {};
+        Object.entries(rawMap).forEach(([instanceDate, marker]) => {
+            if (typeof instanceDate !== 'string' || typeof marker !== 'string') return;
+            if (!instanceDate || !marker) return;
+            normalized[instanceDate] = marker;
+        });
+        return normalized;
+    }
+
+    private applyTaskCompletionAutoCheckIn(
+        habit: Habit,
+        reminder: any,
+        targetDate: string,
+        now: string,
+        noteSuffix?: string
+    ) {
+        let emojiConfig = this.resolveTaskAutoCheckInOption(habit, reminder);
+        const configuredEmoji = reminder.linkedHabitAutoCheckInEmoji || habit.autoCheckInEmoji || habit.checkInEmojis?.[0]?.emoji || '✅';
+        if (!emojiConfig) {
+            emojiConfig = habit.checkInEmojis?.find(item => item.emoji === configuredEmoji);
+        }
+        if (!emojiConfig) {
+            emojiConfig = {
+                emoji: configuredEmoji,
+                meaning: i18n("taskAutoCheckInFromTask") || '任务完成自动打卡',
+                countsAsSuccess: true,
+                promptNote: false
+            } as HabitCheckInEmoji;
+            habit.checkInEmojis = [...(habit.checkInEmojis || []), emojiConfig];
+        }
+
+        habit.checkIns = habit.checkIns || {};
+        if (!habit.checkIns[targetDate]) {
+            habit.checkIns[targetDate] = {
+                count: 0,
+                status: [],
+                timestamp: now,
+                entries: []
+            };
+        }
+
+        const noteParts = [
+            `${i18n("taskAutoCheckInNotePrefix") || '来自任务'}: ${reminder.title || i18n("unnamedTask") || '未命名任务'}`
+        ];
+        if (noteSuffix) {
+            noteParts.push(noteSuffix);
+        }
+
+        const dayCheckIn = habit.checkIns[targetDate];
+        dayCheckIn.entries = dayCheckIn.entries || [];
+        dayCheckIn.entries.push({
+            emoji: emojiConfig.emoji,
+            timestamp: now,
+            meaning: emojiConfig.meaning,
+            note: noteParts.join(' '),
+            group: (emojiConfig.group || '').trim() || undefined
+        });
+        dayCheckIn.status = (dayCheckIn.status || []).concat([emojiConfig.emoji]);
+        dayCheckIn.count = (dayCheckIn.count || 0) + 1;
+        dayCheckIn.timestamp = now;
+        habit.totalCheckIns = (habit.totalCheckIns || 0) + 1;
+        habit.updatedAt = now;
+    }
+
     private async syncTaskCompletionAutoCheckIns(habitData: Record<string, Habit>, reminderData: Record<string, any>) {
         if (!habitData || !reminderData) return;
 
@@ -442,6 +529,58 @@ export class HabitPanel {
 
             const linkedHabitId = reminder.linkedHabitId;
             if (!linkedHabitId || !reminder.linkedHabitAutoCheckInOnComplete) continue;
+            const habit = habitData[linkedHabitId];
+            if (!habit) continue;
+
+            if (reminder.repeat?.enabled) {
+                const completedInstances = (Array.isArray(reminder.repeat?.completedInstances)
+                    ? reminder.repeat.completedInstances
+                    : []).filter((instanceDate: any) => typeof instanceDate === 'string' && !!instanceDate);
+
+                const completedInstanceSet = new Set<string>(completedInstances);
+                const syncedInstanceMap = this.normalizeLinkedHabitInstanceSyncMap(reminder);
+                let instanceMapChanged = false;
+
+                Object.keys(syncedInstanceMap).forEach(instanceDate => {
+                    if (completedInstanceSet.has(instanceDate)) return;
+                    delete syncedInstanceMap[instanceDate];
+                    instanceMapChanged = true;
+                });
+
+                for (const instanceDate of completedInstances) {
+                    const instanceCompletedTime = typeof reminder.repeat?.completedTimes?.[instanceDate] === 'string'
+                        ? reminder.repeat.completedTimes[instanceDate]
+                        : '';
+                    const syncMarker = instanceCompletedTime
+                        ? `${instanceDate}:${instanceCompletedTime}`
+                        : `${instanceDate}:completed`;
+
+                    if (syncedInstanceMap[instanceDate] === syncMarker) continue;
+
+                    const targetDate = this.getCompletedDateFromRepeatInstance(reminder, instanceDate);
+                    this.applyTaskCompletionAutoCheckIn(
+                        habit,
+                        reminder,
+                        targetDate,
+                        now,
+                        `(${i18n("instanceDate") || '实例日期'}: ${instanceDate})`
+                    );
+
+                    syncedInstanceMap[instanceDate] = syncMarker;
+                    instanceMapChanged = true;
+                    hasHabitChange = true;
+                }
+
+                if (instanceMapChanged) {
+                    if (Object.keys(syncedInstanceMap).length > 0) {
+                        reminder.linkedHabitLastAutoCheckInInstanceKeys = syncedInstanceMap;
+                    } else if (reminder.linkedHabitLastAutoCheckInInstanceKeys !== undefined) {
+                        delete reminder.linkedHabitLastAutoCheckInInstanceKeys;
+                    }
+                    hasReminderChange = true;
+                }
+            }
+
             if (!reminder.completed) {
                 if (reminder.linkedHabitLastAutoCheckInKey !== undefined) {
                     delete reminder.linkedHabitLastAutoCheckInKey;
@@ -450,52 +589,11 @@ export class HabitPanel {
                 continue;
             }
 
-            const habit = habitData[linkedHabitId];
-            if (!habit) continue;
-
             const syncMarker = reminder.completedTime || 'completed';
             if (reminder.linkedHabitLastAutoCheckInKey === syncMarker) continue;
 
             const targetDate = this.getCompletedDateFromReminder(reminder);
-            let emojiConfig = this.resolveTaskAutoCheckInOption(habit, reminder);
-            const configuredEmoji = reminder.linkedHabitAutoCheckInEmoji || habit.autoCheckInEmoji || habit.checkInEmojis?.[0]?.emoji || '✅';
-            if (!emojiConfig) {
-                emojiConfig = habit.checkInEmojis?.find(item => item.emoji === configuredEmoji);
-            }
-            if (!emojiConfig) {
-                emojiConfig = {
-                    emoji: configuredEmoji,
-                    meaning: i18n("taskAutoCheckInFromTask") || '任务完成自动打卡',
-                    countsAsSuccess: true,
-                    promptNote: false
-                } as HabitCheckInEmoji;
-                habit.checkInEmojis = [...(habit.checkInEmojis || []), emojiConfig];
-            }
-
-            habit.checkIns = habit.checkIns || {};
-            if (!habit.checkIns[targetDate]) {
-                habit.checkIns[targetDate] = {
-                    count: 0,
-                    status: [],
-                    timestamp: now,
-                    entries: []
-                };
-            }
-
-            const dayCheckIn = habit.checkIns[targetDate];
-            dayCheckIn.entries = dayCheckIn.entries || [];
-            dayCheckIn.entries.push({
-                emoji: emojiConfig.emoji,
-                timestamp: now,
-                meaning: emojiConfig.meaning,
-                note: `${i18n("taskAutoCheckInNotePrefix") || '来自任务'}: ${reminder.title || i18n("unnamedTask") || '未命名任务'}`,
-                group: (emojiConfig.group || '').trim() || undefined
-            });
-            dayCheckIn.status = (dayCheckIn.status || []).concat([emojiConfig.emoji]);
-            dayCheckIn.count = (dayCheckIn.count || 0) + 1;
-            dayCheckIn.timestamp = now;
-            habit.totalCheckIns = (habit.totalCheckIns || 0) + 1;
-            habit.updatedAt = now;
+            this.applyTaskCompletionAutoCheckIn(habit, reminder, targetDate, now);
 
             reminder.linkedHabitLastAutoCheckInKey = syncMarker;
             hasHabitChange = true;
