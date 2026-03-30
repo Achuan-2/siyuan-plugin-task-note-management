@@ -9008,6 +9008,29 @@ export class ProjectKanbanView {
         }
     }
 
+    private normalizeCustomProgress(value: any): number | undefined {
+        if (value === undefined || value === null || value === '') return undefined;
+        const num = typeof value === 'string' ? Number(value.trim()) : Number(value);
+        if (!Number.isFinite(num)) return undefined;
+        return Math.max(0, Math.min(100, Math.round(num)));
+    }
+
+    private getTaskProgressInfo(task: any): { shouldShow: boolean; percent: number } {
+        const customPercent = this.normalizeCustomProgress(task?.customProgress);
+        if (customPercent !== undefined) {
+            return { shouldShow: true, percent: customPercent };
+        }
+
+        const directChildren = this.tasks.filter(t => t.parentId === task?.id);
+        if (directChildren.length === 0) {
+            return { shouldShow: false, percent: 0 };
+        }
+
+        const completedCount = directChildren.filter(c => c.completed).length;
+        const percent = Math.round((completedCount / directChildren.length) * 100);
+        return { shouldShow: true, percent: Math.max(0, Math.min(100, percent)) };
+    }
+
 
 
     private createTaskElement(task: any, level: number = 0): HTMLElement {
@@ -9864,11 +9887,10 @@ export class ProjectKanbanView {
 
         taskEl.appendChild(taskMainContainer);
 
-        // 如果为父任务，计算子任务完成进度并在底部显示进度条
-        const directChildren = this.tasks.filter(t => t.parentId === task.id);
-        if (directChildren.length > 0) {
-            const completedCount = directChildren.filter(c => c.completed).length;
-            const percent = Math.round((completedCount / directChildren.length) * 100);
+        // 进度条：优先展示自定义进度；未设置时按子任务完成比例展示
+        const progressInfo = this.getTaskProgressInfo(task);
+        if (progressInfo.shouldShow) {
+            const percent = progressInfo.percent;
 
             const progressContainer = document.createElement('div');
             progressContainer.className = 'kanban-task-progress-container';

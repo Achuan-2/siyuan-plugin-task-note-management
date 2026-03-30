@@ -1,7 +1,7 @@
 ﻿import { Dialog, showMessage, confirm } from "siyuan";
 import { getBlockByID, updateBindBlockAtrrs, getBlockReminderIds } from "../api";
 // import { getLocalDateTimeString, getRelativeDateString } from "../utils/dateUtils";
-import { getLocaleTag } from "../utils/dateUtils";
+import { getLocaleTag, getLogicalDateString, getRelativeDateString, compareDateStrings } from "../utils/dateUtils";
 import { CategoryManager } from "../utils/categoryManager";
 import { ProjectManager } from "../utils/projectManager";
 import { i18n } from "../pluginInstance";
@@ -16,7 +16,7 @@ export class BlockRemindersDialog {
     private plugin: any;
     private categoryManager: CategoryManager;
     private projectManager: ProjectManager;
-    private today: string;
+    private allRemindersMap: Map<string, any> = new Map();
     private reminderUpdatedHandler: (event: CustomEvent) => void;
 
     constructor(blockId: string, plugin: any) {
@@ -24,7 +24,6 @@ export class BlockRemindersDialog {
         this.plugin = plugin;
         this.categoryManager = CategoryManager.getInstance();
         this.projectManager = ProjectManager.getInstance(plugin);
-        this.today = new Date().toISOString().split('T')[0];
     }
 
     async show() {
@@ -48,6 +47,7 @@ export class BlockRemindersDialog {
 
             // 获取提醒数据
             const reminderData = await this.plugin.loadReminderData();
+            this.allRemindersMap = new Map(Object.entries(reminderData || {}));
             const reminders = reminderIds
                 .map(id => reminderData[id])
                 .filter(r => r); // 过滤掉不存在的提醒
@@ -73,6 +73,7 @@ export class BlockRemindersDialog {
             // 监听提醒更新事件
             this.reminderUpdatedHandler = async () => {
                 const updatedReminderData = await this.plugin.loadReminderData();
+                this.allRemindersMap = new Map(Object.entries(updatedReminderData || {}));
                 const updatedReminderIds = await getBlockReminderIds(this.blockId);
                 const updatedReminders = updatedReminderIds
                     .map(id => updatedReminderData[id])
@@ -139,6 +140,57 @@ export class BlockRemindersDialog {
             }
 
             container.appendChild(completedSection);
+        }
+    }
+
+    private normalizeCustomProgress(value: any): number | undefined {
+        if (value === undefined || value === null || value === '') return undefined;
+        const num = typeof value === 'string' ? Number(value.trim()) : Number(value);
+        if (!Number.isFinite(num)) return undefined;
+        return Math.max(0, Math.min(100, Math.round(num)));
+    }
+
+    private getReminderProgressInfo(reminder: any): { shouldShow: boolean; percent: number } {
+        const customPercent = this.normalizeCustomProgress(reminder?.customProgress);
+        if (customPercent !== undefined) {
+            return { shouldShow: true, percent: customPercent };
+        }
+
+        const children: any[] = [];
+        this.allRemindersMap.forEach((r: any) => {
+            if (r?.parentId === reminder?.id) children.push(r);
+        });
+
+        if (children.length === 0) {
+            return { shouldShow: false, percent: 0 };
+        }
+
+        const completedCount = children.filter(c => c.completed).length;
+        return {
+            shouldShow: true,
+            percent: Math.max(0, Math.min(100, Math.round((completedCount / children.length) * 100)))
+        };
+    }
+
+    private getReminderLogicalDate(dateStr?: string, timeStr?: string): string {
+        if (!dateStr) return '';
+        if (timeStr) {
+            try {
+                return getLogicalDateString(new Date(`${dateStr}T${timeStr}`));
+            } catch (e) {
+                return dateStr;
+            }
+        }
+        return dateStr;
+    }
+
+    private getLogicalDayDifference(baseLogicalDate: string, targetLogicalDate: string): number {
+        try {
+            const base = new Date(`${baseLogicalDate}T00:00:00`);
+            const target = new Date(`${targetLogicalDate}T00:00:00`);
+            return Math.round((target.getTime() - base.getTime()) / (24 * 60 * 60 * 1000));
+        } catch (e) {
+            return compareDateStrings(targetLogicalDate, baseLogicalDate);
         }
     }
 
@@ -234,7 +286,7 @@ export class BlockRemindersDialog {
         if (reminder.date) {
             const timeEl = document.createElement('div');
             timeEl.className = 'reminder-item__time';
-            const timeText = this.formatReminderTime(reminder.date, reminder.time, this.today, reminder.endDate, reminder.endTime);
+            const timeText = this.formatReminderTime(reminder.date, reminder.time, undefined, reminder.endDate, reminder.endTime);
             timeEl.textContent = '🗓' + timeText;
             timeEl.style.fontSize = '12px';
             timeEl.style.color = 'var(--b3-theme-on-surface-light)';
@@ -406,6 +458,53 @@ export class BlockRemindersDialog {
             infoEl.appendChild(tagsContainer);
         }
 
+        const progressInfo = this.getReminderProgressInfo(reminder);
+        if (progressInfo.shouldShow) {
+            const progressContainer = document.createElement('div');
+            progressContainer.className = 'reminder-progress-container';
+            progressContainer.style.cssText = `
+                margin-top: 6px;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            `;
+
+            const progressWrap = document.createElement('div');
+            progressWrap.style.cssText = `
+                flex: 1;
+                min-width: 0;
+                height: 8px;
+                background: rgba(0, 0, 0, 0.08);
+                border-radius: 6px;
+                overflow: hidden;
+            `;
+
+            const progressBar = document.createElement('div');
+            progressBar.className = 'reminder-progress-bar';
+            progressBar.style.cssText = `
+                height: 100%;
+                width: ${progressInfo.percent}%;
+                border-radius: 6px;
+                background: linear-gradient(90deg, #2ecc71, #27ae60);
+                transition: width 0.3s ease;
+            `;
+            progressWrap.appendChild(progressBar);
+
+            const percentText = document.createElement('span');
+            percentText.className = 'reminder-progress-text';
+            percentText.textContent = `${progressInfo.percent}%`;
+            percentText.style.cssText = `
+                font-size: 12px;
+                color: var(--b3-theme-on-surface-light);
+                min-width: 36px;
+                text-align: right;
+            `;
+
+            progressContainer.appendChild(progressWrap);
+            progressContainer.appendChild(percentText);
+            infoEl.appendChild(progressContainer);
+        }
+
         contentEl.appendChild(infoEl);
 
         // 操作按钮
@@ -504,48 +603,54 @@ export class BlockRemindersDialog {
     }
 
     private formatReminderTime(date: string, time?: string, today?: string, endDate?: string, endTime?: string): string {
-        // 简化版本，从ReminderPanel复制
-        const now = new Date();
-        const targetDate = new Date(date + (time ? 'T' + time : ''));
-        const isToday = date === today;
-        const isTomorrow = date === new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-        const isYesterday = date === new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        if (!today) {
+            today = getLogicalDateString();
+        }
+        const tomorrow = getRelativeDateString(1);
+        const yesterday = getRelativeDateString(-1);
 
-        let dateStr = '';
-        if (isToday) {
-            dateStr = i18n("today") || '今天';
-        } else if (isTomorrow) {
-            dateStr = i18n("tomorrow") || '明天';
-        } else if (isYesterday) {
-            dateStr = i18n("yesterday") || '昨天';
-        } else {
-            const diffDays = Math.floor((targetDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
-            if (diffDays > 0 && diffDays <= 7) {
-                const weekdays = [i18n("sunday") || '周日', i18n("monday") || '周一', i18n("tuesday") || '周二', i18n("wednesday") || '周三', i18n("thursday") || '周四', i18n("friday") || '周五', i18n("saturday") || '周六'];
-                dateStr = weekdays[targetDate.getDay()];
-            } else {
-                dateStr = date;
+        const getRelativeLabel = (calendarDate: string, logicalDate: string): string => {
+            if (logicalDate === today) return i18n("today") || "今天";
+            if (logicalDate === tomorrow) return i18n("tomorrow") || "明天";
+            if (logicalDate === yesterday) return i18n("yesterday") || "昨天";
+
+            try {
+                const base = new Date(`${today}T00:00:00`);
+                const target = new Date(`${logicalDate}T00:00:00`);
+                const diffDays = Math.round((target.getTime() - base.getTime()) / (24 * 60 * 60 * 1000));
+                if (diffDays > 0 && diffDays <= 7) {
+                    const calendar = new Date(`${calendarDate}T00:00:00`);
+                    const weekdays = [
+                        i18n("sunday") || "周日",
+                        i18n("monday") || "周一",
+                        i18n("tuesday") || "周二",
+                        i18n("wednesday") || "周三",
+                        i18n("thursday") || "周四",
+                        i18n("friday") || "周五",
+                        i18n("saturday") || "周六"
+                    ];
+                    return weekdays[calendar.getDay()];
+                }
+            } catch (e) {
+                // ignore
             }
-        }
 
-        let timeStr = '';
-        if (time) {
-            timeStr = time;
-        }
+            return calendarDate;
+        };
 
-        // 显示结束时间：跨日期或有结束时间
+        const logicalStart = this.getReminderLogicalDate(date, time);
+        const dateStr = getRelativeLabel(date, logicalStart);
+        const timeStr = time || '';
+
         if (endDate && (endDate !== date || endTime)) {
-            const isEndToday = endDate === today;
-            const isEndSameDay = endDate === date;
-            let endDateStr = isEndToday ? (i18n("today") || '今天') : endDate;
+            const logicalEnd = this.getReminderLogicalDate(endDate, endTime || time);
+            const endDateStr = getRelativeLabel(endDate, logicalEnd);
             const endTimeStr = endTime || '';
-            
-            // 同一天只显示结束时间，跨日期显示结束日期+时间
-            if (isEndSameDay) {
+
+            if (endDate === date) {
                 return `${dateStr} ${timeStr} - ${endTimeStr}`.trim();
-            } else {
-                return `${dateStr} ${timeStr} - ${endDateStr} ${endTimeStr}`.trim();
             }
+            return `${dateStr} ${timeStr} - ${endDateStr} ${endTimeStr}`.trim();
         }
 
         return `${dateStr} ${timeStr}`.trim();
@@ -553,23 +658,18 @@ export class BlockRemindersDialog {
 
     private createReminderCountdownElement(reminder: any): HTMLElement | null {
         if (!reminder.date) return null;
+        const logicalToday = getLogicalDateString();
 
-        const now = new Date();
-        
         // 判断是否设置了结束日期（与开始日期不同）
         const hasEndDate = reminder.endDate && reminder.endDate !== reminder.date;
-        
-        // 计算开始日期的差值
-        const startDate = new Date(reminder.date + (reminder.time ? 'T' + reminder.time : ''));
-        const startDiffMs = startDate.getTime() - now.getTime();
-        const startDiffDays = Math.ceil(startDiffMs / (24 * 60 * 60 * 1000));
-        
-        // 计算结束日期的差值（如果有）
+
+        const logicalStart = this.getReminderLogicalDate(reminder.date, reminder.time);
+        const startDiffDays = this.getLogicalDayDifference(logicalToday, logicalStart);
+
         let endDiffDays: number | null = null;
         if (hasEndDate) {
-            const endDate = new Date(reminder.endDate + (reminder.endTime ? 'T' + reminder.endTime : ''));
-            const endDiffMs = endDate.getTime() - now.getTime();
-            endDiffDays = Math.ceil(endDiffMs / (24 * 60 * 60 * 1000));
+            const logicalEnd = this.getReminderLogicalDate(reminder.endDate, reminder.endTime || reminder.time);
+            endDiffDays = this.getLogicalDayDifference(logicalToday, logicalEnd);
         }
 
         const countdownEl = document.createElement('span');

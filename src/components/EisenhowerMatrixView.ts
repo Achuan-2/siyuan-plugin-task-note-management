@@ -40,6 +40,7 @@ interface QuadrantTask {
     isRepeatInstance?: boolean; // 是否为重复事件实例
     originalId?: string; // 原始重复事件的ID
     isSubscribed?: boolean; // 是否为订阅任务
+    customProgress?: number | string; // 自定义进度（0-100）
 }
 
 interface Quadrant {
@@ -1513,8 +1514,9 @@ export class EisenhowerMatrixView {
         taskContent.appendChild(taskInnerContent);
         taskEl.appendChild(taskContent);
 
-        // 如果有子任务且为父任务，添加进度条容器（显示在任务元素底部）
-        if (childTasks.length > 0) {
+        // 进度条：优先使用自定义进度；未设置时按子任务完成比例显示
+        const progressInfo = this.getTaskProgressInfo(task);
+        if (progressInfo.shouldShow) {
             const progressContainer = document.createElement('div');
             progressContainer.className = 'task-progress-container';
             // ensure the progress bar fills vertically and the percent text sits to the right
@@ -1526,7 +1528,7 @@ export class EisenhowerMatrixView {
 
             const progressBar = document.createElement('div');
             progressBar.className = 'task-progress';
-            const percent = this.calculateChildCompletionPercent(task.id);
+            const percent = progressInfo.percent;
             progressBar.style.width = `${percent}%`;
             progressBar.setAttribute('data-progress', String(percent));
             // ensure bar takes full height of wrapper
@@ -1979,14 +1981,43 @@ export class EisenhowerMatrixView {
      */
     private updateParentProgressUI(parentId: string) {
         try {
-            const percent = this.calculateChildCompletionPercent(parentId);
+            const parentTask = this.allTasks.find(t => t.id === parentId);
+            const progressInfo = this.getTaskProgressInfo(parentTask);
 
             // 找到父任务元素
             const parentEl = this.container.querySelector(`[data-task-id="${parentId}"]`) as HTMLElement | null;
             if (!parentEl) return;
 
-            const progressBar = parentEl.querySelector('.task-progress') as HTMLElement | null;
-            const percentText = parentEl.querySelector('.task-progress-percent') as HTMLElement | null;
+            const existingContainer = parentEl.querySelector('.task-progress-container') as HTMLElement | null;
+            if (!progressInfo.shouldShow) {
+                if (existingContainer) existingContainer.remove();
+                return;
+            }
+
+            let progressContainer = existingContainer;
+            if (!progressContainer) {
+                progressContainer = document.createElement('div');
+                progressContainer.className = 'task-progress-container';
+                progressContainer.style.cssText = `display:flex; align-items:stretch; gap:8px; justify-content:space-between;`;
+
+                const progressWrap = document.createElement('div');
+                progressWrap.style.cssText = `flex:1; min-width:0;  display:flex; align-items:center;`;
+
+                const progressBar = document.createElement('div');
+                progressBar.className = 'task-progress';
+                progressWrap.appendChild(progressBar);
+
+                const percentText = document.createElement('span');
+                percentText.className = 'task-progress-percent';
+
+                progressContainer.appendChild(progressWrap);
+                progressContainer.appendChild(percentText);
+                parentEl.appendChild(progressContainer);
+            }
+
+            const percent = progressInfo.percent;
+            const progressBar = progressContainer.querySelector('.task-progress') as HTMLElement | null;
+            const percentText = progressContainer.querySelector('.task-progress-percent') as HTMLElement | null;
 
             if (progressBar) {
                 progressBar.style.width = `${percent}%`;
@@ -2145,13 +2176,39 @@ export class EisenhowerMatrixView {
      * 计算指定父任务的子任务完成百分比（已完成子任务数 / 子任务总数 * 100）
      * @param parentId 父任务ID
      */
+    private normalizeCustomProgress(value: any): number | undefined {
+        if (value === undefined || value === null || value === '') return undefined;
+        const num = typeof value === 'string' ? Number(value.trim()) : Number(value);
+        if (!Number.isFinite(num)) return undefined;
+        return Math.max(0, Math.min(100, Math.round(num)));
+    }
+
+    private getTaskProgressInfo(task: QuadrantTask | undefined | null): { shouldShow: boolean; percent: number } {
+        if (!task) return { shouldShow: false, percent: 0 };
+
+        const customPercent = this.normalizeCustomProgress((task as any).customProgress);
+        if (customPercent !== undefined) {
+            return { shouldShow: true, percent: customPercent };
+        }
+
+        const childTasks = this.allTasks.filter(t => t.parentId === task.id);
+        if (childTasks.length === 0) return { shouldShow: false, percent: 0 };
+
+        const completedCount = childTasks.filter(t => t.completed).length;
+        const percent = Math.round((completedCount / childTasks.length) * 100);
+        return { shouldShow: true, percent: Math.min(100, Math.max(0, percent)) };
+    }
+
     private calculateChildCompletionPercent(parentId: string): number {
         try {
+            const parentTask = this.allTasks.find(t => t.id === parentId);
+            if (parentTask) {
+                return this.getTaskProgressInfo(parentTask).percent;
+            }
             const childTasks = this.allTasks.filter(t => t.parentId === parentId);
             if (childTasks.length === 0) return 0;
             const completedCount = childTasks.filter(t => t.completed).length;
-            const percent = Math.round((completedCount / childTasks.length) * 100);
-            return Math.min(100, Math.max(0, percent));
+            return Math.min(100, Math.max(0, Math.round((completedCount / childTasks.length) * 100)));
         } catch (error) {
             console.error('计算子任务完成百分比失败:', error);
             return 0;

@@ -1676,23 +1676,48 @@ export class ReminderPanel {
      * 更新父任务底部的进度条显示（如果父任务当前显示）
      * @param parentId 父任务ID
      */
-    private updateParentTaskProgressDom(parentId: string): void {
-        const parentEl = this.remindersContainer.querySelector(`[data-reminder-id="${parentId}"]`) as HTMLElement | null;
-        if (!parentEl) return;
+    private normalizeCustomProgress(value: any): number | undefined {
+        if (value === undefined || value === null || value === '') return undefined;
+        const num = typeof value === 'string' ? Number(value.trim()) : Number(value);
+        if (!Number.isFinite(num)) return undefined;
+        return Math.max(0, Math.min(100, Math.round(num)));
+    }
+
+    private getReminderProgressInfo(reminder: any): { shouldShow: boolean; percent: number } {
+        const customPercent = this.normalizeCustomProgress(reminder?.customProgress);
+        if (customPercent !== undefined) {
+            return { shouldShow: true, percent: customPercent };
+        }
 
         const allChildren: any[] = [];
         this.allRemindersMap.forEach((r: any) => {
-            if (r.parentId === parentId) allChildren.push(r);
+            if (r.parentId === reminder?.id) allChildren.push(r);
         });
 
-        const existing = parentEl.querySelector('.reminder-progress-container') as HTMLElement | null;
         if (allChildren.length === 0) {
+            return { shouldShow: false, percent: 0 };
+        }
+
+        const completedCount = allChildren.filter(c => c.completed).length;
+        return { shouldShow: true, percent: Math.round((completedCount / allChildren.length) * 100) };
+    }
+
+    private updateParentTaskProgressDom(parentId: string): void {
+        const parentEl = this.remindersContainer.querySelector(`[data-reminder-id="${parentId}"]`) as HTMLElement | null;
+        if (!parentEl) return;
+        const parentReminder = this.allRemindersMap.get(parentId);
+
+        const existing = parentEl.querySelector('.reminder-progress-container') as HTMLElement | null;
+        if (!parentReminder) {
             if (existing) existing.remove();
             return;
         }
 
-        const completedCount = allChildren.filter(c => c.completed).length;
-        const percent = Math.round((completedCount / allChildren.length) * 100);
+        const { shouldShow, percent } = this.getReminderProgressInfo(parentReminder);
+        if (!shouldShow) {
+            if (existing) existing.remove();
+            return;
+        }
 
         let progressContainer = existing;
         if (!progressContainer) {
@@ -3424,19 +3449,10 @@ export class ReminderPanel {
         contentEl.appendChild(infoEl);
         reminderEl.appendChild(contentEl);
 
-        // 如果为父任务，计算直接子任务完成进度并在底部显示进度条
-        if (hasChildren) {
-            // 注意：需要从 allRemindersMap 中获取所有子任务（包括被隐藏的已完成子任务）
-            // 而不是只从 allVisibleReminders 或 currentRemindersCache 中获取
-            // 这样进度条才能正确反映所有子任务的完成情况
-            const allChildren: any[] = [];
-            this.allRemindersMap.forEach(r => {
-                if (r.parentId === reminder.id) {
-                    allChildren.push(r);
-                }
-            });
-            const completedCount = allChildren.filter(c => c.completed).length;
-            const percent = allChildren.length > 0 ? Math.round((completedCount / allChildren.length) * 100) : 0;
+        // 进度条显示优先使用自定义进度；未设置时才按子任务完成数计算
+        const progressInfo = this.getReminderProgressInfo(reminder);
+        if (progressInfo.shouldShow) {
+            const percent = progressInfo.percent;
 
             const progressContainer = document.createElement('div');
             progressContainer.className = 'reminder-progress-container';

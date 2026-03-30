@@ -725,6 +725,61 @@ export class QuickReminderDialog {
         return this.formatEstimatedPomodoroDuration(hours, minutes);
     }
 
+    private normalizeCustomProgressValue(value: any): number | undefined {
+        if (value === undefined || value === null || value === '') {
+            return undefined;
+        }
+
+        const num = typeof value === 'string' ? Number(value.trim()) : Number(value);
+        if (!Number.isFinite(num)) {
+            return undefined;
+        }
+
+        return Math.max(0, Math.min(100, Math.round(num)));
+    }
+
+    private syncCustomProgressInputs(source: 'range' | 'number' | 'auto' = 'auto') {
+        const rangeInput = this.dialog.element.querySelector('#quickCustomProgressRange') as HTMLInputElement;
+        const numberInput = this.dialog.element.querySelector('#quickCustomProgressValue') as HTMLInputElement;
+        if (!rangeInput || !numberInput) return;
+
+        const sourceValue = source === 'range'
+            ? rangeInput.value
+            : (source === 'number' ? numberInput.value : (numberInput.value || rangeInput.value));
+        let normalized = this.normalizeCustomProgressValue(sourceValue);
+        if (normalized === undefined) {
+            normalized = source === 'number'
+                ? (this.normalizeCustomProgressValue(rangeInput.value) ?? 0)
+                : 0;
+        }
+
+        const text = String(normalized);
+        rangeInput.value = text;
+        numberInput.value = text;
+    }
+
+    private updateCustomProgressInputState() {
+        const enabledInput = this.dialog.element.querySelector('#quickCustomProgressEnabled') as HTMLInputElement;
+        const controls = this.dialog.element.querySelector('#quickCustomProgressControls') as HTMLElement;
+        if (!enabledInput || !controls) return;
+
+        controls.style.display = enabledInput.checked ? 'flex' : 'none';
+        if (enabledInput.checked) {
+            this.syncCustomProgressInputs('auto');
+        }
+    }
+
+    private getCustomProgressValue(): number | undefined {
+        const enabledInput = this.dialog.element.querySelector('#quickCustomProgressEnabled') as HTMLInputElement;
+        if (!enabledInput || !enabledInput.checked) {
+            return undefined;
+        }
+
+        this.syncCustomProgressInputs('auto');
+        const numberInput = this.dialog.element.querySelector('#quickCustomProgressValue') as HTMLInputElement;
+        return this.normalizeCustomProgressValue(numberInput?.value) ?? 0;
+    }
+
     // 填充编辑表单数据
     private async populateEditForm() {
         if (!this.reminder) return;
@@ -815,6 +870,18 @@ export class QuickReminderDialog {
             if (estimatedPomodoroMinutesInput) {
                 estimatedPomodoroMinutesInput.value = minutes > 0 ? String(minutes) : '';
             }
+        }
+
+        const customProgressEnabledInput = this.dialog.element.querySelector('#quickCustomProgressEnabled') as HTMLInputElement;
+        const customProgressRangeInput = this.dialog.element.querySelector('#quickCustomProgressRange') as HTMLInputElement;
+        const customProgressValueInput = this.dialog.element.querySelector('#quickCustomProgressValue') as HTMLInputElement;
+        if (customProgressEnabledInput && customProgressRangeInput && customProgressValueInput) {
+            const customProgress = this.normalizeCustomProgressValue(this.reminder.customProgress);
+            customProgressEnabledInput.checked = customProgress !== undefined;
+            const progressValue = customProgress ?? 0;
+            customProgressRangeInput.value = String(progressValue);
+            customProgressValueInput.value = String(progressValue);
+            this.updateCustomProgressInputState();
         }
 
         // 填充日期和时间（使用独立的日期和时间输入框）
@@ -1157,6 +1224,8 @@ export class QuickReminderDialog {
 
         // 隐藏预计番茄时长组
         hideGroupOf('#quickEstimatedPomodoroHours');
+        // 隐藏自定义进度组
+        hideGroupOf('#quickCustomProgressValue');
 
         // 隐藏番茄钟查看组
         const pomodorosGroup = dialog.querySelector('#quickPomodorosGroup') as HTMLElement;
@@ -1982,6 +2051,21 @@ export class QuickReminderDialog {
                                 <div style="display: flex; align-items: center; gap: 6px; flex: 1 1 150px; min-width: 140px;">
                                     <input type="number" id="quickEstimatedPomodoroMinutes" class="b3-text-field" min="0" step="1" placeholder="0" style="width: 100%;">
                                     <span style="white-space: nowrap; color: var(--b3-theme-on-surface-light);">m</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="b3-form__group">
+                            <label class="b3-form__label">${i18n("customProgress") || "自定义进度"}</label>
+                            <div style="display: flex; flex-direction: column; gap: 8px;">
+                                <label class="b3-checkbox" style="display: flex; align-items: center;">
+                                    <input type="checkbox" class="b3-switch" id="quickCustomProgressEnabled">
+                                    <span class="b3-checkbox__graphic"></span>
+                                    <span class="b3-checkbox__label">${i18n("enableCustomProgress") || "启用自定义进度"}</span>
+                                </label>
+                                <div id="quickCustomProgressControls" style="display: none; align-items: center; gap: 8px; margin-left: 28px;">
+                                    <input type="range" class="b3-slider" id="quickCustomProgressRange" min="0" max="100" step="1" value="0" style="flex: 1;">
+                                    <input type="number" id="quickCustomProgressValue" class="b3-text-field" min="0" max="100" step="1" value="0" style="width: 72px;">
+                                    <span style="color: var(--b3-theme-on-surface-light);">%</span>
                                 </div>
                             </div>
                         </div>
@@ -3317,6 +3401,9 @@ export class QuickReminderDialog {
         const durationInput = this.dialog.element.querySelector('#quickDurationDays') as HTMLInputElement;
         const estimatedPomodoroHoursInput = this.dialog.element.querySelector('#quickEstimatedPomodoroHours') as HTMLInputElement;
         const estimatedPomodoroMinutesInput = this.dialog.element.querySelector('#quickEstimatedPomodoroMinutes') as HTMLInputElement;
+        const customProgressEnabledInput = this.dialog.element.querySelector('#quickCustomProgressEnabled') as HTMLInputElement;
+        const customProgressRangeInput = this.dialog.element.querySelector('#quickCustomProgressRange') as HTMLInputElement;
+        const customProgressValueInput = this.dialog.element.querySelector('#quickCustomProgressValue') as HTMLInputElement;
         const habitAutoCheckInCheckbox = this.dialog.element.querySelector('#quickHabitAutoCheckInOnComplete') as HTMLInputElement;
         const syncBlockTitleBtn = this.dialog.element.querySelector('#quickSyncBlockTitleBtn') as HTMLButtonElement;
         const syncTitleToBlockBtn = this.dialog.element.querySelector('#quickSyncTitleToBlockBtn') as HTMLButtonElement;
@@ -3435,6 +3522,26 @@ export class QuickReminderDialog {
         estimatedPomodoroMinutesInput?.addEventListener('input', normalizeEstimatedPomodoroDuration);
         estimatedPomodoroMinutesInput?.addEventListener('change', normalizeEstimatedPomodoroDuration);
         estimatedPomodoroMinutesInput?.addEventListener('blur', normalizeEstimatedPomodoroDuration);
+
+        customProgressEnabledInput?.addEventListener('change', () => {
+            this.updateCustomProgressInputState();
+        });
+        customProgressRangeInput?.addEventListener('input', () => {
+            this.syncCustomProgressInputs('range');
+        });
+        customProgressRangeInput?.addEventListener('change', () => {
+            this.syncCustomProgressInputs('range');
+        });
+        customProgressValueInput?.addEventListener('input', () => {
+            this.syncCustomProgressInputs('number');
+        });
+        customProgressValueInput?.addEventListener('change', () => {
+            this.syncCustomProgressInputs('number');
+        });
+        customProgressValueInput?.addEventListener('blur', () => {
+            this.syncCustomProgressInputs('number');
+        });
+        this.updateCustomProgressInputState();
 
         // 当结束日期变化，基于开始日期计算持续天数
         endDateInput?.addEventListener('change', () => {
@@ -5070,6 +5177,7 @@ export class QuickReminderDialog {
         const milestoneId = milestoneSelector?.value || undefined;
 
         const estimatedPomodoroDuration = this.getEstimatedPomodoroDurationValue();
+        const customProgress = this.getCustomProgressValue();
 
         // 每日可做
         const isAvailableToday = (this.dialog.element.querySelector('#quickIsAvailableToday') as HTMLInputElement)?.checked || false;
@@ -5152,6 +5260,7 @@ export class QuickReminderDialog {
                 repeat: this.repeatConfig.enabled ? this.repeatConfig : undefined,
                 quadrant: this.defaultQuadrant,
                 estimatedPomodoroDuration: estimatedPomodoroDuration,
+                customProgress: customProgress,
                 isAvailableToday: isAvailableToday,
                 availableStartDate: availableStartDate,
                 hideInCalendar: hideInCalendar
@@ -5235,6 +5344,7 @@ export class QuickReminderDialog {
                 }
             }
             optimisticReminder.estimatedPomodoroDuration = estimatedPomodoroDuration;
+            optimisticReminder.customProgress = customProgress;
             // 看板状态直接使用kanbanStatus
             optimisticReminder.kanbanStatus = kanbanStatus;
             optimisticReminder.isAvailableToday = isAvailableToday;
@@ -5279,7 +5389,8 @@ export class QuickReminderDialog {
                 quadrant: this.defaultQuadrant,
                 kanbanStatus: kanbanStatus,
                 reminderTimes: this.customTimes.length > 0 ? [...this.customTimes] : undefined,
-                estimatedPomodoroDuration: estimatedPomodoroDuration
+                estimatedPomodoroDuration: estimatedPomodoroDuration,
+                customProgress: customProgress
             };
 
             if (typeof this.defaultSort === 'number') optimisticReminder.sort = this.defaultSort;
@@ -5338,7 +5449,8 @@ export class QuickReminderDialog {
                             kanbanStatus: kanbanStatus,
                             // 提醒时间相关字段
                             reminderTimes: this.customTimes.length > 0 ? [...this.customTimes] : undefined,
-                            estimatedPomodoroDuration: estimatedPomodoroDuration
+                            estimatedPomodoroDuration: estimatedPomodoroDuration,
+                            customProgress: customProgress
                         };
 
                         // 调用实例修改保存方法
@@ -5411,6 +5523,7 @@ export class QuickReminderDialog {
                             }
                         }
                         reminder.estimatedPomodoroDuration = estimatedPomodoroDuration;
+                        reminder.customProgress = customProgress;
                         reminder.isAvailableToday = isAvailableToday;
                         reminder.availableStartDate = availableStartDate;
                         reminder.hideInCalendar = hideInCalendar;
@@ -5643,7 +5756,8 @@ export class QuickReminderDialog {
                         hideInCalendar: hideInCalendar,
                         // 旧字段 `customReminderTime` 不再写入，新提醒统一保存到 `reminderTimes`
                         reminderTimes: this.customTimes.length > 0 ? [...this.customTimes] : undefined,
-                        estimatedPomodoroDuration: estimatedPomodoroDuration
+                        estimatedPomodoroDuration: estimatedPomodoroDuration,
+                        customProgress: customProgress
                     };
 
                     // 添加默认排序值
@@ -5884,6 +5998,7 @@ export class QuickReminderDialog {
                 kanbanStatus: instanceData.kanbanStatus,
                 reminderTimes: instanceData.reminderTimes,
                 estimatedPomodoroDuration: instanceData.estimatedPomodoroDuration,
+                customProgress: instanceData.customProgress,
                 modifiedAt: new Date().toISOString().split('T')[0]
             };
 
@@ -5983,6 +6098,7 @@ export class QuickReminderDialog {
                     note: tempSubtask.note || undefined,
                     reminderTimes: tempSubtask.reminderTimes || undefined,
                     estimatedPomodoroDuration: tempSubtask.estimatedPomodoroDuration || undefined,
+                    customProgress: this.normalizeCustomProgressValue(tempSubtask.customProgress),
                     notifiedTime: false,
                     notifiedCustomTime: false
                 };
