@@ -9,6 +9,7 @@
 
 import * as ics from 'ics';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { lunarToSolar, solarToLunar } from './lunarUtils';
 import { pushErrMsg, pushMsg, putFile, getBlockKramdown, uploadCloud, getFileBlob, forwardProxy } from '../api';
 import { Constants } from 'siyuan';
@@ -1311,14 +1312,30 @@ async function uploadToS3(settings: any, icsContent: string, fileName: string, p
         const s3Key = storagePath + fileName;
 
         // 上传到S3
-        const command = new PutObjectCommand({
+        const putInput = {
             Bucket: s3Bucket,
             Key: s3Key,
             Body: icsContent,
             ContentType: 'text/calendar',
-        });
+        };
+        const command = new PutObjectCommand(putInput);
+        let uploadedByProxy = false;
 
-        await s3Client.send(command);
+        if (shouldPreferS3ProxyUpload()) {
+            await uploadToS3ByForwardProxy(s3Client, s3Bucket, s3Key, icsContent);
+            uploadedByProxy = true;
+        } else {
+            try {
+                await s3Client.send(command);
+            } catch (directErr: any) {
+                if (!isLikelyCorsOrBrowserFetchError(directErr)) {
+                    throw directErr;
+                }
+                console.warn('S3 直连上传失败，尝试通过思源代理重试（通常由浏览器 CORS 导致）:', directErr);
+                await uploadToS3ByForwardProxy(s3Client, s3Bucket, s3Key, icsContent);
+                uploadedByProxy = true;
+            }
+        }
 
         // 构建云端链接
         let cloudUrl: string;
@@ -1367,12 +1384,70 @@ async function uploadToS3(settings: any, icsContent: string, fileName: string, p
         }
 
         if (!silent) {
-            await pushMsg(`ICS文件已上传到S3: ${cloudUrl}`);
+            await pushMsg(
+                uploadedByProxy
+                    ? `ICS文件已上传到S3（代理模式）: ${cloudUrl}`
+                    : `ICS文件已上传到S3: ${cloudUrl}`
+            );
         }
         console.log('ICS 文件上传到 S3 成功');
     } catch (err) {
         console.error('上传到S3失败:', err);
         throw new Error('上传到S3失败: ' + (err.message || err));
+    }
+}
+
+function shouldPreferS3ProxyUpload(): boolean {
+    // 桌面端可直接访问网络请求；浏览器/移动端优先代理，避免 CORS 预检失败
+    try {
+        if (typeof window === 'undefined' || typeof (window as any).require !== 'function') {
+            return true;
+        }
+        const electron = (window as any).require('electron');
+        return !electron?.ipcRenderer;
+    } catch {
+        return true;
+    }
+}
+
+function isLikelyCorsOrBrowserFetchError(err: any): boolean {
+    const msg = String(err?.message || err || '').toLowerCase();
+    const name = String(err?.name || '').toLowerCase();
+    return (
+        msg.includes('failed to fetch') ||
+        msg.includes('cors') ||
+        msg.includes('preflight') ||
+        msg.includes('access-control-allow-origin') ||
+        msg.includes('err_failed') ||
+        (name === 'typeerror' && msg.length === 0)
+    );
+}
+
+async function uploadToS3ByForwardProxy(
+    s3Client: S3Client,
+    bucket: string,
+    key: string,
+    icsContent: string
+): Promise<void> {
+    const signedUrl = await getSignedUrl(
+        s3Client,
+        new PutObjectCommand({
+            Bucket: bucket,
+            Key: key,
+            ContentType: 'text/calendar',
+        }),
+        { expiresIn: 900 }
+    );
+    const response = await forwardProxy(
+        signedUrl,
+        'PUT',
+        icsContent,
+        [{ 'Content-Type': 'text/calendar' }],
+        30000,
+        'text/calendar'
+    );
+    if (!response || response.status < 200 || response.status >= 300) {
+        throw new Error(`代理上传S3失败，状态码: ${response?.status ?? 'unknown'}`);
     }
 }
 
