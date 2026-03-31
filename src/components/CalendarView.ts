@@ -6251,7 +6251,8 @@ export class CalendarView {
             const allReminders = this.showTasks ? (Object.values(reminderData) as any[]) : [];
             let filteredReminders = allReminders.filter(reminder => {
                 if (!reminder || typeof reminder !== 'object') return false;
-                if (this.isAbandonedReminder(reminder)) return false;
+                // 普通放弃任务不显示；重复系列任务交由实例级规则处理
+                if (this.isAbandonedReminder(reminder) && !reminder.repeat?.enabled) return false;
 
                 // 不在日历视图显示的任务过滤
                 // 如果任务或父任务被标记为隐藏，且未开启强制显示，则过滤掉
@@ -6324,6 +6325,7 @@ export class CalendarView {
 
                     const completedInstances = reminder.repeat?.completedInstances || [];
                     const instanceModifications = reminder.repeat?.instanceModifications || {};
+                    const isOriginalAbandoned = this.isAbandonedReminder(reminder);
 
                     // Used to track processed instances (using original date key)
                     const processedInstances = new Set<string>();
@@ -6356,7 +6358,16 @@ export class CalendarView {
                             completed: isInstanceCompleted
                         };
 
-                        if (this.isAbandonedReminder(instanceReminder)) {
+                        const isInstanceAbandoned = this.isAbandonedReminder(instanceReminder);
+                        // 规则：
+                        // 1) 原始任务放弃：仅显示已完成实例
+                        // 2) 原始任务未放弃：放弃实例不显示
+                        if (isOriginalAbandoned) {
+                            if (!isInstanceCompleted) {
+                                continue;
+                            }
+                            (instanceReminder as any)._allowAbandonedDisplay = true;
+                        } else if (isInstanceAbandoned) {
                             continue;
                         }
 
@@ -6429,7 +6440,14 @@ export class CalendarView {
                                 sort: (mod && typeof mod.sort === 'number') ? mod.sort : (reminder.sort || 0)
                             };
 
-                            if (this.isAbandonedReminder(instanceReminder)) {
+                            const isInstanceAbandoned = this.isAbandonedReminder(instanceReminder);
+                            // 规则同上：原始放弃仅显示已完成实例；原始未放弃时放弃实例不显示
+                            if (isOriginalAbandoned) {
+                                if (!isInstanceCompleted) {
+                                    continue;
+                                }
+                                (instanceReminder as any)._allowAbandonedDisplay = true;
+                            } else if (isInstanceAbandoned) {
                                 continue;
                             }
 
@@ -7104,7 +7122,8 @@ export class CalendarView {
     }
 
     private addEventToList(events: any[], reminder: any, eventId: string, isRepeated: boolean, originalId?: string) {
-        if (this.isAbandonedReminder(reminder)) return;
+        const allowAbandonedDisplay = !!(reminder && reminder._allowAbandonedDisplay);
+        if (this.isAbandonedReminder(reminder) && !allowAbandonedDisplay) return;
         const priority = reminder.priority || 'none';
 
         // 使用缓存获取颜色，避免重复计算
