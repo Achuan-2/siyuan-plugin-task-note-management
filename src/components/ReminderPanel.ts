@@ -1642,6 +1642,7 @@ export class ReminderPanel {
                 if (!child.completed) {
                     child.completed = true;
                     child.completedTime = getLocalDateTimeString(new Date());
+                    this.syncCustomProgressOnCompletion(child, true);
                     if (child.blockId) affectedBlockIds.add(child.blockId);
                     completedTaskIds.push(child.id);
                 }
@@ -1660,6 +1661,7 @@ export class ReminderPanel {
                 if (!child.completed) {
                     child.completed = true;
                     child.completedTime = getLocalDateTimeString(new Date());
+                    this.syncCustomProgressOnCompletion(child, true);
                     if (child.blockId) affectedBlockIds.add(child.blockId);
                     completedTaskIds.push(child.id);
                 }
@@ -1683,9 +1685,20 @@ export class ReminderPanel {
         return Math.max(0, Math.min(100, Math.round(num)));
     }
 
+    private syncCustomProgressOnCompletion(reminder: any, completed: boolean): void {
+        if (!completed || !reminder) return;
+        const customPercent = this.normalizeCustomProgress(reminder.customProgress);
+        if (customPercent !== undefined && customPercent !== 100) {
+            reminder.customProgress = 100;
+        }
+    }
+
     private getReminderProgressInfo(reminder: any): { shouldShow: boolean; percent: number } {
         const customPercent = this.normalizeCustomProgress(reminder?.customProgress);
         if (customPercent !== undefined) {
+            if (reminder?.completed) {
+                return { shouldShow: true, percent: 100 };
+            }
             return { shouldShow: true, percent: customPercent };
         }
 
@@ -4915,6 +4928,7 @@ export class ReminderPanel {
             const updatedReminder = { ...this.currentRemindersCache[cacheIndex], completed };
             if (completed) {
                 updatedReminder.completedTime = optimisticTime;
+                this.syncCustomProgressOnCompletion(updatedReminder, true);
             } else {
                 delete updatedReminder.completedTime;
             }
@@ -5034,6 +5048,7 @@ export class ReminderPanel {
             reminder.completed = completed;
             if (completed) {
                 reminder.completedTime = optimisticCompletedTime || getLocalDateTimeString(new Date());
+                this.syncCustomProgressOnCompletion(reminder, true);
                 // 自动完成子任务
                 const childIds = await this.completeAllChildTasks(reminderId, reminderData, affectedBlockIds);
                 completedTaskIds.push(reminderId, ...childIds);
@@ -5056,7 +5071,12 @@ export class ReminderPanel {
 
             // 更新 allRemindersMap 中的数据，以便 updateParentProgress 能获取最新的完成状态
             if (this.allRemindersMap.has(reminderId)) {
-                this.allRemindersMap.set(reminderId, { ...this.allRemindersMap.get(reminderId), completed, completedTime: reminder.completedTime });
+                this.allRemindersMap.set(reminderId, {
+                    ...this.allRemindersMap.get(reminderId),
+                    completed,
+                    completedTime: reminder.completedTime,
+                    customProgress: reminder.customProgress
+                });
             }
 
             // 批量更新块书签与任务列表状态
@@ -10478,6 +10498,7 @@ export class ReminderPanel {
                 if (!target.completed) changedCount++;
                 target.completed = true;
                 target.completedTime = completedTime;
+                this.syncCustomProgressOnCompletion(target, true);
                 if (target.blockId) affectedBlockIds.add(target.blockId);
                 completedTaskIds.add(reminder.id);
 

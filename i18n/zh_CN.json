@@ -90,6 +90,8 @@
     "reminderTimeOptional": "提醒时间（可选）",
     "reminderNote": "备注",
     "reminderNoteOptional": "备注（可选）",
+    "customProgress": "自定义进度",
+    "enableCustomProgress": "启用自定义进度",
     "eventTitle": "事件标题",
     "allDayReminder": "全天任务",
     "noSpecificTime": "不设置具体时间",

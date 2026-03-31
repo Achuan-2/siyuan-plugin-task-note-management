@@ -90,6 +90,8 @@
     "reminderTimeOptional": "Reminder Time (Optional)",
     "reminderNote": "Note",
     "reminderNoteOptional": "Note (Optional)",
+    "customProgress": "Custom Progress",
+    "enableCustomProgress": "Enable Custom Progress",
     "eventTitle": "Event Title",
     "allDayReminder": "All Day Reminder",
     "noSpecificTime": "No specific time",

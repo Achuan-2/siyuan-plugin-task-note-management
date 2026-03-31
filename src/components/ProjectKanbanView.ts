@@ -1169,6 +1169,7 @@ export class ProjectKanbanView {
                                         if (targetStatusId === 'completed') {
                                             task.kanbanStatus = 'completed';
                                             task.completed = true;
+                                            this.syncCustomProgressOnCompletion(task, true);
                                             task.completedTime = getLocalDateTimeString(new Date());
                                         } else if (targetStatusId === 'doing') {
                                             task.completed = false;
@@ -9015,9 +9016,20 @@ export class ProjectKanbanView {
         return Math.max(0, Math.min(100, Math.round(num)));
     }
 
+    private syncCustomProgressOnCompletion(task: any, completed: boolean): void {
+        if (!completed || !task) return;
+        const customPercent = this.normalizeCustomProgress(task.customProgress);
+        if (customPercent !== undefined && customPercent !== 100) {
+            task.customProgress = 100;
+        }
+    }
+
     private getTaskProgressInfo(task: any): { shouldShow: boolean; percent: number } {
         const customPercent = this.normalizeCustomProgress(task?.customProgress);
         if (customPercent !== undefined) {
+            if (task?.completed) {
+                return { shouldShow: true, percent: 100 };
+            }
             return { shouldShow: true, percent: customPercent };
         }
 
@@ -11266,6 +11278,7 @@ export class ProjectKanbanView {
         const optimisticTask = this.tasks.find(t => t.id === task.id);
         if (optimisticTask) {
             optimisticTask.completed = completed;
+            this.syncCustomProgressOnCompletion(optimisticTask, completed);
             if (completed) {
                 // 设置一个临时的完成时间用于排序
                 optimisticTask.completedTime = getLocalDateTimeString(new Date());
@@ -11291,6 +11304,7 @@ export class ProjectKanbanView {
                     const reminderData = await this.getReminders();
                     if (reminderData[task.id]) {
                         reminderData[task.id].completed = completed;
+                        this.syncCustomProgressOnCompletion(reminderData[task.id], completed);
                         const affectedBlockIds = new Set<string>();
                         if (task.blockId || task.docId) {
                             affectedBlockIds.add(task.blockId || task.docId);
@@ -11439,6 +11453,7 @@ export class ProjectKanbanView {
             const localTask = this.tasks.find(t => t.id === task.id);
             if (localTask) {
                 localTask.completed = completed;
+                this.syncCustomProgressOnCompletion(localTask, completed);
                 if (completed) {
                     localTask.completedTime = originalReminder.repeat.instanceCompletedTimes?.[instanceDate];
                 } else {
@@ -11573,6 +11588,7 @@ export class ProjectKanbanView {
                     // 非周期实例的正常处理
                     if (newStatus === 'completed') {
                         reminderData[actualTaskId].completed = true;
+                        this.syncCustomProgressOnCompletion(reminderData[actualTaskId], true);
                         reminderData[actualTaskId].completedTime = getLocalDateTimeString(new Date());
 
                         // 父任务完成时，自动完成所有子任务
@@ -11624,6 +11640,7 @@ export class ProjectKanbanView {
                     if (localTask) {
                         if (newStatus === 'done') {
                             localTask.completed = true;
+                            this.syncCustomProgressOnCompletion(localTask, true);
                             localTask.completedTime = reminderData[actualTaskId].completedTime;
                         } else {
                             localTask.completed = false;
@@ -11681,6 +11698,7 @@ export class ProjectKanbanView {
                 const childTask = reminderData[childId];
                 if (childTask && !childTask.completed) {
                     childTask.completed = true;
+                    this.syncCustomProgressOnCompletion(childTask, true);
                     childTask.completedTime = currentTime;
                     completedCount++;
                     completedTaskIds.push(childId);
@@ -11757,6 +11775,7 @@ export class ProjectKanbanView {
                 const childTask = reminderData[childId];
                 if (childTask && !childTask.completed) {
                     childTask.completed = true;
+                    this.syncCustomProgressOnCompletion(childTask, true);
                     childTask.completedTime = currentTime;
                     completedCount++;
                     completedTaskIds.push(childId);
@@ -14344,6 +14363,7 @@ export class ProjectKanbanView {
                 if (!childInDb.completed) {
                     childInDb.kanbanStatus = 'completed';
                     childInDb.completed = true;
+                    this.syncCustomProgressOnCompletion(childInDb, true);
                     childInDb.completedTime = getLocalDateTimeString(new Date());
                 }
             } else {
@@ -14375,14 +14395,15 @@ export class ProjectKanbanView {
 
             // 更新本地缓存
             const localChild = this.tasks.find(t => t.id === childTask.id);
-            if (localChild) {
-                localChild.parentId = parentTask.id;
-                // 同步本地缓存状态
-                if (parentStatus === 'completed') {
-                    localChild.kanbanStatus = 'completed';
-                    localChild.completed = true;
-                    localChild.completedTime = getLocalDateTimeString(new Date());
-                } else {
+                if (localChild) {
+                    localChild.parentId = parentTask.id;
+                    // 同步本地缓存状态
+                    if (parentStatus === 'completed') {
+                        localChild.kanbanStatus = 'completed';
+                        localChild.completed = true;
+                        this.syncCustomProgressOnCompletion(localChild, true);
+                        localChild.completedTime = getLocalDateTimeString(new Date());
+                    } else {
                     localChild.kanbanStatus = parentStatus;
                     localChild.completed = false;
                     delete localChild.completedTime;
@@ -14521,6 +14542,7 @@ export class ProjectKanbanView {
                     if (!draggedTaskInDb.completed) {
                         if (targetStatus === 'completed') {
                             draggedTaskInDb.completed = true;
+                            this.syncCustomProgressOnCompletion(draggedTaskInDb, true);
                             draggedTaskInDb.completedTime = getLocalDateTimeString(new Date());
                             draggedTaskInDb.kanbanStatus = 'completed';
                         } else {
@@ -14797,6 +14819,7 @@ export class ProjectKanbanView {
                 if (targetStatus !== undefined) {
                     if (targetStatus === 'completed') {
                         task.completed = true;
+                        this.syncCustomProgressOnCompletion(task, true);
                         task.completedTime = getLocalDateTimeString(new Date());
                     } else {
                         task.completed = false;
@@ -14820,6 +14843,7 @@ export class ProjectKanbanView {
                     if (targetStatus !== undefined) {
                         if (targetStatus === 'completed') {
                             desc.completed = true;
+                            this.syncCustomProgressOnCompletion(desc, true);
                             desc.completedTime = getLocalDateTimeString(new Date());
                             desc.kanbanStatus = 'completed';
                         } else {
@@ -15062,6 +15086,7 @@ export class ProjectKanbanView {
                 if (oldStatus !== newStatus) {
                     if (newStatus === 'completed') {
                         draggedTaskInDb.completed = true;
+                        this.syncCustomProgressOnCompletion(draggedTaskInDb, true);
                         draggedTaskInDb.completedTime = getLocalDateTimeString(new Date());
                     } else {
                         draggedTaskInDb.completed = false;
@@ -15149,6 +15174,7 @@ export class ProjectKanbanView {
                         if (newStatus === 'completed') {
                             if (!desc.completed) {
                                 desc.completed = true;
+                                this.syncCustomProgressOnCompletion(desc, true);
                                 desc.completedTime = getLocalDateTimeString(new Date());
                                 desc.kanbanStatus = 'completed';
                             }
@@ -15265,6 +15291,7 @@ export class ProjectKanbanView {
             if (oldStatus !== newStatus) {
                 if (newStatus === 'completed') {
                     draggedTaskInDb.completed = true;
+                    this.syncCustomProgressOnCompletion(draggedTaskInDb, true);
                     draggedTaskInDb.completedTime = getLocalDateTimeString(new Date());
                 } else {
                     draggedTaskInDb.completed = false;
@@ -15302,6 +15329,7 @@ export class ProjectKanbanView {
                         if (newStatus === 'completed') {
                             if (!desc.completed) {
                                 desc.completed = true;
+                                this.syncCustomProgressOnCompletion(desc, true);
                                 desc.completedTime = getLocalDateTimeString(new Date());
                                 desc.kanbanStatus = 'completed';
                             }
@@ -16239,6 +16267,36 @@ export class ProjectKanbanView {
                 }
             }
         }
+
+        // 乐观更新完成状态/自定义进度后，局部重绘当前任务及祖先任务，
+        // 确保进度条（含父任务聚合进度）立即与最新数据一致
+        if ('completed' in updates || 'customProgress' in updates) {
+            this.refreshTaskAndAncestorProgress(taskId);
+        }
+    }
+
+    private getAncestorTaskIds(taskId: string): string[] {
+        const taskMap = new Map<string, any>(this.tasks.map(t => [t.id, t]));
+        const ancestorIds: string[] = [];
+        const visited = new Set<string>();
+        let current = taskMap.get(taskId);
+
+        while (current?.parentId && !visited.has(current.parentId)) {
+            const parentId = current.parentId;
+            visited.add(parentId);
+            ancestorIds.push(parentId);
+            current = taskMap.get(parentId);
+        }
+
+        return ancestorIds;
+    }
+
+    private refreshTaskAndAncestorProgress(taskId: string): void {
+        const ids = Array.from(new Set([taskId, ...this.getAncestorTaskIds(taskId)]));
+        ids.forEach(id => {
+            const el = this.container.querySelector(`[data-task-id="${id}"]`) as HTMLElement | null;
+            if (el) this.refreshTaskElement(id);
+        });
     }
 
     /**
@@ -16737,6 +16795,7 @@ export class ProjectKanbanView {
                     if (newStatus === 'completed') {
                         if (!task.completed) {
                             task.completed = true;
+                            this.syncCustomProgressOnCompletion(task, true);
                             task.completedTime = getLocalDateTimeString(new Date());
                             task.kanbanStatus = 'completed';
                             itemChanged = true;
@@ -17375,6 +17434,7 @@ export class ProjectKanbanView {
                         if (newStatus === 'completed') {
                             task.kanbanStatus = 'completed';
                             task.completed = true;
+                            this.syncCustomProgressOnCompletion(task, true);
                             task.completedTime = getLocalDateTimeString(new Date());
                         } else if (newStatus === 'doing') {
                             task.completed = false;
@@ -17435,6 +17495,7 @@ export class ProjectKanbanView {
                     // 设置为完成状态
                     task.kanbanStatus = 'completed';
                     task.completed = true;
+                    this.syncCustomProgressOnCompletion(task, true);
                     // 如果已经有完成时间，保持原样？或者更新？
                     // 通常批量设置为完成意味着"现在完成"，所以更新时间比较合理，或者如果已经完成就不动?
                     // 但用户显式点击"设置已完成"，意味着强制设为完成。
@@ -17764,6 +17825,7 @@ export class ProjectKanbanView {
                             } else if (updates.kanbanStatus === 'completed') {
                                 if (!subTaskInDb.completed || subTaskInDb.kanbanStatus !== 'completed') {
                                     subTaskInDb.completed = true;
+                                    this.syncCustomProgressOnCompletion(subTaskInDb, true);
                                     subTaskInDb.completedTime = instanceCompletedTime;
                                     subTaskInDb.kanbanStatus = 'completed';
                                     subTaskChanged = true;
@@ -17805,6 +17867,7 @@ export class ProjectKanbanView {
                             if (newStatus === 'completed') {
                                 if (!item.completed) {
                                     item.completed = true;
+                                    this.syncCustomProgressOnCompletion(item, true);
                                     item.completedTime = getLocalDateTimeString(new Date());
                                     item.kanbanStatus = 'completed';
                                     itemChanged = true;
