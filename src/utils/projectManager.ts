@@ -517,7 +517,7 @@ export class ProjectManager {
      * 固定状态：doing(进行中), completed(已完成)
      * 默认可自定义状态：short_term(短期), long_term(长期)
      */
-    public getDefaultKanbanStatuses(): KanbanStatus[] {
+    private getBuiltInDefaultKanbanStatuses(): KanbanStatus[] {
         return [
             {
                 id: 'doing',
@@ -552,6 +552,88 @@ export class ProjectManager {
                 sort: 100
             }
         ];
+    }
+
+    /**
+     * 规范化全局看板状态配置：
+     * - 过滤非法项
+     * - 强制保留 doing / completed 两个固定状态
+     * - 重新排序
+     */
+    private normalizeGlobalKanbanStatuses(config: any): KanbanStatus[] | null {
+        if (!Array.isArray(config) || config.length === 0) return null;
+
+        const builtInDefaults = this.getBuiltInDefaultKanbanStatuses();
+        const builtInMap = new Map<string, KanbanStatus>(
+            builtInDefaults.map(status => [status.id, status])
+        );
+
+        const normalized: KanbanStatus[] = [];
+        const seenIds = new Set<string>();
+
+        config.forEach((item: any, index: number) => {
+            if (!item || typeof item !== 'object') return;
+
+            const id = typeof item.id === 'string' ? item.id.trim() : '';
+            const name = typeof item.name === 'string' ? item.name.trim() : '';
+            if (!id || !name || seenIds.has(id)) return;
+
+            const fallback = builtInMap.get(id);
+            const rawColor = typeof item.color === 'string' ? item.color.trim() : '';
+            const color = rawColor || fallback?.color || '#3498db';
+            const rawIcon = typeof item.icon === 'string' ? item.icon.trim() : '';
+            const icon = rawIcon || fallback?.icon;
+            const sort = typeof item.sort === 'number' && Number.isFinite(item.sort)
+                ? item.sort
+                : index * 10;
+
+            normalized.push({
+                id,
+                name,
+                color,
+                icon,
+                isFixed: id === 'doing' || id === 'completed' ? true : item.isFixed === true,
+                sort
+            });
+            seenIds.add(id);
+        });
+
+        // doing/completed 是系统关键状态，必须存在
+        ['doing', 'completed'].forEach(requiredId => {
+            if (seenIds.has(requiredId)) return;
+            const fallback = builtInMap.get(requiredId);
+            if (fallback) {
+                normalized.push({ ...fallback });
+                seenIds.add(requiredId);
+            }
+        });
+
+        if (normalized.length === 0) return null;
+
+        normalized.sort((a, b) => (a.sort || 0) - (b.sort || 0));
+        normalized.forEach((status, index) => {
+            status.sort = index * 10;
+            if (status.id === 'doing' || status.id === 'completed') {
+                status.isFixed = true;
+            }
+        });
+
+        return normalized;
+    }
+
+    public getDefaultKanbanStatuses(): KanbanStatus[] {
+        try {
+            const globalStatuses = this.normalizeGlobalKanbanStatuses(
+                this.plugin?.settings?.globalKanbanStatuses
+            );
+            if (globalStatuses && globalStatuses.length > 0) {
+                return globalStatuses;
+            }
+        } catch (error) {
+            console.warn('读取全局看板状态配置失败，使用内置默认状态:', error);
+        }
+
+        return this.getBuiltInDefaultKanbanStatuses();
     }
 
     /**

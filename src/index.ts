@@ -142,6 +142,15 @@ export const DEFAULT_SETTINGS = {
     // 项目排序配置
     projectSortOrder: [],
     projectSortMode: 'custom',
+    // 全局项目默认看板状态配置（为空时使用内置默认状态）
+    globalKanbanStatuses: [] as Array<{
+        id: string;
+        name: string;
+        color: string;
+        icon?: string;
+        isFixed: boolean;
+        sort: number;
+    }>,
     // 项目面板筛选与排序
     projectPanelSort: 'priority',
     projectPanelSortOrder: 'desc',

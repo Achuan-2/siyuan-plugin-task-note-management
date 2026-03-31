@@ -12,6 +12,7 @@ import { StatusManager } from "../utils/statusManager";
 import { ProjectDialog } from "./ProjectDialog";
 import { CategoryManageDialog } from "./CategoryManageDialog";
 import { StatusManageDialog } from "./StatusManageDialog";
+import { GlobalProjectStatusDialog } from "./GlobalProjectStatusDialog";
 import { ProjectKanbanView } from "./ProjectKanbanView";
 import { BlockBindingDialog } from "./BlockBindingDialog";
 import { i18n } from "../pluginInstance";
@@ -2372,6 +2373,18 @@ export class ProjectPanel {
         statusDialog.show();
     }
 
+    private showGlobalProjectStatusDialog() {
+        const globalStatusDialog = new GlobalProjectStatusDialog(this.plugin, () => {
+            // 全局项目状态更新后，刷新项目面板并通知相关视图
+            this.loadProjects();
+            window.dispatchEvent(new CustomEvent('projectUpdated'));
+        });
+        globalStatusDialog.show().catch((error) => {
+            console.error('打开全局项目状态设置失败:', error);
+            showMessage(i18n('openModifyDialogFailed') || '打开配置对话框失败');
+        });
+    }
+
     private openProjectKanban(project: any) {
         try {
             // 打开项目看板Tab
@@ -2451,6 +2464,15 @@ export class ProjectPanel {
                 label: i18n("manageStatuses") || "管理状态",
                 click: () => {
                     this.showStatusManageDialog();
+                }
+            });
+
+            // 添加项目状态全局设置
+            menu.addItem({
+                icon: 'iconSettings',
+                label: i18n("globalKanbanStatuses") || "项目状态全局设置",
+                click: () => {
+                    this.showGlobalProjectStatusDialog();
                 }
             });
 

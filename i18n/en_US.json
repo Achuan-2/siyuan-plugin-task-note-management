@@ -307,7 +307,7 @@
     "categoryIcon": "Category Icon (Optional)",
     "noCategory": "No Category Assigned",
     "allCategories": "All Categories",
-    "resetToDefault": "Reset to Default Categories",
+    "resetToDefault": "Reset to Default",
     "resetCategories": "Reset Categories",
     "confirmResetCategories": "Are you sure to reset categories to default? This will delete all custom categories.",
     "categoryAdded": "Category successfully added",

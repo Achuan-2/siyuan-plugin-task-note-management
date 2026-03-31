@@ -307,7 +307,7 @@
     "categoryIcon": "分类图标（可选）",
     "noCategory": "无分类",
     "allCategories": "所有分类",
-    "resetToDefault": "重置为默认分类",
+    "resetToDefault": "重置为默认",
     "resetCategories": "重置分类",
     "confirmResetCategories": "确定要将分类重置为默认吗？这将删除所有自定义分类。",
     "categoryAdded": "分类添加成功",

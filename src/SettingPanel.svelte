@@ -548,6 +548,41 @@
             ],
         },
         {
+            name: '🗂️项目设置',
+            items: [
+                {
+                    key: 'openGlobalProjectStatusDialog',
+                    value: '',
+                    type: 'button',
+                    title: i18n('globalKanbanStatuses') || '全局项目默认状态',
+                    description:
+                        i18n('globalKanbanStatusesDesc') ||
+                        '用于配置新建项目默认看板状态。支持自定义名称、图标、颜色与排序。',
+                    button: {
+                        label: i18n('edit') || '编辑',
+                        callback: async () => {
+                            try {
+                                const { GlobalProjectStatusDialog } = await import(
+                                    './components/GlobalProjectStatusDialog'
+                                );
+                                const dialog = new GlobalProjectStatusDialog(plugin, async () => {
+                                    const loadedSettings = await plugin.loadSettings(true);
+                                    settings = { ...loadedSettings };
+                                    updateGroupItems();
+                                });
+                                await dialog.show();
+                            } catch (error) {
+                                console.error('打开全局项目状态配置失败:', error);
+                                await pushErrMsg(
+                                    i18n('openModifyDialogFailed') || '打开配置对话框失败'
+                                );
+                            }
+                        },
+                    },
+                },
+            ],
+        },
+        {
             name: '✅' + i18n('taskNoteSettings'),
             items: [
                 {

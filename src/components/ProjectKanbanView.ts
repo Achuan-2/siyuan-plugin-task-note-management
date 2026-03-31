@@ -67,7 +67,7 @@ export class ProjectKanbanView {
     // 分页：每页最多显示的顶层任务数量
     private pageSize: number = 30;
     // 存储每列当前页，key 为 status 
-    private pageIndexMap: { [status: string]: number } = { long_term: 1, short_term: 1, doing: 1, completed: 1 };
+    private pageIndexMap: { [status: string]: number } = {};
 
     // 自定义分组子分组折叠状态跟踪，key 为 "groupId-status" 格式
     private collapsedStatusGroups: Set<string> = new Set();
@@ -4735,7 +4735,7 @@ export class ProjectKanbanView {
                 e.preventDefault();
                 e.stopPropagation();
                 // 在自定义分组列上放下，尝试使用之前的状态或默认状态
-                await this.handleDrop(e, this.lastSelectedStatus || 'short_term', groupId);
+                await this.handleDrop(e, this.getDefaultActiveStatusForDrop(), groupId);
                 return;
             }
 
@@ -4775,6 +4775,26 @@ export class ProjectKanbanView {
                 }
             }
         });
+    }
+
+    /**
+     * 获取拖拽落入分组时的默认目标状态
+     */
+    private getDefaultActiveStatusForDrop(): string {
+        if (
+            this.lastSelectedStatus &&
+            this.kanbanStatuses.some(
+                status => status.id === this.lastSelectedStatus && status.id !== 'completed'
+            )
+        ) {
+            return this.lastSelectedStatus;
+        }
+
+        const doingStatus = this.kanbanStatuses.find(status => status.id === 'doing');
+        if (doingStatus) return doingStatus.id;
+
+        const firstNonCompleted = this.kanbanStatuses.find(status => status.id !== 'completed');
+        return firstNonCompleted?.id || 'doing';
     }
 
     /**
@@ -5809,18 +5829,30 @@ export class ProjectKanbanView {
 
             // 重置分页索引，防止页码超出范围
             try {
-                const counts = {
-                    doing: this.tasks.filter(t => t.status === 'doing').filter(t => !t.parentId || !this.tasks.find(tt => tt.id === t.parentId)).length,
-                    short_term: this.tasks.filter(t => t.status === 'short_term').filter(t => !t.parentId || !this.tasks.find(tt => tt.id === t.parentId)).length,
-                    long_term: this.tasks.filter(t => t.status === 'long_term').filter(t => !t.parentId || !this.tasks.find(tt => tt.id === t.parentId)).length,
-                    completed: this.tasks.filter(t => t.status === 'completed').filter(t => !t.parentId || !this.tasks.find(tt => tt.id === t.parentId)).length,
-                };
-                for (const status of ['doing', 'short_term', 'long_term', 'completed']) {
-                    const totalTop = counts[status as keyof typeof counts] || 0;
+                const topLevelTasks = this.tasks.filter(
+                    t => !t.parentId || !this.tasks.find(tt => tt.id === t.parentId)
+                );
+                const validStatusIds = new Set(this.kanbanStatuses.map(s => s.id));
+
+                // 清理不存在的状态页码缓存
+                Object.keys(this.pageIndexMap).forEach(statusId => {
+                    if (!validStatusIds.has(statusId)) {
+                        delete this.pageIndexMap[statusId];
+                    }
+                });
+
+                this.kanbanStatuses.forEach(statusConfig => {
+                    const statusId = statusConfig.id;
+                    const totalTop =
+                        statusId === 'completed'
+                            ? topLevelTasks.filter(t => t.completed).length
+                            : topLevelTasks.filter(
+                                  t => !t.completed && this.getTaskStatus(t) === statusId
+                              ).length;
                     const totalPages = Math.max(1, Math.ceil(totalTop / this.pageSize));
-                    const current = this.pageIndexMap[status] || 1;
-                    this.pageIndexMap[status] = Math.min(Math.max(1, current), totalPages);
-                }
+                    const current = this.pageIndexMap[statusId] || 1;
+                    this.pageIndexMap[statusId] = Math.min(Math.max(1, current), totalPages);
+                });
             } catch (err) {
                 // ignore
             }
