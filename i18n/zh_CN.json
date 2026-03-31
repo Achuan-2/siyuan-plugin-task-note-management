@@ -981,7 +981,7 @@
     "manageGroups": "管理分组",
     "customGroup": "分组",
     "noGroup": "未分组",
-    "manageCustomGroups": "管理分组",
+    "manageCustomGroups": "管理看板分组",
     "existingGroups": "现有分组",
     "newGroup": "新建分组",
     "groupName": "分组名称",
@@ -2013,5 +2013,6 @@
     "confirmDeleteCheckInOption": "确定要删除打卡项「${emoji} ${meaning}」吗？",
     "partialCompleted": "部分完成",
     "multiSelect": "多选",
-    "refreshSuccess": "刷新成功"
+    "refreshSuccess": "刷新成功",
+    "globalKanbanStatuses": "管理项目默认看板状态"
 }

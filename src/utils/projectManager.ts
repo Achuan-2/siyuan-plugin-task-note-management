@@ -23,6 +23,7 @@ export interface ProjectGroup {
     blockId?: string;
     milestones?: Milestone[];
     archived?: boolean;
+    visibleStatusIds?: string[]; // 分组可见状态ID，空或未设置表示显示全部状态
 }
 
 export interface Project {

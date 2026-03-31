@@ -2470,7 +2470,7 @@ export class ProjectPanel {
             // 添加项目状态全局设置
             menu.addItem({
                 icon: 'iconSettings',
-                label: i18n("globalKanbanStatuses") || "项目状态全局设置",
+                label: i18n("globalKanbanStatuses"),
                 click: () => {
                     this.showGlobalProjectStatusDialog();
                 }

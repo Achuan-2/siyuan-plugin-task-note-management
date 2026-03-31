@@ -2013,5 +2013,6 @@
     "confirmDeleteCheckInOption": "Are you sure you want to delete check-in option \"${emoji} ${meaning}\"?",
     "partialCompleted": "Partially Completed",
     "multiSelect": "Multi Select",
-    "refreshSuccess": "Refresh successfully"
+    "refreshSuccess": "Refresh successfully",
+    "globalKanbanStatuses": "Set Global Kanban Statuses"
 }

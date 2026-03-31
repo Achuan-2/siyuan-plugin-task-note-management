@@ -3442,7 +3442,7 @@ export class ReminderPanel {
                                 border-radius: 12px;
                                 background: ${tag.color}20;
                                 border: 1px solid ${tag.color};
-                                color: var(--b3-theme-on-surface);
+                                color: ${tag.color};
                                 font-weight: 500;
                             `;
                             tagEl.textContent = `#${tag.name}`;

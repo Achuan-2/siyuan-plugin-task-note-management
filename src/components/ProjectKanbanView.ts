@@ -281,6 +281,118 @@ export class ProjectKanbanView {
         }
     }
 
+    private normalizeGroupVisibleStatusIds(rawStatusIds: any): string[] {
+        if (!Array.isArray(rawStatusIds)) return [];
+        const validStatusIdSet = new Set(this.kanbanStatuses.map(status => status.id));
+        const normalized: string[] = [];
+        rawStatusIds.forEach((statusId: any) => {
+            if (typeof statusId === 'string' && validStatusIdSet.has(statusId) && !normalized.includes(statusId)) {
+                normalized.push(statusId);
+            }
+        });
+        return normalized;
+    }
+
+    private getVisibleStatusesForGroup(group: any): import('../utils/projectManager').KanbanStatus[] {
+        // 未分组始终显示所有状态
+        if (!group || group.id === 'ungrouped') {
+            return this.kanbanStatuses;
+        }
+
+        // 未配置或配置为空时，按兼容逻辑显示全部状态
+        const visibleStatusIds = this.normalizeGroupVisibleStatusIds(group.visibleStatusIds);
+        if (visibleStatusIds.length === 0) {
+            return this.kanbanStatuses;
+        }
+
+        const visibleSet = new Set(visibleStatusIds);
+        const visibleStatuses = this.kanbanStatuses.filter(status => visibleSet.has(status.id));
+        return visibleStatuses.length > 0 ? visibleStatuses : this.kanbanStatuses;
+    }
+
+    private isStatusVisibleForGroup(group: any, statusId: string): boolean {
+        return this.getVisibleStatusesForGroup(group).some(status => status.id === statusId);
+    }
+
+    private async getCustomGroupById(groupId: string | null): Promise<any | null> {
+        if (!groupId) return null;
+        try {
+            const groups = await this.projectManager.getProjectCustomGroups(this.projectId);
+            return groups.find((group: any) => group.id === groupId) || null;
+        } catch (error) {
+            console.warn('[Kanban] 获取分组失败:', error);
+            return null;
+        }
+    }
+
+    /**
+     * 当任务拖入目标分组时，如果当前状态在目标分组被隐藏，则返回一个可见的回退状态
+     */
+    private async getFallbackStatusForGroupDrop(task: any, targetGroupId: string | null): Promise<string | null> {
+        if (!task || !targetGroupId) return null;
+
+        const targetGroup = await this.getCustomGroupById(targetGroupId);
+        if (!targetGroup) return null;
+
+        const currentStatus = this.getTaskStatus(task);
+        if (this.isStatusVisibleForGroup(targetGroup, currentStatus)) {
+            return null;
+        }
+
+        const visibleStatuses = this.getVisibleStatusesForGroup(targetGroup);
+        if (!visibleStatuses.length) return null;
+
+        const fallbackStatus = visibleStatuses.find(status => status.id !== 'completed') || visibleStatuses[0];
+        if (!fallbackStatus || fallbackStatus.id === currentStatus) return null;
+
+        return fallbackStatus.id;
+    }
+
+    private async buildCustomGroupDropUpdates(task: any, targetGroupId: string | null): Promise<{ customGroupId: string | null, projectId: string, kanbanStatus?: string }> {
+        const updates: { customGroupId: string | null, projectId: string, kanbanStatus?: string } = {
+            customGroupId: targetGroupId,
+            projectId: this.projectId
+        };
+        const fallbackStatus = await this.getFallbackStatusForGroupDrop(task, targetGroupId);
+        if (fallbackStatus) {
+            updates.kanbanStatus = fallbackStatus;
+        }
+        return updates;
+    }
+
+    private buildGroupStatusVisibilityOptionsHtml(group?: any): string {
+        if (!this.kanbanStatuses || this.kanbanStatuses.length === 0) {
+            return `<div style="padding: 8px 0; color: var(--b3-theme-on-surface-light);">${i18n('noStatus') || '暂无状态'}</div>`;
+        }
+
+        const visibleStatusIds = this.normalizeGroupVisibleStatusIds(group?.visibleStatusIds);
+        const useAllVisible = visibleStatusIds.length === 0;
+        const visibleStatusSet = new Set(visibleStatusIds);
+
+        return this.kanbanStatuses.map(status => {
+            const isChecked = useAllVisible || visibleStatusSet.has(status.id);
+            return `
+                <label style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--b3-theme-border); border-radius: 6px; cursor: pointer;">
+                    <input type="checkbox" class="group-visible-status-checkbox b3-switch b3-switch--small" data-status-id="${status.id}" ${isChecked ? 'checked' : ''}>
+                    <span style="display: inline-flex; align-items: center; justify-content: center; width: 18px;">${status.icon || '📋'}</span>
+                    <span style="font-size: 13px; color: ${status.color || 'var(--b3-theme-on-surface)'};">${status.name}</span>
+                </label>
+            `;
+        }).join('');
+    }
+
+    private getSelectedVisibleStatusIds(dialogElement: HTMLElement): string[] {
+        const selected: string[] = [];
+        const checkboxes = Array.from(dialogElement.querySelectorAll('.group-visible-status-checkbox')) as HTMLInputElement[];
+        checkboxes.forEach(checkbox => {
+            if (checkbox.checked) {
+                const statusId = checkbox.dataset.statusId;
+                if (statusId) selected.push(statusId);
+            }
+        });
+        return selected;
+    }
+
     private async createGroupDialog(container: HTMLElement) {
         const dialog = new Dialog({
             title: i18n('newGroup'),
@@ -308,6 +420,19 @@ export class ProjectKanbanView {
                         <label class="b3-form__label">${i18n('iconOptional')}</label>
                         <input type="text" id="newGroupIcon" class="b3-text-field" placeholder="${i18n('emojiIconExample')}" style="width: 100%;">
                     </div>
+                    <div class="b3-form__group">
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                            <label class="b3-form__label" style="margin: 0;">${i18n('taskStatus') || '任务状态'} (${i18n('optional')})</label>
+                            <div style="display: flex; gap: 4px;">
+                                <button type="button" class="b3-button b3-button--text" id="newGroupStatusSelectAll" style="padding: 2px 6px; font-size: 12px;">${i18n('selectAll') || '全选'}</button>
+                                <button type="button" class="b3-button b3-button--text" id="newGroupStatusResetDefault" style="padding: 2px 6px; font-size: 12px;">${i18n('default') || '默认'}</button>
+                            </div>
+                        </div>
+                        <div class="b3-label__text" style="margin-top: 4px; color: var(--b3-theme-on-surface-light);">${i18n('visibleStatusesForGroupHint') || '未勾选的状态将在该分组里隐藏'}</div>
+                        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 8px;">
+                            ${this.buildGroupStatusVisibilityOptionsHtml()}
+                        </div>
+                    </div>
                 </div>
                 <div class="b3-dialog__action">
                     <button class="b3-button b3-button--cancel" id="newGroupCancel">${i18n('cancel')}</button>
@@ -324,6 +449,22 @@ export class ProjectKanbanView {
         const bindBlockBtn = dialog.element.querySelector('#editGroupBindBlockBtn') as HTMLButtonElement;
         const cancelBtn = dialog.element.querySelector('#newGroupCancel') as HTMLButtonElement;
         const saveBtn = dialog.element.querySelector('#newGroupSave') as HTMLButtonElement;
+        const statusSelectAllBtn = dialog.element.querySelector('#newGroupStatusSelectAll') as HTMLButtonElement;
+        const statusResetDefaultBtn = dialog.element.querySelector('#newGroupStatusResetDefault') as HTMLButtonElement;
+
+        const setAllStatusCheckbox = (checked: boolean) => {
+            const checkboxes = Array.from(dialog.element.querySelectorAll('.group-visible-status-checkbox')) as HTMLInputElement[];
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = checked;
+            });
+        };
+
+        statusSelectAllBtn?.addEventListener('click', () => {
+            setAllStatusCheckbox(true);
+        });
+        statusResetDefaultBtn?.addEventListener('click', () => {
+            setAllStatusCheckbox(true);
+        });
 
         // 绑定块按钮：打开 BlockBindingDialog
         bindBlockBtn?.addEventListener('click', () => {
@@ -345,9 +486,14 @@ export class ProjectKanbanView {
             const color = colorInput.value;
             const icon = iconInput.value.trim();
             const blockId = blockIdInput.value.trim();
+            const selectedStatusIds = this.getSelectedVisibleStatusIds(dialog.element);
 
             if (!name) {
                 showMessage(i18n('pleaseEnterGroupName'));
+                return;
+            }
+            if (this.kanbanStatuses.length > 0 && selectedStatusIds.length === 0) {
+                showMessage(i18n('pleaseSelectAtLeastOneStatus') || '请至少选择一个状态');
                 return;
             }
 
@@ -362,6 +508,7 @@ export class ProjectKanbanView {
                     color,
                     icon,
                     blockId: blockId || undefined,
+                    visibleStatusIds: selectedStatusIds.length === this.kanbanStatuses.length ? undefined : selectedStatusIds,
                     sort: maxSort + 10
                 }; currentGroups.push(newGroup);
                 await projectManager.setProjectCustomGroups(this.projectId, currentGroups);
@@ -1439,7 +1586,7 @@ export class ProjectKanbanView {
                         border: 1px solid ${tag.color};
                         border-radius: 16px;
                         font-size: 14px;
-                        color: var(--b3-theme-on-surface);
+                        color: ${tag.color};
                         cursor: pointer;
                     `;
 
@@ -3196,6 +3343,19 @@ export class ProjectKanbanView {
                         <label class="b3-form__label">${i18n('iconOptional')}</label>
                         <input type="text" id="editGroupIcon" class="b3-text-field" value="${group.icon || ''}" placeholder="${i18n('emojiIconExample')}" style="width: 100%;">
                     </div>
+                    <div class="b3-form__group">
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                            <label class="b3-form__label" style="margin: 0;">${i18n('taskStatus') || '任务状态'} (${i18n('optional')})</label>
+                            <div style="display: flex; gap: 4px;">
+                                <button type="button" class="b3-button b3-button--text" id="editGroupStatusSelectAll" style="padding: 2px 6px; font-size: 12px;">${i18n('selectAll') || '全选'}</button>
+                                <button type="button" class="b3-button b3-button--text" id="editGroupStatusResetDefault" style="padding: 2px 6px; font-size: 12px;">${i18n('default') || '默认'}</button>
+                            </div>
+                        </div>
+                        <div class="b3-label__text" style="margin-top: 4px; color: var(--b3-theme-on-surface-light);">${i18n('visibleStatusesForGroupHint') || '未勾选的状态将在该分组里隐藏'}</div>
+                        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 8px;">
+                            ${this.buildGroupStatusVisibilityOptionsHtml(group)}
+                        </div>
+                    </div>
                     <div class="b3-form__group" style="display: flex; align-items: center; gap: 8px;">
                         <input type="checkbox" id="editGroupArchived" class="b3-switch" ${group.archived ? 'checked' : ''}>
                         <label class="b3-form__label" style="margin: 0;">${i18n('archived')}</label>
@@ -3217,6 +3377,22 @@ export class ProjectKanbanView {
         const editCancelBtn = dialog.element.querySelector('#editCancelBtn') as HTMLButtonElement;
         const editSaveBtn = dialog.element.querySelector('#editSaveBtn') as HTMLButtonElement;
         const editGroupBindBlockBtn = dialog.element.querySelector('#editGroupBindBlockBtn') as HTMLButtonElement;
+        const editGroupStatusSelectAllBtn = dialog.element.querySelector('#editGroupStatusSelectAll') as HTMLButtonElement;
+        const editGroupStatusResetDefaultBtn = dialog.element.querySelector('#editGroupStatusResetDefault') as HTMLButtonElement;
+
+        const setAllStatusCheckbox = (checked: boolean) => {
+            const checkboxes = Array.from(dialog.element.querySelectorAll('.group-visible-status-checkbox')) as HTMLInputElement[];
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = checked;
+            });
+        };
+
+        editGroupStatusSelectAllBtn?.addEventListener('click', () => {
+            setAllStatusCheckbox(true);
+        });
+        editGroupStatusResetDefaultBtn?.addEventListener('click', () => {
+            setAllStatusCheckbox(true);
+        });
 
         // 绑定块按钮点击事件
         editGroupBindBlockBtn?.addEventListener('click', () => {
@@ -3242,9 +3418,19 @@ export class ProjectKanbanView {
             const color = editGroupColor.value;
             const icon = editGroupIcon.value.trim();
             const archived = editGroupArchived.checked;
+            const selectedStatusIds = this.getSelectedVisibleStatusIds(dialog.element);
+            const normalizedCurrentVisibleStatusIds = this.normalizeGroupVisibleStatusIds(group.visibleStatusIds);
+            const normalizedNextVisibleStatusIds = selectedStatusIds.length === this.kanbanStatuses.length ? [] : selectedStatusIds;
+            const visibleStatusesChanged =
+                normalizedCurrentVisibleStatusIds.length !== normalizedNextVisibleStatusIds.length ||
+                normalizedCurrentVisibleStatusIds.some(statusId => !normalizedNextVisibleStatusIds.includes(statusId));
 
             if (!name) {
                 showMessage(i18n('pleaseEnterGroupName'));
+                return;
+            }
+            if (this.kanbanStatuses.length > 0 && selectedStatusIds.length === 0) {
+                showMessage(i18n('pleaseSelectAtLeastOneStatus') || '请至少选择一个状态');
                 return;
             }
 
@@ -3256,7 +3442,15 @@ export class ProjectKanbanView {
                 // 更新分组信息
                 const groupIndex = currentGroups.findIndex((g: any) => g.id === group.id);
                 if (groupIndex !== -1) {
-                    currentGroups[groupIndex] = { ...currentGroups[groupIndex], name, color, icon, blockId: blockId || undefined, archived };
+                    currentGroups[groupIndex] = {
+                        ...currentGroups[groupIndex],
+                        name,
+                        color,
+                        icon,
+                        blockId: blockId || undefined,
+                        archived,
+                        visibleStatusIds: selectedStatusIds.length === this.kanbanStatuses.length ? undefined : selectedStatusIds
+                    };
                     await projectManager.setProjectCustomGroups(this.projectId, currentGroups);
                 }
 
@@ -3264,7 +3458,7 @@ export class ProjectKanbanView {
                 await this.loadAndDisplayGroups(container);
 
                 // 如果分组被归档，需要刷新看板以隐藏该分组
-                if (archived !== group.archived) {
+                if (archived !== group.archived || visibleStatusesChanged) {
                     await this.loadProject();
                     this.queueLoadTasks();
                     this.dispatchReminderUpdate();
@@ -4753,7 +4947,8 @@ export class ProjectKanbanView {
             if (this.isDragging && this.draggedTask) {
                 e.preventDefault();
                 e.stopPropagation();
-                await this.batchUpdateTasks([this.draggedTask.id], { customGroupId: groupId, projectId: this.projectId });
+                const updates = await this.buildCustomGroupDropUpdates(this.draggedTask, groupId);
+                await this.batchUpdateTasks([this.draggedTask.id], updates);
             } else {
                 let externalTaskId = '';
                 const reminderPayload = e.dataTransfer?.getData('application/x-reminder');
@@ -4771,7 +4966,13 @@ export class ProjectKanbanView {
                     console.log('[Kanban] External Drop on Group:', { externalTaskId, groupId, projectId: this.projectId });
                     e.preventDefault();
                     e.stopPropagation();
-                    await this.batchUpdateTasks([externalTaskId], { customGroupId: groupId, projectId: this.projectId });
+                    let externalTask = this.tasks.find(task => task.id === externalTaskId);
+                    if (!externalTask) {
+                        const reminderData = await this.getReminders();
+                        externalTask = this.findOrCreateUiTask(externalTaskId, reminderData);
+                    }
+                    const updates = await this.buildCustomGroupDropUpdates(externalTask, groupId);
+                    await this.batchUpdateTasks([externalTaskId], updates);
                 }
             }
         });
@@ -6836,17 +7037,21 @@ export class ProjectKanbanView {
         // 为每个自定义分组创建状态子列（使用 kanbanStatuses 中定义的所有状态）
         activeGroups.forEach((group: any) => {
             const groupStatusTasks: { [status: string]: any[] } = {};
-            this.kanbanStatuses.forEach(status => {
+            const visibleStatuses = this.getVisibleStatusesForGroup(group);
+            visibleStatuses.forEach(status => {
                 groupStatusTasks[status.id] = statusTasks[status.id].filter(task => task.customGroupId === group.id);
             });
 
             if (this.project?.hideNoDoingGroups) {
-                const doingTasks = groupStatusTasks['doing'] || [];
-                if (doingTasks.length === 0) {
-                    const columnId = `custom-group-${group.id}`;
-                    const column = kanbanContainer.querySelector(`.kanban-column-${columnId}`);
-                    if (column) column.remove();
-                    return; // 隐藏没有进行中任务的分组
+                // 分组隐藏了 doing 状态时，不参与“隐藏无进行中分组”判断
+                if (this.isStatusVisibleForGroup(group, 'doing')) {
+                    const doingTasks = groupStatusTasks['doing'] || [];
+                    if (doingTasks.length === 0) {
+                        const columnId = `custom-group-${group.id}`;
+                        const column = kanbanContainer.querySelector(`.kanban-column-${columnId}`);
+                        if (column) column.remove();
+                        return; // 隐藏没有进行中任务的分组
+                    }
                 }
             }
 
@@ -7365,10 +7570,11 @@ export class ProjectKanbanView {
 
         // 检查是否有自定义分组
         const hasCustomGroups = await this.hasProjectCustomGroups();
+        let visibleTasksForCount = tasks;
 
         if (hasCustomGroups) {
             // 如果有自定义分组，使用原有的分组渲染逻辑
-            await this.renderTasksGroupedByCustomGroupInStableContainer(groupsContainer, tasks, status);
+            visibleTasksForCount = await this.renderTasksGroupedByCustomGroupInStableContainer(groupsContainer, tasks, status);
         } else {
             // 如果没有自定义分组，直接在状态子分组中渲染任务
             this.renderTasksInStableStatusGroups(groupsContainer, tasks, status);
@@ -7376,8 +7582,8 @@ export class ProjectKanbanView {
 
         // 更新列顶部计数
         if (count) {
-            const taskMap = new Map(tasks.map(t => [t.id, t]));
-            const topLevelTasks = tasks.filter(t => !t.parentId || !taskMap.has(t.parentId));
+            const taskMap = new Map(visibleTasksForCount.map(t => [t.id, t]));
+            const topLevelTasks = visibleTasksForCount.filter(t => !t.parentId || !taskMap.has(t.parentId));
             count.textContent = topLevelTasks.length.toString();
         }
     }
@@ -7436,7 +7642,7 @@ export class ProjectKanbanView {
         }
     }
 
-    private async renderTasksGroupedByCustomGroupInStableContainer(groupsContainer: HTMLElement, tasks: any[], status: string) {
+    private async renderTasksGroupedByCustomGroupInStableContainer(groupsContainer: HTMLElement, tasks: any[], status: string): Promise<any[]> {
         // 获取项目自定义分组
         const projectManager = this.projectManager;
         const projectGroups = await projectManager.getProjectCustomGroups(this.projectId);
@@ -7450,6 +7656,7 @@ export class ProjectKanbanView {
 
         if (this.project?.hideNoDoingGroups) {
             displayGroups = displayGroups.filter((g: any) => {
+                if (!this.isStatusVisibleForGroup(g, 'doing')) return true;
                 return this.tasks.some(task => task.customGroupId === g.id && !task.completed && this.getTaskStatus(task) === 'doing');
             });
         }
@@ -7461,7 +7668,7 @@ export class ProjectKanbanView {
 
         // 获取对应的状态分组容器
         const groupContainer = groupsContainer.querySelector(`.status-stable-group[data-status="${status}"]`) as HTMLElement;
-        if (!groupContainer) return;
+        if (!groupContainer) return tasks;
 
         const groupTasksContainer = groupContainer.querySelector('.status-stable-group-tasks') as HTMLElement;
         const taskCount = groupContainer.querySelector('.status-stable-group-count') as HTMLElement;
@@ -7473,9 +7680,11 @@ export class ProjectKanbanView {
 
         groupTasksContainer.innerHTML = '';
 
+        let visibleTasksForCount: any[] = [];
         if (allActiveGroups.length === 0) {
             // 如果没有自定义分组，直接渲染任务
             this.renderTasksInColumn(groupTasksContainer, tasks);
+            visibleTasksForCount = tasks;
         } else {
             // 按自定义分组渲染任务组
             const groupsSubContainer = document.createElement('div');
@@ -7491,10 +7700,12 @@ export class ProjectKanbanView {
             const validGroupIds = new Set(allActiveGroups.map((g: any) => g.id));
 
             displayGroups.forEach((group: any) => {
+                if (!this.isStatusVisibleForGroup(group, status)) return;
                 const groupTasks = tasks.filter(task => task.customGroupId === group.id);
                 if (groupTasks.length > 0) {
                     const groupSubContainer = this.createCustomGroupInStatusColumn(group, groupTasks, isCollapsedDefault, status);
                     groupsSubContainer.appendChild(groupSubContainer);
+                    visibleTasksForCount.push(...groupTasks);
                 }
             });
 
@@ -7520,9 +7731,15 @@ export class ProjectKanbanView {
                 };
                 const ungroupedContainer = this.createCustomGroupInStatusColumn(ungroupedGroup, ungroupedTasks, isCollapsedDefault, status);
                 groupsSubContainer.appendChild(ungroupedContainer);
+                visibleTasksForCount.push(...ungroupedTasks);
             }
 
             groupTasksContainer.appendChild(groupsSubContainer);
+        }
+
+        // 更新分组任务计数
+        if (taskCount) {
+            taskCount.textContent = visibleTasksForCount.length.toString();
         }
 
         // 恢复高度
@@ -7532,10 +7749,7 @@ export class ProjectKanbanView {
             });
         }
 
-        // 更新分组任务计数
-        if (taskCount) {
-            taskCount.textContent = tasks.length.toString();
-        }
+        return visibleTasksForCount;
     }
 
 
@@ -8525,12 +8739,13 @@ export class ProjectKanbanView {
             gap: 16px;
         `;
 
-        // 按 kanbanStatuses 顺序创建所有状态分组
+        // 按分组可见状态顺序创建状态分组
+        const visibleStatuses = this.getVisibleStatusesForGroup(group);
         const expandedTasksMap: { [status: string]: any[] } = {};
         const nonCompletedIncludedIds = new Set<string>();
 
         // 第一遍：收集所有非已完成状态的扩展任务，用于过滤已完成的重复任务
-        this.kanbanStatuses.forEach(status => {
+        visibleStatuses.forEach(status => {
             if (status.id !== 'completed') {
                 const tasks = statusTasks[status.id] || [];
                 expandedTasksMap[status.id] = this.augmentTasksWithDescendants(tasks, group.id);
@@ -8539,7 +8754,7 @@ export class ProjectKanbanView {
         });
 
         // 第二遍：创建所有状态分组
-        this.kanbanStatuses.forEach(status => {
+        visibleStatuses.forEach(status => {
             let tasks: any[];
             if (status.id === 'completed') {
                 // 已完成任务需要过滤掉已经在其他分组中显示的任务
@@ -8570,7 +8785,7 @@ export class ProjectKanbanView {
         // 更新列顶部计数 — 只统计顶层（父）任务，不包括子任务
         if (count) {
             let allTasks: any[] = [];
-            this.kanbanStatuses.forEach(status => {
+            visibleStatuses.forEach(status => {
                 if (status.id === 'completed') {
                     const completedTasks = statusTasks[status.id] || [];
                     allTasks.push(...completedTasks.filter(t => !nonCompletedIncludedIds.has(t.id)));
@@ -9908,7 +10123,7 @@ export class ProjectKanbanView {
                                 border-radius: 12px;
                                 background: ${tag.color}20;
                                 border: 1px solid ${tag.color};
-                                color: var(--b3-theme-on-surface);
+                                color: ${tag.color};
                                 font-weight: 500;
                             `;
                             tagEl.textContent = `#${tag.name}`;
@@ -11078,8 +11293,26 @@ export class ProjectKanbanView {
             ? this.kanbanStatuses
             : this.projectManager.getDefaultKanbanStatuses();
 
+        let statusCandidates = statuses;
+        const taskGroupId = task.customGroupId;
+        if (taskGroupId && taskGroupId !== 'ungrouped') {
+            try {
+                const projectGroups = await this.projectManager.getProjectCustomGroups(this.projectId);
+                const taskGroup = projectGroups.find((group: any) => group.id === taskGroupId);
+                if (taskGroup) {
+                    const visibleStatusIdSet = new Set(this.getVisibleStatusesForGroup(taskGroup).map(status => status.id));
+                    const filteredStatuses = statuses.filter(status => visibleStatusIdSet.has(status.id));
+                    if (filteredStatuses.length > 0) {
+                        statusCandidates = filteredStatuses;
+                    }
+                }
+            } catch (error) {
+                console.warn('[Kanban] 加载分组可见状态失败，使用全部状态:', error);
+            }
+        }
+
         const statusMenuItems: any[] = [];
-        statuses.forEach((s: any) => {
+        statusCandidates.forEach((s: any) => {
             statusMenuItems.push({
                 iconHTML: s.icon || '',
                 label: s.name || s.id,
@@ -11162,7 +11395,7 @@ export class ProjectKanbanView {
                                 border-radius: 12px;
                                 background: ${tag.color}20;
                                 border: 1px solid ${tag.color};
-                                color: var(--b3-theme-on-surface);
+                                color: ${tag.color};
                                 font-weight: 500;
                                 max-width: 150px;
                                 min-width: 80px;

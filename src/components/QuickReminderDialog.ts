@@ -221,6 +221,7 @@ export class QuickReminderDialog {
     private selectedCategoryIds: string[] = [];
     private isMultiSelectCategory: boolean = false; // 分类是否多选
     private currentKanbanStatuses: import('../utils/projectManager').KanbanStatus[] = []; // 当前项目的kanbanStatuses
+    private currentActiveProjectGroups: import('../utils/projectManager').ProjectGroup[] = []; // 当前项目未归档分组
     private durationManuallyChanged: boolean = false; // 标记用户是否手动修改了持续天数
     private tempSubtasks: any[] = []; // 新建模式下的临时子任务列表
     private skipSave: boolean = false; // 是否跳过保存到数据库（用于临时子任务创建）
@@ -2695,19 +2696,50 @@ export class QuickReminderDialog {
      * 更新看板状态选择器
      * 根据当前项目的kanbanStatuses动态生成选项
      */
+    private normalizeGroupVisibleStatusIds(rawStatusIds: any, validStatusIds: Set<string>): string[] {
+        if (!Array.isArray(rawStatusIds)) return [];
+        const normalized: string[] = [];
+        rawStatusIds.forEach((statusId: any) => {
+            if (typeof statusId === 'string' && validStatusIds.has(statusId) && !normalized.includes(statusId)) {
+                normalized.push(statusId);
+            }
+        });
+        return normalized;
+    }
+
+    private filterKanbanStatusesBySelectedGroup(statuses: import('../utils/projectManager').KanbanStatus[]): import('../utils/projectManager').KanbanStatus[] {
+        const groupSelector = this.dialog?.element?.querySelector('#quickCustomGroupSelector') as HTMLInputElement;
+        const selectedGroupId = groupSelector?.value || '';
+        if (!selectedGroupId) return statuses;
+
+        const group = this.currentActiveProjectGroups.find(g => g.id === selectedGroupId);
+        if (!group) return statuses;
+
+        const validStatusIds = new Set(statuses.map(status => status.id));
+        const visibleStatusIds = this.normalizeGroupVisibleStatusIds((group as any).visibleStatusIds, validStatusIds);
+        if (visibleStatusIds.length === 0) return statuses;
+
+        const visibleStatusSet = new Set(visibleStatusIds);
+        const filtered = statuses.filter(status => visibleStatusSet.has(status.id));
+        return filtered.length > 0 ? filtered : statuses;
+    }
+
     private updateKanbanStatusSelector() {
         const selector = this.dialog?.element?.querySelector('#quickStatusSelector') as HTMLElement;
         if (!selector) return;
 
         // 过滤掉已完成状态，获取可用的状态列表
-        const availableStatuses = this.currentKanbanStatuses.filter(status => status.id !== 'completed');
+        let availableStatuses = this.currentKanbanStatuses.filter(status => status.id !== 'completed');
 
         // 如果没有可用状态，使用默认状态
         if (availableStatuses.length === 0) {
             const projectManager = ProjectManager.getInstance(this.plugin);
             this.currentKanbanStatuses = projectManager.getDefaultKanbanStatuses();
-            availableStatuses.push(...this.currentKanbanStatuses.filter(status => status.id !== 'completed'));
+            availableStatuses = this.currentKanbanStatuses.filter(status => status.id !== 'completed');
         }
+
+        // 如果选择了自定义分组，按分组可见状态过滤
+        availableStatuses = this.filterKanbanStatusesBySelectedGroup(availableStatuses);
 
         // 获取当前选中的状态
         const currentSelected = selector.querySelector('.task-status-option.selected') as HTMLElement;
@@ -2885,9 +2917,9 @@ export class QuickReminderDialog {
                     padding: 4px 10px;
                     font-size: 12px;
                     border-radius: 12px;
-                    background: ${isSelected ? tag.color : tag.color + '20'};
+                    background: ${isSelected ? tag.color + '30' : tag.color + '20'};
                     border: 1px solid ${tag.color};
-                    color: ${isSelected ? '#fff' : 'var(--b3-theme-on-surface)'};
+                    color: ${tag.color};
                     cursor: pointer;
                     transition: all 0.2s ease;
                     user-select: none;
@@ -2915,8 +2947,8 @@ export class QuickReminderDialog {
                     }
 
                     // 更新样式
-                    tagEl.style.background = isNowSelected ? tag.color : tag.color + '20';
-                    tagEl.style.color = isNowSelected ? '#fff' : 'var(--b3-theme-on-surface)';
+                    tagEl.style.background = isNowSelected ? tag.color + '30' : tag.color + '20';
+                    tagEl.style.color = tag.color;
                     tagEl.style.fontWeight = isNowSelected ? '600' : '500';
                 });
 
@@ -4772,6 +4804,7 @@ export class QuickReminderDialog {
                 const projectGroups = await projectManager.getProjectCustomGroups(projectId);
                 // 过滤掉已归档的分组
                 const activeGroups = projectGroups.filter((g: any) => !g.archived);
+                this.currentActiveProjectGroups = activeGroups;
 
                 if (activeGroups.length > 0) {
                     // 显示分组选择器并渲染分组选项
@@ -4793,10 +4826,12 @@ export class QuickReminderDialog {
                 this.updateKanbanStatusSelector();
             } catch (error) {
                 console.error('检查项目分组失败:', error);
+                this.currentActiveProjectGroups = [];
                 customGroupContainer.style.display = 'none';
             }
         } else {
             // 没有选择项目，隐藏分组选择器
+            this.currentActiveProjectGroups = [];
             customGroupContainer.style.display = 'none';
             // 使用默认kanbanStatuses
             const { ProjectManager } = await import('../utils/projectManager');
@@ -4825,6 +4860,7 @@ export class QuickReminderDialog {
             const projectGroups = await projectManager.getProjectCustomGroups(projectId);
             // 过滤掉已归档的分组
             const activeGroups = projectGroups.filter((g: any) => !g.archived);
+            this.currentActiveProjectGroups = activeGroups;
 
             // 清空并重新构建分组选择器
             let html = '';
@@ -4900,6 +4936,8 @@ export class QuickReminderDialog {
 
                     // 触发变更：更新里程碑
                     await this.renderMilestoneSelector(projectId, val || '');
+                    // 触发变更：按分组重新过滤任务状态
+                    this.updateKanbanStatusSelector();
                 }
             });
 
@@ -5165,12 +5203,17 @@ export class QuickReminderDialog {
         const linkedHabitAutoCheckInEmoji = linkedHabitAutoCheckInOnComplete
             ? (autoCheckInOptionSelect?.selectedOptions?.[0]?.getAttribute('data-emoji') || undefined)
             : undefined;
+        const selectableStatuses = this.filterKanbanStatusesBySelectedGroup(
+            this.currentKanbanStatuses.filter(s => s.id !== 'completed')
+        );
+
         // 获取选中的kanbanStatus，如果没有选中则使用第一个可用状态
         let kanbanStatus = selectedStatus?.getAttribute('data-status-type');
         if (!kanbanStatus) {
-            // 如果没有选中状态，使用第一个可用状态（排除已完成）
-            const availableStatuses = this.currentKanbanStatuses.filter(s => s.id !== 'completed');
-            kanbanStatus = availableStatuses.length > 0 ? availableStatuses[0].id : 'short_term';
+            kanbanStatus = selectableStatuses.length > 0 ? selectableStatuses[0].id : 'short_term';
+        } else if (!selectableStatuses.some(s => s.id === kanbanStatus) && selectableStatuses.length > 0) {
+            // 兜底：已选状态若不在当前分组可见状态中，自动纠正到首个可见状态
+            kanbanStatus = selectableStatuses[0].id;
         }
         const customGroupId = customGroupSelector?.value || undefined;
         const milestoneSelector = this.dialog.element.querySelector('#quickMilestoneSelector') as HTMLSelectElement;
@@ -5201,7 +5244,7 @@ export class QuickReminderDialog {
         if (date && kanbanStatus !== 'completed' && !(this.repeatConfig && this.repeatConfig.enabled)) {
             const today = getLogicalDateString();
             if (compareDateStrings(date, today) <= 0) {
-                const hasDoingStatus = this.currentKanbanStatuses.some(s => s.id === 'doing');
+                const hasDoingStatus = selectableStatuses.some(s => s.id === 'doing');
                 if (hasDoingStatus) {
                     kanbanStatus = 'doing';
                 }
