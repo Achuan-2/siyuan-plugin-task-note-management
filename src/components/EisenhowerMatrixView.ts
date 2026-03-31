@@ -679,6 +679,26 @@ export class EisenhowerMatrixView {
         return ['important-urgent', 'important-not-urgent', 'not-important-urgent', 'not-important-not-urgent'].includes(quadrant);
     }
 
+    private isTaskOrParentAbandoned(task: QuadrantTask): boolean {
+        if (task.extendedProps?.kanbanStatus === 'abandoned') {
+            return true;
+        }
+
+        const visited = new Set<string>();
+        let currentParentId = task.parentId;
+        while (currentParentId && !visited.has(currentParentId)) {
+            visited.add(currentParentId);
+            const parentTask = this.allTasks.find(t => t.id === currentParentId);
+            if (!parentTask) break;
+            if (parentTask.extendedProps?.kanbanStatus === 'abandoned') {
+                return true;
+            }
+            currentParentId = parentTask.parentId;
+        }
+
+        return false;
+    }
+
     /**
      * 检查任务本身或其父任务是否为进行中状态
      * 今天或过去的任务也视为进行中状态
@@ -686,6 +706,10 @@ export class EisenhowerMatrixView {
      * @returns 如果任务或其父任务是进行中状态，返回true
      */
     private isTaskOrParentDoing(task: QuadrantTask): boolean {
+        if (this.isTaskOrParentAbandoned(task)) {
+            return false;
+        }
+
         // 检查任务本身是否是进行中
         if (task.extendedProps?.kanbanStatus === 'doing') {
             return true;
@@ -775,6 +799,11 @@ export class EisenhowerMatrixView {
     private applyFiltersAndGroup() {
         // 应用筛选
         this.filteredTasks = this.allTasks.filter(task => {
+            // 放弃状态（包含父链为放弃）在四象限面板中默认不显示
+            if (this.isTaskOrParentAbandoned(task)) {
+                return false;
+            }
+
             // 任务状态筛选（基于 kanbanStatus）
             if (this.kanbanStatusFilter !== 'all') {
                 if (this.kanbanStatusFilter === 'doing') {

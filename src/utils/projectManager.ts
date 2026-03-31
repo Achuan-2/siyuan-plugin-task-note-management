@@ -48,11 +48,11 @@ export interface Project {
  * 看板状态配置
  */
 export interface KanbanStatus {
-    id: string;           // 状态ID: 'doing', 'short_term', 'long_term', 'completed' 或自定义ID
+    id: string;           // 状态ID: 'doing', 'short_term', 'long_term', 'completed', 'abandoned' 或自定义ID
     name: string;         // 显示名称
     color: string;        // 状态颜色
     icon?: string;        // 状态图标（emoji）
-    isFixed: boolean;     // 是否固定不可删除（doing和completed为固定）
+    isFixed: boolean;     // 是否固定不可删除（doing、completed、abandoned 为固定）
     sort: number;         // 排序权重
 }
 
@@ -128,7 +128,8 @@ export class ProjectManager {
             'doing': ['进行中', 'Doing'],
             'short_term': ['短期', 'Short Term', 'shortTerm'],
             'long_term': ['长期', 'Long Term', 'longTerm'],
-            'completed': ['已完成', 'Completed']
+            'completed': ['已完成', 'Completed'],
+            'abandoned': ['放弃', 'Abandoned']
         };
         return defaultNames[id]?.includes(name) || false;
     }
@@ -515,7 +516,7 @@ export class ProjectManager {
 
     /**
      * 获取项目的默认看板状态配置
-     * 固定状态：doing(进行中), completed(已完成)
+     * 固定状态：doing(进行中), completed(已完成), abandoned(放弃)
      * 默认可自定义状态：short_term(短期), long_term(长期)
      */
     private getBuiltInDefaultKanbanStatuses(): KanbanStatus[] {
@@ -551,6 +552,14 @@ export class ProjectManager {
                 icon: '✅',
                 isFixed: true,
                 sort: 100
+            },
+            {
+                id: 'abandoned',
+                name: i18n('abandoned') || '放弃',
+                color: '#7f8c8d',
+                icon: '🚫',
+                isFixed: true,
+                sort: 110
             }
         ];
     }
@@ -558,7 +567,7 @@ export class ProjectManager {
     /**
      * 规范化全局看板状态配置：
      * - 过滤非法项
-     * - 强制保留 doing / completed 两个固定状态
+     * - 强制保留 doing / completed / abandoned 三个固定状态
      * - 重新排序
      */
     private normalizeGlobalKanbanStatuses(config: any): KanbanStatus[] | null {
@@ -593,14 +602,14 @@ export class ProjectManager {
                 name,
                 color,
                 icon,
-                isFixed: id === 'doing' || id === 'completed' ? true : item.isFixed === true,
+                isFixed: id === 'doing' || id === 'completed' || id === 'abandoned' ? true : item.isFixed === true,
                 sort
             });
             seenIds.add(id);
         });
 
-        // doing/completed 是系统关键状态，必须存在
-        ['doing', 'completed'].forEach(requiredId => {
+        // doing/completed/abandoned 是系统关键状态，必须存在
+        ['doing', 'completed', 'abandoned'].forEach(requiredId => {
             if (seenIds.has(requiredId)) return;
             const fallback = builtInMap.get(requiredId);
             if (fallback) {
@@ -614,7 +623,7 @@ export class ProjectManager {
         normalized.sort((a, b) => (a.sort || 0) - (b.sort || 0));
         normalized.forEach((status, index) => {
             status.sort = index * 10;
-            if (status.id === 'doing' || status.id === 'completed') {
+            if (status.id === 'doing' || status.id === 'completed' || status.id === 'abandoned') {
                 status.isFixed = true;
             }
         });

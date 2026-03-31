@@ -6251,6 +6251,7 @@ export class CalendarView {
             const allReminders = this.showTasks ? (Object.values(reminderData) as any[]) : [];
             let filteredReminders = allReminders.filter(reminder => {
                 if (!reminder || typeof reminder !== 'object') return false;
+                if (this.isAbandonedReminder(reminder)) return false;
 
                 // 不在日历视图显示的任务过滤
                 // 如果任务或父任务被标记为隐藏，且未开启强制显示，则过滤掉
@@ -6355,6 +6356,10 @@ export class CalendarView {
                             completed: isInstanceCompleted
                         };
 
+                        if (this.isAbandonedReminder(instanceReminder)) {
+                            continue;
+                        }
+
                         // Apply completion filter to instances
                         if (!this.passesCompletionFilter(instanceReminder)) {
                             continue;
@@ -6424,6 +6429,10 @@ export class CalendarView {
                                 sort: (mod && typeof mod.sort === 'number') ? mod.sort : (reminder.sort || 0)
                             };
 
+                            if (this.isAbandonedReminder(instanceReminder)) {
+                                continue;
+                            }
+
                             // Apply completion filter to modified instances
                             if (!this.passesCompletionFilter(instanceReminder)) {
                                 continue;
@@ -6474,6 +6483,7 @@ export class CalendarView {
 
                         // 执行过滤逻辑
                         if (reminder) {
+                            if (this.isAbandonedReminder(reminder)) continue;
                             if (!this.passesProjectFilter(reminder)) continue;
                             if (!this.passesCategoryFilter(reminder, projectData)) continue;
                         } else {
@@ -6694,6 +6704,7 @@ export class CalendarView {
 
         for (const reminder of allReminders) {
             if (!reminder || typeof reminder !== 'object') continue;
+            if (this.isAbandonedReminder(reminder)) continue;
 
             // 处理普通已完成任务
             if (reminder.completed && reminder.completedTime) {
@@ -7030,6 +7041,10 @@ export class CalendarView {
         return this.currentProjectFilter.has(reminder.projectId);
     }
 
+    private isAbandonedReminder(reminder: any): boolean {
+        return reminder?.kanbanStatus === 'abandoned';
+    }
+
     passesCompletionFilter(reminder: any): boolean {
         if (this.currentCompletionFilter === 'all') {
             return true;
@@ -7089,6 +7104,7 @@ export class CalendarView {
     }
 
     private addEventToList(events: any[], reminder: any, eventId: string, isRepeated: boolean, originalId?: string) {
+        if (this.isAbandonedReminder(reminder)) return;
         const priority = reminder.priority || 'none';
 
         // 使用缓存获取颜色，避免重复计算

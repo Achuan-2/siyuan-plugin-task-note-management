@@ -5455,6 +5455,10 @@ export class ProjectKanbanView {
                         if (hasRepeatingAncestor) continue;
                         // 仅对未完成且有明确 date 的任务处理（不处理实例层的逻辑，这里作用于原始提醒与普通任务）
                         if (!t.completed && t.date && compareDateStrings(t.date, todayForDateCheck) <= 0) {
+                            // 放弃状态不参与自动回退到进行中
+                            if (this.isAbandonedStatus(t.kanbanStatus)) {
+                                continue;
+                            }
                             // 如果父任务已经是进行中，则跳过，避免重复设置及不必要的级联
                             if (t.kanbanStatus === 'doing') {
                                 continue;
@@ -5473,6 +5477,7 @@ export class ProjectKanbanView {
                                 for (const did of descendantIds) {
                                     const desc = reminderData[did];
                                     if (!desc) continue;
+                                    if (this.isAbandonedStatus(desc.kanbanStatus)) continue;
                                     if (!desc.completed && desc.kanbanStatus !== 'doing') {
                                         desc.kanbanStatus = 'doing';
                                         dateCascadeChanged = true;
@@ -6434,6 +6439,9 @@ export class ProjectKanbanView {
 
         // 重复实例：今天或已过且未完成时，展示在 doing（仅展示层，不回写原始任务状态）
         if (task.isRepeatInstance && task.date) {
+            if (this.isAbandonedStatus(task.kanbanStatus)) {
+                return task.kanbanStatus;
+            }
             const today = getLogicalDateString();
             const logicalDate = this.getTaskLogicalDate(task.date, task.time);
             if (compareDateStrings(logicalDate, today) <= 0) {
@@ -6450,6 +6458,18 @@ export class ProjectKanbanView {
 
         // 默认返回进行中
         return 'doing';
+    }
+
+    private isAbandonedStatus(statusId: string | null | undefined): boolean {
+        return statusId === 'abandoned';
+    }
+
+    private isAbandonedTask(task: any): boolean {
+        return this.isAbandonedStatus(this.getTaskStatus(task));
+    }
+
+    private getListModeVisibleTasks(tasks: any[]): any[] {
+        return tasks.filter(task => !this.isAbandonedTask(task));
     }
 
     /**
@@ -7519,7 +7539,8 @@ export class ProjectKanbanView {
             'doing': '⏳',
             'short_term': '📋',
             'long_term': '🤔',
-            'completed': '✅'
+            'completed': '✅',
+            'abandoned': '🚫'
         };
 
         return [{
@@ -7877,8 +7898,9 @@ export class ProjectKanbanView {
         const countBadge = column.querySelector('.kanban-column-count') as HTMLElement;
 
         // Filter tasks
-        const unfinishedTasks = this.tasks.filter(t => !t.completed);
-        const finishedTasks = this.sortDoneTasks(this.tasks.filter(t => t.completed));
+        const listVisibleTasks = this.getListModeVisibleTasks(this.tasks);
+        const unfinishedTasks = listVisibleTasks.filter(t => !t.completed);
+        const finishedTasks = this.sortDoneTasks(listVisibleTasks.filter(t => t.completed));
 
         if (countBadge) {
             // Count total top-level unfinished tasks
@@ -7897,21 +7919,23 @@ export class ProjectKanbanView {
     }
 
     private async renderGroupedListColumns(container: HTMLElement, groups: any[]) {
+        const listVisibleTasks = this.getListModeVisibleTasks(this.tasks);
+
         // Handle ungrouped tasks (orphaned tasks should be considered ungrouped)
         const validGroupIds = new Set(groups.map(g => g.id));
-        const ungroupedTasks = this.tasks.filter(t => !t.customGroupId || !validGroupIds.has(t.customGroupId));
+        const ungroupedTasks = listVisibleTasks.filter(t => !t.customGroupId || !validGroupIds.has(t.customGroupId));
 
         let displayGroups = [...groups].sort((a, b) => (a.sort || 0) - (b.sort || 0));
         const todayStr = getLogicalDateString();
 
         if (this.project?.hideNoDoingGroups) {
             displayGroups = displayGroups.filter((g: any) => {
-                return this.tasks.some(task => task.customGroupId === g.id && !task.completed && this.getTaskStatus(task) === 'doing');
+                return listVisibleTasks.some(task => task.customGroupId === g.id && !task.completed && this.getTaskStatus(task) === 'doing');
             });
         }
         if (this.project?.hideNoTodayGroups) {
             displayGroups = displayGroups.filter((g: any) => {
-                return this.tasks.some(task => task.customGroupId === g.id && task.date && compareDateStrings(this.getTaskLogicalDate(task.date, task.time), todayStr) === 0);
+                return listVisibleTasks.some(task => task.customGroupId === g.id && task.date && compareDateStrings(this.getTaskLogicalDate(task.date, task.time), todayStr) === 0);
             });
         }
 
@@ -7920,7 +7944,7 @@ export class ProjectKanbanView {
 
         // Render groups
         for (const group of displayGroups) {
-            const groupTasks = this.tasks.filter(t => t.customGroupId === group.id);
+            const groupTasks = listVisibleTasks.filter(t => t.customGroupId === group.id);
             await this.renderListModeGroupColumn(container, group, groupTasks);
             renderedGroupIds.add(`custom-group-${group.id}`);
         }
@@ -7928,11 +7952,11 @@ export class ProjectKanbanView {
         let showUngrouped = ungroupedTasks.length > 0;
 
         if (showUngrouped && this.project?.hideNoDoingGroups) {
-            const hasDoing = this.tasks.some(task => (!task.customGroupId || !validGroupIds.has(task.customGroupId)) && !task.completed && this.getTaskStatus(task) === 'doing');
+            const hasDoing = listVisibleTasks.some(task => (!task.customGroupId || !validGroupIds.has(task.customGroupId)) && !task.completed && this.getTaskStatus(task) === 'doing');
             if (!hasDoing) showUngrouped = false;
         }
         if (showUngrouped && this.project?.hideNoTodayGroups) {
-            const hasToday = this.tasks.some(task => (!task.customGroupId || !validGroupIds.has(task.customGroupId)) && task.date && compareDateStrings(this.getTaskLogicalDate(task.date, task.time), todayStr) === 0);
+            const hasToday = listVisibleTasks.some(task => (!task.customGroupId || !validGroupIds.has(task.customGroupId)) && task.date && compareDateStrings(this.getTaskLogicalDate(task.date, task.time), todayStr) === 0);
             if (!hasToday) showUngrouped = false;
         }
 
@@ -8857,6 +8881,7 @@ export class ProjectKanbanView {
             'short_term': '📋',
             'long_term': '🤔',
             'completed': '✅',
+            'abandoned': '🚫',
             'incomplete': '🗓'
         };
         // 优先使用 kanbanStatuses 中设置的图标，其次使用默认图标
@@ -8955,7 +8980,7 @@ export class ProjectKanbanView {
             isCollapsed = false;
         } else {
             // 没有任何记录，则使用默认值
-            isCollapsed = status === 'completed';
+            isCollapsed = status === 'completed' || this.isAbandonedStatus(status);
         }
 
         // 设置初始显示状态
@@ -11752,7 +11777,15 @@ export class ProjectKanbanView {
                 // 如果任务未完成且有设置日期，且该日期为今天或已过，且目标状态不是“进行中/完成”，
                 // 无论是通过拖拽还是右键菜单修改，都应提示用户：系统会自动将该任务显示在“进行中”列，
                 // 如要移出“进行中”需先修改任务的日期或时间。
-                if (task && !task.completed && task.date && compareDateStrings(this.getTaskLogicalDate(task.date, task.time), today) <= 0 && newStatus !== 'doing' && newStatus !== 'completed') {
+                if (
+                    task &&
+                    !task.completed &&
+                    task.date &&
+                    compareDateStrings(this.getTaskLogicalDate(task.date, task.time), today) <= 0 &&
+                    newStatus !== 'doing' &&
+                    newStatus !== 'completed' &&
+                    !this.isAbandonedStatus(newStatus)
+                ) {
                     const dialog = new Dialog({
                         title: '提示',
                         content: `
@@ -15287,7 +15320,13 @@ export class ProjectKanbanView {
             // 如果尝试通过拖拽改变状态，且任务未完成且任务日期为今天或已过，弹窗提示用户
             try {
                 const today = getLogicalDateString();
-                if (oldStatus !== newStatus && !draggedTaskInDb.completed && draggedTaskInDb.date && compareDateStrings(this.getTaskLogicalDate(draggedTaskInDb.date, draggedTaskInDb.time), today) <= 0) {
+                if (
+                    oldStatus !== newStatus &&
+                    !draggedTaskInDb.completed &&
+                    draggedTaskInDb.date &&
+                    compareDateStrings(this.getTaskLogicalDate(draggedTaskInDb.date, draggedTaskInDb.time), today) <= 0 &&
+                    !this.isAbandonedStatus(newStatus)
+                ) {
                     // 弹窗：取消 / 编辑任务时间
                     const dialog = new Dialog({
                         title: '提示',
@@ -16958,6 +16997,7 @@ export class ProjectKanbanView {
                     if (oldStatus === newStatus) return false; // 状态未变则不算
                     if (t.completed) return false; // 已完成的忽略
                     if (!t.date) return false; // 无日期的忽略
+                    if (this.isAbandonedStatus(newStatus)) return false; // 放弃状态允许移动
                     try {
                         const logical = this.getTaskLogicalDate(t.date, t.time);
                         return compareDateStrings(logical, today) <= 0;
@@ -17852,7 +17892,7 @@ export class ProjectKanbanView {
                         if (uiTask.completed) continue;
                         if (uiTask.date && compareDateStrings(this.getTaskLogicalDate(uiTask.date, uiTask.time), today) <= 0) {
                             const target = updates.kanbanStatus;
-                            if (target !== 'doing' && target !== 'completed') {
+                            if (target !== 'doing' && target !== 'completed' && !this.isAbandonedStatus(target)) {
                                 offendingTasks.push(uiTask);
                             }
                         }

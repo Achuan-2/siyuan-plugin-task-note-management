@@ -4757,7 +4757,10 @@ export class QuickReminderDialog {
 
     private getStatusDisplayName(statusKey: string): string {
         const status = this.projectManager.getStatusManager().getStatusById(statusKey);
-        return status?.name || statusKey;
+        const icon = typeof status?.icon === 'string' ? status.icon.trim() : '';
+        const name = typeof status?.name === 'string' ? status.name.trim() : '';
+        if (icon && name) return `${icon} ${name}`;
+        return name || statusKey;
     }
 
     /**

@@ -57,6 +57,14 @@ export class GlobalProjectStatusDialog {
                 isFixed: true,
                 sort: 100,
             },
+            {
+                id: "abandoned",
+                name: i18n("abandoned") || "放弃",
+                color: "#7f8c8d",
+                icon: "🚫",
+                isFixed: true,
+                sort: 110,
+            },
         ];
     }
 
@@ -94,13 +102,13 @@ export class GlobalProjectStatusDialog {
                 name,
                 color,
                 icon,
-                isFixed: id === "doing" || id === "completed" ? true : item.isFixed === true,
+                isFixed: id === "doing" || id === "completed" || id === "abandoned" ? true : item.isFixed === true,
                 sort,
             });
             seenIds.add(id);
         });
 
-        for (const requiredId of ["doing", "completed"]) {
+        for (const requiredId of ["doing", "completed", "abandoned"]) {
             if (seenIds.has(requiredId)) continue;
             const fallback = builtInMap.get(requiredId);
             if (fallback) {
@@ -111,7 +119,7 @@ export class GlobalProjectStatusDialog {
         normalized.sort((a, b) => (a.sort || 0) - (b.sort || 0));
         normalized.forEach((item, index) => {
             item.sort = index * 10;
-            if (item.id === "doing" || item.id === "completed") {
+            if (item.id === "doing" || item.id === "completed" || item.id === "abandoned") {
                 item.isFixed = true;
             }
         });
@@ -420,7 +428,7 @@ export class GlobalProjectStatusDialog {
         reordered.splice(insertBefore ? targetIndex : targetIndex + 1, 0, removed);
         reordered.forEach((s, idx) => {
             s.sort = idx * 10;
-            if (s.id === "doing" || s.id === "completed") s.isFixed = true;
+            if (s.id === "doing" || s.id === "completed" || s.id === "abandoned") s.isFixed = true;
         });
 
         this.statuses = reordered;

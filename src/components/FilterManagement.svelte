@@ -41,6 +41,7 @@
         isBuiltIn: boolean;
         dateFilters: DateFilter[];
         statusFilter: 'all' | 'completed' | 'uncompleted';
+        kanbanStatusNameFilters?: string[];
         projectFilters: string[];
         categoryFilters: string[];
         priorityFilters: string[];
@@ -63,6 +64,7 @@
     let projectManager: ProjectManager;
     let categories: any[] = [];
     let projects: any[] = [];
+    let kanbanStatusNameOptions: string[] = [];
 
     function maxDayOfMonth(month: number): number {
         const daysInMonth = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
@@ -88,6 +90,7 @@
     let yearlyEndMonth: number = 12;
     let yearlyEndDay: number = 31;
     let statusFilter: 'all' | 'completed' | 'uncompleted' = 'all';
+    let selectedKanbanStatusNames: string[] = ['all'];
     let selectedProjects: string[] = [];
     let selectedCategories: string[] = [];
     let selectedPriorities: string[] = [];
@@ -126,6 +129,21 @@
         return normalized.length > 0 ? normalized : [{ method: 'time', order: 'asc' }];
     }
 
+    function normalizeKanbanStatusNameFilters(filters: any): string[] {
+        if (!Array.isArray(filters) || filters.length === 0) {
+            return ['all'];
+        }
+        const normalized = Array.from(
+            new Set(
+                filters
+                    .filter((item: any) => typeof item === 'string')
+                    .map((item: string) => item.trim())
+                    .filter((item: string) => !!item)
+            )
+        );
+        return normalized.length > 0 ? normalized : ['all'];
+    }
+
     function normalizeFilterConfig(filter: FilterConfig): FilterConfig {
         const builtInDefaults = getBuiltInSortDefaults(filter.id);
         const defaults =
@@ -141,11 +159,13 @@
                     : defaults.sortCriteria
             )
             : [];
+        const finalKanbanStatusNameFilters = normalizeKanbanStatusNameFilters(filter.kanbanStatusNameFilters);
 
         return {
             ...filter,
             sortMode: finalMode,
             sortCriteria: finalCriteria,
+            kanbanStatusNameFilters: finalKanbanStatusNameFilters,
         };
     }
 
@@ -219,6 +239,31 @@
         }
     }
 
+    async function loadKanbanStatusNameOptions() {
+        try {
+            const statusNameSet = new Set<string>();
+            await Promise.all(
+                projects.map(async (project: any) => {
+                    if (!project?.id) return;
+                    try {
+                        const statuses = await projectManager.getProjectKanbanStatuses(project.id);
+                        statuses.forEach((status: any) => {
+                            if (!status || status.id === 'completed') return;
+                            const name = typeof status.name === 'string' ? status.name.trim() : '';
+                            if (name) statusNameSet.add(name);
+                        });
+                    } catch (error) {
+                        console.warn('加载项目看板状态失败:', project.id, error);
+                    }
+                })
+            );
+            kanbanStatusNameOptions = Array.from(statusNameSet).sort((a, b) => a.localeCompare(b, 'zh-CN'));
+        } catch (error) {
+            console.error('加载看板状态名称选项失败:', error);
+            kanbanStatusNameOptions = [];
+        }
+    }
+
     onMount(async () => {
         categoryManager = CategoryManager.getInstance(plugin);
         projectManager = ProjectManager.getInstance(plugin);
@@ -265,6 +310,7 @@
             projects = [...projects, ...nonArchivedProjects];
         });
 
+        await loadKanbanStatusNameOptions();
         await loadFilters();
     });
 
@@ -452,6 +498,7 @@
         // 根据日期筛选器数量自动设置多选状态
         isMultiSelectDateFilter = filter.dateFilters.length > 1;
         statusFilter = filter.statusFilter;
+        selectedKanbanStatusNames = normalizeKanbanStatusNameFilters(filter.kanbanStatusNameFilters);
         selectedProjects = [...filter.projectFilters];
         selectedCategories = [...filter.categoryFilters];
         selectedPriorities = [...filter.priorityFilters];
@@ -503,6 +550,7 @@
         customRangeStart = '';
         customRangeEnd = '';
         statusFilter = 'all';
+        selectedKanbanStatusNames = ['all'];
         selectedProjects = ['all']; // 默认为全部项目
         selectedCategories = ['all']; // 默认为全部分类
         selectedPriorities = ['all']; // 默认为全部优先级
@@ -536,6 +584,7 @@
             isBuiltIn: false,
             dateFilters,
             statusFilter,
+            kanbanStatusNameFilters: normalizeKanbanStatusNameFilters(selectedKanbanStatusNames),
             projectFilters: selectedProjects,
             categoryFilters: selectedCategories,
             priorityFilters: selectedPriorities,
@@ -624,6 +673,24 @@
                 selectedProjects = selectedProjects.filter(id => id !== 'all');
                 selectedProjects = [...selectedProjects, projectId];
             }
+        }
+    }
+
+    function toggleKanbanStatusName(statusName: string) {
+        if (statusName === 'all') {
+            selectedKanbanStatusNames = ['all'];
+            return;
+        }
+
+        if (selectedKanbanStatusNames.includes(statusName)) {
+            selectedKanbanStatusNames = selectedKanbanStatusNames.filter(name => name !== statusName);
+        } else {
+            selectedKanbanStatusNames = selectedKanbanStatusNames.filter(name => name !== 'all');
+            selectedKanbanStatusNames = [...selectedKanbanStatusNames, statusName];
+        }
+
+        if (selectedKanbanStatusNames.length === 0) {
+            selectedKanbanStatusNames = ['all'];
         }
     }
 
@@ -1140,6 +1207,31 @@
                         >
                             {i18n('uncompleted')}
                         </div>
+                    </div>
+                </div>
+
+                <div class="b3-form__group">
+                    <span class="b3-form__label">{i18n('kanbanStatus') || '项目看板状态'}</span>
+                    <div class="filter-options">
+                        <div
+                            class="filter-option"
+                            class:selected={selectedKanbanStatusNames.includes('all')}
+                            on:click={() => toggleKanbanStatusName('all')}
+                        >
+                            {i18n('all') || '全部'}（{i18n('excludeAbandoned') || '不含放弃'}）
+                        </div>
+                        {#each kanbanStatusNameOptions as statusName}
+                            <div
+                                class="filter-option"
+                                class:selected={selectedKanbanStatusNames.includes(statusName)}
+                                on:click={() => toggleKanbanStatusName(statusName)}
+                            >
+                                {statusName}
+                            </div>
+                        {/each}
+                    </div>
+                    <div class="b3-label__text" style="margin-top: 6px;">
+                        {i18n('kanbanStatusFilterByNameHint') || '按状态名称筛选；不同项目同名状态会合并筛选，且不包含“已完成”状态。'}
                     </div>
                 </div>
 

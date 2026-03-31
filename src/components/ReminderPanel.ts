@@ -79,6 +79,8 @@ export class ReminderPanel {
     private currentCustomFilterId: string | null = null;
     // 用户手动修改的分类筛选（独立于筛选器设置）
     private userManualCategories: string[] = ['all'];
+    // 项目看板状态名称缓存：projectId -> (statusId -> statusName)
+    private projectKanbanStatusNameCache: Map<string, Map<string, string>> = new Map();
 
     // 分页相关状态
     private currentPage: number = 1;
@@ -1989,6 +1991,9 @@ export class ReminderPanel {
             // 将所有任务保存到 allRemindersMap 中，用于后续计算进度
             this.allRemindersMap = new Map(reminderMap);
 
+            // 刷新项目看板状态名称缓存（供“看板状态名称筛选”与“默认隐藏放弃”使用）
+            await this.ensureProjectKanbanStatusNameCache(filteredReminders);
+
             // 0. 如果当前是自定义过滤器，提前同步分类设置
             if (this.currentTab.startsWith('custom_')) {
                 const filterId = this.currentTab.replace('custom_', '');
@@ -3866,6 +3871,10 @@ export class ReminderPanel {
         // 构建提醒映射，用于查找父任务
         const reminderMap = new Map<string, any>();
         reminders.forEach(r => reminderMap.set(r.id, r));
+        // 内置筛选默认隐藏“放弃”状态任务；自定义筛选由 applyCustomFilter 决定
+        const sourceReminders = targetTab.startsWith('custom_')
+            ? reminders
+            : reminders.filter(r => !this.isReminderInAbandonedKanbanStatus(r));
 
         const isEffectivelyCompleted = (reminder: any) => {
             // 如果任务已标记为完成，直接返回 true
@@ -3921,14 +3930,14 @@ export class ReminderPanel {
 
         switch (targetTab) {
             case 'overdue':
-                return reminders.filter(r => {
+                return sourceReminders.filter(r => {
                     const hasDate = r.date || r.endDate;
                     if (!hasDate || isEffectivelyCompleted(r)) return false;
                     const endLogical = this.getReminderLogicalDate(r.endDate || r.date, r.endTime || r.time);
                     return compareDateStrings(endLogical, today) < 0;
                 });
             case 'today':
-                return reminders.filter(r => {
+                return sourceReminders.filter(r => {
                     const isCompleted = isEffectivelyCompleted(r);
                     if (isCompleted) return false;
                     const hasIgnoreMark = this.hasTodayIgnoreMark(r, today);
@@ -3973,7 +3982,7 @@ export class ReminderPanel {
                 });
             case 'tomorrow':
 
-                return reminders.filter(r => {
+                return sourceReminders.filter(r => {
                     const hasDate = r.date || r.endDate;
                     if (isEffectivelyCompleted(r) || !hasDate) return false;
                     const startLogical = this.getReminderLogicalDate(r.date || r.endDate, r.time || r.endTime);
@@ -3981,7 +3990,7 @@ export class ReminderPanel {
                     return compareDateStrings(startLogical, tomorrow) <= 0 && compareDateStrings(tomorrow, endLogical) <= 0;
                 });
             case 'future7':
-                return reminders.filter(r => {
+                return sourceReminders.filter(r => {
                     const hasDate = r.date || r.endDate;
                     if (isEffectivelyCompleted(r) || !hasDate) return false;
                     const startLogical = this.getReminderLogicalDate(r.date || r.endDate, r.time || r.endTime);
@@ -3989,16 +3998,16 @@ export class ReminderPanel {
                     return compareDateStrings(tomorrow, endLogical) <= 0 && compareDateStrings(startLogical, future7Days) <= 0;
                 });
             case 'futureAll':
-                return reminders.filter(r => {
+                return sourceReminders.filter(r => {
                     const hasDate = r.date || r.endDate;
                     if (isEffectivelyCompleted(r) || !hasDate) return false;
                     const startLogical = this.getReminderLogicalDate(r.date || r.endDate, r.time || r.endTime);
                     return compareDateStrings(tomorrow, startLogical) <= 0;
                 });
             case 'completed':
-                return reminders.filter(r => isEffectivelyCompleted(r));
+                return sourceReminders.filter(r => isEffectivelyCompleted(r));
             case 'todayCompleted':
-                return reminders.filter(r => {
+                return sourceReminders.filter(r => {
                     // 1. 常规任务的今日完成
                     if (this.isTodayCompleted(r, today)) return true;
 
@@ -4019,7 +4028,7 @@ export class ReminderPanel {
                     return false;
                 });
             case 'yesterdayCompleted':
-                return reminders.filter(r => {
+                return sourceReminders.filter(r => {
                     // 已标记为完成的：如果其完成时间（completedTime）在昨日，则视为昨日已完成
                     if (r.completed) {
                         try {
@@ -4040,7 +4049,7 @@ export class ReminderPanel {
                     return r.endDate && this.isSpanningEventYesterdayCompleted(r) && compareDateStrings(this.getReminderLogicalDate(r.date || r.endDate, r.time || r.endTime), yesterdayStr) <= 0 && compareDateStrings(yesterdayStr, this.getReminderLogicalDate(r.endDate || r.date, r.endTime || r.time)) <= 0;
                 });
             case 'all': // Past 7 days
-                return reminders.filter(r => {
+                return sourceReminders.filter(r => {
                     const hasDate = r.date || r.endDate;
                     if (!hasDate) return false;
                     const startLogical = this.getReminderLogicalDate(r.date || r.endDate, r.time || r.endTime);
@@ -4048,9 +4057,9 @@ export class ReminderPanel {
                     return compareDateStrings(sevenDaysAgo, startLogical) <= 0 && compareDateStrings(endLogical, today) < 0;
                 });
             case 'allUncompleted': // 所有未完成任务
-                return reminders.filter(r => !isEffectivelyCompleted(r) && !isCompletedDueToParent(r));
+                return sourceReminders.filter(r => !isEffectivelyCompleted(r) && !isCompletedDueToParent(r));
             case 'noDate': // 无日期任务（根据顶级父任务是否有日期来判断）
-                return reminders.filter(r => {
+                return sourceReminders.filter(r => {
                     // 排除已完成的任务和因父任务完成而视为完成的任务
                     if (isEffectivelyCompleted(r) || isCompletedDueToParent(r)) return false;
 
@@ -4065,7 +4074,7 @@ export class ReminderPanel {
                     return !(topLevelParent.date || topLevelParent.endDate);
                 });
             case 'thisWeek':
-                return reminders.filter(r => {
+                return sourceReminders.filter(r => {
                     const hasDate = r.date || r.endDate;
                     if (isEffectivelyCompleted(r) || !hasDate) return false;
 
@@ -4090,7 +4099,7 @@ export class ReminderPanel {
             default:
                 // 处理自定义过滤器
                 if (targetTab.startsWith('custom_')) {
-                    return this.applyCustomFilter(reminders, targetTab, today, isEffectivelyCompleted);
+                    return this.applyCustomFilter(sourceReminders, targetTab, today, isEffectivelyCompleted);
                 }
                 return [];
         }
@@ -4131,18 +4140,25 @@ export class ReminderPanel {
             filtered = this.applyStatusFilter(filtered, filterConfig.statusFilter, isEffectivelyCompleted);
         }
 
-        // 3. 应用项目过滤
+        // 3. 应用看板状态名称过滤（按状态 name；默认“全部”但排除放弃）
+        filtered = this.applyKanbanStatusNameFilter(
+            filtered,
+            this.normalizeKanbanStatusNameFilters(filterConfig.kanbanStatusNameFilters),
+            isEffectivelyCompleted
+        );
+
+        // 4. 应用项目过滤
         if (filterConfig.projectFilters && filterConfig.projectFilters.length > 0 && !filterConfig.projectFilters.includes('all')) {
             filtered = this.applyProjectFilter(filtered, filterConfig.projectFilters);
         }
 
-        // 4. 应用分类过滤（已在loadReminders中通过applyCategoryFilter处理）
+        // 5. 应用分类过滤（已在loadReminders中通过applyCategoryFilter处理）
         // 但自定义过滤器可能有自己的分类设置，这里需要额外处理
         if (filterConfig.categoryFilters && filterConfig.categoryFilters.length > 0 && !filterConfig.categoryFilters.includes('all')) {
             filtered = this.applyCustomCategoryFilter(filtered, filterConfig.categoryFilters);
         }
 
-        // 5. 应用优先级过滤
+        // 6. 应用优先级过滤
         if (filterConfig.priorityFilters && filterConfig.priorityFilters.length > 0 && !filterConfig.priorityFilters.includes('all')) {
             filtered = this.applyPriorityFilter(filtered, filterConfig.priorityFilters);
         }
@@ -4173,6 +4189,125 @@ export class ReminderPanel {
         } catch (error) {
             console.error('Failed to load custom filters:', error);
         }
+    }
+
+    private normalizeKanbanStatusNameFilters(filters: any): string[] {
+        if (!Array.isArray(filters) || filters.length === 0) {
+            return ['all'];
+        }
+        const normalized = Array.from(
+            new Set(
+                filters
+                    .filter((item: any) => typeof item === 'string')
+                    .map((item: string) => item.trim())
+                    .filter((item: string) => !!item)
+            )
+        );
+        return normalized.length > 0 ? normalized : ['all'];
+    }
+
+    private getReminderKanbanStatusId(reminder: any): string {
+        if (!reminder || typeof reminder !== 'object') return 'doing';
+        if (reminder.completed) return 'completed';
+        return typeof reminder.kanbanStatus === 'string' && reminder.kanbanStatus.trim()
+            ? reminder.kanbanStatus.trim()
+            : 'doing';
+    }
+
+    private isReminderInAbandonedKanbanStatus(reminder: any): boolean {
+        return this.getReminderKanbanStatusId(reminder) === 'abandoned';
+    }
+
+    private getReminderKanbanStatusName(reminder: any): string | null {
+        if (!reminder || typeof reminder !== 'object') return null;
+        const projectId = typeof reminder.projectId === 'string' ? reminder.projectId : '';
+        if (!projectId) return null;
+        const statusMap = this.projectKanbanStatusNameCache.get(projectId);
+        if (!statusMap) return null;
+        const statusId = this.getReminderKanbanStatusId(reminder);
+        return statusMap.get(statusId) || null;
+    }
+
+    private async ensureProjectKanbanStatusNameCache(reminders: any[]): Promise<void> {
+        try {
+            const projectIds = Array.from(
+                new Set(
+                    reminders
+                        .map(reminder => (typeof reminder?.projectId === 'string' ? reminder.projectId : ''))
+                        .filter(projectId => !!projectId)
+                )
+            );
+
+            if (projectIds.length === 0) {
+                this.projectKanbanStatusNameCache.clear();
+                return;
+            }
+
+            const { ProjectManager } = await import('../utils/projectManager');
+            const projectManager = ProjectManager.getInstance(this.plugin);
+            const nextCache: Map<string, Map<string, string>> = new Map();
+
+            await Promise.all(projectIds.map(async projectId => {
+                try {
+                    const statuses = await projectManager.getProjectKanbanStatuses(projectId);
+                    const statusMap: Map<string, string> = new Map();
+                    statuses.forEach(status => {
+                        if (!status || typeof status.id !== 'string') return;
+                        const statusName = typeof status.name === 'string' ? status.name.trim() : '';
+                        if (!statusName) return;
+                        statusMap.set(status.id, statusName);
+                    });
+                    nextCache.set(projectId, statusMap);
+                } catch (error) {
+                    console.warn(`[ReminderPanel] 加载项目状态失败: ${projectId}`, error);
+                }
+            }));
+
+            this.projectKanbanStatusNameCache = nextCache;
+        } catch (error) {
+            console.warn('[ReminderPanel] 刷新项目状态名称缓存失败', error);
+            this.projectKanbanStatusNameCache.clear();
+        }
+    }
+
+    private applyKanbanStatusNameFilter(
+        reminders: any[],
+        kanbanStatusNameFilters: string[],
+        isEffectivelyCompleted: (reminder: any) => boolean
+    ): any[] {
+        const normalizedFilters = this.normalizeKanbanStatusNameFilters(kanbanStatusNameFilters);
+        const useAll = normalizedFilters.includes('all');
+        const selectedNames = new Set(normalizedFilters.filter(name => name !== 'all'));
+
+        return reminders.filter(reminder => {
+            // 已完成任务由“已完成/未完成”筛选控制，不参与看板状态名称筛选
+            if (isEffectivelyCompleted(reminder)) {
+                return true;
+            }
+
+            const isAbandoned = this.isReminderInAbandonedKanbanStatus(reminder);
+            if (useAll) {
+                // “全部”默认不显示放弃状态
+                return !isAbandoned;
+            }
+
+            if (isAbandoned) {
+                const abandonedName = this.getReminderKanbanStatusName(reminder);
+                return abandonedName ? selectedNames.has(abandonedName) : false;
+            }
+
+            // 非项目任务不参与项目看板状态筛选
+            if (!reminder?.projectId) {
+                return true;
+            }
+
+            const statusName = this.getReminderKanbanStatusName(reminder);
+            if (!statusName) {
+                // 无法解析名称时保持显示，避免误伤
+                return true;
+            }
+            return selectedNames.has(statusName);
+        });
     }
 
     /**
@@ -8974,6 +9109,11 @@ export class ReminderPanel {
         const today = getLogicalDateString();
         const tomorrow = getRelativeDateString(1);
         const future7Days = getRelativeDateString(7);
+
+        // 侧栏默认隐藏放弃状态任务
+        if (this.isReminderInAbandonedKanbanStatus(reminder)) {
+            return false;
+        }
 
         // 检查分类筛选
         if (this.currentCategoryFilter !== 'all') {
