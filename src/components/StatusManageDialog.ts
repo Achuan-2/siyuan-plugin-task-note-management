@@ -66,7 +66,6 @@ export class StatusManageDialog {
                     text-align: center;
                 }
                 .statuses-list {
-                    max-height: 400px;
                     overflow-y: auto;
                 }
                 .status-item {

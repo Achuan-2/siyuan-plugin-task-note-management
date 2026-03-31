@@ -177,7 +177,6 @@ export class GlobalProjectStatusDialog {
                     text-align: center;
                 }
                 .statuses-list {
-                    max-height: 420px;
                     overflow-y: auto;
                 }
                 .status-item {
