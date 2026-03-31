@@ -5542,6 +5542,49 @@ export class ProjectKanbanView {
 
                     // 过滤实例：保留过去未完成、今天的、未来第一个未完成，以及所有已完成的实例
                     const completedInstances = reminder.repeat?.completedInstances || [];
+                    const isSeriesAbandoned = this.isAbandonedStatus(reminder.kanbanStatus);
+
+                    // 原始重复任务为放弃时：只展示“放弃前快照实例”
+                    if (isSeriesAbandoned) {
+                        const abandonedAt = reminder.repeat?.abandonedAt || today;
+                        const abandonedInstanceDate = reminder.repeat?.abandonedInstanceDate;
+                        let pickedInstance: any | null = null;
+
+                        if (abandonedInstanceDate) {
+                            pickedInstance = repeatInstances.find(inst => this.getRepeatInstanceOriginalKey(inst) === abandonedInstanceDate) || null;
+                        }
+                        if (!pickedInstance) {
+                            pickedInstance = this.pickSingleDisplayInstance(repeatInstances, abandonedAt);
+                        }
+
+                        if (pickedInstance) {
+                            const originalKey = this.getRepeatInstanceOriginalKey(pickedInstance);
+                            const isInstanceCompleted = completedInstances.includes(originalKey);
+                            const isInstanceResolved = isInstanceCompleted || this.isAbandonedStatus((pickedInstance as any)?.kanbanStatus);
+
+                            const instanceTask = {
+                                ...reminder,
+                                ...pickedInstance,
+                                id: (pickedInstance as any).instanceId || `${reminder.id}_${pickedInstance.date}`,
+                                isRepeatInstance: true,
+                                completed: isInstanceCompleted,
+                                completedTime: isInstanceCompleted
+                                    ? (pickedInstance.completedTime || reminder.repeat?.instanceCompletedTimes?.[originalKey] || getLocalDateTimeString(new Date(pickedInstance.date)))
+                                    : undefined
+                            };
+                            allTasksWithInstances.push(instanceTask);
+
+                            let cutoffTime: number | undefined;
+                            const realCompletedTimeStr = pickedInstance.completedTime || reminder.repeat?.instanceCompletedTimes?.[originalKey] || reminder.repeat?.completedTimes?.[originalKey];
+                            if (realCompletedTimeStr) {
+                                cutoffTime = new Date(realCompletedTimeStr).getTime();
+                            } else if (isInstanceResolved) {
+                                cutoffTime = new Date(`${pickedInstance.date}T23:59:59`).getTime();
+                            }
+                            generateSubtreeInstances(reminder.id, instanceTask.id, pickedInstance.date, allTasksWithInstances, reminderData, cutoffTime);
+                        }
+                        return;
+                    }
 
                     // 将实例分类为：过去未完成、今天未完成、未来未完成、未来已完成、过去已完成
                     let pastIncompleteList: any[] = [];
@@ -5555,6 +5598,9 @@ export class ProjectKanbanView {
                         const originalKey = instanceIdStr.split('_').pop() || instance.date;
                         // 对于所有重复事件，只添加实例，不添加原始任务
                         const isInstanceCompleted = completedInstances.includes(originalKey);
+                        const isInstanceAbandoned = this.isAbandonedStatus((instance as any)?.kanbanStatus);
+                        // 对“是否需要补下一个实例”的判断来说，放弃实例与完成实例都视为已处理
+                        const isInstanceResolved = isInstanceCompleted || isInstanceAbandoned;
 
                         const instanceTask = {
                             ...reminder,
@@ -5573,21 +5619,21 @@ export class ProjectKanbanView {
                         let targetSubList;
                         if (dateComparison < 0) {
                             // 过去的日期
-                            if (isInstanceCompleted) {
+                            if (isInstanceResolved) {
                                 targetSubList = pastCompletedList;
                             } else {
                                 targetSubList = pastIncompleteList;
                             }
                         } else if (dateComparison === 0) {
                             // 今天的日期（只收集未完成的）
-                            if (!isInstanceCompleted) {
+                            if (!isInstanceResolved) {
                                 targetSubList = todayIncompleteList;
                             } else {
                                 targetSubList = pastCompletedList; // 今天已完成算作过去
                             }
                         } else {
                             // 未来的日期
-                            if (isInstanceCompleted) {
+                            if (isInstanceResolved) {
                                 targetSubList = futureCompletedList;
                             } else {
                                 targetSubList = futureIncompleteList;
@@ -5603,7 +5649,7 @@ export class ProjectKanbanView {
                         // If explicit time exists, use it
                         if (realCompletedTimeStr) {
                             cutoffTime = new Date(realCompletedTimeStr).getTime();
-                        } else if (isInstanceCompleted) {
+                        } else if (isInstanceResolved) {
                             // If implicitly completed (e.g. past) or no time recorded, default to end of the instance date
                             // ensuring tasks created ON that day are included, but future tasks are excluded.
                             cutoffTime = new Date(`${instance.date}T23:59:59`).getTime();
@@ -6343,6 +6389,12 @@ export class ProjectKanbanView {
             const isCompletedFlag = !!r.completed || (r.completedTime !== undefined && r.completedTime !== null && String(r.completedTime).trim() !== '');
 
             if (r.repeat && r.repeat.enabled) {
+                // 原始重复任务已放弃：不再按未来实例展开，仅按放弃状态计一次
+                if (r.kanbanStatus === 'abandoned') {
+                    safeInc('abandoned');
+                    return;
+                }
+
                 const completedInstances = r.repeat.completedInstances || [];
 
                 const rangeStart = r.startDate || r.date || r.createdTime?.split('T')[0] || '2020-01-01';
@@ -6365,18 +6417,23 @@ export class ProjectKanbanView {
                     const instanceIdStr = (instance as any).instanceId || `${r.id}_${instance.date}`;
                     const originalKey = instanceIdStr.split('_').pop() || instance.date;
                     const isInstanceCompleted = completedInstances.includes(originalKey);
+                    // 静态方法内避免调用实例方法
+                    const isInstanceAbandoned = instance?.kanbanStatus === 'abandoned';
+                    const isInstanceResolved = isInstanceCompleted || isInstanceAbandoned;
                     const instanceLogical = this.getTaskLogicalDate(instance.date, instance.time);
                     const dateComparison = compareDateStrings(instanceLogical, today);
 
                     if (isInstanceCompleted) {
                         counts['completed'] = (counts['completed'] || 0) + 1;
+                    } else if (isInstanceAbandoned) {
+                        safeInc('abandoned');
                     } else {
                         const effectiveStatus = instance.kanbanStatus || null;
                         if (dateComparison <= 0) {
                             // past or today -> prefer a 'doing' status if present
                             if (counts.hasOwnProperty('doing')) safeInc('doing');
                             else safeInc(effectiveStatus);
-                            if (dateComparison === 0) hasTodayIncomplete = true;
+                            if (dateComparison === 0 && !isInstanceResolved) hasTodayIncomplete = true;
                         } else {
                             futureIncompleteList.push({ ...instance });
                         }
@@ -6458,6 +6515,61 @@ export class ProjectKanbanView {
 
         // 默认返回进行中
         return 'doing';
+    }
+
+    private getRepeatInstanceOriginalKey(instance: any): string {
+        if (!instance) return '';
+        const instanceId = (instance as any).instanceId || instance.id;
+        if (typeof instanceId === 'string') {
+            const idx = instanceId.lastIndexOf('_');
+            if (idx >= 0 && idx < instanceId.length - 1) {
+                return instanceId.substring(idx + 1);
+            }
+        }
+        return instance.date || '';
+    }
+
+    // 为“放弃的重复系列”挑选快照实例：截止放弃日期前最新一个；若此前没有则取第一个未来实例
+    private pickSingleDisplayInstance(instances: any[], cutoffDate: string): any | null {
+        if (!Array.isArray(instances) || instances.length === 0) return null;
+
+        const sorted = [...instances].sort((a, b) => {
+            const aDate = this.getTaskLogicalDate(a?.date, a?.time);
+            const bDate = this.getTaskLogicalDate(b?.date, b?.time);
+            return compareDateStrings(aDate, bDate);
+        });
+
+        let latestBeforeOrAt: any | null = null;
+        for (const inst of sorted) {
+            const logicalDate = this.getTaskLogicalDate(inst?.date, inst?.time);
+            if (compareDateStrings(logicalDate, cutoffDate) <= 0) {
+                latestBeforeOrAt = inst;
+            } else {
+                break;
+            }
+        }
+
+        if (latestBeforeOrAt) return latestBeforeOrAt;
+        return sorted[0] || null;
+    }
+
+    // 对重复实例优先使用 instanceId 中携带的原始生成日期作为实例键
+    private getRepeatInstanceOriginalDate(task: any): string {
+        if (!task) return '';
+        const instanceId = typeof task.id === 'string' ? task.id : '';
+        const fallbackDate = task.date || '';
+
+        if (!instanceId) return fallbackDate;
+        const lastUnderscoreIndex = instanceId.lastIndexOf('_');
+        if (lastUnderscoreIndex < 0 || lastUnderscoreIndex === instanceId.length - 1) {
+            return fallbackDate;
+        }
+
+        const originalDate = instanceId.substring(lastUnderscoreIndex + 1);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(originalDate) || /^\d{8}$/.test(originalDate)) {
+            return originalDate;
+        }
+        return fallbackDate;
     }
 
     private isAbandonedStatus(statusId: string | null | undefined): boolean {
@@ -11759,6 +11871,8 @@ export class ProjectKanbanView {
 
             // 广播更新事件
             this.dispatchReminderUpdate(true);
+            // 重复实例完成/取消完成后，需要立即重算实例列表（例如补出下一个实例）
+            await this.queueLoadTasks();
         } catch (error) {
             console.error('切换重复实例完成状态失败:', error);
             showMessage('操作失败，请重试');
@@ -11769,6 +11883,12 @@ export class ProjectKanbanView {
         try {
             // 保存旧状态,用于后续的DOM移动
             const oldStatus = this.getTaskStatus(task);
+            const instanceDate = task.isRepeatInstance ? this.getRepeatInstanceOriginalDate(task) : task.date;
+            if (task.isRepeatInstance && !instanceDate) {
+                console.warn('[Kanban] 无法解析重复实例日期，已取消状态更新', task);
+                showMessage(i18n("operationFailed"));
+                return;
+            }
 
             // 如果当前是通过拖拽触发的状态变更，并且任务有设置日期且该日期为今天或已过
             // 则阻止直接把它移出 "进行中"，提示用户需要修改任务时间才能移出。
@@ -11842,17 +11962,16 @@ export class ProjectKanbanView {
                             reminderData[actualTaskId].repeat.completedInstances = [];
                         }
                         // 添加到已完成实例列表（如果还没有）
-                        if (!reminderData[actualTaskId].repeat.completedInstances.includes(task.date)) {
-                            reminderData[actualTaskId].repeat.completedInstances.push(task.date);
+                        if (!reminderData[actualTaskId].repeat.completedInstances.includes(instanceDate)) {
+                            reminderData[actualTaskId].repeat.completedInstances.push(instanceDate);
                         }
 
                         // 周期实例完成时，也自动完成所有子任务的对应实例
-                        const childIds = await this.completeAllChildInstances(actualTaskId, task.date, reminderData, affectedBlockIds, task.id);
+                        const childIds = await this.completeAllChildInstances(actualTaskId, instanceDate, reminderData, affectedBlockIds, task.id);
                         completedTaskIds.push(task.id, ...childIds);
                     } else {
                         // [FIX] 对于周期实例的状态修改，应该只影响该实例及其 Ghost 子任务
                         // 而不是修改原始任务的全局状态
-                        const instanceDate = task.date;
                         // Use originalId if available for recursion
                         const targetId = task.isRepeatInstance ? task.originalId : task.id;
                         const originalIdsToUpdate = [targetId, ...this.getAllDescendantIds(targetId, reminderData)];
@@ -11902,6 +12021,27 @@ export class ProjectKanbanView {
                         } else {
                             // 支持自定义 kanban status id（非 long_term/short_term/doing）
                             reminderData[actualTaskId].kanbanStatus = newStatus;
+                        }
+                    }
+
+                    // 重复模板任务被放弃时，记录“放弃前快照实例”；离开放弃状态时清理快照信息
+                    if (reminderData[actualTaskId]?.repeat?.enabled) {
+                        if (newStatus === 'abandoned') {
+                            const repeatTask = reminderData[actualTaskId];
+                            const abandonedAt = getLogicalDateString();
+                            repeatTask.repeat.abandonedAt = abandonedAt;
+
+                            const isLunarRepeat = repeatTask.repeat.type === 'lunar-monthly' || repeatTask.repeat.type === 'lunar-yearly';
+                            const repeatInstances = this.generateInstancesWithFutureGuarantee(repeatTask, abandonedAt, isLunarRepeat);
+                            const pickedInstance = this.pickSingleDisplayInstance(repeatInstances, abandonedAt);
+                            if (pickedInstance) {
+                                repeatTask.repeat.abandonedInstanceDate = this.getRepeatInstanceOriginalKey(pickedInstance);
+                            } else {
+                                delete repeatTask.repeat.abandonedInstanceDate;
+                            }
+                        } else {
+                            delete reminderData[actualTaskId].repeat.abandonedAt;
+                            delete reminderData[actualTaskId].repeat.abandonedInstanceDate;
                         }
                     }
                 }
@@ -12568,6 +12708,15 @@ export class ProjectKanbanView {
                 // 保存成功后尝试增量更新 DOM
                 if (savedTask && typeof savedTask === 'object') {
                     try {
+                        // 重复模板任务必须走全量重算：
+                        // 局部插入会先插入原始任务卡片，导致右键菜单不是“实例菜单”。
+                        if (savedTask.repeat?.enabled) {
+                            this.reminderData = null;
+                            await this.queueLoadTasks();
+                            this.dispatchReminderUpdate(true);
+                            return;
+                        }
+
                         // 1. 更新本地缓存
                         if (this.reminderData) {
                             this.reminderData[savedTask.id] = savedTask;
@@ -12699,8 +12848,17 @@ export class ProjectKanbanView {
             }
 
             // 优化：乐观更新 + 立即渲染 + 后台数据刷新
-            const callback = (savedTask?: any) => {
+            const callback = async (savedTask?: any) => {
                 if (savedTask) {
+                    // 编辑重复模板任务（例如“修改所有实例”）后，必须全量重算实例列表，
+                    // 否则当前看板可能仍停留在旧的实例状态展示。
+                    if (savedTask.repeat?.enabled || taskToEdit?.repeat?.enabled) {
+                        this.reminderData = null;
+                        await this.queueLoadTasks();
+                        this.dispatchReminderUpdate(true);
+                        return;
+                    }
+
                     // 1. 乐观更新内存中的任务数据
                     const taskIndex = this.tasks.findIndex(t => t.id === savedTask.id);
                     // 兼容性处理：如果返回的任务只有 createdAt，补齐 createdTime
@@ -15808,7 +15966,8 @@ export class ProjectKanbanView {
 
             // 优化：只通过 reminderUpdated 事件触发刷新，避免重复更新
             // 事件监听器会调用 queueLoadTasks() 进行防抖刷新
-            const callback = () => {
+            const callback = async () => {
+                await this.queueLoadTasks();
                 this.dispatchReminderUpdate(true);
             };
 
@@ -15954,10 +16113,16 @@ export class ProjectKanbanView {
 
             // 检查是否有未完成的未来实例（关键修复：不仅要是未来的，还要是未完成的）
             hasUncompletedFutureInstance = repeatInstances.some(instance => {
+                const instanceLogical = this.getTaskLogicalDate(instance.date, instance.time);
+                if (compareDateStrings(instanceLogical, today) <= 0) return false;
+
+                // 原始系列已放弃时，只要存在未来实例就够了（后续由展示层仅保留一个）
+                if (this.isAbandonedStatus(reminder?.kanbanStatus)) return true;
+
                 const instanceIdStr = (instance as any).instanceId || `${reminder.id}_${instance.date}`;
                 const originalKey = instanceIdStr.split('_').pop() || instance.date;
-                const instanceLogical = this.getTaskLogicalDate(instance.date, instance.time);
-                return compareDateStrings(instanceLogical, today) > 0 && !completedInstances.includes(originalKey);
+                const isInstanceResolved = completedInstances.includes(originalKey) || this.isAbandonedStatus((instance as any)?.kanbanStatus);
+                return !isInstanceResolved;
             });
 
             if (!hasUncompletedFutureInstance) {
@@ -17727,52 +17892,8 @@ export class ProjectKanbanView {
             dialog.destroy();
 
             try {
-                let successCount = 0;
-                const tasksToUpdate = [];
-                const blocksToUpdate = [];
-
-                for (const taskId of selectedIds) {
-                    const task = this.tasks.find(t => t.id === taskId);
-                    if (task) {
-                        const wasCompleted = task.completed;
-                        // 修改状态
-                        if (newStatus === 'completed') {
-                            task.kanbanStatus = 'completed';
-                            task.completed = true;
-                            this.syncCustomProgressOnCompletion(task, true);
-                            task.completedTime = getLocalDateTimeString(new Date());
-                        } else if (newStatus === 'doing') {
-                            task.completed = false;
-                            task.completedTime = undefined;
-                            task.kanbanStatus = 'doing';
-                        } else {
-                            // 其他状态（长期、短期、自定义状态）
-                            task.completed = false;
-                            task.completedTime = undefined;
-                            task.kanbanStatus = newStatus;
-                        }
-
-                        tasksToUpdate.push(task);
-
-                        // 如果有绑定块且完成状态变化，记录
-                        if ((task.blockId || task.docId) && wasCompleted !== task.completed) {
-                            blocksToUpdate.push(task.blockId || task.docId);
-                        }
-
-                        successCount++;
-                    }
-                }
-
-                // 批量保存任务
-                await this.saveTasks(tasksToUpdate);
-
-                // 更新任务
-                this.queueLoadTasks();
-                showMessage(i18n('batchUpdateSuccess', { count: String(successCount) }) || `成功更新 ${successCount} 个任务`);
-                // 批量更新绑定块属性
-                for (const blockId of blocksToUpdate) {
-                    await updateBindBlockAtrrs(blockId, this.plugin);
-                }
+                // 统一走 batchUpdateTasks，避免重复实例被当作独立任务写入 reminderData 产生拷贝键
+                await this.batchUpdateTasks(selectedIds, { kanbanStatus: newStatus });
             } catch (error) {
                 console.error('批量设置状态失败:', error);
                 showMessage(i18n('batchUpdateFailed') || '批量更新失败');
@@ -17788,54 +17909,7 @@ export class ProjectKanbanView {
         if (selectedIds.length === 0) return;
 
         try {
-            let successCount = 0;
-            const tasksToUpdate = [];
-            const blocksToUpdate = [];
-
-            for (const taskId of selectedIds) {
-                const task = this.tasks.find(t => t.id === taskId);
-                if (task) {
-                    const wasCompleted = task.completed;
-
-                    // 设置为完成状态
-                    task.kanbanStatus = 'completed';
-                    task.completed = true;
-                    this.syncCustomProgressOnCompletion(task, true);
-                    // 如果已经有完成时间，保持原样？或者更新？
-                    // 通常批量设置为完成意味着"现在完成"，所以更新时间比较合理，或者如果已经完成就不动?
-                    // 但用户显式点击"设置已完成"，意味着强制设为完成。
-                    if (!wasCompleted) {
-                        task.completedTime = getLocalDateTimeString(new Date());
-                    } else if (!task.completedTime) {
-                        task.completedTime = getLocalDateTimeString(new Date());
-                    }
-
-                    tasksToUpdate.push(task);
-
-                    // 记录需要更新的绑定块
-                    if (task.blockId || task.docId) {
-                        blocksToUpdate.push(task.blockId || task.docId);
-                    }
-
-                    successCount++;
-                }
-            }
-
-            if (tasksToUpdate.length === 0) {
-                return;
-            }
-
-            // 批量保存任务
-            await this.saveTasks(tasksToUpdate);
-
-            // 更新任务
-            this.queueLoadTasks();
-            showMessage(i18n('batchUpdateSuccess', { count: String(successCount) }) || `成功更新 ${successCount} 个任务`);
-
-            // 批量更新绑定块属性
-            for (const blockId of blocksToUpdate) {
-                await updateBindBlockAtrrs(blockId, this.plugin);
-            }
+            await this.batchUpdateTasks(selectedIds, { kanbanStatus: 'completed' });
         } catch (error) {
             console.error('批量设置已完成失败:', error);
             showMessage(i18n('batchUpdateFailed') || '批量更新失败');
