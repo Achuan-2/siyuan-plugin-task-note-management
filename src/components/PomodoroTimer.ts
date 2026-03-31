@@ -358,6 +358,7 @@ export class PomodoroTimer {
             completedPomodoros: this.completedPomodoros,
             reminderTitle: this.reminder.title,
             reminderId: this.reminder.id,
+            blockId: this.reminder.blockId,
             currentPhaseOriginalDuration: this.currentPhaseOriginalDuration,
             startTime: this.startTime,
             randomRestCount: this.randomRestCount,
@@ -5597,8 +5598,7 @@ export class PomodoroTimer {
         return Math.floor(numericValue);
     }
 
-    private async updateBlockPomodoroAttrs(focusMinutes: number): Promise<boolean> {
-        const blockId = this.reminder?.blockId;
+    private async updateBlockPomodoroAttrsByBlockId(blockId: string | undefined, focusMinutes: number): Promise<boolean> {
         if (!blockId) return false;
 
         const addedMinutes = Math.max(1, Math.round(Number(focusMinutes) || 0));
@@ -5628,6 +5628,10 @@ export class PomodoroTimer {
             console.warn('写入块番茄属性失败:', error);
             return false;
         }
+    }
+
+    private async updateBlockPomodoroAttrs(focusMinutes: number): Promise<boolean> {
+        return this.updateBlockPomodoroAttrsByBlockId(this.reminder?.blockId, focusMinutes);
     }
 
     private async updateReminderPomodoroCount(
@@ -6809,6 +6813,7 @@ export class PomodoroTimer {
         const eventTitle = forceTitle || this.reminder.title || (i18n('pomodoroFocusDefault') || '番茄专注');
         const minutes = elapsedSecs / 60;
         const originalDuration = state ? state.currentPhaseOriginalDuration : this.currentPhaseOriginalDuration;
+        const targetBlockId = (state && typeof state.blockId === "string" ? state.blockId : "") || this.reminder?.blockId;
 
         try {
             await this.recordManager.recordWorkSession(
@@ -6819,6 +6824,10 @@ export class PomodoroTimer {
                 false, // 标记为未完成（中途切换或手动停止）
                 state ? state.isCountUp : this.isCountUp
             );
+            const blockAttrsChanged = await this.updateBlockPomodoroAttrsByBlockId(targetBlockId, minutes);
+            if (blockAttrsChanged) {
+                window.dispatchEvent(new CustomEvent('reminderUpdated'));
+            }
             console.log(`[PomodoroTimer] 已记录部分专注时间: ${eventTitle}, ${Math.round(minutes * 10) / 10}分钟`);
         } catch (error) {
             console.error('[PomodoroTimer] 记录部分专注时间失败:', error);
