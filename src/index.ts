@@ -2741,6 +2741,7 @@ export default class ReminderPlugin extends Plugin {
                 id: blockId,
                 title: title.length > 80 ? `${title.slice(0, 80)}...` : title,
                 blockId,
+                isBlockPomodoro: true,
             };
         } catch (error) {
             console.error("读取块信息失败，无法启动番茄钟:", error);

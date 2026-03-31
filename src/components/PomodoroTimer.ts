@@ -119,6 +119,7 @@ export class PomodoroTimer {
     private normalWindowBounds: { x: number; y: number; width: number; height: number } | null = null; // 保存正常窗口位置和大小
     private inheritedWindowBounds: { x: number; y: number; width: number; height: number } | null = null; // 继承的窗口位置信息
     private scheduledNotificationIds: number[] = []; // 已调度的移动端通知ID列表
+    private blockPomodoroMetricCache: { blockId: string; count: number; minutes: number } | null = null;
 
     private static async isWindowFromWorkspace(win: any, workspaceDir: string): Promise<boolean> {
         if (!workspaceDir) {
@@ -4688,6 +4689,32 @@ export class PomodoroTimer {
         showMessage('🧘 ' + (i18n('pomodoroLongBreak') || '开始长时休息'));
     }
 
+    private async recordInterruptedWorkSession(
+        minutes: number,
+        eventId: string,
+        eventTitle: string,
+        originalDuration: number
+    ): Promise<void> {
+        const recordedMinutes = Math.max(1, Math.round(Number(minutes) || 0));
+        try {
+            await this.recordManager.recordWorkSession(
+                recordedMinutes,
+                eventId,
+                eventTitle,
+                originalDuration,
+                this.isCountUp,
+                this.isCountUp
+            );
+            await this.updateReminderPomodoroCount(recordedMinutes, { notify: false });
+            this.updateStatsDisplay();
+            window.dispatchEvent(new CustomEvent('reminderUpdated'));
+            showMessage(i18n('pomodoroRecorded') || '已记录此次专注', 2000);
+        } catch (err) {
+            console.error('记录番茄专注失败:', err);
+            showMessage(i18n('pomodoroRecordFailed') || '记录失败', 3000);
+        }
+    }
+
     private async resetTimer() {
         // 如果在工作阶段中途停止（正计时或倒计时都有可能），询问用户是否将已用时间记录为一次番茄计时
         if (this.isWorkPhase) {
@@ -4707,23 +4734,7 @@ export class PomodoroTimer {
                         i18n('pomodoroStopConfirmTitle') || '中断番茄钟',
                         String(i18n('pomodoroStopConfirmContent', { minutes: minutes.toString() }) || `检测到你已专注 ${minutes} 分钟，是否将此次专注记录为番茄？`),
                         async () => {
-                            try {
-                                await this.recordManager.recordWorkSession(
-                                    Math.max(1, minutes),
-                                    eventId,
-                                    eventTitle,
-                                    this.currentPhaseOriginalDuration,
-                                    this.isCountUp,
-                                    this.isCountUp
-                                );
-                                this.updateStatsDisplay();
-                                showMessage(i18n('pomodoroRecorded') || '已记录此次专注', 2000);
-                                // 触发 reminderUpdated 事件
-                                window.dispatchEvent(new CustomEvent('reminderUpdated'));
-                            } catch (err) {
-                                console.error('记录番茄专注失败:', err);
-                                showMessage(i18n('pomodoroRecordFailed') || '记录失败', 3000);
-                            }
+                            await this.recordInterruptedWorkSession(minutes, eventId, eventTitle, this.currentPhaseOriginalDuration);
                         }
                     );
                 } else {
@@ -4732,23 +4743,7 @@ export class PomodoroTimer {
                         i18n('pomodoroStopConfirmTitle') || '中断番茄钟',
                         String(i18n('pomodoroStopConfirmContent', { minutes: minutes.toString() }) || `检测到你已专注 ${minutes} 分钟，是否将此次专注记录为番茄？`),
                         async () => {
-                            try {
-                                await this.recordManager.recordWorkSession(
-                                    Math.max(1, minutes),
-                                    eventId,
-                                    eventTitle,
-                                    this.currentPhaseOriginalDuration,
-                                    this.isCountUp,
-                                    this.isCountUp
-                                );
-                                this.updateStatsDisplay();
-                                showMessage(i18n('pomodoroRecorded') || '已记录此次专注', 2000);
-                                // 触发 reminderUpdated 事件
-                                window.dispatchEvent(new CustomEvent('reminderUpdated'));
-                            } catch (err) {
-                                console.error('记录番茄专注失败:', err);
-                                showMessage(i18n('pomodoroRecordFailed') || '记录失败', 3000);
-                            }
+                            await this.recordInterruptedWorkSession(minutes, eventId, eventTitle, this.currentPhaseOriginalDuration);
                         }
                     );
                 }
@@ -5092,7 +5087,7 @@ export class PomodoroTimer {
             const completedFocusMinutes = this.isCountUp
                 ? Math.max(1, Math.round(Number(this.currentPhaseOriginalDuration || this.settings?.workDuration || 25)))
                 : Math.max(1, Math.round(this.totalTime / 60));
-            await this.updateReminderPomodoroCount(completedFocusMinutes);
+            void this.updateReminderPomodoroCount(completedFocusMinutes);
             this.triggerHabitAutoCheckInAfterPomodoro();
 
             // 正计时模式下静默更新显示，不记录时间（时间在手动停止时统一记录）
@@ -5264,7 +5259,7 @@ export class PomodoroTimer {
 
                 // 更新番茄数量计数
                 this.completedPomodoros++;
-                await this.updateReminderPomodoroCount(actualDuration);
+                void this.updateReminderPomodoroCount(actualDuration);
                 this.triggerHabitAutoCheckInAfterPomodoro();
 
                 // 判断是否应该进入长休息
@@ -5608,80 +5603,105 @@ export class PomodoroTimer {
 
         const addedMinutes = Math.max(1, Math.round(Number(focusMinutes) || 0));
         try {
-            const blockAttrs = await getBlockAttrs(blockId);
-            const currentCount = this.parsePomodoroMetric(blockAttrs?.[BLOCK_POMODORO_COUNT_ATTR]);
-            const currentMinutes = this.parsePomodoroMetric(blockAttrs?.[BLOCK_POMODORO_MINUTES_ATTR]);
+            let currentCount = 0;
+            let currentMinutes = 0;
+            if (this.blockPomodoroMetricCache && this.blockPomodoroMetricCache.blockId === blockId) {
+                currentCount = this.blockPomodoroMetricCache.count;
+                currentMinutes = this.blockPomodoroMetricCache.minutes;
+            } else {
+                const blockAttrs = await getBlockAttrs(blockId);
+                currentCount = this.parsePomodoroMetric(blockAttrs?.[BLOCK_POMODORO_COUNT_ATTR]);
+                currentMinutes = this.parsePomodoroMetric(blockAttrs?.[BLOCK_POMODORO_MINUTES_ATTR]);
+            }
+
+            const nextCount = currentCount + 1;
+            const nextMinutes = currentMinutes + addedMinutes;
 
             await setBlockAttrs(blockId, {
-                [BLOCK_POMODORO_COUNT_ATTR]: String(currentCount + 1),
-                [BLOCK_POMODORO_MINUTES_ATTR]: String(currentMinutes + addedMinutes),
+                [BLOCK_POMODORO_COUNT_ATTR]: String(nextCount),
+                [BLOCK_POMODORO_MINUTES_ATTR]: String(nextMinutes),
             });
+            this.blockPomodoroMetricCache = { blockId, count: nextCount, minutes: nextMinutes };
             return true;
         } catch (error) {
+            this.blockPomodoroMetricCache = null;
             console.warn('写入块番茄属性失败:', error);
             return false;
         }
     }
 
-    private async updateReminderPomodoroCount(focusMinutes?: number) {
+    private async updateReminderPomodoroCount(
+        focusMinutes?: number,
+        options?: { notify?: boolean }
+    ) {
         const addedMinutes = Math.max(
             1,
             Math.round(Number(focusMinutes || this.currentPhaseOriginalDuration || this.settings?.workDuration || 25))
         );
-        let reminderDataChanged = false;
+        const notify = options?.notify !== false;
+        const shouldUpdateReminderData = !this.reminder?.isBlockPomodoro;
 
-        try {
-            const reminderData = await this.plugin.loadReminderData();
+        const reminderDataTask = async (): Promise<boolean> => {
+            if (!shouldUpdateReminderData) return false;
+            try {
+                const reminderData = await this.plugin.loadReminderData();
+                let reminderDataChanged = false;
 
-            // 每个实例（包括重复实例）使用自己的ID来保存番茄钟计数
-            const targetId = this.reminder.id;
+                // 每个实例（包括重复实例）使用自己的ID来保存番茄钟计数
+                const targetId = this.reminder.id;
 
-            // 对于重复实例，需要确保在 reminderData 中存在对应的条目
-            // 因为重复实例不会直接保存在 reminderData 中，所以需要特殊处理
-            if (this.reminder.isRepeatInstance) {
-                // 获取原始任务
-                const originalReminder = reminderData[this.reminder.originalId];
-                if (!originalReminder) {
-                    console.warn('未找到原始提醒项:', this.reminder.originalId);
+                // 对于重复实例，需要确保在 reminderData 中存在对应的条目
+                // 因为重复实例不会直接保存在 reminderData 中，所以需要特殊处理
+                if (this.reminder.isRepeatInstance) {
+                    // 获取原始任务
+                    const originalReminder = reminderData[this.reminder.originalId];
+                    if (!originalReminder) {
+                        console.warn('未找到原始提醒项:', this.reminder.originalId);
+                    } else {
+                        // 为重复实例创建独立的番茄钟计数记录（保存在 repeat.instancePomodoroCount 中）
+                        if (!originalReminder.repeat) {
+                            originalReminder.repeat = {};
+                        }
+                        if (!originalReminder.repeat.instancePomodoroCount) {
+                            originalReminder.repeat.instancePomodoroCount = {};
+                        }
+
+                        // 使用实例ID作为key保存番茄钟计数
+                        if (typeof originalReminder.repeat.instancePomodoroCount[targetId] !== 'number') {
+                            originalReminder.repeat.instancePomodoroCount[targetId] = 0;
+                        }
+                        originalReminder.repeat.instancePomodoroCount[targetId]++;
+                        reminderDataChanged = true;
+                    }
                 } else {
-                    // 为重复实例创建独立的番茄钟计数记录（保存在 repeat.instancePomodoroCount 中）
-                    if (!originalReminder.repeat) {
-                        originalReminder.repeat = {};
-                    }
-                    if (!originalReminder.repeat.instancePomodoroCount) {
-                        originalReminder.repeat.instancePomodoroCount = {};
-                    }
+                    // 普通任务直接保存
+                    if (reminderData[targetId]) {
+                        if (typeof reminderData[targetId].pomodoroCount !== 'number') {
+                            reminderData[targetId].pomodoroCount = 0;
+                        }
 
-                    // 使用实例ID作为key保存番茄钟计数
-                    if (typeof originalReminder.repeat.instancePomodoroCount[targetId] !== 'number') {
-                        originalReminder.repeat.instancePomodoroCount[targetId] = 0;
+                        reminderData[targetId].pomodoroCount++;
+                        reminderDataChanged = true;
+                    } else {
+                        console.debug('当前番茄钟未绑定提醒数据，仅更新块属性:', targetId);
                     }
-                    originalReminder.repeat.instancePomodoroCount[targetId]++;
-                    reminderDataChanged = true;
                 }
-            } else {
-                // 普通任务直接保存
-                if (reminderData[targetId]) {
-                    if (typeof reminderData[targetId].pomodoroCount !== 'number') {
-                        reminderData[targetId].pomodoroCount = 0;
-                    }
 
-                    reminderData[targetId].pomodoroCount++;
-                    reminderDataChanged = true;
-                } else {
-                    console.debug('当前番茄钟未绑定提醒数据，仅更新块属性:', targetId);
+                if (reminderDataChanged) {
+                    await this.plugin.saveReminderData(reminderData);
                 }
+                return reminderDataChanged;
+            } catch (error) {
+                console.error('更新提醒番茄数量失败:', error);
+                return false;
             }
+        };
 
-            if (reminderDataChanged) {
-                await this.plugin.saveReminderData(reminderData);
-            }
-        } catch (error) {
-            console.error('更新提醒番茄数量失败:', error);
-        }
-
-        const blockAttrsChanged = await this.updateBlockPomodoroAttrs(addedMinutes);
-        if (reminderDataChanged || blockAttrsChanged) {
+        const [reminderDataChanged, blockAttrsChanged] = await Promise.all([
+            reminderDataTask(),
+            this.updateBlockPomodoroAttrs(addedMinutes),
+        ]);
+        if (notify && (reminderDataChanged || blockAttrsChanged)) {
             window.dispatchEvent(new CustomEvent('reminderUpdated'));
         }
     }
@@ -6171,23 +6191,7 @@ export class PomodoroTimer {
                 const isBrowserWindow = !this.isTabMode && this.container && typeof (this.container as any).webContents !== 'undefined';
 
                 const saveRecord = async () => {
-                    try {
-                        await this.recordManager.recordWorkSession(
-                            Math.max(1, minutes),
-                            eventId,
-                            eventTitle,
-                            originalDuration,
-                            this.isCountUp,
-                            this.isCountUp
-                        );
-                        this.updateStatsDisplay();
-                        showMessage(i18n('pomodoroRecorded') || '已记录此次专注', 2000);
-                        // 触发 reminderUpdated 事件
-                        window.dispatchEvent(new CustomEvent('reminderUpdated'));
-                    } catch (err) {
-                        console.error('记录番茄专注失败:', err);
-                        showMessage(i18n('pomodoroRecordFailed') || '记录失败', 3000);
-                    }
+                    await this.recordInterruptedWorkSession(minutes, eventId, eventTitle, originalDuration);
                 };
 
                 if (isBrowserWindow) {
