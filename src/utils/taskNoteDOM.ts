@@ -1,6 +1,9 @@
-﻿import { i18n } from "../pluginInstance";
+﻿import { showMessage } from "siyuan";
+import { i18n } from "../pluginInstance";
 
 const PROJECT_KANBAN_TAB_TYPE = "project_kanban_tab";
+const BLOCK_POMODORO_COUNT_ATTR = "custom-task-pomodoro-count";
+const BLOCK_POMODORO_MINUTES_ATTR = "custom-task-pomodoro-minutes";
 
 export class TaskNoteDOMManager {
     private plugin: any;
@@ -13,6 +16,25 @@ export class TaskNoteDOMManager {
 
     constructor(plugin: any) {
         this.plugin = plugin;
+    }
+
+    private parsePomodoroMetric(value?: string | null): number {
+        const numericValue = Number(value);
+        if (!Number.isFinite(numericValue) || numericValue <= 0) return 0;
+        return Math.floor(numericValue);
+    }
+
+    private formatPomodoroDuration(totalMinutes: number): string {
+        const safeMinutes = Math.max(0, Math.floor(Number(totalMinutes) || 0));
+        const hours = Math.floor(safeMinutes / 60);
+        const minutes = safeMinutes % 60;
+        if (hours <= 0) return `${minutes}${i18n("minutes") || "分钟"}`;
+        if (minutes === 0) return `${hours}h`;
+        return `${hours}h ${minutes}${i18n("minutes") || "分钟"}`;
+    }
+
+    private getPomodoroSummaryText(totalCount: number, totalMinutes: number): string {
+        return `🍅 ${Math.max(0, totalCount)} · ⏱ ${this.formatPomodoroDuration(totalMinutes)}`;
     }
 
     public initOutlinePrefixObserver() {
@@ -273,7 +295,9 @@ export class TaskNoteDOMManager {
         const hasTrackedAttrsOnNode =
             node.hasAttribute("custom-task-projectid") ||
             node.hasAttribute("custom-bind-reminders") ||
-            node.hasAttribute("custom-bind-milestones");
+            node.hasAttribute("custom-bind-milestones") ||
+            node.hasAttribute(BLOCK_POMODORO_COUNT_ATTR) ||
+            node.hasAttribute(BLOCK_POMODORO_MINUTES_ATTR);
         const blockEl = (node.hasAttribute("data-node-id") ? node : node.closest("[data-node-id]")) as HTMLElement | null;
         const blockId = node.getAttribute("data-node-id") || this._getBlockIdFromElement(node);
         if (!blockId) return;
@@ -293,6 +317,8 @@ export class TaskNoteDOMManager {
         const hasBind = attrSource.hasAttribute("custom-bind-reminders");
         const rawMilestones = attrSource.getAttribute("custom-bind-milestones");
         const milestoneProjectId = attrSource.getAttribute("custom-task-projectid");
+        const pomodoroTotalCount = this.parsePomodoroMetric(attrSource.getAttribute(BLOCK_POMODORO_COUNT_ATTR));
+        const pomodoroTotalMinutes = this.parsePomodoroMetric(attrSource.getAttribute(BLOCK_POMODORO_MINUTES_ATTR));
 
         const projectIds = rawAttr ? rawAttr.split(",").map((s) => s.trim()).filter((s) => s) : [];
         const milestoneIds = rawMilestones ? rawMilestones.split(",").map((s) => s.trim()).filter((s) => s) : [];
@@ -302,10 +328,12 @@ export class TaskNoteDOMManager {
             hasBind,
             milestoneIds,
             milestoneProjectId: milestoneProjectId || undefined,
+            pomodoroTotalCount,
+            pomodoroTotalMinutes,
             element: attrSource,
         };
 
-        if (!rawAttr && !hasBind && !rawMilestones) {
+        if (!rawAttr && !hasBind && !rawMilestones && pomodoroTotalCount <= 0 && pomodoroTotalMinutes <= 0) {
             const trackedSource = this._findTrackedSourceForBlock(protyle, blockId);
             if (trackedSource && trackedSource !== attrSource) return;
             const btns = protyle.element.querySelectorAll(`[data-block-id="${blockId}"][data-plugin-added="reminder-plugin"]`);
@@ -329,7 +357,7 @@ export class TaskNoteDOMManager {
         try {
             if (!protyle || !protyle.element) return;
 
-            const selector = "[custom-task-projectid], [custom-bind-reminders], [custom-bind-milestones]";
+            const selector = `[custom-task-projectid], [custom-bind-reminders], [custom-bind-milestones], [${BLOCK_POMODORO_COUNT_ATTR}], [${BLOCK_POMODORO_MINUTES_ATTR}]`;
             const allBlocks = Array.from(protyle.element.querySelectorAll(selector)) as Element[];
 
             if (allBlocks.length === 0) {
@@ -337,7 +365,15 @@ export class TaskNoteDOMManager {
                 return;
             }
 
-            const blocksToProcess = new Map<string, { projectIds: string[]; hasBind: boolean; milestoneIds: string[]; milestoneProjectId?: string; element: Element }>();
+            const blocksToProcess = new Map<string, {
+                projectIds: string[];
+                hasBind: boolean;
+                milestoneIds: string[];
+                milestoneProjectId?: string;
+                pomodoroTotalCount: number;
+                pomodoroTotalMinutes: number;
+                element: Element
+            }>();
 
             for (const node of allBlocks) {
                 const blockId = node.getAttribute("data-node-id") || this._getBlockIdFromElement(node);
@@ -349,6 +385,8 @@ export class TaskNoteDOMManager {
                 const rawMilestones = node.getAttribute("custom-bind-milestones");
                 const milestoneIds = rawMilestones ? rawMilestones.split(",").map((s) => s.trim()).filter((s) => s) : [];
                 const milestoneProjectId = node.getAttribute("custom-task-projectid") || undefined;
+                const pomodoroTotalCount = this.parsePomodoroMetric(node.getAttribute(BLOCK_POMODORO_COUNT_ATTR));
+                const pomodoroTotalMinutes = this.parsePomodoroMetric(node.getAttribute(BLOCK_POMODORO_MINUTES_ATTR));
 
                 const existing = blocksToProcess.get(blockId);
                 if (existing) {
@@ -359,6 +397,8 @@ export class TaskNoteDOMManager {
                         hasBind: existing.hasBind || hasBind,
                         milestoneIds: mergedMilestoneIds,
                         milestoneProjectId: milestoneProjectId || existing.milestoneProjectId,
+                        pomodoroTotalCount: Math.max(existing.pomodoroTotalCount, pomodoroTotalCount),
+                        pomodoroTotalMinutes: Math.max(existing.pomodoroTotalMinutes, pomodoroTotalMinutes),
                         element: existing.element.classList.contains("protyle-wysiwyg") ? existing.element : node,
                     });
                 } else {
@@ -367,6 +407,8 @@ export class TaskNoteDOMManager {
                         hasBind,
                         milestoneIds,
                         milestoneProjectId,
+                        pomodoroTotalCount,
+                        pomodoroTotalMinutes,
                         element: node,
                     });
                 }
@@ -408,7 +450,9 @@ export class TaskNoteDOMManager {
                                 if (node.nodeType === 1) {
                                     const el = node as Element;
                                     this._processSingleBlock(protyle, el);
-                                    const relevantChildren = el.querySelectorAll?.("[custom-task-projectid], [custom-bind-reminders], [custom-bind-milestones]");
+                                    const relevantChildren = el.querySelectorAll?.(
+                                        `[custom-task-projectid], [custom-bind-reminders], [custom-bind-milestones], [${BLOCK_POMODORO_COUNT_ATTR}], [${BLOCK_POMODORO_MINUTES_ATTR}]`
+                                    );
                                     if (relevantChildren && relevantChildren.length > 0) {
                                         relevantChildren.forEach((child) => this._processSingleBlock(protyle, child));
                                     }
@@ -440,7 +484,15 @@ export class TaskNoteDOMManager {
                 childList: true,
                 subtree: true,
                 attributes: true,
-                attributeFilter: ["custom-task-projectid", "custom-bind-reminders", "custom-bind-milestones", "updated", "bookmark"],
+                attributeFilter: [
+                    "custom-task-projectid",
+                    "custom-bind-reminders",
+                    "custom-bind-milestones",
+                    BLOCK_POMODORO_COUNT_ATTR,
+                    BLOCK_POMODORO_MINUTES_ATTR,
+                    "updated",
+                    "bookmark",
+                ],
             });
 
             const attrObserver = new MutationObserver((mutations) => {
@@ -470,7 +522,9 @@ export class TaskNoteDOMManager {
         if (!protyle?.element || !blockId) return null;
 
         const trackedCandidates = Array.from(
-            protyle.element.querySelectorAll("[custom-task-projectid], [custom-bind-reminders], [custom-bind-milestones]")
+            protyle.element.querySelectorAll(
+                `[custom-task-projectid], [custom-bind-reminders], [custom-bind-milestones], [${BLOCK_POMODORO_COUNT_ATTR}], [${BLOCK_POMODORO_MINUTES_ATTR}]`
+            )
         ) as Element[];
         for (const candidate of trackedCandidates) {
             if (this._getBlockIdFromElement(candidate) === blockId) {
@@ -515,7 +569,9 @@ export class TaskNoteDOMManager {
         const activeBlockIds = new Set(activeBlocks.keys());
         const rootId = protyle?.block?.rootID;
         const trackedCandidates = Array.from(
-            protyle?.element?.querySelectorAll?.("[custom-task-projectid], [custom-bind-reminders], [custom-bind-milestones]") || []
+            protyle?.element?.querySelectorAll?.(
+                `[custom-task-projectid], [custom-bind-reminders], [custom-bind-milestones], [${BLOCK_POMODORO_COUNT_ATTR}], [${BLOCK_POMODORO_MINUTES_ATTR}]`
+            ) || []
         ) as Element[];
         const docLevelAttrNode = trackedCandidates.find((node) => {
             const id = this._getBlockIdFromElement(node);
@@ -574,9 +630,32 @@ export class TaskNoteDOMManager {
             }
             seenMilestone.add(blockId);
         }
+
+        const pomodoroSummaryButtons = Array.from(protyle.element.querySelectorAll(".block-pomodoro-summary")) as HTMLElement[];
+        const seenPomodoroSummary = new Set<string>();
+        for (const btn of pomodoroSummaryButtons) {
+            const blockId = btn.dataset.blockId || btn.closest("[data-node-id]")?.getAttribute("data-node-id");
+            if (!blockId || !activeBlockIds.has(blockId)) {
+                btn.remove();
+                continue;
+            }
+            if (seenPomodoroSummary.has(blockId)) {
+                btn.remove();
+                continue;
+            }
+            seenPomodoroSummary.add(blockId);
+        }
     }
 
-    public _processBlockButtons(protyle: any, blockId: string, info: { projectIds: string[]; hasBind: boolean; milestoneIds?: string[]; milestoneProjectId?: string; element: Element }) {
+    public _processBlockButtons(protyle: any, blockId: string, info: {
+        projectIds: string[];
+        hasBind: boolean;
+        milestoneIds?: string[];
+        milestoneProjectId?: string;
+        pomodoroTotalCount?: number;
+        pomodoroTotalMinutes?: number;
+        element: Element
+    }) {
         const blockEl = (info.element && info.element.getAttribute("data-node-id") === blockId)
             ? (info.element as HTMLElement)
             : (protyle.element.querySelector(`[data-node-id="${blockId}"]`) as HTMLElement);
@@ -635,6 +714,28 @@ export class TaskNoteDOMManager {
         } else if (existingMilestoneBtn) {
             existingMilestoneBtn.remove();
         }
+
+        const pomodoroTotalCount = Math.max(0, Math.floor(Number(info.pomodoroTotalCount || 0)));
+        const pomodoroTotalMinutes = Math.max(0, Math.floor(Number(info.pomodoroTotalMinutes || 0)));
+        const hasPomodoroSummary = pomodoroTotalCount > 0 || pomodoroTotalMinutes > 0;
+        const existingPomodoroBtn = container.querySelector(`.block-pomodoro-summary[data-block-id="${blockId}"]`) as HTMLElement | null;
+        if (hasPomodoroSummary) {
+            if (!existingPomodoroBtn) {
+                const pomodoroBtn = this._createPomodoroSummaryButton(blockId, pomodoroTotalCount, pomodoroTotalMinutes);
+                container.appendChild(pomodoroBtn);
+            } else {
+                const prevCount = this.parsePomodoroMetric(existingPomodoroBtn.dataset.pomodoroTotalCount);
+                const prevMinutes = this.parsePomodoroMetric(existingPomodoroBtn.dataset.pomodoroTotalMinutes);
+                if (prevCount !== pomodoroTotalCount || prevMinutes !== pomodoroTotalMinutes) {
+                    this._updatePomodoroSummaryButton(existingPomodoroBtn, pomodoroTotalCount, pomodoroTotalMinutes);
+                }
+                if (existingPomodoroBtn.parentElement !== container) {
+                    container.appendChild(existingPomodoroBtn);
+                }
+            }
+        } else if (existingPomodoroBtn) {
+            existingPomodoroBtn.remove();
+        }
     }
 
     public _findButtonContainer(blockEl: HTMLElement, sourceElement: Element): HTMLElement | null {
@@ -657,6 +758,81 @@ export class TaskNoteDOMManager {
         }
 
         return null;
+    }
+
+    public _createPomodoroSummaryButton(blockId: string, totalCount: number, totalMinutes: number): HTMLElement {
+        const btn = document.createElement("button");
+        btn.className = "block-pomodoro-summary block__icon fn__flex-center ariaLabel";
+        btn.style.cssText = `
+            margin-left: 6px;
+            padding: 1px 6px;
+            border: none;
+            background: var(--b3-theme-surface-lighter);
+            cursor: pointer;
+            border-radius: 11px;
+            color: var(--b3-theme-on-background);
+            opacity: 0.9;
+            transition: all 0.12s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 22px;
+            line-height: 1;
+            max-width: 200px;
+        `;
+        btn.dataset.blockId = blockId;
+        btn.setAttribute("data-plugin-added", "reminder-plugin");
+        btn.addEventListener("click", async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            try {
+                const { PomodoroSessionsDialog } = await import("../components/PomodoroSessionsDialog");
+                const dialog = new PomodoroSessionsDialog(
+                    blockId,
+                    this.plugin,
+                    () => window.dispatchEvent(new CustomEvent("reminderUpdated")),
+                    false,
+                    { dialogTitle: `🍅 ${i18n("viewPomodoros") || "番茄钟记录"}` }
+                );
+                await dialog.show();
+            } catch (error) {
+                console.error("打开番茄记录对话框失败:", error);
+                showMessage(i18n("operationFailed") || "操作失败", 3000);
+            }
+        });
+        const textEl = document.createElement("span");
+        textEl.className = "block-pomodoro-summary__text";
+        textEl.style.cssText = "font-size:12px;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
+        btn.appendChild(textEl);
+        this._updatePomodoroSummaryButton(btn, totalCount, totalMinutes);
+        return btn;
+    }
+
+    public _updatePomodoroSummaryButton(btn: HTMLElement, totalCount: number, totalMinutes: number) {
+        const text = this.getPomodoroSummaryText(totalCount, totalMinutes);
+        const ariaText = `番茄总数 ${totalCount}，番茄总时长 ${this.formatPomodoroDuration(totalMinutes)}`;
+        const countStr = String(totalCount);
+        const minutesStr = String(totalMinutes);
+        if (btn.dataset.pomodoroTotalCount !== countStr) {
+            btn.dataset.pomodoroTotalCount = countStr;
+        }
+        if (btn.dataset.pomodoroTotalMinutes !== minutesStr) {
+            btn.dataset.pomodoroTotalMinutes = minutesStr;
+        }
+        let textEl = btn.querySelector(".block-pomodoro-summary__text") as HTMLElement | null;
+        if (!textEl) {
+            textEl = document.createElement("span");
+            textEl.className = "block-pomodoro-summary__text";
+            textEl.style.cssText = "font-size:12px;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
+            btn.appendChild(textEl);
+        }
+        if (textEl.textContent !== text) {
+            textEl.textContent = text;
+        }
+        btn.classList.add("ariaLabel");
+        if (btn.getAttribute("aria-label") !== ariaText) {
+            btn.setAttribute("aria-label", ariaText);
+        }
     }
 
     public _createProjectButton(projectId: string, blockId: string): HTMLElement {

@@ -2,6 +2,7 @@ import {
     Plugin,
     getActiveEditor,
     showMessage,
+    confirm,
     Dialog,
     openTab,
     getFrontend,
@@ -53,6 +54,7 @@ import {
     getLinkedTaskPomodoroStatsByDate as getLinkedTaskPomodoroStatsByDateUtil
 } from "./utils/linkedHabitPomodoro";
 import { ChangelogUtils } from "./utils/changelogNotify";
+import { createPomodoroStartSubmenu as createSharedPomodoroStartSubmenu } from "./utils/pomodoroPresets";
 
 
 export const SETTINGS_FILE = "reminder-settings.json";
@@ -2700,6 +2702,15 @@ export default class ReminderPlugin extends Plugin {
         if (detail.blockElements && detail.blockElements.length === 1) {
             const blockElement = detail.blockElements[0];
             const blockId = blockElement.getAttribute("data-node-id");
+
+            if (blockId) {
+                detail.menu.addItem({
+                    iconHTML: "🍅",
+                    label: i18n("startPomodoro") || "开始番茄钟",
+                    submenu: this.createBlockPomodoroStartSubmenu(blockId)
+                });
+            }
+
             if (blockId && blockElement.hasAttribute("custom-bind-reminders")) {
                 detail.menu.addItem({
                     iconHTML: "📋",
@@ -2713,6 +2724,101 @@ export default class ReminderPlugin extends Plugin {
             }
         }
 
+    }
+
+    private async buildPomodoroReminderFromBlock(blockId: string): Promise<any | null> {
+        try {
+            const { getBlockByID } = await import("./api");
+            const block = await getBlockByID(blockId);
+            if (!block) {
+                showMessage(i18n("blockNotExist") || "块不存在", 2500);
+                return null;
+            }
+
+            const rawTitle = String(block.content || "").trim();
+            const title = rawTitle || (i18n("untitledTask") || "未命名任务");
+            return {
+                id: blockId,
+                title: title.length > 80 ? `${title.slice(0, 80)}...` : title,
+                blockId,
+            };
+        } catch (error) {
+            console.error("读取块信息失败，无法启动番茄钟:", error);
+            showMessage(i18n("blockPreviewFailed") || "获取块信息失败", 3000);
+            return null;
+        }
+    }
+
+    private createBlockPomodoroStartSubmenu(blockId: string): any[] {
+        return createSharedPomodoroStartSubmenu({
+            source: {
+                id: blockId,
+                title: i18n("untitledTask") || "未命名任务",
+            },
+            plugin: this,
+            startPomodoro: (workDurationOverride?: number) => this.startPomodoroForBlock(blockId, workDurationOverride),
+        });
+    }
+
+    private async startPomodoroForBlock(blockId: string, workDurationOverride?: number) {
+        const reminder = await this.buildPomodoroReminderFromBlock(blockId);
+        if (!reminder) return;
+
+        const pomodoroManager = PomodoroManager.getInstance();
+        if (pomodoroManager.hasActivePomodoroTimer()) {
+            const currentState = pomodoroManager.getCurrentState();
+            const currentTitle = currentState.reminderTitle || (i18n("untitledTask") || "未命名任务");
+            const newTitle = reminder.title || (i18n("untitledTask") || "未命名任务");
+
+            let confirmMessage = `${i18n("currentPomodoroTask") || "当前番茄钟任务"}："${currentTitle}"\n${i18n("switchPomodoroTask") || "切换番茄钟任务"}："${newTitle}"`;
+            if (currentState.isRunning && !currentState.isPaused) {
+                if (!pomodoroManager.pauseCurrentTimer()) {
+                    console.warn("暂停当前番茄钟失败");
+                }
+                confirmMessage += `\n\n${i18n("confirm") || "确定"}后将继承当前计时进度继续。`;
+            }
+
+            confirm(
+                i18n("switchPomodoroTask") || "切换番茄钟任务",
+                confirmMessage,
+                () => {
+                    this.performStartPomodoroForBlock(reminder, currentState, workDurationOverride).catch((error) => {
+                        console.error("切换番茄钟任务失败:", error);
+                        showMessage(i18n("operationFailed"), 3000);
+                    });
+                },
+                () => {
+                    if (currentState.isRunning && !currentState.isPaused) {
+                        pomodoroManager.resumeCurrentTimer();
+                    }
+                }
+            );
+            return;
+        }
+
+        pomodoroManager.cleanupInactiveTimer();
+        await this.performStartPomodoroForBlock(reminder, undefined, workDurationOverride);
+    }
+
+    private async performStartPomodoroForBlock(reminder: any, inheritState?: any, workDurationOverride?: number) {
+        const settings = await this.getPomodoroSettings();
+        const runtimeSettings = workDurationOverride && workDurationOverride > 0
+            ? { ...settings, workDuration: workDurationOverride }
+            : settings;
+
+        const hasStandaloneWindow = (this as any).pomodoroWindowId;
+        if (hasStandaloneWindow && typeof (this as any).openPomodoroWindow === "function") {
+            await (this as any).openPomodoroWindow(reminder, runtimeSettings, false, inheritState);
+            return;
+        }
+
+        const pomodoroManager = PomodoroManager.getInstance();
+        pomodoroManager.closeCurrentTimer();
+
+        const { PomodoroTimer } = await import("./components/PomodoroTimer");
+        const pomodoroTimer = new PomodoroTimer(reminder, runtimeSettings, false, inheritState, this);
+        pomodoroManager.setCurrentPomodoroTimer(pomodoroTimer);
+        pomodoroTimer.show();
     }
 
     /**

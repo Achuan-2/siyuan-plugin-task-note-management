@@ -1,8 +1,11 @@
 import { showMessage, confirm, getFrontend, getBackend, Dialog } from "siyuan";
 import { PomodoroRecordManager } from "../utils/pomodoroRecord";
-import { getBlockByID, openBlock, sendNotification, cancelNotification } from "../api";
+import { getBlockByID, getBlockAttrs, setBlockAttrs, openBlock, sendNotification, cancelNotification } from "../api";
 import { i18n } from "../pluginInstance";
 import { resolveAudioPath } from "../utils/audioUtils";
+
+const BLOCK_POMODORO_COUNT_ATTR = "custom-task-pomodoro-count";
+const BLOCK_POMODORO_MINUTES_ATTR = "custom-task-pomodoro-minutes";
 
 
 export class PomodoroTimer {
@@ -5079,8 +5082,6 @@ export class PomodoroTimer {
                     true,
                     false
                 );
-                // 触发 reminderUpdated 事件
-                window.dispatchEvent(new CustomEvent('reminderUpdated'));
             } else {
                 // 正计时模式完成番茄后也要停止随机微休息
                 this.stopRandomRestTimer();
@@ -5088,10 +5089,11 @@ export class PomodoroTimer {
 
             // 更新番茄数量（正计时和倒计时都需要）
             this.completedPomodoros++;
-            await this.updateReminderPomodoroCount();
+            const completedFocusMinutes = this.isCountUp
+                ? Math.max(1, Math.round(Number(this.currentPhaseOriginalDuration || this.settings?.workDuration || 25)))
+                : Math.max(1, Math.round(this.totalTime / 60));
+            await this.updateReminderPomodoroCount(completedFocusMinutes);
             this.triggerHabitAutoCheckInAfterPomodoro();
-            // 触发 reminderUpdated 事件
-            window.dispatchEvent(new CustomEvent('reminderUpdated'));
 
             // 正计时模式下静默更新显示，不记录时间（时间在手动停止时统一记录）
             if (this.isCountUp) {
@@ -5262,7 +5264,7 @@ export class PomodoroTimer {
 
                 // 更新番茄数量计数
                 this.completedPomodoros++;
-                await this.updateReminderPomodoroCount();
+                await this.updateReminderPomodoroCount(actualDuration);
                 this.triggerHabitAutoCheckInAfterPomodoro();
 
                 // 判断是否应该进入长休息
@@ -5594,7 +5596,40 @@ export class PomodoroTimer {
     }
 
 
-    private async updateReminderPomodoroCount() {
+    private parsePomodoroMetric(value: any): number {
+        const numericValue = Number(value);
+        if (!Number.isFinite(numericValue) || numericValue <= 0) return 0;
+        return Math.floor(numericValue);
+    }
+
+    private async updateBlockPomodoroAttrs(focusMinutes: number): Promise<boolean> {
+        const blockId = this.reminder?.blockId;
+        if (!blockId) return false;
+
+        const addedMinutes = Math.max(1, Math.round(Number(focusMinutes) || 0));
+        try {
+            const blockAttrs = await getBlockAttrs(blockId);
+            const currentCount = this.parsePomodoroMetric(blockAttrs?.[BLOCK_POMODORO_COUNT_ATTR]);
+            const currentMinutes = this.parsePomodoroMetric(blockAttrs?.[BLOCK_POMODORO_MINUTES_ATTR]);
+
+            await setBlockAttrs(blockId, {
+                [BLOCK_POMODORO_COUNT_ATTR]: String(currentCount + 1),
+                [BLOCK_POMODORO_MINUTES_ATTR]: String(currentMinutes + addedMinutes),
+            });
+            return true;
+        } catch (error) {
+            console.warn('写入块番茄属性失败:', error);
+            return false;
+        }
+    }
+
+    private async updateReminderPomodoroCount(focusMinutes?: number) {
+        const addedMinutes = Math.max(
+            1,
+            Math.round(Number(focusMinutes || this.currentPhaseOriginalDuration || this.settings?.workDuration || 25))
+        );
+        let reminderDataChanged = false;
+
         try {
             const reminderData = await this.plugin.loadReminderData();
 
@@ -5608,26 +5643,22 @@ export class PomodoroTimer {
                 const originalReminder = reminderData[this.reminder.originalId];
                 if (!originalReminder) {
                     console.warn('未找到原始提醒项:', this.reminder.originalId);
-                    return;
-                }
+                } else {
+                    // 为重复实例创建独立的番茄钟计数记录（保存在 repeat.instancePomodoroCount 中）
+                    if (!originalReminder.repeat) {
+                        originalReminder.repeat = {};
+                    }
+                    if (!originalReminder.repeat.instancePomodoroCount) {
+                        originalReminder.repeat.instancePomodoroCount = {};
+                    }
 
-                // 为重复实例创建独立的番茄钟计数记录（保存在 repeat.instancePomodoroCount 中）
-                if (!originalReminder.repeat) {
-                    originalReminder.repeat = {};
+                    // 使用实例ID作为key保存番茄钟计数
+                    if (typeof originalReminder.repeat.instancePomodoroCount[targetId] !== 'number') {
+                        originalReminder.repeat.instancePomodoroCount[targetId] = 0;
+                    }
+                    originalReminder.repeat.instancePomodoroCount[targetId]++;
+                    reminderDataChanged = true;
                 }
-                if (!originalReminder.repeat.instancePomodoroCount) {
-                    originalReminder.repeat.instancePomodoroCount = {};
-                }
-
-                // 使用实例ID作为key保存番茄钟计数
-                if (typeof originalReminder.repeat.instancePomodoroCount[targetId] !== 'number') {
-                    originalReminder.repeat.instancePomodoroCount[targetId] = 0;
-                }
-                originalReminder.repeat.instancePomodoroCount[targetId]++;
-
-                await this.plugin.saveReminderData(reminderData);
-                window.dispatchEvent(new CustomEvent('reminderUpdated'));
-
             } else {
                 // 普通任务直接保存
                 if (reminderData[targetId]) {
@@ -5636,15 +5667,22 @@ export class PomodoroTimer {
                     }
 
                     reminderData[targetId].pomodoroCount++;
-                    await this.plugin.saveReminderData(reminderData);
-                    window.dispatchEvent(new CustomEvent('reminderUpdated'));
-
+                    reminderDataChanged = true;
                 } else {
-                    console.warn('未找到对应的提醒项:', targetId);
+                    console.debug('当前番茄钟未绑定提醒数据，仅更新块属性:', targetId);
                 }
+            }
+
+            if (reminderDataChanged) {
+                await this.plugin.saveReminderData(reminderData);
             }
         } catch (error) {
             console.error('更新提醒番茄数量失败:', error);
+        }
+
+        const blockAttrsChanged = await this.updateBlockPomodoroAttrs(addedMinutes);
+        if (reminderDataChanged || blockAttrsChanged) {
+            window.dispatchEvent(new CustomEvent('reminderUpdated'));
         }
     }
 
