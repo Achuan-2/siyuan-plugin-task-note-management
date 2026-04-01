@@ -1,9 +1,16 @@
 ﻿import { showMessage } from "siyuan";
 import { i18n } from "../pluginInstance";
+import { PomodoroRecordManager } from "./pomodoroRecord";
 
 const PROJECT_KANBAN_TAB_TYPE = "project_kanban_tab";
 const BLOCK_POMODORO_COUNT_ATTR = "custom-task-pomodoro-count";
 const BLOCK_POMODORO_MINUTES_ATTR = "custom-task-pomodoro-minutes";
+const INSTANCE_EVENT_ID_SUFFIX_REGEX = /^(.*)_\d{4}-\d{2}-\d{2}$/;
+
+interface PomodoroStats {
+    count: number;
+    minutes: number;
+}
 
 export class TaskNoteDOMManager {
     private plugin: any;
@@ -13,9 +20,21 @@ export class TaskNoteDOMManager {
     private protyleObservers: WeakMap<Element, MutationObserver> = new WeakMap();
     private protyleDebounceTimers: WeakMap<Element, number> = new WeakMap();
     private currentHeadingIds: Set<string> = new Set();
+    private pomodoroStatsByEventId: Map<string, PomodoroStats> = new Map();
+    private pomodoroStatsByBaseEventId: Map<string, PomodoroStats> = new Map();
+    private pomodoroStatsCacheUpdatedAt = 0;
+    private pomodoroStatsLoadingPromise: Promise<void> | null = null;
+    private latestPomodoroSummaryTaskByBlock: Map<string, number> = new Map();
 
     constructor(plugin: any) {
         this.plugin = plugin;
+        const invalidatePomodoroStatsCache = () => {
+            this.invalidatePomodoroStatsCache();
+        };
+        window.addEventListener("reminderUpdated", invalidatePomodoroStatsCache as EventListener);
+        this.plugin.addCleanup(() => {
+            window.removeEventListener("reminderUpdated", invalidatePomodoroStatsCache as EventListener);
+        });
     }
 
     private parsePomodoroMetric(value?: string | null): number {
@@ -35,6 +54,107 @@ export class TaskNoteDOMManager {
 
     private getPomodoroSummaryText(totalCount: number, totalMinutes: number): string {
         return `🍅 ${Math.max(0, totalCount)} · ⏱ ${this.formatPomodoroDuration(totalMinutes)}`;
+    }
+
+    private normalizeReminderIds(rawValue?: string | string[] | null): string[] {
+        if (!rawValue) return [];
+        const values = Array.isArray(rawValue) ? rawValue : String(rawValue).split(",");
+        return Array.from(new Set(values.map((id) => String(id).trim()).filter((id) => id)));
+    }
+
+    private getReminderIdsKey(reminderIds: string[]): string {
+        return this.normalizeReminderIds(reminderIds).join(",");
+    }
+
+    private getEmptyPomodoroStats(): PomodoroStats {
+        return { count: 0, minutes: 0 };
+    }
+
+    private accumulatePomodoroStats(target: PomodoroStats, source?: PomodoroStats | null) {
+        if (!source) return;
+        target.count += Math.max(0, Math.floor(Number(source.count) || 0));
+        target.minutes += Math.max(0, Math.floor(Number(source.minutes) || 0));
+    }
+
+    private setPomodoroStats(targetMap: Map<string, PomodoroStats>, key: string, count: number, minutes: number) {
+        const current = targetMap.get(key) || this.getEmptyPomodoroStats();
+        current.count += Math.max(0, Math.floor(Number(count) || 0));
+        current.minutes += Math.max(0, Math.floor(Number(minutes) || 0));
+        targetMap.set(key, current);
+    }
+
+    private invalidatePomodoroStatsCache() {
+        this.pomodoroStatsByEventId = new Map();
+        this.pomodoroStatsByBaseEventId = new Map();
+        this.pomodoroStatsCacheUpdatedAt = 0;
+        this.pomodoroStatsLoadingPromise = null;
+    }
+
+    private async ensurePomodoroStatsCache(force = false): Promise<void> {
+        const cacheTtlMs = 3000;
+        const now = Date.now();
+        if (!force && this.pomodoroStatsCacheUpdatedAt > 0 && now - this.pomodoroStatsCacheUpdatedAt < cacheTtlMs) {
+            return;
+        }
+        if (this.pomodoroStatsLoadingPromise) {
+            await this.pomodoroStatsLoadingPromise;
+            return;
+        }
+
+        this.pomodoroStatsLoadingPromise = (async () => {
+            try {
+                const recordManager = PomodoroRecordManager.getInstance(this.plugin);
+                await recordManager.initialize();
+                const records = (recordManager as any).records || {};
+                const statsByEventId = new Map<string, PomodoroStats>();
+                const statsByBaseEventId = new Map<string, PomodoroStats>();
+
+                for (const dateKey of Object.keys(records)) {
+                    const record = records[dateKey];
+                    const sessions = Array.isArray(record?.sessions) ? record.sessions : [];
+                    for (const session of sessions) {
+                        if (!session || session.type !== "work") continue;
+                        const eventId = String(session.eventId || "").trim();
+                        if (!eventId) continue;
+                        const count = Math.max(0, Math.floor(Number(recordManager.calculateSessionCount(session)) || 0));
+                        const minutes = Math.max(0, Math.floor(Number(session.duration) || 0));
+                        if (count <= 0 && minutes <= 0) continue;
+                        this.setPomodoroStats(statsByEventId, eventId, count, minutes);
+                    }
+                }
+
+                for (const [eventId, stats] of statsByEventId.entries()) {
+                    this.setPomodoroStats(statsByBaseEventId, eventId, stats.count, stats.minutes);
+                    const matched = eventId.match(INSTANCE_EVENT_ID_SUFFIX_REGEX);
+                    if (matched && matched[1]) {
+                        this.setPomodoroStats(statsByBaseEventId, matched[1], stats.count, stats.minutes);
+                    }
+                }
+
+                this.pomodoroStatsByEventId = statsByEventId;
+                this.pomodoroStatsByBaseEventId = statsByBaseEventId;
+                this.pomodoroStatsCacheUpdatedAt = Date.now();
+            } catch (error) {
+                console.warn("加载番茄会话缓存失败:", error);
+                this.pomodoroStatsByEventId = new Map();
+                this.pomodoroStatsByBaseEventId = new Map();
+                this.pomodoroStatsCacheUpdatedAt = Date.now();
+            } finally {
+                this.pomodoroStatsLoadingPromise = null;
+            }
+        })();
+
+        await this.pomodoroStatsLoadingPromise;
+    }
+
+    private getBoundPomodoroStatsFromCache(reminderIds: string[]): PomodoroStats {
+        const totals = this.getEmptyPomodoroStats();
+        const normalizedIds = this.normalizeReminderIds(reminderIds);
+        for (const reminderId of normalizedIds) {
+            const stats = this.pomodoroStatsByBaseEventId.get(reminderId) || this.pomodoroStatsByEventId.get(reminderId);
+            this.accumulatePomodoroStats(totals, stats);
+        }
+        return totals;
     }
 
     public initOutlinePrefixObserver() {
@@ -314,7 +434,8 @@ export class TaskNoteDOMManager {
 
         const attrSource = (isDocumentLevel || hasTrackedAttrsOnNode ? node : blockEl) as Element;
         const rawAttr = attrSource.getAttribute("custom-task-projectid");
-        const hasBind = attrSource.hasAttribute("custom-bind-reminders");
+        const bindReminderIds = this.normalizeReminderIds(attrSource.getAttribute("custom-bind-reminders"));
+        const hasBind = bindReminderIds.length > 0;
         const rawMilestones = attrSource.getAttribute("custom-bind-milestones");
         const milestoneProjectId = attrSource.getAttribute("custom-task-projectid");
         const pomodoroTotalCount = this.parsePomodoroMetric(attrSource.getAttribute(BLOCK_POMODORO_COUNT_ATTR));
@@ -326,6 +447,7 @@ export class TaskNoteDOMManager {
         const info = {
             projectIds,
             hasBind,
+            bindReminderIds,
             milestoneIds,
             milestoneProjectId: milestoneProjectId || undefined,
             pomodoroTotalCount,
@@ -368,6 +490,7 @@ export class TaskNoteDOMManager {
             const blocksToProcess = new Map<string, {
                 projectIds: string[];
                 hasBind: boolean;
+                bindReminderIds: string[];
                 milestoneIds: string[];
                 milestoneProjectId?: string;
                 pomodoroTotalCount: number;
@@ -381,7 +504,8 @@ export class TaskNoteDOMManager {
 
                 const rawAttr = node.getAttribute("custom-task-projectid");
                 const projectIds = rawAttr ? rawAttr.split(",").map((s) => s.trim()).filter((s) => s) : [];
-                const hasBind = node.hasAttribute("custom-bind-reminders");
+                const bindReminderIds = this.normalizeReminderIds(node.getAttribute("custom-bind-reminders"));
+                const hasBind = bindReminderIds.length > 0;
                 const rawMilestones = node.getAttribute("custom-bind-milestones");
                 const milestoneIds = rawMilestones ? rawMilestones.split(",").map((s) => s.trim()).filter((s) => s) : [];
                 const milestoneProjectId = node.getAttribute("custom-task-projectid") || undefined;
@@ -391,10 +515,12 @@ export class TaskNoteDOMManager {
                 const existing = blocksToProcess.get(blockId);
                 if (existing) {
                     const mergedProjectIds = Array.from(new Set([...existing.projectIds, ...projectIds]));
+                    const mergedBindReminderIds = Array.from(new Set([...(existing.bindReminderIds || []), ...bindReminderIds]));
                     const mergedMilestoneIds = Array.from(new Set([...(existing.milestoneIds || []), ...milestoneIds]));
                     blocksToProcess.set(blockId, {
                         projectIds: mergedProjectIds,
-                        hasBind: existing.hasBind || hasBind,
+                        hasBind: mergedBindReminderIds.length > 0,
+                        bindReminderIds: mergedBindReminderIds,
                         milestoneIds: mergedMilestoneIds,
                         milestoneProjectId: milestoneProjectId || existing.milestoneProjectId,
                         pomodoroTotalCount: Math.max(existing.pomodoroTotalCount, pomodoroTotalCount),
@@ -405,6 +531,7 @@ export class TaskNoteDOMManager {
                     blocksToProcess.set(blockId, {
                         projectIds,
                         hasBind,
+                        bindReminderIds,
                         milestoneIds,
                         milestoneProjectId,
                         pomodoroTotalCount,
@@ -650,6 +777,7 @@ export class TaskNoteDOMManager {
     public _processBlockButtons(protyle: any, blockId: string, info: {
         projectIds: string[];
         hasBind: boolean;
+        bindReminderIds?: string[];
         milestoneIds?: string[];
         milestoneProjectId?: string;
         pomodoroTotalCount?: number;
@@ -687,8 +815,9 @@ export class TaskNoteDOMManager {
             }
         }
 
+        const linkedReminderIds = this.normalizeReminderIds(info.bindReminderIds).filter((id) => id !== blockId);
         const existingBindBtn = container.querySelector(`.block-bind-reminders-btn[data-block-id="${blockId}"]`) as HTMLElement;
-        if (info.hasBind) {
+        if (linkedReminderIds.length > 0) {
             if (!existingBindBtn) {
                 const bindBtn = this._createBindButton(blockId);
                 container.appendChild(bindBtn);
@@ -715,19 +844,24 @@ export class TaskNoteDOMManager {
             existingMilestoneBtn.remove();
         }
 
-        const pomodoroTotalCount = Math.max(0, Math.floor(Number(info.pomodoroTotalCount || 0)));
-        const pomodoroTotalMinutes = Math.max(0, Math.floor(Number(info.pomodoroTotalMinutes || 0)));
+        const selfPomodoroCount = Math.max(0, Math.floor(Number(info.pomodoroTotalCount || 0)));
+        const selfPomodoroMinutes = Math.max(0, Math.floor(Number(info.pomodoroTotalMinutes || 0)));
+        const linkedPomodoroStats = this.getBoundPomodoroStatsFromCache(linkedReminderIds);
+        const pomodoroTotalCount = selfPomodoroCount + linkedPomodoroStats.count;
+        const pomodoroTotalMinutes = selfPomodoroMinutes + linkedPomodoroStats.minutes;
         const hasPomodoroSummary = pomodoroTotalCount > 0 || pomodoroTotalMinutes > 0;
         const existingPomodoroBtn = container.querySelector(`.block-pomodoro-summary[data-block-id="${blockId}"]`) as HTMLElement | null;
         if (hasPomodoroSummary) {
             if (!existingPomodoroBtn) {
-                const pomodoroBtn = this._createPomodoroSummaryButton(blockId, pomodoroTotalCount, pomodoroTotalMinutes);
+                const pomodoroBtn = this._createPomodoroSummaryButton(blockId, pomodoroTotalCount, pomodoroTotalMinutes, linkedReminderIds);
                 container.appendChild(pomodoroBtn);
             } else {
                 const prevCount = this.parsePomodoroMetric(existingPomodoroBtn.dataset.pomodoroTotalCount);
                 const prevMinutes = this.parsePomodoroMetric(existingPomodoroBtn.dataset.pomodoroTotalMinutes);
-                if (prevCount !== pomodoroTotalCount || prevMinutes !== pomodoroTotalMinutes) {
-                    this._updatePomodoroSummaryButton(existingPomodoroBtn, pomodoroTotalCount, pomodoroTotalMinutes);
+                const prevReminderIdsKey = this.getReminderIdsKey(existingPomodoroBtn.dataset.pomodoroIncludeEventIds);
+                const nextReminderIdsKey = this.getReminderIdsKey(linkedReminderIds);
+                if (prevCount !== pomodoroTotalCount || prevMinutes !== pomodoroTotalMinutes || prevReminderIdsKey !== nextReminderIdsKey) {
+                    this._updatePomodoroSummaryButton(existingPomodoroBtn, pomodoroTotalCount, pomodoroTotalMinutes, linkedReminderIds);
                 }
                 if (existingPomodoroBtn.parentElement !== container) {
                     container.appendChild(existingPomodoroBtn);
@@ -735,6 +869,65 @@ export class TaskNoteDOMManager {
             }
         } else if (existingPomodoroBtn) {
             existingPomodoroBtn.remove();
+        }
+
+        void this.refreshPomodoroSummaryWithMergedSessions(
+            protyle,
+            blockId,
+            selfPomodoroCount,
+            selfPomodoroMinutes,
+            linkedReminderIds
+        );
+    }
+
+    private async refreshPomodoroSummaryWithMergedSessions(
+        protyle: any,
+        blockId: string,
+        selfPomodoroCount: number,
+        selfPomodoroMinutes: number,
+        linkedReminderIds: string[]
+    ) {
+        const nextTaskId = (this.latestPomodoroSummaryTaskByBlock.get(blockId) || 0) + 1;
+        this.latestPomodoroSummaryTaskByBlock.set(blockId, nextTaskId);
+        try {
+            await this.ensurePomodoroStatsCache();
+        } catch {
+            return;
+        }
+        if (this.latestPomodoroSummaryTaskByBlock.get(blockId) !== nextTaskId) {
+            return;
+        }
+
+        const linkedStats = this.getBoundPomodoroStatsFromCache(linkedReminderIds);
+        const mergedCount = Math.max(0, Math.floor(selfPomodoroCount + linkedStats.count));
+        const mergedMinutes = Math.max(0, Math.floor(selfPomodoroMinutes + linkedStats.minutes));
+        const hasPomodoroSummary = mergedCount > 0 || mergedMinutes > 0;
+
+        const trackedSource =
+            this._findTrackedSourceForBlock(protyle, blockId) ||
+            (protyle?.element?.querySelector?.(".protyle-wysiwyg") as Element | null);
+        const blockEl = (protyle?.element?.querySelector?.(`[data-node-id="${blockId}"]`) as HTMLElement | null) ||
+            (trackedSource as HTMLElement | null);
+        if (!trackedSource || !blockEl) return;
+
+        const container = this._findButtonContainer(blockEl, trackedSource);
+        if (!container) return;
+
+        const existingPomodoroBtn = container.querySelector(`.block-pomodoro-summary[data-block-id="${blockId}"]`) as HTMLElement | null;
+        if (!hasPomodoroSummary) {
+            if (existingPomodoroBtn) {
+                existingPomodoroBtn.remove();
+            }
+            return;
+        }
+
+        if (!existingPomodoroBtn) {
+            container.appendChild(this._createPomodoroSummaryButton(blockId, mergedCount, mergedMinutes, linkedReminderIds));
+            return;
+        }
+        this._updatePomodoroSummaryButton(existingPomodoroBtn, mergedCount, mergedMinutes, linkedReminderIds);
+        if (existingPomodoroBtn.parentElement !== container) {
+            container.appendChild(existingPomodoroBtn);
         }
     }
 
@@ -760,7 +953,7 @@ export class TaskNoteDOMManager {
         return null;
     }
 
-    public _createPomodoroSummaryButton(blockId: string, totalCount: number, totalMinutes: number): HTMLElement {
+    public _createPomodoroSummaryButton(blockId: string, totalCount: number, totalMinutes: number, includeEventIds: string[] = []): HTMLElement {
         const btn = document.createElement("button");
         btn.className = "block-pomodoro-summary block__icon fn__flex-center ariaLabel";
         btn.style.cssText = `
@@ -787,12 +980,18 @@ export class TaskNoteDOMManager {
             e.stopPropagation();
             try {
                 const { PomodoroSessionsDialog } = await import("../components/PomodoroSessionsDialog");
+                const linkedEventIds = this.normalizeReminderIds(btn.dataset.pomodoroIncludeEventIds);
+                const includeInstances = btn.dataset.pomodoroIncludeInstances === "true";
                 const dialog = new PomodoroSessionsDialog(
                     blockId,
                     this.plugin,
                     () => window.dispatchEvent(new CustomEvent("reminderUpdated")),
-                    false,
-                    { dialogTitle: `🍅 ${i18n("viewPomodoros") || "番茄钟记录"}` }
+                    includeInstances,
+                    {
+                        defaultAddEventId: blockId,
+                        includeEventIds: linkedEventIds,
+                        dialogTitle: `🍅 ${i18n("viewPomodoros") || "番茄钟记录"}`
+                    }
                 );
                 await dialog.show();
             } catch (error) {
@@ -804,20 +1003,28 @@ export class TaskNoteDOMManager {
         textEl.className = "block-pomodoro-summary__text";
         textEl.style.cssText = "font-size:12px;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
         btn.appendChild(textEl);
-        this._updatePomodoroSummaryButton(btn, totalCount, totalMinutes);
+        this._updatePomodoroSummaryButton(btn, totalCount, totalMinutes, includeEventIds);
         return btn;
     }
 
-    public _updatePomodoroSummaryButton(btn: HTMLElement, totalCount: number, totalMinutes: number) {
+    public _updatePomodoroSummaryButton(btn: HTMLElement, totalCount: number, totalMinutes: number, includeEventIds: string[] = []) {
         const text = this.getPomodoroSummaryText(totalCount, totalMinutes);
         const ariaText = `番茄总数 ${totalCount}，番茄总时长 ${this.formatPomodoroDuration(totalMinutes)}`;
         const countStr = String(totalCount);
         const minutesStr = String(totalMinutes);
+        const normalizedEventIds = this.normalizeReminderIds(includeEventIds);
+        const includeEventIdsStr = normalizedEventIds.join(",");
         if (btn.dataset.pomodoroTotalCount !== countStr) {
             btn.dataset.pomodoroTotalCount = countStr;
         }
         if (btn.dataset.pomodoroTotalMinutes !== minutesStr) {
             btn.dataset.pomodoroTotalMinutes = minutesStr;
+        }
+        if (btn.dataset.pomodoroIncludeEventIds !== includeEventIdsStr) {
+            btn.dataset.pomodoroIncludeEventIds = includeEventIdsStr;
+        }
+        if (btn.dataset.pomodoroIncludeInstances !== "true") {
+            btn.dataset.pomodoroIncludeInstances = "true";
         }
         let textEl = btn.querySelector(".block-pomodoro-summary__text") as HTMLElement | null;
         if (!textEl) {
