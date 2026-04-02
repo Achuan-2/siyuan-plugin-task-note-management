@@ -267,6 +267,7 @@ export const DEFAULT_SETTINGS = {
 export default class ReminderPlugin extends Plugin {
     private reminderPanel: ReminderPanel;
     private tabViews: Map<string, any> = new Map(); // 存储所有Tab视图实例（日历、四象限、项目看板、番茄钟等）
+    private registeredDockKeys: Set<string> = new Set(); // 记录已注册的 Dock，避免对未注册项执行可见性切换
     private categoryManager: CategoryManager;
     private settingUtils: SettingUtils;
     private chronoParser: any;
@@ -1379,6 +1380,11 @@ export default class ReminderPlugin extends Plugin {
         const onSettingsUpdated = async () => {
             try {
                 const settings = await this.loadSettings();
+                const isMobile = getFrontend().endsWith('mobile');
+                if (!isMobile || settings.enableProjectDock !== false) this.ensureProjectDockRegistered();
+                if (!isMobile || settings.enableReminderDock !== false) this.ensureReminderDockRegistered();
+                if (!isMobile || settings.enableHabitDock !== false) this.ensureHabitDockRegistered();
+                if (!isMobile || settings.enableCalendarDock !== false) this.ensureCalendarDockRegistered();
                 this.toggleDockVisibility('project_dock', settings.enableProjectDock !== false);
                 this.toggleDockVisibility('reminder_dock', settings.enableReminderDock !== false);
                 this.toggleDockVisibility('habit_dock', settings.enableHabitDock !== false);
@@ -1891,6 +1897,7 @@ export default class ReminderPlugin extends Plugin {
         text: string;
         init: (element: HTMLElement) => void;
     }) {
+        this.registeredDockKeys.add(options.type);
         this.addDock({
             config: {
                 position: "LeftTop",
@@ -1913,10 +1920,8 @@ export default class ReminderPlugin extends Plugin {
         });
     }
 
-    private async initializeUI() {
-        // 加载设置（用于初始显示/隐藏某些停靠栏）
-        const settings = await this.loadSettings();
-
+    private ensureProjectDockRegistered() {
+        if (this.registeredDockKeys.has("project_dock")) return;
         this.registerDockPanel({
             type: "project_dock",
             icon: "iconProject",
@@ -1927,7 +1932,10 @@ export default class ReminderPlugin extends Plugin {
                 this.projectPanel = new ProjectPanel(element, this);
             }
         });
+    }
 
+    private ensureReminderDockRegistered() {
+        if (this.registeredDockKeys.has("reminder_dock")) return;
         this.registerDockPanel({
             type: "reminder_dock",
             icon: "iconClock",
@@ -1937,7 +1945,10 @@ export default class ReminderPlugin extends Plugin {
                 this.reminderPanel = new ReminderPanel(element, this);
             }
         });
+    }
 
+    private ensureHabitDockRegistered() {
+        if (this.registeredDockKeys.has("habit_dock")) return;
         this.registerDockPanel({
             type: "habit_dock",
             icon: "iconCheck",
@@ -1947,7 +1958,10 @@ export default class ReminderPlugin extends Plugin {
                 new HabitPanel(element, this);
             }
         });
+    }
 
+    private ensureCalendarDockRegistered() {
+        if (this.registeredDockKeys.has("calendar_dock")) return;
         this.registerDockPanel({
             type: "calendar_dock",
             icon: "iconCalendar",
@@ -1957,6 +1971,29 @@ export default class ReminderPlugin extends Plugin {
                 new CalendarView(element, this, { isDockMode: true });
             }
         });
+    }
+
+    private async initializeUI() {
+        // 加载设置（用于初始显示/隐藏某些停靠栏）
+        const settings = await this.loadSettings();
+        const isMobile = getFrontend().endsWith('mobile');
+
+        // 手机端在对应侧栏开关关闭时不注册 Dock（移动端无法可靠 hide）
+        if (!isMobile || settings.enableProjectDock !== false) {
+            this.ensureProjectDockRegistered();
+        }
+
+        if (!isMobile || settings.enableReminderDock !== false) {
+            this.ensureReminderDockRegistered();
+        }
+
+        if (!isMobile || settings.enableHabitDock !== false) {
+            this.ensureHabitDockRegistered();
+        }
+
+        if (!isMobile || settings.enableCalendarDock !== false) {
+            this.ensureCalendarDockRegistered();
+        }
 
 
 
@@ -2277,6 +2314,7 @@ export default class ReminderPlugin extends Plugin {
     // 控制停靠栏可见性：通过隐藏停靠栏图标实现启用/禁用（不注销注册）
     private async toggleDockVisibility(dockKey: string, visible: boolean) {
         try {
+            if (!this.registeredDockKeys.has(dockKey)) return;
             const selector = getDockItemSelector(this.name, dockKey);
             const dockIcon = await this.whenElementExist(selector) as HTMLElement;
             if (!dockIcon) return;
