@@ -846,6 +846,8 @@
     "editTask": "编辑任务",
     "createSubtask": "创建子任务",
     "pasteCreateSubtask": "粘贴新建子任务",
+    "createTaskBeforeCurrent": "在当前任务前新增任务",
+    "createTaskAfterCurrent": "在当前任务后新增任务",
     "unsetParentRelation": "解除父任务关系",
     "taskCreatedSuccessfully": "任务创建成功",
     "statusSwitchFailed": "状态切换失败",

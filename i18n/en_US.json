@@ -846,6 +846,8 @@
     "editTask": "Edit Task",
     "createSubtask": "Create Subtask",
     "pasteCreateSubtask": "Paste Create Subtask",
+    "createTaskBeforeCurrent": "Insert Task Before Current",
+    "createTaskAfterCurrent": "Insert Task After Current",
     "unsetParentRelation": "Unset Parent Relation",
     "taskCreatedSuccessfully": "Task created successfully",
     "statusSwitchFailed": "Status switch failed",
