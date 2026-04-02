@@ -3158,6 +3158,16 @@ export class QuickReminderDialog {
         return item;
     }
 
+    private sortCustomTimes(date?: string, endDate?: string) {
+        this.customTimes.sort((a, b) => {
+            if (!a || !a.time) return 1;
+            if (!b || !b.time) return -1;
+            const dayCompare = this.getCustomReminderSortValue(a, date, endDate) - this.getCustomReminderSortValue(b, date, endDate);
+            if (dayCompare !== 0) return dayCompare;
+            return this.getCustomReminderTimeValue(a.time).localeCompare(this.getCustomReminderTimeValue(b.time));
+        });
+    }
+
     private updateCustomReminderInputMode() {
         const customReminderInput = this.dialog.element.querySelector('#quickCustomReminderTime') as HTMLInputElement;
         const dayWrapper = this.dialog.element.querySelector('#quickCustomReminderDayWrapper') as HTMLElement;
@@ -3302,6 +3312,7 @@ export class QuickReminderDialog {
                         date,
                         endDate
                     );
+                    this.sortCustomTimes(date, endDate);
                     this.renderCustomTimeList();
                 });
             }
@@ -3325,6 +3336,22 @@ export class QuickReminderDialog {
             timeInput.addEventListener('change', () => {
                 const v = timeInput.value?.trim();
                 if (!v) {
+                    return;
+                }
+                this.customTimes[index] = this.buildCustomTimeItem(
+                    v,
+                    this.customTimes[index]?.note || '',
+                    daySelect?.value || '',
+                    beforeDaysInput?.value || '',
+                    date,
+                    endDate
+                );
+            });
+
+            // 仅在失焦后排序，避免编辑过程中列表跳动
+            timeInput.addEventListener('blur', () => {
+                const v = timeInput.value?.trim();
+                if (!v) {
                     // 如果时间被清空，则移除该项
                     this.customTimes.splice(index, 1);
                     this.renderCustomTimeList();
@@ -3338,6 +3365,8 @@ export class QuickReminderDialog {
                     date,
                     endDate
                 );
+                this.sortCustomTimes(date, endDate);
+                this.renderCustomTimeList();
             });
 
             beforeDaysInput?.addEventListener('change', () => {
@@ -3349,6 +3378,7 @@ export class QuickReminderDialog {
                     date,
                     endDate
                 );
+                this.sortCustomTimes(date, endDate);
                 this.renderCustomTimeList();
             });
 
@@ -3393,13 +3423,7 @@ export class QuickReminderDialog {
             : this.normalizeCustomTimeItem(timeOrItem, date, endDate);
         // 直接添加，允许重复时间
         this.customTimes.push(item);
-        this.customTimes.sort((a, b) => {
-            if (!a || !a.time) return 1;
-            if (!b || !b.time) return -1;
-            const dayCompare = this.getCustomReminderSortValue(a, date, endDate) - this.getCustomReminderSortValue(b, date, endDate);
-            if (dayCompare !== 0) return dayCompare;
-            return this.getCustomReminderTimeValue(a.time).localeCompare(this.getCustomReminderTimeValue(b.time));
-        });
+        this.sortCustomTimes(date, endDate);
         this.renderCustomTimeList();
     }
 
