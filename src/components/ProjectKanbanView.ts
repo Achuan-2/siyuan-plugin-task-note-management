@@ -11162,6 +11162,18 @@ export class ProjectKanbanView {
             click: () => this.showCreateTaskDialog(task)
         });
 
+        menu.addItem({
+            iconHTML: "⬆️",
+            label: i18n('createTaskBeforeCurrent') || '在当前任务前新增任务',
+            click: () => this.createTaskAdjacentTo(task, true)
+        });
+
+        menu.addItem({
+            iconHTML: "⬇️",
+            label: i18n('createTaskAfterCurrent') || '在当前任务后新增任务',
+            click: () => this.createTaskAdjacentTo(task, false)
+        });
+
         // 粘贴新建子任务
         menu.addItem({
             iconHTML: "📋",
@@ -12695,11 +12707,150 @@ export class ProjectKanbanView {
         });
     }
 
+    private resolveTaskForInsertion(targetTask: any, reminderData: any): any | null {
+        if (!targetTask) return null;
+        if (targetTask.isRepeatInstance && targetTask.originalId) {
+            return reminderData[targetTask.originalId] || this.tasks.find(t => t.id === targetTask.originalId) || targetTask;
+        }
+        return reminderData[targetTask.id] || targetTask;
+    }
+
+    private calculateAdjacentInsertSort(targetTask: any, insertBefore: boolean, reminderData: any): number | undefined {
+        try {
+            if (!targetTask) return undefined;
+
+            const targetSort = this.getTaskSortValue(targetTask);
+            const targetParentId = targetTask.parentId || null;
+            const targetStatus = this.getTaskStatus(targetTask);
+            const targetGroupId = targetTask.customGroupId || 'ungrouped';
+            const targetPriority = targetTask.priority || 'none';
+
+            const siblings = Object.values(reminderData).filter((item: any) => {
+                if (!item || item.projectId !== this.projectId) return false;
+                if ((item.parentId || null) !== targetParentId) return false;
+
+                if (targetParentId) {
+                    return true;
+                }
+
+                return this.getTaskStatus(item) === targetStatus &&
+                    (item.customGroupId || 'ungrouped') === targetGroupId &&
+                    (item.priority || 'none') === targetPriority;
+            }).sort((a: any, b: any) => this.getTaskSortValue(a) - this.getTaskSortValue(b));
+
+            const targetIndex = siblings.findIndex((item: any) => item.id === targetTask.id);
+            if (targetIndex === -1) {
+                return Number.isFinite(targetSort) ? targetSort : undefined;
+            }
+
+            let nextSort = targetSort;
+            if (insertBefore) {
+                const prevTask = siblings[targetIndex - 1];
+                const prevSort = prevTask ? this.getTaskSortValue(prevTask) : targetSort - 2000;
+                nextSort = (targetSort + prevSort) / 2;
+            } else {
+                const afterTask = siblings[targetIndex + 1];
+                const afterSort = afterTask ? this.getTaskSortValue(afterTask) : targetSort + 2000;
+                nextSort = (targetSort + afterSort) / 2;
+            }
+
+            if (!Number.isFinite(nextSort)) return Number.isFinite(targetSort) ? targetSort : undefined;
+
+            if (nextSort === targetSort) {
+                const offset = insertBefore ? -1 : 1;
+                nextSort = targetSort + offset;
+            }
+
+            return nextSort;
+        } catch (error) {
+            console.warn('计算前后插入排序值失败，回退默认排序', error);
+            return undefined;
+        }
+    }
+
+    private tryPlaceCreatedTaskAdjacent(createdTaskId: string, targetTaskId: string, insertBefore: boolean): boolean {
+        try {
+            const createdEl = this.container.querySelector(`[data-task-id="${createdTaskId}"]`) as HTMLElement | null;
+            const targetEl = this.container.querySelector(`[data-task-id="${targetTaskId}"]`) as HTMLElement | null;
+            if (!createdEl || !targetEl) return false;
+
+            const targetContainer = targetEl.parentElement;
+            if (!targetContainer) return false;
+
+            if (createdEl.parentElement) {
+                createdEl.parentElement.removeChild(createdEl);
+            }
+
+            if (insertBefore) {
+                targetContainer.insertBefore(createdEl, targetEl);
+            } else {
+                const nextSibling = targetEl.nextSibling;
+                if (nextSibling) targetContainer.insertBefore(createdEl, nextSibling);
+                else targetContainer.appendChild(createdEl);
+            }
+
+            return true;
+        } catch (error) {
+            console.warn('局部相邻插入新任务失败', error);
+            return false;
+        }
+    }
+
+    private async createTaskAdjacentTo(targetTask: any, insertBefore: boolean): Promise<void> {
+        try {
+            const reminderData = await this.getReminders();
+            const effectiveTask = this.resolveTaskForInsertion(targetTask, reminderData);
+            if (!effectiveTask) {
+                showMessage(i18n('operationFailed') || '操作失败');
+                return;
+            }
+
+            let parentTask: any = undefined;
+            if (effectiveTask.parentId) {
+                parentTask = this.tasks.find(t => t.id === effectiveTask.parentId) || reminderData[effectiveTask.parentId];
+                if (!parentTask) {
+                    parentTask = {
+                        id: effectiveTask.parentId,
+                        categoryId: effectiveTask.categoryId,
+                        priority: effectiveTask.priority,
+                        customGroupId: effectiveTask.customGroupId,
+                        milestoneId: effectiveTask.milestoneId,
+                        kanbanStatus: this.getTaskStatus(effectiveTask)
+                    };
+                }
+            }
+
+            const defaultSort = this.calculateAdjacentInsertSort(effectiveTask, insertBefore, reminderData);
+            const defaultStatus = this.getTaskStatus(effectiveTask);
+            const defaultPriority = targetTask?.priority ?? effectiveTask?.priority;
+            this.showCreateTaskDialog(
+                parentTask,
+                effectiveTask.customGroupId ?? null,
+                defaultStatus,
+                effectiveTask.milestoneId,
+                defaultSort,
+                { targetTaskId: effectiveTask.id, insertBefore },
+                defaultPriority
+            );
+        } catch (error) {
+            console.error('创建前后相邻任务失败:', error);
+            showMessage(i18n('operationFailed') || '操作失败');
+        }
+    }
+
     // 使用 QuickReminderDialog 创建任务
-    private showCreateTaskDialog(parentTask?: any, defaultCustomGroupId?: string | null, defaultStatus?: any, defaultMilestoneId?: string) {
+    private showCreateTaskDialog(
+        parentTask?: any,
+        defaultCustomGroupId?: string | null,
+        defaultStatus?: any,
+        defaultMilestoneId?: string,
+        defaultSortOverride?: number,
+        adjacentContext?: { targetTaskId: string, insertBefore: boolean },
+        defaultPriorityOverride?: string
+    ) {
         // Calculate max sort value to place new task at the end
         const maxSort = this.tasks.reduce((max, task) => Math.max(max, task.sort || 0), 0);
-        const defaultSort = maxSort + 10000;
+        const defaultSort = Number.isFinite(defaultSortOverride as number) ? (defaultSortOverride as number) : (maxSort + 10000);
 
         const quickDialog = new QuickReminderDialog(
             undefined, // 项目看板创建任务默认不设置日期
@@ -12727,6 +12878,10 @@ export class ProjectKanbanView {
                         // 兼容性处理：新任务只有 createdAt，补齐 createdTime 以便排序
                         if (savedTask.createdAt && !savedTask.createdTime) {
                             savedTask.createdTime = savedTask.createdAt;
+                        }
+                        const savedSortNumber = Number(savedTask.sort);
+                        if (!Number.isFinite(savedSortNumber) && Number.isFinite(defaultSort)) {
+                            savedTask.sort = defaultSort;
                         }
 
                         if (existingIndex >= 0) {
@@ -12764,6 +12919,15 @@ export class ProjectKanbanView {
                             this.restoreScrollState();
                         }
 
+                        // 相邻插入场景下，强制将新任务临时定位到目标任务前/后，确保立即可见
+                        if (adjacentContext?.targetTaskId) {
+                            const placed = this.tryPlaceCreatedTaskAdjacent(savedTask.id, adjacentContext.targetTaskId, adjacentContext.insertBefore);
+                            if (!placed) {
+                                // 兜底重绘，避免由于容器变化导致新卡片不可见
+                                await this.queueLoadTasks();
+                            }
+                        }
+
                         this.dispatchReminderUpdate(true);
                     } catch (e) {
                         console.error("增量更新新任务失败，回退到完整重载", e);
@@ -12778,7 +12942,7 @@ export class ProjectKanbanView {
                 defaultProjectId: this.projectId, // 默认项目ID
                 defaultParentId: parentTask?.id, // 传递父任务ID
                 defaultCategoryId: parentTask?.categoryId || this.project.categoryId, // 如果是子任务，继承父任务分类；否则使用项目分类
-                defaultPriority: parentTask?.priority, // 如果是子任务，继承父任务优先级
+                defaultPriority: parentTask?.priority ?? defaultPriorityOverride, // 如果是子任务，继承父任务优先级；否则可使用外部传入优先级
                 defaultTitle: parentTask ? '' : undefined, // 子任务不预填标题
                 // 传入默认 custom group id（可能为 undefined 或 null）
                 defaultCustomGroupId: parentTask?.customGroupId ?? defaultCustomGroupId,
@@ -16991,12 +17155,11 @@ export class ProjectKanbanView {
     private insertTaskElementIntoContainer(container: HTMLElement, task: any, status: string) {
         const taskEl = this.createTaskElement(task, 0);
         const loadMoreEl = container.querySelector('.kanban-load-more') as HTMLElement | null;
+        const children = Array.from(container.children) as HTMLElement[];
+        const existingTaskEls = children.filter(el => el.classList?.contains('kanban-task'));
 
         // 已完成列保持按完成时间倒序插入
         if (status === 'completed' && task.completedTime) {
-            const children = Array.from(container.children) as HTMLElement[];
-            const existingTaskEls = children.filter(el => el.classList?.contains('kanban-task'));
-
             const insertBeforeEl = existingTaskEls.find(el => {
                 const id = el.dataset.taskId;
                 if (!id) return false;
@@ -17005,6 +17168,23 @@ export class ProjectKanbanView {
                 const currentTime = new Date(task.completedTime).getTime();
                 const existingTime = new Date(existing.completedTime).getTime();
                 return currentTime > existingTime;
+            });
+
+            if (insertBeforeEl) {
+                container.insertBefore(taskEl, insertBeforeEl);
+                return;
+            }
+        }
+
+        // 非完成列按当前排序规则就近插入，避免新建后总是落在末尾
+        if (status !== 'completed') {
+            const criteria = this.getActiveSortCriteria();
+            const insertBeforeEl = existingTaskEls.find(el => {
+                const id = el.dataset.taskId;
+                if (!id) return false;
+                const existing = this.tasks.find(t => t.id === id);
+                if (!existing || existing.parentId) return false;
+                return this.sortByCriteria(task, existing, criteria) < 0;
             });
 
             if (insertBeforeEl) {
