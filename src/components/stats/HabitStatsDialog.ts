@@ -30,17 +30,32 @@ const COLOR_POOL = [
     "#ff9e80", "#9ad0f5", "#ffd166", "#90be6d", "#ffadad"
 ];
 
+type HabitCheckInLogItem = {
+    id: string;
+    dateStr: string;
+    timeText: string;
+    timestampMs: number;
+    emoji: string;
+    note: string;
+    hasNote: boolean;
+};
+
 export class HabitStatsDialog {
     private dialog: Dialog;
     private habit: Habit;
     private currentMonthDate: Date = new Date();
-    private currentTab: 'overview' | 'time' = 'overview';
+    private currentTab: 'overview' | 'time' | 'logs' = 'overview';
     private currentTimeView: 'week' | 'month' | 'year' = 'week';
     private timeViewOffset: number = 0; // 用于周/月/年视图的偏移
     private yearViewOffset: number = 0; // 用于年度视图的偏移
     private chartInstances: EChartsType[] = [];
     private resizeObservers: ResizeObserver[] = [];
     private weekStartDay: number = 1; // 周起始日，0为周日，1为周一
+    private logStartDate = '';
+    private logEndDate = '';
+    private logOnlyWithNote = false;
+    private logPage = 1;
+    private readonly logPageSize = 30;
 
     private onSave?: (habit: Habit) => Promise<void>;
     private plugin?: any;
@@ -218,7 +233,17 @@ export class HabitStatsDialog {
             this.renderContainer(container);
         });
 
+        const logTab = document.createElement('button');
+        logTab.className = `b3-button ${this.currentTab !== 'logs' ? 'b3-button--outline' : ''}`;
+        logTab.textContent = "打卡日志";
+        logTab.style.cssText = this.currentTab === 'logs' ? 'font-weight: bold;' : '';
+        logTab.addEventListener('click', () => {
+            this.currentTab = 'logs';
+            this.renderContainer(container);
+        });
+
         tabNav.appendChild(overviewTab);
+        tabNav.appendChild(logTab);
         tabNav.appendChild(timeTab);
         container.appendChild(tabNav);
 
@@ -228,8 +253,10 @@ export class HabitStatsDialog {
 
         if (this.currentTab === 'overview') {
             this.renderStats(contentArea);
-        } else {
+        } else if (this.currentTab === 'time') {
             this.renderTimeStats(contentArea);
+        } else {
+            this.renderCheckInLogs(contentArea);
         }
     }
 
@@ -1012,6 +1039,263 @@ export class HabitStatsDialog {
         container.innerHTML = '';
         this.destroyCharts();
         this.renderYearlyView(container);
+    }
+
+    private getCheckInLogTimestampMs(dateStr: string, timestamp?: string): number {
+        if (timestamp) {
+            const normalized = timestamp.includes("T") ? timestamp : timestamp.replace(" ", "T");
+            const parsed = new Date(normalized).getTime();
+            if (!Number.isNaN(parsed)) return parsed;
+        }
+        const fallback = new Date(`${dateStr}T00:00:00`).getTime();
+        return Number.isNaN(fallback) ? 0 : fallback;
+    }
+
+    private getCheckInLogEntries(): HabitCheckInLogItem[] {
+        const logs: HabitCheckInLogItem[] = [];
+
+        Object.entries(this.habit.checkIns || {}).forEach(([dateStr, checkIn]) => {
+            if (checkIn.entries && checkIn.entries.length > 0) {
+                checkIn.entries.forEach((entry, index) => {
+                    const note = entry.note?.trim() || "";
+                    logs.push({
+                        id: `${dateStr}-entry-${index}-${entry.timestamp || ""}`,
+                        dateStr,
+                        timeText: this.extractTimeFromTimestamp(entry.timestamp || "") || "",
+                        timestampMs: this.getCheckInLogTimestampMs(dateStr, entry.timestamp),
+                        emoji: entry.emoji || this.habit.autoCheckInEmoji || "✅",
+                        note,
+                        hasNote: note.length > 0
+                    });
+                });
+                return;
+            }
+
+            if (checkIn.status && checkIn.status.length > 0) {
+                checkIn.status.forEach((emoji, index) => {
+                    logs.push({
+                        id: `${dateStr}-status-${index}-${checkIn.timestamp || ""}`,
+                        dateStr,
+                        timeText: this.extractTimeFromTimestamp(checkIn.timestamp || "") || "",
+                        timestampMs: this.getCheckInLogTimestampMs(dateStr, checkIn.timestamp),
+                        emoji: emoji || this.habit.autoCheckInEmoji || "✅",
+                        note: "",
+                        hasNote: false
+                    });
+                });
+                return;
+            }
+
+            const fallbackCount = Math.max(0, Number(checkIn.count) || 0);
+            for (let i = 0; i < fallbackCount; i++) {
+                logs.push({
+                    id: `${dateStr}-count-${i}-${checkIn.timestamp || ""}`,
+                    dateStr,
+                    timeText: this.extractTimeFromTimestamp(checkIn.timestamp || "") || "",
+                    timestampMs: this.getCheckInLogTimestampMs(dateStr, checkIn.timestamp),
+                    emoji: this.habit.autoCheckInEmoji || "🍅",
+                    note: "",
+                    hasNote: false
+                });
+            }
+        });
+
+        return logs.sort((a, b) => {
+            if (b.timestampMs !== a.timestampMs) return b.timestampMs - a.timestampMs;
+            if (b.dateStr !== a.dateStr) return b.dateStr.localeCompare(a.dateStr);
+            return a.id.localeCompare(b.id);
+        });
+    }
+
+    private isLogInDateRange(dateStr: string): boolean {
+        if (this.logStartDate && dateStr < this.logStartDate) return false;
+        if (this.logEndDate && dateStr > this.logEndDate) return false;
+        return true;
+    }
+
+    private renderCheckInLogs(container: HTMLElement) {
+        this.destroyCharts();
+        container.innerHTML = '';
+
+        const panel = document.createElement('div');
+        panel.style.cssText = 'display:flex; flex-direction:column; gap:10px; min-height:0;';
+
+        const toolbar = document.createElement('div');
+        toolbar.style.cssText = 'display:flex; align-items:center; gap:10px 12px; flex-wrap:wrap;';
+
+        const startWrap = document.createElement('label');
+        startWrap.style.cssText = 'display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--b3-theme-on-surface-light);';
+        startWrap.textContent = '开始日期';
+        const startInput = document.createElement('input');
+        startInput.type = 'date';
+        startInput.value = this.logStartDate;
+        startInput.style.cssText = 'border:1px solid var(--b3-theme-surface-lighter); border-radius:8px; padding:4px 8px; min-height:30px; background:var(--b3-theme-surface); color:var(--b3-theme-on-surface);';
+        startInput.addEventListener('change', () => {
+            this.logStartDate = startInput.value || '';
+            this.logPage = 1;
+            this.renderCheckInLogs(container);
+        });
+        startWrap.appendChild(startInput);
+
+        const endWrap = document.createElement('label');
+        endWrap.style.cssText = 'display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--b3-theme-on-surface-light);';
+        endWrap.textContent = '结束日期';
+        const endInput = document.createElement('input');
+        endInput.type = 'date';
+        endInput.value = this.logEndDate;
+        endInput.style.cssText = 'border:1px solid var(--b3-theme-surface-lighter); border-radius:8px; padding:4px 8px; min-height:30px; background:var(--b3-theme-surface); color:var(--b3-theme-on-surface);';
+        endInput.addEventListener('change', () => {
+            this.logEndDate = endInput.value || '';
+            this.logPage = 1;
+            this.renderCheckInLogs(container);
+        });
+        endWrap.appendChild(endInput);
+
+        const noteOnlyWrap = document.createElement('label');
+        noteOnlyWrap.style.cssText = 'display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--b3-theme-on-surface);';
+        const noteOnlyInput = document.createElement('input');
+        noteOnlyInput.type = 'checkbox';
+        noteOnlyInput.checked = this.logOnlyWithNote;
+        noteOnlyInput.addEventListener('change', () => {
+            this.logOnlyWithNote = noteOnlyInput.checked;
+            this.logPage = 1;
+            this.renderCheckInLogs(container);
+        });
+        noteOnlyWrap.appendChild(noteOnlyInput);
+        noteOnlyWrap.appendChild(document.createTextNode('仅看有备注'));
+
+        const resetBtn = document.createElement('button');
+        resetBtn.className = 'b3-button b3-button--outline';
+        resetBtn.textContent = '重置筛选';
+        resetBtn.addEventListener('click', () => {
+            this.logStartDate = '';
+            this.logEndDate = '';
+            this.logOnlyWithNote = false;
+            this.logPage = 1;
+            this.renderCheckInLogs(container);
+        });
+
+        toolbar.appendChild(startWrap);
+        toolbar.appendChild(endWrap);
+        toolbar.appendChild(noteOnlyWrap);
+        toolbar.appendChild(resetBtn);
+        panel.appendChild(toolbar);
+
+        const allLogs = this.getCheckInLogEntries();
+        const filteredLogs = allLogs.filter(log => this.isLogInDateRange(log.dateStr) && (!this.logOnlyWithNote || log.hasNote));
+        const totalPages = Math.max(1, Math.ceil(filteredLogs.length / this.logPageSize));
+        if (this.logPage > totalPages) this.logPage = totalPages;
+        if (this.logPage < 1) this.logPage = 1;
+        const pageStart = (this.logPage - 1) * this.logPageSize;
+        const pageLogs = filteredLogs.slice(pageStart, pageStart + this.logPageSize);
+
+        const summary = document.createElement('div');
+        summary.style.cssText = 'font-size:12px; color:var(--b3-theme-on-surface-light);';
+        summary.textContent = `共 ${filteredLogs.length} 条日志，每页 ${this.logPageSize} 条`;
+        panel.appendChild(summary);
+
+        const list = document.createElement('div');
+        list.style.cssText = 'display:flex; flex-direction:column; gap:8px; max-height:560px; overflow:auto; padding-right:4px;';
+
+        if (pageLogs.length === 0) {
+            const empty = document.createElement('div');
+            empty.style.cssText = 'padding:24px 12px; text-align:center; color:var(--b3-theme-on-surface-light);';
+            empty.textContent = '当前筛选条件下没有打卡日志';
+            list.appendChild(empty);
+        } else {
+            pageLogs.forEach(log => {
+                const card = document.createElement('div');
+                card.style.cssText = 'border:1px solid var(--b3-theme-surface-lighter); border-radius:12px; background:var(--b3-theme-surface); padding:10px 12px; display:flex; justify-content:space-between; align-items:flex-start; gap:10px;';
+
+                const main = document.createElement('div');
+                main.style.cssText = 'flex:1; min-width:0; display:flex; flex-direction:column; gap:4px;';
+
+                const title = document.createElement('div');
+                title.style.cssText = 'font-size:14px; font-weight:600; color:var(--b3-theme-on-surface);';
+                title.textContent = `${this.habit.icon || "🌱"} ${this.habit.title || "未命名习惯"}`;
+
+                const meta = document.createElement('div');
+                meta.style.cssText = 'font-size:12px; color:var(--b3-theme-on-surface-light);';
+                meta.textContent = `${log.dateStr}${log.timeText ? ` ${log.timeText}` : ''}`;
+
+                const content = document.createElement('div');
+                content.style.cssText = 'display:flex; align-items:flex-start; gap:8px; font-size:13px; color:var(--b3-theme-on-surface); word-break:break-word;';
+
+                const emoji = document.createElement('span');
+                emoji.style.cssText = 'font-size:16px; line-height:1;';
+                emoji.textContent = log.emoji;
+
+                const note = document.createElement('span');
+                note.style.cssText = log.hasNote ? '' : 'color:var(--b3-theme-on-surface-light);';
+                note.textContent = log.hasNote ? log.note : '无备注';
+
+                content.appendChild(emoji);
+                content.appendChild(note);
+                main.appendChild(title);
+                main.appendChild(meta);
+                main.appendChild(content);
+
+                const actions = document.createElement('div');
+                actions.style.cssText = 'flex-shrink:0;';
+                const openDayBtn = document.createElement('button');
+                openDayBtn.className = 'b3-button b3-button--outline';
+                openDayBtn.textContent = '查看当天';
+                openDayBtn.addEventListener('click', () => {
+                    const dayDialog = new HabitDayDialog(this.habit, log.dateStr, async (updatedHabit) => {
+                        if (this.onSave) {
+                            await this.onSave(updatedHabit);
+                        } else {
+                            this.habit = updatedHabit;
+                        }
+                        this.renderCheckInLogs(container);
+                    }, this.plugin);
+                    dayDialog.show();
+                });
+                actions.appendChild(openDayBtn);
+
+                card.appendChild(main);
+                card.appendChild(actions);
+                list.appendChild(card);
+            });
+        }
+
+        panel.appendChild(list);
+
+        const pagination = document.createElement('div');
+        pagination.style.cssText = 'display:flex; justify-content:center; align-items:center; gap:10px;';
+
+        const prevBtn = document.createElement('button');
+        prevBtn.className = 'b3-button b3-button--outline';
+        prevBtn.textContent = '◀';
+        prevBtn.disabled = this.logPage <= 1;
+        prevBtn.addEventListener('click', () => {
+            if (this.logPage > 1) {
+                this.logPage -= 1;
+                this.renderCheckInLogs(container);
+            }
+        });
+
+        const pageLabel = document.createElement('span');
+        pageLabel.style.cssText = 'min-width:120px; text-align:center; font-size:13px;';
+        pageLabel.textContent = `第 ${this.logPage} / ${totalPages} 页`;
+
+        const nextBtn = document.createElement('button');
+        nextBtn.className = 'b3-button b3-button--outline';
+        nextBtn.textContent = '▶';
+        nextBtn.disabled = this.logPage >= totalPages;
+        nextBtn.addEventListener('click', () => {
+            if (this.logPage < totalPages) {
+                this.logPage += 1;
+                this.renderCheckInLogs(container);
+            }
+        });
+
+        pagination.appendChild(prevBtn);
+        pagination.appendChild(pageLabel);
+        pagination.appendChild(nextBtn);
+        panel.appendChild(pagination);
+
+        container.appendChild(panel);
     }
 
     // ==================== 时间统计 Tab ====================

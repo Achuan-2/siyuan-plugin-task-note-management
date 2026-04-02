@@ -24,7 +24,7 @@ import {
 
 export let plugin: any;
 
-type TabKey = "overview" | "week" | "month" | "year";
+type TabKey = "overview" | "week" | "month" | "year" | "logs";
 type OverviewSubTab = "active" | "ended" | "abandoned"; // 概览页的子Tab
 
 type HabitOverviewStats = {
@@ -41,6 +41,20 @@ type HabitGroupSection = {
     groupId: string;
     groupName: string;
     habits: Habit[];
+};
+
+type HabitCheckInLogItem = {
+    id: string;
+    habit: Habit;
+    habitTitle: string;
+    habitIcon: string;
+    groupName: string;
+    dateStr: string;
+    timeText: string;
+    timestampMs: number;
+    emoji: string;
+    note: string;
+    hasNote: boolean;
 };
 
 const WEEKDAY_NAMES = ["日", "一", "二", "三", "四", "五", "六"];
@@ -69,6 +83,13 @@ let overviewListEl: HTMLDivElement | null = null;
 let weekListEl: HTMLDivElement | null = null;
 let monthPanelEl: HTMLDivElement | null = null;
 let yearListEl: HTMLDivElement | null = null;
+let logsListEl: HTMLDivElement | null = null;
+const LOG_PAGE_SIZE = 30;
+let logStartDate = "";
+let logEndDate = "";
+let logOnlyWithNote = false;
+let logPage = 1;
+let logFilterKey = "";
 
 onMount(async () => {
     await Promise.all([loadWeekStartDay(), initPomodoro(), loadGroups(), loadHabits()]);
@@ -332,6 +353,117 @@ function getCheckInDetails(habit: Habit, dateStr: string): string[] {
         });
     }
     return [];
+}
+
+function getTimeTextFromTimestamp(timestamp?: string): string {
+    if (!timestamp) return "";
+    const match = timestamp.match(/(\d{2}):(\d{2})/);
+    if (match) return `${match[1]}:${match[2]}`;
+    return "";
+}
+
+function getTimestampMs(dateStr: string, timestamp?: string): number {
+    if (timestamp) {
+        const normalized = timestamp.includes("T") ? timestamp : timestamp.replace(" ", "T");
+        const parsed = new Date(normalized).getTime();
+        if (!Number.isNaN(parsed)) return parsed;
+    }
+    const fallback = new Date(`${dateStr}T00:00:00`).getTime();
+    return Number.isNaN(fallback) ? 0 : fallback;
+}
+
+function getGroupNameById(groupId?: string): string {
+    const safeGroupId = groupId || "none";
+    if (safeGroupId === "none") return i18n("noneGroupName") || "未分组";
+    const found = groupList.find(group => group.id === safeGroupId);
+    return found?.name || safeGroupId;
+}
+
+function buildCheckInLogsForHabit(habit: Habit): HabitCheckInLogItem[] {
+    const logs: HabitCheckInLogItem[] = [];
+
+    Object.entries(habit.checkIns || {}).forEach(([dateStr, checkIn]) => {
+        const groupName = getGroupNameById(habit.groupId);
+
+        if (checkIn.entries && checkIn.entries.length > 0) {
+            checkIn.entries.forEach((entry, index) => {
+                const note = entry.note?.trim() || "";
+                const timeText = getTimeTextFromTimestamp(entry.timestamp);
+                logs.push({
+                    id: `${habit.id}-${dateStr}-entry-${index}-${entry.timestamp || ""}`,
+                    habit,
+                    habitTitle: habit.title || "未命名习惯",
+                    habitIcon: habit.icon || "🌱",
+                    groupName,
+                    dateStr,
+                    timeText,
+                    timestampMs: getTimestampMs(dateStr, entry.timestamp),
+                    emoji: entry.emoji || habit.autoCheckInEmoji || "✅",
+                    note,
+                    hasNote: note.length > 0
+                });
+            });
+            return;
+        }
+
+        if (checkIn.status && checkIn.status.length > 0) {
+            checkIn.status.forEach((emoji, index) => {
+                logs.push({
+                    id: `${habit.id}-${dateStr}-status-${index}-${checkIn.timestamp || ""}`,
+                    habit,
+                    habitTitle: habit.title || "未命名习惯",
+                    habitIcon: habit.icon || "🌱",
+                    groupName,
+                    dateStr,
+                    timeText: getTimeTextFromTimestamp(checkIn.timestamp),
+                    timestampMs: getTimestampMs(dateStr, checkIn.timestamp),
+                    emoji: emoji || habit.autoCheckInEmoji || "✅",
+                    note: "",
+                    hasNote: false
+                });
+            });
+            return;
+        }
+
+        const fallbackCount = Math.max(0, Number(checkIn.count) || 0);
+        for (let i = 0; i < fallbackCount; i++) {
+            logs.push({
+                id: `${habit.id}-${dateStr}-count-${i}-${checkIn.timestamp || ""}`,
+                habit,
+                habitTitle: habit.title || "未命名习惯",
+                habitIcon: habit.icon || "🌱",
+                groupName,
+                dateStr,
+                timeText: getTimeTextFromTimestamp(checkIn.timestamp),
+                timestampMs: getTimestampMs(dateStr, checkIn.timestamp),
+                emoji: habit.autoCheckInEmoji || "🍅",
+                note: "",
+                hasNote: false
+            });
+        }
+    });
+
+    return logs;
+}
+
+function isLogInDateRange(log: HabitCheckInLogItem): boolean {
+    if (logStartDate && log.dateStr < logStartDate) return false;
+    if (logEndDate && log.dateStr > logEndDate) return false;
+    return true;
+}
+
+function resetLogFilters() {
+    logStartDate = "";
+    logEndDate = "";
+    logOnlyWithNote = false;
+}
+
+function prevLogPage() {
+    if (logPage > 1) logPage -= 1;
+}
+
+function nextLogPage(totalPages: number) {
+    if (logPage < totalPages) logPage += 1;
 }
 
 function shouldCheckInOnDate(habit: Habit, dateStr: string): boolean {
@@ -689,6 +821,8 @@ function getActiveScrollTop(): number {
             return monthPanelEl?.scrollTop || 0;
         case "year":
             return yearListEl?.scrollTop || 0;
+        case "logs":
+            return logsListEl?.scrollTop || 0;
         default:
             return 0;
     }
@@ -707,6 +841,9 @@ function setActiveScrollTop(top: number) {
             break;
         case "year":
             if (yearListEl) yearListEl.scrollTop = top;
+            break;
+        case "logs":
+            if (logsListEl) logsListEl.scrollTop = top;
             break;
     }
 }
@@ -815,11 +952,40 @@ $: yearVisibleSections = groupedSections
         habits: section.habits.filter(habit => !isHabitEnded(habit) && hasRequiredDateInRange(habit, yearVisibleDates))
     }))
     .filter(section => section.habits.length > 0);
+
+$: allCheckInLogs = habits
+    .flatMap(habit => buildCheckInLogsForHabit(habit))
+    .sort((a, b) => {
+        if (b.timestampMs !== a.timestampMs) return b.timestampMs - a.timestampMs;
+        if (b.dateStr !== a.dateStr) return b.dateStr.localeCompare(a.dateStr);
+        return a.habitTitle.localeCompare(b.habitTitle, "zh-CN", { sensitivity: "base" });
+    });
+
+$: filteredCheckInLogs = allCheckInLogs.filter(log => isLogInDateRange(log) && (!logOnlyWithNote || log.hasNote));
+
+$: totalLogPages = Math.max(1, Math.ceil(filteredCheckInLogs.length / LOG_PAGE_SIZE));
+
+$: pagedCheckInLogs = filteredCheckInLogs.slice(
+    (logPage - 1) * LOG_PAGE_SIZE,
+    logPage * LOG_PAGE_SIZE
+);
+
+$: {
+    const nextKey = `${logStartDate}|${logEndDate}|${logOnlyWithNote}`;
+    if (nextKey !== logFilterKey) {
+        logFilterKey = nextKey;
+        logPage = 1;
+    }
+}
+
+$: if (logPage > totalLogPages) logPage = totalLogPages;
+$: if (logPage < 1) logPage = 1;
 </script>
 
 <div class="habit-stats-root">
     <div class="stats-nav">
         <button class:active={activeTab === "overview"} on:click={() => activeTab = "overview"}>概览</button>
+        <button class:active={activeTab === "logs"} on:click={() => activeTab = "logs"}>打卡日志</button>
         <button class:active={activeTab === "week"} on:click={() => activeTab = "week"}>周打卡视图</button>
         <button class:active={activeTab === "month"} on:click={() => activeTab = "month"}>月打卡视图</button>
         <button class:active={activeTab === "year"} on:click={() => activeTab = "year"}>年视图</button>
@@ -1030,7 +1196,7 @@ $: yearVisibleSections = groupedSections
                 {/each}
             {/if}
         </div>
-    {:else}
+    {:else if activeTab === "year"}
         <div class="year-panel">
             <div class="panel-toolbar">
                 <button class="nav-btn" on:click={prevYear}>◀</button>
@@ -1096,6 +1262,63 @@ $: yearVisibleSections = groupedSections
                         {/each}
                     {/each}
                 {/if}
+            </div>
+        </div>
+    {:else}
+        <div class="logs-panel">
+            <div class="logs-toolbar">
+                <div class="log-filter-item">
+                    <span>开始日期</span>
+                    <input type="date" bind:value={logStartDate} />
+                </div>
+                <div class="log-filter-item">
+                    <span>结束日期</span>
+                    <input type="date" bind:value={logEndDate} />
+                </div>
+                <label class="log-note-filter">
+                    <input type="checkbox" bind:checked={logOnlyWithNote} />
+                    仅看有备注
+                </label>
+                <button class="b3-button b3-button--outline" on:click={resetLogFilters}>重置筛选</button>
+            </div>
+
+            <div class="logs-summary">
+                共 {filteredCheckInLogs.length} 条日志，每页 {LOG_PAGE_SIZE} 条
+            </div>
+
+            <div class="logs-list" bind:this={logsListEl}>
+                {#if pagedCheckInLogs.length === 0}
+                    <div class="state-block">当前筛选条件下没有打卡日志</div>
+                {:else}
+                    {#each pagedCheckInLogs as log}
+                        <div class="log-card">
+                            <div class="log-main">
+                                <div class="log-title-row">
+                                    <div class="log-title">{log.habitIcon} {log.habitTitle}</div>
+                                    <span class="log-group-tag">{log.groupName}</span>
+                                </div>
+                                <div class="log-meta">
+                                    <span>{log.dateStr}{log.timeText ? ` ${log.timeText}` : ""}</span>
+                                </div>
+                                <div class="log-content">
+                                    <span class="log-emoji">{log.emoji}</span>
+                                    <span class:log-note-empty={!log.hasNote}>
+                                        {log.hasNote ? log.note : "无备注"}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="log-actions">
+                                <button class="view-btn" on:click={() => openHabitDayEditor(log.habit, log.dateStr)}>查看当天</button>
+                            </div>
+                        </div>
+                    {/each}
+                {/if}
+            </div>
+
+            <div class="logs-pagination">
+                <button class="nav-btn" on:click={prevLogPage} disabled={logPage <= 1}>◀</button>
+                <div class="log-page-info">第 {logPage} / {totalLogPages} 页</div>
+                <button class="nav-btn" on:click={() => nextLogPage(totalLogPages)} disabled={logPage >= totalLogPages}>▶</button>
             </div>
         </div>
     {/if}
@@ -1794,5 +2017,140 @@ $: yearVisibleSections = groupedSections
 
     .year-day-emojis.tiny {
         font-size: clamp(2px, 1.5cqw, 6px);
+    }
+
+    .logs-panel {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        gap: 10px;
+    }
+
+    .logs-toolbar {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px 12px;
+    }
+
+    .log-filter-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        color: var(--b3-theme-on-surface-light);
+    }
+
+    .log-filter-item input[type="date"] {
+        border: 1px solid var(--b3-theme-surface-lighter);
+        border-radius: 8px;
+        padding: 4px 8px;
+        min-height: 30px;
+        background: var(--b3-theme-surface);
+        color: var(--b3-theme-on-surface);
+    }
+
+    .log-note-filter {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        color: var(--b3-theme-on-surface);
+    }
+
+    .logs-summary {
+        font-size: 12px;
+        color: var(--b3-theme-on-surface-light);
+        padding: 0 2px;
+    }
+
+    .logs-list {
+        overflow: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding-right: 4px;
+    }
+
+    .log-card {
+        border: 1px solid var(--b3-border-color);
+        background: var(--b3-theme-surface);
+        border-radius: 12px;
+        padding: 10px 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .log-main {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .log-title-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .log-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--b3-theme-on-surface);
+    }
+
+    .log-group-tag {
+        font-size: 12px;
+        color: var(--b3-theme-on-surface-light);
+        background: var(--b3-theme-background);
+        border-radius: 999px;
+        padding: 2px 8px;
+    }
+
+    .log-meta {
+        font-size: 12px;
+        color: var(--b3-theme-on-surface-light);
+    }
+
+    .log-content {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        font-size: 13px;
+        color: var(--b3-theme-on-surface);
+        word-break: break-word;
+    }
+
+    .log-emoji {
+        font-size: 16px;
+        line-height: 1;
+    }
+
+    .log-note-empty {
+        color: var(--b3-theme-on-surface-light);
+    }
+
+    .log-actions {
+        flex-shrink: 0;
+    }
+
+    .logs-pagination {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 10px;
+        margin-top: 2px;
+    }
+
+    .log-page-info {
+        min-width: 120px;
+        text-align: center;
+        font-size: 13px;
+        color: var(--b3-theme-on-surface);
     }
 </style>
