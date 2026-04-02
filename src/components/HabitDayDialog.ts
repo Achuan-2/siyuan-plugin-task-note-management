@@ -85,6 +85,48 @@ export class HabitDayDialog {
         return cfg ? cfg.meaning : undefined;
     }
 
+    private getAvailableCheckInEmojisForDate(dateStr: string): HabitCheckInEmoji[] {
+        const emojiConfigs = this.habit.checkInEmojis || [] as HabitCheckInEmoji[];
+        if (!this.habit.hideCheckedToday) return emojiConfigs;
+
+        const checkIn = this.habit.checkIns?.[dateStr];
+        if (!checkIn) return emojiConfigs;
+
+        const checkedGroups = new Set<string>();
+        const checkedEmojis = new Set<string>();
+        const emojiToGroups = new Map<string, Set<string>>();
+
+        emojiConfigs.forEach(cfg => {
+            const groupName = (cfg.group || "").trim();
+            if (!groupName) return;
+            if (!emojiToGroups.has(cfg.emoji)) emojiToGroups.set(cfg.emoji, new Set<string>());
+            emojiToGroups.get(cfg.emoji)!.add(groupName);
+        });
+
+        this.getEntriesForDate(checkIn).forEach(entry => {
+            checkedEmojis.add(entry.emoji);
+            const groupName = (entry.group || "").trim();
+            if (groupName) {
+                checkedGroups.add(groupName);
+                return;
+            }
+
+            // 兼容旧数据：entry 没有 group 时，用 emoji 配置推断已打卡分组
+            const mappedGroups = emojiToGroups.get(entry.emoji);
+            if (mappedGroups) {
+                mappedGroups.forEach(g => checkedGroups.add(g));
+            }
+        });
+
+        return emojiConfigs.filter(cfg => {
+            const groupName = (cfg.group || "").trim();
+            if (groupName) {
+                return !checkedGroups.has(groupName);
+            }
+            return !checkedEmojis.has(cfg.emoji);
+        });
+    }
+
     private async setEntriesForDate(dateStr: string, entries: HabitDayEntry[]) {
         this.habit.checkIns = this.habit.checkIns || {};
         if (!entries || entries.length === 0) {
@@ -699,9 +741,15 @@ export class HabitDayDialog {
 
         const wrap = document.createElement("div");
         wrap.style.cssText = "display:flex; flex-wrap:wrap; gap:8px;";
-        const emojiConfigs = this.habit.checkInEmojis || [] as any[];
+        const emojiConfigs = this.getAvailableCheckInEmojisForDate(this.dateStr);
         let selectedEmoji: string | undefined = emojiConfigs.length > 0 ? emojiConfigs[0].emoji : undefined;
         let selectedMeaning: string | undefined = emojiConfigs.length > 0 ? emojiConfigs[0].meaning : undefined;
+        if (emojiConfigs.length === 0) {
+            const empty = document.createElement("div");
+            empty.textContent = "无打卡项";
+            empty.style.cssText = "color:var(--b3-theme-on-surface-light); font-size:12px;";
+            wrap.appendChild(empty);
+        }
         emojiConfigs.forEach(cfg => {
             const btn = document.createElement("button");
             btn.className = `b3-button ${(cfg.emoji === selectedEmoji && cfg.meaning === selectedMeaning) ? "b3-button--primary" : "b3-button--outline"}`;
@@ -738,9 +786,12 @@ export class HabitDayDialog {
         const saveBtn = document.createElement("button");
         saveBtn.className = "b3-button b3-button--primary";
         saveBtn.textContent = i18n("save");
+        if (emojiConfigs.length === 0) {
+            saveBtn.disabled = true;
+        }
         saveBtn.addEventListener("click", async () => {
             if (!selectedEmoji) {
-                showMessage(i18n("selectCheckInStatus"), 2000, "error");
+                showMessage("无打卡项", 2000, "error");
                 return;
             }
             const timestamp = `${this.dateStr} ${timeInput.value || `${hh}:${mm}`}`;
