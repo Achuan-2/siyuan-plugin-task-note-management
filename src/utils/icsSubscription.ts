@@ -231,6 +231,26 @@ export async function getAllReminders(
  * Save reminders back to their respective sources
  * This handles splitting local reminders from subscription tasks
  */
+function normalizeForCompare(value: any): any {
+    if (Array.isArray(value)) {
+        return value.map(item => normalizeForCompare(item));
+    }
+    if (value && typeof value === 'object') {
+        const normalized: any = {};
+        Object.keys(value)
+            .sort()
+            .forEach(key => {
+                normalized[key] = normalizeForCompare(value[key]);
+            });
+        return normalized;
+    }
+    return value;
+}
+
+function isSameReminderPayload(a: any, b: any): boolean {
+    return JSON.stringify(normalizeForCompare(a || {})) === JSON.stringify(normalizeForCompare(b || {}));
+}
+
 export async function saveReminders(plugin: any, allReminders: any): Promise<void> {
     try {
         const localReminders: any = {};
@@ -259,7 +279,18 @@ export async function saveReminders(plugin: any, allReminders: any): Promise<voi
         // Save each subscription's tasks
         for (const subId of Object.keys(subRemindersBySubId)) {
             if (subscriptionData.subscriptions[subId]) {
-                await saveSubscriptionTasks(plugin, subId, subRemindersBySubId[subId]);
+                const nextTasks = subRemindersBySubId[subId];
+                let shouldSave = true;
+                try {
+                    const currentTasks = await loadSubscriptionTasks(plugin, subId);
+                    shouldSave = !isSameReminderPayload(currentTasks, nextTasks);
+                } catch (error) {
+                    console.warn(`Failed to compare subscription tasks for ${subId}, fallback to save`, error);
+                }
+
+                if (shouldSave) {
+                    await saveSubscriptionTasks(plugin, subId, nextTasks);
+                }
             }
         }
     } catch (error) {

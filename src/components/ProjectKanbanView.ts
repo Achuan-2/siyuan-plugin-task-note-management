@@ -9603,7 +9603,7 @@ export class ProjectKanbanView {
                 e.stopPropagation();
 
                 // 加载最新数据以便持久化 fold 属性
-                const reminderData = await getAllReminders(this.plugin);
+                const reminderData = await this.getReminders();
                 const targetId = task.isRepeatInstance ? (task.originalId || task.id) : task.id;
                 const targetReminder = reminderData[targetId];
 
