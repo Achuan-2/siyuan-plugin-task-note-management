@@ -981,15 +981,16 @@ export class BlockBindingDialog {
                 defaultLevel = settings.defaultHeadingLevel || 3;
             }
 
+            // 默认使用设置层级；只有父标题层级与默认层级一致时，才自动下钻一级
+            let targetLevel = defaultLevel;
             if (parentBlock.type === 'h') {
-                const parentLevel = parseInt(parentBlock.subtype.replace('h', ''));
-                // 父块是标题块时，自动降一级
-                const newLevel = Math.min(parentLevel + 1, 6);
-                levelSelect.value = newLevel.toString();
-            } else {
-                // 父块是文档，使用默认层级
-                levelSelect.value = defaultLevel.toString();
+                const parentLevel = parseInt(parentBlock.subtype.replace('h', ''), 10);
+                if (!Number.isNaN(parentLevel) && parentLevel === defaultLevel) {
+                    targetLevel = Math.min(defaultLevel + 1, 6);
+                }
             }
+
+            levelSelect.value = targetLevel.toString();
         } catch (error) {
             console.error('调整标题层级失败:', error);
         }
