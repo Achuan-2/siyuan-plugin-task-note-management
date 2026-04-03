@@ -58,7 +58,8 @@ body:
     attributes:
       label: 版本与环境（必须）
       value: |
-        - 版本：
+        - 插件版本：
+        - 思源笔记版本：
         - 操作系统：
         - 浏览器（若使用）：
       render: markdown
