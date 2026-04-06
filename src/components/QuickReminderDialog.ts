@@ -5266,9 +5266,12 @@ export class QuickReminderDialog {
         let time: string | undefined = timeInput?.value || undefined;
         let endTime: string | undefined = endTimeInput?.value || undefined;
 
-        // 自动根据日期更新状态：如果是今天或过去的任务，且未完成，自动设为进行中
-        // 但重复任务系列应保留用户显式选择的状态（如长期），实例显示由实例逻辑决定
-        if (date && kanbanStatus !== 'completed' && !(this.repeatConfig && this.repeatConfig.enabled)) {
+        // 自动根据日期更新状态（仅新建模式）：
+        // 如果是今天或过去的任务，且未完成，自动设为进行中。
+        // 编辑模式应尊重用户显式选择的状态，不做自动覆盖。
+        // 重复任务系列也应保留用户显式选择的状态（如长期），实例显示由实例逻辑决定。
+        const shouldAutoSetDoingByDate = this.mode !== 'edit' && this.mode !== 'batch_edit';
+        if (shouldAutoSetDoingByDate && date && kanbanStatus !== 'completed' && !(this.repeatConfig && this.repeatConfig.enabled)) {
             const today = getLogicalDateString();
             if (compareDateStrings(date, today) <= 0) {
                 const hasDoingStatus = selectableStatuses.some(s => s.id === 'doing');
