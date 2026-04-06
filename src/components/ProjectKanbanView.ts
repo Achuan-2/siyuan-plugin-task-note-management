@@ -146,6 +146,8 @@ export class ProjectKanbanView {
 
     private lute: any;
     private showCompletedSubtasks: boolean = true; // 是否显示已完成的子任务
+    private customGroupTabsMode: boolean = false; // 自定义分组看板是否使用页签显示
+    private activeCustomGroupTabId: string | null = null; // 当前选中的分组页签
     // 移动端禁用任务拖拽，避免长按手势被拖拽抢占导致右键菜单无法触发
     private readonly isMobileClient: boolean;
 
@@ -583,6 +585,10 @@ export class ProjectKanbanView {
             } else {
                 this.showCompletedSubtasks = true;
             }
+            this.customGroupTabsMode = !!this.project?.customGroupTabsMode;
+            this.activeCustomGroupTabId = typeof this.project?.activeCustomGroupTabId === 'string'
+                ? this.project.activeCustomGroupTabId
+                : null;
             if (!this.project) {
                 throw new Error(i18n('projectNotExist'));
             }
@@ -3841,6 +3847,37 @@ export class ProjectKanbanView {
                 projectData[this.projectId].showCompletedSubtasks = checked;
                 await this.plugin.saveProjectData(projectData);
             }
+            await this.queueLoadTasks();
+        }));
+
+        // 自定义分组看板：页签显示模式
+        displaySettingsDropdown.appendChild(createSwitchItem(i18n("customGroupTabsMode") || "分组看板使用页签显示", this.customGroupTabsMode, async (checked) => {
+            this.customGroupTabsMode = checked;
+            if (!checked) {
+                this.activeCustomGroupTabId = null;
+            }
+            // 保存到项目数据
+            const projectData = await this.plugin.loadProjectData() || {};
+            if (projectData[this.projectId]) {
+                projectData[this.projectId].customGroupTabsMode = checked;
+                if (!checked) {
+                    delete projectData[this.projectId].activeCustomGroupTabId;
+                }
+                await this.plugin.saveProjectData(projectData);
+                if (this.project) {
+                    this.project.customGroupTabsMode = checked;
+                    if (!checked) {
+                        delete this.project.activeCustomGroupTabId;
+                    }
+                }
+            }
+            // 切换分组页签显示模式时强制重建看板，避免旧的页签 DOM 残留
+            const kanbanContainer = this.container.querySelector('.project-kanban-container') as HTMLElement;
+            if (kanbanContainer) {
+                kanbanContainer.innerHTML = '';
+            }
+            this._lastRenderMode = null;
+            this._lastRenderedProjectId = null;
             await this.queueLoadTasks();
         }));
 
@@ -7167,6 +7204,18 @@ export class ProjectKanbanView {
 
         const todayStr = getLogicalDateString();
 
+        // 页签模式：每次只展示一个分组，分组内容占满容器
+        if (this.customGroupTabsMode) {
+            await this.renderCustomGroupKanbanTabs(kanbanContainer, activeGroups, statusTasks, todayStr);
+            return;
+        }
+
+        // 关闭页签模式后，清理旧的页签容器
+        const tabsWrapper = kanbanContainer.querySelector('.custom-group-tabs-wrapper');
+        if (tabsWrapper) {
+            kanbanContainer.innerHTML = '';
+        }
+
         // 为每个自定义分组创建状态子列（使用 kanbanStatuses 中定义的所有状态）
         activeGroups.forEach((group: any) => {
             const groupStatusTasks: { [status: string]: any[] } = {};
@@ -7547,6 +7596,183 @@ export class ProjectKanbanView {
         }
     }
 
+    private async renderCustomGroupKanbanTabs(
+        kanbanContainer: HTMLElement,
+        activeGroups: any[],
+        statusTasks: { [status: string]: any[] },
+        todayStr: string
+    ) {
+        const tabEntries: Array<{ group: any; statusTasks: { [status: string]: any[] } }> = [];
+
+        // 普通分组
+        activeGroups.forEach((group: any) => {
+            const groupStatusTasks: { [status: string]: any[] } = {};
+            const visibleStatuses = this.getVisibleStatusesForGroup(group);
+            visibleStatuses.forEach(status => {
+                groupStatusTasks[status.id] = (statusTasks[status.id] || []).filter(task => task.customGroupId === group.id);
+            });
+
+            if (this.project?.hideNoDoingGroups) {
+                if (this.isStatusVisibleForGroup(group, 'doing')) {
+                    const doingTasks = groupStatusTasks['doing'] || [];
+                    if (doingTasks.length === 0) {
+                        return;
+                    }
+                }
+            }
+
+            if (this.project?.hideNoTodayGroups) {
+                let hasToday = false;
+                for (const statusId in groupStatusTasks) {
+                    if (groupStatusTasks[statusId].some(task => {
+                        return task.date && compareDateStrings(this.getTaskLogicalDate(task.date, task.time), todayStr) === 0;
+                    })) {
+                        hasToday = true;
+                        break;
+                    }
+                }
+                if (!hasToday) {
+                    return;
+                }
+            }
+
+            tabEntries.push({
+                group,
+                statusTasks: groupStatusTasks
+            });
+        });
+
+        // 未分组
+        const validGroupIds = new Set(activeGroups.map((g: any) => g.id));
+        const ungroupedStatusTasks: { [status: string]: any[] } = {};
+        let hasUngrouped = false;
+        this.kanbanStatuses.forEach(status => {
+            ungroupedStatusTasks[status.id] = (statusTasks[status.id] || []).filter(task => !task.customGroupId || !validGroupIds.has(task.customGroupId));
+            if (ungroupedStatusTasks[status.id].length > 0) {
+                hasUngrouped = true;
+            }
+        });
+
+        if (this.project?.hideNoDoingGroups) {
+            const doingTasks = ungroupedStatusTasks['doing'] || [];
+            if (doingTasks.length === 0) {
+                hasUngrouped = false;
+            }
+        }
+
+        if (this.project?.hideNoTodayGroups && hasUngrouped) {
+            let hasToday = false;
+            for (const statusId in ungroupedStatusTasks) {
+                if (ungroupedStatusTasks[statusId].some(task => {
+                    return task.date && compareDateStrings(this.getTaskLogicalDate(task.date, task.time), todayStr) === 0;
+                })) {
+                    hasToday = true;
+                    break;
+                }
+            }
+            if (!hasToday) {
+                hasUngrouped = false;
+            }
+        }
+
+        if (hasUngrouped) {
+            const projectData = await this.plugin.loadProjectData() || {};
+            const project = projectData[this.projectId];
+            const defaultMilestones = (project?.milestones || []).filter((m: any) => !m.archived);
+
+            tabEntries.push({
+                group: {
+                    id: 'ungrouped',
+                    name: '未分组',
+                    color: '#95a5a6',
+                    icon: '📋',
+                    milestones: defaultMilestones
+                },
+                statusTasks: ungroupedStatusTasks
+            });
+        }
+
+        if (tabEntries.length === 0) {
+            this.renderEmptyCustomGroupKanban();
+            return;
+        }
+
+        let tabsWrapper = kanbanContainer.querySelector('.custom-group-tabs-wrapper') as HTMLElement;
+        if (!tabsWrapper) {
+            kanbanContainer.innerHTML = '';
+            tabsWrapper = document.createElement('div');
+            tabsWrapper.className = 'custom-group-tabs-wrapper';
+            tabsWrapper.innerHTML = `
+                <div class="custom-group-tabs-bar"></div>
+                <div class="custom-group-tab-content"></div>
+            `;
+            kanbanContainer.appendChild(tabsWrapper);
+        }
+
+        const tabsBar = tabsWrapper.querySelector('.custom-group-tabs-bar') as HTMLElement;
+        const tabContent = tabsWrapper.querySelector('.custom-group-tab-content') as HTMLElement;
+        if (!tabsBar || !tabContent) return;
+
+        const validTabIdSet = new Set(tabEntries.map(entry => entry.group.id));
+        if (!this.activeCustomGroupTabId || !validTabIdSet.has(this.activeCustomGroupTabId)) {
+            this.activeCustomGroupTabId = tabEntries[0].group.id;
+        }
+
+        const persistActiveTab = async (tabId: string) => {
+            try {
+                const projectData = await this.plugin.loadProjectData() || {};
+                if (!projectData[this.projectId]) return;
+                projectData[this.projectId].activeCustomGroupTabId = tabId;
+                await this.plugin.saveProjectData(projectData);
+                if (this.project) {
+                    this.project.activeCustomGroupTabId = tabId;
+                }
+            } catch (error) {
+                console.warn('保存分组页签状态失败:', error);
+            }
+        };
+
+        const renderActiveTab = () => {
+            const activeEntry = tabEntries.find(entry => entry.group.id === this.activeCustomGroupTabId) || tabEntries[0];
+            if (!activeEntry) return;
+
+            tabContent.innerHTML = '';
+            this.renderCustomGroupColumnWithStatuses(activeEntry.group, activeEntry.statusTasks, tabContent);
+
+            const activeColumn = tabContent.querySelector(`.kanban-column-custom-group-${activeEntry.group.id}`) as HTMLElement;
+            if (activeColumn) {
+                activeColumn.classList.add('kanban-column-tabbed');
+                activeColumn.style.width = '100%';
+                activeColumn.style.maxWidth = 'none';
+                activeColumn.style.minWidth = '100%';
+                activeColumn.style.height = '100%';
+            }
+        };
+
+        tabsBar.innerHTML = '';
+        tabEntries.forEach(entry => {
+            const tabButton = document.createElement('button');
+            const isActive = entry.group.id === this.activeCustomGroupTabId;
+            tabButton.className = `b3-button ${isActive ? 'b3-button--primary' : 'b3-button--outline'} custom-group-tab-btn`;
+            tabButton.textContent = `${entry.group.icon || '📋'} ${entry.group.name}`;
+            tabButton.addEventListener('click', async () => {
+                if (this.activeCustomGroupTabId === entry.group.id) return;
+                this.activeCustomGroupTabId = entry.group.id;
+                await persistActiveTab(entry.group.id);
+                tabsBar.querySelectorAll('.custom-group-tab-btn').forEach(btn => {
+                    btn.classList.remove('b3-button--primary');
+                    btn.classList.add('b3-button--outline');
+                });
+                tabButton.classList.remove('b3-button--outline');
+                tabButton.classList.add('b3-button--primary');
+                renderActiveTab();
+            });
+            tabsBar.appendChild(tabButton);
+        });
+
+        renderActiveTab();
+    }
+
     private async ensureStatusColumnsExist(kanbanContainer: HTMLElement) {
         // 1. 加载项目数据和里程碑
         const projectData = await this.plugin.loadProjectData() || {};
@@ -7919,6 +8145,14 @@ export class ProjectKanbanView {
             this._lastRenderMode = 'list';
         }
 
+        // 关闭页签模式后，清理旧的页签容器
+        if (!this.customGroupTabsMode) {
+            const tabsWrapper = kanbanContainer.querySelector('.custom-group-tabs-wrapper');
+            if (tabsWrapper) {
+                kanbanContainer.innerHTML = '';
+            }
+        }
+
         const projectManager = this.projectManager;
         const projectGroups = await projectManager.getProjectCustomGroups(this.projectId);
         // 过滤掉已归档的分组
@@ -7927,6 +8161,9 @@ export class ProjectKanbanView {
         if (activeGroups.length === 0) {
             // No custom grouping -> Single column
             await this.renderSingleListColumn(kanbanContainer);
+        } else if (this.customGroupTabsMode) {
+            // With custom grouping in tab mode -> one group per tab
+            await this.renderGroupedListTabs(kanbanContainer, activeGroups);
         } else {
             // With custom grouping -> Columns per group
             await this.renderGroupedListColumns(kanbanContainer, activeGroups);
@@ -8032,6 +8269,131 @@ export class ProjectKanbanView {
         }
     }
 
+    private async renderGroupedListTabs(container: HTMLElement, groups: any[]) {
+        const listVisibleTasks = this.getListModeVisibleTasks(this.tasks);
+
+        const validGroupIds = new Set(groups.map(g => g.id));
+        const ungroupedTasks = listVisibleTasks.filter(t => !t.customGroupId || !validGroupIds.has(t.customGroupId));
+
+        let displayGroups = [...groups].sort((a, b) => (a.sort || 0) - (b.sort || 0));
+        const todayStr = getLogicalDateString();
+
+        if (this.project?.hideNoDoingGroups) {
+            displayGroups = displayGroups.filter((g: any) => {
+                return listVisibleTasks.some(task => task.customGroupId === g.id && !task.completed && this.getTaskStatus(task) === 'doing');
+            });
+        }
+        if (this.project?.hideNoTodayGroups) {
+            displayGroups = displayGroups.filter((g: any) => {
+                return listVisibleTasks.some(task => task.customGroupId === g.id && task.date && compareDateStrings(this.getTaskLogicalDate(task.date, task.time), todayStr) === 0);
+            });
+        }
+
+        const tabEntries: Array<{ group: any; tasks: any[] }> = [];
+        displayGroups.forEach(group => {
+            tabEntries.push({
+                group,
+                tasks: listVisibleTasks.filter(t => t.customGroupId === group.id)
+            });
+        });
+
+        let showUngrouped = ungroupedTasks.length > 0;
+        if (showUngrouped && this.project?.hideNoDoingGroups) {
+            const hasDoing = listVisibleTasks.some(task => (!task.customGroupId || !validGroupIds.has(task.customGroupId)) && !task.completed && this.getTaskStatus(task) === 'doing');
+            if (!hasDoing) showUngrouped = false;
+        }
+        if (showUngrouped && this.project?.hideNoTodayGroups) {
+            const hasToday = listVisibleTasks.some(task => (!task.customGroupId || !validGroupIds.has(task.customGroupId)) && task.date && compareDateStrings(this.getTaskLogicalDate(task.date, task.time), todayStr) === 0);
+            if (!hasToday) showUngrouped = false;
+        }
+        if (showUngrouped) {
+            tabEntries.push({
+                group: { id: 'ungrouped', name: i18n('ungrouped') || '未分组', color: '#95a5a6', icon: '📋' },
+                tasks: ungroupedTasks
+            });
+        }
+
+        if (tabEntries.length === 0) {
+            container.innerHTML = '';
+            return;
+        }
+
+        let tabsWrapper = container.querySelector('.custom-group-tabs-wrapper') as HTMLElement;
+        if (!tabsWrapper) {
+            container.innerHTML = '';
+            tabsWrapper = document.createElement('div');
+            tabsWrapper.className = 'custom-group-tabs-wrapper';
+            tabsWrapper.innerHTML = `
+                <div class="custom-group-tabs-bar"></div>
+                <div class="custom-group-tab-content"></div>
+            `;
+            container.appendChild(tabsWrapper);
+        }
+
+        const tabsBar = tabsWrapper.querySelector('.custom-group-tabs-bar') as HTMLElement;
+        const tabContent = tabsWrapper.querySelector('.custom-group-tab-content') as HTMLElement;
+        if (!tabsBar || !tabContent) return;
+
+        const validTabIdSet = new Set(tabEntries.map(entry => entry.group.id));
+        if (!this.activeCustomGroupTabId || !validTabIdSet.has(this.activeCustomGroupTabId)) {
+            this.activeCustomGroupTabId = tabEntries[0].group.id;
+        }
+
+        const persistActiveTab = async (tabId: string) => {
+            try {
+                const projectData = await this.plugin.loadProjectData() || {};
+                if (!projectData[this.projectId]) return;
+                projectData[this.projectId].activeCustomGroupTabId = tabId;
+                await this.plugin.saveProjectData(projectData);
+                if (this.project) {
+                    this.project.activeCustomGroupTabId = tabId;
+                }
+            } catch (error) {
+                console.warn('保存分组页签状态失败:', error);
+            }
+        };
+
+        const renderActiveTab = async () => {
+            const activeEntry = tabEntries.find(entry => entry.group.id === this.activeCustomGroupTabId) || tabEntries[0];
+            if (!activeEntry) return;
+
+            tabContent.innerHTML = '';
+            await this.renderListModeGroupColumn(tabContent, activeEntry.group, activeEntry.tasks, true);
+
+            const activeColumn = tabContent.querySelector(`.kanban-column-custom-group-${activeEntry.group.id}`) as HTMLElement;
+            if (activeColumn) {
+                activeColumn.classList.add('kanban-column-tabbed');
+                activeColumn.style.width = '100%';
+                activeColumn.style.maxWidth = 'none';
+                activeColumn.style.minWidth = '100%';
+                activeColumn.style.height = '100%';
+            }
+        };
+
+        tabsBar.innerHTML = '';
+        tabEntries.forEach(entry => {
+            const tabButton = document.createElement('button');
+            const isActive = entry.group.id === this.activeCustomGroupTabId;
+            tabButton.className = `b3-button ${isActive ? 'b3-button--primary' : 'b3-button--outline'} custom-group-tab-btn`;
+            tabButton.textContent = `${entry.group.icon || '📋'} ${entry.group.name}`;
+            tabButton.addEventListener('click', async () => {
+                if (this.activeCustomGroupTabId === entry.group.id) return;
+                this.activeCustomGroupTabId = entry.group.id;
+                await persistActiveTab(entry.group.id);
+                tabsBar.querySelectorAll('.custom-group-tab-btn').forEach(btn => {
+                    btn.classList.remove('b3-button--primary');
+                    btn.classList.add('b3-button--outline');
+                });
+                tabButton.classList.remove('b3-button--outline');
+                tabButton.classList.add('b3-button--primary');
+                await renderActiveTab();
+            });
+            tabsBar.appendChild(tabButton);
+        });
+
+        await renderActiveTab();
+    }
+
     private async renderGroupedListColumns(container: HTMLElement, groups: any[]) {
         const listVisibleTasks = this.getListModeVisibleTasks(this.tasks);
 
@@ -8090,13 +8452,13 @@ export class ProjectKanbanView {
         });
     }
 
-    private async renderListModeGroupColumn(container: HTMLElement, group: any, tasks: any[]) {
+    private async renderListModeGroupColumn(container: HTMLElement, group: any, tasks: any[], useContainerAsCreateParent: boolean = false) {
         const columnId = `custom-group-${group.id}`;
         let column = container.querySelector(`.kanban-column-${columnId}`) as HTMLElement;
 
         if (!column) {
             // Reusing the createCustomGroupColumn method for consistent styling
-            column = this.createCustomGroupColumn(columnId, group);
+            column = this.createCustomGroupColumn(columnId, group, useContainerAsCreateParent ? container : undefined);
         }
 
         // Ensure column is in the container (in case createCustomGroupColumn didn't append it or order changed)
@@ -8792,8 +9154,9 @@ export class ProjectKanbanView {
         this.renderCustomGroupColumnWithStatuses(group, statusTasks);
     }
 
-    private createCustomGroupColumn(columnId: string, group: any): HTMLElement {
-        const kanbanContainer = this.container.querySelector('.project-kanban-container') as HTMLElement;
+    private createCustomGroupColumn(columnId: string, group: any, parentContainer?: HTMLElement): HTMLElement {
+        const defaultContainer = this.container.querySelector('.project-kanban-container') as HTMLElement;
+        const kanbanContainer = parentContainer || defaultContainer;
         if (!kanbanContainer) return document.createElement('div');
 
         const column = document.createElement('div');
@@ -8900,32 +9263,35 @@ export class ProjectKanbanView {
 
         header.appendChild(headerRight);
 
-        // 使列头可以拖拽以调整分组顺序（直接在看板中拖动 header 调整顺序）
-        header.draggable = true;
+        // 使列头可以拖拽以调整分组顺序（仅普通分组看板列启用，页签内容禁用）
+        const isTabbedContent = !!parentContainer;
+        header.draggable = !isTabbedContent;
         header.dataset.groupId = group.id;
 
-        header.addEventListener('dragstart', (e) => {
-            this.draggedGroupId = group.id;
-            column.style.opacity = '0.5';
-            try {
-                if (e.dataTransfer) {
-                    e.dataTransfer.effectAllowed = 'move';
-                    e.dataTransfer.setData('text/plain', group.id);
+        if (!isTabbedContent) {
+            header.addEventListener('dragstart', (e) => {
+                this.draggedGroupId = group.id;
+                column.style.opacity = '0.5';
+                try {
+                    if (e.dataTransfer) {
+                        e.dataTransfer.effectAllowed = 'move';
+                        e.dataTransfer.setData('text/plain', group.id);
+                    }
+                } catch (err) {
+                    // ignore
                 }
-            } catch (err) {
-                // ignore
-            }
-        });
+            });
 
-        header.addEventListener('dragend', () => {
-            this.draggedGroupId = null;
-            column.style.opacity = '';
-            // 清除列插入指示器
-            if (this._columnDropIndicator && this._columnDropIndicator.parentNode) {
-                this._columnDropIndicator.parentNode.removeChild(this._columnDropIndicator);
-            }
-            this._columnDropIndicator = null;
-        });
+            header.addEventListener('dragend', () => {
+                this.draggedGroupId = null;
+                column.style.opacity = '';
+                // 清除列插入指示器
+                if (this._columnDropIndicator && this._columnDropIndicator.parentNode) {
+                    this._columnDropIndicator.parentNode.removeChild(this._columnDropIndicator);
+                }
+                this._columnDropIndicator = null;
+            });
+        }
 
         // 列内容
         const content = document.createElement('div');
@@ -8960,13 +9326,14 @@ export class ProjectKanbanView {
         this.renderCustomGroupColumn(ungroupedGroup, tasks);
     }
 
-    private renderCustomGroupColumnWithStatuses(group: any, statusTasks: { [status: string]: any[] }) {
+    private renderCustomGroupColumnWithStatuses(group: any, statusTasks: { [status: string]: any[] }, parentContainer?: HTMLElement) {
         const columnId = `custom-group-${group.id}`;
-        let column = this.container.querySelector(`.kanban-column-${columnId}`) as HTMLElement;
+        const searchRoot = parentContainer || this.container;
+        let column = searchRoot.querySelector(`.kanban-column-${columnId}`) as HTMLElement;
 
         if (!column) {
             // 如果列不存在，创建新列
-            column = this.createCustomGroupColumn(columnId, group);
+            column = this.createCustomGroupColumn(columnId, group, parentContainer);
         }
 
         const content = column.querySelector('.kanban-column-content') as HTMLElement;
@@ -14198,6 +14565,37 @@ export class ProjectKanbanView {
 
             .status-column-groups {
                 padding: 4px;
+            }
+
+            /* 自定义分组页签模式 */
+            .custom-group-tabs-wrapper {
+                display: flex;
+                flex-direction: column;
+                width: 100%;
+                min-height: 0;
+                flex: 1;
+            }
+
+            .custom-group-tabs-bar {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                margin: 0 0 12px 0;
+                padding: 0 4px;
+            }
+
+            .custom-group-tab-content {
+                display: flex;
+                flex: 1;
+                min-height: 0;
+                width: 100%;
+            }
+
+            .custom-group-tab-content .kanban-column.kanban-column-tabbed {
+                width: 100%;
+                min-width: 100%;
+                max-width: none;
+                flex: 1;
             }
 
             /* 自定义分组状态容器样式 */
