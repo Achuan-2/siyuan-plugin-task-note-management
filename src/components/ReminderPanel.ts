@@ -4280,32 +4280,31 @@ export class ReminderPanel {
         const selectedNames = new Set(normalizedFilters.filter(name => name !== 'all'));
 
         return reminders.filter(reminder => {
-            // 已完成任务由“已完成/未完成”筛选控制，不参与看板状态名称筛选
-            if (isEffectivelyCompleted(reminder)) {
-                return true;
-            }
-
             const isAbandoned = this.isReminderInAbandonedKanbanStatus(reminder);
             if (useAll) {
+                // 已完成任务由“已完成/未完成”筛选控制，不参与看板状态名称筛选
+                if (isEffectivelyCompleted(reminder)) {
+                    return true;
+                }
                 // “全部”默认不显示放弃状态
                 return !isAbandoned;
             }
 
-            if (isAbandoned) {
-                const abandonedName = this.getReminderKanbanStatusName(reminder);
-                return abandonedName ? selectedNames.has(abandonedName) : false;
+            // 选择了具体看板状态（如“放弃”）时，使用严格匹配：
+            // 仅显示项目任务且状态名称命中选项，避免将无项目/无状态名/其他状态任务放行。
+            if (isEffectivelyCompleted(reminder)) {
+                return false;
             }
 
-            // 非项目任务不参与项目看板状态筛选
             if (!reminder?.projectId) {
-                return true;
+                return false;
             }
 
             const statusName = this.getReminderKanbanStatusName(reminder);
             if (!statusName) {
-                // 无法解析名称时保持显示，避免误伤
-                return true;
+                return false;
             }
+
             return selectedNames.has(statusName);
         });
     }
