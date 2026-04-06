@@ -363,12 +363,41 @@ function parseIcalRRule(rrule: ICAL.Recur): any {
 }
 
 /**
+ * 根据项目看板状态配置，决定导入任务的默认 kanbanStatus
+ * - 若项目只有固定三个状态（doing / completed / abandoned），则用 'doing'
+ * - 若项目还有其他自定义状态，则用第一个非固定状态的 id
+ * - 若无 projectId 或查询失败，也用 'doing'
+ */
+export async function resolveDefaultKanbanStatus(
+    plugin: any,
+    projectId?: string
+): Promise<string> {
+    if (!projectId) return 'doing';
+    try {
+        const { ProjectManager } = await import('./projectManager');
+        const projectManager = ProjectManager.getInstance(plugin);
+        const kanbanStatuses = await projectManager.getProjectKanbanStatuses(projectId);
+        // 找出第一个非固定（非 doing/completed/abandoned）的状态
+        const firstCustom = kanbanStatuses.find(s => !s.isFixed);
+        if (firstCustom) {
+            return firstCustom.id;
+        }
+        // 只有固定状态，放入进行中
+        return 'doing';
+    } catch (error) {
+        console.warn('resolveDefaultKanbanStatus 失败，使用 doing:', error);
+        return 'doing';
+    }
+}
+
+/**
  * 合并导入的事件到现有提醒数据
  */
 export function mergeImportedEvents(
     existingReminders: any,
     importedEvents: ParsedIcsEvent[],
-    options: IcsImportOptions
+    options: IcsImportOptions,
+    defaultKanbanStatus: string = 'doing'
 ): any {
     const merged = { ...existingReminders };
     let addedCount = 0;
@@ -405,6 +434,7 @@ export function mergeImportedEvents(
             };
             updatedCount++;
         } else {
+            const isPast = isEventPast(event);
             merged[id] = {
                 id,
                 ...event,
@@ -414,7 +444,9 @@ export function mergeImportedEvents(
                 categoryId: options.categoryId,
                 tags: options.tags || [],
                 priority: options.priority || 'none',
-                completed: event.completed || isEventPast(event),
+                completed: event.completed || isPast,
+                // 看板状态：已完成事件 -> completed；其余根据项目配置决定
+                kanbanStatus: (event.completed || isPast) ? 'completed' : defaultKanbanStatus,
                 createdAt: event.createdAt || new Date().toISOString(),
                 // Preserve subscription metadata
                 subscriptionId: event.subscriptionId,
@@ -455,13 +487,16 @@ export async function importIcsFile(
         // 2. 加载现有提醒数据
         const existingReminders = await plugin.loadReminderData();
 
-        // 3. 合并导入的事件
-        const { merged, stats } = mergeImportedEvents(existingReminders, events, options);
+        // 3. 确定导入任务的默认看板状态
+        const defaultKanbanStatus = await resolveDefaultKanbanStatus(plugin, options.projectId);
 
-        // 4. 保存合并后的数据
+        // 4. 合并导入的事件
+        const { merged, stats } = mergeImportedEvents(existingReminders, events, options, defaultKanbanStatus);
+
+        // 5. 保存合并后的数据
         await plugin.saveData('reminder.json', merged);
 
-        // 5. 触发更新事件
+        // 6. 触发更新事件
         window.dispatchEvent(new CustomEvent('reminderUpdated'));
 
         await pushMsg(`ICS导入成功：新增 ${stats.added} 个，更新 ${stats.updated} 个，共 ${stats.total} 个事件`);

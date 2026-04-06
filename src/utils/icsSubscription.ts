@@ -1,5 +1,5 @@
 import { pushErrMsg, pushMsg, putFile, getFile, removeFile } from '../api';
-import { parseIcsFile, isEventPast } from './icsImport';
+import { parseIcsFile, isEventPast, resolveDefaultKanbanStatus } from './icsImport';
 import { i18n } from "../pluginInstance";
 
 export interface IcsSubscription {
@@ -369,6 +369,9 @@ export async function syncSubscription(
             }
         }
 
+        // Resolve default kanban status based on subscription's project configuration
+        const defaultKanbanStatus = await resolveDefaultKanbanStatus(plugin, subscription.projectId);
+
         // Convert events to reminder format and merge with existing data
         const tasks: any = {};
         for (const event of events) {
@@ -381,6 +384,9 @@ export async function syncSubscription(
 
             const id = existingTask?.id || window.Lute?.NewNodeID?.() || `${subscription.id}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
+            const isPast = isEventPast(event);
+            const isCompleted = preserveCompleted ? existingTask.completed : (event.completed || isPast);
+
             tasks[id] = {
                 id,
                 ...event,
@@ -391,8 +397,11 @@ export async function syncSubscription(
                 priority: subscription.priority || 'none',
                 tagIds: subscription.tagIds || [],
                 // Preserve completed status if the existing task is completed
-                completed: preserveCompleted ? existingTask.completed : (event.completed || isEventPast(event)),
+                completed: isCompleted,
                 completedAt: preserveCompleted ? existingTask.completedAt : undefined,
+                // 看板状态：已有任务保留原状态；新建任务按完成状态和项目配置决定
+                kanbanStatus: existingTask?.kanbanStatus ||
+                    (isCompleted ? 'completed' : defaultKanbanStatus),
                 createdAt: existingTask?.createdAt || event.createdAt || new Date().toISOString(),
                 // Mark as subscribed (read-only)
                 subscriptionId: subscription.id,
