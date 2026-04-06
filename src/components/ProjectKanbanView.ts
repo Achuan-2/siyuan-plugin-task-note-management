@@ -6581,7 +6581,8 @@ export class ProjectKanbanView {
     }
 
     private getListModeVisibleTasks(tasks: any[]): any[] {
-        return tasks.filter(task => !this.isAbandonedTask(task));
+        // 列表视图需要显示全部状态（未完成/已完成/已放弃）
+        return tasks;
     }
 
     /**
@@ -8011,7 +8012,8 @@ export class ProjectKanbanView {
 
         // Filter tasks
         const listVisibleTasks = this.getListModeVisibleTasks(this.tasks);
-        const unfinishedTasks = listVisibleTasks.filter(t => !t.completed);
+        const unfinishedTasks = listVisibleTasks.filter(t => !t.completed && !this.isAbandonedTask(t));
+        const abandonedTasks = listVisibleTasks.filter(t => !t.completed && this.isAbandonedTask(t));
         const finishedTasks = this.sortDoneTasks(listVisibleTasks.filter(t => t.completed));
 
         if (countBadge) {
@@ -8021,7 +8023,7 @@ export class ProjectKanbanView {
             countBadge.textContent = topLevel.length.toString();
         }
 
-        this.renderListSections(content, unfinishedTasks, finishedTasks, null);
+        this.renderListSections(content, unfinishedTasks, finishedTasks, abandonedTasks, null);
 
         // [新增] 更新列顶部的里程碑筛选按钮
         const headerRight = column.querySelector('.custom-header-right') as HTMLElement;
@@ -8106,7 +8108,8 @@ export class ProjectKanbanView {
         }
 
         const content = column.querySelector('.kanban-column-content') as HTMLElement;
-        const unfinishedTasks = tasks.filter(t => !t.completed);
+        const unfinishedTasks = tasks.filter(t => !t.completed && !this.isAbandonedTask(t));
+        const abandonedTasks = tasks.filter(t => !t.completed && this.isAbandonedTask(t));
         const finishedTasks = this.sortDoneTasks(tasks.filter(t => t.completed));
 
         // Update total count in header
@@ -8118,7 +8121,7 @@ export class ProjectKanbanView {
             count.textContent = topLevel.length.toString();
         }
 
-        this.renderListSections(content, unfinishedTasks, finishedTasks, group.id);
+        this.renderListSections(content, unfinishedTasks, finishedTasks, abandonedTasks, group.id);
 
         // [新增] 更新列顶部的里程碑筛选按钮
         const rightContainer = column.querySelector('.custom-header-right') as HTMLElement;
@@ -8192,7 +8195,7 @@ export class ProjectKanbanView {
         container.appendChild(btnContainer);
     }
 
-    private renderListSections(content: HTMLElement, unfinished: any[], finished: any[], groupId: string | null) {
+    private renderListSections(content: HTMLElement, unfinished: any[], finished: any[], abandoned: any[], groupId: string | null) {
         // Unfinished Section
         let unfinishedSection = content.querySelector('.list-section-unfinished') as HTMLElement;
         if (!unfinishedSection) {
@@ -8397,9 +8400,111 @@ export class ProjectKanbanView {
 
         const finishedCountLabel = finishedSection.querySelector('.list-section-count');
         if (finishedCountLabel) finishedCountLabel.textContent = finished.length.toString();
+
+        // Abandoned Section
+        let abandonedSection = content.querySelector('.list-section-abandoned') as HTMLElement;
+        if (!abandonedSection) {
+            abandonedSection = document.createElement('div');
+            abandonedSection.className = 'list-section list-section-abandoned';
+            abandonedSection.style.display = 'flex';
+            abandonedSection.style.flexDirection = 'column';
+
+            const header = document.createElement('div');
+            header.className = 'list-section-header';
+            header.style.cssText = `
+                font-size: 13px; 
+                font-weight: 600; 
+                color: var(--b3-theme-on-surface); 
+                padding: 10px 12px;
+                background: var(--b3-theme-background);
+                position: sticky;
+                top: 0;
+                z-index: 2;
+                opacity: 0.95;
+                display: flex; 
+                align-items: center; 
+                justify-content: space-between; 
+                cursor: pointer;
+                border-bottom: 1px solid var(--b3-theme-surface-lighter);
+                border-top: 4px solid var(--b3-theme-background);
+            `;
+
+            const titleWrap = document.createElement('div');
+            titleWrap.style.display = 'flex';
+            titleWrap.style.alignItems = 'center';
+            titleWrap.style.gap = '4px';
+
+            const toggleIcon = document.createElement('span');
+            toggleIcon.innerHTML = '<svg class="b3-button__icon" style="width: 12px; height: 12px;"><use xlink:href="#iconDown"></use></svg>';
+            titleWrap.appendChild(toggleIcon);
+
+            const titleLabel = document.createElement('span');
+            titleLabel.textContent = i18n('abandoned') || '已放弃';
+            titleWrap.appendChild(titleLabel);
+
+            header.appendChild(titleWrap);
+
+            const countLabel = document.createElement('span');
+            countLabel.className = 'list-section-count';
+            countLabel.style.fontSize = '12px';
+            countLabel.style.opacity = '0.7';
+            header.appendChild(countLabel);
+
+            abandonedSection.appendChild(header);
+
+            const taskContainer = document.createElement('div');
+            taskContainer.className = 'list-section-tasks';
+            taskContainer.style.minHeight = '30px';
+            taskContainer.style.padding = '0 12px 8px 12px';
+            abandonedSection.appendChild(taskContainer);
+
+            content.appendChild(abandonedSection);
+
+            this.addListSectionDropEvents(taskContainer, 'abandoned', groupId);
+
+            // Toggle Collapse
+            let isCollapsed = true; // Default to collapsed
+            const toggleKey = `list-abandoned-${groupId || 'single'}`;
+            if (this.expandedStatusGroups.has(toggleKey)) {
+                isCollapsed = false;
+            }
+
+            const updateState = () => {
+                taskContainer.style.display = isCollapsed ? 'none' : 'block';
+                toggleIcon.innerHTML = `<svg class="b3-button__icon" style="width: 12px; height: 12px;"><use xlink:href="#icon${isCollapsed ? 'Right' : 'Down'}"></use></svg>`;
+            };
+            updateState();
+
+            header.addEventListener('click', () => {
+                isCollapsed = !isCollapsed;
+                if (!isCollapsed) {
+                    this.expandedStatusGroups.add(toggleKey);
+                } else {
+                    this.expandedStatusGroups.delete(toggleKey);
+                }
+                updateState();
+            });
+        }
+
+        const abandonedContainer = abandonedSection.querySelector('.list-section-tasks') as HTMLElement;
+        abandonedContainer.innerHTML = '';
+
+        const abandonedKey = `list-abandoned-${groupId || 'single'}`;
+        const abandonedPage = this.pageIndexMap[abandonedKey] || 1;
+        this.pageIndexMap[abandonedKey] = abandonedPage;
+
+        const { pagedTasks: pagedAbandoned, hasMore: hasMoreAbandoned } = this.paginateTasks(abandoned, abandonedPage);
+        this.renderTasksInColumn(abandonedContainer, pagedAbandoned);
+
+        if (hasMoreAbandoned) {
+            this.renderLoadMoreButton(abandonedContainer, abandonedKey);
+        }
+
+        const abandonedCountLabel = abandonedSection.querySelector('.list-section-count');
+        if (abandonedCountLabel) abandonedCountLabel.textContent = abandoned.length.toString();
     }
 
-    private addListSectionDropEvents(element: HTMLElement, type: 'unfinished' | 'finished', groupId: string | null) {
+    private addListSectionDropEvents(element: HTMLElement, type: 'unfinished' | 'finished' | 'abandoned', groupId: string | null) {
         element.addEventListener('dragover', (e) => {
             const types = e.dataTransfer?.types || [];
             const isSiYuanDrag = types.some(t => t.startsWith(Constants.SIYUAN_DROP_GUTTER)) ||
@@ -8431,7 +8536,11 @@ export class ProjectKanbanView {
                 types.includes(Constants.SIYUAN_DROP_TAB);
 
             if (isSiYuanDrag) {
-                const status = type === 'finished' ? 'completed' : 'doing';
+                const status = type === 'finished'
+                    ? 'completed'
+                    : type === 'abandoned'
+                        ? 'abandoned'
+                        : 'doing';
                 await this.handleDrop(e, status, groupId);
                 return;
             }
@@ -8457,6 +8566,9 @@ export class ProjectKanbanView {
                 updates.completed = true;
                 updates.kanbanStatus = 'completed';
                 updates.completedTime = getLocalDateTimeString(new Date());
+            } else if (type === 'abandoned') {
+                updates.completed = false;
+                updates.kanbanStatus = 'abandoned';
             } else {
                 updates.completed = false;
                 updates.kanbanStatus = 'doing'; // Default to doing when moving to unfinished
