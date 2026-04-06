@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2024 by [author]. All Rights Reserved.
  * @Author       : [author]
  * @Date         : [date]
@@ -379,10 +379,17 @@ export function mergeImportedEvents(
         // 生成新的ID（使用时间戳+随机数）
         const id = window.Lute?.NewNodeID?.() || `imported-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
-        // 检查是否已存在相同UID的事件
+        // 检查是否已存在相同事件
+        // uid 非空时才用 uid 匹配；title+date+time 组合匹配（避免同标题不同日期的复习任务被误判重复）
         const existingId = Object.keys(merged).find(key => {
             const reminder = merged[key];
-            return reminder.uid === event.uid || reminder.title === event.title;
+            if (event.uid && reminder.uid && reminder.uid === event.uid) {
+                return true;
+            }
+            // 仅当 title、date、time 全部相同时才视为重复
+            return reminder.title === event.title &&
+                reminder.date === event.date &&
+                (reminder.time || '') === (event.time || '');
         });
 
         if (existingId) {
