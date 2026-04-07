@@ -1680,6 +1680,7 @@
     "setGroup": "Set Group",
     "deadline": "Deadline",
     "showCompletedSubtasks": "Show Completed Subtasks",
+    "hideEmptyStatusBars": "Hide Status Sections Without Tasks",
     "taskManagement": "Task Management",
     "todayIgnored": "⭕ Today's Ignored",
     "dailyAvailable": "🍰 Daily Available",

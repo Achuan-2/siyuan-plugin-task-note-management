@@ -1680,6 +1680,7 @@
     "setGroup": "设置分组",
     "deadline": "截止",
     "showCompletedSubtasks": "显示已完成子任务",
+    "hideEmptyStatusBars": "隐藏无任务状态栏",
     "taskManagement": "任务管理",
     "todayIgnored": "⭕ 今日忽略",
     "dailyAvailable": "🍰 每日可做",
