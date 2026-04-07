@@ -146,6 +146,7 @@ export class ProjectKanbanView {
 
     private lute: any;
     private showCompletedSubtasks: boolean = true; // 是否显示已完成的子任务
+    private hideEmptyStatusBars: boolean = false; // 是否隐藏没有任务的状态栏/分组
     private customGroupTabsMode: boolean = false; // 自定义分组看板是否使用页签显示
     private activeCustomGroupTabId: string | null = null; // 当前选中的分组页签
 
@@ -581,6 +582,11 @@ export class ProjectKanbanView {
                 this.showCompletedSubtasks = this.project.showCompletedSubtasks;
             } else {
                 this.showCompletedSubtasks = true;
+            }
+            if (this.project && typeof this.project.hideEmptyStatusBars === 'boolean') {
+                this.hideEmptyStatusBars = this.project.hideEmptyStatusBars;
+            } else {
+                this.hideEmptyStatusBars = false;
             }
             this.customGroupTabsMode = !!this.project?.customGroupTabsMode;
             this.activeCustomGroupTabId = typeof this.project?.activeCustomGroupTabId === 'string'
@@ -3843,6 +3849,21 @@ export class ProjectKanbanView {
             if (projectData[this.projectId]) {
                 projectData[this.projectId].showCompletedSubtasks = checked;
                 await this.plugin.saveProjectData(projectData);
+            }
+            await this.queueLoadTasks();
+        }));
+
+        // 隐藏没有任务的状态栏
+        displaySettingsDropdown.appendChild(createSwitchItem(i18n("hideEmptyStatusBars") || "隐藏没有任务的状态栏", this.hideEmptyStatusBars, async (checked) => {
+            this.hideEmptyStatusBars = checked;
+            // 保存到项目数据
+            const projectData = await this.plugin.loadProjectData() || {};
+            if (projectData[this.projectId]) {
+                projectData[this.projectId].hideEmptyStatusBars = checked;
+                await this.plugin.saveProjectData(projectData);
+                if (this.project) {
+                    this.project.hideEmptyStatusBars = checked;
+                }
             }
             await this.queueLoadTasks();
         }));
@@ -7583,12 +7604,16 @@ export class ProjectKanbanView {
 
         // 渲染带分组的任务（在稳定的子分组容器内）
         for (const status of this.kanbanStatuses) {
+            let tasksForRender = statusTasks[status.id] || [];
             if (status.id === 'completed') {
-                const sortedDoneTasks = this.sortDoneTasks(statusTasks[status.id] || []);
-                await this.renderStatusColumnWithStableGroups('completed', sortedDoneTasks);
-                this.showColumn('completed');
-            } else {
-                await this.renderStatusColumnWithStableGroups(status.id, statusTasks[status.id] || []);
+                tasksForRender = this.sortDoneTasks(tasksForRender);
+            }
+            await this.renderStatusColumnWithStableGroups(status.id, tasksForRender);
+
+            const column = this.container.querySelector(`.kanban-column-${status.id}`) as HTMLElement;
+            if (column) {
+                const shouldHide = this.hideEmptyStatusBars && tasksForRender.length === 0;
+                column.style.display = shouldHide ? 'none' : 'flex';
             }
         }
     }
@@ -8653,6 +8678,7 @@ export class ProjectKanbanView {
 
         const unfinishedCountLabel = unfinishedSection.querySelector('.list-section-count');
         if (unfinishedCountLabel) unfinishedCountLabel.textContent = unfinished.length.toString();
+        unfinishedSection.style.display = this.hideEmptyStatusBars && unfinished.length === 0 ? 'none' : 'flex';
 
         // Finished Section
         let finishedSection = content.querySelector('.list-section-finished') as HTMLElement;
@@ -8759,6 +8785,7 @@ export class ProjectKanbanView {
 
         const finishedCountLabel = finishedSection.querySelector('.list-section-count');
         if (finishedCountLabel) finishedCountLabel.textContent = finished.length.toString();
+        finishedSection.style.display = this.hideEmptyStatusBars && finished.length === 0 ? 'none' : 'flex';
 
         // Abandoned Section
         let abandonedSection = content.querySelector('.list-section-abandoned') as HTMLElement;
@@ -8861,6 +8888,7 @@ export class ProjectKanbanView {
 
         const abandonedCountLabel = abandonedSection.querySelector('.list-section-count');
         if (abandonedCountLabel) abandonedCountLabel.textContent = abandoned.length.toString();
+        abandonedSection.style.display = this.hideEmptyStatusBars && abandoned.length === 0 ? 'none' : 'flex';
     }
 
     private addListSectionDropEvents(element: HTMLElement, type: 'unfinished' | 'finished' | 'abandoned', groupId: string | null) {
@@ -9355,6 +9383,7 @@ export class ProjectKanbanView {
         const visibleStatuses = this.getVisibleStatusesForGroup(group);
         const expandedTasksMap: { [status: string]: any[] } = {};
         const nonCompletedIncludedIds = new Set<string>();
+        const statusEntries: Array<{ status: any; tasks: any[] }> = [];
 
         // 第一遍：收集所有非已完成状态的扩展任务，用于过滤已完成的重复任务
         visibleStatuses.forEach(status => {
@@ -9376,6 +9405,11 @@ export class ProjectKanbanView {
                 tasks = expandedTasksMap[status.id] || [];
             }
 
+            if (this.hideEmptyStatusBars && tasks.length === 0) {
+                return;
+            }
+
+            statusEntries.push({ status, tasks });
             const statusGroupContainer = this.createStatusGroupInCustomColumn(
                 group,
                 tasks,
@@ -9397,13 +9431,8 @@ export class ProjectKanbanView {
         // 更新列顶部计数 — 只统计顶层（父）任务，不包括子任务
         if (count) {
             let allTasks: any[] = [];
-            visibleStatuses.forEach(status => {
-                if (status.id === 'completed') {
-                    const completedTasks = statusTasks[status.id] || [];
-                    allTasks.push(...completedTasks.filter(t => !nonCompletedIncludedIds.has(t.id)));
-                } else {
-                    allTasks.push(...(expandedTasksMap[status.id] || []));
-                }
+            statusEntries.forEach(({ tasks }) => {
+                allTasks.push(...tasks);
             });
             const mapCombined = new Map(allTasks.map((t: any) => [t.id, t]));
             const topLevelCombined = allTasks.filter((t: any) => !t.parentId || !mapCombined.has(t.parentId));
