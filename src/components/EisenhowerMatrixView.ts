@@ -152,7 +152,9 @@ export class EisenhowerMatrixView {
         await this.categoryManager.initialize();
         await this.loadProjectSortOrder();
         await this.loadCriteriaSettings();
+        await this.loadFilterSettings();
         this.setupUI();
+        this.updateKanbanStatusFilterButton();
         await this.loadTasks();
         this.renderMatrix();
         this.setupEventListeners();
@@ -4279,6 +4281,7 @@ export class EisenhowerMatrixView {
                 this.updateKanbanStatusFilterButton();
                 this.applyFiltersAndGroup();
                 this.renderMatrix();
+                void this.saveFilterSettings();
                 dropdown.remove();
             });
 
@@ -4339,6 +4342,33 @@ export class EisenhowerMatrixView {
         }
     }
 
+    private async loadFilterSettings() {
+        try {
+            const settings = await this.plugin.loadSettings();
+
+            const statusFilters = Array.isArray(settings.eisenhowerStatusFilters)
+                ? settings.eisenhowerStatusFilters.filter((item: unknown) => typeof item === 'string')
+                : [];
+            const projectFilters = Array.isArray(settings.eisenhowerProjectFilters)
+                ? settings.eisenhowerProjectFilters.filter((item: unknown) => typeof item === 'string')
+                : [];
+
+            this.statusFilter = new Set(statusFilters);
+            this.projectFilter = new Set(projectFilters);
+
+            const kanbanStatusFilter = settings.eisenhowerKanbanStatusFilter;
+            if (kanbanStatusFilter === 'all' || kanbanStatusFilter === 'doing' || kanbanStatusFilter === 'todo') {
+                this.kanbanStatusFilter = kanbanStatusFilter;
+            } else {
+                this.kanbanStatusFilter = 'doing';
+            }
+        } catch (error) {
+            this.statusFilter.clear();
+            this.projectFilter.clear();
+            this.kanbanStatusFilter = 'doing';
+        }
+    }
+
     private async saveCriteriaSettings() {
         try {
             const settings = await this.plugin.loadSettings();
@@ -4347,6 +4377,18 @@ export class EisenhowerMatrixView {
             await this.plugin.saveSettings(settings);
         } catch (error) {
             console.error('保存标准设置失败:', error);
+        }
+    }
+
+    private async saveFilterSettings() {
+        try {
+            const settings = await this.plugin.loadSettings();
+            settings.eisenhowerStatusFilters = Array.from(this.statusFilter);
+            settings.eisenhowerProjectFilters = Array.from(this.projectFilter);
+            settings.eisenhowerKanbanStatusFilter = this.kanbanStatusFilter;
+            await this.plugin.saveSettings(settings);
+        } catch (error) {
+            console.error('保存四象限筛选设置失败:', error);
         }
     }
 
@@ -4689,7 +4731,7 @@ export class EisenhowerMatrixView {
             });
         });
 
-        applyBtn?.addEventListener('click', () => {
+        applyBtn?.addEventListener('click', async () => {
             // 收集状态筛选
             const statusCheckboxes = dialog.element.querySelectorAll('#statusFilters input[type="checkbox"]');
             this.statusFilter.clear();
@@ -4707,6 +4749,8 @@ export class EisenhowerMatrixView {
                     this.projectFilter.add((checkbox as HTMLInputElement).value);
                 }
             });
+
+            await this.saveFilterSettings();
 
             // 应用筛选
             this.applyFiltersAndGroup();
