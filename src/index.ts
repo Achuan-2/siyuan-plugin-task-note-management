@@ -324,7 +324,7 @@ export default class ReminderPlugin extends Plugin {
 
     public settings: any;
     public vip: any = { vipKeys: [], isVip: false, expireDate: '', freeTrialUsed: false };
-    public isInMobileApp: boolean = false;
+    public isInMobileApp: boolean = false; // 是否在移动端（手机或平板）运行
 
     public getWorkspaceDir(): string {
         return (window as any).siyuan?.config?.system?.workspaceDir || "";
@@ -1326,7 +1326,7 @@ export default class ReminderPlugin extends Plugin {
     }
 
     async onload() {
-        // 初始化移动端检测
+        // 初始化移动端（手机+平板）检测
         this.isInMobileApp = isInMobileApp();
 
 

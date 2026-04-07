@@ -5614,9 +5614,8 @@ export class ReminderPanel {
 
     // 新增：添加拖拽功能
     private addDragFunctionality(element: HTMLElement, reminder: any) {
-        const isAndroid = getBackend().endsWith('android') || getFrontend().endsWith('mobile');
 
-        if (isAndroid) return; // 华为平板不能添加lement.draggable = true;
+        if (this.plugin.isInMobileApp) return; // 华为平板不能添加lement.draggable = true;
         if (this.isDragDisabledBySortMode()) return;
 
         element.draggable = true;

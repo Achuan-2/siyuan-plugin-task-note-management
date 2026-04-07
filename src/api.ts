@@ -701,7 +701,7 @@ export async function pushErrMsg(msg: string, timeout: number = 7000) {
 }
 
 /**
- * 判断当前是否在移动端应用环境
+ * 判断当前是否在移动端（手机、平板）应用环境
  * 使用 platformUtils 提供的接口进行检测，若不可用则返回 false
  */
 export function isInMobileApp(): boolean {

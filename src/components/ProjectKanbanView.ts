@@ -148,8 +148,6 @@ export class ProjectKanbanView {
     private showCompletedSubtasks: boolean = true; // 是否显示已完成的子任务
     private customGroupTabsMode: boolean = false; // 自定义分组看板是否使用页签显示
     private activeCustomGroupTabId: string | null = null; // 当前选中的分组页签
-    // 移动端禁用任务拖拽，避免长按手势被拖拽抢占导致右键菜单无法触发
-    private readonly isMobileClient: boolean;
 
     constructor(container: HTMLElement, plugin: any, projectId: string) {
         this.container = container;
@@ -158,7 +156,6 @@ export class ProjectKanbanView {
         this.projectId = projectId;
         this.categoryManager = CategoryManager.getInstance(this.plugin);
         this.projectManager = ProjectManager.getInstance(this.plugin);
-        this.isMobileClient = getBackend().endsWith('android') || getFrontend().endsWith('mobile');
 
         try {
             if ((window as any).Lute) {
@@ -9914,7 +9911,7 @@ export class ProjectKanbanView {
         if (level > 0) {
             taskEl.classList.add('is-subtask');
         }
-        taskEl.draggable = !this.isMobileClient && !task.isSubscribed;
+        taskEl.draggable = !this.plugin.isInMobileApp && !task.isSubscribed;
         if (task.isSubscribed) {
             taskEl.style.cursor = 'default';
         }
@@ -10815,7 +10812,7 @@ export class ProjectKanbanView {
         }
 
         // 所有任务均启用拖拽（订阅任务也支持排序）；移动端禁用以确保长按菜单可用
-        if (!this.isMobileClient) {
+        if (!this.plugin.isInMobileApp) {
             taskEl.draggable = true;
             this.addTaskDragEvents(taskEl, task);
             taskEl.addEventListener('dragover', (e) => {
