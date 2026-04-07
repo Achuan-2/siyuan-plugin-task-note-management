@@ -3854,7 +3854,7 @@ export class ProjectKanbanView {
         }));
 
         // 隐藏没有任务的状态栏
-        displaySettingsDropdown.appendChild(createSwitchItem(i18n("hideEmptyStatusBars") || "隐藏没有任务的状态栏", this.hideEmptyStatusBars, async (checked) => {
+        displaySettingsDropdown.appendChild(createSwitchItem(i18n("hideEmptyStatusBars") || "隐藏没有任务的状态", this.hideEmptyStatusBars, async (checked) => {
             this.hideEmptyStatusBars = checked;
             // 保存到项目数据
             const projectData = await this.plugin.loadProjectData() || {};
