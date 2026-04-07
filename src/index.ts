@@ -139,6 +139,9 @@ export const DEFAULT_SETTINGS = {
     // 四象限设置
     eisenhowerImportanceThreshold: 'medium',
     eisenhowerUrgencyDays: 3,
+    eisenhowerStatusFilters: [] as string[],
+    eisenhowerProjectFilters: [] as string[],
+    eisenhowerKanbanStatusFilter: 'doing',
     // 项目排序配置
     projectSortOrder: [],
     projectSortMode: 'custom',
@@ -3476,6 +3479,14 @@ export default class ReminderPlugin extends Plugin {
                     }));
 
                     for (const instance of instances) {
+                        const originalInstanceDate = (instance.instanceId && instance.instanceId.includes('_'))
+                            ? instance.instanceId.split('_').pop()
+                            : instance.date;
+                        // 重复实例已完成（含每日完成标记）时，不应再触发时间提醒
+                        if (instance.completed || (originalInstanceDate && reminderObj.dailyCompletions?.[originalInstanceDate])) {
+                            continue;
+                        }
+
                         // 检查实例是否需要提醒
                         // 时间提醒
                         if (instance.time) {

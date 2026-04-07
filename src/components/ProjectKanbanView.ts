@@ -12289,6 +12289,7 @@ export class ProjectKanbanView {
             const reminderData = await this.getReminders();
             const originalReminder = reminderData[task.originalId];
             let affectedBlockIds: Set<string>;
+            const recurringOriginalIds = new Set<string>([task.originalId]);
 
             if (!originalReminder) {
                 showMessage("原始重复事件不存在");
@@ -12323,6 +12324,8 @@ export class ProjectKanbanView {
 
                 // 收集受影响的块 ID
                 affectedBlockIds = new Set<string>();
+                // 完成实例时，ghost 子任务也会写入 completedInstances，需要一起重建通知
+                this.getAllDescendantIds(task.originalId, reminderData).forEach((id) => recurringOriginalIds.add(id));
 
                 // 递归完成所有子任务的对应实例或本身，包括普通子任务
                 const childIds = await this.completeAllChildInstances(task.originalId, instanceDate, reminderData, affectedBlockIds, task.id);
@@ -12352,6 +12355,8 @@ export class ProjectKanbanView {
                     }
                 }
             }
+
+            await this.refreshRecurringMobileNotifications(reminderData, recurringOriginalIds);
 
             // 如果是标记为完成，更新受影响子任务的块属性
             if (completed) {
@@ -12466,9 +12471,12 @@ export class ProjectKanbanView {
 
                 // 收集所有已完成的任务ID用于取消移动端通知
                 const completedTaskIds: string[] = [];
+                // 收集完成状态发生变更的重复系列原始任务，用于重建移动端提醒
+                const recurringOriginalIds = new Set<string>();
 
                 // 如果是周期实例，需要更新实例的完成状态
                 if (task.isRepeatInstance) {
+                    recurringOriginalIds.add(actualTaskId);
                     // 处理周期实例的完成状态
                     if (newStatus === 'completed') {
                         // 标记这个特定日期的实例为已完成
@@ -12482,6 +12490,7 @@ export class ProjectKanbanView {
                         if (!reminderData[actualTaskId].repeat.completedInstances.includes(instanceDate)) {
                             reminderData[actualTaskId].repeat.completedInstances.push(instanceDate);
                         }
+                        this.getAllDescendantIds(actualTaskId, reminderData).forEach((id) => recurringOriginalIds.add(id));
 
                         // 周期实例完成时，也自动完成所有子任务的对应实例
                         const childIds = await this.completeAllChildInstances(actualTaskId, instanceDate, reminderData, affectedBlockIds, task.id);
@@ -12492,6 +12501,7 @@ export class ProjectKanbanView {
                         // Use originalId if available for recursion
                         const targetId = task.isRepeatInstance ? task.originalId : task.id;
                         const originalIdsToUpdate = [targetId, ...this.getAllDescendantIds(targetId, reminderData)];
+                        originalIdsToUpdate.forEach((id) => recurringOriginalIds.add(id));
 
                         for (const oid of originalIdsToUpdate) {
                             const originalTask = reminderData[oid];
@@ -12575,6 +12585,8 @@ export class ProjectKanbanView {
                         }
                     }
                 }
+
+                await this.refreshRecurringMobileNotifications(reminderData, recurringOriginalIds);
 
                 // 更新受影响块的书签状态
                 for (const bId of affectedBlockIds) {
@@ -15768,6 +15780,7 @@ export class ProjectKanbanView {
         try {
             const isDraggedInstance = draggedTask.isRepeatInstance && draggedTask.originalId;
             const isTargetInstance = targetTask.isRepeatInstance && targetTask.originalId;
+            const recurringOriginalIds = new Set<string>();
 
             const draggedOriginalId = isDraggedInstance ? draggedTask.originalId : draggedTask.id;
             // 使用原始日期（从 ID 中提取），因为 date 可能已被修改
@@ -15945,6 +15958,9 @@ export class ProjectKanbanView {
 
                     // 递归更新 ghost 子任务
                     const originalIdsToUpdate = [draggedOriginalId, ...this.getAllDescendantIds(draggedOriginalId, reminderData)];
+                    if (targetStatus !== undefined) {
+                        originalIdsToUpdate.forEach((id) => recurringOriginalIds.add(id));
+                    }
                     for (const oid of originalIdsToUpdate) {
                         const originalTask = reminderData[oid];
                         if (!originalTask) continue;
@@ -16019,6 +16035,7 @@ export class ProjectKanbanView {
             }
 
             await saveReminders(this.plugin, reminderData);
+            await this.refreshRecurringMobileNotifications(reminderData, recurringOriginalIds);
 
             // 更新本地缓存
             items.forEach(item => {
@@ -18746,6 +18763,7 @@ export class ProjectKanbanView {
             const blocksToUpdate = new Set<string>();
             let hasChanges = false;
             let updatedCount = 0;
+            const recurringOriginalIds = new Set<string>();
 
             for (const taskId of taskIds) {
                 const uiTask = this.findOrCreateUiTask(taskId, reminderData);
@@ -18770,6 +18788,9 @@ export class ProjectKanbanView {
                     // 因为 ghost 实例的修改是存储在原始任务的 instanceModifications 中的
                     const originalId = uiTask.originalId;
                     const originalIdsToUpdate = [originalId, ...this.getAllDescendantIds(originalId, reminderData)];
+                    if (updates.kanbanStatus) {
+                        originalIdsToUpdate.forEach((id) => recurringOriginalIds.add(id));
+                    }
 
                     let instanceDescendantChanged = false;
 
@@ -19068,6 +19089,7 @@ export class ProjectKanbanView {
 
             if (hasChanges) {
                 await saveReminders(this.plugin, reminderData);
+                await this.refreshRecurringMobileNotifications(reminderData, recurringOriginalIds);
                 this.dispatchReminderUpdate(true);
                 await this.queueLoadTasks(); // Full reload
                 showMessage(i18n('batchUpdateSuccess', { count: String(updatedCount) }) || `成功更新 ${updatedCount} 个任务`);
@@ -19380,6 +19402,35 @@ export class ProjectKanbanView {
                 await updateBindBlockAtrrs(boundId, this.plugin);
             } catch (e) {
                 /* ignore */
+            }
+        }
+    }
+
+    private async refreshRecurringMobileNotifications(reminderData: any, originalIds: Iterable<string>): Promise<void> {
+        const uniqueIds = Array.from(new Set(Array.from(originalIds || []).filter(Boolean)));
+        if (uniqueIds.length === 0) return;
+
+        if (this.plugin?.updateMobileNotification) {
+            for (const originalId of uniqueIds) {
+                const originalReminder = reminderData?.[originalId];
+                if (!originalReminder) continue;
+                try {
+                    await this.plugin.updateMobileNotification(originalReminder);
+                } catch (e) {
+                    console.warn('看板刷新重复任务移动端通知失败:', originalId, e);
+                }
+            }
+            return;
+        }
+
+        // 兼容兜底：无 updateMobileNotification 时，至少清理该系列通知，避免继续提醒
+        if (this.plugin?.cancelMobileNotification) {
+            for (const originalId of uniqueIds) {
+                try {
+                    await this.plugin.cancelMobileNotification(originalId);
+                } catch (e) {
+                    console.warn('看板取消重复任务移动端通知失败:', originalId, e);
+                }
             }
         }
     }

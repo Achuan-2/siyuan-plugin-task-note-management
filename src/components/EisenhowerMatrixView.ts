@@ -1937,6 +1937,7 @@ export class EisenhowerMatrixView {
         try {
             const reminderData = await getAllReminders(this.plugin);
             const originalReminder = reminderData[task.originalId!];
+            const recurringOriginalIds = new Set<string>([task.originalId!]);
 
             if (!originalReminder) {
                 showMessage(i18n('originalRepeatEventNotExist'));
@@ -1965,6 +1966,7 @@ export class EisenhowerMatrixView {
                 originalReminder.repeat.instanceCompletedTimes[instanceDate] = getLocalDateTimeString(new Date());
 
                 // [NEW] 递归完成该实例下的所有子任务实例
+                this.getAllDescendantIds(task.originalId!, reminderData).forEach((id) => recurringOriginalIds.add(id));
                 const childIds = await this.completeAllChildInstances(task.originalId!, instanceDate, reminderData);
                 completedTaskIds.push(task.id, ...childIds);
             } else {
@@ -1981,6 +1983,7 @@ export class EisenhowerMatrixView {
             }
 
             await saveReminders(this.plugin, reminderData);
+            await this.refreshRecurringMobileNotifications(reminderData, Array.from(recurringOriginalIds));
 
             // 取消已完成任务的移动端通知
             if (completed && this.plugin?.cancelMobileNotification) {
@@ -5223,6 +5226,7 @@ export class EisenhowerMatrixView {
                 }
 
                 await saveReminders(this.plugin, reminderData);
+                await this.refreshRecurringMobileNotifications(reminderData, [originalId]);
             } else {
                 throw new Error('原始事件不存在');
             }
@@ -5296,6 +5300,34 @@ export class EisenhowerMatrixView {
         }
 
         return repeatInstances;
+    }
+
+    private async refreshTaskMobileNotification(reminder: any, reminderIdForFallback?: string): Promise<void> {
+        if (!reminder) return;
+        if (this.plugin?.updateMobileNotification) {
+            try {
+                await this.plugin.updateMobileNotification(reminder);
+            } catch (e) {
+                console.warn('四象限刷新任务移动端通知失败:', reminder?.id || reminderIdForFallback, e);
+            }
+            return;
+        }
+
+        const fallbackId = reminder?.id || reminderIdForFallback;
+        if (fallbackId && this.plugin?.cancelMobileNotification) {
+            try {
+                await this.plugin.cancelMobileNotification(fallbackId);
+            } catch (e) {
+                console.warn('四象限取消任务移动端通知失败:', fallbackId, e);
+            }
+        }
+    }
+
+    private async refreshRecurringMobileNotifications(reminderData: any, originalIds: string[]): Promise<void> {
+        const uniqueIds = Array.from(new Set((originalIds || []).filter(Boolean)));
+        for (const originalId of uniqueIds) {
+            await this.refreshTaskMobileNotification(reminderData?.[originalId], originalId);
+        }
     }
 
     destroy() {

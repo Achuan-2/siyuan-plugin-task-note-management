@@ -5131,6 +5131,21 @@ export class ReminderPanel {
 
                 await saveReminders(this.plugin, reminderData);
 
+                // 重复实例完成/取消完成后，重建该系列移动端通知，避免已完成实例继续提醒
+                if (this.plugin?.updateMobileNotification) {
+                    try {
+                        await this.plugin.updateMobileNotification(original);
+                    } catch (e) {
+                        console.warn('刷新重复任务移动端通知失败:', originalId, e);
+                    }
+                } else if (completed && this.plugin?.cancelMobileNotification) {
+                    try {
+                        await this.plugin.cancelMobileNotification(originalId);
+                    } catch (e) {
+                        console.warn('取消重复任务移动端通知失败:', originalId, e);
+                    }
+                }
+
                 // 取消已完成任务的移动端通知
                 if (completed && this.plugin?.cancelMobileNotification) {
                     for (const taskId of completedTaskIds) {
@@ -10602,6 +10617,7 @@ export class ReminderPanel {
             const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
             const affectedBlockIds = new Set<string>();
             const completedTaskIds = new Set<string>();
+            const recurringOriginalIds = new Set<string>();
             let changedCount = 0;
 
             for (const reminder of selectedReminders) {
@@ -10623,6 +10639,7 @@ export class ReminderPanel {
                     }
                     original.repeat.completedTimes[originalInstanceDate] = completedTime;
                     if (original.blockId) affectedBlockIds.add(original.blockId);
+                    recurringOriginalIds.add(originalId);
 
                     const childIds = await this.completeAllChildTasks(originalId, reminderData, affectedBlockIds, originalInstanceDate);
                     completedTaskIds.add(reminder.id);
@@ -10652,6 +10669,28 @@ export class ReminderPanel {
                         await this.plugin.cancelMobileNotification(taskId);
                     } catch (e) {
                         console.warn('取消移动端通知失败:', taskId, e);
+                    }
+                }
+            }
+
+            if (recurringOriginalIds.size > 0) {
+                if (this.plugin?.updateMobileNotification) {
+                    for (const originalId of recurringOriginalIds) {
+                        const originalReminder = reminderData[originalId];
+                        if (!originalReminder) continue;
+                        try {
+                            await this.plugin.updateMobileNotification(originalReminder);
+                        } catch (e) {
+                            console.warn('批量完成后刷新重复任务移动端通知失败:', originalId, e);
+                        }
+                    }
+                } else if (this.plugin?.cancelMobileNotification) {
+                    for (const originalId of recurringOriginalIds) {
+                        try {
+                            await this.plugin.cancelMobileNotification(originalId);
+                        } catch (e) {
+                            console.warn('批量完成后取消重复任务移动端通知失败:', originalId, e);
+                        }
                     }
                 }
             }

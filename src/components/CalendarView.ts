@@ -3473,6 +3473,7 @@ export class CalendarView {
                 }
 
                 await saveReminders(this.plugin, reminderData);
+                await this.refreshRecurringMobileNotifications(reminderData, [originalId]);
             } else {
                 throw new Error('原始事件不存在');
             }
@@ -3793,6 +3794,35 @@ export class CalendarView {
                 await this.refreshEvents();
             }
         })();
+    }
+
+    private async refreshTaskMobileNotification(reminder: any, reminderIdForFallback?: string): Promise<void> {
+        if (!reminder) return;
+        if (this.plugin?.updateMobileNotification) {
+            try {
+                await this.plugin.updateMobileNotification(reminder);
+            } catch (e) {
+                console.warn('日历刷新任务移动端通知失败:', reminder?.id || reminderIdForFallback, e);
+            }
+            return;
+        }
+
+        // 兼容兜底：无 updateMobileNotification 时，至少清理通知避免继续提醒
+        const fallbackId = reminder?.id || reminderIdForFallback;
+        if (fallbackId && this.plugin?.cancelMobileNotification) {
+            try {
+                await this.plugin.cancelMobileNotification(fallbackId);
+            } catch (e) {
+                console.warn('日历取消任务移动端通知失败:', fallbackId, e);
+            }
+        }
+    }
+
+    private async refreshRecurringMobileNotifications(reminderData: any, originalIds: Iterable<string>): Promise<void> {
+        const uniqueIds = Array.from(new Set(Array.from(originalIds || []).filter(Boolean)));
+        for (const originalId of uniqueIds) {
+            await this.refreshTaskMobileNotification(reminderData?.[originalId], originalId);
+        }
     }
 
     private renderEventContent(eventInfo) {
@@ -4136,6 +4166,7 @@ export class CalendarView {
                     }
 
                     await saveReminders(this.plugin, reminderData);
+                    await this.refreshRecurringMobileNotifications(reminderData, [originalId]);
 
                     // 更新块的书签状态
                     const blockId = reminderData[originalId].blockId;
@@ -4173,6 +4204,7 @@ export class CalendarView {
                     }
 
                     await saveReminders(this.plugin, reminderData);
+                    await this.refreshTaskMobileNotification(reminderData[reminderId], reminderId);
 
                     // 更新块的书签状态
                     if (blockId) {
@@ -8213,6 +8245,7 @@ export class CalendarView {
                     }
 
                     await saveReminders(this.plugin, reminderData);
+                    await this.refreshRecurringMobileNotifications(reminderData, [reminder.id]);
                     showMessage(i18n("firstOccurrenceSkipped"));
                     window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
                 } catch (error) {
