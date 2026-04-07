@@ -871,8 +871,7 @@ export class HabitPanel {
         const viewDate = this.getCurrentViewDate();
         sortedHabits.forEach(habit => {
             const habitCard = this.createHabitCard(habit, viewDate);
-            const isAndroid = getFrontend().endsWith('mobile') || getBackend().endsWith('android');
-            if (!isAndroid) {                // 启用拖拽：仅在同一分组内按优先级排序时可拖拽调整
+            if (!this.plugin.isInMobileApp) {                // 启用拖拽：仅在同一分组内按优先级排序时可拖拽调整
                 habitCard.draggable = true;
                 habitCard.dataset.habitId = habit.id;
                 habitCard.style.cursor = 'grab';
