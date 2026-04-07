@@ -61,6 +61,7 @@ export class EisenhowerMatrixView {
     private filteredTasks: QuadrantTask[] = [];
     private statusFilter: Set<string> = new Set();
     private reminderUpdatedHandler: (event?: CustomEvent) => void;
+    private projectUpdatedHandler: (event?: CustomEvent) => void;
     private projectFilter: Set<string> = new Set();
     // 唯一标识，用于区分事件来源，避免响应自己触发的事件
     private viewId: string;
@@ -91,6 +92,12 @@ export class EisenhowerMatrixView {
         this.categoryManager = CategoryManager.getInstance(plugin);
         // 监听事件时，如果是自己触发的事件则跳过
         this.reminderUpdatedHandler = (event?: CustomEvent) => {
+            if (event && event.detail && event.detail.source === this.viewId) {
+                return; // 跳过自己触发的事件
+            }
+            this.refresh(false);
+        };
+        this.projectUpdatedHandler = (event?: CustomEvent) => {
             if (event && event.detail && event.detail.source === this.viewId) {
                 return; // 跳过自己触发的事件
             }
@@ -232,6 +239,8 @@ export class EisenhowerMatrixView {
 
     private async loadTasks(force: boolean = false) {
         try {
+            // 项目状态、名称等可能在其他视图中更新，这里先刷新项目缓存
+            await this.projectManager.loadProjects();
             const reminderData = await getAllReminders(this.plugin, undefined, force, 'matrix');
             const today = getLogicalDateString();
             this.allTasks = [];
@@ -1798,6 +1807,8 @@ export class EisenhowerMatrixView {
 
         // 监听任务更新事件
         window.addEventListener('reminderUpdated', this.reminderUpdatedHandler);
+        // 监听项目更新事件（例如项目状态切换）
+        window.addEventListener('projectUpdated', this.projectUpdatedHandler as EventListener);
     }
 
     private async moveTaskToQuadrant(taskId: string, newQuadrant: QuadrantTask['quadrant']) {
@@ -5246,6 +5257,7 @@ export class EisenhowerMatrixView {
     destroy() {
         // 清理事件监听器
         window.removeEventListener('reminderUpdated', this.reminderUpdatedHandler);
+        window.removeEventListener('projectUpdated', this.projectUpdatedHandler as EventListener);
 
         // 清理样式
         const style = document.querySelector('#eisenhower-matrix-styles');
