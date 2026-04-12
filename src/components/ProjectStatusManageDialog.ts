@@ -1,12 +1,17 @@
 ﻿import { Dialog, showMessage, confirm, openEmoji } from "siyuan";
 import { StatusManager, Status } from "../utils/statusManager";
 import { i18n } from "../pluginInstance";
+
+type StatusWithBadge = Status & {
+    includeInBadge?: boolean;
+};
+
 export class StatusManageDialog {
     private dialog: Dialog;
     private statusManager: StatusManager;
     private onUpdated?: () => void;
     private draggedElement: HTMLElement | null = null;
-    private draggedStatus: Status | null = null;
+    private draggedStatus: StatusWithBadge | null = null;
     private plugin?: any;
 
     constructor(plugin?: any, onUpdated?: () => void) {
@@ -129,7 +134,21 @@ export class StatusManageDialog {
                 }
                 .status-actions {
                     display: flex;
+                    align-items: center;
                     gap: 4px;
+                }
+                .status-count-switch {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 4px;
+                    margin-right: 6px;
+                    font-size: 12px;
+                    color: var(--b3-theme-on-surface);
+                    cursor: pointer;
+                    user-select: none;
+                }
+                .status-count-switch input {
+                    margin: 0;
                 }
             </style>
         `;
@@ -156,6 +175,28 @@ export class StatusManageDialog {
         });
     }
 
+    private shouldIncludeInBadge(status?: Partial<StatusWithBadge>): boolean {
+        if (!status || typeof status !== "object") return false;
+        if (typeof status.includeInBadge === "boolean") {
+            return status.includeInBadge;
+        }
+        // 兼容历史数据：旧版本仅统计 active
+        return status.id === "active";
+    }
+
+    private async updateStatusBadgeSetting(status: StatusWithBadge, includeInBadge: boolean) {
+        try {
+            await this.statusManager.updateStatus(status.id, { includeInBadge } as any);
+            status.includeInBadge = includeInBadge;
+            showMessage(includeInBadge ? "已计入项目徽章" : "已从项目徽章排除");
+            window.dispatchEvent(new CustomEvent('projectUpdated'));
+        } catch (error) {
+            console.error("更新状态徽章计数配置失败", error);
+            showMessage("更新徽章计数配置失败，请重试");
+            this.renderStatuses();
+        }
+    }
+
     private async renderStatuses() {
         const statusesList = this.dialog.element.querySelector('#statusesList') as HTMLElement;
         if (!statusesList) return;
@@ -175,6 +216,8 @@ export class StatusManageDialog {
     }
 
     private createStatusElement(status: Status): HTMLElement {
+        const statusWithBadge = status as StatusWithBadge;
+        const includeInBadge = this.shouldIncludeInBadge(statusWithBadge);
         const statusEl = document.createElement('div');
         statusEl.className = 'status-item';
         statusEl.draggable = true;
@@ -186,6 +229,10 @@ export class StatusManageDialog {
                 <div class="status-name">${status.name}</div>
             </div>
             <div class="status-actions">
+                <label class="status-count-switch ariaLabel" aria-label="是否计入项目徽章">
+                    <input type="checkbox" class="b3-switch" data-action="toggle-badge" ${includeInBadge ? 'checked' : ''}>
+                    <span>计数</span>
+                </label>
                 <button class="b3-button b3-button--outline status-edit-btn ariaLabel" data-action="edit" data-id="${status.id}" aria-label="${i18n("editStatus") || "编辑状态"}">
                     <svg class="b3-button__icon"><use xlink:href="#iconEdit"></use></svg>
                 </button>
@@ -201,6 +248,16 @@ export class StatusManageDialog {
 
         const editBtn = statusEl.querySelector('[data-action="edit"]') as HTMLButtonElement;
         const deleteBtn = statusEl.querySelector('[data-action="delete"]') as HTMLButtonElement;
+        const badgeToggle = statusEl.querySelector('[data-action="toggle-badge"]') as HTMLInputElement;
+
+        badgeToggle?.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+
+        badgeToggle?.addEventListener('change', (e) => {
+            e.stopPropagation();
+            this.updateStatusBadgeSetting(statusWithBadge, badgeToggle.checked);
+        });
 
         editBtn?.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -320,6 +377,7 @@ export class StatusManageDialog {
 
     private showEditStatusDialog(status?: Status) {
         const isEdit = !!status;
+        const initialIncludeInBadge = isEdit ? this.shouldIncludeInBadge(status as StatusWithBadge) : false;
         const editDialog = new Dialog({
             title: isEdit ? (i18n("editStatus") || "编辑状态") : (i18n("addStatus") || "添加状态"),
             content: `
@@ -332,6 +390,13 @@ export class StatusManageDialog {
                         <div class="b3-form__group">
                             <label class="b3-form__label">${i18n("statusIcon") || "状态图标"}</label>
                             <div id="statusIcon" class="status-icon-display">${status?.icon || '📝'}</div>
+                        </div>
+                        <div class="b3-form__group">
+                            <label class="b3-form__label">项目徽章计数</label>
+                            <label class="status-badge-checkbox">
+                                <input type="checkbox" class="b3-switch" id="statusIncludeInBadge" ${initialIncludeInBadge ? 'checked' : ''}>
+                                <span>该状态项目计入侧栏项目徽章</span>
+                            </label>
                         </div>
                     </div>
                     <div class="b3-dialog__action">
@@ -357,6 +422,17 @@ export class StatusManageDialog {
                             transform: scale(1.1);
                             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
                         }
+                        .status-badge-checkbox {
+                            display: inline-flex;
+                            align-items: center;
+                            gap: 6px;
+                            font-size: 13px;
+                            cursor: pointer;
+                            user-select: none;
+                        }
+                        .status-badge-checkbox input {
+                            margin: 0;
+                        }
                     </style>
                 </div>
             `,
@@ -367,6 +443,7 @@ export class StatusManageDialog {
         const iconDisplay = editDialog.element.querySelector('#statusIcon') as HTMLElement;
         const cancelBtn = editDialog.element.querySelector('#editCancelBtn') as HTMLButtonElement;
         const confirmBtn = editDialog.element.querySelector('#editConfirmBtn') as HTMLButtonElement;
+        const includeInBadgeInput = editDialog.element.querySelector('#statusIncludeInBadge') as HTMLInputElement;
 
         // 设置初始图标
         if (status?.icon) {
@@ -388,6 +465,7 @@ export class StatusManageDialog {
         confirmBtn?.addEventListener('click', async () => {
             const name = nameInput.value.trim();
             const icon = iconDisplay.textContent || '';
+            const includeInBadge = includeInBadgeInput?.checked ?? false;
 
             if (!name) {
                 showMessage(i18n("pleaseEnterStatusName") || "请输入状态名称");
@@ -396,15 +474,16 @@ export class StatusManageDialog {
 
             try {
                 if (isEdit && status) {
-                    await this.statusManager.updateStatus(status.id, { name, icon });
+                    await this.statusManager.updateStatus(status.id, { name, icon, includeInBadge } as any);
                     showMessage(i18n("statusUpdated") || "状态已更新");
                 } else {
-                    await this.statusManager.addStatus({ name, icon });
+                    await this.statusManager.addStatus({ name, icon, includeInBadge } as any);
                     showMessage(i18n("statusAdded") || "状态已添加");
                 }
 
                 editDialog.destroy();
                 this.renderStatuses();
+                window.dispatchEvent(new CustomEvent('projectUpdated'));
             } catch (error) {
                 console.error("保存状态失败", error);
                 showMessage(i18n("saveStatusFailed") || "保存状态失败，请重试");
