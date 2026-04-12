@@ -12211,7 +12211,7 @@ export class ProjectKanbanView {
             this.updateTaskElementDOM(task.id, {
                 completed,
                 completedTime: optimisticTask.completedTime,
-                __deferStatusMoveMs: completed ? 500 : 0
+                __deferStatusMoveMs: completed ? 300 : 0
             });
         }
 

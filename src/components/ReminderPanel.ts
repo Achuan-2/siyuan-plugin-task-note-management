@@ -250,7 +250,7 @@ export class ReminderPanel {
             const el = this.remindersContainer.querySelector(`[data-reminder-id="${reminderId}"]`) as HTMLElement | null;
             if (el) el.remove();
             this.currentRemindersCache = this.currentRemindersCache.filter(r => r.id !== reminderId);
-        }, 500);
+        }, 300);
         this.completionRemovalTimers.set(reminderId, timerId);
     }
 
@@ -5104,7 +5104,7 @@ export class ReminderPanel {
             this.allRemindersMap.set(id, { ...(this.allRemindersMap.get(id) || {}), ...updatedReminder });
 
             if (!this.shouldShowInCurrentView(updatedReminder)) {
-                // 今日任务中勾选完成时，先保留 500ms 完成态视觉反馈，再由后续刷新移除
+                // 今日任务中勾选完成时，先保留 300ms 完成态视觉反馈，再由后续刷新移除
                 if (completed && this.currentTab === 'today') {
                     this.updateReminderCompletionDom(id, completed, updatedReminder.completedTime);
                     this.scheduleCompletionRemoval(id);
@@ -5223,7 +5223,7 @@ export class ReminderPanel {
                 window.dispatchEvent(new CustomEvent('reminderUpdated', {
                     detail: {
                         source: this.panelId,
-                        refreshDelayMs: (completed && this.currentTab === 'today') ? 500 : 100
+                        refreshDelayMs: (completed && this.currentTab === 'today') ? 300 : 100
                     }
                 }));
                 return;
@@ -5291,7 +5291,7 @@ export class ReminderPanel {
             window.dispatchEvent(new CustomEvent('reminderUpdated', {
                 detail: {
                     source: this.panelId,
-                    refreshDelayMs: (completed && this.currentTab === 'today') ? 500 : 100
+                    refreshDelayMs: (completed && this.currentTab === 'today') ? 300 : 100
                 }
             }));
         } catch (error) {
@@ -10601,7 +10601,7 @@ export class ReminderPanel {
             window.dispatchEvent(new CustomEvent('reminderUpdated', {
                 detail: {
                     source: this.panelId,
-                    refreshDelayMs: this.currentTab === 'today' ? 500 : 100
+                    refreshDelayMs: this.currentTab === 'today' ? 300 : 100
                 }
             }));
             showMessage(i18n('batchUpdateSuccess', { count: String(changedCount || ids.length) }) || `成功更新 ${changedCount || ids.length} 个任务`);
