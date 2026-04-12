@@ -48,6 +48,7 @@ export class HabitPanel {
     private groupFilterButton: HTMLButtonElement;
     private currentTab: string = 'today';
     private selectedGroups: string[] = [];
+    private showCompletedHabitsInTodayPending: boolean = true;
     private groupManager: HabitGroupManager;
     private habitUpdatedHandler: () => void;
     private reminderUpdatedHandler: () => void;
@@ -107,6 +108,9 @@ export class HabitPanel {
             if (Array.isArray(settings.habitPanelSelectedGroups)) {
                 this.selectedGroups = settings.habitPanelSelectedGroups;
             }
+            if (typeof settings.habitPanelShowCompletedInTodayPending === 'boolean') {
+                this.showCompletedHabitsInTodayPending = settings.habitPanelShowCompletedInTodayPending;
+            }
         } catch (error) {
             console.error('恢复习惯面板设置失败:', error);
         }
@@ -116,6 +120,7 @@ export class HabitPanel {
         try {
             const settings = await this.plugin.loadSettings();
             settings.habitPanelSelectedGroups = this.selectedGroups;
+            settings.habitPanelShowCompletedInTodayPending = this.showCompletedHabitsInTodayPending;
             await this.plugin.saveSettings(settings);
         } catch (error) {
             console.error('保存习惯面板设置失败:', error);
@@ -334,6 +339,23 @@ export class HabitPanel {
                 click: () => {
                     this.showGroupManageDialog();
                 }
+            });
+
+            // 显示设置
+            menu.addItem({
+                icon: 'iconEye',
+                label: i18n("displaySettings") || "显示设置",
+                submenu: [
+                    {
+                        icon: this.showCompletedHabitsInTodayPending ? 'iconSelect' : '',
+                        label: i18n("showTodayPendingCompletedHabits") || "今日待打卡显示已完成习惯",
+                        click: () => {
+                            this.showCompletedHabitsInTodayPending = !this.showCompletedHabitsInTodayPending;
+                            void this.savePanelSettings();
+                            void this.loadHabits();
+                        }
+                    }
+                ]
             });
 
             // 使用按钮的位置定位菜单（回退到事件坐标）
@@ -756,7 +778,7 @@ export class HabitPanel {
 
         // 如果没有习惯，根据当前 tab 决定是否继续渲染已打卡区
         if (habits.length === 0) {
-            if (this.currentTab !== 'today') {
+            if (this.currentTab !== 'today' || !this.showCompletedHabitsInTodayPending) {
                 this.habitsContainer.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--b3-theme-on-surface-light);">${i18n("noHabits")}</div>`;
                 return;
             }
@@ -804,7 +826,7 @@ export class HabitPanel {
         });
 
         // 如果是今日待打卡，在下方显示已打卡习惯（排除已在主区渲染的习惯）
-        if (this.currentTab === 'today') {
+        if (this.currentTab === 'today' && this.showCompletedHabitsInTodayPending) {
             this.renderCompletedHabitsSection(renderedIds);
         }
     }
