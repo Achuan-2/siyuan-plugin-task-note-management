@@ -815,6 +815,12 @@ export class QuickReminderDialog {
             hideInCalendarCheckbox.checked = true;
         }
 
+        // 填充置顶状态
+        const pinnedCheckbox = this.dialog.element.querySelector('#quickPinned') as HTMLInputElement;
+        if (pinnedCheckbox && this.reminder.pinned) {
+            pinnedCheckbox.checked = true;
+        }
+
         // 填充标题
         if (titleInput && this.reminder.title) {
             titleInput.value = this.reminder.title;
@@ -1263,6 +1269,8 @@ export class QuickReminderDialog {
 
         // 隐藏展示设置组
         hideGroupOf('#quickIsAvailableToday');
+        hideGroupOf('#quickHideInCalendar');
+        hideGroupOf('#quickPinned');
 
         // dateOnly 模式对话框使用 auto 高度，但需要限制最大高度以便小屏上可滚动
         const contentEl = dialog.querySelector('.b3-dialog__content') as HTMLElement;
@@ -2204,6 +2212,11 @@ export class QuickReminderDialog {
                                     <input type="checkbox" class="b3-switch" id="quickHideInCalendar">
                                     <span class="b3-checkbox__graphic"></span>
                                     <span class="b3-checkbox__label">${i18n("hideInCalendar")}</span>
+                                </label>
+                                <label class="b3-checkbox">
+                                    <input type="checkbox" class="b3-switch" id="quickPinned">
+                                    <span class="b3-checkbox__graphic"></span>
+                                    <span class="b3-checkbox__label">📌${i18n("pinTask") || "置顶任务"}</span>
                                 </label>
                             </div>
                         </div>
@@ -5256,6 +5269,8 @@ export class QuickReminderDialog {
         // 不在日历视图显示
         const hideInCalendar = (this.dialog.element.querySelector('#quickHideInCalendar') as HTMLInputElement)?.checked || false;
 
+        // 置顶任务
+        const pinned = (this.dialog.element.querySelector('#quickPinned') as HTMLInputElement)?.checked || false;
 
         // 获取选中的标签ID（使用 selectedTagIds 属性）
         const tagIds = this.selectedTagIds;
@@ -5523,7 +5538,8 @@ export class QuickReminderDialog {
                             // 提醒时间相关字段
                             reminderTimes: this.customTimes.length > 0 ? [...this.customTimes] : undefined,
                             estimatedPomodoroDuration: estimatedPomodoroDuration,
-                            customProgress: customProgress
+                            customProgress: customProgress,
+                            pinned: pinned
                         };
 
                         // 调用实例修改保存方法
@@ -5600,6 +5616,7 @@ export class QuickReminderDialog {
                         reminder.isAvailableToday = isAvailableToday;
                         reminder.availableStartDate = availableStartDate;
                         reminder.hideInCalendar = hideInCalendar;
+                        reminder.pinned = pinned;
 
                         // 设置或删除 documentId
                         if (inputId) {
@@ -5887,6 +5904,8 @@ export class QuickReminderDialog {
                         reminder.note = note;
                     }
 
+                    reminder.pinned = pinned;
+
                     // 如果是周期任务，自动完成所有过去的实例
                     if (this.repeatConfig.enabled && date) {
                         const { generateRepeatInstances } = await import("../utils/repeatUtils");
@@ -6072,6 +6091,7 @@ export class QuickReminderDialog {
                 reminderTimes: instanceData.reminderTimes,
                 estimatedPomodoroDuration: instanceData.estimatedPomodoroDuration,
                 customProgress: instanceData.customProgress,
+                pinned: instanceData.pinned,
                 modifiedAt: new Date().toISOString().split('T')[0]
             };
 
@@ -6172,6 +6192,7 @@ export class QuickReminderDialog {
                     reminderTimes: tempSubtask.reminderTimes || undefined,
                     estimatedPomodoroDuration: tempSubtask.estimatedPomodoroDuration || undefined,
                     customProgress: this.normalizeCustomProgressValue(tempSubtask.customProgress),
+                    pinned: tempSubtask.pinned || false,
                     notifiedTime: false,
                     notifiedCustomTime: false
                 };

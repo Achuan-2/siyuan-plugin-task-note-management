@@ -6845,6 +6845,13 @@ export class ProjectKanbanView {
     }
 
     private sortByCriteria(a: any, b: any, criteria: SortCriterion[]): number {
+        // 置顶任务优先显示（相同完成状态下）
+        const pinA = a.pinned ? 0 : 1;
+        const pinB = b.pinned ? 0 : 1;
+        if (pinA !== pinB) {
+            return pinA - pinB;
+        }
+
         for (const criterion of criteria) {
             const result = this.compareByCriterion(a, b, criterion);
             if (result !== 0) {
@@ -10024,6 +10031,18 @@ export class ProjectKanbanView {
             align-items: flex-start;
         `;
 
+        if (task.pinned) {
+            const badge = document.createElement("div");
+            badge.style.position = "absolute";
+            badge.style.top = "6px";
+            badge.style.right = "6px";
+            badge.style.fontSize = "14px";
+            badge.innerHTML = "📌";
+            badge.classList.add("ariaLabel");
+            badge.setAttribute("aria-label", "置顶任务");
+            taskEl.appendChild(badge);
+        }
+
         // 多选复选框（仅在多选模式下显示）
         let multiSelectCheckbox: HTMLInputElement | null = null;
         if (this.isMultiSelectMode) {
@@ -11924,14 +11943,20 @@ export class ProjectKanbanView {
             return items;
         };
 
+        const isPinned = !!task.pinned;
+        // 置顶任务
+        menu.addItem({
+            iconHTML: isPinned ? "📍" : "📌",
+            label: isPinned ? (i18n("unpinTask") || "取消置顶任务") : (i18n("pinTask") || "置顶任务"),
+            click: () => this.setReminderPinned(task, !isPinned)
+        });
+
         // 快速调整日期
         menu.addItem({
             iconHTML: "📆",
             label: i18n('quickReschedule') || '快速调整日期',
             submenu: createQuickDateMenuItems(task, !!task.isRepeatInstance)
         });
-
-
 
         // 设置优先级子菜单
         const priorityMenuItems = [];
@@ -14945,6 +14970,45 @@ export class ProjectKanbanView {
     }
 
     // 设置任务优先级
+    private async setReminderPinned(task: any, pinned: boolean) {
+        try {
+            const reminderData = await this.getReminders();
+            const targetId = task.isRepeatInstance ? task.originalId : task.id;
+            
+            if (!targetId || !reminderData[targetId]) {
+                showMessage(i18n("reminderNotExist"));
+                return;
+            }
+
+            if (pinned) {
+                reminderData[targetId].pinned = true;
+            } else {
+                delete reminderData[targetId].pinned;
+            }
+
+            await saveReminders(this.plugin, reminderData);
+            
+            // Sync local cache
+            this.tasks.forEach(item => {
+                const itemTargetId = item.isRepeatInstance ? item.originalId : item.id;
+                if (itemTargetId === targetId) {
+                    if (pinned) {
+                        item.pinned = true;
+                    } else {
+                        delete item.pinned;
+                    }
+                }
+            });
+
+            showMessage(pinned ? (i18n("taskPinned") || "任务已置顶") : (i18n("taskUnpinned") || "已取消任务置顶"));
+            this.dispatchReminderUpdate(true);
+            await this.queueLoadTasks();
+        } catch (error) {
+            console.error('设置任务置顶状态失败:', error);
+            showMessage(i18n("operationFailed"));
+        }
+    }
+
     private async setPriority(task: any, priority: string) {
         // 1. 乐观更新内存数据和 DOM
         const optimisticTask = this.tasks.find(t => t.id === task.id);
@@ -16096,6 +16160,25 @@ export class ProjectKanbanView {
 
             const draggedId = draggedTask.id;
             const targetId = targetTask.id;
+
+            const draggedOriginalId = draggedTask.isRepeatInstance ? (draggedTask.originalId || draggedId) : draggedId;
+            const targetOriginalId = targetTask.isRepeatInstance ? (targetTask.originalId || targetId) : targetId;
+            
+            // 同步置顶状态
+            if (reminderData[draggedOriginalId] && reminderData[targetOriginalId]) {
+                const targetPinned = !!reminderData[targetOriginalId].pinned;
+                const draggedPinned = !!reminderData[draggedOriginalId].pinned;
+                
+                if (targetPinned !== draggedPinned) {
+                    if (targetPinned) {
+                        reminderData[draggedOriginalId].pinned = true;
+                        draggedTask.pinned = true;
+                    } else {
+                        delete reminderData[draggedOriginalId].pinned;
+                        draggedTask.pinned = false;
+                    }
+                }
+            }
 
             let draggedTaskInDb = reminderData[draggedId];
             let targetTaskInDb = reminderData[targetId];

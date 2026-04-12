@@ -842,6 +842,12 @@ export class ReminderPanel {
             }
         }
 
+        // 置顶任务始终优先显示（在相同完成状态分组内）
+        const pinnedDiff = this.getPinnedSortRank(a) - this.getPinnedSortRank(b);
+        if (pinnedDiff !== 0) {
+            return pinnedDiff;
+        }
+
         // 依次应用每个排序条件
         for (const criterion of criteria) {
             const result = this.compareByCriterion(a, b, criterion);
@@ -1106,6 +1112,22 @@ export class ReminderPanel {
         }
 
         return items;
+    }
+
+    private isReminderPinned(reminder: any): boolean {
+        if (!reminder) return false;
+        if (reminder.pinned === true) return true;
+
+        if (reminder.isRepeatInstance && reminder.originalId) {
+            const originalReminder = this.getOriginalReminder(reminder.originalId);
+            return originalReminder?.pinned === true;
+        }
+
+        return false;
+    }
+
+    private getPinnedSortRank(reminder: any): number {
+        return this.isReminderPinned(reminder) ? 0 : 1;
     }
 
     /**
@@ -2715,6 +2737,17 @@ export class ReminderPanel {
 
         reminderEl.dataset.reminderId = reminder.id;
         reminderEl.dataset.priority = priority;
+
+        // 右上角置顶角标
+        const isPinned = this.isReminderPinned(reminder);
+        if (isPinned) {
+            reminderEl.style.position = 'relative';
+            const pinBadge = document.createElement('div');
+            pinBadge.className = 'reminder-item__pin-badge';
+            pinBadge.textContent = '📌';
+            pinBadge.style.cssText = 'position: absolute; top: 4px; right: 4px; font-size: 14px; line-height: 1; pointer-events: none; z-index: 1;';
+            reminderEl.appendChild(pinBadge);
+        }
 
         // 所有任务均启用拖拽功能（支持排序）
         this.addDragFunctionality(reminderEl, reminder);
@@ -6655,6 +6688,22 @@ export class ReminderPanel {
             const oldPriority = draggedReminder.priority || 'none';
             const newPriority = targetReminder.priority || 'none';
 
+            // 同步置顶状态
+            if (reminderData[draggedOriginalId] && reminderData[targetOriginalId]) {
+                const targetPinned = !!reminderData[targetOriginalId].pinned;
+                const draggedPinned = !!reminderData[draggedOriginalId].pinned;
+                
+                if (targetPinned !== draggedPinned) {
+                    if (targetPinned) {
+                        reminderData[draggedOriginalId].pinned = true;
+                        draggedReminder.pinned = true;
+                    } else {
+                        delete reminderData[draggedOriginalId].pinned;
+                        draggedReminder.pinned = false;
+                    }
+                }
+            }
+
             // 非优先级排序模式：只调整 sort，不变更 priority
             if (!hasPriorityCriterion) {
                 await this.reorderSortGroup(
@@ -7050,6 +7099,7 @@ export class ReminderPanel {
 
         // 判断是否为重复/循环任务或重复实例
         const isRecurring = reminder.isRepeatInstance || (reminder.repeat && reminder.repeat.enabled);
+        const isPinned = this.isReminderPinned(reminder);
         
         // 计算逻辑起止日期并检查是否为跨天事件
         const startLogical = this.getReminderLogicalDate(reminder.date, reminder.time);
@@ -7393,6 +7443,13 @@ export class ReminderPanel {
 
             menu.addSeparator();
 
+            // 置顶任务
+            menu.addItem({
+                iconHTML: isPinned ? "📍" : "📌",
+                label: isPinned ? (i18n("unpinTask") || "取消置顶任务") : (i18n("pinTask") || "置顶任务"),
+                click: () => this.setReminderPinned(reminder, !isPinned)
+            });
+
             // 快速调整日期 (重复实例：只修改此实例)
             menu.addItem({
                 iconHTML: "📆",
@@ -7483,6 +7540,13 @@ export class ReminderPanel {
             }
 
             menu.addSeparator();
+
+            // 置顶任务
+            menu.addItem({
+                iconHTML: isPinned ? "📍" : "📌",
+                label: isPinned ? (i18n("unpinTask") || "取消置顶任务") : (i18n("pinTask") || "置顶任务"),
+                click: () => this.setReminderPinned(reminder, !isPinned)
+            });
 
             // 快速调整日期（普通任务）
             menu.addItem({
@@ -8463,6 +8527,51 @@ export class ReminderPanel {
             console.error('从DOM移除任务失败:', error);
             // 出错时使用全局刷新
             this.loadReminders();
+        }
+    }
+
+    private async setReminderPinned(reminder: any, pinned: boolean) {
+        try {
+            const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
+            const targetId = reminder?.isRepeatInstance ? reminder?.originalId : reminder?.id;
+            if (!targetId || !reminderData[targetId]) {
+                showMessage(i18n("reminderNotExist"));
+                return;
+            }
+
+            if (pinned) {
+                reminderData[targetId].pinned = true;
+            } else {
+                delete reminderData[targetId].pinned;
+            }
+
+            await saveReminders(this.plugin, reminderData);
+
+            // 同步本地缓存，避免右键后状态显示滞后
+            if (this.originalRemindersCache[targetId]) {
+                if (pinned) {
+                    this.originalRemindersCache[targetId].pinned = true;
+                } else {
+                    delete this.originalRemindersCache[targetId].pinned;
+                }
+            }
+            this.currentRemindersCache.forEach(item => {
+                const itemTargetId = item?.isRepeatInstance ? item?.originalId : item?.id;
+                if (itemTargetId === targetId) {
+                    if (pinned) {
+                        item.pinned = true;
+                    } else {
+                        delete item.pinned;
+                    }
+                }
+            });
+
+            showMessage(pinned ? (i18n("taskPinned") || "任务已置顶") : (i18n("taskUnpinned") || "已取消任务置顶"));
+            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
+            await this.loadReminders();
+        } catch (error) {
+            console.error('设置任务置顶状态失败:', error);
+            showMessage(i18n("operationFailed"));
         }
     }
 

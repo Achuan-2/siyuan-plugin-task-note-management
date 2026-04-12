@@ -41,6 +41,7 @@ interface QuadrantTask {
     originalId?: string; // 原始重复事件的ID
     isSubscribed?: boolean; // 是否为订阅任务
     customProgress?: number | string; // 自定义进度（0-100）
+    pinned?: boolean; // 是否置顶
 }
 
 interface Quadrant {
@@ -554,7 +555,9 @@ export class EisenhowerMatrixView {
                     repeat: reminder?.repeat,
                     isRepeatInstance: reminder?.isRepeatInstance,
                     originalId: reminder?.originalId,
-                    isSubscribed: reminder?.isSubscribed
+                    isSubscribed: reminder?.isSubscribed,
+                    customProgress: reminder?.customProgress,
+                    pinned: !!reminder?.pinned
                 };
 
                 this.allTasks.push(task);
@@ -885,6 +888,11 @@ export class EisenhowerMatrixView {
         grouped.forEach((projectTasks) => {
             // 按优先级排序（高到低），同优先级按sort字段排序
             projectTasks.sort((a, b) => {
+                // 1. 置顶任务排在最前面
+                if (a.pinned !== b.pinned) {
+                    return a.pinned ? -1 : 1;
+                }
+
                 const priorityOrder = { 'high': 3, 'medium': 2, 'low': 1, 'none': 0 };
                 const priorityA = priorityOrder[a.priority || 'none'];
                 const priorityB = priorityOrder[b.priority || 'none'];
@@ -1203,6 +1211,13 @@ export class EisenhowerMatrixView {
 
         taskTitle.textContent = task.title;
         taskTitle.classList.add('ariaLabel'); taskTitle.setAttribute('aria-label', task.blockId ? `点击打开绑定块: ${task.title}` : task.title);
+
+        // 如果任务置顶，添加置顶图标
+        if (task.pinned) {
+            const pinIcon = document.createElement('span');
+            pinIcon.textContent = '📌 ';
+            taskTitle.prepend(pinIcon);
+        }
 
         // 如果有子任务，添加数量指示器
         if (childTasks.length > 0) {
@@ -3243,6 +3258,16 @@ export class EisenhowerMatrixView {
         });
         menu.addSeparator();
 
+        // 置顶任务
+        const isPinned = !!task.pinned;
+        menu.addItem({
+            iconHTML: isPinned ? "📍" : "📌",
+            label: isPinned ? (i18n("unpinTask") || "取消置顶任务") : (i18n("pinTask") || "置顶任务"),
+            click: () => this.setTaskPinned(task, !isPinned)
+        });
+
+        menu.addSeparator();
+
         // 绑定块功能
         if (task.blockId) {
             menu.addItem({
@@ -3517,6 +3542,41 @@ export class EisenhowerMatrixView {
         }
     }
 
+    private async setTaskPinned(task: QuadrantTask, pinned: boolean) {
+        try {
+            const reminderData = await getAllReminders(this.plugin);
+            const targetId = task.isRepeatInstance && task.originalId ? task.originalId : task.id;
+            
+            if (!targetId || !reminderData[targetId]) {
+                showMessage(i18n("taskNotExist"));
+                return;
+            }
+
+            if (pinned) {
+                reminderData[targetId].pinned = true;
+            } else {
+                delete reminderData[targetId].pinned;
+            }
+
+            await saveReminders(this.plugin, reminderData);
+            
+            // Sync local cache
+            this.allTasks.forEach(item => {
+                const itemTargetId = item.isRepeatInstance && item.originalId ? item.originalId : item.id;
+                if (itemTargetId === targetId) {
+                    item.pinned = pinned;
+                }
+            });
+
+            showMessage(pinned ? (i18n("taskPinned") || "任务已置顶") : (i18n("taskUnpinned") || "已取消任务置顶"));
+            await this.refresh(true);
+            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.viewId } }));
+        } catch (error) {
+            console.error('设置任务置顶状态失败:', error);
+            showMessage(i18n("operationFailed"));
+        }
+    }
+
     private async setTaskStatusAndTerm(taskId: string, kanbanStatus: string) {
         try {
             const reminderData = await getAllReminders(this.plugin);
@@ -3730,6 +3790,14 @@ export class EisenhowerMatrixView {
 
             if (draggedProjectId !== targetProjectId) {
                 return;
+            }
+
+            // 同步置顶状态
+            const targetPinned = !!targetTask.pinned;
+            if (targetPinned) {
+                draggedTask.pinned = true;
+            } else {
+                delete draggedTask.pinned;
             }
 
             const oldPriority = draggedTask.priority || 'none';
