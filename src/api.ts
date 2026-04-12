@@ -899,6 +899,69 @@ function formatDate(date) {
 
     return `${year}-${month}-${day} ${hours}:${minutes}`;
 }
+
+function toggleTaskCheckboxInKramdown(kramdown: string, completed: boolean): string {
+    if (completed) {
+        let updated = kramdown.replace(
+            /^(\s*[-*+]\s*\{:[^}]*\}\s*)\[\s*\]/gm,
+            '$1[X]'
+        );
+        if (updated !== kramdown) return updated;
+
+        updated = kramdown.replace(
+            /^(\s*[-*+]\s*)\[\s*\](\s*\{:[^}]*\})?/gm,
+            '$1[X]$2'
+        );
+        return updated;
+    }
+
+    let updated = kramdown.replace(
+        /^(\s*[-*+]\s*\{:[^}]*\}\s*)\[(?:x|X)\]/gm,
+        '$1[ ]'
+    );
+    if (updated !== kramdown) return updated;
+
+    updated = kramdown.replace(
+        /^(\s*[-*+]\s*)\[(?:x|X)\](\s*\{:[^}]*\})?/gm,
+        '$1[ ]$2'
+    );
+    return updated;
+}
+
+async function isTaskListLikeBlock(blockId: string): Promise<boolean> {
+    try {
+        const result = await sql(`SELECT type, subtype FROM blocks WHERE id = '${blockId}'`);
+        if (result && result.length > 0) {
+            const block = result[0];
+            // 兼容任务列表项（i/t）和任务列表容器（l/t）
+            if ((block.type === 'i' || block.type === 'l') && block.subtype === 't') {
+                return true;
+            }
+        }
+
+        // 兜底：按 kramdown 内容识别，避免依赖 markdown
+        const kramdown = (await getBlockKramdown(blockId)).kramdown || '';
+        if (!kramdown) return false;
+        return /^\s*[-*+]\s*(?:\{:[^}]*\}\s*)?\[(?: |x|X)\]/m.test(kramdown)
+            || /^\s*[-*+]\s*\[(?: |x|X)\](?:\s*\{:[^}]*\})?/m.test(kramdown);
+    } catch (error) {
+        console.warn('检测任务列表块失败:', error);
+        return false;
+    }
+}
+
+async function syncTaskListBlockCompletion(blockId: string, completed: boolean): Promise<void> {
+    const isTaskList = await isTaskListLikeBlock(blockId);
+    if (!isTaskList) return;
+
+    // 统一基于 kramdown 更新，避免 markdown 更新导致属性丢失
+    const kramdown = (await getBlockKramdown(blockId)).kramdown;
+    if (!kramdown) return;
+    const updatedKramdown = toggleTaskCheckboxInKramdown(kramdown, completed);
+    if (updatedKramdown !== kramdown) {
+        await updateBlock("markdown", updatedKramdown, blockId);
+    }
+}
 /**
  * 检查并更新块的提醒书签状态
  * @param blockId 块ID
@@ -961,6 +1024,13 @@ export async function updateBindBlockAtrrs(blockId: string, plugin: any): Promis
 
         // 一次性更新所有属性
         await setBlockAttrs(blockId, attrs);
+
+        // 统一在 API 层同步任务列表块勾选状态，避免各面板重复实现
+        try {
+            await syncTaskListBlockCompletion(blockId, allCompleted);
+        } catch (syncErr) {
+            console.warn('同步任务列表块勾选状态失败:', blockId, syncErr);
+        }
 
     } catch (error) {
         console.error('更新块提醒书签失败:', error);

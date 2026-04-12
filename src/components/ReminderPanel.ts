@@ -1,6 +1,6 @@
 import { colorWithOpacity } from "../utils/uiUtils";
 import { showMessage, confirm, Dialog, Menu, Constants, getFrontend, getBackend, platformUtils } from "siyuan";
-import { refreshSql, sql, getBlockKramdown, getBlockByID, updateBindBlockAtrrs, openBlock, pushMsg } from "../api";
+import { refreshSql, getBlockByID, updateBindBlockAtrrs, openBlock, pushMsg } from "../api";
 import { getLocalDateString, compareDateStrings, getLocalDateTimeString, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../utils/dateUtils";
 import { loadSortConfig, saveSortConfig, getSortCriterionName, SortCriterion, loadFilterConfig, saveFilterConfig } from "../utils/sortConfig";
 import { SortMenuDialog } from "./SortMenuDialog";
@@ -5166,8 +5166,6 @@ export class ReminderPanel {
                 for (const bId of affectedBlockIds) {
                     try {
                         await updateBindBlockAtrrs(bId, this.plugin);
-                        if (completed) await this.handleTaskListCompletion(bId);
-                        else await this.handleTaskListCompletionCancel(bId);
                     } catch (err) {
                         console.warn('更新子任务块属性失败:', bId, err);
                     }
@@ -5232,8 +5230,6 @@ export class ReminderPanel {
             for (const bId of affectedBlockIds) {
                 try {
                     await updateBindBlockAtrrs(bId, this.plugin);
-                    if (completed) await this.handleTaskListCompletion(bId);
-                    else await this.handleTaskListCompletionCancel(bId);
                 } catch (err) {
                     console.warn('更新任务块属性失败:', bId, err);
                 }
@@ -5254,161 +5250,6 @@ export class ReminderPanel {
             await this.loadReminders(true);
         }
     }
-    /**
-     * 处理任务列表的自动完成取消功能
-     * 当完成时间提醒事项时，检测是否为待办事项列表，如果是则自动打勾
-     * @param blockId 块ID
-     */
-    private async handleTaskListCompletionCancel(blockId: string) {
-        try {
-            // 1. 检测块是否为待办事项列表
-            const isTaskList = await this.isTaskListBlock(blockId);
-            if (!isTaskList) {
-                return; // 不是待办事项列表，不需要处理
-            }
-
-            // 2. 获取块的 kramdown 内容
-            const kramdown = (await getBlockKramdown(blockId)).kramdown;
-            if (!kramdown) {
-                console.warn('无法获取块的 kramdown 内容:', blockId);
-                return;
-            }
-            // 3. 使用正则表达式匹配待办事项格式: ^- {: xxx}[X]
-            const taskPattern = /^-\s*\{:[^}]*\}\[X\]/gm;
-
-            // 检查是否包含完成的待办项
-            const hasCompletedTasks = taskPattern.test(kramdown);
-            if (!hasCompletedTasks) {
-                return; // 没有完成的待办项，不需要处理
-            }
-
-            // 4. 将 ^- {: xxx}[x] 替换为 ^- {: xxx}[ ]
-            // 重置正则表达式的 lastIndex
-            taskPattern.lastIndex = 0;
-            const updatedKramdown = kramdown.replace(
-                /^(-\s*\{:[^}]*\})\[X\]/gm,
-                '$1[ ]'
-            );
-
-
-            // 5. 更新块内容
-            await this.updateBlockWithKramdown(blockId, updatedKramdown);
-
-
-        } catch (error) {
-            console.error('处理任务列表完成状态失败:', error);
-            // 静默处理错误，不影响主要功能
-        }
-    }
-    /**
-     * 处理任务列表的自动完成功能
-     * 当完成时间提醒事项时，检测是否为待办事项列表，如果是则自动打勾
-     * @param blockId 块ID
-     */
-    private async handleTaskListCompletion(blockId: string) {
-        try {
-            // 1. 检测块是否为待办事项列表
-            const isTaskList = await this.isTaskListBlock(blockId);
-            if (!isTaskList) {
-                return; // 不是待办事项列表，不需要处理
-            }
-
-            // 2. 获取块的 kramdown 内容
-            const kramdown = (await getBlockKramdown(blockId)).kramdown;
-            if (!kramdown) {
-                console.warn('无法获取块的 kramdown 内容:', blockId);
-                return;
-            }
-
-            // 3. 使用正则表达式匹配待办事项格式: ^- {: xxx}[ ]
-            const taskPattern = /^-\s*\{:[^}]*\}\[\s*\]/gm;
-
-            // 检查是否包含未完成的待办项
-            const hasUncompletedTasks = taskPattern.test(kramdown);
-
-            if (!hasUncompletedTasks) {
-                return; // 没有未完成的待办项，不需要处理
-            }
-
-            // 4. 将 ^- {: xxx}[ ] 替换为 ^- {: xxx}[x]
-            // 重置正则表达式的 lastIndex
-            taskPattern.lastIndex = 0;
-            const updatedKramdown = kramdown.replace(
-                /^(-\s*\{:[^}]*\})\[\s*\]/gm,
-                '$1[X]'
-            );
-
-
-            // 5. 更新块内容
-            await this.updateBlockWithKramdown(blockId, updatedKramdown);
-
-
-        } catch (error) {
-            console.error('处理任务列表完成状态失败:', error);
-            // 静默处理错误，不影响主要功能
-        }
-    }
-    /**
-     * 检测块是否为待办事项列表
-     * @param blockId 块ID
-     * @returns 是否为待办事项列表
-     */
-    private async isTaskListBlock(blockId: string): Promise<boolean> {
-        try {
-            // 使用 SQL 查询检测块类型
-            const sqlQuery = `SELECT type, subtype FROM blocks WHERE id = '${blockId}'`;
-            const result = await sql(sqlQuery);
-
-            if (result && result.length > 0) {
-                const block = result[0];
-                // 检查是否为待办事项列表：type='i' and subtype='t'
-                return block.type === 'i' && block.subtype === 't';
-            }
-
-            return false;
-        } catch (error) {
-            console.error('检测任务列表块失败:', error);
-            return false;
-        }
-    }
-
-    /**
-     * 使用 kramdown 更新块内容
-     * @param blockId 块ID
-     * @param kramdown kramdown 内容
-     */
-    private async updateBlockWithKramdown(blockId: string, kramdown: string) {
-        try {
-            const updateData = {
-                dataType: "markdown",
-                data: kramdown,
-                id: blockId
-            };
-
-            // 使用 updateBlock API 更新块
-            const response = await fetch('/api/block/updateBlock', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(updateData)
-            });
-
-            if (!response.ok) {
-                throw new Error(`更新块失败: ${response.status} ${response.statusText}`);
-            }
-
-            const result = await response.json();
-            if (result.code !== 0) {
-                throw new Error(`更新块失败: ${result.msg || '未知错误'}`);
-            }
-
-        } catch (error) {
-            console.error('更新块内容失败:', error);
-            throw error;
-        }
-    }
-
     private async openBlockTab(blockId: string) {
         try {
             openBlock(blockId);
@@ -10698,7 +10539,6 @@ export class ReminderPanel {
             for (const bId of affectedBlockIds) {
                 try {
                     await updateBindBlockAtrrs(bId, this.plugin);
-                    await this.handleTaskListCompletion(bId);
                 } catch (err) {
                     console.warn('批量完成后更新任务块属性失败:', bId, err);
                 }
