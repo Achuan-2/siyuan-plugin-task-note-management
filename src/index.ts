@@ -2391,6 +2391,71 @@ export default class ReminderPlugin extends Plugin {
             }
         }
 
+        // 1.5 补充：当项目/分组绑定的是“块”时，同文档下的块新建任务也应继承（非该分组绑定块的子块）
+        if (block.type !== 'd' && rootId) {
+            const projectData = await this.loadProjectData();
+            if (projectData) {
+                const projectList = Object.entries(projectData)
+                    .filter(([key, value]) => !key.startsWith('_') && value && typeof value === 'object')
+                    .map(([key, value]) => {
+                        const project = value as any;
+                        return {
+                            ...project,
+                            __projectId: project.id || key
+                        };
+                    }) as any[];
+
+                const blockInfoCache = new Map<string, any | null>();
+                const getBlockInfoWithCache = async (id?: string) => {
+                    if (!id) return null;
+                    if (blockInfoCache.has(id)) return blockInfoCache.get(id);
+                    const blockInfo = await getBlockByID(id);
+                    blockInfoCache.set(id, blockInfo || null);
+                    return blockInfo || null;
+                };
+
+                const ancestorIdSet = new Set((ancestors || []).map((item: any) => item.id));
+
+                // 1.5.1 优先匹配分组绑定块：同文档且不是该绑定块子块时，也默认继承该分组
+                for (const p of projectList) {
+                    if (!p.customGroups || !Array.isArray(p.customGroups)) continue;
+                    for (const group of p.customGroups) {
+                        if (group?.archived) continue;
+                        const groupBlockId = group?.blockId;
+                        if (!groupBlockId || groupBlockId === rootId) continue;
+                        if (ancestorIdSet.has(groupBlockId)) continue;
+
+                        const groupBlock = await getBlockInfoWithCache(groupBlockId);
+                        if (groupBlock?.root_id === rootId) {
+                            return {
+                                projectId: p.__projectId,
+                                groupId: group.id,
+                                milestoneId: undefined,
+                                categoryId: undefined
+                            };
+                        }
+                    }
+                }
+
+                // 1.5.2 其次匹配项目绑定块：同文档块默认继承项目（无分组）
+                for (const p of projectList) {
+                    const projectBlockId = p?.blockId;
+                    if (!projectBlockId || projectBlockId === rootId) continue;
+                    if (ancestorIdSet.has(projectBlockId)) continue;
+
+                    const projectBlock = await getBlockInfoWithCache(projectBlockId);
+                    if (projectBlock?.root_id === rootId) {
+                        return {
+                            projectId: p.__projectId,
+                            groupId: undefined,
+                            milestoneId: undefined,
+                            categoryId: undefined
+                        };
+                    }
+                }
+            }
+        }
+
         // 2. 检查最近的同级标题
         if (block.type === 'h' && (block as any).subtype) {
             const siblingHeadings = await sql(`
@@ -2447,6 +2512,16 @@ export default class ReminderPlugin extends Plugin {
         // 4. Fallback: 检查文档是否本身是项目，或者是否绑定了某个项目分组
         const projectData = await this.loadProjectData();
         if (projectData) {
+            const projectList = Object.entries(projectData)
+                .filter(([key, value]) => !key.startsWith('_') && value && typeof value === 'object')
+                .map(([key, value]) => {
+                    const project = value as any;
+                    return {
+                        ...project,
+                        __projectId: project.id || key
+                    };
+                }) as any[];
+
             // 4.0 先检查父块路径是否是项目或者项目分组的绑定块（使用已获取的 ancestors，避免额外查询）
             const parentChain = ancestors && ancestors.length > 0 ? ancestors : [];
             if (parentChain.length === 0 && parentId) {
@@ -2463,10 +2538,10 @@ export default class ReminderPlugin extends Plugin {
             for (const parentBlock of parentChain) {
                 const checkId = parentBlock.id;
                 // Check if this parent block is a project main block
-                const parentProject = Object.values(projectData).find((p: any) => p.blockId === checkId);
+                const parentProject = projectList.find((p: any) => p.blockId === checkId);
                 if (parentProject) {
                     return {
-                        projectId: (parentProject as any).id,
+                        projectId: (parentProject as any).__projectId,
                         groupId: undefined,
                         milestoneId: undefined,
                         categoryId: undefined
@@ -2474,12 +2549,12 @@ export default class ReminderPlugin extends Plugin {
                 }
 
                 // Check if this parent block is a project group block
-                for (const p of Object.values(projectData) as any[]) {
+                for (const p of projectList) {
                     if (p.customGroups && Array.isArray(p.customGroups)) {
                         const group = p.customGroups.find((g: any) => g.blockId === checkId);
                         if (group) {
                             return {
-                                projectId: p.id,
+                                projectId: p.__projectId,
                                 groupId: group.id,
                                 milestoneId: undefined,
                                 categoryId: undefined
@@ -2490,10 +2565,10 @@ export default class ReminderPlugin extends Plugin {
             }
 
             // 4.1 检查是否是项目主文档
-            const project = Object.values(projectData).find((p: any) => p.blockId === rootId);
+            const project = projectList.find((p: any) => p.blockId === rootId);
             if (project) {
                 return {
-                    projectId: (project as any).id,
+                    projectId: (project as any).__projectId,
                     groupId: undefined,
                     milestoneId: undefined,
                     categoryId: undefined
@@ -2501,12 +2576,12 @@ export default class ReminderPlugin extends Plugin {
             }
 
             // 4.2 检查是否是项目分组的绑定文档
-            for (const p of Object.values(projectData) as any[]) {
+            for (const p of projectList) {
                 if (p.customGroups && Array.isArray(p.customGroups)) {
                     const group = p.customGroups.find((g: any) => g.blockId === rootId);
                     if (group) {
                         return {
-                            projectId: p.id,
+                            projectId: p.__projectId,
                             groupId: group.id,
                             milestoneId: undefined,
                             categoryId: undefined
