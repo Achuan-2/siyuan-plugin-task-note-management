@@ -15,6 +15,7 @@
         | 'none'
         | 'yesterday'
         | 'today'
+        | 'overdue'
         | 'tomorrow'
         | 'this_week'
         | 'next_7_days'
@@ -325,7 +326,7 @@
                 id: 'builtin_today',
                 name: i18n('todayReminders') || '今日任务',
                 isBuiltIn: true,
-                dateFilters: [{ type: 'today' }],
+                dateFilters: [{ type: 'today' }, { type: 'overdue' }],
                 statusFilter: 'all',
                 projectFilters: ['all'],
                 categoryFilters: ['all'],
@@ -375,8 +376,8 @@
                 id: 'builtin_overdue',
                 name: i18n('overdueReminders') || '过期任务',
                 isBuiltIn: true,
-                dateFilters: [{ type: 'past_7_days' }],
-                statusFilter: 'all',
+                dateFilters: [{ type: 'overdue' }],
+                statusFilter: 'uncompleted',
                 projectFilters: ['all'],
                 categoryFilters: ['all'],
                 priorityFilters: ['all'],
@@ -891,6 +892,13 @@
                             on:click={() => toggleDateFilter('none')}
                         >
                             {i18n('noDate')}
+                        </div>
+                        <div
+                            class="filter-option"
+                            class:selected={selectedDateFilters.includes('overdue')}
+                            on:click={() => toggleDateFilter('overdue')}
+                        >
+                            {i18n('overdueReminders') || '已过期'}
                         </div>
                         <div
                             class="filter-option"

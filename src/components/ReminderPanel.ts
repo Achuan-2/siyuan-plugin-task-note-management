@@ -4392,6 +4392,13 @@ export class ReminderPanel {
                         const todayEnd = this.getReminderLogicalDate(r.endDate || r.date, r.endTime || r.time);
                         return compareDateStrings(todayStart, today) <= 0 && compareDateStrings(today, todayEnd) <= 0;
                     }
+                    case 'overdue': {
+                        const hasDate = r.date || r.endDate;
+                        if (!hasDate) return false;
+                        if (isEffectivelyCompleted(r)) return false;
+                        const overdueEnd = this.getReminderLogicalDate(r.endDate || r.date, r.endTime || r.time);
+                        return compareDateStrings(overdueEnd, today) < 0;
+                    }
                     case 'tomorrow': {
                         const hasDate = r.date || r.endDate;
                         if (!hasDate) return false;
