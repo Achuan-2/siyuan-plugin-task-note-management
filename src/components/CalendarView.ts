@@ -2116,7 +2116,6 @@ export class CalendarView {
         // datesSet 会在 render 后自动触发，无需额外调用 refreshEvents
 
         // 添加自定义样式
-        this.addCustomStyles();
 
         // 监听提醒更新事件
         this.externalReminderUpdatedHandler = (e: Event) => {
@@ -2848,6 +2847,16 @@ export class CalendarView {
         }
 
         // 如果事项没有绑定块，显示绑定块选项
+        menu.addItem({
+            iconHTML: "✅",
+            label: calendarEvent.extendedProps.completed ? i18n("markAsUncompleted") : i18n("markAsCompleted"),
+            click: () => {
+                this.toggleEventCompleted(calendarEvent);
+            }
+        });
+
+        menu.addSeparator();
+
         if (!calendarEvent.extendedProps.blockId) {
             menu.addItem({
                 iconHTML: "🔗",
@@ -2947,13 +2956,6 @@ export class CalendarView {
             });
         }
 
-        menu.addItem({
-            iconHTML: "✅",
-            label: calendarEvent.extendedProps.completed ? i18n("markAsUncompleted") : i18n("markAsCompleted"),
-            click: () => {
-                this.toggleEventCompleted(calendarEvent);
-            }
-        });
 
         menu.addSeparator();
 
@@ -5309,301 +5311,6 @@ export class CalendarView {
         }
     }
 
-    private addCustomStyles() {
-        // 检查是否已经添加过样式
-        if (document.querySelector('#reminder-calendar-custom-styles')) {
-            return;
-        }
-
-        const style = document.createElement('style');
-        style.id = 'reminder-calendar-custom-styles';
-        style.textContent = `
-            .fc-today-custom:not(.fc-popover),
-            .fc-list-day-today-custom,
-            .fc-col-header-cell.fc-today-custom {
-                background-color: transparent!important;
-            }
-            .fc-today-custom  .fc-daygrid-day-frame,
-            .fc-today-custom .fc-scrollgrid-sync-inner,
-            .fc-today-custom .fc-timegrid-col-frame{
-                border: 2px solid var(--b3-theme-primary) !important;
-            }
-            .fc-today-custom:not(.fc-popover):hover {
-                background-color: var(--b3-theme-primary-lightest) !important;
-            }
-            
-            /* 隐藏默认的今日高亮 */
-            .fc-day-today:not(.fc-today-custom) {
-                background-color: transparent !important;
-            }
-            .fc-list-day-today:not(.fc-list-day-today-custom) {
-                background-color: transparent !important;
-            }
-            .fc-col-header-cell.fc-day-today:not(.fc-today-custom) {
-                background-color: transparent !important;
-            }
-            
-            /* 当前时间指示线样式 */
-            .fc-timegrid-now-indicator-line {
-                border-color: var(--b3-theme-primary) !important;
-                border-width: 2px !important;
-                opacity: 0.8;
-                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-            }
-            
-            /* 当前时间指示箭头样式 */
-            .fc-timegrid-now-indicator-arrow {
-                border-left-color: var(--b3-theme-primary) !important;
-                border-right-color: var(--b3-theme-primary) !important;
-                opacity: 0.8;
-            }
-            
-            /* 日历事件主容器优化 */
-            .fc-event-main-frame {
-                display: flex;
-                flex-direction: column;
-                padding: 2px 4px;
-                box-sizing: border-box;
-                gap: 1px;
-                width: 100%;
-                height: 100%;
-                overflow: hidden;
-            }
-
-            .reminder-event-top-row {
-                display: flex;
-                align-items: center;
-                gap: 1px;
-                width: 100%;
-                min-height: 18px;
-                flex-shrink: 0;
-            }
-
-            .reminder-event-indicators-row {
-                display: flex;
-                gap: 2px;
-                align-items: center;
-                padding-left: 18px; /* 与复选框对齐 */
-                flex-shrink: 999; /* 空间不足时优先隐藏 */
-                max-height: 1.2em;
-                overflow: hidden;
-            }
-
-            .reminder-event-icon {
-                font-size: 12px;
-                line-height: 1;
-            }
-
-            .reminder-calendar-event-checkbox {
-                margin: 0;
-                width: 14px;
-                height: 14px;
-                cursor: pointer;
-                flex-shrink: 0;
-            }
-
-            .reminder-event-doc-title,
-            .reminder-event-note {
-                font-size: 10px;
-                opacity: 0.7;
-                line-height: 1.2;
-                flex-shrink: 0;
-                display: -webkit-box;
-                -webkit-box-orient: vertical;
-                -webkit-line-clamp: 2;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                word-break: break-word;
-            }
-
-            /* Markdown content styling in notes */
-            .reminder-event-note p,
-            .reminder-event-note ul,
-            .reminder-event-note ol {
-                margin: 0px 2px;
-                padding: 0;
-            }
-
-            .reminder-event-note li {
-                margin-left: 1em;
-            }
-
-            .reminder-event-note strong {
-                font-weight: 600;
-            }
-
-            .reminder-event-note code {
-                font-size: 0.9em;
-                padding: 0 2px;
-                background: var(--b3-theme-background);
-                border-radius: 2px;
-            }
-
-            .fc-event-time {
-                font-size: 10px;
-                opacity: 0.8;
-                white-space: nowrap;
-                overflow: hidden;
-                flex-shrink: 0;
-            }
-
-            .fc-event-title-container {
-                flex-grow: 1;
-                overflow: hidden;
-                min-height: 0;
-            }
-
-            .fc-event-title {
-                font-size: 12px;
-                line-height: 1.3;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                display: -webkit-box;
-                -webkit-line-clamp: 2;
-                -webkit-box-orient: vertical;
-                flex: 1; /* 占据剩余空间 */
-                min-width: 0; /* 允许收缩 */
-            }
-
-            .fc-event-time {
-                font-size: 10px;
-                opacity: 0.8;
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                flex-shrink: 999; /* 时间优先收缩隐藏 */
-                max-height: 1.2em;
-            }
-
-            .reminder-event-doc-title,
-            .reminder-event-note {
-                font-size: 10px;
-                opacity: 0.7;
-                line-height: 1.2;
-                flex-shrink: 999; /* 文档名和备注优先收缩 */
-                display: -webkit-box;
-                -webkit-box-orient: vertical;
-                -webkit-line-clamp: 2;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                word-break: break-word;
-                max-height: 2.4em; /* 2 lines * 1.2 line-height */
-            }
-
-            .reminder-event-label {
-                display: -webkit-box;
-                -webkit-line-clamp: 3;
-                -webkit-box-orient: vertical;
-                overflow: hidden;
-                word-break: break-all;
-                line-height: 1.2;
-                max-height: 3.6em;
-            }
-
-            .fc-h-event .fc-event-main {
-                color: var(--b3-theme-on-background);
-            }
-
-            /* 短事件布局优化 (TimeGrid 15-30min) */
-            .fc-timegrid-event-short .fc-event-main-frame {
-                flex-direction: row;
-                align-items: center;
-                gap: 4px;
-                padding: 1px 4px;
-            }
-
-            .fc-timegrid-event-short .fc-event-title {
-                -webkit-line-clamp: 1;
-                flex-shrink: 1; /* 横向布局时可以收缩 */
-            }
-
-            .fc-timegrid-event-short .fc-event-time,
-            .fc-timegrid-event-short .reminder-event-doc-title,
-            .fc-timegrid-event-short .reminder-event-note {
-                display: none;
-            }
-
-            /* 当高度非常小时隐藏非关键信息 */
-            .fc-timegrid-event:not(.fc-timegrid-event-short) .fc-event-main-frame {
-                justify-content: flex-start;
-            }
-
-            /* 在深色主题下的适配 */
-            .b3-theme-dark .fc-timegrid-now-indicator-line {
-                border-color: var(--b3-theme-primary-light) !important;
-                box-shadow: 0 1px 3px rgba(255, 255, 255, 0.1);
-            }
-            
-            .b3-theme-dark .fc-timegrid-now-indicator-arrow {
-                border-left-color: var(--b3-theme-primary-light) !important;
-                border-right-color: var(--b3-theme-primary-light) !important;
-            }
-            
-            /* 已完成任务的样式优化 */
-            .fc-event.completed {
-                opacity: 0.6 !important;
-            }
-            .fc-event.completed:hover {
-                opacity: 1 !important;
-            }
-
-
-            /* Pomodoro Event Styles */
-            .pomodoro-event {
-                border: none !important;
-                border-left: none !important;
-                box-shadow: none !important;
-                opacity: 0.7 !important;
-            }
-
-            /* Completed Task Time Event Styles */
-            .completed-task-time-event {
-                border: none !important;
-                border-left: 3px solid #27ae60 !important;
-                box-shadow: none !important;
-                opacity: 0.75 !important;
-            }
-
-            .completed-task-time-event .fc-event-title {
-                font-style: italic;
-            }
-
-            /* 完成任务时间分隔线 (仅用于 dayGrid 视图的 All-day/日网格区域) */
-            .fc-daygrid-day-events .fc-daygrid-event-harness:has(.completed-task-time-event) .completed-task-time-event {
-                margin-top: 12px !important;
-                position: relative;
-            }
-            
-            .fc-daygrid-day-events .fc-daygrid-event-harness:has(.completed-task-time-event) .completed-task-time-event::before {
-                content: "";
-                position: absolute;
-                top: -8px;
-                left: 0;
-                right: 0;
-                border-top: 1px dashed var(--b3-theme-on-surface-light);
-                opacity: 0.6;
-            }
-
-            .fc-daygrid-day-events .fc-daygrid-event-harness:has(.completed-task-time-event) ~ .fc-daygrid-event-harness:has(.completed-task-time-event) .completed-task-time-event {
-                margin-top: 1px !important;
-            }
-            
-            .fc-daygrid-day-events .fc-daygrid-event-harness:has(.completed-task-time-event) ~ .fc-daygrid-event-harness:has(.completed-task-time-event) .completed-task-time-event::before {
-                display: none;
-            }
-
-            .all-day-reorder-indicator {
-                height: 2px !important;
-                background-color: var(--b3-theme-primary) !important;
-                box-shadow: 0 0 4px var(--b3-theme-primary);
-                border-radius: 2px;
-                /* 移除 transition 以免在隐藏或位置跳变时产生滑动感 */
-                transition: none !important;
-                pointer-events: none;
-            }
-        `;
-        document.head.appendChild(style);
-    }
 
     private async updateDropIndicator(pointX: number, pointY: number, calendarEl: HTMLElement): Promise<void> {
         try {
