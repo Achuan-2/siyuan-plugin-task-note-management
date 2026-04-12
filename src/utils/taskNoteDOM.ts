@@ -1,4 +1,4 @@
-﻿import { showMessage } from "siyuan";
+import { showMessage } from "siyuan";
 import { i18n } from "../pluginInstance";
 import { PomodoroRecordManager } from "./pomodoroRecord";
 
@@ -10,6 +10,12 @@ const INSTANCE_EVENT_ID_SUFFIX_REGEX = /^(.*)_\d{4}-\d{2}-\d{2}$/;
 interface PomodoroStats {
     count: number;
     minutes: number;
+}
+
+interface BoundReminderDateDisplayInfo {
+    reminderId: string;
+    displayText: string;
+    displayType: "schedule" | "completed";
 }
 
 export class TaskNoteDOMManager {
@@ -25,15 +31,25 @@ export class TaskNoteDOMManager {
     private pomodoroStatsCacheUpdatedAt = 0;
     private pomodoroStatsLoadingPromise: Promise<void> | null = null;
     private latestPomodoroSummaryTaskByBlock: Map<string, number> = new Map();
+    private latestBindReminderDateTaskByBlock: Map<string, number> = new Map();
 
     constructor(plugin: any) {
         this.plugin = plugin;
-        const invalidatePomodoroStatsCache = () => {
+        const onReminderUpdated = () => {
             this.invalidatePomodoroStatsCache();
+            this.refreshBoundReminderDateButtonsForAllProtyles();
         };
-        window.addEventListener("reminderUpdated", invalidatePomodoroStatsCache as EventListener);
+        window.addEventListener("reminderUpdated", onReminderUpdated as EventListener);
         this.plugin.addCleanup(() => {
-            window.removeEventListener("reminderUpdated", invalidatePomodoroStatsCache as EventListener);
+            window.removeEventListener("reminderUpdated", onReminderUpdated as EventListener);
+        });
+    }
+
+    private refreshBoundReminderDateButtonsForAllProtyles() {
+        document.querySelectorAll(".protyle").forEach((protyleElement) => {
+            const protyle = (protyleElement as any).protyle;
+            if (!protyle?.element) return;
+            this._scanProtyleForButtons(protyle);
         });
     }
 
@@ -743,6 +759,21 @@ export class TaskNoteDOMManager {
             seenBind.add(blockId);
         }
 
+        const bindDateButtons = Array.from(protyle.element.querySelectorAll(".block-bind-reminder-date")) as HTMLElement[];
+        const seenBindDate = new Set<string>();
+        for (const btn of bindDateButtons) {
+            const blockId = btn.dataset.blockId || btn.closest("[data-node-id]")?.getAttribute("data-node-id");
+            if (!blockId || !activeBlockIds.has(blockId)) {
+                btn.remove();
+                continue;
+            }
+            if (seenBindDate.has(blockId)) {
+                btn.remove();
+                continue;
+            }
+            seenBindDate.add(blockId);
+        }
+
         const milestoneButtons = Array.from(protyle.element.querySelectorAll(".block-milestone-btn")) as HTMLElement[];
         const seenMilestone = new Set<string>();
         for (const btn of milestoneButtons) {
@@ -817,6 +848,7 @@ export class TaskNoteDOMManager {
 
         const linkedReminderIds = this.normalizeReminderIds(info.bindReminderIds).filter((id) => id !== blockId);
         const existingBindBtn = container.querySelector(`.block-bind-reminders-btn[data-block-id="${blockId}"]`) as HTMLElement;
+        const existingBindDateBtn = container.querySelector(`.block-bind-reminder-date[data-block-id="${blockId}"]`) as HTMLElement | null;
         if (linkedReminderIds.length > 0) {
             if (!existingBindBtn) {
                 const bindBtn = this._createBindButton(blockId);
@@ -824,8 +856,17 @@ export class TaskNoteDOMManager {
             } else if (existingBindBtn.parentElement !== container) {
                 container.appendChild(existingBindBtn);
             }
+            if (existingBindDateBtn && existingBindDateBtn.parentElement !== container) {
+                container.appendChild(existingBindDateBtn);
+            }
+            void this.refreshBindReminderDateButton(protyle, blockId, linkedReminderIds);
         } else if (existingBindBtn) {
             existingBindBtn.remove();
+            if (existingBindDateBtn) {
+                existingBindDateBtn.remove();
+            }
+        } else if (existingBindDateBtn) {
+            existingBindDateBtn.remove();
         }
 
         const existingMilestoneBtn = container.querySelector(`.block-milestone-btn[data-block-id="${blockId}"]`) as HTMLElement;
@@ -951,6 +992,201 @@ export class TaskNoteDOMManager {
         }
 
         return null;
+    }
+
+    private async getBoundReminderDateDisplayInfoFromPlugin(reminderIds: string[]): Promise<BoundReminderDateDisplayInfo | null> {
+        if (!this.plugin || typeof this.plugin.getBoundReminderDateDisplayInfo !== "function") return null;
+        const info = await this.plugin.getBoundReminderDateDisplayInfo(reminderIds);
+        if (!info || typeof info !== "object") return null;
+        const reminderId = String((info as any).reminderId || "").trim();
+        const displayText = String((info as any).displayText || "").trim();
+        const displayType = (info as any).displayType === "completed" ? "completed" : "schedule";
+        if (!reminderId || !displayText) return null;
+        return {
+            reminderId,
+            displayText,
+            displayType
+        };
+    }
+
+    private async refreshBindReminderDateButton(protyle: any, blockId: string, reminderIds: string[]) {
+        const normalizedReminderIds = this.normalizeReminderIds(reminderIds);
+        const nextTaskId = (this.latestBindReminderDateTaskByBlock.get(blockId) || 0) + 1;
+        this.latestBindReminderDateTaskByBlock.set(blockId, nextTaskId);
+
+        const trackedSource =
+            this._findTrackedSourceForBlock(protyle, blockId) ||
+            (protyle?.element?.querySelector?.(".protyle-wysiwyg") as Element | null);
+        const blockEl = (protyle?.element?.querySelector?.(`[data-node-id="${blockId}"]`) as HTMLElement | null) ||
+            (trackedSource as HTMLElement | null);
+        if (!trackedSource || !blockEl) return;
+
+        const container = this._findButtonContainer(blockEl, trackedSource);
+        if (!container) return;
+
+        const existingDateBtn = container.querySelector(`.block-bind-reminder-date[data-block-id="${blockId}"]`) as HTMLElement | null;
+        if (normalizedReminderIds.length === 0) {
+            if (existingDateBtn) existingDateBtn.remove();
+            return;
+        }
+
+        let displayInfo: BoundReminderDateDisplayInfo | null = null;
+        try {
+            displayInfo = await this.getBoundReminderDateDisplayInfoFromPlugin(normalizedReminderIds);
+        } catch (error) {
+            console.warn("获取绑定任务日期展示信息失败:", error);
+            displayInfo = null;
+        }
+
+        if (this.latestBindReminderDateTaskByBlock.get(blockId) !== nextTaskId) {
+            return;
+        }
+
+        if (!displayInfo || displayInfo.displayType === "completed") {
+            if (existingDateBtn) existingDateBtn.remove();
+            return;
+        }
+
+        if (!existingDateBtn) {
+            const dateBtn = this._createBindReminderDateButton(
+                blockId,
+                displayInfo.reminderId,
+                displayInfo.displayText,
+                displayInfo.displayType
+            );
+            this.ensureBindReminderDateButtonOrder(container, blockId, dateBtn);
+            return;
+        }
+
+        this._updateBindReminderDateButton(existingDateBtn, displayInfo.reminderId, displayInfo.displayText, displayInfo.displayType);
+        this.ensureBindReminderDateButtonOrder(container, blockId, existingDateBtn);
+    }
+
+    private ensureBindReminderDateButtonOrder(container: HTMLElement, blockId: string, dateBtn: HTMLElement) {
+        const bindBtn = container.querySelector(`.block-bind-reminders-btn[data-block-id="${blockId}"]`) as HTMLElement | null;
+        if (bindBtn) {
+            const nextElement = bindBtn.nextElementSibling;
+            if (nextElement !== dateBtn) {
+                if (nextElement) {
+                    container.insertBefore(dateBtn, nextElement);
+                } else {
+                    container.appendChild(dateBtn);
+                }
+            } else if (dateBtn.parentElement !== container) {
+                container.appendChild(dateBtn);
+            }
+            return;
+        }
+        if (dateBtn.parentElement !== container) {
+            container.appendChild(dateBtn);
+        }
+    }
+
+    public _createBindReminderDateButton(
+        blockId: string,
+        reminderId: string,
+        displayText: string,
+        displayType: "schedule" | "completed" = "schedule"
+    ): HTMLElement {
+        const btn = document.createElement("button");
+        btn.className = "block-bind-reminder-date block__icon fn__flex-center ariaLabel";
+        btn.style.cssText = `
+            margin-left: 6px;
+            padding: 1px 6px;
+            border: none;
+            background: var(--b3-theme-surface-lighter);
+            cursor: pointer;
+            border-radius: 11px;
+            color: var(--b3-theme-on-background);
+            opacity: 0.9;
+            transition: all 0.12s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 22px;
+            line-height: 1;
+            max-width: 210px;
+        `;
+        btn.dataset.blockId = blockId;
+        btn.setAttribute("data-plugin-added", "reminder-plugin");
+        btn.addEventListener("click", async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const targetReminderId = String(btn.dataset.reminderId || "").trim();
+            if (!targetReminderId) return;
+            try {
+                if (this.plugin && typeof this.plugin.openReminderEditDialog === "function") {
+                    await this.plugin.openReminderEditDialog(blockId, targetReminderId);
+                    return;
+                }
+
+                const reminderData = await this.plugin.loadReminderData();
+                const reminder = reminderData?.[targetReminderId];
+                if (!reminder) {
+                    showMessage(i18n("taskNotFound") || "任务不存在", 3000, "error");
+                    return;
+                }
+                const { QuickReminderDialog } = await import("../components/QuickReminderDialog");
+                const dialog = new QuickReminderDialog(undefined, undefined, undefined, undefined, {
+                    blockId,
+                    reminder,
+                    plugin: this.plugin,
+                    mode: "edit"
+                });
+                dialog.show();
+            } catch (error) {
+                console.error("打开绑定任务日期编辑对话框失败:", error);
+                showMessage(i18n("openModifyDialogFailed") || "打开修改对话框失败，请重试", 3000, "error");
+            }
+        });
+
+        const textEl = document.createElement("span");
+        textEl.className = "block-bind-reminder-date__text";
+        textEl.style.cssText = "font-size:12px;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
+        btn.appendChild(textEl);
+        this._updateBindReminderDateButton(btn, reminderId, displayText, displayType);
+        return btn;
+    }
+
+    public _updateBindReminderDateButton(
+        btn: HTMLElement,
+        reminderId: string,
+        displayText: string,
+        displayType: "schedule" | "completed" = "schedule"
+    ) {
+        const safeReminderId = String(reminderId || "").trim();
+        const safeDisplayText = String(displayText || "").trim();
+        const safeDisplayType = displayType === "completed" ? "completed" : "schedule";
+        const prefix = safeDisplayType === "completed" ? "✅" : "🗓";
+        const text = safeDisplayText ? `${prefix} ${safeDisplayText}` : prefix;
+        const ariaText = safeDisplayType === "completed"
+            ? `最近完成时间 ${safeDisplayText}，点击编辑任务日期`
+            : `任务安排时间 ${safeDisplayText}，点击编辑任务日期`;
+
+        if (btn.dataset.reminderId !== safeReminderId) {
+            btn.dataset.reminderId = safeReminderId;
+        }
+        if (btn.dataset.displayType !== safeDisplayType) {
+            btn.dataset.displayType = safeDisplayType;
+        }
+        if (btn.dataset.displayText !== safeDisplayText) {
+            btn.dataset.displayText = safeDisplayText;
+        }
+
+        let textEl = btn.querySelector(".block-bind-reminder-date__text") as HTMLElement | null;
+        if (!textEl) {
+            textEl = document.createElement("span");
+            textEl.className = "block-bind-reminder-date__text";
+            textEl.style.cssText = "font-size:12px;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
+            btn.appendChild(textEl);
+        }
+        if (textEl.textContent !== text) {
+            textEl.textContent = text;
+        }
+        btn.classList.add("ariaLabel");
+        if (btn.getAttribute("aria-label") !== ariaText) {
+            btn.setAttribute("aria-label", ariaText);
+        }
     }
 
     public _createPomodoroSummaryButton(blockId: string, totalCount: number, totalMinutes: number, includeEventIds: string[] = []): HTMLElement {

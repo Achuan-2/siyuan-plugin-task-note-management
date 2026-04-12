@@ -91,6 +91,12 @@ export const PROJECT_KANBAN_TAB_TYPE = "project_kanban_tab";
 const POMODORO_TAB_TYPE = "pomodoro_timer_tab";
 export const STORAGE_NAME = "siyuan-plugin-task-note-management";
 
+export interface BoundReminderDateDisplayInfo {
+    reminderId: string;
+    displayText: string;
+    displayType: "schedule" | "completed";
+}
+
 
 // 默认设置
 export const DEFAULT_SETTINGS = {
@@ -3758,6 +3764,197 @@ export default class ReminderPlugin extends Plugin {
         const minutes = parseInt(parts[1], 10);
         if (isNaN(hours) || isNaN(minutes)) return 0;
         return hours * 100 + minutes;
+    }
+
+    private normalizeReminderDateText(value?: string | null): string {
+        return typeof value === "string" ? value.trim() : "";
+    }
+
+    private normalizeReminderTimeText(value?: string | null): string {
+        if (!value || typeof value !== "string") return "";
+        const parsed = this.extractDateAndTime(value);
+        if (parsed?.time) return parsed.time;
+        const trimmed = value.trim();
+        if (!trimmed) return "";
+        const match = trimmed.match(/^(\d{1,2}):(\d{1,2})/);
+        if (!match) return "";
+        const hour = Math.max(0, Math.min(23, Number(match[1]) || 0));
+        const minute = Math.max(0, Math.min(59, Number(match[2]) || 0));
+        return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+    }
+
+    private getReminderLogicalDateForDisplay(dateText: string, timeText?: string): string {
+        if (!dateText) return "";
+        if (!timeText) return dateText;
+        try {
+            return getLogicalDateString(new Date(`${dateText}T${timeText}:00`));
+        } catch {
+            return dateText;
+        }
+    }
+
+    private parseReminderScheduleTimestamp(dateText: string, timeText?: string): number {
+        if (!dateText) return Number.MAX_SAFE_INTEGER;
+        const normalizedTime = timeText || "00:00";
+        try {
+            const dt = new Date(`${dateText}T${normalizedTime}:00`);
+            const ts = dt.getTime();
+            return Number.isFinite(ts) ? ts : Number.MAX_SAFE_INTEGER;
+        } catch {
+            return Number.MAX_SAFE_INTEGER;
+        }
+    }
+
+    private parseReminderCompletedTimestamp(completedAt?: string): number {
+        if (!completedAt || typeof completedAt !== "string") return Number.NEGATIVE_INFINITY;
+        const ts = new Date(completedAt).getTime();
+        return Number.isFinite(ts) ? ts : Number.NEGATIVE_INFINITY;
+    }
+
+    private formatReminderScheduleDisplayText(reminder: any): string {
+        const dateText = this.normalizeReminderDateText(reminder?.date);
+        if (!dateText) return "";
+        const timeText = this.normalizeReminderTimeText(reminder?.time);
+        return timeText ? `${dateText} ${timeText}` : dateText;
+    }
+
+    private formatReminderCompletedDisplayText(completedAt?: string): string {
+        if (!completedAt || typeof completedAt !== "string") return "";
+        try {
+            const dt = new Date(completedAt);
+            if (!Number.isFinite(dt.getTime())) return "";
+            const datePart = dt.toLocaleDateString(getLocaleTag());
+            const timePart = dt.toLocaleTimeString(getLocaleTag(), {
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: false
+            });
+            return `${datePart} ${timePart}`.trim();
+        } catch {
+            return "";
+        }
+    }
+
+    private isReminderOverdueForBoundDateDisplay(reminder: any, logicalToday: string): boolean {
+        const startDate = this.normalizeReminderDateText(reminder?.date);
+        if (!startDate) return false;
+        const startTime = this.normalizeReminderTimeText(reminder?.time);
+        const startLogicalDate = this.getReminderLogicalDateForDisplay(startDate, startTime);
+
+        const endDate = this.normalizeReminderDateText(reminder?.endDate) || startDate;
+        const endTime = this.normalizeReminderTimeText(reminder?.endTime) || startTime;
+        const endLogicalDate = this.getReminderLogicalDateForDisplay(endDate, endTime) || startLogicalDate;
+
+        return !!endLogicalDate && compareDateStrings(endLogicalDate, logicalToday) < 0;
+    }
+
+    public async getBoundReminderDateDisplayInfo(reminderIds: string[]): Promise<BoundReminderDateDisplayInfo | null> {
+        const normalizedIds = Array.from(new Set((reminderIds || []).map((id) => String(id || "").trim()).filter(Boolean)));
+        if (normalizedIds.length === 0) return null;
+
+        try {
+            const reminderData = await this.loadReminderData();
+            if (!reminderData || typeof reminderData !== "object") return null;
+
+            const idOrderMap = new Map<string, number>();
+            normalizedIds.forEach((id, index) => idOrderMap.set(id, index));
+
+            const reminders = normalizedIds
+                .map((id) => reminderData[id])
+                .filter((reminder: any) => reminder && reminder.id);
+            if (reminders.length === 0) return null;
+
+            const allCompleted = reminders.every((reminder: any) => !!reminder.completed);
+            if (allCompleted) {
+                let selectedReminder: any = reminders[0];
+                let latestCompletedTs = this.parseReminderCompletedTimestamp(selectedReminder?.completedAt);
+                for (const reminder of reminders.slice(1)) {
+                    const ts = this.parseReminderCompletedTimestamp(reminder?.completedAt);
+                    if (ts > latestCompletedTs) {
+                        selectedReminder = reminder;
+                        latestCompletedTs = ts;
+                    }
+                }
+
+                if (!Number.isFinite(latestCompletedTs) || latestCompletedTs === Number.NEGATIVE_INFINITY) {
+                    selectedReminder = reminders[reminders.length - 1];
+                }
+
+                let displayText = this.formatReminderCompletedDisplayText(selectedReminder?.completedAt);
+                if (!displayText) {
+                    displayText = this.formatReminderScheduleDisplayText(selectedReminder);
+                }
+                if (!displayText) {
+                    displayText = i18n("completed") || "已完成";
+                }
+
+                return {
+                    reminderId: String(selectedReminder.id),
+                    displayText,
+                    displayType: "completed",
+                };
+            }
+
+            const logicalToday = getLogicalDateString();
+            const incompleteWithDate = reminders.filter((reminder: any) => !reminder.completed && this.normalizeReminderDateText(reminder?.date));
+            if (incompleteWithDate.length === 0) return null;
+
+            const nonOverdueIncomplete = incompleteWithDate.filter((reminder: any) =>
+                !this.isReminderOverdueForBoundDateDisplay(reminder, logicalToday)
+            );
+            const candidates = nonOverdueIncomplete.length > 0 ? nonOverdueIncomplete : incompleteWithDate;
+
+            candidates.sort((a: any, b: any) => {
+                const aDate = this.normalizeReminderDateText(a?.date);
+                const bDate = this.normalizeReminderDateText(b?.date);
+                const aTime = this.normalizeReminderTimeText(a?.time);
+                const bTime = this.normalizeReminderTimeText(b?.time);
+                const aTs = this.parseReminderScheduleTimestamp(aDate, aTime);
+                const bTs = this.parseReminderScheduleTimestamp(bDate, bTime);
+                if (aTs !== bTs) return aTs - bTs;
+                const aIndex = idOrderMap.get(String(a?.id || "")) ?? Number.MAX_SAFE_INTEGER;
+                const bIndex = idOrderMap.get(String(b?.id || "")) ?? Number.MAX_SAFE_INTEGER;
+                return aIndex - bIndex;
+            });
+
+            const selectedReminder = candidates[0];
+            const displayText = this.formatReminderScheduleDisplayText(selectedReminder);
+            if (!displayText) return null;
+
+            return {
+                reminderId: String(selectedReminder.id),
+                displayText,
+                displayType: "schedule",
+            };
+        } catch (error) {
+            console.warn("获取块绑定任务日期展示信息失败:", error);
+            return null;
+        }
+    }
+
+    public async openReminderEditDialog(blockId: string, reminderId: string): Promise<boolean> {
+        const targetReminderId = String(reminderId || "").trim();
+        if (!targetReminderId) return false;
+        try {
+            const reminderData = await this.loadReminderData();
+            const reminder = reminderData?.[targetReminderId];
+            if (!reminder) {
+                showMessage(i18n("taskNotFound") || "任务不存在", 3000, "error");
+                return false;
+            }
+            const dialog = new QuickReminderDialog(undefined, undefined, undefined, undefined, {
+                blockId,
+                reminder,
+                plugin: this,
+                mode: "edit"
+            });
+            dialog.show();
+            return true;
+        } catch (error) {
+            console.error("打开任务编辑对话框失败:", error);
+            showMessage(i18n("openModifyDialogFailed") || "打开修改对话框失败，请重试", 3000, "error");
+            return false;
+        }
     }
 
     /**
