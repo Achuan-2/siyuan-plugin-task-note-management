@@ -7112,6 +7112,21 @@ export class ReminderPanel {
         const canToggleTodayCompleted = !reminder.completed && !isDessert && (isSpanningInToday || isFutureReminderInToday);
         const isIgnoredToday = this.hasTodayIgnoreMark(reminder, today);
 
+        // 任务完成/取消完成（置于右键菜单最顶部）
+        menu.addItem({
+            iconHTML: reminder.completed ? "↩️" : "✅",
+            label: reminder.completed ? (i18n("markAsUncompleted") || "取消完成") : (i18n("markAsCompleted") || "完成任务"),
+            click: () => {
+                if (reminder.isRepeatInstance) {
+                    const originalInstanceDate = (reminder.id && reminder.id.includes('_')) ? reminder.id.split('_').pop() : reminder.date;
+                    this.toggleReminder(reminder.originalId, !reminder.completed, true, originalInstanceDate, reminder.id);
+                } else {
+                    this.toggleReminder(reminder.id, !reminder.completed, false, undefined, reminder.id);
+                }
+            }
+        });
+        menu.addSeparator();
+
         // --- 每日可做任务专用菜单 ---
         // 只有当今天还没完成时才显示 "今日已完成"
         const dailyCompletedList = Array.isArray(reminder.dailyDessertCompleted) ? reminder.dailyDessertCompleted : [];
