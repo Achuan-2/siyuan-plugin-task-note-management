@@ -18599,9 +18599,10 @@ export class ProjectKanbanView {
             const startTime = startTimeInput.value;
             const endDate = endDateInput.value;
             const endTime = endTimeInput.value;
+            const shouldClearDate = clearAll || !startDate;
 
             // 校验：结束日期不能早于开始日期
-            if (!clearAll && startDate && endDate && endDate < startDate) {
+            if (!shouldClearDate && endDate && endDate < startDate) {
                 showMessage(i18n('endDateCannotBeEarlier') || '结束日期不能早于开始日期');
                 return;
             }
@@ -18609,30 +18610,101 @@ export class ProjectKanbanView {
             dialog.destroy();
 
             try {
+                const reminderData = await this.getReminders();
+                const handledTargetIds = new Set<string>();
+                const recurringOriginalIds = new Set<string>();
                 let successCount = 0;
-                const tasksToUpdate = [];
 
                 for (const taskId of selectedIds) {
-                    const task = this.tasks.find(t => t.id === taskId);
-                    if (task) {
-                        if (clearAll) {
-                            task.date = undefined;
-                            task.time = undefined;
-                            task.endDate = undefined;
-                            task.endTime = undefined;
-                        } else {
-                            if (startDate) task.date = startDate;
-                            task.time = startTime || undefined;
-                            task.endDate = endDate || undefined;
-                            task.endTime = endTime || undefined;
+                    const uiTask = this.findOrCreateUiTask(taskId, reminderData);
+                    if (!uiTask) continue;
+
+                    const targetId = (uiTask.isRepeatInstance && uiTask.originalId) ? uiTask.originalId : uiTask.id;
+                    if (!targetId || handledTargetIds.has(targetId)) continue;
+                    handledTargetIds.add(targetId);
+
+                    const reminder = reminderData[targetId];
+                    if (!reminder) continue;
+
+                    let changed = false;
+
+                    if (shouldClearDate) {
+                        if (reminder.date !== undefined) {
+                            delete reminder.date;
+                            changed = true;
                         }
-                        tasksToUpdate.push(task);
+                        if (reminder.time !== undefined) {
+                            delete reminder.time;
+                            changed = true;
+                        }
+                        if (reminder.endDate !== undefined) {
+                            delete reminder.endDate;
+                            changed = true;
+                        }
+                        if (reminder.endTime !== undefined) {
+                            delete reminder.endTime;
+                            changed = true;
+                        }
+
+                        // 清空日期时，重复任务自动取消重复
+                        if (reminder.repeat?.enabled) {
+                            reminder.repeat.enabled = false;
+                            delete reminder.repeat.abandonedAt;
+                            delete reminder.repeat.abandonedInstanceDate;
+                            recurringOriginalIds.add(targetId);
+                            changed = true;
+                        }
+                    } else {
+                        if (reminder.date !== startDate) {
+                            reminder.date = startDate;
+                            changed = true;
+                        }
+
+                        if (startTime) {
+                            if (reminder.time !== startTime) {
+                                reminder.time = startTime;
+                                changed = true;
+                            }
+                        } else if (reminder.time !== undefined) {
+                            delete reminder.time;
+                            changed = true;
+                        }
+
+                        if (endDate) {
+                            if (reminder.endDate !== endDate) {
+                                reminder.endDate = endDate;
+                                changed = true;
+                            }
+                        } else if (reminder.endDate !== undefined) {
+                            delete reminder.endDate;
+                            changed = true;
+                        }
+
+                        if (endTime) {
+                            if (reminder.endTime !== endTime) {
+                                reminder.endTime = endTime;
+                                changed = true;
+                            }
+                        } else if (reminder.endTime !== undefined) {
+                            delete reminder.endTime;
+                            changed = true;
+                        }
+                    }
+
+                    if (changed) {
+                        reminder.projectId = this.projectId;
+                        reminder.updatedAt = new Date().toISOString();
                         successCount++;
                     }
                 }
 
-                // 批量保存任务
-                await this.saveTasks(tasksToUpdate);
+                if (successCount > 0) {
+                    await saveReminders(this.plugin, reminderData);
+                    await this.refreshRecurringMobileNotifications(reminderData, recurringOriginalIds);
+                    // 触发更新事件
+                    this.dispatchReminderUpdate(true);
+                }
+
                 showMessage(i18n('batchUpdateSuccess', { count: String(successCount) }) || `成功更新 ${successCount} 个任务`);
                 this.queueLoadTasks();
             } catch (error) {
