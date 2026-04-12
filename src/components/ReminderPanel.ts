@@ -2885,7 +2885,7 @@ export class ReminderPanel {
             urlIcon.href = reminder.url;
             urlIcon.target = '_blank';
             urlIcon.classList.add('ariaLabel'); urlIcon.setAttribute('aria-label', i18n("openUrl") + ': ' + reminder.url);
-            urlIcon.innerHTML = '<svg style="width: 14px; height: 14px; vertical-align: middle; margin-left: 4px;"><use xlink:href="#iconLink"></use></svg>';
+            urlIcon.innerHTML = '<svg style="width: 14px; height: 14px; vertical-align: middle; margin-left: 4px;"><use xlink:href="#iconOpenWindow"></use></svg>';
             urlIcon.style.cssText = 'color: var(--b3-theme-primary); cursor: pointer; text-decoration: none; display: inline-flex; align-items: center;';
             urlIcon.addEventListener('click', (e) => {
                 e.stopPropagation();

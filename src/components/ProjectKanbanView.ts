@@ -10303,7 +10303,7 @@ export class ProjectKanbanView {
             urlIcon.href = task.url;
             urlIcon.target = '_blank';
             urlIcon.classList.add('ariaLabel'); urlIcon.setAttribute('aria-label', i18n("openUrl") + ': ' + task.url);
-            urlIcon.innerHTML = '<svg style="width: 14px; height: 14px;"><use xlink:href="#iconLink"></use></svg>';
+            urlIcon.innerHTML = '<svg style="width: 14px; height: 14px;"><use xlink:href="#iconOpenWindow"></use></svg>';
             urlIcon.style.cssText = 'color: var(--b3-theme-primary); cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; flex-shrink: 0;';
             urlIcon.addEventListener('click', (e) => {
                 e.stopPropagation();

@@ -26,6 +26,7 @@ export interface HabitLike {
     frequency?: HabitFrequencyLike;
     reminderTime?: string;
     reminderTimes?: (string | HabitReminderTimeEntry)[];
+    url?: string;
     checkIns?: {
         [date: string]: {
             count?: number;
@@ -64,6 +65,7 @@ export interface Habit extends HabitLike {
     color?: string;
     note?: string;
     blockId?: string;
+    url?: string;
     target: number;
     goalType?: HabitGoalType;
     pomodoroTargetHours?: number;

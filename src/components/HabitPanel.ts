@@ -1022,6 +1022,27 @@ export class HabitPanel {
             });
         }
         header.appendChild(title);
+
+        // 网页链接图标（参考 ReminderPanel）
+        if (habit.url) {
+            const rawUrl = habit.url.trim();
+            const normalizedUrl = /^https?:\/\//i.test(rawUrl) ? rawUrl : `http://${rawUrl}`;
+            const urlIcon = document.createElement('a');
+            urlIcon.className = 'habit-card__url-icon';
+            urlIcon.href = normalizedUrl;
+            urlIcon.target = '_blank';
+            urlIcon.rel = 'noopener noreferrer';
+            urlIcon.classList.add('ariaLabel'); urlIcon.setAttribute('aria-label', `${i18n("openUrl")}: ${rawUrl}`);
+            urlIcon.innerHTML = '<svg style="width: 14px; height: 14px; vertical-align: middle;"><use xlink:href="#iconOpenWindow"></use></svg>';
+            urlIcon.style.cssText = 'color: var(--b3-theme-primary); cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; flex-shrink: 0;';
+            if (isInactive) {
+                urlIcon.style.opacity = '0.6';
+            }
+            urlIcon.addEventListener('click', (ev) => {
+                ev.stopPropagation();
+            });
+            header.appendChild(urlIcon);
+        }
         
         // 状态标签（已结束/已放弃）
         if (isEnded) {
@@ -1513,6 +1534,23 @@ export class HabitPanel {
                         console.error('openBlock failed', err);
                         showMessage(i18n("openBlockFailed"), 3000, 'error');
                     }
+                }
+            });
+        }
+
+        // 打开网页链接（如果存在）
+        if (habit.url) {
+            menu.addItem({
+                label: i18n("openUrl"),
+                icon: "iconOpenWindow",
+                click: () => {
+                    const rawUrl = habit.url?.trim();
+                    if (!rawUrl) {
+                        showMessage(i18n("pleaseEnterUrl"));
+                        return;
+                    }
+                    const normalizedUrl = /^https?:\/\//i.test(rawUrl) ? rawUrl : `http://${rawUrl}`;
+                    window.open(normalizedUrl, '_blank');
                 }
             });
         }

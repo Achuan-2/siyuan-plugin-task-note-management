@@ -461,6 +461,39 @@ export class HabitEditDialog {
         blockGroup.appendChild(blockPreview);
         form.appendChild(blockGroup);
 
+        // 网页链接（可选）
+        const urlGroup = document.createElement('div');
+        urlGroup.style.cssText = 'display:flex; flex-direction: column; gap:4px;';
+
+        const urlLabel = document.createElement('label');
+        urlLabel.textContent = i18n("bindUrl") || '绑定网页链接';
+        urlLabel.style.cssText = 'font-weight: bold; font-size: 14px;';
+
+        const urlRow = document.createElement('div');
+        urlRow.style.cssText = 'display:flex; gap:8px; align-items:center;';
+
+        const urlInput = document.createElement('input');
+        urlInput.type = 'url';
+        urlInput.name = 'url';
+        urlInput.id = 'habitUrlInput';
+        urlInput.className = 'b3-text-field';
+        urlInput.placeholder = i18n("enterUrl") || '请输入网页链接 (http:// 或 https://)';
+        urlInput.value = this.habit?.url || '';
+        urlInput.style.cssText = 'flex: 1;';
+        urlInput.spellcheck = false;
+
+        const openUrlBtn = document.createElement('button');
+        openUrlBtn.type = 'button';
+        openUrlBtn.className = 'b3-button b3-button--outline';
+        openUrlBtn.classList.add('ariaLabel'); openUrlBtn.setAttribute('aria-label', i18n("openUrl") || '打开链接');
+        openUrlBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconOpenWindow"></use></svg>';
+
+        urlRow.appendChild(urlInput);
+        urlRow.appendChild(openUrlBtn);
+        urlGroup.appendChild(urlLabel);
+        urlGroup.appendChild(urlRow);
+        form.appendChild(urlGroup);
+
         // initial preview if editing and block exists
         if (blockInput.value) {
             this.updatePreviewForBlock(blockInput.value, blockPreview).catch(err => console.warn('初始化块预览失败', err));
@@ -508,6 +541,7 @@ export class HabitEditDialog {
                 createdAt: this.habit?.createdAt || getLocalDateTimeString(new Date()),
                 updatedAt: getLocalDateTimeString(new Date()),
                 blockId: this.habit?.blockId,
+                url: (form.querySelector('input[name="url"]') as HTMLInputElement | null)?.value?.trim() || this.habit?.url,
                 hideCheckedToday: draftHideCheckedToday
             };
             const dialog = new HabitCheckInEmojiDialog(tempHabit, async (emojis) => {
@@ -598,6 +632,16 @@ export class HabitEditDialog {
         clearBtn.addEventListener('click', () => {
             blockInput.value = '';
             blockPreview.textContent = '';
+        });
+
+        openUrlBtn.addEventListener('click', () => {
+            const rawUrl = urlInput.value?.trim();
+            if (!rawUrl) {
+                showMessage(i18n("pleaseEnterUrl") || i18n("enterUrl"));
+                return;
+            }
+            const normalizedUrl = /^https?:\/\//i.test(rawUrl) ? rawUrl : `http://${rawUrl}`;
+            window.open(normalizedUrl, '_blank');
         });
 
         // 输入更改时更新预览（简单实现）并尝试自动将引用格式规范化为纯 id
@@ -959,6 +1003,8 @@ export class HabitEditDialog {
 
         const rawBlockVal = (formData.get('blockId') as string) || undefined;
         const parsedBlockId = rawBlockVal ? (this.extractBlockId(rawBlockVal) || rawBlockVal) : undefined;
+        const rawUrlVal = ((formData.get('url') as string) || '').trim();
+        const url = rawUrlVal || undefined;
         const goalType = (formData.get('goalType') as string) === 'pomodoro' ? 'pomodoro' : 'count';
         const targetCount = Math.max(1, parseInt(formData.get('target') as string) || 1);
         const pomodoroTargetHours = Math.max(0, parseInt((formData.get('pomodoroTargetHours') as string) || '0') || 0);
@@ -994,6 +1040,7 @@ export class HabitEditDialog {
             reminderTime: undefined, // deprecated: will keep first value for compatibility below
             reminderTimes: [],
             blockId: parsedBlockId || undefined,
+            url,
             sort: this.habit?.sort,
             // 保留兼容字段，不再在编辑界面展示优先级
             priority: this.habit?.priority || 'none',
