@@ -11,7 +11,7 @@ import { CategoryManager } from "../utils/categoryManager";
 import { StatusManager } from "../utils/statusManager";
 import { ProjectDialog } from "./ProjectDialog";
 import { CategoryManageDialog } from "./CategoryManageDialog";
-import { StatusManageDialog } from "./StatusManageDialog";
+import { StatusManageDialog } from "./ProjectStatusManageDialog";
 import { GlobalProjectStatusDialog } from "./GlobalProjectStatusDialog";
 import { ProjectKanbanView } from "./ProjectKanbanView";
 import { BlockBindingDialog } from "./BlockBindingDialog";
