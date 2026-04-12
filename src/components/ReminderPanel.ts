@@ -68,6 +68,7 @@ export class ReminderPanel {
     private allRemindersMap: Map<string, any> = new Map(); // 存储所有任务的完整信息，用于计算进度
     private isLoading: boolean = false;
     private loadTimeoutId: number | null = null;
+    private completionRemovalTimers: Map<string, number> = new Map();
 
     // 侧栏多选模式
     private isMultiSelectMode: boolean = false;
@@ -116,6 +117,10 @@ export class ReminderPanel {
                 if (event.detail.source === this.panelId) return;
             }
 
+            const refreshDelayMs = (event && event.detail && typeof event.detail.refreshDelayMs === 'number')
+                ? Math.max(0, Number(event.detail.refreshDelayMs))
+                : 100;
+
             // 防抖处理，避免短时间内的多次更新
             if (this.loadTimeoutId) {
                 clearTimeout(this.loadTimeoutId);
@@ -132,7 +137,7 @@ export class ReminderPanel {
                     this.loadReminders();
                 }
                 this.loadTimeoutId = null;
-            }, 100);
+            }, refreshDelayMs);
         };
 
         this.sortConfigUpdatedHandler = (event: CustomEvent) => {
@@ -204,6 +209,8 @@ export class ReminderPanel {
             clearTimeout(this.loadTimeoutId);
             this.loadTimeoutId = null;
         }
+        this.completionRemovalTimers.forEach(timerId => clearTimeout(timerId));
+        this.completionRemovalTimers.clear();
 
 
         if (this.reminderUpdatedHandler) {
@@ -219,6 +226,32 @@ export class ReminderPanel {
 
         // 清理当前番茄钟实例
         this.pomodoroManager.cleanupInactiveTimer();
+    }
+
+    private clearCompletionRemovalTimer(reminderId: string): void {
+        const timerId = this.completionRemovalTimers.get(reminderId);
+        if (timerId) {
+            clearTimeout(timerId);
+            this.completionRemovalTimers.delete(reminderId);
+        }
+    }
+
+    private scheduleCompletionRemoval(reminderId: string): void {
+        this.clearCompletionRemovalTimer(reminderId);
+        const timerId = window.setTimeout(() => {
+            this.completionRemovalTimers.delete(reminderId);
+
+            const reminder = this.currentRemindersCache.find(r => r.id === reminderId);
+            if (!reminder) return;
+
+            const shouldStillHide = this.currentTab === 'today' && !!reminder.completed && !this.shouldShowInCurrentView(reminder);
+            if (!shouldStillHide) return;
+
+            const el = this.remindersContainer.querySelector(`[data-reminder-id="${reminderId}"]`) as HTMLElement | null;
+            if (el) el.remove();
+            this.currentRemindersCache = this.currentRemindersCache.filter(r => r.id !== reminderId);
+        }, 500);
+        this.completionRemovalTimers.set(reminderId, timerId);
     }
 
 
@@ -5056,6 +5089,7 @@ export class ReminderPanel {
         const optimisticTime = completedTime || (completed ? getLocalDateTimeString(new Date()) : undefined);
 
         for (const id of uniqueIds) {
+            this.clearCompletionRemovalTimer(id);
             const cacheIndex = this.currentRemindersCache.findIndex(r => r.id === id);
             if (cacheIndex < 0) continue;
 
@@ -5070,6 +5104,12 @@ export class ReminderPanel {
             this.allRemindersMap.set(id, { ...(this.allRemindersMap.get(id) || {}), ...updatedReminder });
 
             if (!this.shouldShowInCurrentView(updatedReminder)) {
+                // 今日任务中勾选完成时，先保留 500ms 完成态视觉反馈，再由后续刷新移除
+                if (completed && this.currentTab === 'today') {
+                    this.updateReminderCompletionDom(id, completed, updatedReminder.completedTime);
+                    this.scheduleCompletionRemoval(id);
+                    continue;
+                }
                 const el = this.remindersContainer.querySelector(`[data-reminder-id="${id}"]`) as HTMLElement | null;
                 if (el) el.remove();
                 this.currentRemindersCache = this.currentRemindersCache.filter(r => r.id !== id);
@@ -5180,7 +5220,12 @@ export class ReminderPanel {
                 }
 
                 // 通知其他组件刷新
-                window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
+                window.dispatchEvent(new CustomEvent('reminderUpdated', {
+                    detail: {
+                        source: this.panelId,
+                        refreshDelayMs: (completed && this.currentTab === 'today') ? 500 : 100
+                    }
+                }));
                 return;
             }
 
@@ -5243,7 +5288,12 @@ export class ReminderPanel {
             }
 
             // 通知其他组件刷新
-            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
+            window.dispatchEvent(new CustomEvent('reminderUpdated', {
+                detail: {
+                    source: this.panelId,
+                    refreshDelayMs: (completed && this.currentTab === 'today') ? 500 : 100
+                }
+            }));
         } catch (error) {
             console.error('切换提醒状态失败:', error);
             showMessage(i18n("operationFailed"));
@@ -10548,7 +10598,12 @@ export class ReminderPanel {
                 this.plugin.updateBadges();
             }
 
-            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
+            window.dispatchEvent(new CustomEvent('reminderUpdated', {
+                detail: {
+                    source: this.panelId,
+                    refreshDelayMs: this.currentTab === 'today' ? 500 : 100
+                }
+            }));
             showMessage(i18n('batchUpdateSuccess', { count: String(changedCount || ids.length) }) || `成功更新 ${changedCount || ids.length} 个任务`);
             this.exitPanelMultiSelectMode();
         } catch (e) {

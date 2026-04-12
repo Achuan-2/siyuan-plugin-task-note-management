@@ -91,6 +91,8 @@ export class ProjectKanbanView {
     private _debounceDelay: number = 250; // ms
     private _pendingLoadPromise: Promise<void> | null = null;
     private _pendingLoadResolve: (() => void) | null = null;
+    // 勾选完成后的延迟移列定时器（用于先展示完成态再移动到已完成列）
+    private completionMoveTimers: Map<string, number> = new Map();
 
     // 用于临时保存滚动状态，避免界面刷新重置滚动条
     private _savedScrollState: {
@@ -12208,7 +12210,8 @@ export class ProjectKanbanView {
             // 仅更新当前任务的 DOM，避免整页重渲染引发滚动条跳动
             this.updateTaskElementDOM(task.id, {
                 completed,
-                completedTime: optimisticTask.completedTime
+                completedTime: optimisticTask.completedTime,
+                __deferStatusMoveMs: completed ? 500 : 0
             });
         }
 
@@ -17344,6 +17347,37 @@ export class ProjectKanbanView {
         }));
     }
 
+    private clearCompletionMoveTimer(taskId: string): void {
+        const timerId = this.completionMoveTimers.get(taskId);
+        if (timerId) {
+            clearTimeout(timerId);
+            this.completionMoveTimers.delete(taskId);
+        }
+    }
+
+    private scheduleDelayedMoveToStatusColumn(taskId: string, delayMs: number): void {
+        this.clearCompletionMoveTimer(taskId);
+        const timerId = window.setTimeout(() => {
+            this.completionMoveTimers.delete(taskId);
+
+            const taskEl = this.container.querySelector(`[data-task-id="${taskId}"]`) as HTMLElement | null;
+            if (!taskEl) return;
+            const task = this.tasks.find(t => t.id === taskId);
+            if (!task) return;
+
+            const statusAncestor = taskEl.closest('[data-status]') as HTMLElement | null;
+            const currentStatus = statusAncestor?.dataset.status || null;
+            const targetStatus = this.getTaskStatus(task);
+            if (currentStatus === targetStatus) return;
+
+            const moved = this.moveTaskCardToColumn(taskEl, currentStatus, targetStatus);
+            if (!moved) {
+                this.queueLoadTasks();
+            }
+        }, Math.max(0, delayMs));
+        this.completionMoveTimers.set(taskId, timerId);
+    }
+
 
 
     /**
@@ -17439,18 +17473,29 @@ export class ProjectKanbanView {
 
         // 如果状态改变，智能移动任务卡片到新列
         if ('kanbanStatus' in updates || 'completed' in updates || 'date' in updates) {
+            const deferStatusMoveMs = (typeof (updates as any).__deferStatusMoveMs === 'number')
+                ? Math.max(0, Number((updates as any).__deferStatusMoveMs))
+                : 0;
             const newStatus = this.getTaskStatus(task);
             // 尝试从最近的带 data-status 的祖先元素获取当前状态，兼容自定义分组模式下的子状态容器
             const statusAncestor = taskEl.closest('[data-status]') as HTMLElement | null;
             const currentStatus = statusAncestor?.dataset.status || null;
 
             if (currentStatus !== newStatus) {
-                // 尝试智能移动任务卡片
-                const moved = this.moveTaskCardToColumn(taskEl, currentStatus, newStatus);
-                if (!moved) {
-                    // 如果移动失败，才重新渲染
-                    this.queueLoadTasks();
+                if (deferStatusMoveMs > 0 && newStatus === 'completed') {
+                    // 勾选完成时，先保留完成态视觉反馈，再延迟移入已完成列
+                    this.scheduleDelayedMoveToStatusColumn(taskId, deferStatusMoveMs);
+                } else {
+                    this.clearCompletionMoveTimer(taskId);
+                    // 尝试智能移动任务卡片
+                    const moved = this.moveTaskCardToColumn(taskEl, currentStatus, newStatus);
+                    if (!moved) {
+                        // 如果移动失败，才重新渲染
+                        this.queueLoadTasks();
+                    }
                 }
+            } else {
+                this.clearCompletionMoveTimer(taskId);
             }
         }
 
