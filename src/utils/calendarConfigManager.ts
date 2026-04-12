@@ -19,6 +19,7 @@ export interface CalendarConfig {
     showRepeatTasks: boolean;
     repeatInstanceLimit: number;
     showHiddenTasks: boolean; // 显示不在日历视图显示的任务
+    showEventCheckbox: boolean; // 显示日历事件前的复选框
     showCompletedTaskTime: boolean; // 显示已完成任务时间
     showCompletedTaskTimeOnlyWithoutDate: boolean; // 只显示没有日期的任务的完成时间
     showTasks: boolean; // 是否显示任务
@@ -49,6 +50,7 @@ export class CalendarConfigManager {
             showRepeatTasks: true, // 默认显示重复任务
             repeatInstanceLimit: -1, // 默认显示全部实例 (-1表示不限制)
             showHiddenTasks: false, // 默认不显示隐藏任务
+            showEventCheckbox: true, // 默认显示日历事件前复选框
             showCompletedTaskTime: true, // 默认显示已完成任务时间
             showCompletedTaskTimeOnlyWithoutDate: false, // 默认显示所有已完成任务的时间
             showTasks: true, // 默认显示任务
@@ -86,6 +88,7 @@ export class CalendarConfigManager {
             settings.calendarShowRepeatTasks = this.config.showRepeatTasks;
             settings.calendarRepeatInstanceLimit = this.config.repeatInstanceLimit;
             settings.calendarShowHiddenTasks = this.config.showHiddenTasks;
+            settings.showCalendarEventCheckbox = this.config.showEventCheckbox;
             settings.calendarShowCompletedTaskTime = this.config.showCompletedTaskTime;
             settings.calendarShowCompletedTaskTimeOnlyWithoutDate = this.config.showCompletedTaskTimeOnlyWithoutDate;
             settings.calendarShowTasks = this.config.showTasks;
@@ -144,6 +147,7 @@ export class CalendarConfigManager {
                 showRepeatTasks: settings.calendarShowRepeatTasks !== false, // 默认为 true
                 repeatInstanceLimit: settings.calendarRepeatInstanceLimit !== undefined ? settings.calendarRepeatInstanceLimit : -1, // 默认为 -1
                 showHiddenTasks: settings.calendarShowHiddenTasks === true, // 默认为 false
+                showEventCheckbox: settings.showCalendarEventCheckbox !== false, // 默认为 true
                 showCompletedTaskTime: settings.calendarShowCompletedTaskTime !== false, // 默认为 true
                 showCompletedTaskTimeOnlyWithoutDate: settings.calendarShowCompletedTaskTimeOnlyWithoutDate === true, // 默认为 false
                 showTasks: settings.calendarShowTasks !== false, // 默认为 true
@@ -168,6 +172,7 @@ export class CalendarConfigManager {
                 showRepeatTasks: true,
                 repeatInstanceLimit: -1,
                 showHiddenTasks: false,
+                showEventCheckbox: true,
                 showCompletedTaskTime: true,
                 showCompletedTaskTimeOnlyWithoutDate: false,
                 showTasks: true,
@@ -316,6 +321,15 @@ export class CalendarConfigManager {
 
     public getShowHiddenTasks(): boolean {
         return this.config.showHiddenTasks !== undefined ? this.config.showHiddenTasks : false;
+    }
+
+    public async setShowEventCheckbox(show: boolean) {
+        this.config.showEventCheckbox = show;
+        await this.saveConfig();
+    }
+
+    public getShowEventCheckbox(): boolean {
+        return this.config.showEventCheckbox !== false;
     }
 
     public async setShowCompletedTaskTime(show: boolean) {

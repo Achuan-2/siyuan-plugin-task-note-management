@@ -60,6 +60,7 @@ export class CalendarView {
     private showRepeatTasks: boolean = true; // 是否显示重复任务
     private repeatInstanceLimit: number = -1; // 重复任务显示实例数量限制
     private showHiddenTasks: boolean = false; // 是否显示不在日历视图显示的任务
+    private showEventCheckbox: boolean = true; // 是否显示日历事件前的复选框
     private showCompletedTaskTime: boolean = true; // 是否显示已完成任务时间
     private showCompletedTaskTimeOnlyWithoutDate: boolean = false; // 是否只显示没有日期的任务的完成时间
     private pomodoroToggleBtn: HTMLElement | null = null; // Pomodoro toggle button
@@ -160,6 +161,7 @@ export class CalendarView {
             this.showRepeatTasks = this.calendarConfigManager.getShowRepeatTasks();
             this.repeatInstanceLimit = this.calendarConfigManager.getRepeatInstanceLimit();
             this.showHiddenTasks = this.calendarConfigManager.getShowHiddenTasks();
+            this.showEventCheckbox = this.calendarConfigManager.getShowEventCheckbox();
             this.showPomodoro = this.calendarConfigManager.getShowPomodoro();
             this.showPomodoroBreakTime = this.calendarConfigManager.getShowPomodoroBreakTime();
             this.showCompletedTaskTime = this.calendarConfigManager.getShowCompletedTaskTime();
@@ -496,6 +498,7 @@ export class CalendarView {
         this.showRepeatTasks = this.calendarConfigManager.getShowRepeatTasks();
         this.repeatInstanceLimit = this.calendarConfigManager.getRepeatInstanceLimit();
         this.showHiddenTasks = this.calendarConfigManager.getShowHiddenTasks();
+        this.showEventCheckbox = this.calendarConfigManager.getShowEventCheckbox();
         this.showCompletedTaskTime = this.calendarConfigManager.getShowCompletedTaskTime();
         this.showCompletedTaskTimeOnlyWithoutDate = this.calendarConfigManager.getShowCompletedTaskTimeOnlyWithoutDate();
         this.holidays = await loadHolidays(this.plugin);
@@ -1125,6 +1128,39 @@ export class CalendarView {
             await this.calendarConfigManager.setShowHabits(checked);
             await this.refreshEvents();
         }));
+
+        // 任务样式设置（无复选框 / 有复选框）
+        const taskStyleLabel = document.createElement('div');
+        taskStyleLabel.style.padding = '4px 12px';
+        taskStyleLabel.style.fontSize = '0.9em';
+        taskStyleLabel.style.color = 'var(--b3-theme-on-surface-light)';
+        taskStyleLabel.innerText = i18n("taskStyle") || "任务样式";
+        displaySettingsDropdown.appendChild(taskStyleLabel);
+
+        const taskStyleGroup = document.createElement('div');
+        taskStyleGroup.className = 'fn__flex fn__flex-center';
+        taskStyleGroup.style.padding = '4px 8px';
+        taskStyleGroup.style.gap = '4px';
+
+        const createTaskStyleBtn = (label: string, showCheckbox: boolean) => {
+            const btn = document.createElement('button');
+            btn.className = `b3-button b3-button--small ${this.showEventCheckbox === showCheckbox ? '' : 'b3-button--outline'}`;
+            btn.style.flex = '1';
+            btn.innerText = label;
+            btn.addEventListener('click', async () => {
+                if (this.showEventCheckbox === showCheckbox) return;
+                this.showEventCheckbox = showCheckbox;
+                await this.calendarConfigManager.setShowEventCheckbox(showCheckbox);
+                Array.from(taskStyleGroup.querySelectorAll('button')).forEach(b => b.classList.add('b3-button--outline'));
+                btn.classList.remove('b3-button--outline');
+                await this.refreshEvents();
+            });
+            return btn;
+        };
+
+        taskStyleGroup.appendChild(createTaskStyleBtn(i18n("noEventCheckbox") || "无复选框", false));
+        taskStyleGroup.appendChild(createTaskStyleBtn(i18n("withEventCheckbox") || "有复选框", true));
+        displaySettingsDropdown.appendChild(taskStyleGroup);
 
         // 上色方案设置
         const colorDivider = document.createElement('div');
@@ -3911,7 +3947,7 @@ export class CalendarView {
             subIcon.style.lineHeight = '1';
             subIcon.style.flexShrink = '0';
             topRow.appendChild(subIcon);
-        } else {
+        } else if (this.showEventCheckbox) {
             const checkbox = document.createElement('input');
             checkbox.type = 'checkbox';
             checkbox.className = 'reminder-calendar-event-checkbox';
@@ -4011,6 +4047,9 @@ export class CalendarView {
         // 3. 指标行：放置状态图标
         const indicatorsRow = document.createElement('div');
         indicatorsRow.className = 'reminder-event-indicators-row';
+        if (!props.isSubscribed && !props.isHabit && !this.showEventCheckbox) {
+            indicatorsRow.style.paddingLeft = '0';
+        }
 
         // 分类图标 (订阅图标已移至顶部复选框位置)
         // 分类图标 (订阅图标已移至顶部复选框位置)
