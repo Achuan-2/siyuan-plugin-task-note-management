@@ -300,6 +300,13 @@ export class ReminderPanel {
                     .reminder-list.drag-over-active {
                         box-shadow: inset 0 0 0 2px var(--b3-theme-primary);
                     }
+                    @supports (-webkit-touch-callout: none) {
+                        .reminder-panel .reminder-item {
+                            -webkit-user-select: none;
+                            user-select: none;
+                            -webkit-touch-callout: none;
+                        }
+                    }
                 `;
                 document.head.appendChild(style);
             }
@@ -2664,6 +2671,11 @@ export class ReminderPanel {
 
         const reminderEl = document.createElement('div');
         reminderEl.className = `reminder-item ${isOverdue ? 'reminder-item--overdue' : ''} ${isSpanningDays ? 'reminder-item--spanning' : ''} reminder-priority-${priority}`;
+        if (this.plugin?.isInMobileApp) {
+            reminderEl.style.setProperty('-webkit-user-select', 'none');
+            reminderEl.style.setProperty('user-select', 'none');
+            reminderEl.style.setProperty('-webkit-touch-callout', 'none');
+        }
 
         // 子任务缩进：使用margin-left让整个任务块缩进，包括背景色
         if (level > 0) {
@@ -2857,6 +2869,9 @@ export class ReminderPanel {
             });
         } else {
             titleEl.style.cssText = `font-weight: 500; color: var(--b3-theme-on-surface); cursor: default; text-decoration: none;`;
+        }
+        if (this.plugin?.isInMobileApp) {
+            titleEl.style.setProperty('-webkit-user-select', 'none');
         }
 
         titleEl.textContent = reminder.title || i18n("unnamedNote");

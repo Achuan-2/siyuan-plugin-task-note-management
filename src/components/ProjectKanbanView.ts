@@ -2373,6 +2373,11 @@ export class ProjectKanbanView {
                     padding: 8px;
                     margin: 1px 5px;
                 `;
+                if (this.plugin?.isInMobileApp) {
+                    taskEl.style.setProperty('-webkit-user-select', 'none');
+                    taskEl.style.setProperty('user-select', 'none');
+                    taskEl.style.setProperty('-webkit-touch-callout', 'none');
+                }
 
                 taskEl.addEventListener('mouseenter', () => {
                     taskEl.style.transform = 'translateY(-2px)';
@@ -2463,6 +2468,9 @@ export class ProjectKanbanView {
                         line-height: 1.4;
                         width: fit-content;
                     `;
+                }
+                if (this.plugin?.isInMobileApp) {
+                    titleEl.style.setProperty('-webkit-user-select', 'none');
                 }
 
                 titleEl.textContent = task.title || i18n('noContentHint');
@@ -9988,6 +9996,11 @@ export class ProjectKanbanView {
             background-color: ${backgroundColor};
             border: 1.5px solid ${borderColor};
         `;
+        if (this.plugin?.isInMobileApp) {
+            taskEl.style.setProperty('-webkit-user-select', 'none');
+            taskEl.style.setProperty('user-select', 'none');
+            taskEl.style.setProperty('-webkit-touch-callout', 'none');
+        }
 
         if (task.completed) {
             taskEl.style.opacity = '0.5';
@@ -10255,6 +10268,9 @@ export class ProjectKanbanView {
                 line-height: 1.4;
                 width: fit-content;
             `;
+        }
+        if (this.plugin?.isInMobileApp) {
+            titleEl.style.setProperty('-webkit-user-select', 'none');
         }
 
         titleEl.textContent = task.title || i18n('noContentHint');
