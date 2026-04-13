@@ -2875,6 +2875,14 @@ export class CalendarView {
                 }
             });
 
+            menu.addItem({
+                iconHTML: "📊",
+                label: i18n("viewPomodoros") || "查看番茄钟",
+                click: () => {
+                    void this.showPomodoroSessions(calendarEvent);
+                }
+            });
+
             menu.open({
                 x: event.clientX,
                 y: event.clientY
@@ -3085,6 +3093,14 @@ export class CalendarView {
             label: i18n("startCountUp"),
             click: () => {
                 this.startPomodoroCountUp(calendarEvent);
+            }
+        });
+
+        menu.addItem({
+            iconHTML: "📊",
+            label: i18n("viewPomodoros") || "查看番茄钟",
+            click: () => {
+                void this.showPomodoroSessions(calendarEvent);
             }
         });
 
@@ -8044,6 +8060,36 @@ export class CalendarView {
             plugin: this.plugin,
             startPomodoro: (workDurationOverride?: number) => this.startPomodoro(calendarEvent, workDurationOverride)
         });
+    }
+
+    private resolvePomodoroTargetEventId(calendarEvent: any): string {
+        const rawId = String(calendarEvent?.id || "").trim();
+        if (rawId && /_(\d{4}-\d{2}-\d{2})$/.test(rawId)) {
+            return rawId;
+        }
+
+        const extendedProps = calendarEvent?.extendedProps || {};
+        const originalId = String(extendedProps.originalId || "").trim();
+        const instanceDate = String(extendedProps.date || "").trim();
+        if (extendedProps.isRepeated && originalId && /^\d{4}-\d{2}-\d{2}$/.test(instanceDate)) {
+            return `${originalId}_${instanceDate}`;
+        }
+
+        return rawId || originalId;
+    }
+
+    private async showPomodoroSessions(calendarEvent: any) {
+        const { PomodoroSessionsDialog } = await import("./PomodoroSessionsDialog");
+        const reminderId = this.resolvePomodoroTargetEventId(calendarEvent);
+        if (!reminderId) {
+            showMessage(i18n("reminderNotExist") || "任务不存在");
+            return;
+        }
+
+        const dialog = new PomodoroSessionsDialog(reminderId, this.plugin, () => {
+            // 关闭后按需刷新，避免右键查看触发额外重载
+        });
+        dialog.show();
     }
 
     private startPomodoro(calendarEvent: any, workDurationOverride?: number) {
