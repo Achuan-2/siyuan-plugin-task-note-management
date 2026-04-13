@@ -17,7 +17,7 @@ import { CategoryManageDialog } from "./CategoryManageDialog";
 import { ProjectColorDialog } from "./ProjectColorDialog";
 import { PomodoroTimer } from "./PomodoroTimer";
 import { i18n } from "../pluginInstance";
-import { generateRepeatInstances, RepeatInstance, getDaysDifference, addDaysToDate } from "../utils/repeatUtils";
+import { generateRepeatInstances, RepeatInstance, getDaysDifference, addDaysToDate, resolveRepeatReminderTimes } from "../utils/repeatUtils";
 import { getAllReminders, saveReminders, loadHolidays, loadSubscriptions } from "../utils/icsSubscription";
 import { CalendarConfigManager } from "../utils/calendarConfigManager";
 import { showStatsDialog } from "./stats/ShowStatsDialog";
@@ -2659,6 +2659,255 @@ export class CalendarView {
         }, 300); // 300ms延迟隐藏
     }
 
+    private normalizeReminderTimeTaskEvent(calendarEvent: any): any {
+        if (calendarEvent?.extendedProps?.type !== 'reminderTime') {
+            return calendarEvent;
+        }
+
+        return {
+            ...calendarEvent,
+            id: calendarEvent.extendedProps.sourceEventId || calendarEvent.id,
+            title: calendarEvent.extendedProps.eventTitle || calendarEvent.title,
+            extendedProps: {
+                ...calendarEvent.extendedProps,
+                type: undefined
+            }
+        };
+    }
+
+    private getReminderTimeEventIndex(calendarEvent: any): number {
+        const eventId = String(calendarEvent?.id || '');
+        const matched = eventId.match(/__reminder__(\d+)$/);
+        if (!matched) return -1;
+        return Number.parseInt(matched[1], 10);
+    }
+
+    private async updateReminderTimeEvent(info: any) {
+        const reminderIndex = this.getReminderTimeEventIndex(info.event);
+        if (reminderIndex < 0) {
+            info.revert();
+            return;
+        }
+
+        try {
+            const reminderData = await getAllReminders(this.plugin);
+            const originalReminderId = info.event.extendedProps.originalId;
+            const sourceEventId = info.event.extendedProps.sourceEventId || '';
+            const isRepeated = !!info.event.extendedProps.isRepeated;
+
+            let newStartDate = info.event.start;
+            let newEndDate = info.event.end;
+
+            if (newStartDate) {
+                newStartDate = this.snapToMinutes(newStartDate, 5);
+            }
+
+            if (newEndDate) {
+                newEndDate = this.snapToMinutes(newEndDate, 5);
+            } else if (newStartDate) {
+                const fallbackDuration = info.oldEvent?.end && info.oldEvent?.start
+                    ? info.oldEvent.end.getTime() - info.oldEvent.start.getTime()
+                    : 30 * 60 * 1000;
+                newEndDate = new Date(newStartDate.getTime() + fallbackDuration);
+                newEndDate = this.snapToMinutes(newEndDate, 5);
+            }
+
+            if (!newStartDate || !newEndDate) {
+                throw new Error('提醒时间事件缺少开始或结束时间');
+            }
+
+            const { dateStr: startDateStr, timeStr: startTimeStr } = getLocalDateTime(newStartDate);
+            const { dateStr: endDateStr, timeStr: endTimeStr } = getLocalDateTime(newEndDate);
+            if (!startTimeStr) {
+                throw new Error('提醒时间事件缺少开始时间');
+            }
+
+            if (isRepeated) {
+                const originalReminder = reminderData[originalReminderId];
+                if (!originalReminder) {
+                    throw new Error('重复任务原始数据不存在');
+                }
+
+                const instanceDate = sourceEventId.split('_').pop() || info.event.extendedProps.date;
+                if (!instanceDate) {
+                    throw new Error('重复任务实例日期不存在');
+                }
+
+                const existingModification = originalReminder.repeat?.instanceModifications?.[instanceDate] || {};
+                const resolvedReminderTimes = resolveRepeatReminderTimes(
+                    existingModification.reminderTimes !== undefined ? existingModification.reminderTimes : originalReminder.reminderTimes,
+                    info.event.extendedProps.date || instanceDate,
+                    info.event.extendedProps.endDate || undefined,
+                    originalReminder.date,
+                    originalReminder.endDate
+                ) || [];
+
+                if (!resolvedReminderTimes[reminderIndex]) {
+                    throw new Error('提醒时间索引不存在');
+                }
+
+                resolvedReminderTimes[reminderIndex] = {
+                    ...resolvedReminderTimes[reminderIndex],
+                    time: `${startDateStr}T${startTimeStr}`,
+                    endTime: endTimeStr ? `${endDateStr}T${endTimeStr}` : undefined
+                };
+
+                if (!originalReminder.repeat) {
+                    originalReminder.repeat = {};
+                }
+                if (!originalReminder.repeat.instanceModifications) {
+                    originalReminder.repeat.instanceModifications = {};
+                }
+
+                originalReminder.repeat.instanceModifications[instanceDate] = {
+                    ...existingModification,
+                    reminderTimes: resolvedReminderTimes,
+                    modifiedAt: getLocalDateString(new Date())
+                };
+
+                await saveReminders(this.plugin, reminderData);
+                if (this.plugin?.updateMobileNotification) {
+                    try {
+                        await this.plugin.updateMobileNotification(originalReminder);
+                    } catch (e) {
+                        console.warn('更新重复提醒移动端通知失败:', e);
+                    }
+                }
+            } else {
+                const reminder = reminderData[originalReminderId || sourceEventId || info.event.id];
+                if (!reminder) {
+                    throw new Error('任务数据不存在');
+                }
+
+                const reminderTimes = this.getReminderTimeEntries(reminder);
+                if (!reminderTimes[reminderIndex]) {
+                    throw new Error('提醒时间索引不存在');
+                }
+
+                reminderTimes[reminderIndex] = {
+                    ...reminderTimes[reminderIndex],
+                    time: `${startDateStr}T${startTimeStr}`,
+                    endTime: endTimeStr ? `${endDateStr}T${endTimeStr}` : undefined
+                };
+
+                reminder.reminderTimes = reminderTimes;
+                await saveReminders(this.plugin, reminderData);
+                if (this.plugin?.updateMobileNotification) {
+                    try {
+                        await this.plugin.updateMobileNotification(reminder);
+                    } catch (e) {
+                        console.warn('更新提醒移动端通知失败:', e);
+                    }
+                }
+            }
+
+            await this.refreshEvents();
+            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
+            showMessage(i18n("instanceTimeUpdated") || '提醒时间已更新');
+        } catch (error) {
+            console.error('更新提醒时间失败:', error);
+            showMessage(i18n("operationFailed"));
+            info.revert();
+        }
+    }
+
+    private async deleteReminderTimeEvent(calendarEvent: any) {
+        const reminderIndex = this.getReminderTimeEventIndex(calendarEvent);
+        if (reminderIndex < 0) return;
+
+        await confirm(
+            i18n("deleteReminderTime") || "删除此提醒时间",
+            i18n("confirmDelete", { title: calendarEvent.title }),
+            async () => {
+                try {
+                    const reminderData = await getAllReminders(this.plugin);
+                    const originalReminderId = calendarEvent.extendedProps.originalId;
+                    const sourceEventId = calendarEvent.extendedProps.sourceEventId || '';
+                    const isRepeated = !!calendarEvent.extendedProps.isRepeated;
+
+                    if (isRepeated) {
+                        const originalReminder = reminderData[originalReminderId];
+                        if (!originalReminder) {
+                            throw new Error('重复任务原始数据不存在');
+                        }
+
+                        const instanceDate = sourceEventId.split('_').pop() || calendarEvent.extendedProps.date;
+                        if (!instanceDate) {
+                            throw new Error('重复任务实例日期不存在');
+                        }
+
+                        const existingModification = originalReminder.repeat?.instanceModifications?.[instanceDate] || {};
+                        const resolvedReminderTimes = resolveRepeatReminderTimes(
+                            existingModification.reminderTimes !== undefined ? existingModification.reminderTimes : originalReminder.reminderTimes,
+                            calendarEvent.extendedProps.date || instanceDate,
+                            calendarEvent.extendedProps.endDate || undefined,
+                            originalReminder.date,
+                            originalReminder.endDate
+                        ) || [];
+
+                        resolvedReminderTimes.splice(reminderIndex, 1);
+
+                        if (!originalReminder.repeat) {
+                            originalReminder.repeat = {};
+                        }
+                        if (!originalReminder.repeat.instanceModifications) {
+                            originalReminder.repeat.instanceModifications = {};
+                        }
+
+                        originalReminder.repeat.instanceModifications[instanceDate] = {
+                            ...existingModification,
+                            reminderTimes: resolvedReminderTimes,
+                            modifiedAt: getLocalDateString(new Date())
+                        };
+
+                        await saveReminders(this.plugin, reminderData);
+                        if (this.plugin?.updateMobileNotification) {
+                            try {
+                                await this.plugin.updateMobileNotification(originalReminder);
+                            } catch (e) {
+                                console.warn('删除重复提醒后更新移动端通知失败:', e);
+                            }
+                        }
+                    } else {
+                        const reminder = reminderData[originalReminderId || sourceEventId || calendarEvent.id];
+                        if (!reminder) {
+                            throw new Error('任务数据不存在');
+                        }
+
+                        const reminderTimes = this.getReminderTimeEntries(reminder);
+                        reminderTimes.splice(reminderIndex, 1);
+                        if (reminderTimes.length > 0) {
+                            reminder.reminderTimes = reminderTimes;
+                        } else {
+                            delete reminder.reminderTimes;
+                        }
+
+                        await saveReminders(this.plugin, reminderData);
+                        if (this.plugin?.updateMobileNotification) {
+                            try {
+                                await this.plugin.updateMobileNotification(reminder);
+                            } catch (e) {
+                                console.warn('删除提醒后更新移动端通知失败:', e);
+                            }
+                        }
+                    }
+
+                    const targetEvent = this.calendar.getEventById(calendarEvent.id);
+                    if (targetEvent) {
+                        targetEvent.remove();
+                    }
+
+                    await this.refreshEvents();
+                    window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
+                    showMessage(i18n("deleteSuccess") || '删除成功');
+                } catch (error) {
+                    console.error('删除提醒时间失败:', error);
+                    showMessage(i18n("operationFailed"));
+                }
+            }
+        );
+    }
+
     private async showEventContextMenu(event: MouseEvent, calendarEvent: any) {
         // 在显示右键菜单前先隐藏提示框
         if (this.tooltip) {
@@ -2671,6 +2920,9 @@ export class CalendarView {
         }
 
         const menu = new Menu("calendarEventContextMenu");
+
+        const originalEventType = calendarEvent.extendedProps.type;
+        const rawCalendarEvent = calendarEvent;
 
         // Handle Pomodoro events specifically
         if (calendarEvent.extendedProps.type === 'pomodoro') {
@@ -2805,6 +3057,10 @@ export class CalendarView {
                 }
             };
             // 继续执行后续普通任务的菜单逻辑，不 return
+        }
+
+        if (originalEventType === 'reminderTime') {
+            calendarEvent = this.normalizeReminderTimeTaskEvent(calendarEvent);
         }
 
         if (calendarEvent.extendedProps.isHabit) {
@@ -3028,13 +3284,15 @@ export class CalendarView {
             submenu: priorityMenuItems
         });
 
-        menu.addItem({
-            iconHTML: calendarEvent.allDay ? "⏰" : "📅",
-            label: calendarEvent.allDay ? i18n("changeToTimed") : i18n("changeToAllDay"),
-            click: () => {
-                this.toggleAllDayEvent(calendarEvent);
-            }
-        });
+        if (originalEventType !== 'reminderTime') {
+            menu.addItem({
+                iconHTML: calendarEvent.allDay ? "⏰" : "📅",
+                label: calendarEvent.allDay ? i18n("changeToTimed") : i18n("changeToAllDay"),
+                click: () => {
+                    this.toggleAllDayEvent(calendarEvent);
+                }
+            });
+        }
 
         menu.addSeparator();
 
@@ -3105,6 +3363,16 @@ export class CalendarView {
         });
 
         menu.addSeparator();
+
+        if (originalEventType === 'reminderTime') {
+            menu.addItem({
+                iconHTML: "🗑️",
+                label: i18n("deleteReminderTime") || "删除此提醒时间",
+                click: () => {
+                    this.deleteReminderTimeEvent(rawCalendarEvent);
+                }
+            });
+        }
 
         if (calendarEvent.extendedProps.isRepeated) {
             menu.addItem({
@@ -4656,6 +4924,9 @@ export class CalendarView {
             openBlock(blockId);
         } catch (error) {
             console.error('打开笔记失败:', error);
+            const deleteReminderId = info.event.extendedProps?.type === 'reminderTime'
+                ? (info.event.extendedProps.originalId || info.event.id)
+                : info.event.id;
 
             // 询问用户是否删除无效的提醒
             await confirm(
@@ -4663,7 +4934,7 @@ export class CalendarView {
                 i18n("noteBlockDeleted"),
                 async () => {
                     // 删除当前提醒
-                    await this.performDeleteEvent(info.event.id);
+                    await this.performDeleteEvent(deleteReminderId);
                 },
                 () => {
                     showMessage(i18n("openNoteFailed"));
@@ -4675,6 +4946,11 @@ export class CalendarView {
     private async handleEventDrop(info) {
         // 如果正在进行全天重排序，直接跳过通用的 eventDrop 处理
         if (this.isAllDayReordering || (this.allDayDragState && this.allDayDragState.targetEvent)) {
+            return;
+        }
+
+        if (info.event.extendedProps.type === 'reminderTime') {
+            await this.updateReminderTimeEvent(info);
             return;
         }
 
@@ -4726,6 +5002,11 @@ export class CalendarView {
     }
 
     private async handleEventResize(info) {
+        if (info.event.extendedProps.type === 'reminderTime') {
+            await this.updateReminderTimeEvent(info);
+            return;
+        }
+
         const reminderId = info.event.id;
         const originalReminder = info.event.extendedProps;
 
@@ -5459,6 +5740,7 @@ export class CalendarView {
 
     private async showTimeEditDialog(calendarEvent: any) {
         try {
+            calendarEvent = this.normalizeReminderTimeTaskEvent(calendarEvent);
             // 对于重复事件实例，需要使用原始ID来获取原始提醒数据
             const reminderId = calendarEvent.extendedProps.isRepeated ?
                 calendarEvent.extendedProps.originalId :
@@ -5500,6 +5782,7 @@ export class CalendarView {
 
     private async showTimeEditDialogForSeries(calendarEvent: any) {
         try {
+            calendarEvent = this.normalizeReminderTimeTaskEvent(calendarEvent);
             // 获取原始重复事件的ID
             const originalId = calendarEvent.extendedProps.isRepeated ?
                 calendarEvent.extendedProps.originalId :
@@ -5947,6 +6230,7 @@ export class CalendarView {
                 // If repeat settings exist, do not display the original event (only display instances); otherwise, display the original event
                 if (!reminder.repeat?.enabled) {
                     this.addEventToList(events, reminder, reminder.id, false);
+                    this.addReminderTimeEventsToList(events, reminder, reminder.id, false);
                 } else if (this.showRepeatTasks) {
                     // Generate repeat event instances
                     let repeatInstances = generateRepeatInstances(reminder, startDate, endDate);
@@ -6007,6 +6291,7 @@ export class CalendarView {
                         // 事件 id 应使用原始实例键，以便后续的拖拽/保存逻辑能够基于原始实例键进行修改，避免产生重复的 instanceModifications 条目
                         const uniqueInstanceId = `${reminder.id}_${originalKey}`;
                         this.addEventToList(events, instanceReminder, uniqueInstanceId, true, instance.originalId);
+                        this.addReminderTimeEventsToList(events, instanceReminder, uniqueInstanceId, true, instance.originalId);
                     }
 
                     // 处理被移动到当前视图范围内但原始日期不在范围内的实例
@@ -6055,6 +6340,13 @@ export class CalendarView {
                                 endDate: modifiedEndDate || reminder.endDate,
                                 time: mod.time || reminder.time,
                                 endTime: mod.endTime || reminder.endTime,
+                                reminderTimes: resolveRepeatReminderTimes(
+                                    mod.reminderTimes !== undefined ? mod.reminderTimes : reminder.reminderTimes,
+                                    modifiedDate,
+                                    modifiedEndDate || reminder.endDate,
+                                    reminder.date,
+                                    reminder.endDate
+                                ),
                                 completed: isInstanceCompleted,
                                 title: mod.title !== undefined ? mod.title : reminder.title,
                                 note: mod.note !== undefined ? mod.note : (reminder.note || ''),
@@ -6086,6 +6378,7 @@ export class CalendarView {
 
                             const uniqueInstanceId = `${reminder.id}_${originalDateKey}`;
                             this.addEventToList(events, instanceReminder, uniqueInstanceId, true, reminder.id);
+                            this.addReminderTimeEventsToList(events, instanceReminder, uniqueInstanceId, true, reminder.id);
                         }
                     }
                 }
@@ -6749,12 +7042,8 @@ export class CalendarView {
         }
     }
 
-    private addEventToList(events: any[], reminder: any, eventId: string, isRepeated: boolean, originalId?: string) {
-        const allowAbandonedDisplay = !!(reminder && reminder._allowAbandonedDisplay);
-        if (this.isAbandonedReminder(reminder) && !allowAbandonedDisplay) return;
+    private getEventColors(reminder: any): { backgroundColor: string; borderColor: string } {
         const priority = reminder.priority || 'none';
-
-        // 使用缓存获取颜色，避免重复计算
         const cacheKey = `${this.colorBy}-${reminder.projectId || ''}-${reminder.categoryId || ''}-${priority}`;
         let colors = this.colorCache.get(cacheKey);
 
@@ -6762,7 +7051,6 @@ export class CalendarView {
             let backgroundColor: string;
             let borderColor: string;
 
-            // 获取优先级颜色（用于边框）
             let priorityBorderColor: string;
             switch (priority) {
                 case 'high':
@@ -6775,7 +7063,7 @@ export class CalendarView {
                     priorityBorderColor = '#2980b9';
                     break;
                 default:
-                    priorityBorderColor = ''; // 无优先级时返回空，后续使用默认颜色
+                    priorityBorderColor = '';
                     break;
             }
 
@@ -6783,7 +7071,6 @@ export class CalendarView {
                 if (reminder.projectId) {
                     const color = this.projectManager.getProjectColor(reminder.projectId);
                     backgroundColor = color;
-                    // 有优先级时使用优先级颜色作为边框，否则使用项目颜色
                     borderColor = priorityBorderColor || color;
                 } else {
                     backgroundColor = '#8f8f8f';
@@ -6791,17 +7078,15 @@ export class CalendarView {
                 }
             } else if (this.colorBy === 'category') {
                 if (reminder.categoryId) {
-                    // Use the first category for color if multiple are present
                     const firstCategoryId = reminder.categoryId.split(',')[0];
                     const categoryStyle = this.categoryManager.getCategoryStyle(firstCategoryId);
                     backgroundColor = categoryStyle.backgroundColor;
-                    // 有优先级时使用优先级颜色作为边框，否则使用分类颜色
                     borderColor = priorityBorderColor || categoryStyle.borderColor;
                 } else {
                     backgroundColor = '#8f8f8f';
                     borderColor = priorityBorderColor || '#7f8c8d';
                 }
-            } else { // colorBy === 'priority'
+            } else {
                 switch (priority) {
                     case 'high':
                         backgroundColor = '#ff0000';
@@ -6825,6 +7110,170 @@ export class CalendarView {
             colors = { backgroundColor, borderColor };
             this.colorCache.set(cacheKey, colors);
         }
+
+        return colors;
+    }
+
+    private getReminderTimeEntries(reminder: any): Array<{ time: string; endTime?: string; note?: string }> {
+        const entries: Array<{ time: string; endTime?: string; note?: string }> = [];
+
+        if (Array.isArray(reminder?.reminderTimes)) {
+            reminder.reminderTimes.forEach((item: any) => {
+                if (typeof item === 'string' && item.trim()) {
+                    entries.push({ time: item.trim() });
+                    return;
+                }
+
+                if (item && typeof item.time === 'string' && item.time.trim()) {
+                    entries.push({
+                        time: item.time.trim(),
+                        endTime: typeof item.endTime === 'string' ? item.endTime.trim() : undefined,
+                        note: typeof item.note === 'string' ? item.note : undefined
+                    });
+                }
+            });
+        }
+
+        if (entries.length === 0 && typeof reminder?.customReminderTime === 'string' && reminder.customReminderTime.trim()) {
+            entries.push({ time: reminder.customReminderTime.trim() });
+        }
+
+        return entries;
+    }
+
+    private parseReminderTimeToDateTime(reminderTimeStr: string, fallbackDate?: string): { date: string; time: string } | null {
+        if (!reminderTimeStr) return null;
+
+        const value = String(reminderTimeStr).trim();
+        let datePart: string | undefined;
+        let timePart: string | undefined;
+
+        if (value.includes('T')) {
+            const [date, time = ''] = value.split('T');
+            datePart = date;
+            timePart = time;
+        } else if (value.includes(' ')) {
+            const [first, ...rest] = value.split(' ');
+            if (/^\d{4}-\d{2}-\d{2}$/.test(first)) {
+                datePart = first;
+                timePart = rest.join(' ');
+            } else {
+                timePart = value;
+            }
+        } else if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+            datePart = value;
+        } else {
+            timePart = value;
+        }
+
+        const normalizedTime = timePart?.match(/^\d{1,2}:\d{2}/)?.[0];
+        const effectiveDate = datePart || fallbackDate;
+
+        if (!effectiveDate || !normalizedTime) {
+            return null;
+        }
+
+        return {
+            date: effectiveDate,
+            time: normalizedTime.padStart(5, '0')
+        };
+    }
+
+    private addReminderTimeEventsToList(
+        events: any[],
+        reminder: any,
+        sourceEventId: string,
+        isRepeated: boolean,
+        originalId?: string
+    ) {
+        const allowAbandonedDisplay = !!(reminder && reminder._allowAbandonedDisplay);
+        if (this.isAbandonedReminder(reminder) && !allowAbandonedDisplay) return;
+
+        const reminderEntries = this.getReminderTimeEntries(reminder);
+        if (!reminderEntries.length) return;
+
+        const fallbackDate = reminder.date || reminder.endDate;
+        if (!fallbackDate) return;
+
+        const colors = this.getEventColors(reminder);
+        const priority = reminder.priority || 'none';
+        const baseTitle = reminder.title || i18n("unnamedNote");
+
+        reminderEntries.forEach((entry, index) => {
+            const parsed = this.parseReminderTimeToDateTime(entry.time, fallbackDate);
+            if (!parsed) return;
+
+            const startDate = new Date(`${parsed.date}T${parsed.time}:00`);
+            if (Number.isNaN(startDate.getTime())) return;
+
+            let endDate = new Date(startDate.getTime() + 30 * 60 * 1000);
+            const parsedEnd = entry.endTime
+                ? this.parseReminderTimeToDateTime(entry.endTime, parsed.date)
+                : null;
+            if (parsedEnd) {
+                const explicitEndDate = new Date(`${parsedEnd.date}T${parsedEnd.time}:00`);
+                if (!Number.isNaN(explicitEndDate.getTime()) && explicitEndDate > startDate) {
+                    endDate = explicitEndDate;
+                }
+            }
+            const endDateStr = getLocalDateString(endDate);
+            const endTimeStr = endDate.toTimeString().substring(0, 5);
+
+            events.push({
+                id: `${sourceEventId}__reminder__${index}`,
+                title: `⏰ ${baseTitle}`,
+                start: `${parsed.date}T${parsed.time}:00`,
+                end: `${endDateStr}T${endTimeStr}:00`,
+                backgroundColor: colorWithOpacity(colors.backgroundColor, 0.22),
+                borderColor: colors.borderColor,
+                textColor: 'var(--b3-theme-on-background)',
+                className: `reminder-time-event reminder-priority-${priority}${isRepeated ? ' reminder-repeated' : ''}${reminder.completed ? ' completed' : ''}`,
+                editable: !reminder.isSubscribed,
+                startEditable: !reminder.isSubscribed,
+                durationEditable: !reminder.isSubscribed,
+                allDay: false,
+                display: 'block',
+                extendedProps: {
+                    type: 'reminderTime',
+                    eventTitle: baseTitle,
+                    sourceEventId: sourceEventId,
+                    reminderAt: entry.time,
+                    reminderEndAt: entry.endTime,
+                    reminderTimeNote: entry.note,
+                    completed: reminder.completed || false,
+                    note: (typeof entry.note === 'string' && entry.note.trim()) ? entry.note : (reminder.note || ''),
+                    taskNote: reminder.note || '',
+                    date: reminder.date,
+                    endDate: reminder.endDate || null,
+                    time: reminder.time || null,
+                    endTime: reminder.endTime || null,
+                    priority: priority,
+                    categoryId: reminder.categoryId,
+                    projectId: reminder.projectId,
+                    customGroupId: reminder.customGroupId,
+                    customGroupName: reminder.customGroupName,
+                    sort: typeof reminder.sort === 'number' ? reminder.sort : 0,
+                    blockId: reminder.blockId || null,
+                    docId: reminder.docId,
+                    docTitle: reminder.docTitle,
+                    parentId: reminder.parentId || null,
+                    parentTitle: reminder.parentTitle || null,
+                    isRepeated: isRepeated,
+                    originalId: originalId || reminder.id,
+                    repeat: reminder.repeat,
+                    isSubscribed: reminder.isSubscribed || false,
+                    subscriptionId: reminder.subscriptionId,
+                    showNoteInCalendar: reminder.showNoteInCalendar
+                }
+            });
+        });
+    }
+
+    private addEventToList(events: any[], reminder: any, eventId: string, isRepeated: boolean, originalId?: string) {
+        const allowAbandonedDisplay = !!(reminder && reminder._allowAbandonedDisplay);
+        if (this.isAbandonedReminder(reminder) && !allowAbandonedDisplay) return;
+        const priority = reminder.priority || 'none';
+        const colors = this.getEventColors(reminder);
 
         // 检查完成状态（简化逻辑）
         const isCompleted = reminder.completed || false;

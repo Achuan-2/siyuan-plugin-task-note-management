@@ -9,7 +9,7 @@ export interface RepeatInstance {
     time?: string;
     endDate?: string;
     endTime?: string;
-    reminderTimes?: Array<{ time: string, note?: string }>; // 提醒时间列表
+    reminderTimes?: Array<{ time: string, endTime?: string, note?: string }>; // 提醒时间列表
     customReminderPreset?: string; // 提醒预设
     instanceId: string; // 实例标识符
     originalId: string; // 原始提醒ID
@@ -30,6 +30,7 @@ export interface RepeatInstance {
 
 export interface ReminderTimeConfig {
     time: string;
+    endTime?: string;
     note?: string;
     dayOffset?: number;
     dayIndex?: number;
@@ -70,6 +71,7 @@ function normalizeReminderTimeEntry(entry: any): ReminderTimeConfig | null {
     if (typeof entry === 'object' && typeof entry.time === 'string') {
         return {
             time: entry.time,
+            endTime: typeof entry.endTime === 'string' ? entry.endTime : undefined,
             note: entry.note,
             dayOffset: typeof entry.dayOffset === 'number' ? entry.dayOffset : undefined,
             dayIndex: typeof entry.dayIndex === 'number' ? entry.dayIndex : undefined
@@ -147,27 +149,37 @@ export function resolveRepeatReminderTimes(
     }
 
     const durationDays = getReminderTaskDurationDays(instanceDate, instanceEndDate);
+
+    const resolveEntryDateTime = (value: string | undefined, item: ReminderTimeConfig): string | undefined => {
+        if (!value) return undefined;
+        const parsed = extractDateAndTimeParts(value);
+        if (!parsed.time) return undefined;
+
+        let resolvedDate = parsed.date || instanceDate;
+        if (typeof item.dayIndex === 'number') {
+            const dayIndex = Math.min(Math.max(Math.trunc(item.dayIndex), 1), durationDays);
+            resolvedDate = addDaysToDate(instanceDate, dayIndex - 1);
+        } else if (typeof item.dayOffset === 'number') {
+            const dayOffset = Math.trunc(item.dayOffset);
+            resolvedDate = addDaysToDate(instanceDate, dayOffset <= 0 ? dayOffset : dayOffset - 1);
+        } else if (!parsed.date && originalTaskDate) {
+            const offset = getReminderEntryRelativeOffset(item, originalTaskDate, originalTaskEndDate);
+            resolvedDate = addDaysToDate(instanceDate, offset);
+        }
+
+        return `${resolvedDate}T${parsed.time}`;
+    };
+
     const resolved = reminderTimes
         .map((item) => normalizeReminderTimeEntry(item))
         .filter((item): item is ReminderTimeConfig => !!item)
         .map((item) => {
-            const parsed = extractDateAndTimeParts(item.time);
-            if (!parsed.time) return null;
-
-            let resolvedDate = parsed.date || instanceDate;
-            if (typeof item.dayIndex === 'number') {
-                const dayIndex = Math.min(Math.max(Math.trunc(item.dayIndex), 1), durationDays);
-                resolvedDate = addDaysToDate(instanceDate, dayIndex - 1);
-            } else if (typeof item.dayOffset === 'number') {
-                const dayOffset = Math.trunc(item.dayOffset);
-                resolvedDate = addDaysToDate(instanceDate, dayOffset <= 0 ? dayOffset : dayOffset - 1);
-            } else if (!parsed.date && originalTaskDate) {
-                const offset = getReminderEntryRelativeOffset(item, originalTaskDate, originalTaskEndDate);
-                resolvedDate = addDaysToDate(instanceDate, offset);
-            }
+            const resolvedTime = resolveEntryDateTime(item.time, item);
+            if (!resolvedTime) return null;
 
             return {
-                time: `${resolvedDate}T${parsed.time}`,
+                time: resolvedTime,
+                endTime: resolveEntryDateTime(item.endTime, item),
                 note: item.note
             };
         })

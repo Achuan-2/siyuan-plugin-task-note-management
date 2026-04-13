@@ -1,5 +1,6 @@
 export interface ReminderTime {
     time: string;
+    endTime?: string;
     note?: string;
 }
 
