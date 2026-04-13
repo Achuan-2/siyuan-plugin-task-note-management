@@ -19,7 +19,7 @@ import { VipManager } from "../utils/vip";
 
 import { PasteTaskDialog } from "./PasteTaskDialog";
 import { ProjectDialog } from "./ProjectDialog";
-import { getFrontend,getBackend } from "siyuan";
+import { getFrontend, getBackend } from "siyuan";
 import { createPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
 import { SortMenuDialog } from "./SortMenuDialog";
 import { SortCriterion, getSortCriterionName } from "../utils/sortConfig";
@@ -6164,8 +6164,8 @@ export class ProjectKanbanView {
                         statusId === 'completed'
                             ? topLevelTasks.filter(t => t.completed).length
                             : topLevelTasks.filter(
-                                  t => !t.completed && this.getTaskStatus(t) === statusId
-                              ).length;
+                                t => !t.completed && this.getTaskStatus(t) === statusId
+                            ).length;
                     const totalPages = Math.max(1, Math.ceil(totalTop / this.pageSize));
                     const current = this.pageIndexMap[statusId] || 1;
                     this.pageIndexMap[statusId] = Math.min(Math.max(1, current), totalPages);
@@ -6682,7 +6682,7 @@ export class ProjectKanbanView {
         return [
             { key: 'priority', label: () => i18n('sortByPriority') || i18n('sortingPriority'), icon: '🎯' },
             { key: 'category', label: () => i18n('sortByCategory') || '分类', icon: '🏷️' },
-            { key: 'time', label: () =>  i18n('sortByTime'), icon: '🕐' },
+            { key: 'time', label: () => i18n('sortByTime'), icon: '🕐' },
             { key: 'created', label: () => i18n('sortByCreated'), icon: '📅' },
             { key: 'title', label: () => i18n('sortByTitle') || i18n('sortingTitle'), icon: '📝' },
         ];
@@ -14975,7 +14975,7 @@ export class ProjectKanbanView {
         try {
             const reminderData = await this.getReminders();
             const targetId = task.isRepeatInstance ? task.originalId : task.id;
-            
+
             if (!targetId || !reminderData[targetId]) {
                 showMessage(i18n("reminderNotExist"));
                 return;
@@ -14988,7 +14988,7 @@ export class ProjectKanbanView {
             }
 
             await saveReminders(this.plugin, reminderData);
-            
+
             // Sync local cache
             this.tasks.forEach(item => {
                 const itemTargetId = item.isRepeatInstance ? item.originalId : item.id;
@@ -15647,15 +15647,15 @@ export class ProjectKanbanView {
 
             // 更新本地缓存
             const localChild = this.tasks.find(t => t.id === childTask.id);
-                if (localChild) {
-                    localChild.parentId = parentTask.id;
-                    // 同步本地缓存状态
-                    if (parentStatus === 'completed') {
-                        localChild.kanbanStatus = 'completed';
-                        localChild.completed = true;
-                        this.syncCustomProgressOnCompletion(localChild, true);
-                        localChild.completedTime = getLocalDateTimeString(new Date());
-                    } else {
+            if (localChild) {
+                localChild.parentId = parentTask.id;
+                // 同步本地缓存状态
+                if (parentStatus === 'completed') {
+                    localChild.kanbanStatus = 'completed';
+                    localChild.completed = true;
+                    this.syncCustomProgressOnCompletion(localChild, true);
+                    localChild.completedTime = getLocalDateTimeString(new Date());
+                } else {
                     localChild.kanbanStatus = parentStatus;
                     localChild.completed = false;
                     delete localChild.completedTime;
@@ -16164,12 +16164,12 @@ export class ProjectKanbanView {
 
             const draggedOriginalId = draggedTask.isRepeatInstance ? (draggedTask.originalId || draggedId) : draggedId;
             const targetOriginalId = targetTask.isRepeatInstance ? (targetTask.originalId || targetId) : targetId;
-            
+
             // 同步置顶状态
             if (reminderData[draggedOriginalId] && reminderData[targetOriginalId]) {
                 const targetPinned = !!reminderData[targetOriginalId].pinned;
                 const draggedPinned = !!reminderData[draggedOriginalId].pinned;
-                
+
                 if (targetPinned !== draggedPinned) {
                     if (targetPinned) {
                         reminderData[draggedOriginalId].pinned = true;
