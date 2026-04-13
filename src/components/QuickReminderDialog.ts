@@ -3949,9 +3949,9 @@ export class QuickReminderDialog {
             const timeInput = this.dialog.element.querySelector('#quickReminderTime') as HTMLInputElement;
             const hasDate = !!dateInput?.value;
             const hasTime = !!timeInput?.value;
-            
+
             let options: Array<{ value: string; label: string }> = [];
-            
+
             if (hasDate && hasTime) {
                 // 有固定时间的任务：提前5分钟、10分钟、30分钟、1小时、2小时、一天
                 options = [
@@ -3977,20 +3977,20 @@ export class QuickReminderDialog {
                     { value: 'after_tomorrow_9am', label: i18n('afterTomorrow9am') || '后天9点' }
                 ];
             }
-            
+
             return options;
         };
-        
+
         // 计算预设时间
         const calculatePresetTime = (presetValue: string): string | null => {
             const dateInput = this.dialog.element.querySelector('#quickReminderDate') as HTMLInputElement;
             const timeInput = this.dialog.element.querySelector('#quickReminderTime') as HTMLInputElement;
             const hasDate = !!dateInput?.value;
             const hasTime = !!timeInput?.value;
-            
+
             const today = new Date();
             today.setHours(0, 0, 0, 0);
-            
+
             const formatDateTime = (date: Date) => {
                 const yyyy = date.getFullYear();
                 const mm = String(date.getMonth() + 1).padStart(2, '0');
@@ -3999,12 +3999,12 @@ export class QuickReminderDialog {
                 const min = String(date.getMinutes()).padStart(2, '0');
                 return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
             };
-            
+
             if (hasDate && hasTime) {
                 // 基于任务时间计算偏移
                 const baseDate = new Date(`${dateInput.value}T${timeInput.value}`);
                 if (isNaN(baseDate.getTime())) return null;
-                
+
                 let offsetMinutes = 0;
                 switch (presetValue) {
                     case '5m': offsetMinutes = 5; break;
@@ -4015,14 +4015,14 @@ export class QuickReminderDialog {
                     case '1d': offsetMinutes = 24 * 60; break;
                     default: return null;
                 }
-                
+
                 const target = new Date(baseDate.getTime() - offsetMinutes * 60 * 1000);
                 return formatDateTime(target);
             } else if (hasDate && !hasTime) {
                 // 基于日期计算9点时间
                 const baseDate = new Date(dateInput.value);
                 baseDate.setHours(9, 0, 0, 0);
-                
+
                 switch (presetValue) {
                     case 'same_day_9am':
                         return formatDateTime(baseDate);
@@ -4038,7 +4038,7 @@ export class QuickReminderDialog {
                 // 无日期，基于今天计算
                 const targetDate = new Date(today);
                 targetDate.setHours(9, 0, 0, 0);
-                
+
                 switch (presetValue) {
                     case 'today_9am':
                         return formatDateTime(targetDate);
@@ -4056,20 +4056,20 @@ export class QuickReminderDialog {
         // 添加预设按钮 - 显示下拉菜单
         addPresetBtn?.addEventListener('click', () => {
             if (!presetDropdown) return;
-            
+
             // 生成预设选项
             const options = generatePresetOptions();
-            
+
             // 渲染下拉菜单
             presetDropdown.innerHTML = options.map(opt => `
                 <div class="b3-menu__item" data-value="${opt.value}" style="padding: 8px 12px; cursor: pointer;">
                     <span class="b3-menu__label">${opt.label}</span>
                 </div>
             `).join('');
-            
+
             // 显示下拉菜单
             presetDropdown.style.display = 'block';
-            
+
             // 绑定选项点击事件
             presetDropdown.querySelectorAll('.b3-menu__item').forEach(item => {
                 item.addEventListener('click', () => {
