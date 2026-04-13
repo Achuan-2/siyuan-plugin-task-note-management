@@ -244,7 +244,7 @@ export class ReminderPanel {
             const reminder = this.currentRemindersCache.find(r => r.id === reminderId);
             if (!reminder) return;
 
-            const shouldStillHide = this.currentTab === 'today' && !!reminder.completed && !this.shouldShowInCurrentView(reminder);
+            const shouldStillHide = this.isTodayLikeView() && !!reminder.completed && !this.shouldShowInCurrentView(reminder);
             if (!shouldStillHide) return;
 
             const el = this.remindersContainer.querySelector(`[data-reminder-id="${reminderId}"]`) as HTMLElement | null;
@@ -705,6 +705,121 @@ export class ReminderPanel {
         return false;
     }
 
+    private getActiveCustomFilterConfig(): any | null {
+        if (!this.currentTab.startsWith('custom_')) return null;
+        const filterId = this.currentTab.replace('custom_', '');
+        return this.getCustomFilterConfig(filterId);
+    }
+
+    private getTodayLikeCustomFilterMode(filterConfig: any): 'today' | 'today_with_overdue' | null {
+        if (!filterConfig || !Array.isArray(filterConfig.dateFilters) || filterConfig.dateFilters.length === 0) {
+            return null;
+        }
+
+        const dateFilterTypes = Array.from(new Set(
+            filterConfig.dateFilters
+                .map((df: any) => (typeof df?.type === 'string' ? df.type : ''))
+                .filter((type: string) => !!type)
+        ));
+
+        if (dateFilterTypes.length === 1 && dateFilterTypes[0] === 'today') {
+            return 'today';
+        }
+
+        if (
+            dateFilterTypes.length === 2 &&
+            dateFilterTypes.includes('today') &&
+            dateFilterTypes.includes('overdue')
+        ) {
+            return 'today_with_overdue';
+        }
+
+        return null;
+    }
+
+    private isTodayLikeView(): boolean {
+        if (this.currentTab === 'today') return true;
+        const filterConfig = this.getActiveCustomFilterConfig();
+        if (!filterConfig || filterConfig.statusFilter === 'completed') return false;
+        return this.getTodayLikeCustomFilterMode(filterConfig) !== null;
+    }
+
+    private filterTodayTabReminders(
+        reminders: any[],
+        today: string,
+        isEffectivelyCompleted: (reminder: any) => boolean,
+        excludeDesserts: boolean = false,
+        includeOverdue: boolean = true
+    ): any[] {
+        return reminders.filter(r => {
+            const isCompleted = isEffectivelyCompleted(r);
+            if (isCompleted) return false;
+            const hasIgnoreMark = this.hasTodayIgnoreMark(r, today);
+
+            // 1. 常规今日任务：有日期且（在日期范围内，或可选地包含已逾期）
+            const hasDate = r.date || r.endDate;
+            const startLogical = hasDate ? this.getReminderLogicalDate(r.date || r.endDate, r.time || r.endTime) : null;
+            const endLogical = hasDate ? this.getReminderLogicalDate(r.endDate || r.date, r.endTime || r.time) : null;
+
+            if (hasDate && startLogical && endLogical) {
+                const inRange = compareDateStrings(startLogical, today) <= 0 && compareDateStrings(today, endLogical) <= 0;
+                const isOverdue = compareDateStrings(endLogical, today) < 0;
+                if (inRange || (includeOverdue && isOverdue)) {
+                    if (this.canApplyTodayIgnore(r, today) && hasIgnoreMark) return false;
+                    return true;
+                }
+            }
+
+            // 2. 今日提醒的未来任务/订阅任务
+            if (this.isFutureTaskRemindedOnDate(r, today)) {
+                if (hasIgnoreMark) return false;
+                return !this.hasDailyCompletionMark(r, today);
+            }
+
+            if (excludeDesserts) return false;
+
+            // 3. 今日可做任务
+            if (r.isAvailableToday) {
+                const availDate = r.availableStartDate || today;
+                if (compareDateStrings(availDate, today) <= 0) {
+                    const dailyCompleted = Array.isArray(r.dailyDessertCompleted) ? r.dailyDessertCompleted : [];
+                    if (dailyCompleted.includes(today)) return false;
+                    if (hasIgnoreMark) return false;
+                    return true;
+                }
+            }
+
+            return false;
+        });
+    }
+
+    private getTodayLikeSpecialReminders(
+        reminders: any[],
+        today: string,
+        isEffectivelyCompleted: (reminder: any) => boolean
+    ): any[] {
+        return reminders.filter(r => {
+            if (isEffectivelyCompleted(r)) return false;
+            const hasIgnoreMark = this.hasTodayIgnoreMark(r, today);
+
+            if (this.isFutureTaskRemindedOnDate(r, today)) {
+                if (hasIgnoreMark) return false;
+                return !this.hasDailyCompletionMark(r, today);
+            }
+
+            if (!r.isAvailableToday) return false;
+
+            const availDate = r.availableStartDate || today;
+            if (compareDateStrings(availDate, today) > 0) return false;
+
+            const dailyCompleted = Array.isArray(r.dailyDessertCompleted) ? r.dailyDessertCompleted : [];
+            if (dailyCompleted.includes(today)) return false;
+            if (hasIgnoreMark) return false;
+
+            return true;
+        });
+    }
+
     // 修改排序方法以支持多条件排序
     private sortReminders(reminders: any[]) {
         const criteria = this.getActiveSortCriteria();
@@ -739,7 +854,7 @@ export class ReminderPanel {
         }
 
         // 特殊处理：今日任务视图下，每日可做任务始终放在最后，不参与其他排序
-        if (this.currentTab === 'today') {
+        if (this.isTodayLikeView()) {
             const todayStr = getLogicalDateString();
 
             // 定义分组：0-普通任务, 1-订阅任务, 2-每日可做(Dessert)
@@ -2402,11 +2517,11 @@ export class ReminderPanel {
                 // So checking transition is enough.
 
                 // 只有 top-level 任务需要分隔符。
-                if (level === 0 && (this.currentTab === 'today' || this.currentTab === 'todayCompleted')) {
+                if (level === 0 && (this.isTodayLikeView() || this.currentTab === 'todayCompleted')) {
                     // 定义分组类型：0-普通任务, 1-订阅任务, 2-底部任务(每日可做/今日忽略)
                     const getGroupType = (item: any) => {
                         let isBottomGroup = false;
-                        if (this.currentTab === 'today') {
+                        if (this.isTodayLikeView()) {
                             isBottomGroup = item.isAvailableToday && (!item.date && !item.endDate || (item.date || item.endDate) !== today);
                         } else if (this.currentTab === 'todayCompleted') {
                             const isIgnoredToday = this.hasTodayIgnoreMark(item, today);
@@ -4018,49 +4133,7 @@ export class ReminderPanel {
                     return compareDateStrings(endLogical, today) < 0;
                 });
             case 'today':
-                return sourceReminders.filter(r => {
-                    const isCompleted = isEffectivelyCompleted(r);
-                    if (isCompleted) return false;
-                    const hasIgnoreMark = this.hasTodayIgnoreMark(r, today);
-
-                    // 1. 常规今日任务：有日期且 (在日期范围内 或 已逾期)
-                    const hasDate = r.date || r.endDate;
-                    const startLogical = hasDate ? this.getReminderLogicalDate(r.date || r.endDate, r.time || r.endTime) : null;
-                    const endLogical = hasDate ? this.getReminderLogicalDate(r.endDate || r.date, r.endTime || r.time) : null;
-
-                    if (hasDate && startLogical && endLogical) {
-                        const inRange = compareDateStrings(startLogical, today) <= 0 && compareDateStrings(today, endLogical) <= 0;
-                        const isOverdue = compareDateStrings(endLogical, today) < 0;
-                        if (inRange || isOverdue) {
-                            if (this.canApplyTodayIgnore(r, today) && hasIgnoreMark) return false;
-                            return true;
-                        }
-                    }
-
-                    // 2. 今日可做任务 (Daily Dessert): 
-                    if (this.isFutureTaskRemindedOnDate(r, today)) {
-                        if (hasIgnoreMark) return false;
-                        return !this.hasDailyCompletionMark(r, today);
-                    }
-
-                    if (excludeDesserts) return false;
-
-                    if (r.isAvailableToday) {
-                        const availDate = r.availableStartDate || today;
-                        if (compareDateStrings(availDate, today) <= 0) {
-                            // 检查今天是否已完成
-                            const dailyCompleted = Array.isArray(r.dailyDessertCompleted) ? r.dailyDessertCompleted : [];
-                            if (dailyCompleted.includes(today)) return false;
-
-                            // 检查今天是否已忽略
-                            if (hasIgnoreMark) return false;
-
-                            return true;
-                        }
-                    }
-
-                    return false;
-                });
+                return this.filterTodayTabReminders(sourceReminders, today, isEffectivelyCompleted, excludeDesserts, true);
             case 'tomorrow':
 
                 return sourceReminders.filter(r => {
@@ -4212,8 +4285,17 @@ export class ReminderPanel {
         let filtered = [...reminders];
 
         // 1. 应用日期过滤
+        const todayLikeMode = this.getTodayLikeCustomFilterMode(filterConfig);
         if (filterConfig.dateFilters && filterConfig.dateFilters.length > 0) {
-            filtered = this.applyDateFilters(filtered, filterConfig.dateFilters, today, isEffectivelyCompleted);
+            if (todayLikeMode) {
+                const dateMatched = this.applyDateFilters(filtered, filterConfig.dateFilters, today, isEffectivelyCompleted);
+                const specialMatched = this.getTodayLikeSpecialReminders(filtered, today, isEffectivelyCompleted);
+                const merged = new Map<string, any>();
+                [...dateMatched, ...specialMatched].forEach(reminder => merged.set(reminder.id, reminder));
+                filtered = Array.from(merged.values());
+            } else {
+                filtered = this.applyDateFilters(filtered, filterConfig.dateFilters, today, isEffectivelyCompleted);
+            }
         }
 
         // 2. 应用状态过滤
@@ -5160,7 +5242,7 @@ export class ReminderPanel {
 
             if (!this.shouldShowInCurrentView(updatedReminder)) {
                 // 今日任务中勾选完成时，先保留 300ms 完成态视觉反馈，再由后续刷新移除
-                if (completed && this.currentTab === 'today') {
+                if (completed && this.isTodayLikeView()) {
                     this.updateReminderCompletionDom(id, completed, updatedReminder.completedTime);
                     this.scheduleCompletionRemoval(id);
                     continue;
@@ -5278,7 +5360,7 @@ export class ReminderPanel {
                 window.dispatchEvent(new CustomEvent('reminderUpdated', {
                     detail: {
                         source: this.panelId,
-                        refreshDelayMs: (completed && this.currentTab === 'today') ? 300 : 100
+                        refreshDelayMs: (completed && this.isTodayLikeView()) ? 300 : 100
                     }
                 }));
                 return;
@@ -5346,7 +5428,7 @@ export class ReminderPanel {
             window.dispatchEvent(new CustomEvent('reminderUpdated', {
                 detail: {
                     source: this.panelId,
-                    refreshDelayMs: (completed && this.currentTab === 'today') ? 300 : 100
+                    refreshDelayMs: (completed && this.isTodayLikeView()) ? 300 : 100
                 }
             }));
         } catch (error) {
@@ -6122,7 +6204,7 @@ export class ReminderPanel {
 
             // 如果任务没有日期，且当前在"今日任务"视图中，自动添加今日日期
             // 这样可以确保拖拽出来的子任务不会从今日任务视图中消失
-            if (!reminderData[childId].date && this.currentTab === 'today') {
+            if (!reminderData[childId].date && this.isTodayLikeView()) {
                 reminderData[childId].date = getLogicalDateString();
             }
 
@@ -9664,7 +9746,7 @@ export class ReminderPanel {
 
             // 8.5 特殊处理今日视图下的每日可做分隔符 (Daily Dessert Separator)
             // 确保普通任务不会被错误地插入到分隔符下方
-            if (this.currentTab === 'today') {
+            if (this.isTodayLikeView()) {
                 const isSavedDessert = savedReminder.isAvailableToday && (!savedReminder.date || savedReminder.date !== today);
                 const separator = this.remindersContainer.querySelector('#daily-dessert-separator') as HTMLElement;
                 if (separator) {
@@ -9688,7 +9770,7 @@ export class ReminderPanel {
             }
 
             // 8.5.1 处理订阅任务分隔符，避免非订阅任务在乐观更新时被追加到订阅区下方
-            if ((this.currentTab === 'today' || this.currentTab === 'todayCompleted') && !savedReminder.parentId) {
+            if ((this.isTodayLikeView() || this.currentTab === 'todayCompleted') && !savedReminder.parentId) {
                 const subscribedSeparator = this.remindersContainer.querySelector('#subscribed-tasks-separator') as HTMLElement;
                 if (subscribedSeparator && !savedReminder.isSubscribed) {
                     let shouldInsertBeforeSubscribedSeparator = false;
@@ -9740,7 +9822,7 @@ export class ReminderPanel {
                     }
                     if (prevEl) {
                         // 8.6 针对每日可做任务修正 prevEl
-                        if (this.currentTab === 'today') {
+                        if (this.isTodayLikeView()) {
                             const isSavedDessert = savedReminder.isAvailableToday && (!savedReminder.date || savedReminder.date !== today);
                             if (isSavedDessert) {
                                 const separator = this.remindersContainer.querySelector('#daily-dessert-separator') as HTMLElement;
@@ -9755,7 +9837,7 @@ export class ReminderPanel {
                                 }
                             }
                         }
-                        if ((this.currentTab === 'today' || this.currentTab === 'todayCompleted') && !savedReminder.parentId && !savedReminder.isSubscribed) {
+                        if ((this.isTodayLikeView() || this.currentTab === 'todayCompleted') && !savedReminder.parentId && !savedReminder.isSubscribed) {
                             const subscribedSeparator = this.remindersContainer.querySelector('#subscribed-tasks-separator') as HTMLElement;
                             if (subscribedSeparator && prevEl === subscribedSeparator) {
                                 this.remindersContainer.insertBefore(el, subscribedSeparator);
@@ -10747,7 +10829,7 @@ export class ReminderPanel {
             window.dispatchEvent(new CustomEvent('reminderUpdated', {
                 detail: {
                     source: this.panelId,
-                    refreshDelayMs: this.currentTab === 'today' ? 300 : 100
+                    refreshDelayMs: this.isTodayLikeView() ? 300 : 100
                 }
             }));
             showMessage(i18n('batchUpdateSuccess', { count: String(changedCount || ids.length) }) || `成功更新 ${changedCount || ids.length} 个任务`);
