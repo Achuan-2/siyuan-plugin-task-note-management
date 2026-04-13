@@ -7625,11 +7625,11 @@ export class ProjectKanbanView {
             if (status.id === 'completed') {
                 tasksForRender = this.sortDoneTasks(tasksForRender);
             }
-            await this.renderStatusColumnWithStableGroups(status.id, tasksForRender);
+            const visibleTasksForColumn = await this.renderStatusColumnWithStableGroups(status.id, tasksForRender);
 
             const column = this.container.querySelector(`.kanban-column-${status.id}`) as HTMLElement;
             if (column) {
-                const shouldHide = this.hideEmptyStatusBars && tasksForRender.length === 0;
+                const shouldHide = this.hideEmptyStatusBars && visibleTasksForColumn.length === 0;
                 column.style.display = shouldHide ? 'none' : 'flex';
             }
         }
@@ -7952,16 +7952,16 @@ export class ProjectKanbanView {
         return groupContainer;
     }
 
-    private async renderStatusColumnWithStableGroups(status: string, tasks: any[]) {
+    private async renderStatusColumnWithStableGroups(status: string, tasks: any[]): Promise<any[]> {
         const column = this.container.querySelector(`.kanban-column-${status}`) as HTMLElement;
-        if (!column) return;
+        if (!column) return [];
 
         const content = column.querySelector('.kanban-column-content') as HTMLElement;
         const count = column.querySelector('.kanban-column-count') as HTMLElement;
 
         // 获取稳定的分组容器
         const groupsContainer = content.querySelector('.status-column-stable-groups') as HTMLElement;
-        if (!groupsContainer) return;
+        if (!groupsContainer) return [];
 
         // 获取项目自定义分组
         // 注意：这里我们简化处理，如果有自定义分组，则按分组渲染；否则直接在状态子分组中渲染任务
@@ -7985,6 +7985,8 @@ export class ProjectKanbanView {
             const topLevelTasks = visibleTasksForCount.filter(t => !t.parentId || !taskMap.has(t.parentId));
             count.textContent = topLevelTasks.length.toString();
         }
+
+        return visibleTasksForCount;
     }
 
     private async hasProjectCustomGroups(): Promise<boolean> {
