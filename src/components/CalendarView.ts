@@ -2707,7 +2707,7 @@ export class CalendarView {
             } else if (newStartDate) {
                 const fallbackDuration = info.oldEvent?.end && info.oldEvent?.start
                     ? info.oldEvent.end.getTime() - info.oldEvent.start.getTime()
-                    : 30 * 60 * 1000;
+                    : 15 * 60 * 1000;
                 newEndDate = new Date(newStartDate.getTime() + fallbackDuration);
                 newEndDate = this.snapToMinutes(newEndDate, 5);
             }
@@ -7206,7 +7206,7 @@ export class CalendarView {
             const startDate = new Date(`${parsed.date}T${parsed.time}:00`);
             if (Number.isNaN(startDate.getTime())) return;
 
-            let endDate = new Date(startDate.getTime() + 30 * 60 * 1000);
+            let endDate = new Date(startDate.getTime() + 15 * 60 * 1000);
             const parsedEnd = entry.endTime
                 ? this.parseReminderTimeToDateTime(entry.endTime, parsed.date)
                 : null;
