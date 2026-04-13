@@ -348,6 +348,7 @@ export class PomodoroTimer {
         return {
             isRunning: this.isRunning,
             isPaused: this.isPaused,
+            isCompletingPhase: this.isCompletingPhase,
             isWorkPhase: this.isWorkPhase,
             isLongBreak: this.isLongBreak,
             isCountUp: this.isCountUp,
@@ -361,6 +362,7 @@ export class PomodoroTimer {
             blockId: this.reminder.blockId,
             currentPhaseOriginalDuration: this.currentPhaseOriginalDuration,
             startTime: this.startTime,
+            lastPomodoroTriggerTime: this.lastPomodoroTriggerTime,
             randomRestCount: this.randomRestCount,
             randomRestEnabled: this.randomRestEnabled,
             todayFocusMinutes: this.recordManager.getTodayFocusTime(),
@@ -4414,58 +4416,7 @@ export class PomodoroTimer {
         }
 
         this.timer = window.setInterval(() => {
-            // 如果窗口已关闭，停止定时器
-            if (this.isWindowClosed) {
-                if (this.timer) {
-                    clearInterval(this.timer);
-                    this.timer = null;
-                }
-                return;
-            }
-
-            const currentTime = Date.now();
-            const elapsedSinceStart = Math.floor((currentTime - this.startTime) / 1000);
-
-            if (this.isCountUp) {
-                if (this.isWorkPhase) {
-                    // 正计时工作时间：elapsedSinceStart 已经包含了继承的时间
-                    // 因为 startTime = Date.now() - (继承的秒数 * 1000)
-                    this.timeElapsed = elapsedSinceStart;
-
-                    // 检查是否完成一个番茄
-                    const pomodoroLength = this.settings.workDuration * 60;
-                    const currentCycleTime = this.timeElapsed % pomodoroLength;
-
-                    if (this.timeElapsed > 0 && currentCycleTime === 0) {
-                        if (this.lastPomodoroTriggerTime !== this.timeElapsed) {
-                            this.lastPomodoroTriggerTime = this.timeElapsed;
-                            this.completePomodoroPhase();
-                        }
-                    }
-                } else {
-                    // 正计时休息时间：倒计时显示
-                    const totalBreakTime = this.isLongBreak ?
-                        this.settings.longBreakDuration * 60 :
-                        this.settings.breakDuration * 60;
-
-                    this.breakTimeLeft = totalBreakTime - elapsedSinceStart;
-
-                    if (this.breakTimeLeft <= 0) {
-                        this.breakTimeLeft = 0;
-                        this.completeBreakPhase();
-                    }
-                }
-            } else {
-                // 倒计时模式：elapsedSinceStart 已经包含了继承的时间
-                this.timeLeft = this.totalTime - elapsedSinceStart;
-
-                if (this.timeLeft <= 0) {
-                    this.timeLeft = 0;
-                    this.completePhase();
-                }
-            }
-
-            this.updateDisplay();
+            this.reconcileTimerState();
         }, 500);
 
         // 调度移动端通知
@@ -4474,6 +4425,95 @@ export class PomodoroTimer {
         // 更新显示
         this.updateDisplay();
     }
+
+    /**
+     * 基于真实时间同步当前阶段状态，避免后台节流导致停在 00:00 但不切阶段。
+     */
+    private reconcileTimerState(shouldUpdateDisplay: boolean = true) {
+        if (this.isWindowClosed) {
+            if (this.timer) {
+                clearInterval(this.timer);
+                this.timer = null;
+            }
+            return false;
+        }
+
+        if (this.isCompletingPhase) {
+            return false;
+        }
+
+        if (!this.isRunning || this.isPaused) {
+            return false;
+        }
+
+        const currentTime = Date.now();
+        if (!this.startTime || this.startTime <= 0 || this.startTime > currentTime) {
+            return false;
+        }
+
+        const elapsedSinceStart = Math.floor((currentTime - this.startTime) / 1000);
+        let phaseCompleted = false;
+
+        if (this.isCountUp) {
+            if (this.isWorkPhase) {
+                this.timeElapsed = elapsedSinceStart;
+
+                const pomodoroLength = Math.max(1, this.settings.workDuration * 60);
+                const completedCycles = Math.floor(this.timeElapsed / pomodoroLength);
+                const triggerTime = completedCycles * pomodoroLength;
+
+                if (this.timeElapsed > 0 && completedCycles > 0 && this.lastPomodoroTriggerTime < triggerTime) {
+                    this.lastPomodoroTriggerTime = triggerTime;
+                    phaseCompleted = true;
+                    void this.completePomodoroPhase();
+                }
+            } else {
+                const totalBreakTime = this.isLongBreak ?
+                    this.settings.longBreakDuration * 60 :
+                    this.settings.breakDuration * 60;
+
+                this.breakTimeLeft = totalBreakTime - elapsedSinceStart;
+
+                if (this.breakTimeLeft <= 0) {
+                    this.breakTimeLeft = 0;
+                    phaseCompleted = true;
+                    void this.completeBreakPhase();
+                }
+            }
+        } else {
+            this.timeLeft = this.totalTime - elapsedSinceStart;
+
+            if (this.timeLeft <= 0) {
+                this.timeLeft = 0;
+                phaseCompleted = true;
+                void this.completePhase();
+            }
+        }
+
+        if (shouldUpdateDisplay) {
+            this.updateDisplay();
+        }
+
+        return phaseCompleted;
+    }
+
+    private stopForAutoTransition() {
+        this.isRunning = false;
+        this.isPaused = false;
+        this.startTime = 0;
+        this.pausedTime = 0;
+
+        if (this.timer) {
+            clearInterval(this.timer);
+            this.timer = null;
+        }
+
+        if (this.autoTransitionTimer) {
+            clearTimeout(this.autoTransitionTimer);
+            this.autoTransitionTimer = null;
+        }
+    }
+
     private async pauseTimer() {
         this.isPaused = true;
 
@@ -4526,46 +4566,7 @@ export class PomodoroTimer {
         }
 
         this.timer = window.setInterval(() => {
-            const currentTime = Date.now();
-            const elapsedSinceStart = Math.floor((currentTime - this.startTime) / 1000);
-
-            if (this.isCountUp) {
-                if (this.isWorkPhase) {
-                    // 正计时：直接使用从开始到现在的总时间
-                    this.timeElapsed = elapsedSinceStart;
-
-                    const pomodoroLength = this.settings.workDuration * 60;
-                    const currentCycleTime = this.timeElapsed % pomodoroLength;
-
-                    if (this.timeElapsed > 0 && currentCycleTime === 0) {
-                        if (this.lastPomodoroTriggerTime !== this.timeElapsed) {
-                            this.lastPomodoroTriggerTime = this.timeElapsed;
-                            this.completePomodoroPhase();
-                        }
-                    }
-                } else {
-                    const totalBreakTime = this.isLongBreak ?
-                        this.settings.longBreakDuration * 60 :
-                        this.settings.breakDuration * 60;
-
-                    this.breakTimeLeft = totalBreakTime - elapsedSinceStart;
-
-                    if (this.breakTimeLeft <= 0) {
-                        this.breakTimeLeft = 0;
-                        this.completeBreakPhase();
-                    }
-                }
-            } else {
-                // 倒计时：从总时间减去已经过的时间
-                this.timeLeft = this.totalTime - elapsedSinceStart;
-
-                if (this.timeLeft <= 0) {
-                    this.timeLeft = 0;
-                    this.completePhase();
-                }
-            }
-
-            this.updateDisplay();
+            this.reconcileTimerState();
         }, 500);
 
         // 调度移动端通知
@@ -5158,8 +5159,13 @@ export class PomodoroTimer {
             if (this.autoMode) {
                 showMessage(`☕ ${breakType}${i18n('pomodoroBreakEndAutoWork') || '结束！自动开始下一个工作阶段'}`, 3000);
 
+                this.stopForAutoTransition();
+                this.updateDisplay();
+                this.updateMainSwitchButton();
+
                 // 自动切换到工作阶段
-                setTimeout(() => {
+                this.autoTransitionTimer = window.setTimeout(() => {
+                    this.autoTransitionTimer = null;
                     this.autoSwitchToWork();
                 }, 1000); // 延迟1秒切换
             } else {
@@ -5274,8 +5280,13 @@ export class PomodoroTimer {
                         showMessage(`🍅 ${i18n('pomodoroWorkEndAutoBreak') || '工作时间结束！自动开始休息'}`, 3000);
                     }
 
+                    this.stopForAutoTransition();
+                    this.updateDisplay();
+                    this.updateMainSwitchButton();
+
                     // 自动切换到休息阶段
-                    setTimeout(() => {
+                    this.autoTransitionTimer = window.setTimeout(() => {
+                        this.autoTransitionTimer = null;
                         this.autoSwitchToBreak(shouldTakeLongBreak);
                     }, 1000);
                 } else {                // 非自动模式下，也要根据番茄钟数量判断休息类型
@@ -5357,8 +5368,13 @@ export class PomodoroTimer {
                     // 只有在系统弹窗关闭时才显示思源笔记弹窗
                     showMessage(`☕ ${breakType}${i18n('pomodoroBreakEndAutoWork') || '结束！自动开始下一个番茄钟'}`, 3000);
 
+                    this.stopForAutoTransition();
+                    this.updateDisplay();
+                    this.updateMainSwitchButton();
+
                     // 自动切换到工作阶段
-                    setTimeout(() => {
+                    this.autoTransitionTimer = window.setTimeout(() => {
+                        this.autoTransitionTimer = null;
                         this.autoSwitchToWork();
                     }, 1000);
                 } else {
@@ -5424,6 +5440,10 @@ export class PomodoroTimer {
         // 停止所有音频和定时器
         this.stopAllAudio();
         this.stopRandomRestTimer();
+        if (this.timer) {
+            clearInterval(this.timer);
+            this.timer = null;
+        }
         if (this.autoTransitionTimer) {
             clearTimeout(this.autoTransitionTimer);
             this.autoTransitionTimer = null;
@@ -5459,23 +5479,7 @@ export class PomodoroTimer {
         // 开始计时
         this.startTime = Date.now();
         this.timer = window.setInterval(() => {
-            const currentTime = Date.now();
-            const elapsedSinceStart = Math.floor((currentTime - this.startTime) / 1000);
-
-            if (this.isCountUp) {
-                this.breakTimeLeft = breakDuration * 60 - elapsedSinceStart;
-                if (this.breakTimeLeft <= 0) {
-                    this.breakTimeLeft = 0;
-                    this.completeBreakPhase();
-                }
-            } else {
-                this.timeLeft = this.totalTime - elapsedSinceStart;
-                if (this.timeLeft <= 0) {
-                    this.timeLeft = 0;
-                    this.completePhase();
-                }
-            }
-            this.updateDisplay();
+            this.reconcileTimerState();
         }, 500);
 
         // 调度移动端通知
@@ -5498,6 +5502,10 @@ export class PomodoroTimer {
         // 停止所有音频和定时器
         this.stopAllAudio();
         this.stopRandomRestTimer();
+        if (this.timer) {
+            clearInterval(this.timer);
+            this.timer = null;
+        }
         if (this.autoTransitionTimer) {
             clearTimeout(this.autoTransitionTimer);
             this.autoTransitionTimer = null;
@@ -5509,6 +5517,7 @@ export class PomodoroTimer {
         this.isRunning = true;
         this.isPaused = false;
         this.pausedTime = 0; // 重置暂停时间
+        this.lastPomodoroTriggerTime = -1;
 
         // 设置当前阶段的原始时长
         this.currentPhaseOriginalDuration = this.settings.workDuration;
@@ -5534,25 +5543,7 @@ export class PomodoroTimer {
         // 开始计时
         this.startTime = Date.now();
         this.timer = window.setInterval(() => {
-            const currentTime = Date.now();
-            const elapsedSinceStart = Math.floor((currentTime - this.startTime) / 1000);
-
-            if (this.isCountUp) {
-                this.timeElapsed = elapsedSinceStart;
-
-                const pomodoroLength = this.settings.workDuration * 60;
-                const currentCycleTime = this.timeElapsed % pomodoroLength;
-                if (this.timeElapsed > 0 && currentCycleTime === 0) {
-                    this.completePomodoroPhase();
-                }
-            } else {
-                this.timeLeft = this.totalTime - elapsedSinceStart;
-                if (this.timeLeft <= 0) {
-                    this.timeLeft = 0;
-                    this.completePhase();
-                }
-            }
-            this.updateDisplay();
+            this.reconcileTimerState();
         }, 500);
 
         // 调度移动端通知
@@ -7027,7 +7018,8 @@ export class PomodoroTimer {
                     contextIsolation: false,
                     webSecurity: false,
                     enableRemoteModule: true,
-                    autoplayPolicy: 'no-user-gesture-required'
+                    autoplayPolicy: 'no-user-gesture-required',
+                    backgroundThrottling: false
                 },
                 show: false,
                 backgroundColor: backgroundColor
@@ -7451,38 +7443,7 @@ document.body.classList.remove('docked-mode');
     private startTickLoop() {
         if (this.timer) clearInterval(this.timer);
         this.timer = window.setInterval(() => {
-            if (this.isWindowClosed) {
-                if (this.timer) { clearInterval(this.timer); this.timer = null; }
-                return;
-            }
-            const currentTime = Date.now();
-            const elapsedSinceStart = Math.floor((currentTime - this.startTime) / 1000);
-
-            if (this.isCountUp) {
-                if (this.isWorkPhase) {
-                    this.timeElapsed = elapsedSinceStart;
-                    const pomodoroLength = this.settings.workDuration * 60;
-                    if (this.timeElapsed > 0 && this.timeElapsed % pomodoroLength === 0) {
-                        if (this.lastPomodoroTriggerTime !== this.timeElapsed) {
-                            this.lastPomodoroTriggerTime = this.timeElapsed;
-                            this.completePomodoroPhase();
-                        }
-                    }
-                } else {
-                    const totalBreakTime = this.isLongBreak ? this.settings.longBreakDuration * 60 : this.settings.breakDuration * 60;
-                    this.breakTimeLeft = totalBreakTime - elapsedSinceStart;
-                    if (this.breakTimeLeft <= 0) {
-                        this.breakTimeLeft = 0;
-                        this.completeBreakPhase();
-                    }
-                }
-            } else {
-                this.timeLeft = this.totalTime - elapsedSinceStart;
-                if (this.timeLeft <= 0) {
-                    this.timeLeft = 0;
-                    this.completePhase();
-                }
-            }
+            this.reconcileTimerState(false);
         }, 500);
     }
 
@@ -8128,10 +8089,15 @@ document.body.classList.remove('docked-mode');
                 dailyFocusGoal: dailyFocusGoal,
                 pomodoroDockPosition: this.settings.pomodoroDockPosition || 'top'
             })};
+        let syncTimerStatePending = false;
 
         function callMethod(method) {
             ipcRenderer.send('${actionChannel}', method);
             closeSwitchMenu();
+        }
+
+        function requestTimerSync() {
+            ipcRenderer.send('${actionChannel}', 'syncTimerState');
         }
         
         function closeSwitchMenu() {
@@ -8389,7 +8355,7 @@ document.body.classList.remove('docked-mode');
 
         // Main Timer Loop (independent of main window)
         setInterval(() => {
-            if (localState.isRunning && !localState.isPaused) {
+            if (localState.isRunning && !localState.isPaused && !localState.isCompletingPhase) {
                 const now = Date.now();
                 // FIX: 检查 startTime 是否有效（避免刚开始或窗口重建时进度条瞬间跳跃）
                 if (!localState.startTime || localState.startTime <= 0 || localState.startTime > now) {
@@ -8402,12 +8368,35 @@ document.body.classList.remove('docked-mode');
                 if (localState.isCountUp) {
                      if (localState.isWorkPhase) {
                          localState.timeElapsed = elapsed;
+                         const pomodoroLength = Math.max(1, settings.workDuration * 60);
+                         const completedCycles = Math.floor(localState.timeElapsed / pomodoroLength);
+                         const triggerTime = completedCycles * pomodoroLength;
+                         if (localState.timeElapsed > 0 && completedCycles > 0 && (localState.lastPomodoroTriggerTime ?? -1) < triggerTime) {
+                             if (!syncTimerStatePending) {
+                                 syncTimerStatePending = true;
+                                 requestTimerSync();
+                             }
+                         }
                      } else {
                          const totalBreakTime = localState.isLongBreak ? settings.longBreakDuration * 60 : settings.breakDuration * 60;
                          localState.breakTimeLeft = Math.max(0, totalBreakTime - elapsed);
+                         if (localState.breakTimeLeft <= 0 && !syncTimerStatePending) {
+                             syncTimerStatePending = true;
+                             requestTimerSync();
+                         }
                      }
                 } else {
                      localState.timeLeft = Math.max(0, localState.totalTime - elapsed);
+                     if (localState.timeLeft <= 0 && !syncTimerStatePending) {
+                         syncTimerStatePending = true;
+                         requestTimerSync();
+                     }
+                }
+
+                if ((localState.isCountUp && localState.isWorkPhase && localState.timeElapsed <= 0) ||
+                    (localState.isCountUp && !localState.isWorkPhase && localState.breakTimeLeft > 0) ||
+                    (!localState.isCountUp && localState.timeLeft > 0)) {
+                    syncTimerStatePending = false;
                 }
                 
                 render();
@@ -8419,6 +8408,7 @@ document.body.classList.remove('docked-mode');
             localState = { ...localState, ...newState };
             // Update global exposed state
             window.localState = localState;
+            syncTimerStatePending = false;
             
             if (newSettings) {
                 settings = { ...settings, ...newSettings };
@@ -8708,6 +8698,9 @@ document.body.classList.remove('docked-mode');
                     break;
                 case 'toggleBackgroundAudio':
                     this.toggleBackgroundAudio();
+                    break;
+                case 'syncTimerState':
+                    this.reconcileTimerState();
                     break;
                 default:
                     console.warn('[PomodoroTimer] Unknown method:', method);
