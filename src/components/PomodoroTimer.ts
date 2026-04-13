@@ -73,6 +73,7 @@ export class PomodoroTimer {
     private autoMode: boolean = false; // 自动模式状态
     private longBreakInterval: number = 4; // 长休息间隔
     private autoTransitionTimer: number = null; // 自动切换定时器
+    private lastBrowserWindowCompletionKey: string = ''; // BrowserWindow 到点上报去重 key
 
     private workAudio: HTMLAudioElement = null;
     private breakAudio: HTMLAudioElement = null;
@@ -4354,6 +4355,8 @@ export class PomodoroTimer {
     private async startTimer() {
         this.isRunning = true;
         this.isPaused = false;
+        this.clearAutoTransitionTimer();
+        this.lastBrowserWindowCompletionKey = '';
 
         // 确保音频播放权限已被获取（特别是为了结束提示音），强制重新初始化以处理权限丢失
         await this.initializeAudioPlayback(true);
@@ -4588,6 +4591,8 @@ export class PomodoroTimer {
         this.stopAllAudio();
         this.stopRandomRestTimer(); // 停止随机微休息
         this.cancelAllMobileNotifications(); // 取消移动端通知
+        this.clearAutoTransitionTimer();
+        this.lastBrowserWindowCompletionKey = '';
 
         this.isWorkPhase = true;
         this.isLongBreak = false;
@@ -4627,6 +4632,8 @@ export class PomodoroTimer {
         this.stopAllAudio();
         this.stopRandomRestTimer(); // 停止随机微休息
         this.cancelAllMobileNotifications(); // 取消移动端通知
+        this.clearAutoTransitionTimer();
+        this.lastBrowserWindowCompletionKey = '';
 
         this.isWorkPhase = false;
         this.isLongBreak = false;
@@ -4665,6 +4672,8 @@ export class PomodoroTimer {
         this.stopAllAudio();
         this.stopRandomRestTimer(); // 停止随机微休息
         this.cancelAllMobileNotifications(); // 取消移动端通知
+        this.clearAutoTransitionTimer();
+        this.lastBrowserWindowCompletionKey = '';
 
         this.isWorkPhase = false;
         this.isLongBreak = true;
@@ -4778,6 +4787,8 @@ export class PomodoroTimer {
         this.stopAllAudio();
         this.stopRandomRestTimer(); // 停止随机微休息
         this.cancelAllMobileNotifications(); // 取消移动端通知
+        this.clearAutoTransitionTimer();
+        this.lastBrowserWindowCompletionKey = '';
 
         if (this.isCountUp) {
             this.timeElapsed = 0;
@@ -5005,6 +5016,21 @@ export class PomodoroTimer {
         }
     }
 
+    private clearAutoTransitionTimer() {
+        if (this.autoTransitionTimer) {
+            clearTimeout(this.autoTransitionTimer);
+            this.autoTransitionTimer = null;
+        }
+    }
+
+    private scheduleAutoTransition(task: () => void, delay: number = 1000) {
+        this.clearAutoTransitionTimer();
+        this.autoTransitionTimer = window.setTimeout(() => {
+            this.autoTransitionTimer = null;
+            task();
+        }, Math.max(0, delay));
+    }
+
     private async completePomodoroPhase() {
         // 先取消所有已调度的移动端通知
         this.cancelAllMobileNotifications();
@@ -5159,7 +5185,7 @@ export class PomodoroTimer {
                 showMessage(`☕ ${breakType}${i18n('pomodoroBreakEndAutoWork') || '结束！自动开始下一个工作阶段'}`, 3000);
 
                 // 自动切换到工作阶段
-                setTimeout(() => {
+                this.scheduleAutoTransition(() => {
                     this.autoSwitchToWork();
                 }, 1000); // 延迟1秒切换
             } else {
@@ -5275,7 +5301,7 @@ export class PomodoroTimer {
                     }
 
                     // 自动切换到休息阶段
-                    setTimeout(() => {
+                    this.scheduleAutoTransition(() => {
                         this.autoSwitchToBreak(shouldTakeLongBreak);
                     }, 1000);
                 } else {                // 非自动模式下，也要根据番茄钟数量判断休息类型
@@ -5358,7 +5384,7 @@ export class PomodoroTimer {
                     showMessage(`☕ ${breakType}${i18n('pomodoroBreakEndAutoWork') || '结束！自动开始下一个番茄钟'}`, 3000);
 
                     // 自动切换到工作阶段
-                    setTimeout(() => {
+                    this.scheduleAutoTransition(() => {
                         this.autoSwitchToWork();
                     }, 1000);
                 } else {
@@ -5424,10 +5450,8 @@ export class PomodoroTimer {
         // 停止所有音频和定时器
         this.stopAllAudio();
         this.stopRandomRestTimer();
-        if (this.autoTransitionTimer) {
-            clearTimeout(this.autoTransitionTimer);
-            this.autoTransitionTimer = null;
-        }
+        this.clearAutoTransitionTimer();
+        this.lastBrowserWindowCompletionKey = '';
 
         // 设置休息阶段
         this.isWorkPhase = false;
@@ -5498,10 +5522,8 @@ export class PomodoroTimer {
         // 停止所有音频和定时器
         this.stopAllAudio();
         this.stopRandomRestTimer();
-        if (this.autoTransitionTimer) {
-            clearTimeout(this.autoTransitionTimer);
-            this.autoTransitionTimer = null;
-        }
+        this.clearAutoTransitionTimer();
+        this.lastBrowserWindowCompletionKey = '';
 
         // 设置工作阶段
         this.isWorkPhase = true;
@@ -6139,10 +6161,8 @@ export class PomodoroTimer {
         }
 
         // 清理自动切换定时器
-        if (this.autoTransitionTimer) {
-            clearTimeout(this.autoTransitionTimer);
-            this.autoTransitionTimer = null;
-        }
+        this.clearAutoTransitionTimer();
+        this.lastBrowserWindowCompletionKey = '';
 
         this.stopAllAudio();
         this.stopRandomRestTimer(); // 停止随机微休息
@@ -7199,10 +7219,7 @@ document.body.classList.remove('docked-mode');
                     clearInterval(this.timer);
                     this.timer = null;
                 }
-                if (this.autoTransitionTimer) {
-                    clearTimeout(this.autoTransitionTimer);
-                    this.autoTransitionTimer = null;
-                }
+                this.clearAutoTransitionTimer();
 
                 this.detachAudioUnlockListeners();
             });
@@ -7238,10 +7255,7 @@ document.body.classList.remove('docked-mode');
                     clearInterval(this.timer);
                     this.timer = null;
                 }
-                if (this.autoTransitionTimer) {
-                    clearTimeout(this.autoTransitionTimer);
-                    this.autoTransitionTimer = null;
-                }
+                this.clearAutoTransitionTimer();
 
                 this.detachAudioUnlockListeners();
             });
@@ -8754,6 +8768,8 @@ document.body.classList.remove('docked-mode');
             }
 
             const elapsedSinceStart = Math.max(0, Math.floor((now - this.startTime) / 1000));
+            let completionKey = '';
+            let completionHandler: (() => Promise<void>) | null = null;
 
             if (this.isCountUp) {
                 if (this.isWorkPhase) {
@@ -8765,8 +8781,11 @@ document.body.classList.remove('docked-mode');
                         : 0;
 
                     if (completedCycles > lastTriggeredCycle) {
-                        this.lastPomodoroTriggerTime = completedCycles * pomodoroLength;
-                        await this.completePomodoroPhase();
+                        completionKey = `countup-work-${completedCycles}`;
+                        completionHandler = async () => {
+                            this.lastPomodoroTriggerTime = completedCycles * pomodoroLength;
+                            await this.completePomodoroPhase();
+                        };
                     }
                 } else {
                     const breakSeconds = Math.max(
@@ -8775,7 +8794,10 @@ document.body.classList.remove('docked-mode');
                     );
                     this.breakTimeLeft = Math.max(0, breakSeconds - elapsedSinceStart);
                     if (this.breakTimeLeft <= 0) {
-                        await this.completeBreakPhase();
+                        completionKey = `countup-break-${this.startTime}`;
+                        completionHandler = async () => {
+                            await this.completeBreakPhase();
+                        };
                     }
                 }
             } else {
@@ -8789,8 +8811,22 @@ document.body.classList.remove('docked-mode');
                 this.totalTime = effectiveTotalTime;
                 this.timeLeft = Math.max(0, effectiveTotalTime - elapsedSinceStart);
                 if (this.timeLeft <= 0) {
-                    await this.completePhase();
+                    const phaseType = this.isWorkPhase ? 'work' : (this.isLongBreak ? 'long-break' : 'break');
+                    completionKey = `countdown-${phaseType}-${this.startTime}`;
+                    completionHandler = async () => {
+                        await this.completePhase();
+                    };
                 }
+            }
+
+            if (completionHandler) {
+                if (completionKey && this.lastBrowserWindowCompletionKey === completionKey) {
+                    return;
+                }
+                if (completionKey) {
+                    this.lastBrowserWindowCompletionKey = completionKey;
+                }
+                await completionHandler();
             }
 
             this.updateDisplay();
