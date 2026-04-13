@@ -1797,7 +1797,7 @@ export class ReminderPanel {
      */
     private async completeAllChildTasks(parentId: string, reminderData: any, affectedBlockIds: Set<string>, instanceDate?: string): Promise<string[]> {
         const completedTaskIds: string[] = [];
-        
+
         // 1. Ghost Subtasks: Children of the original parent (recurse with instanceDate)
         const ghostChildren = (Object.values(reminderData) as any[]).filter(r => r.parentId === parentId);
 
@@ -1849,7 +1849,7 @@ export class ReminderPanel {
                 completedTaskIds.push(...childIds);
             }
         }
-        
+
         return completedTaskIds;
     }
 
@@ -6774,7 +6774,7 @@ export class ReminderPanel {
             if (reminderData[draggedOriginalId] && reminderData[targetOriginalId]) {
                 const targetPinned = !!reminderData[targetOriginalId].pinned;
                 const draggedPinned = !!reminderData[draggedOriginalId].pinned;
-                
+
                 if (targetPinned !== draggedPinned) {
                     if (targetPinned) {
                         reminderData[draggedOriginalId].pinned = true;
@@ -7182,7 +7182,7 @@ export class ReminderPanel {
         // 判断是否为重复/循环任务或重复实例
         const isRecurring = reminder.isRepeatInstance || (reminder.repeat && reminder.repeat.enabled);
         const isPinned = this.isReminderPinned(reminder);
-        
+
         // 计算逻辑起止日期并检查是否为跨天事件
         const startLogical = this.getReminderLogicalDate(reminder.date, reminder.time);
         const endLogical = this.getReminderLogicalDate(reminder.endDate || reminder.date, reminder.endTime || reminder.time);
