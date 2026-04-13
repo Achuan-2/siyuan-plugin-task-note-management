@@ -73,7 +73,6 @@ export class PomodoroTimer {
     private autoMode: boolean = false; // 自动模式状态
     private longBreakInterval: number = 4; // 长休息间隔
     private autoTransitionTimer: number = null; // 自动切换定时器
-    private lastBrowserWindowCompletionKey: string = ''; // BrowserWindow 到点上报去重 key
 
     private workAudio: HTMLAudioElement = null;
     private breakAudio: HTMLAudioElement = null;
@@ -4355,8 +4354,6 @@ export class PomodoroTimer {
     private async startTimer() {
         this.isRunning = true;
         this.isPaused = false;
-        this.clearAutoTransitionTimer();
-        this.lastBrowserWindowCompletionKey = '';
 
         // 确保音频播放权限已被获取（特别是为了结束提示音），强制重新初始化以处理权限丢失
         await this.initializeAudioPlayback(true);
@@ -4591,8 +4588,6 @@ export class PomodoroTimer {
         this.stopAllAudio();
         this.stopRandomRestTimer(); // 停止随机微休息
         this.cancelAllMobileNotifications(); // 取消移动端通知
-        this.clearAutoTransitionTimer();
-        this.lastBrowserWindowCompletionKey = '';
 
         this.isWorkPhase = true;
         this.isLongBreak = false;
@@ -4632,8 +4627,6 @@ export class PomodoroTimer {
         this.stopAllAudio();
         this.stopRandomRestTimer(); // 停止随机微休息
         this.cancelAllMobileNotifications(); // 取消移动端通知
-        this.clearAutoTransitionTimer();
-        this.lastBrowserWindowCompletionKey = '';
 
         this.isWorkPhase = false;
         this.isLongBreak = false;
@@ -4672,8 +4665,6 @@ export class PomodoroTimer {
         this.stopAllAudio();
         this.stopRandomRestTimer(); // 停止随机微休息
         this.cancelAllMobileNotifications(); // 取消移动端通知
-        this.clearAutoTransitionTimer();
-        this.lastBrowserWindowCompletionKey = '';
 
         this.isWorkPhase = false;
         this.isLongBreak = true;
@@ -4787,8 +4778,6 @@ export class PomodoroTimer {
         this.stopAllAudio();
         this.stopRandomRestTimer(); // 停止随机微休息
         this.cancelAllMobileNotifications(); // 取消移动端通知
-        this.clearAutoTransitionTimer();
-        this.lastBrowserWindowCompletionKey = '';
 
         if (this.isCountUp) {
             this.timeElapsed = 0;
@@ -5016,21 +5005,6 @@ export class PomodoroTimer {
         }
     }
 
-    private clearAutoTransitionTimer() {
-        if (this.autoTransitionTimer) {
-            clearTimeout(this.autoTransitionTimer);
-            this.autoTransitionTimer = null;
-        }
-    }
-
-    private scheduleAutoTransition(task: () => void, delay: number = 1000) {
-        this.clearAutoTransitionTimer();
-        this.autoTransitionTimer = window.setTimeout(() => {
-            this.autoTransitionTimer = null;
-            task();
-        }, Math.max(0, delay));
-    }
-
     private async completePomodoroPhase() {
         // 先取消所有已调度的移动端通知
         this.cancelAllMobileNotifications();
@@ -5185,7 +5159,7 @@ export class PomodoroTimer {
                 showMessage(`☕ ${breakType}${i18n('pomodoroBreakEndAutoWork') || '结束！自动开始下一个工作阶段'}`, 3000);
 
                 // 自动切换到工作阶段
-                this.scheduleAutoTransition(() => {
+                setTimeout(() => {
                     this.autoSwitchToWork();
                 }, 1000); // 延迟1秒切换
             } else {
@@ -5301,7 +5275,7 @@ export class PomodoroTimer {
                     }
 
                     // 自动切换到休息阶段
-                    this.scheduleAutoTransition(() => {
+                    setTimeout(() => {
                         this.autoSwitchToBreak(shouldTakeLongBreak);
                     }, 1000);
                 } else {                // 非自动模式下，也要根据番茄钟数量判断休息类型
@@ -5384,7 +5358,7 @@ export class PomodoroTimer {
                     showMessage(`☕ ${breakType}${i18n('pomodoroBreakEndAutoWork') || '结束！自动开始下一个番茄钟'}`, 3000);
 
                     // 自动切换到工作阶段
-                    this.scheduleAutoTransition(() => {
+                    setTimeout(() => {
                         this.autoSwitchToWork();
                     }, 1000);
                 } else {
@@ -5450,8 +5424,10 @@ export class PomodoroTimer {
         // 停止所有音频和定时器
         this.stopAllAudio();
         this.stopRandomRestTimer();
-        this.clearAutoTransitionTimer();
-        this.lastBrowserWindowCompletionKey = '';
+        if (this.autoTransitionTimer) {
+            clearTimeout(this.autoTransitionTimer);
+            this.autoTransitionTimer = null;
+        }
 
         // 设置休息阶段
         this.isWorkPhase = false;
@@ -5522,8 +5498,10 @@ export class PomodoroTimer {
         // 停止所有音频和定时器
         this.stopAllAudio();
         this.stopRandomRestTimer();
-        this.clearAutoTransitionTimer();
-        this.lastBrowserWindowCompletionKey = '';
+        if (this.autoTransitionTimer) {
+            clearTimeout(this.autoTransitionTimer);
+            this.autoTransitionTimer = null;
+        }
 
         // 设置工作阶段
         this.isWorkPhase = true;
@@ -6161,8 +6139,10 @@ export class PomodoroTimer {
         }
 
         // 清理自动切换定时器
-        this.clearAutoTransitionTimer();
-        this.lastBrowserWindowCompletionKey = '';
+        if (this.autoTransitionTimer) {
+            clearTimeout(this.autoTransitionTimer);
+            this.autoTransitionTimer = null;
+        }
 
         this.stopAllAudio();
         this.stopRandomRestTimer(); // 停止随机微休息
@@ -7047,8 +7027,7 @@ export class PomodoroTimer {
                     contextIsolation: false,
                     webSecurity: false,
                     enableRemoteModule: true,
-                    autoplayPolicy: 'no-user-gesture-required',
-                    backgroundThrottling: false
+                    autoplayPolicy: 'no-user-gesture-required'
                 },
                 show: false,
                 backgroundColor: backgroundColor
@@ -7108,8 +7087,8 @@ export class PomodoroTimer {
             }
 
             // 监听渲染进程的操作请求（通过主进程 IPC）
-            const actionHandler = (_event: any, method: string, ...args: any[]) => {
-                this.callMethod(method, ...args);
+            const actionHandler = (_event: any, method: string) => {
+                this.callMethod(method);
             };
             const controlHandler = (_event: any, action: string, pinState?: boolean) => {
                 switch (action) {
@@ -7219,7 +7198,10 @@ document.body.classList.remove('docked-mode');
                     clearInterval(this.timer);
                     this.timer = null;
                 }
-                this.clearAutoTransitionTimer();
+                if (this.autoTransitionTimer) {
+                    clearTimeout(this.autoTransitionTimer);
+                    this.autoTransitionTimer = null;
+                }
 
                 this.detachAudioUnlockListeners();
             });
@@ -7255,7 +7237,10 @@ document.body.classList.remove('docked-mode');
                     clearInterval(this.timer);
                     this.timer = null;
                 }
-                this.clearAutoTransitionTimer();
+                if (this.autoTransitionTimer) {
+                    clearTimeout(this.autoTransitionTimer);
+                    this.autoTransitionTimer = null;
+                }
 
                 this.detachAudioUnlockListeners();
             });
@@ -7523,8 +7508,8 @@ document.body.classList.remove('docked-mode');
                 screen = remote?.screen;
             } catch (e) { }
 
-            const actionHandler = (_event: any, method: string, ...args: any[]) => {
-                this.callMethod(method, ...args);
+            const actionHandler = (_event: any, method: string) => {
+                this.callMethod(method);
             };
 
             const controlHandler = (_event: any, action: string, pinState?: boolean) => {
@@ -8144,8 +8129,8 @@ document.body.classList.remove('docked-mode');
                 pomodoroDockPosition: this.settings.pomodoroDockPosition || 'top'
             })};
 
-        function callMethod(method, ...args) {
-            ipcRenderer.send('${actionChannel}', method, ...args);
+        function callMethod(method) {
+            ipcRenderer.send('${actionChannel}', method);
             closeSwitchMenu();
         }
         
@@ -8403,58 +8388,6 @@ document.body.classList.remove('docked-mode');
         }
 
         // Main Timer Loop (independent of main window)
-        let lastCompletionNotifyKey = '';
-        let lastCompletionNotifyAt = 0;
-
-        function notifyPhaseCompletionIfNeeded() {
-            if (!localState || !localState.isRunning || localState.isPaused) {
-                return;
-            }
-
-            let shouldNotify = false;
-            let notifyKey = '';
-
-            if (localState.isCountUp) {
-                if (localState.isWorkPhase) {
-                    const pomodoroLength = Math.max(1, (settings.workDuration || 25) * 60);
-                    const completedCycles = Math.floor((localState.timeElapsed || 0) / pomodoroLength);
-                    const completedPomodoros = Math.max(0, Number(localState.completedPomodoros || 0));
-                    if (completedCycles > completedPomodoros) {
-                        shouldNotify = true;
-                        notifyKey = \`countup-work-\${completedCycles}\`;
-                    }
-                } else if ((localState.breakTimeLeft || 0) <= 0) {
-                    shouldNotify = true;
-                    notifyKey = \`countup-break-\${localState.startTime || 0}\`;
-                }
-            } else if ((localState.timeLeft || 0) <= 0) {
-                shouldNotify = true;
-                notifyKey = \`countdown-\${localState.startTime || 0}\`;
-            }
-
-            if (!shouldNotify) {
-                return;
-            }
-
-            const now = Date.now();
-            if (notifyKey !== lastCompletionNotifyKey || now - lastCompletionNotifyAt >= 2000) {
-                lastCompletionNotifyKey = notifyKey;
-                lastCompletionNotifyAt = now;
-                callMethod('handleBrowserWindowPhaseCompletion', {
-                    now,
-                    startTime: localState.startTime || 0,
-                    isCountUp: !!localState.isCountUp,
-                    isWorkPhase: !!localState.isWorkPhase,
-                    isLongBreak: !!localState.isLongBreak,
-                    timeLeft: localState.timeLeft || 0,
-                    breakTimeLeft: localState.breakTimeLeft || 0,
-                    timeElapsed: localState.timeElapsed || 0,
-                    totalTime: localState.totalTime || 0,
-                    completedPomodoros: localState.completedPomodoros || 0
-                });
-            }
-        }
-
         setInterval(() => {
             if (localState.isRunning && !localState.isPaused) {
                 const now = Date.now();
@@ -8478,7 +8411,6 @@ document.body.classList.remove('docked-mode');
                 }
                 
                 render();
-                notifyPhaseCompletionIfNeeded();
             }
         }, 100);
 
@@ -8490,10 +8422,6 @@ document.body.classList.remove('docked-mode');
             
             if (newSettings) {
                 settings = { ...settings, ...newSettings };
-            }
-            if (!localState.isRunning || localState.isPaused) {
-                lastCompletionNotifyKey = '';
-                lastCompletionNotifyAt = 0;
             }
             render();
         }
@@ -8655,8 +8583,8 @@ document.body.classList.remove('docked-mode');
                 }
 
                 // 添加新的监听器，包含迷你/吸附/恢复等操作
-                const actionHandler = (_event: any, method: string, ...args: any[]) => {
-                    this.callMethod(method, ...args);
+                const actionHandler = (_event: any, method: string) => {
+                    this.callMethod(method);
                 };
                 const controlHandler = (_event: any, action: string, pinState?: boolean) => {
                     switch (action) {
@@ -8749,94 +8677,6 @@ document.body.classList.remove('docked-mode');
 
 
     /**
-     * BrowserWindow 本地计时器在到点时主动上报，由主逻辑统一执行阶段完成（切换模式 + 记录数据）
-     */
-    private async handleBrowserWindowPhaseCompletion(payload?: any) {
-        try {
-            if (this.isCompletingPhase || !this.isRunning || this.isPaused) {
-                return;
-            }
-
-            const now = Date.now();
-            const payloadStartTime = Number(payload?.startTime || 0);
-            if ((!this.startTime || this.startTime <= 0) && payloadStartTime > 0) {
-                this.startTime = payloadStartTime;
-            }
-
-            if (!this.startTime || this.startTime <= 0 || this.startTime > now) {
-                return;
-            }
-
-            const elapsedSinceStart = Math.max(0, Math.floor((now - this.startTime) / 1000));
-            let completionKey = '';
-            let completionHandler: (() => Promise<void>) | null = null;
-
-            if (this.isCountUp) {
-                if (this.isWorkPhase) {
-                    const pomodoroLength = Math.max(1, (Number(this.settings?.workDuration) || 25) * 60);
-                    this.timeElapsed = elapsedSinceStart;
-                    const completedCycles = Math.floor(this.timeElapsed / pomodoroLength);
-                    const lastTriggeredCycle = this.lastPomodoroTriggerTime > 0
-                        ? Math.floor(this.lastPomodoroTriggerTime / pomodoroLength)
-                        : 0;
-
-                    if (completedCycles > lastTriggeredCycle) {
-                        completionKey = `countup-work-${completedCycles}`;
-                        completionHandler = async () => {
-                            this.lastPomodoroTriggerTime = completedCycles * pomodoroLength;
-                            await this.completePomodoroPhase();
-                        };
-                    }
-                } else {
-                    const breakSeconds = Math.max(
-                        1,
-                        (Number(this.isLongBreak ? this.settings?.longBreakDuration : this.settings?.breakDuration) || 5) * 60
-                    );
-                    this.breakTimeLeft = Math.max(0, breakSeconds - elapsedSinceStart);
-                    if (this.breakTimeLeft <= 0) {
-                        completionKey = `countup-break-${this.startTime}`;
-                        completionHandler = async () => {
-                            await this.completeBreakPhase();
-                        };
-                    }
-                }
-            } else {
-                const effectiveTotalTime = this.totalTime > 0
-                    ? this.totalTime
-                    : Math.max(0, Number(payload?.totalTime || 0));
-                if (effectiveTotalTime <= 0) {
-                    return;
-                }
-
-                this.totalTime = effectiveTotalTime;
-                this.timeLeft = Math.max(0, effectiveTotalTime - elapsedSinceStart);
-                if (this.timeLeft <= 0) {
-                    const phaseType = this.isWorkPhase ? 'work' : (this.isLongBreak ? 'long-break' : 'break');
-                    completionKey = `countdown-${phaseType}-${this.startTime}`;
-                    completionHandler = async () => {
-                        await this.completePhase();
-                    };
-                }
-            }
-
-            if (completionHandler) {
-                if (completionKey && this.lastBrowserWindowCompletionKey === completionKey) {
-                    return;
-                }
-                if (completionKey) {
-                    this.lastBrowserWindowCompletionKey = completionKey;
-                }
-                await completionHandler();
-            }
-
-            this.updateDisplay();
-        } catch (error) {
-            console.error('[PomodoroTimer] handleBrowserWindowPhaseCompletion error:', error);
-        }
-    }
-
-
-    /**
      * 供 BrowserWindow 调用的方法
      */
     public callMethod(method: string, ...args: any[]) {
@@ -8868,9 +8708,6 @@ document.body.classList.remove('docked-mode');
                     break;
                 case 'toggleBackgroundAudio':
                     this.toggleBackgroundAudio();
-                    break;
-                case 'handleBrowserWindowPhaseCompletion':
-                    this.handleBrowserWindowPhaseCompletion(args[0]);
                     break;
                 default:
                     console.warn('[PomodoroTimer] Unknown method:', method);
@@ -8929,11 +8766,11 @@ document.body.classList.remove('docked-mode');
                 // 退出迷你模式
                 // 获取当前 mini 模式窗口位置
                 const currentBounds = pomodoroWindow.getBounds();
-                
+
                 // 正常模式的窗口大小
                 const normalWidth = 240;
                 const normalHeight = 235;
-                
+
                 // 获取屏幕尺寸以进行边界检查
                 let screenWidth = 1920;
                 let screenHeight = 1080;
@@ -8951,15 +8788,15 @@ document.body.classList.remove('docked-mode');
                     screenWidth = window.screen.availWidth || 1920;
                     screenHeight = window.screen.availHeight || 1080;
                 }
-                
+
                 // 计算正常模式窗口的位置（以 mini 模式窗口中心为基准）
                 let newX = currentBounds.x + (currentBounds.width - normalWidth) / 2;
                 let newY = currentBounds.y + (currentBounds.height - normalHeight) / 2;
-                
+
                 // 确保窗口不超出屏幕边界
                 newX = Math.max(0, Math.min(newX, screenWidth - normalWidth));
                 newY = Math.max(0, Math.min(newY, screenHeight - normalHeight));
-                
+
                 // 设置窗口大小和位置
                 pomodoroWindow.setBounds({
                     x: Math.round(newX),
@@ -8967,10 +8804,10 @@ document.body.classList.remove('docked-mode');
                     width: normalWidth,
                     height: normalHeight
                 });
-                
+
                 // 清除保存的正常窗口位置，因为我们使用 mini 模式的位置
                 this.normalWindowBounds = null;
-                
+
                 pomodoroWindow.setResizable(true);
                 pomodoroWindow.setAspectRatio(0); // 取消比例限制
 
