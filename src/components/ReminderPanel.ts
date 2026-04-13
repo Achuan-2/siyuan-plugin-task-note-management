@@ -11254,8 +11254,9 @@ export class ReminderPanel {
         // 动态导入 PomodoroSessionsDialog
         const { PomodoroSessionsDialog } = await import("./PomodoroSessionsDialog");
 
-        // 获取提醒ID（处理重复实例的情况）
-        const reminderId = reminder.isRepeatInstance ? reminder.originalId : reminder.id;
+        // 重复实例需要使用实例 ID，才能命中实例级番茄记录；
+        // 普通任务和原始周期任务仍使用自身 ID。
+        const reminderId = reminder.id;
 
         const dialog = new PomodoroSessionsDialog(reminderId, this.plugin, () => {
             // 番茄钟更新后的回调，可选择性刷新界面

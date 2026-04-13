@@ -12227,8 +12227,9 @@ export class ProjectKanbanView {
     private async showPomodoroSessions(task: any) {
         const { PomodoroSessionsDialog } = await import("./PomodoroSessionsDialog");
 
-        // 重复实例查看原始任务的番茄钟记录，和其他面板保持一致
-        const reminderId = task.isRepeatInstance ? task.originalId : task.id;
+        // 重复实例需要使用实例 ID，才能命中实例级番茄记录；
+        // 普通任务和原始周期任务仍使用自身 ID。
+        const reminderId = task.id;
         const dialog = new PomodoroSessionsDialog(reminderId, this.plugin, () => {
             // 关闭后可按需刷新，这里保持轻量不主动刷新
         });
