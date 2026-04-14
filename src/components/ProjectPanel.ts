@@ -587,8 +587,38 @@ export class ProjectPanel {
         this.currentSortOrder = primary.order;
     }
 
-    private isPriorityPrimarySort(): boolean {
-        return this.getActiveSortCriteria()?.[0]?.method === 'priority';
+    private isDragDisabledBySortMode(): boolean {
+        const primary = this.getActiveSortCriteria()?.[0]?.method;
+        return primary === 'created' || primary === 'title';
+    }
+
+    private getProjectNonPrioritySortGroupKey(project: any): string {
+        const activeCriteria = this.getActiveSortCriteria();
+        const keyParts: string[] = [];
+        const categoryOrderMap = buildProjectCategoryOrderMap(this.categoryManager.getCategories());
+
+        for (const criterion of activeCriteria) {
+            if (criterion.method === 'priority') {
+                break;
+            }
+
+            if (criterion.method === 'category') {
+                const categoryInfo = getProjectPrimaryCategoryOrder(project, categoryOrderMap);
+                keyParts.push(categoryInfo.hasCategory ? `category:${categoryInfo.order}` : 'category:none');
+                continue;
+            }
+
+            if (criterion.method === 'time') {
+                keyParts.push(`time:${project?.startDate || '__NO_DATE__'}`);
+                continue;
+            }
+        }
+
+        return keyParts.length > 0 ? keyParts.join('|') : '__ALLOW_ALL__';
+    }
+
+    private isSameNonPrioritySortGroup(a: any, b: any): boolean {
+        return this.getProjectNonPrioritySortGroupKey(a) === this.getProjectNonPrioritySortGroupKey(b);
     }
 
     private updateSortButtonTitle() {
@@ -859,45 +889,66 @@ export class ProjectPanel {
         projectEl.dataset.projectId = project.id;
         projectEl.dataset.priority = priority;
 
-        // 创建拖拽手柄
-        const dragHandle = document.createElement('div');
-        dragHandle.className = 'drag-handle';
-        dragHandle.innerHTML = '⋮⋮';
-        dragHandle.style.cssText = `
+        const itemMoreBtn = document.createElement('button');
+        itemMoreBtn.type = 'button';
+        itemMoreBtn.className = 'b3-button b3-button--text project-item__more-button';
+        itemMoreBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconMore"></use></svg>';
+        const shouldAlwaysShowMoreButton = !!this.plugin?.isInMobileApp;
+        itemMoreBtn.style.cssText = `
             position: absolute;
             top: 8px;
             right: 8px;
-            cursor: grab;
-            padding: 4px 8px;
-            color: var(--b3-theme-on-surface);
-            opacity: 0;
-            font-size: 12px;
-            user-select: none;
-            display: flex;
+            display: inline-flex;
             align-items: center;
             justify-content: center;
-            background: var(--b3-theme-surface);
-            border-radius: 4px;
-            border: 1px solid var(--b3-border-color);
+            width: 28px;
+            height: 28px;
+            padding: 0;
+            border-radius: 6px;
+            opacity: ${shouldAlwaysShowMoreButton ? '1' : '0'};
+            pointer-events: ${shouldAlwaysShowMoreButton ? 'auto' : 'none'};
             transition: opacity 0.2s ease;
             z-index: 10;
         `;
-        dragHandle.classList.add('ariaLabel'); dragHandle.setAttribute('aria-label', "拖拽排序");
+        itemMoreBtn.classList.add('ariaLabel');
+        itemMoreBtn.setAttribute('aria-label', i18n("more") || "更多");
+        itemMoreBtn.draggable = false;
 
-        // 添加hover效果
-        projectEl.addEventListener('mouseenter', () => {
-            dragHandle.style.opacity = '1';
+        const setMoreButtonVisible = (visible: boolean) => {
+            if (shouldAlwaysShowMoreButton) return;
+            itemMoreBtn.style.opacity = visible ? '1' : '0';
+            itemMoreBtn.style.pointerEvents = visible ? 'auto' : 'none';
+        };
+
+        if (!shouldAlwaysShowMoreButton) {
+            projectEl.addEventListener('mouseenter', () => setMoreButtonVisible(true));
+            projectEl.addEventListener('mouseleave', () => setMoreButtonVisible(false));
+            itemMoreBtn.addEventListener('focus', () => setMoreButtonVisible(true));
+            itemMoreBtn.addEventListener('blur', () => setMoreButtonVisible(false));
+        }
+
+        itemMoreBtn.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
         });
-        projectEl.addEventListener('mouseleave', () => {
-            dragHandle.style.opacity = '0';
+        itemMoreBtn.addEventListener('dragstart', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
         });
+        itemMoreBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
 
-        // 将拖拽手柄添加到project-item
-        projectEl.appendChild(dragHandle);
+            const rect = itemMoreBtn.getBoundingClientRect();
+            this.showProjectContextMenu({
+                clientX: rect.right,
+                clientY: rect.bottom + 4
+            }, project);
+        });
+        projectEl.appendChild(itemMoreBtn);
 
-        // 仅在主排序为优先级时启用拖拽排序
-        if (this.isPriorityPrimarySort()) {
-            this.addDragFunctionality(projectEl, dragHandle, project);
+        // 桌面端允许直接拖拽排序；创建时间/标题排序下禁用
+        if (!this.isDragDisabledBySortMode()) {
+            this.addDragFunctionality(projectEl, project);
         }
 
         // 添加右键菜单支持
@@ -908,7 +959,7 @@ export class ProjectPanel {
 
         // 添加单击打开项目看板支持
         projectEl.addEventListener('click', (e) => {
-            if ((e.target as HTMLElement).closest('.drag-handle')) return;
+            if ((e.target as HTMLElement).closest('.project-item__more-button')) return;
             e.preventDefault();
             e.stopPropagation();
             this.openProjectKanban(project);
@@ -1374,16 +1425,24 @@ export class ProjectPanel {
         return totalMinutes;
     }
     // 新增：添加拖拽功能
-    private addDragFunctionality(projectEl: HTMLElement, handle: HTMLElement, project: any) {
-        handle.draggable = true;
-        handle.style.cursor = 'grab';
+    private addDragFunctionality(projectEl: HTMLElement, project: any) {
+        if (this.plugin?.isInMobileApp) return;
 
-        handle.addEventListener('dragstart', (e) => {
+        projectEl.draggable = true;
+        projectEl.style.cursor = 'grab';
+
+        projectEl.addEventListener('dragstart', (e) => {
+            const target = e.target as HTMLElement | null;
+            if (target?.closest('.project-item__more-button')) {
+                e.preventDefault();
+                return;
+            }
+
             this.isDragging = true;
             this.draggedElement = projectEl;
             this.draggedProject = project;
             projectEl.style.opacity = '0.5';
-            handle.style.cursor = 'grabbing';
+            projectEl.style.cursor = 'grabbing';
 
             if (e.dataTransfer) {
                 e.dataTransfer.effectAllowed = 'move';
@@ -1391,12 +1450,12 @@ export class ProjectPanel {
             }
         });
 
-        handle.addEventListener('dragend', () => {
+        projectEl.addEventListener('dragend', () => {
             this.isDragging = false;
             this.draggedElement = null;
             this.draggedProject = null;
             projectEl.style.opacity = '';
-            handle.style.cursor = 'grab';
+            projectEl.style.cursor = 'grab';
         });
 
         projectEl.addEventListener('dragover', (e) => {
@@ -1439,9 +1498,22 @@ export class ProjectPanel {
     }
 
     // 新增：检查是否可以放置
-    private canDropHere(_draggedProject: any, _targetProject: any): boolean {
-        // 允许跨优先级拖拽，后续在 reorderProjects 中会自动更新优先级
-        return true;
+    private canDropHere(draggedProject: any, targetProject: any): boolean {
+        if (!draggedProject || !targetProject) return false;
+        if (draggedProject.id === targetProject.id) return false;
+
+        const draggedStatus = draggedProject.status || 'active';
+        const targetStatus = targetProject.status || 'active';
+
+        if (draggedStatus !== targetStatus) {
+            return false;
+        }
+
+        if (this.isDragDisabledBySortMode()) {
+            return false;
+        }
+
+        return this.isSameNonPrioritySortGroup(draggedProject, targetProject);
     }
 
     // 新增：显示拖放指示器
@@ -1485,7 +1557,8 @@ export class ProjectPanel {
     // 新增：处理拖放
     private async handleDrop(draggedProject: any, targetProject: any, event: DragEvent) {
         try {
-            const rect = (event.target as HTMLElement).getBoundingClientRect();
+            const dropTarget = (event.currentTarget as HTMLElement) || (event.target as HTMLElement);
+            const rect = dropTarget.getBoundingClientRect();
             const midpoint = rect.top + rect.height / 2;
             const insertBefore = event.clientY < midpoint;
 
@@ -1503,6 +1576,14 @@ export class ProjectPanel {
     // 新增：重新排序项目
     private async reorderProjects(draggedProject: any, targetProject: any, insertBefore: boolean) {
         try {
+            if (this.isDragDisabledBySortMode()) {
+                return;
+            }
+
+            if (!this.isSameNonPrioritySortGroup(draggedProject, targetProject)) {
+                return;
+            }
+
             const projectData = await this.plugin.loadProjectData();
 
             const draggedId = draggedProject.id;
@@ -1716,7 +1797,7 @@ export class ProjectPanel {
         return startedEl;
     }
 
-    private showProjectContextMenu(event: MouseEvent, project: any) {
+    private showProjectContextMenu(event: { clientX: number; clientY: number }, project: any) {
         const menu = new Menu("projectContextMenu");
 
         if (project.blockId) {

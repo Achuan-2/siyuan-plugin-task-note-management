@@ -10040,17 +10040,41 @@ export class ProjectKanbanView {
             align-items: flex-start;
         `;
 
-        if (task.pinned) {
-            const badge = document.createElement("div");
-            badge.style.position = "absolute";
-            badge.style.top = "6px";
-            badge.style.right = "6px";
-            badge.style.fontSize = "14px";
-            badge.innerHTML = "📌";
-            badge.classList.add("ariaLabel");
-            badge.setAttribute("aria-label", "置顶任务");
-            taskEl.appendChild(badge);
-        }
+        const itemMoreBtn = document.createElement('button');
+        itemMoreBtn.type = 'button';
+        itemMoreBtn.className = 'b3-button b3-button--text kanban-task-more-button';
+        itemMoreBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconMore"></use></svg>';
+        itemMoreBtn.classList.add('ariaLabel');
+        itemMoreBtn.setAttribute('aria-label', i18n('more'));
+        itemMoreBtn.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
+        });
+        itemMoreBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const rect = itemMoreBtn.getBoundingClientRect();
+            const position = {
+                clientX: rect.right,
+                clientY: rect.bottom + 4,
+            };
+
+            if (this.isMultiSelectMode) {
+                if (!this.selectedTaskIds.has(task.id)) {
+                    this.toggleTaskSelection(task.id, true);
+                }
+                await this.showBatchContextMenu(position);
+                return;
+            }
+
+            if (task.isSubscribed) {
+                this.showSubscribedTaskContextMenu(position, task);
+                return;
+            }
+
+            await this.showTaskContextMenu(position, task);
+        });
+        taskEl.appendChild(itemMoreBtn);
 
         // 多选复选框（仅在多选模式下显示）
         let multiSelectCheckbox: HTMLInputElement | null = null;
@@ -10201,6 +10225,7 @@ export class ProjectKanbanView {
         taskContentContainer.className = 'kanban-task-content';
         taskContentContainer.style.flex = '1';
         taskContentContainer.style.overflow = 'auto';
+        taskContentContainer.style.paddingRight = '30px';
 
         // 如果是子任务且状态与父任务不同，且不是作为嵌套子任务显示（level=0表示顶层任务），则显示父任务名称
         // level > 0 表示该任务是作为父任务的子任务嵌套显示的，此时不需要显示父任务名
@@ -10321,8 +10346,20 @@ export class ProjectKanbanView {
 
         // 创建标题和链接的容器
         const titleContainer = document.createElement('div');
-        titleContainer.style.cssText = 'display: flex; align-items: center; gap: 6px; margin-bottom: 8px;';
-        titleContainer.appendChild(titleEl);
+        titleContainer.className = 'kanban-task-title-container';
+
+        const titleRow = document.createElement('div');
+        titleRow.className = 'kanban-task-title-row';
+
+        if (task.pinned) {
+            const badge = document.createElement('span');
+            badge.className = 'kanban-task-pin-badge ariaLabel';
+            badge.innerHTML = '📌';
+            badge.setAttribute('aria-label', i18n('pinTask') || '置顶任务');
+            titleRow.appendChild(badge);
+        }
+
+        titleRow.appendChild(titleEl);
 
         // 添加URL链接图标作为兄弟节点
         if (task.url) {
@@ -10336,9 +10373,10 @@ export class ProjectKanbanView {
             urlIcon.addEventListener('click', (e) => {
                 e.stopPropagation();
             });
-            titleContainer.appendChild(urlIcon);
+            titleRow.appendChild(urlIcon);
         }
 
+        titleContainer.appendChild(titleRow);
         taskContentContainer.appendChild(titleContainer);
 
         // 任务信息容器
@@ -11505,7 +11543,7 @@ export class ProjectKanbanView {
         });
     }
 
-    private showSubscribedTaskContextMenu(event: MouseEvent, task: any) {
+    private showSubscribedTaskContextMenu(event: { clientX: number; clientY: number }, task: any) {
         const menu = new Menu("subscribedTaskContextMenu");
 
         menu.addItem({
@@ -11558,7 +11596,7 @@ export class ProjectKanbanView {
     /**
      * 多选模式下的右键菜单：显示批量操作
      */
-    private async showBatchContextMenu(event: MouseEvent): Promise<void> {
+    private async showBatchContextMenu(event: { clientX: number; clientY: number }): Promise<void> {
         const menu = new Menu("kanbanBatchContextMenu");
         // 设置已完成
         menu.addItem({
@@ -11643,7 +11681,7 @@ export class ProjectKanbanView {
         });
     }
 
-    private async showTaskContextMenu(event: MouseEvent, task: any) {
+    private async showTaskContextMenu(event: { clientX: number; clientY: number }, task: any) {
         const menu = new Menu("kanbanTaskContextMenu");
 
         const childTasks = this.tasks.filter(t => t.parentId === task.id);
@@ -14222,6 +14260,62 @@ export class ProjectKanbanView {
                 margin-bottom: 8px;
                 color: var(--b3-theme-on-surface);
                 line-height: 1.4;
+            }
+
+            .kanban-task-title-container {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                margin-bottom: 8px;
+                min-width: 0;
+            }
+
+            .kanban-task-title-row {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                min-width: 0;
+            }
+
+            .kanban-task-title-row .kanban-task-title {
+                margin-bottom: 0;
+            }
+
+            .kanban-task-pin-badge {
+                font-size: 14px;
+                line-height: 1;
+                flex-shrink: 0;
+                pointer-events: none;
+            }
+
+            .kanban-task-more-button {
+                position: absolute;
+                top: 4px;
+                right: 4px;
+                min-width: 28px;
+                height: 28px;
+                padding: 0 6px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: 6px;
+                opacity: 0;
+                visibility: hidden;
+                pointer-events: none;
+                z-index: 2;
+                transition: opacity 0.15s ease, visibility 0.15s ease;
+            }
+
+            .kanban-task:hover .kanban-task-more-button,
+            .kanban-task:focus-within .kanban-task-more-button {
+                opacity: 1;
+                visibility: visible;
+                pointer-events: auto;
+            }
+
+            .kanban-task-more-button .b3-button__icon {
+                width: 14px;
+                height: 14px;
             }
 
             .kanban-task-info {

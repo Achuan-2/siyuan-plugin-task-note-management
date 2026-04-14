@@ -1385,6 +1385,7 @@
     border-radius: 4px;
     margin-bottom: 8px;
     padding: 8px;
+    position: relative;
     cursor: pointer;
 
     &--overdue {
@@ -1406,6 +1407,57 @@
     display: flex;
     gap: 6px;
     align-items: flex-start;
+    padding-right: 34px;
+}
+
+.reminder-item__title-container {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.reminder-item__title-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+}
+
+.reminder-item__pin-badge {
+    font-size: 14px;
+    line-height: 1;
+    pointer-events: none;
+    flex-shrink: 0;
+}
+
+.reminder-item__more-button {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    min-width: 28px;
+    height: 28px;
+    padding: 0 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    z-index: 2;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.15s ease, visibility 0.15s ease;
+}
+
+.reminder-item:hover .reminder-item__more-button,
+.reminder-item:focus-within .reminder-item__more-button {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+.reminder-item__more-button .b3-button__icon {
+    width: 14px;
+    height: 14px;
 }
 
 .reminder-item__left-controls {

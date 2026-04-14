@@ -1131,10 +1131,32 @@ export class EisenhowerMatrixView {
         // 设置任务元素的背景色和边框
         taskEl.style.backgroundColor = backgroundColor;
         taskEl.style.border = `1.5px solid ${borderColor}`;
+        taskEl.style.position = 'relative';
 
         // 创建任务内容容器
         const taskContent = document.createElement('div');
         taskContent.className = 'task-content';
+        taskContent.style.paddingRight = '30px';
+
+        const moreBtn = document.createElement('button');
+        moreBtn.type = 'button';
+        moreBtn.className = `b3-button b3-button--text task-more-button${this.isMobileClient ? ' task-more-button--mobile' : ''}`;
+        moreBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconMore"></use></svg>';
+        moreBtn.classList.add('ariaLabel');
+        moreBtn.setAttribute('aria-label', i18n('more'));
+        moreBtn.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
+        });
+        moreBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const rect = moreBtn.getBoundingClientRect();
+            this.showTaskContextMenu(task, {
+                clientX: rect.right,
+                clientY: rect.bottom + 4
+            });
+        });
+        taskEl.appendChild(moreBtn);
 
         // 创建复选框容器
         const checkboxContainer = document.createElement('div');
@@ -1611,7 +1633,10 @@ export class EisenhowerMatrixView {
 
         taskEl.addEventListener('contextmenu', (e) => {
             e.preventDefault();
-            this.showTaskContextMenu(task, e as MouseEvent);
+            this.showTaskContextMenu(task, {
+                clientX: (e as MouseEvent).clientX,
+                clientY: (e as MouseEvent).clientY
+            });
         });
 
         checkbox.addEventListener('change', (e) => {
@@ -2729,6 +2754,37 @@ export class EisenhowerMatrixView {
                 gap: 8px;
             }
 
+            .task-more-button {
+                position: absolute;
+                top: 4px;
+                right: 4px;
+                min-width: 28px;
+                height: 28px;
+                padding: 0 6px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: 6px;
+                opacity: 0;
+                visibility: hidden;
+                pointer-events: none;
+                z-index: 2;
+                transition: opacity 0.15s ease, visibility 0.15s ease;
+            }
+
+            .quick_item:hover .task-more-button,
+            .quick_item:focus-within .task-more-button,
+            .task-more-button--mobile {
+                opacity: 1;
+                visibility: visible;
+                pointer-events: auto;
+            }
+
+            .task-more-button .b3-button__icon {
+                width: 14px;
+                height: 14px;
+            }
+
             .task-checkbox {
                 margin-top: 2px;
             }
@@ -3188,7 +3244,7 @@ export class EisenhowerMatrixView {
         document.head.appendChild(style);
     }
 
-    private showTaskContextMenu(task: QuadrantTask, event: MouseEvent) {
+    private showTaskContextMenu(task: QuadrantTask, event: { clientX: number; clientY: number }) {
         const menu = new Menu();
 
         if (task.isSubscribed) {

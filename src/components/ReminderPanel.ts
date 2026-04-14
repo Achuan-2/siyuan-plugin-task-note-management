@@ -2853,16 +2853,38 @@ export class ReminderPanel {
         reminderEl.dataset.reminderId = reminder.id;
         reminderEl.dataset.priority = priority;
 
-        // 右上角置顶角标
         const isPinned = this.isReminderPinned(reminder);
-        if (isPinned) {
-            reminderEl.style.position = 'relative';
-            const pinBadge = document.createElement('div');
-            pinBadge.className = 'reminder-item__pin-badge';
-            pinBadge.textContent = '📌';
-            pinBadge.style.cssText = 'position: absolute; top: 4px; right: 4px; font-size: 14px; line-height: 1; pointer-events: none; z-index: 1;';
-            reminderEl.appendChild(pinBadge);
-        }
+
+        const itemMoreBtn = document.createElement('button');
+        itemMoreBtn.type = 'button';
+        itemMoreBtn.className = 'b3-button b3-button--text reminder-item__more-button';
+        itemMoreBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconMore"></use></svg>';
+        itemMoreBtn.classList.add('ariaLabel');
+        itemMoreBtn.setAttribute('aria-label', i18n("more") || "更多");
+        itemMoreBtn.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
+        });
+        itemMoreBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const rect = itemMoreBtn.getBoundingClientRect();
+            const position = {
+                clientX: rect.right,
+                clientY: rect.bottom + 4,
+            };
+
+            if (this.isMultiSelectMode) {
+                if (!this.selectedReminderIds.has(reminder.id)) {
+                    this.togglePanelReminderSelection(reminder.id, reminderEl);
+                }
+                this.showPanelBatchContextMenu(position);
+                return;
+            }
+
+            this.showReminderContextMenu(position, reminder);
+        });
+        reminderEl.appendChild(itemMoreBtn);
 
         // 所有任务均启用拖拽功能（支持排序）
         this.addDragFunctionality(reminderEl, reminder);
@@ -3003,6 +3025,16 @@ export class ReminderPanel {
             this.addDocumentTitle(titleContainer, reminder.docId);
         }
 
+        const titleRow = document.createElement('div');
+        titleRow.className = 'reminder-item__title-row';
+
+        if (isPinned) {
+            const pinBadge = document.createElement('span');
+            pinBadge.className = 'reminder-item__pin-badge';
+            pinBadge.textContent = '📌';
+            titleRow.appendChild(pinBadge);
+        }
+
         const titleEl = document.createElement('span');
         titleEl.className = 'reminder-item__title';
 
@@ -3024,7 +3056,7 @@ export class ReminderPanel {
 
         titleEl.textContent = reminder.title || i18n("unnamedNote");
         titleEl.classList.add('ariaLabel'); titleEl.setAttribute('aria-label', reminder.blockId ? `点击打开绑定块: ${reminder.title || i18n("unnamedNote")}` : (reminder.title || i18n("unnamedNote")));
-        titleContainer.appendChild(titleEl);
+        titleRow.appendChild(titleEl);
 
         // 添加URL链接图标
         if (reminder.url) {
@@ -3038,8 +3070,10 @@ export class ReminderPanel {
             urlIcon.addEventListener('click', (e) => {
                 e.stopPropagation();
             });
-            titleContainer.appendChild(urlIcon);
+            titleRow.appendChild(urlIcon);
         }
+
+        titleContainer.appendChild(titleRow);
 
         const timeContainer = document.createElement('div');
         timeContainer.className = 'reminder-item__time-container';
@@ -7109,7 +7143,7 @@ export class ReminderPanel {
         }
     }
 
-    private showReminderContextMenu(event: MouseEvent, reminder: any) {
+    private showReminderContextMenu(event: { clientX: number; clientY: number }, reminder: any) {
         const menu = new Menu("reminderContextMenu");
         const today = getLogicalDateString();
 
@@ -10617,7 +10651,7 @@ export class ReminderPanel {
         this.lastClickedReminderId = currentId;
     }
 
-    private showPanelBatchContextMenu(event: MouseEvent): void {
+    private showPanelBatchContextMenu(event: { clientX: number; clientY: number }): void {
         const menu = new Menu('panelBatchContextMenu');
         const selectedCount = this.selectedReminderIds.size;
 
