@@ -2734,6 +2734,12 @@ export default class ReminderPlugin extends Plugin {
             }
         });
 
+        detail.menu.addItem({
+            iconHTML: "🍅",
+            label: i18n("startPomodoro") || "开始番茄钟",
+            submenu: this.createBlockPomodoroStartSubmenu(documentId)
+        });
+
         // 添加文档提醒查看功能
         detail.menu.addItem({
             iconHTML: "📋",
