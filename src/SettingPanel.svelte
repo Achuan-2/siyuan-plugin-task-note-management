@@ -736,18 +736,18 @@
                     description: i18n('pomodoroAutoModeDesc'),
                 },
                 {
-                    key: 'pomodoroSystemNotification',
-                    value: settings.pomodoroSystemNotification,
-                    type: 'checkbox',
-                    title: i18n('pomodoroSystemNotification'),
-                    description: i18n('pomodoroSystemNotificationDesc'),
-                },
-                {
                     key: 'pomodoroGlobalWindow',
                     value: settings.pomodoroGlobalWindow,
                     type: 'checkbox',
                     title: i18n('pomodoroGlobalWindow'),
                     description: i18n('pomodoroGlobalWindowDesc'),
+                },
+                {
+                    key: 'pomodoroSystemNotification',
+                    value: settings.pomodoroSystemNotification,
+                    type: 'checkbox',
+                    title: i18n('pomodoroSystemNotification'),
+                    description: i18n('pomodoroSystemNotificationDesc'),
                 },
                 {
                     key: 'pomodoroEndPopupWindow',
@@ -1634,8 +1634,7 @@
                 ...group,
                 items: group.items.filter(
                     item =>
-                        !item.hidden &&
-                        isSettingItemMatched(item, normalizedSettingSearchKeyword)
+                        !item.hidden && isSettingItemMatched(item, normalizedSettingSearchKeyword)
                 ),
             };
         })
@@ -2009,7 +2008,10 @@
                                                     on:keydown={e => {
                                                         if (e.key === 'Enter' || e.key === ' ') {
                                                             e.preventDefault();
-                                                            toggleSettingValue(item.key, audio.path);
+                                                            toggleSettingValue(
+                                                                item.key,
+                                                                audio.path
+                                                            );
                                                         }
                                                     }}
                                                 >
