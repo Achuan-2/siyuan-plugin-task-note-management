@@ -5036,8 +5036,6 @@ export class CalendarView {
                     console.error('打开笔记失败:', error);
                     showMessage(i18n("openNoteFailed"));
                 }
-            } else {
-                showMessage(i18n("unboundReminder") + "，请右键选择\"绑定到块\"");
             }
             return;
         }
@@ -5047,11 +5045,6 @@ export class CalendarView {
 
         // 如果没有绑定块，提示用户绑定块 (订阅任务除外)
         if (!reminder.blockId) {
-            if (reminder.isSubscribed) {
-                showMessage(i18n("subscribedTaskReadOnly") || "订阅任务（只读）");
-            } else {
-                showMessage(i18n("unboundReminder") + "，请右键选择\"绑定到块\"");
-            }
             return;
         }
 
