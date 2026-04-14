@@ -406,14 +406,123 @@ export class PomodoroTimer {
     }
 
     /**
-     * BrowserWindow 模式下的实际字体值（将变量解析后注入到独立页面）
+     * BrowserWindow 模式下的字体配置（将变量解析后注入到独立页面）
      */
-    private getPomodoroBrowserWindowFontFamily(): string {
+    private getPomodoroBrowserWindowFontConfig(): { fontFamily: string; fontFaceCss: string } {
         const baseFont = this.getCssVariable('--b3-font-family');
-        if (baseFont) {
-            return `${baseFont}, ${this.getEmojiFontFallbackList()}`;
+        const fontFamily = baseFont
+            ? `${baseFont}, ${this.getEmojiFontFallbackList()}`
+            : this.getEmojiFontFallbackList();
+
+        return {
+            fontFamily,
+            fontFaceCss: this.getPomodoroBrowserWindowFontFaceCss(baseFont)
+        };
+    }
+
+    private normalizeFontFamilyName(fontFamily: string): string {
+        return fontFamily.trim().replace(/^['"]|['"]$/g, '');
+    }
+
+    private extractFontFamilyNames(fontFamilyValue: string): string[] {
+        if (!fontFamilyValue) return [];
+
+        const genericFamilies = new Set([
+            'serif',
+            'sans-serif',
+            'monospace',
+            'cursive',
+            'fantasy',
+            'system-ui',
+            'ui-serif',
+            'ui-sans-serif',
+            'ui-monospace',
+            'ui-rounded',
+            'emoji',
+            'math',
+            'fangsong',
+            'inherit',
+            'initial',
+            'unset'
+        ]);
+
+        return fontFamilyValue
+            .split(',')
+            .map(item => this.normalizeFontFamilyName(item))
+            .filter(item => item && !genericFamilies.has(item.toLowerCase()));
+    }
+
+    private convertCssUrlsToAbsolute(cssText: string, baseUrl?: string): string {
+        if (!cssText) return '';
+        const resolvedBaseUrl = baseUrl || window.location.href;
+
+        return cssText.replace(/url\(([^)]+)\)/g, (_match, rawUrl) => {
+            const originalUrl = String(rawUrl).trim();
+            const unquotedUrl = originalUrl.replace(/^['"]|['"]$/g, '');
+
+            if (!unquotedUrl || /^(data:|https?:|file:|blob:|app:|about:|chrome:|mailto:|#)/i.test(unquotedUrl)) {
+                return `url(${originalUrl})`;
+            }
+
+            try {
+                const absoluteUrl = new URL(unquotedUrl, resolvedBaseUrl).href;
+                const quote = originalUrl.startsWith("'") ? "'" : (originalUrl.startsWith('"') ? '"' : '');
+                return `url(${quote}${absoluteUrl}${quote})`;
+            } catch {
+                return `url(${originalUrl})`;
+            }
+        });
+    }
+
+    private collectMatchingFontFaceRules(cssRules: CSSRuleList | undefined, fontFamilyNames: Set<string>, output: Set<string>) {
+        if (!cssRules || fontFamilyNames.size === 0) return;
+
+        const fontFaceRuleType = typeof CSSRule !== 'undefined' ? CSSRule.FONT_FACE_RULE : 5;
+        const importRuleType = typeof CSSRule !== 'undefined' ? CSSRule.IMPORT_RULE : 3;
+
+        Array.from(cssRules).forEach((rule: any) => {
+            if (!rule) return;
+
+            if (rule.type === fontFaceRuleType) {
+                const familyName = this.normalizeFontFamilyName(rule.style?.getPropertyValue?.('font-family') || '');
+                if (familyName && fontFamilyNames.has(familyName)) {
+                    const baseUrl = rule.parentStyleSheet?.href || window.location.href;
+                    output.add(this.convertCssUrlsToAbsolute(rule.cssText, baseUrl));
+                }
+                return;
+            }
+
+            if (rule.type === importRuleType && rule.styleSheet?.cssRules) {
+                this.collectMatchingFontFaceRules(rule.styleSheet.cssRules, fontFamilyNames, output);
+                return;
+            }
+
+            if (rule.cssRules) {
+                this.collectMatchingFontFaceRules(rule.cssRules, fontFamilyNames, output);
+            }
+        });
+    }
+
+    private getPomodoroBrowserWindowFontFaceCss(fontFamilyValue: string): string {
+        try {
+            if (typeof document === 'undefined' || typeof window === 'undefined') return '';
+
+            const fontFamilyNames = new Set(this.extractFontFamilyNames(fontFamilyValue));
+            if (fontFamilyNames.size === 0) return '';
+
+            const fontFaceCssSet = new Set<string>();
+            Array.from(document.styleSheets || []).forEach((styleSheet: StyleSheet) => {
+                try {
+                    this.collectMatchingFontFaceRules((styleSheet as CSSStyleSheet).cssRules, fontFamilyNames, fontFaceCssSet);
+                } catch {
+                    // 忽略无权限读取的样式表
+                }
+            });
+
+            return Array.from(fontFaceCssSet).join('\n');
+        } catch {
+            return '';
         }
-        return this.getEmojiFontFallbackList();
     }
 
     /**
@@ -1078,7 +1187,7 @@ export class PomodoroTimer {
             const btnHoverBgColor = colors.surface ? this.adjustColor(colors.surface, -10) : '#e0e0e0';
             const confirmBtnColor = '#4CAF50';
             const confirmBtnHoverColor = '#45a049';
-            const fontFamily = this.getPomodoroBrowserWindowFontFamily();
+            const { fontFamily, fontFaceCss } = this.getPomodoroBrowserWindowFontConfig();
 
             const htmlContent = `
                 <!DOCTYPE html>
@@ -1086,6 +1195,7 @@ export class PomodoroTimer {
                 <head>
                     <meta charset="UTF-8">
                     <style>
+                        ${fontFaceCss}
                         body {
                             background-color: ${bgColor};
                             color: ${textColor};
@@ -1270,7 +1380,7 @@ export class PomodoroTimer {
 
             const bgColor = this.getCssVariable('--b3-theme-background');
             const textColor = this.getCssVariable('--b3-theme-on-background');
-            const fontFamily = this.getPomodoroBrowserWindowFontFamily();
+            const { fontFamily, fontFaceCss } = this.getPomodoroBrowserWindowFontConfig();
 
             const htmlContent = `
                 <!DOCTYPE html>
@@ -1279,6 +1389,7 @@ export class PomodoroTimer {
                     <meta charset="UTF-8">
                     <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data:;">
                     <style>
+                        ${fontFaceCss}
                         body {
                             background-color: ${bgColor};
                             color: ${textColor};
@@ -1455,7 +1566,7 @@ export class PomodoroTimer {
 
             const bgColor = this.getCssVariable('--b3-theme-background');
             const textColor = this.getCssVariable('--b3-theme-on-background');
-            const fontFamily = this.getPomodoroBrowserWindowFontFamily();
+            const { fontFamily, fontFaceCss } = this.getPomodoroBrowserWindowFontConfig();
 
             const htmlContent = `
                 <!DOCTYPE html>
@@ -1465,6 +1576,7 @@ export class PomodoroTimer {
                     <!-- 允许内联样式和脚本 -->
                     <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data:;">
                     <style>
+                        ${fontFaceCss}
                         body {
                             background-color: ${bgColor};
                             color: ${textColor};
@@ -3057,7 +3169,7 @@ export class PomodoroTimer {
                 transition: all 0.2s ease;
                 z-index: 999;
             `;
-            settingsBtn.innerHTML = '🔄';
+            settingsBtn.innerHTML = '⚙️';
             settingsBtn.title = i18n('settings') || '设置';
 
             // 设置按钮悬停效果
@@ -3791,7 +3903,7 @@ export class PomodoroTimer {
     private updateMainSwitchButton() {
         if (!this.mainSwitchBtn) return;
 
-        let icon = '🔄'; // 默认设置图标
+        let icon = '⚙️'; // 默认设置图标
         let title = i18n('switcherMenu') || '切换菜单';
 
 
@@ -7145,7 +7257,8 @@ export class PomodoroTimer {
             const controlChannel = `pomodoro-control-${pomodoroWindow.id}`;
             const ipcMain = (remote as any).ipcMain;
 
-            const htmlContent = this.generateBrowserWindowHTML(actionChannel, controlChannel, currentState, timeStr, statusText, todayTimeStr, weekTimeStr, bgColor, textColor, surfaceColor, borderColor, hoverColor, this.getCssVariable('--b3-theme-background-light'), this.reminder.title || (i18n('unnamedNote') || '未命名笔记'), this.isBackgroundAudioMuted, this.randomRestEnabled, this.randomRestCount, successColor, dailyFocusGoal, this.getPomodoroBrowserWindowFontFamily());
+            const { fontFamily, fontFaceCss } = this.getPomodoroBrowserWindowFontConfig();
+            const htmlContent = this.generateBrowserWindowHTML(actionChannel, controlChannel, currentState, timeStr, statusText, todayTimeStr, weekTimeStr, bgColor, textColor, surfaceColor, borderColor, hoverColor, this.getCssVariable('--b3-theme-background-light'), this.reminder.title || (i18n('unnamedNote') || '未命名笔记'), this.isBackgroundAudioMuted, this.randomRestEnabled, this.randomRestCount, successColor, dailyFocusGoal, fontFamily, fontFaceCss);
 
             this.container = pomodoroWindow as any;
 
@@ -7723,6 +7836,7 @@ document.body.classList.remove('docked-mode');
         successColor: string,
         dailyFocusGoal: number,
         fontFamily: string,
+        fontFaceCss: string,
         miniModeTitle?: string,
         dockModeTitle?: string
     ): string {
@@ -7745,6 +7859,7 @@ document.body.classList.remove('docked-mode');
     <title>Pomodoro Timer</title>
     <script>window.isPomodoroWindow = true;</script>
     <style>
+        ${fontFaceCss}
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             background: ${this.isDocked ? 'transparent !important' : bgColor};
@@ -7771,6 +7886,7 @@ document.body.classList.remove('docked-mode');
             background: none;
             border: none;
             color: ${textColor};
+            font-family: inherit;
             cursor: pointer;
             padding: 4px;
             border-radius: 4px;
@@ -7802,6 +7918,7 @@ document.body.classList.remove('docked-mode');
             background: none;
             border: none;
             color: ${textColor};
+            font-family: inherit;
             cursor: pointer;
             padding: 8px 12px;
             border-radius: 4px;
@@ -8074,7 +8191,7 @@ document.body.classList.remove('docked-mode');
             </button>
             <div class="switch-container">
                 <button class="titlebar-btn" id="statusBtn" onclick="toggleSwitchMenu(event)">
-                    🔄
+                    ⚙️
                 </button>
                 <div class="switch-menu" id="switchMenu">
                     <button class="menu-item" onclick="callMethod('toggleMode')">
@@ -8529,6 +8646,7 @@ document.body.classList.remove('docked-mode');
             const borderColor = this.adjustColor(colors.surface, 20);
             const hoverColor = this.adjustColor(colors.surface, 10);
 
+            const { fontFamily, fontFaceCss } = this.getPomodoroBrowserWindowFontConfig();
             const htmlContent = this.generateBrowserWindowHTML(
                 actionChannel,
                 controlChannel,
@@ -8549,7 +8667,8 @@ document.body.classList.remove('docked-mode');
                 this.randomRestCount,
                 colors.successBackground,
                 (this.settings.dailyFocusGoal || 0),
-                this.getPomodoroBrowserWindowFontFamily()
+                fontFamily,
+                fontFaceCss
             );
 
             // 重新加载窗口内容
