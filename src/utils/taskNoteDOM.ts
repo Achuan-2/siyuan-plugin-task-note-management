@@ -1,6 +1,7 @@
 import { showMessage } from "siyuan";
 import { i18n } from "../pluginInstance";
 import { PomodoroRecordManager } from "./pomodoroRecord";
+import { ProjectManager, type MilestoneDateDisplayInfo } from "./projectManager";
 
 const PROJECT_KANBAN_TAB_TYPE = "project_kanban_tab";
 const BLOCK_POMODORO_COUNT_ATTR = "custom-task-pomodoro-count";
@@ -33,6 +34,8 @@ export class TaskNoteDOMManager {
     private latestPomodoroSummaryTaskByBlock: Map<string, number> = new Map();
     private latestBindReminderDateTaskByBlock: Map<string, number> = new Map();
     private lastBoundReminderDateDisplayByBlock: Map<string, BoundReminderDateDisplayInfo> = new Map();
+    private latestMilestoneDateTaskByBlock: Map<string, number> = new Map();
+    private lastMilestoneDateDisplayByBlock: Map<string, MilestoneDateDisplayInfo> = new Map();
 
     constructor(plugin: any) {
         this.plugin = plugin;
@@ -790,6 +793,21 @@ export class TaskNoteDOMManager {
             seenMilestone.add(blockId);
         }
 
+        const milestoneDateButtons = Array.from(protyle.element.querySelectorAll(".block-milestone-date")) as HTMLElement[];
+        const seenMilestoneDate = new Set<string>();
+        for (const btn of milestoneDateButtons) {
+            const blockId = btn.dataset.blockId || btn.closest("[data-node-id]")?.getAttribute("data-node-id");
+            if (!blockId || !activeBlockIds.has(blockId)) {
+                btn.remove();
+                continue;
+            }
+            if (seenMilestoneDate.has(blockId)) {
+                btn.remove();
+                continue;
+            }
+            seenMilestoneDate.add(blockId);
+        }
+
         const pomodoroSummaryButtons = Array.from(protyle.element.querySelectorAll(".block-pomodoro-summary")) as HTMLElement[];
         const seenPomodoroSummary = new Set<string>();
         for (const btn of pomodoroSummaryButtons) {
@@ -902,19 +920,48 @@ export class TaskNoteDOMManager {
         }
 
         const existingMilestoneBtn = container.querySelector(`.block-milestone-btn[data-block-id="${blockId}"]`) as HTMLElement;
+        const existingMilestoneDateBtn = container.querySelector(`.block-milestone-date[data-block-id="${blockId}"]`) as HTMLElement | null;
         if (info.milestoneIds && info.milestoneIds.length > 0 && info.milestoneProjectId) {
             if (!existingMilestoneBtn) {
                 const milestoneBtn = this._createMilestoneButton(blockId, info.milestoneProjectId, info.milestoneIds);
                 container.appendChild(milestoneBtn);
             } else {
-                existingMilestoneBtn.dataset.milestoneIds = info.milestoneIds.join(",");
-                existingMilestoneBtn.dataset.projectId = info.milestoneProjectId;
                 if (existingMilestoneBtn.parentElement !== container) {
                     container.appendChild(existingMilestoneBtn);
                 }
             }
+            if (existingMilestoneDateBtn) {
+                existingMilestoneDateBtn.remove();
+            }
+            const syncMilestoneDateInfo =
+                this.getMilestoneDateDisplayInfoSync(info.milestoneProjectId, info.milestoneIds) ||
+                this.lastMilestoneDateDisplayByBlock.get(blockId) ||
+                null;
+            const milestoneBtn = (container.querySelector(`.block-milestone-btn[data-block-id="${blockId}"]`) as HTMLElement | null);
+            if (syncMilestoneDateInfo) {
+                this.lastMilestoneDateDisplayByBlock.set(blockId, syncMilestoneDateInfo);
+                if (milestoneBtn) {
+                    this._updateMilestoneButton(
+                        milestoneBtn,
+                        info.milestoneProjectId,
+                        info.milestoneIds,
+                        syncMilestoneDateInfo.displayText
+                    );
+                }
+            } else if (milestoneBtn) {
+                this.lastMilestoneDateDisplayByBlock.delete(blockId);
+                this._updateMilestoneButton(milestoneBtn, info.milestoneProjectId, info.milestoneIds, "");
+            }
+            void this.refreshMilestoneDateButton(protyle, blockId, info.milestoneProjectId, info.milestoneIds);
         } else if (existingMilestoneBtn) {
             existingMilestoneBtn.remove();
+            if (existingMilestoneDateBtn) {
+                existingMilestoneDateBtn.remove();
+            }
+            this.lastMilestoneDateDisplayByBlock.delete(blockId);
+        } else if (existingMilestoneDateBtn) {
+            existingMilestoneDateBtn.remove();
+            this.lastMilestoneDateDisplayByBlock.delete(blockId);
         }
 
         const selfPomodoroCount = Math.max(0, Math.floor(Number(info.pomodoroTotalCount || 0)));
@@ -1054,6 +1101,72 @@ export class TaskNoteDOMManager {
             displayText,
             displayType
         };
+    }
+
+    private getMilestoneDateDisplayInfoSync(projectId: string, milestoneIds: string[]): MilestoneDateDisplayInfo | null {
+        try {
+            const projectManager = ProjectManager.getInstance(this.plugin);
+            return projectManager.getMilestoneDateDisplayInfoSync(projectId, milestoneIds);
+        } catch (error) {
+            console.warn("同步获取里程碑日期展示信息失败:", error);
+            return null;
+        }
+    }
+
+    private async getMilestoneDateDisplayInfo(projectId: string, milestoneIds: string[]): Promise<MilestoneDateDisplayInfo | null> {
+        try {
+            const projectManager = ProjectManager.getInstance(this.plugin);
+            return await projectManager.getMilestoneDateDisplayInfo(projectId, milestoneIds);
+        } catch (error) {
+            console.warn("获取里程碑日期展示信息失败:", error);
+            return null;
+        }
+    }
+
+    private async refreshMilestoneDateButton(protyle: any, blockId: string, projectId: string, milestoneIds: string[]) {
+        const normalizedMilestoneIds = this.normalizeReminderIds(milestoneIds);
+        const nextTaskId = (this.latestMilestoneDateTaskByBlock.get(blockId) || 0) + 1;
+        this.latestMilestoneDateTaskByBlock.set(blockId, nextTaskId);
+        if (!projectId || normalizedMilestoneIds.length === 0) {
+            this.lastMilestoneDateDisplayByBlock.delete(blockId);
+            const legacyDateBtn = protyle?.element?.querySelector?.(`.block-milestone-date[data-block-id="${blockId}"]`) as HTMLElement | null;
+            if (legacyDateBtn) legacyDateBtn.remove();
+            const existingBtn = protyle?.element?.querySelector?.(`.block-milestone-btn[data-block-id="${blockId}"]`) as HTMLElement | null;
+            if (existingBtn) this._updateMilestoneButton(existingBtn, projectId, normalizedMilestoneIds, "");
+            return;
+        }
+
+        const displayInfo = await this.getMilestoneDateDisplayInfo(projectId, normalizedMilestoneIds);
+        if (this.latestMilestoneDateTaskByBlock.get(blockId) !== nextTaskId) {
+            return;
+        }
+
+        const trackedSource =
+            this._findTrackedSourceForBlock(protyle, blockId) ||
+            (protyle?.element?.querySelector?.(".protyle-wysiwyg") as Element | null);
+        const blockEl = (protyle?.element?.querySelector?.(`[data-node-id="${blockId}"]`) as HTMLElement | null) ||
+            (trackedSource as HTMLElement | null);
+        if (!trackedSource || !blockEl) return;
+
+        const container = this._findButtonContainer(blockEl, trackedSource);
+        if (!container) return;
+
+        const legacyDateBtn = container.querySelector(`.block-milestone-date[data-block-id="${blockId}"]`) as HTMLElement | null;
+        if (legacyDateBtn) legacyDateBtn.remove();
+        const existingBtn = container.querySelector(`.block-milestone-btn[data-block-id="${blockId}"]`) as HTMLElement | null;
+        if (!displayInfo) {
+            this.lastMilestoneDateDisplayByBlock.delete(blockId);
+            if (existingBtn) {
+                this._updateMilestoneButton(existingBtn, projectId, normalizedMilestoneIds, "");
+            }
+            return;
+        }
+
+        this.lastMilestoneDateDisplayByBlock.set(blockId, displayInfo);
+
+        if (existingBtn) {
+            this._updateMilestoneButton(existingBtn, projectId, normalizedMilestoneIds, displayInfo.displayText);
+        }
     }
 
     private async refreshBindReminderDateButton(protyle: any, blockId: string, reminderIds: string[]) {
@@ -1415,87 +1528,143 @@ export class TaskNoteDOMManager {
         return btn;
     }
 
+    private async openMilestoneTasksDialog(projectId: string, milestoneIds: string[]) {
+        const normalizedMilestoneIds = this.normalizeReminderIds(milestoneIds);
+        const firstMilestoneId = normalizedMilestoneIds[0];
+        if (!firstMilestoneId) return;
+
+        const projectData = await this.plugin.loadProjectData();
+        const project = projectData[projectId];
+
+        let milestone: any = null;
+        let groupId: string | null = null;
+
+        if (project?.milestones) {
+            milestone = project.milestones.find((m: any) => m.id === firstMilestoneId);
+        }
+
+        if (!milestone) {
+            const projectManager = ProjectManager.getInstance(this.plugin);
+            const groups = await projectManager.getProjectCustomGroups(projectId);
+
+            for (const group of groups) {
+                if (group.milestones) {
+                    milestone = group.milestones.find((m: any) => m.id === firstMilestoneId);
+                    if (milestone) {
+                        groupId = group.id;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!milestone) {
+            console.warn("Milestone not found:", firstMilestoneId);
+            return;
+        }
+
+        const tabId = this.plugin.name + PROJECT_KANBAN_TAB_TYPE + projectId;
+        const kanbanView = this.plugin.tabViews.get(tabId);
+
+        if (kanbanView && typeof kanbanView.showMilestoneTasksDialog === "function") {
+            await kanbanView.showMilestoneTasksDialog(milestone, groupId);
+            return;
+        }
+
+        const { ProjectKanbanView } = await import("../components/ProjectKanbanView");
+        const tempContainer = document.createElement("div");
+        const tempView = new ProjectKanbanView(tempContainer, this.plugin, projectId);
+        await tempView.showMilestoneTasksDialog(milestone, groupId);
+    }
+
     public _createMilestoneButton(blockId: string, projectId: string, milestoneIds: string[]): HTMLElement {
         const btn = document.createElement("button");
         btn.className = "block-milestone-btn block__icon fn__flex-center ariaLabel";
-        btn.setAttribute("aria-label", "查看里程碑任务");
-        btn.style.cssText = `
-            margin-left: 6px;
-            padding: 2px;
-            border: none;
-            background: transparent;
-            cursor: pointer;
-            border-radius: 3px;
-            color: var(--b3-theme-on-background);
-            opacity: 0.85;
-            transition: all 0.12s ease;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 22px;
-            height: 22px;
-        `;
-        btn.innerHTML = `<span style="font-size:14px;line-height:1">🚩</span>`;
         btn.dataset.blockId = blockId;
-        btn.dataset.projectId = projectId;
-        btn.dataset.milestoneIds = milestoneIds.join(",");
         btn.setAttribute("data-plugin-added", "reminder-plugin");
-        btn.classList.add('ariaLabel'); btn.setAttribute('aria-label', "查看里程碑任务");
 
         btn.addEventListener("click", async (e) => {
             e.preventDefault();
             e.stopPropagation();
             try {
-                const firstMilestoneId = milestoneIds[0];
-                if (!firstMilestoneId) return;
-
-                const projectData = await this.plugin.loadProjectData();
-                const project = projectData[projectId];
-
-                let milestone: any = null;
-                let groupId: string | null = null;
-
-                if (project?.milestones) {
-                    milestone = project.milestones.find((m: any) => m.id === firstMilestoneId);
-                }
-
-                if (!milestone) {
-                    const { ProjectManager } = await import("./projectManager");
-                    const projectManager = ProjectManager.getInstance(this.plugin);
-                    const groups = await projectManager.getProjectCustomGroups(projectId);
-
-                    for (const group of groups) {
-                        if (group.milestones) {
-                            milestone = group.milestones.find((m: any) => m.id === firstMilestoneId);
-                            if (milestone) {
-                                groupId = group.id;
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                if (!milestone) {
-                    console.warn("Milestone not found:", firstMilestoneId);
-                    return;
-                }
-
-                const tabId = this.plugin.name + PROJECT_KANBAN_TAB_TYPE + projectId;
-                let kanbanView = this.plugin.tabViews.get(tabId);
-
-                if (kanbanView && typeof kanbanView.showMilestoneTasksDialog === "function") {
-                    await kanbanView.showMilestoneTasksDialog(milestone, groupId);
-                } else {
-                    const { ProjectKanbanView } = await import("../components/ProjectKanbanView");
-                    const tempContainer = document.createElement("div");
-                    const tempView = new ProjectKanbanView(tempContainer, this.plugin, projectId);
-                    await tempView.showMilestoneTasksDialog(milestone, groupId);
-                }
+                const targetProjectId = String(btn.dataset.projectId || "").trim();
+                const targetMilestoneIds = this.normalizeReminderIds(btn.dataset.milestoneIds);
+                if (!targetProjectId || targetMilestoneIds.length === 0) return;
+                await this.openMilestoneTasksDialog(targetProjectId, targetMilestoneIds);
             } catch (err) {
                 console.error("打开里程碑任务对话框失败:", err);
             }
         });
 
+        const textEl = document.createElement("span");
+        textEl.className = "block-milestone-btn__text";
+        textEl.style.cssText = "font-size:12px;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
+        btn.appendChild(textEl);
+        this._updateMilestoneButton(btn, projectId, milestoneIds, "");
         return btn;
     }
+
+    public _updateMilestoneButton(
+        btn: HTMLElement,
+        projectId: string,
+        milestoneIds: string[],
+        displayText: string = ""
+    ) {
+        const safeProjectId = String(projectId || "").trim();
+        const safeMilestoneIds = this.normalizeReminderIds(milestoneIds);
+        const milestoneIdsText = safeMilestoneIds.join(",");
+        const safeDisplayText = String(displayText || "").trim();
+        const text = safeDisplayText ? `🚩 ${safeDisplayText}` : "🚩";
+        const ariaText = safeDisplayText
+            ? `查看里程碑任务，日期 ${safeDisplayText}`
+            : "查看里程碑任务";
+
+        if (btn.dataset.projectId !== safeProjectId) {
+            btn.dataset.projectId = safeProjectId;
+        }
+        if (btn.dataset.milestoneIds !== milestoneIdsText) {
+            btn.dataset.milestoneIds = milestoneIdsText;
+        }
+        if (btn.dataset.displayText !== safeDisplayText) {
+            btn.dataset.displayText = safeDisplayText;
+        }
+
+        btn.style.cssText = `
+            margin-left: 6px;
+            padding: 1px 6px;
+            border: none;
+            background: var(--b3-theme-surface-lighter);
+            cursor: pointer;
+            border-radius: 11px;
+            color: var(--b3-theme-on-background);
+            opacity: 0.9;
+            transition: all 0.12s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 22px;
+            line-height: 1;
+            max-width: 280px;
+        `;
+
+        if (btn.title !== safeDisplayText) {
+            btn.title = safeDisplayText;
+        }
+
+        let textEl = btn.querySelector(".block-milestone-btn__text") as HTMLElement | null;
+        if (!textEl) {
+            textEl = document.createElement("span");
+            textEl.className = "block-milestone-btn__text";
+            textEl.style.cssText = "font-size:12px;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
+            btn.appendChild(textEl);
+        }
+        if (textEl.textContent !== text) {
+            textEl.textContent = text;
+        }
+        btn.classList.add("ariaLabel");
+        if (btn.getAttribute("aria-label") !== ariaText) {
+            btn.setAttribute("aria-label", ariaText);
+        }
+    }
+
 }

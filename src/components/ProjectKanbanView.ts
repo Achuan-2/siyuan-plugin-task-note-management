@@ -2157,14 +2157,38 @@ export class ProjectKanbanView {
      * 显示里程碑关联的任务列表对话框
      */
     public async showMilestoneTasksDialog(milestone: any, groupId: string | null) {
+        const milestoneDateText = milestone.startTime || milestone.endTime
+            ? ` (${milestone.startTime || '?'} ~ ${milestone.endTime || '?'})`
+            : '';
+        const tasksLabel = i18n('tasks') || '任务';
         const dialog = new Dialog({
-            title: `${milestone.name}${milestone.startTime || milestone.endTime ? ` (${milestone.startTime || '?'} ~ ${milestone.endTime || '?'})` : ''} - ${i18n('tasks')}`,
-            content: `<div class="b3-dialog__content" style="padding: 0; display: flex; flex-direction: column; height: 100%;"></div>`,
+            title: `${milestone.name}${milestoneDateText} - ${tasksLabel}`,
+            content: `
+                <div class="b3-dialog__content" style="padding: 0; display: flex; flex-direction: column; height: 100%;"></div>
+                <div class="b3-dialog__action">
+                    <button class="b3-button b3-button--text" id="milestoneTasksEditBtn">
+                        <svg class="b3-button__icon"><use xlink:href="#iconEdit"></use></svg>
+                        ${i18n('editMilestone')}
+                    </button>
+                </div>
+            `,
             width: "600px",
             height: "70vh"
         });
 
         const content = dialog.element.querySelector('.b3-dialog__content') as HTMLElement;
+        const editBtn = dialog.element.querySelector('#milestoneTasksEditBtn') as HTMLButtonElement | null;
+        if (editBtn) {
+            editBtn.classList.add('ariaLabel');
+            editBtn.setAttribute('aria-label', i18n('editMilestone'));
+            editBtn.addEventListener('click', async () => {
+                dialog.destroy();
+                await this.showMilestoneEditDialog(milestone, groupId, async () => {
+                    await this.loadTasks();
+                    await this.renderKanban();
+                });
+            });
+        }
 
         // 渲染任务列表
         await this.renderMilestoneTaskTree(content, milestone, groupId, dialog);
@@ -2296,32 +2320,7 @@ export class ProjectKanbanView {
             }
         });
 
-        // 添加编辑里程碑按钮
-        const editBtn = document.createElement('button');
-        editBtn.className = 'b3-button b3-button--text';
-        editBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconEdit"></use></svg> ${i18n('editMilestone')}`;
-        editBtn.style.cssText = `
-            padding: 4px 12px;
-            font-size: 12px;
-            color: var(--b3-theme-on-surface);
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        `;
-        editBtn.addEventListener('click', async () => {
-            // 关闭当前对话框
-            dialog.destroy();
-
-            // 打开编辑里程碑对话框
-            await this.showMilestoneEditDialog(milestone, groupId, async () => {
-                // 保存后刷新看板
-                await this.loadTasks();
-                this.render();
-            });
-        });
-
         buttonContainer.appendChild(copyBtn);
-        buttonContainer.appendChild(editBtn);
         list.appendChild(buttonContainer);
 
         // 递归渲染函数
@@ -2808,7 +2807,7 @@ export class ProjectKanbanView {
         });
 
         cancelBtn.addEventListener('click', () => dialog.destroy());
-        saveBtn.addEventListener('click', async () => {
+        saveBtn.addEventListener('click', () => {
             const name = nameInput.value.trim();
             if (!name) {
                 showMessage(i18n('pleaseEnterMilestoneName') || '请输入里程碑名称');
@@ -2839,19 +2838,27 @@ export class ProjectKanbanView {
             };
 
             const oldBlockId = milestone?.blockId;
-            await this.saveMilestone(data, groupId);
-
-            // 更新块属性
-            if (oldBlockId && oldBlockId !== data.blockId) {
-                await this.updateMilestoneBlockAttrs(oldBlockId);
-            }
-            if (data.blockId) {
-                await this.updateMilestoneBlockAttrs(data.blockId);
-            }
-
-            onSave();
             dialog.destroy();
-            showMessage(i18n('milestoneSaved'));
+
+            void (async () => {
+                try {
+                    await this.saveMilestone(data, groupId);
+
+                    // 更新块属性
+                    if (oldBlockId && oldBlockId !== data.blockId) {
+                        await this.updateMilestoneBlockAttrs(oldBlockId);
+                    }
+                    if (data.blockId) {
+                        await this.updateMilestoneBlockAttrs(data.blockId);
+                    }
+
+                    await Promise.resolve(onSave());
+                    showMessage(i18n('milestoneSaved'));
+                } catch (error) {
+                    console.error('保存里程碑失败:', error);
+                    showMessage(i18n("operationFailed") || "操作失败");
+                }
+            })();
         });
     }
 

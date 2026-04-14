@@ -14,6 +14,11 @@ export interface Milestone {
     note?: string;
 }
 
+export interface MilestoneDateDisplayInfo {
+    milestoneId: string;
+    displayText: string;
+}
+
 export interface ProjectGroup {
     id: string;
     name: string;
@@ -357,6 +362,82 @@ export class ProjectManager {
         } catch (error) {
             console.error('根据ID获取里程碑失败:', error);
             return undefined;
+        }
+    }
+
+    private findMilestoneByIdFromProjectData(projectData: any, projectId: string, milestoneId: string): Milestone | undefined {
+        if (!projectData || typeof projectData !== 'object' || !projectId || !milestoneId) return undefined;
+        const project = projectData[projectId];
+        if (!project || typeof project !== 'object') return undefined;
+
+        const projectMilestone = Array.isArray(project.milestones)
+            ? project.milestones.find((m: Milestone) => m?.id === milestoneId)
+            : undefined;
+        if (projectMilestone) return projectMilestone;
+
+        const groups = Array.isArray(project.customGroups) ? project.customGroups : [];
+        for (const group of groups) {
+            const groupMilestone = Array.isArray(group?.milestones)
+                ? group.milestones.find((m: Milestone) => m?.id === milestoneId)
+                : undefined;
+            if (groupMilestone) return groupMilestone;
+        }
+
+        return undefined;
+    }
+
+    private formatMilestoneDateForDisplay(value?: string): string {
+        const safeValue = typeof value === 'string' ? value.trim() : '';
+        if (!safeValue) return '';
+        const compact = safeValue.replace(/[^\d]/g, '');
+        return compact.length === 8 ? compact : safeValue;
+    }
+
+    private buildMilestoneDateDisplayInfo(
+        projectId: string,
+        milestoneIds: string[],
+        projectData: any
+    ): MilestoneDateDisplayInfo | null {
+        const normalizedMilestoneIds = Array.from(new Set((milestoneIds || []).map((id) => String(id || '').trim()).filter(Boolean)));
+        if (!projectId || normalizedMilestoneIds.length === 0) return null;
+
+        for (const milestoneId of normalizedMilestoneIds) {
+            const milestone = this.findMilestoneByIdFromProjectData(projectData, projectId, milestoneId);
+            if (!milestone) continue;
+
+            const startDate = this.formatMilestoneDateForDisplay(milestone.startTime);
+            const endDate = this.formatMilestoneDateForDisplay(milestone.endTime);
+            const displayText = startDate && endDate
+                ? (startDate === endDate ? startDate : `${startDate}-${endDate}`)
+                : (startDate || endDate);
+
+            if (!displayText) continue;
+
+            return {
+                milestoneId,
+                displayText
+            };
+        }
+
+        return null;
+    }
+
+    public getMilestoneDateDisplayInfoSync(projectId: string, milestoneIds: string[]): MilestoneDateDisplayInfo | null {
+        try {
+            return this.buildMilestoneDateDisplayInfo(projectId, milestoneIds, this.plugin?.projectDataCache);
+        } catch (error) {
+            console.warn('同步获取里程碑日期展示信息失败:', error);
+            return null;
+        }
+    }
+
+    public async getMilestoneDateDisplayInfo(projectId: string, milestoneIds: string[]): Promise<MilestoneDateDisplayInfo | null> {
+        try {
+            const projectData = await this.plugin.loadProjectData();
+            return this.buildMilestoneDateDisplayInfo(projectId, milestoneIds, projectData);
+        } catch (error) {
+            console.error('获取里程碑日期展示信息失败:', error);
+            return null;
         }
     }
 

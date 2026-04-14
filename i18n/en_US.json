@@ -6,8 +6,6 @@
     "noUpdateNotes": "No update notes",
     "iKnow": "I know",
     "moreChangelog": "For more update logs, please visit: ",
-
-
     "save": "Save",
     "name": "Task Note Management",
     "timeReminder": "Task Reminder",
@@ -2029,5 +2027,6 @@
     "partialCompleted": "Partially Completed",
     "multiSelect": "Multi Select",
     "refreshSuccess": "Refresh successfully",
-    "globalKanbanStatuses": "Set Global Kanban Statuses"
+    "globalKanbanStatuses": "Set Global Kanban Statuses",
+    "task": "Tasks"
 }

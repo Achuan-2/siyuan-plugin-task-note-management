@@ -6,8 +6,6 @@
     "noUpdateNotes": "无更新内容",
     "iKnow": "知道啦",
     "moreChangelog": "更多版本更新日志请查看：",
-
-
     "save": "保存",
     "name": "任务笔记管理",
     "timeReminder": "任务笔记管理",
@@ -2029,5 +2027,6 @@
     "partialCompleted": "部分完成",
     "multiSelect": "多选",
     "refreshSuccess": "刷新成功",
-    "globalKanbanStatuses": "管理项目默认看板状态"
+    "globalKanbanStatuses": "管理项目默认看板状态",
+    "task": "任务"
 }
