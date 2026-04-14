@@ -2221,6 +2221,7 @@
             display: flex;
             align-items: center;
             overflow: hidden;
+            padding-top: 4px;
         }
 
         .tab-item__text {
