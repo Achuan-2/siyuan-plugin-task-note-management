@@ -51,7 +51,8 @@ import {
 } from "./utils/habitUtils";
 import {
     buildLinkedHabitPomodoroData,
-    getLinkedTaskPomodoroStatsByDate as getLinkedTaskPomodoroStatsByDateUtil
+    getLinkedTaskPomodoroStatsByDate as getLinkedTaskPomodoroStatsByDateUtil,
+    type LinkedTaskPomodoroDayStats
 } from "./utils/linkedHabitPomodoro";
 import { ChangelogUtils } from "./utils/changelogNotify";
 import { createPomodoroStartSubmenu as createSharedPomodoroStartSubmenu } from "./utils/pomodoroPresets";
@@ -4018,11 +4019,31 @@ export default class ReminderPlugin extends Plugin {
         return shouldCheckInOnDate(habit, date);
     }
 
-    private isHabitCompletedOnDate(habit: any, date: string): boolean {
+    private getLinkedTaskPomodoroStatsSnapshot(
+        reminderData?: Record<string, any>
+    ): Map<string, Map<string, LinkedTaskPomodoroDayStats>> {
+        const recordManager = PomodoroRecordManager.getInstance(this);
+        const records = recordManager.getSaveData() || this.pomodoroRecordsCache || {};
+        return buildLinkedHabitPomodoroData(
+            reminderData || this.reminderDataCache || {},
+            records,
+            (session) => recordManager.calculateSessionCount(session)
+        ).statsByHabit;
+    }
+
+    private isHabitCompletedOnDate(
+        habit: any,
+        date: string,
+        linkedTaskPomodoroStats?: Map<string, Map<string, LinkedTaskPomodoroDayStats>>
+    ): boolean {
         return isHabitCompletedOnDateUtil(habit, date, {
             getPomodoroFocusMinutes: (habitId, logicalDate) => {
                 const manager = PomodoroRecordManager.getInstance(this);
-                return manager.getEventFocusTime(habitId, logicalDate) || 0;
+                const selfFocusMinutes = manager.getEventFocusTime(habitId, logicalDate) || 0;
+                const linkedFocusMinutes = linkedTaskPomodoroStats
+                    ? getLinkedTaskPomodoroStatsByDateUtil(linkedTaskPomodoroStats, habitId, logicalDate).focusMinutes
+                    : 0;
+                return selfFocusMinutes + linkedFocusMinutes;
             }
         });
     }
@@ -4032,6 +4053,8 @@ export default class ReminderPlugin extends Plugin {
         try {
             const habitData = await this.loadHabitData();
             if (!habitData || typeof habitData !== 'object') return;
+            const reminderData = this.reminderDataCache || await this.loadReminderData();
+            const linkedTaskPomodoroStats = this.getLinkedTaskPomodoroStatsSnapshot(reminderData);
 
             const currentNum = this.timeStringToNumber(currentTime);
             let playSoundOnce = false;
@@ -4055,7 +4078,7 @@ export default class ReminderPlugin extends Plugin {
                     if (!this.shouldCheckHabitOnDate(habit, today)) continue;
 
                     // 如果今日已经打卡完成，则不再提醒
-                    if (this.isHabitCompletedOnDate(habit, today)) continue;
+                    if (this.isHabitCompletedOnDate(habit, today, linkedTaskPomodoroStats)) continue;
 
 
                     // 对每个提醒时间进行判断（可能为时间或带日期的时间）
@@ -4653,11 +4676,12 @@ export default class ReminderPlugin extends Plugin {
                     try {
                         const habitData = this.habitDataCache || await this.loadHabitData(true);
                         if (habitData && typeof habitData === 'object') {
+                            const linkedTaskPomodoroStats = this.getLinkedTaskPomodoroStatsSnapshot();
                             for (const [hid, habit] of Object.entries(habitData)) {
                                 try {
                                     const h = habit as any;
                                     if (h.completed) continue;
-                                    const times = this.calculateHabitNotificationTimes(h, 7).map((t) => t.toISOString()).sort();
+                                    const times = this.calculateHabitNotificationTimes(h, 7, linkedTaskPomodoroStats).map((t) => t.toISOString()).sort();
                                     if (times.length > 0) {
                                         expectedHabitPlan[hid] = times;
                                     }
@@ -5142,7 +5166,11 @@ export default class ReminderPlugin extends Plugin {
         return futureTimes;
     }
 
-    private calculateHabitNotificationTimes(habit: any, daysLimit: number = 0): Date[] {
+    private calculateHabitNotificationTimes(
+        habit: any,
+        daysLimit: number = 0,
+        linkedTaskPomodoroStats?: Map<string, Map<string, LinkedTaskPomodoroDayStats>>
+    ): Date[] {
         const now = new Date();
         const today = getLogicalDateString();
         const limitDate = daysLimit > 0 ? new Date(now.getTime() + daysLimit * 24 * 60 * 60 * 1000) : null;
@@ -5153,6 +5181,7 @@ export default class ReminderPlugin extends Plugin {
 
         const startDateCursor = new Date(`${today}T00:00:00`);
         const futureTimes: Date[] = [];
+        const resolvedLinkedTaskPomodoroStats = linkedTaskPomodoroStats || this.getLinkedTaskPomodoroStatsSnapshot();
 
         for (let dayOffset = 0; dayOffset <= scanDays; dayOffset++) {
             const currentDate = new Date(startDateCursor);
@@ -5162,7 +5191,7 @@ export default class ReminderPlugin extends Plugin {
             if (habit?.startDate && compareDateStrings(logicalDate, habit.startDate) < 0) continue;
             if (habit?.endDate && compareDateStrings(logicalDate, habit.endDate) > 0) continue;
             if (!this.shouldCheckHabitOnDate(habit, logicalDate)) continue;
-            if (this.isHabitCompletedOnDate(habit, logicalDate)) continue;
+            if (this.isHabitCompletedOnDate(habit, logicalDate, resolvedLinkedTaskPomodoroStats)) continue;
 
             const timeEntries = getHabitReminderTimesForDate(habit, logicalDate);
             if (timeEntries.length === 0) continue;

@@ -27,7 +27,7 @@ import {
     getHabitPomodoroTargetMinutes as getHabitPomodoroTargetMinutesUtil,
     getHabitProgressOnDate as getHabitProgressOnDateUtil,
     formatHabitReminderTimeDisplay,
-    getHabitReminderTimes,
+    getHabitReminderTimesForDate,
     getTodayHabitBuckets,
     isHabitActiveOnDate,
     isHabitCompletedOnDate as isHabitCompletedOnDateUtil,
@@ -1067,6 +1067,7 @@ export class HabitPanel {
         const today = getLogicalDateString();
         const displayDate = date || today;
         const isHistoryView = displayDate !== today;
+        const isCompletedOnDisplayDate = !isInactive && this.isCompletedOnDate(habit, displayDate);
         const checkIn = habit.checkIns?.[displayDate];
         
         // 已结束和已放弃的习惯不显示进度条
@@ -1137,7 +1138,9 @@ export class HabitPanel {
         
         // 提醒时间（支持多个）- 已结束和已放弃的习惯不显示
         if (!isInactive) {
-            const timesList = getHabitReminderTimes(habit);
+            const timesList = isCompletedOnDisplayDate && !isHistoryView
+                ? []
+                : getHabitReminderTimesForDate(habit, displayDate);
             if (timesList && timesList.length > 0) {
                 const reminderItem = document.createElement('div');
                 reminderItem.className = 'habit-card__info-item habit-card__info-item--full';
