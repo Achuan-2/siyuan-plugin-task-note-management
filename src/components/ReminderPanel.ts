@@ -2844,7 +2844,6 @@ export class ReminderPanel {
                 borderColor = 'var(--b3-card-info-color)';
                 break;
             default:
-                backgroundColor = colorWithOpacity('var(--b3-theme-background-light)', 0.1);
                 borderColor = 'var(--b3-theme-surface-lighter)';
         }
         reminderEl.style.backgroundColor = backgroundColor;
@@ -8765,7 +8764,6 @@ export class ReminderPanel {
                                 borderColor = 'var(--b3-card-info-color)';
                                 break;
                             default:
-                                backgroundColor = colorWithOpacity('var(--b3-theme-background-light)', 0.1);
                                 borderColor = 'var(--b3-theme-surface-lighter)';
                         }
                         el.style.backgroundColor = backgroundColor;
