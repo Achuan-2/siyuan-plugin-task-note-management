@@ -32,6 +32,7 @@ export class TaskNoteDOMManager {
     private pomodoroStatsLoadingPromise: Promise<void> | null = null;
     private latestPomodoroSummaryTaskByBlock: Map<string, number> = new Map();
     private latestBindReminderDateTaskByBlock: Map<string, number> = new Map();
+    private lastBoundReminderDateDisplayByBlock: Map<string, BoundReminderDateDisplayInfo> = new Map();
 
     constructor(plugin: any) {
         this.plugin = plugin;
@@ -859,14 +860,45 @@ export class TaskNoteDOMManager {
             if (existingBindDateBtn && existingBindDateBtn.parentElement !== container) {
                 container.appendChild(existingBindDateBtn);
             }
+            const syncDisplayInfo =
+                this.getBoundReminderDateDisplayInfoSyncFromPlugin(linkedReminderIds) ||
+                this.lastBoundReminderDateDisplayByBlock.get(blockId) ||
+                null;
+            if (syncDisplayInfo?.displayType === "completed") {
+                this.lastBoundReminderDateDisplayByBlock.delete(blockId);
+                if (existingBindDateBtn) {
+                    existingBindDateBtn.remove();
+                }
+            } else if (syncDisplayInfo) {
+                this.lastBoundReminderDateDisplayByBlock.set(blockId, syncDisplayInfo);
+                if (!existingBindDateBtn) {
+                    const dateBtn = this._createBindReminderDateButton(
+                        blockId,
+                        syncDisplayInfo.reminderId,
+                        syncDisplayInfo.displayText,
+                        syncDisplayInfo.displayType
+                    );
+                    this.ensureBindReminderDateButtonOrder(container, blockId, dateBtn);
+                } else {
+                    this._updateBindReminderDateButton(
+                        existingBindDateBtn,
+                        syncDisplayInfo.reminderId,
+                        syncDisplayInfo.displayText,
+                        syncDisplayInfo.displayType
+                    );
+                    this.ensureBindReminderDateButtonOrder(container, blockId, existingBindDateBtn);
+                }
+            }
             void this.refreshBindReminderDateButton(protyle, blockId, linkedReminderIds);
         } else if (existingBindBtn) {
             existingBindBtn.remove();
             if (existingBindDateBtn) {
                 existingBindDateBtn.remove();
             }
+            this.lastBoundReminderDateDisplayByBlock.delete(blockId);
         } else if (existingBindDateBtn) {
             existingBindDateBtn.remove();
+            this.lastBoundReminderDateDisplayByBlock.delete(blockId);
         }
 
         const existingMilestoneBtn = container.querySelector(`.block-milestone-btn[data-block-id="${blockId}"]`) as HTMLElement;
@@ -1009,10 +1041,43 @@ export class TaskNoteDOMManager {
         };
     }
 
+    private getBoundReminderDateDisplayInfoSyncFromPlugin(reminderIds: string[]): BoundReminderDateDisplayInfo | null {
+        if (!this.plugin || typeof this.plugin.getBoundReminderDateDisplayInfoSync !== "function") return null;
+        const info = this.plugin.getBoundReminderDateDisplayInfoSync(reminderIds);
+        if (!info || typeof info !== "object") return null;
+        const reminderId = String((info as any).reminderId || "").trim();
+        const displayText = String((info as any).displayText || "").trim();
+        const displayType = (info as any).displayType === "completed" ? "completed" : "schedule";
+        if (!reminderId || !displayText) return null;
+        return {
+            reminderId,
+            displayText,
+            displayType
+        };
+    }
+
     private async refreshBindReminderDateButton(protyle: any, blockId: string, reminderIds: string[]) {
         const normalizedReminderIds = this.normalizeReminderIds(reminderIds);
         const nextTaskId = (this.latestBindReminderDateTaskByBlock.get(blockId) || 0) + 1;
         this.latestBindReminderDateTaskByBlock.set(blockId, nextTaskId);
+        if (normalizedReminderIds.length === 0) {
+            this.lastBoundReminderDateDisplayByBlock.delete(blockId);
+            const existingDateBtn = protyle?.element?.querySelector?.(`.block-bind-reminder-date[data-block-id="${blockId}"]`) as HTMLElement | null;
+            if (existingDateBtn) existingDateBtn.remove();
+            return;
+        }
+
+        let displayInfo: BoundReminderDateDisplayInfo | null = null;
+        try {
+            displayInfo = await this.getBoundReminderDateDisplayInfoFromPlugin(normalizedReminderIds);
+        } catch (error) {
+            console.warn("获取绑定任务日期展示信息失败:", error);
+            return;
+        }
+
+        if (this.latestBindReminderDateTaskByBlock.get(blockId) !== nextTaskId) {
+            return;
+        }
 
         const trackedSource =
             this._findTrackedSourceForBlock(protyle, blockId) ||
@@ -1025,27 +1090,13 @@ export class TaskNoteDOMManager {
         if (!container) return;
 
         const existingDateBtn = container.querySelector(`.block-bind-reminder-date[data-block-id="${blockId}"]`) as HTMLElement | null;
-        if (normalizedReminderIds.length === 0) {
-            if (existingDateBtn) existingDateBtn.remove();
-            return;
-        }
-
-        let displayInfo: BoundReminderDateDisplayInfo | null = null;
-        try {
-            displayInfo = await this.getBoundReminderDateDisplayInfoFromPlugin(normalizedReminderIds);
-        } catch (error) {
-            console.warn("获取绑定任务日期展示信息失败:", error);
-            displayInfo = null;
-        }
-
-        if (this.latestBindReminderDateTaskByBlock.get(blockId) !== nextTaskId) {
-            return;
-        }
-
         if (!displayInfo || displayInfo.displayType === "completed") {
+            this.lastBoundReminderDateDisplayByBlock.delete(blockId);
             if (existingDateBtn) existingDateBtn.remove();
             return;
         }
+
+        this.lastBoundReminderDateDisplayByBlock.set(blockId, displayInfo);
 
         if (!existingDateBtn) {
             const dateBtn = this._createBindReminderDateButton(
@@ -1105,7 +1156,7 @@ export class TaskNoteDOMManager {
             justify-content: center;
             min-height: 22px;
             line-height: 1;
-            max-width: 210px;
+            max-width: 280px;
         `;
         btn.dataset.blockId = blockId;
         btn.setAttribute("data-plugin-added", "reminder-plugin");
@@ -1171,6 +1222,9 @@ export class TaskNoteDOMManager {
         }
         if (btn.dataset.displayText !== safeDisplayText) {
             btn.dataset.displayText = safeDisplayText;
+        }
+        if (btn.title !== safeDisplayText) {
+            btn.title = safeDisplayText;
         }
 
         let textEl = btn.querySelector(".block-bind-reminder-date__text") as HTMLElement | null;

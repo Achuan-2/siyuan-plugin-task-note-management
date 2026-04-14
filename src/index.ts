@@ -3777,6 +3777,13 @@ export default class ReminderPlugin extends Plugin {
         return typeof value === "string" ? value.trim() : "";
     }
 
+    private formatReminderDateForBoundDisplay(dateText: string): string {
+        const safeDateText = this.normalizeReminderDateText(dateText);
+        if (!safeDateText) return "";
+        const compact = safeDateText.replace(/[^\d]/g, "");
+        return compact.length === 8 ? compact : safeDateText;
+    }
+
     private normalizeReminderTimeText(value?: string | null): string {
         if (!value || typeof value !== "string") return "";
         const parsed = this.extractDateAndTime(value);
@@ -3822,7 +3829,30 @@ export default class ReminderPlugin extends Plugin {
         const dateText = this.normalizeReminderDateText(reminder?.date);
         if (!dateText) return "";
         const timeText = this.normalizeReminderTimeText(reminder?.time);
-        return timeText ? `${dateText} ${timeText}` : dateText;
+        const displayDateText = this.formatReminderDateForBoundDisplay(dateText);
+        const endDateText = this.normalizeReminderDateText(reminder?.endDate) || dateText;
+        const displayEndDateText = this.formatReminderDateForBoundDisplay(endDateText);
+        const endTimeText = this.normalizeReminderTimeText(reminder?.endTime);
+
+        if (endDateText !== dateText && !endTimeText) {
+            const startText = timeText ? `${displayDateText} ${timeText}` : displayDateText;
+            return `${startText}-${displayEndDateText}`;
+        }
+
+        if (!endTimeText) {
+            return timeText ? `${displayDateText} ${timeText}` : displayDateText;
+        }
+
+        if (endDateText === dateText) {
+            if (timeText) {
+                return `${displayDateText} ${timeText}-${endTimeText}`;
+            }
+            return `${displayDateText} ${endTimeText}`;
+        }
+
+        const startText = timeText ? `${displayDateText} ${timeText}` : displayDateText;
+        const endText = `${displayEndDateText} ${endTimeText}`;
+        return `${startText}-${endText}`;
     }
 
     private formatReminderCompletedDisplayText(completedAt?: string): string {
@@ -3855,84 +3885,99 @@ export default class ReminderPlugin extends Plugin {
         return !!endLogicalDate && compareDateStrings(endLogicalDate, logicalToday) < 0;
     }
 
-    public async getBoundReminderDateDisplayInfo(reminderIds: string[]): Promise<BoundReminderDateDisplayInfo | null> {
+    private buildBoundReminderDateDisplayInfo(
+        reminderIds: string[],
+        reminderData: any
+    ): BoundReminderDateDisplayInfo | null {
         const normalizedIds = Array.from(new Set((reminderIds || []).map((id) => String(id || "").trim()).filter(Boolean)));
         if (normalizedIds.length === 0) return null;
+        if (!reminderData || typeof reminderData !== "object") return null;
 
-        try {
-            const reminderData = await this.loadReminderData();
-            if (!reminderData || typeof reminderData !== "object") return null;
+        const idOrderMap = new Map<string, number>();
+        normalizedIds.forEach((id, index) => idOrderMap.set(id, index));
 
-            const idOrderMap = new Map<string, number>();
-            normalizedIds.forEach((id, index) => idOrderMap.set(id, index));
+        const reminders = normalizedIds
+            .map((id) => reminderData[id])
+            .filter((reminder: any) => reminder && reminder.id);
+        if (reminders.length === 0) return null;
 
-            const reminders = normalizedIds
-                .map((id) => reminderData[id])
-                .filter((reminder: any) => reminder && reminder.id);
-            if (reminders.length === 0) return null;
-
-            const allCompleted = reminders.every((reminder: any) => !!reminder.completed);
-            if (allCompleted) {
-                let selectedReminder: any = reminders[0];
-                let latestCompletedTs = this.parseReminderCompletedTimestamp(selectedReminder?.completedAt);
-                for (const reminder of reminders.slice(1)) {
-                    const ts = this.parseReminderCompletedTimestamp(reminder?.completedAt);
-                    if (ts > latestCompletedTs) {
-                        selectedReminder = reminder;
-                        latestCompletedTs = ts;
-                    }
+        const allCompleted = reminders.every((reminder: any) => !!reminder.completed);
+        if (allCompleted) {
+            let selectedReminder: any = reminders[0];
+            let latestCompletedTs = this.parseReminderCompletedTimestamp(selectedReminder?.completedAt);
+            for (const reminder of reminders.slice(1)) {
+                const ts = this.parseReminderCompletedTimestamp(reminder?.completedAt);
+                if (ts > latestCompletedTs) {
+                    selectedReminder = reminder;
+                    latestCompletedTs = ts;
                 }
-
-                if (!Number.isFinite(latestCompletedTs) || latestCompletedTs === Number.NEGATIVE_INFINITY) {
-                    selectedReminder = reminders[reminders.length - 1];
-                }
-
-                let displayText = this.formatReminderCompletedDisplayText(selectedReminder?.completedAt);
-                if (!displayText) {
-                    displayText = this.formatReminderScheduleDisplayText(selectedReminder);
-                }
-                if (!displayText) {
-                    displayText = i18n("completed") || "已完成";
-                }
-
-                return {
-                    reminderId: String(selectedReminder.id),
-                    displayText,
-                    displayType: "completed",
-                };
             }
 
-            const logicalToday = getLogicalDateString();
-            const incompleteWithDate = reminders.filter((reminder: any) => !reminder.completed && this.normalizeReminderDateText(reminder?.date));
-            if (incompleteWithDate.length === 0) return null;
+            if (!Number.isFinite(latestCompletedTs) || latestCompletedTs === Number.NEGATIVE_INFINITY) {
+                selectedReminder = reminders[reminders.length - 1];
+            }
 
-            const nonOverdueIncomplete = incompleteWithDate.filter((reminder: any) =>
-                !this.isReminderOverdueForBoundDateDisplay(reminder, logicalToday)
-            );
-            const candidates = nonOverdueIncomplete.length > 0 ? nonOverdueIncomplete : incompleteWithDate;
-
-            candidates.sort((a: any, b: any) => {
-                const aDate = this.normalizeReminderDateText(a?.date);
-                const bDate = this.normalizeReminderDateText(b?.date);
-                const aTime = this.normalizeReminderTimeText(a?.time);
-                const bTime = this.normalizeReminderTimeText(b?.time);
-                const aTs = this.parseReminderScheduleTimestamp(aDate, aTime);
-                const bTs = this.parseReminderScheduleTimestamp(bDate, bTime);
-                if (aTs !== bTs) return aTs - bTs;
-                const aIndex = idOrderMap.get(String(a?.id || "")) ?? Number.MAX_SAFE_INTEGER;
-                const bIndex = idOrderMap.get(String(b?.id || "")) ?? Number.MAX_SAFE_INTEGER;
-                return aIndex - bIndex;
-            });
-
-            const selectedReminder = candidates[0];
-            const displayText = this.formatReminderScheduleDisplayText(selectedReminder);
-            if (!displayText) return null;
+            let displayText = this.formatReminderCompletedDisplayText(selectedReminder?.completedAt);
+            if (!displayText) {
+                displayText = this.formatReminderScheduleDisplayText(selectedReminder);
+            }
+            if (!displayText) {
+                displayText = i18n("completed") || "已完成";
+            }
 
             return {
                 reminderId: String(selectedReminder.id),
                 displayText,
-                displayType: "schedule",
+                displayType: "completed",
             };
+        }
+
+        const logicalToday = getLogicalDateString();
+        const incompleteWithDate = reminders.filter((reminder: any) => !reminder.completed && this.normalizeReminderDateText(reminder?.date));
+        if (incompleteWithDate.length === 0) return null;
+
+        const nonOverdueIncomplete = incompleteWithDate.filter((reminder: any) =>
+            !this.isReminderOverdueForBoundDateDisplay(reminder, logicalToday)
+        );
+        const candidates = nonOverdueIncomplete.length > 0 ? nonOverdueIncomplete : incompleteWithDate;
+
+        candidates.sort((a: any, b: any) => {
+            const aDate = this.normalizeReminderDateText(a?.date);
+            const bDate = this.normalizeReminderDateText(b?.date);
+            const aTime = this.normalizeReminderTimeText(a?.time);
+            const bTime = this.normalizeReminderTimeText(b?.time);
+            const aTs = this.parseReminderScheduleTimestamp(aDate, aTime);
+            const bTs = this.parseReminderScheduleTimestamp(bDate, bTime);
+            if (aTs !== bTs) return aTs - bTs;
+            const aIndex = idOrderMap.get(String(a?.id || "")) ?? Number.MAX_SAFE_INTEGER;
+            const bIndex = idOrderMap.get(String(b?.id || "")) ?? Number.MAX_SAFE_INTEGER;
+            return aIndex - bIndex;
+        });
+
+        const selectedReminder = candidates[0];
+        const displayText = this.formatReminderScheduleDisplayText(selectedReminder);
+        if (!displayText) return null;
+
+        return {
+            reminderId: String(selectedReminder.id),
+            displayText,
+            displayType: "schedule",
+        };
+    }
+
+    public getBoundReminderDateDisplayInfoSync(reminderIds: string[]): BoundReminderDateDisplayInfo | null {
+        try {
+            return this.buildBoundReminderDateDisplayInfo(reminderIds, this.reminderDataCache);
+        } catch (error) {
+            console.warn("同步获取块绑定任务日期展示信息失败:", error);
+            return null;
+        }
+    }
+
+    public async getBoundReminderDateDisplayInfo(reminderIds: string[]): Promise<BoundReminderDateDisplayInfo | null> {
+        try {
+            const reminderData = await this.loadReminderData();
+            return this.buildBoundReminderDateDisplayInfo(reminderIds, reminderData);
         } catch (error) {
             console.warn("获取块绑定任务日期展示信息失败:", error);
             return null;
