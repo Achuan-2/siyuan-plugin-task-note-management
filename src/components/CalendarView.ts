@@ -7217,6 +7217,7 @@ export class CalendarView {
                     endDate = explicitEndDate;
                 }
             }
+            const isExpiredReminderTime = !reminder.completed && endDate.getTime() < Date.now();
             const endDateStr = getLocalDateString(endDate);
             const endTimeStr = endDate.toTimeString().substring(0, 5);
 
@@ -7228,7 +7229,7 @@ export class CalendarView {
                 backgroundColor: colorWithOpacity(colors.backgroundColor, 0.22),
                 borderColor: colors.borderColor,
                 textColor: 'var(--b3-theme-on-background)',
-                className: `reminder-time-event reminder-priority-${priority}${isRepeated ? ' reminder-repeated' : ''}${reminder.completed ? ' completed' : ''}`,
+                className: `reminder-time-event reminder-priority-${priority}${isRepeated ? ' reminder-repeated' : ''}${reminder.completed || isExpiredReminderTime ? ' completed' : ''}`,
                 editable: !reminder.isSubscribed,
                 startEditable: !reminder.isSubscribed,
                 durationEditable: !reminder.isSubscribed,
@@ -7240,6 +7241,7 @@ export class CalendarView {
                     sourceEventId: sourceEventId,
                     reminderAt: entry.time,
                     reminderEndAt: entry.endTime,
+                    isExpiredReminderTime,
                     reminderTimeNote: entry.note,
                     completed: reminder.completed || false,
                     note: (typeof entry.note === 'string' && entry.note.trim()) ? entry.note : (reminder.note || ''),
