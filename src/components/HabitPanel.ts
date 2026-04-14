@@ -26,6 +26,7 @@ import {
     getHabitGoalType as getHabitGoalTypeUtil,
     getHabitPomodoroTargetMinutes as getHabitPomodoroTargetMinutesUtil,
     getHabitProgressOnDate as getHabitProgressOnDateUtil,
+    formatHabitReminderTimeDisplay,
     getHabitReminderTimes,
     getTodayHabitBuckets,
     isHabitActiveOnDate,
@@ -1137,7 +1138,7 @@ export class HabitPanel {
             if (timesList && timesList.length > 0) {
                 const reminderItem = document.createElement('div');
                 reminderItem.className = 'habit-card__info-item habit-card__info-item--full';
-                const displayTimes = timesList.map(t => t.time);
+                const displayTimes = timesList.map(t => formatHabitReminderTimeDisplay(t));
                 reminderItem.innerHTML = `<span class="habit-card__info-icon">⏰</span><span class="habit-card__info-text">${displayTimes.join(', ')}</span>`;
                 infoGrid.appendChild(reminderItem);
             }

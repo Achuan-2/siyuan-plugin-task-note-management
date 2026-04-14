@@ -44,7 +44,7 @@ import {
     HabitEmojiConfig,
     getHabitGoalType,
     getHabitPomodoroTargetMinutes,
-    getHabitReminderTimes,
+    getHabitReminderTimesForDate,
     getTodayHabitBuckets,
     isHabitCompletedOnDate as isHabitCompletedOnDateUtil,
     shouldCheckInOnDate
@@ -3988,7 +3988,7 @@ export default class ReminderPlugin extends Plugin {
                     if (!habit || typeof habit !== 'object') continue;
 
                     // 需要设置 reminder times 才会被触发（兼容旧属性 reminderTime）
-                    const times = getHabitReminderTimes(habit);
+                    const times = getHabitReminderTimesForDate(habit, today);
                     if (times.length === 0) continue;
 
                     // 已放弃的习惯不提醒
@@ -5098,9 +5098,6 @@ export default class ReminderPlugin extends Plugin {
         // 已放弃的习惯不设置通知
         if (habit?.abandoned === true) return [];
 
-        const timeEntries = getHabitReminderTimes(habit);
-        if (timeEntries.length === 0) return [];
-
         const startDateCursor = new Date(`${today}T00:00:00`);
         const futureTimes: Date[] = [];
 
@@ -5113,6 +5110,9 @@ export default class ReminderPlugin extends Plugin {
             if (habit?.endDate && compareDateStrings(logicalDate, habit.endDate) > 0) continue;
             if (!this.shouldCheckHabitOnDate(habit, logicalDate)) continue;
             if (this.isHabitCompletedOnDate(habit, logicalDate)) continue;
+
+            const timeEntries = getHabitReminderTimesForDate(habit, logicalDate);
+            if (timeEntries.length === 0) continue;
 
             for (const item of timeEntries) {
                 const parsed = this.extractDateAndTime(item.time);

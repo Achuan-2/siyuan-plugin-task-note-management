@@ -18,6 +18,7 @@ import {
 import {
     getHabitGoalType as getHabitGoalTypeUtil,
     getHabitPomodoroTargetMinutes as getHabitPomodoroTargetMinutesUtil,
+    formatHabitReminderTimeDisplay,
     shouldCheckInOnDate as shouldCheckInOnDateUtil,
     getHabitReminderTimes
 } from "../../utils/habitUtils";
@@ -1047,7 +1048,7 @@ $: if (logPage < 1) logPage = 1;
                                         {#if reminderTimes.length > 0}
                                             <span class="habit-meta-item">
                                                 <span class="habit-meta-icon">⏰</span>
-                                                <span>{reminderTimes.map(t => t.time).join(', ')}</span>
+                                                <span>{reminderTimes.map(t => formatHabitReminderTimeDisplay(t)).join(', ')}</span>
                                             </span>
                                         {/if}
                                     </div>

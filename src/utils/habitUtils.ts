@@ -12,7 +12,13 @@ export interface HabitFrequencyLike {
 
 export interface HabitReminderTimeEntry {
     time: string;
+    endTime?: string;
     note?: string;
+}
+
+export interface HabitReminderTimeModification {
+    reminderTimes?: (string | HabitReminderTimeEntry)[];
+    modifiedAt?: string;
 }
 
 export interface HabitLike {
@@ -26,6 +32,9 @@ export interface HabitLike {
     frequency?: HabitFrequencyLike;
     reminderTime?: string;
     reminderTimes?: (string | HabitReminderTimeEntry)[];
+    reminderTimeModifications?: {
+        [date: string]: HabitReminderTimeModification;
+    };
     url?: string;
     checkIns?: {
         [date: string]: {
@@ -84,6 +93,9 @@ export interface Habit extends HabitLike {
     endDate?: string;
     reminderTime?: string;
     reminderTimes?: (string | HabitReminderTimeEntry)[];
+    reminderTimeModifications?: {
+        [date: string]: HabitReminderTimeModification;
+    };
     groupId?: string;
     priority?: 'high' | 'medium' | 'low' | 'none';
     checkInEmojis: HabitEmojiConfig[];
@@ -225,23 +237,50 @@ export function isHabitCompletedOnDate(
     return current >= target;
 }
 
-export function getHabitReminderTimes(habit: HabitLike): HabitReminderTimeEntry[] {
+function normalizeHabitReminderTimes(
+    reminderTimes?: (string | HabitReminderTimeEntry)[],
+    reminderTime?: string
+): HabitReminderTimeEntry[] {
     const entries: HabitReminderTimeEntry[] = [];
-    if (Array.isArray(habit?.reminderTimes) && habit.reminderTimes.length > 0) {
-        for (const rt of habit.reminderTimes) {
+    if (Array.isArray(reminderTimes) && reminderTimes.length > 0) {
+        for (const rt of reminderTimes) {
             if (typeof rt === "string") {
                 entries.push({ time: rt });
             } else if (rt && typeof rt === "object" && typeof rt.time === "string" && rt.time) {
-                entries.push({ time: rt.time, note: rt.note });
+                entries.push({
+                    time: rt.time,
+                    endTime: typeof rt.endTime === "string" ? rt.endTime : undefined,
+                    note: rt.note
+                });
             }
         }
         return entries;
     }
 
-    if (habit?.reminderTime) {
-        entries.push({ time: habit.reminderTime });
+    if (reminderTime) {
+        entries.push({ time: reminderTime });
     }
     return entries;
+}
+
+export function getHabitReminderTimes(habit: HabitLike): HabitReminderTimeEntry[] {
+    return normalizeHabitReminderTimes(habit?.reminderTimes, habit?.reminderTime);
+}
+
+export function getHabitReminderTimesForDate(habit: HabitLike, date: string): HabitReminderTimeEntry[] {
+    const modification = date ? habit?.reminderTimeModifications?.[date] : undefined;
+    if (modification && Array.isArray(modification.reminderTimes)) {
+        return normalizeHabitReminderTimes(modification.reminderTimes);
+    }
+    return getHabitReminderTimes(habit);
+}
+
+export function formatHabitReminderTimeDisplay(entry: HabitReminderTimeEntry): string {
+    if (!entry?.time) return "";
+    if (entry.endTime && entry.endTime !== entry.time) {
+        return `${entry.time} - ${entry.endTime}`;
+    }
+    return entry.time;
 }
 
 export function getTodayHabitBuckets(

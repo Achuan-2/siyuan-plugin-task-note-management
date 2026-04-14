@@ -30,7 +30,7 @@ import { VipManager } from "../utils/vip";
 import { createPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
 import { HabitEditDialog } from "./HabitEditDialog";
 import { HabitStatsDialog } from "./stats/HabitStatsDialog";
-import { getHabitProgressOnDate, shouldCheckInOnDate as shouldCheckInOnDateUtil, isHabitActiveOnDate } from "../utils/habitUtils";
+import { getHabitProgressOnDate, getHabitReminderTimes, getHabitReminderTimesForDate, shouldCheckInOnDate as shouldCheckInOnDateUtil, isHabitActiveOnDate } from "../utils/habitUtils";
 import { HabitGroupManager } from "../utils/habitGroupManager";
 export class CalendarView {
     private container: HTMLElement;
@@ -1670,9 +1670,19 @@ export class CalendarView {
             eventDrop: this.handleEventDrop.bind(this),
             eventResize: this.handleEventResize.bind(this),
             eventAllow: (dropInfo, draggedEvent) => {
-                // 禁用订阅任务和习惯事件的拖拽和调整大小
-                if (draggedEvent.extendedProps.isSubscribed || draggedEvent.extendedProps.isHabit) {
+                // 禁用订阅任务拖拽；习惯仅允许拖动提醒时间，且不能跨天
+                if (draggedEvent.extendedProps.isSubscribed) {
                     return false;
+                }
+                if (draggedEvent.extendedProps.isHabit) {
+                    if (draggedEvent.extendedProps.type !== 'habitReminderTime') {
+                        return false;
+                    }
+                    const dropDate = getLocalDateString(dropInfo.start);
+                    const dropEndDate = dropInfo.end ? getLocalDateString(new Date(dropInfo.end.getTime() - 1000)) : dropDate;
+                    if (dropDate !== draggedEvent.extendedProps.date || dropEndDate !== draggedEvent.extendedProps.date || draggedEvent.extendedProps.completed) {
+                        return false;
+                    }
                 }
                 return this.handleEventAllow(dropInfo, draggedEvent);
             },
@@ -2680,6 +2690,130 @@ export class CalendarView {
         const matched = eventId.match(/__reminder__(\d+)$/);
         if (!matched) return -1;
         return Number.parseInt(matched[1], 10);
+    }
+
+    private serializeHabitReminderTimeEntries(entries: Array<{ time: string; endTime?: string; note?: string }>): Array<string | { time: string; endTime?: string; note?: string }> {
+        return entries
+            .filter((item) => item && typeof item.time === 'string' && item.time.trim())
+            .map((item) => {
+                const time = item.time.trim();
+                const endTime = typeof item.endTime === 'string' ? item.endTime.trim() : '';
+                const note = typeof item.note === 'string' ? item.note.trim() : '';
+                return note || endTime ? { time, endTime: endTime || undefined, note: note || undefined } : time;
+            });
+    }
+
+    private isSameHabitReminderTimeEntries(
+        left: Array<{ time: string; endTime?: string; note?: string }>,
+        right: Array<{ time: string; endTime?: string; note?: string }>
+    ): boolean {
+        if (left.length !== right.length) return false;
+        return left.every((item, index) => {
+            const other = right[index];
+            return !!other &&
+                item.time === other.time &&
+                (item.endTime || '') === (other.endTime || '') &&
+                (item.note || '') === (other.note || '');
+        });
+    }
+
+    private async updateHabitReminderTimeEvent(info: any) {
+        const reminderIndex = this.getReminderTimeEventIndex(info.event);
+        if (reminderIndex < 0) {
+            info.revert();
+            return;
+        }
+
+        try {
+            const habitData = await this.plugin.loadHabitData();
+            const habitId = info.event.extendedProps.habitId;
+            const targetDate = info.event.extendedProps.date;
+            const habit = habitData?.[habitId];
+            if (!habit || !targetDate) {
+                throw new Error('习惯数据不存在');
+            }
+
+            const oldHabitSnapshot = JSON.parse(JSON.stringify(habit));
+            const resolvedReminderTimes = getHabitReminderTimesForDate(habit, targetDate);
+            if (!resolvedReminderTimes[reminderIndex]) {
+                throw new Error('习惯提醒时间索引不存在');
+            }
+
+            let newStartDate = info.event.start;
+            let newEndDate = info.event.end;
+            if (newStartDate) {
+                newStartDate = this.snapToMinutes(newStartDate, 5);
+            }
+            if (newEndDate) {
+                newEndDate = this.snapToMinutes(newEndDate, 5);
+            } else if (newStartDate) {
+                newEndDate = new Date(newStartDate.getTime() + 15 * 60 * 1000);
+                newEndDate = this.snapToMinutes(newEndDate, 5);
+            }
+            if (!newStartDate) {
+                throw new Error('习惯提醒时间缺少开始时间');
+            }
+
+            const { timeStr: startTimeStr } = getLocalDateTime(newStartDate);
+            const { timeStr: endTimeStr } = newEndDate ? getLocalDateTime(newEndDate) : { timeStr: null };
+            if (!startTimeStr) {
+                throw new Error('习惯提醒时间缺少开始时间');
+            }
+
+            const updatedReminderTimes = resolvedReminderTimes.map((item) => ({ ...item }));
+            const previousEntry = resolvedReminderTimes[reminderIndex];
+            const oldDuration = info.oldEvent?.start && info.oldEvent?.end
+                ? info.oldEvent.end.getTime() - info.oldEvent.start.getTime()
+                : null;
+            const newDuration = newStartDate && newEndDate
+                ? newEndDate.getTime() - newStartDate.getTime()
+                : null;
+            const shouldPersistEndTime = !!previousEntry?.endTime || (!!oldDuration && !!newDuration && oldDuration !== newDuration);
+            updatedReminderTimes[reminderIndex] = {
+                ...updatedReminderTimes[reminderIndex],
+                time: startTimeStr,
+                endTime: shouldPersistEndTime && endTimeStr ? endTimeStr : undefined
+            };
+
+            if (!habit.reminderTimeModifications) {
+                habit.reminderTimeModifications = {};
+            }
+
+            const baseReminderTimes = getHabitReminderTimes(habit);
+            if (this.isSameHabitReminderTimeEntries(updatedReminderTimes, baseReminderTimes)) {
+                delete habit.reminderTimeModifications[targetDate];
+            } else {
+                habit.reminderTimeModifications[targetDate] = {
+                    reminderTimes: this.serializeHabitReminderTimeEntries(updatedReminderTimes),
+                    modifiedAt: getLocalDateString(new Date())
+                };
+            }
+
+            if (habit.reminderTimeModifications && Object.keys(habit.reminderTimeModifications).length === 0) {
+                delete habit.reminderTimeModifications;
+            }
+
+            habit.updatedAt = getLocalDateTimeString(new Date());
+            habitData[habitId] = habit;
+            await this.plugin.saveHabitData(habitData);
+
+            if (this.plugin?.updateMobileNotification) {
+                try {
+                    await this.plugin.updateMobileNotification(habit, oldHabitSnapshot, 7);
+                } catch (e) {
+                    console.warn('更新习惯移动端通知失败:', e);
+                }
+            }
+
+            await this.refreshEvents(true);
+            window.dispatchEvent(new CustomEvent('habitUpdated'));
+            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
+            showMessage(i18n("instanceTimeUpdated") || '提醒时间已更新');
+        } catch (error) {
+            console.error('更新习惯提醒时间失败:', error);
+            showMessage(i18n("operationFailed"));
+            info.revert();
+        }
     }
 
     private async updateReminderTimeEvent(info: any) {
@@ -4950,6 +5084,11 @@ export class CalendarView {
             return;
         }
 
+        if (info.event.extendedProps.type === 'habitReminderTime') {
+            await this.updateHabitReminderTimeEvent(info);
+            return;
+        }
+
         if (info.event.extendedProps.type === 'reminderTime') {
             await this.updateReminderTimeEvent(info);
             return;
@@ -5003,6 +5142,11 @@ export class CalendarView {
     }
 
     private async handleEventResize(info) {
+        if (info.event.extendedProps.type === 'habitReminderTime') {
+            await this.updateHabitReminderTimeEvent(info);
+            return;
+        }
+
         if (info.event.extendedProps.type === 'reminderTime') {
             await this.updateReminderTimeEvent(info);
             return;
@@ -6599,34 +6743,64 @@ export class CalendarView {
                     
                     if (this.currentCompletionFilter === 'completed' && !completed) continue;
                     if (this.currentCompletionFilter === 'incomplete' && completed) continue;
+                    const reminderTimes = getHabitReminderTimesForDate(habit, dateStr);
+                    if (!reminderTimes.length) continue;
 
-                    events.push({
-                        id: `habit-${habit.id}-${dateStr}`,
-                        title: habit.title || i18n("unnamedTask"),
-                        start: dateStr,
-                        allDay: true,
-                        display: 'block',
-                        backgroundColor: completed ? 'rgba(46, 125, 50, 0.62)' : '#43a047',
-                        borderColor: completed ? '#1b5e20' : '#2e7d32',
-                        textColor: 'var(--b3-theme-on-background)',
-                        className: `habit-calendar-event${completed ? ' completed' : ''}`,
-                        editable: false,
-                        startEditable: false,
-                        durationEditable: false,
-                        extendedProps: {
-                            type: 'habit',
-                            isHabit: true,
-                            habitId: habit.id,
-                            icon: habit.icon,
-                            color: habit.color,
-                            date: dateStr,
-                            completed,
-                            checkedEmojis,
-                            note: habit.note || '',
-                            target: habit.target || 1,
-                            frequency: habit.frequency,
-                            habitOrder: habitOrderMap.get(habit.id) ?? Number.MAX_SAFE_INTEGER
+                    reminderTimes.forEach((entry, index) => {
+                        const parsed = this.parseReminderTimeToDateTime(entry.time, dateStr);
+                        if (!parsed?.time) return;
+
+                        const startTime = new Date(`${dateStr}T${parsed.time}:00`);
+                        if (Number.isNaN(startTime.getTime())) return;
+
+                        let endTime = new Date(startTime.getTime() + 15 * 60 * 1000);
+                        if (entry.endTime) {
+                            const parsedEnd = this.parseReminderTimeToDateTime(entry.endTime, dateStr);
+                            if (parsedEnd?.time) {
+                                const explicitEnd = new Date(`${dateStr}T${parsedEnd.time}:00`);
+                                if (!Number.isNaN(explicitEnd.getTime()) && explicitEnd > startTime) {
+                                    endTime = explicitEnd;
+                                }
+                            }
                         }
+                        const endDateStr = getLocalDateString(endTime);
+                        const endTimeStr = endTime.toTimeString().substring(0, 5);
+
+                        events.push({
+                            id: `habit-${habit.id}-${dateStr}__reminder__${index}`,
+                            title: habit.title || i18n("unnamedTask"),
+                            start: `${dateStr}T${parsed.time}:00`,
+                            end: `${endDateStr}T${endTimeStr}:00`,
+                            allDay: false,
+                            display: 'block',
+                            backgroundColor: completed ? 'rgba(46, 125, 50, 0.62)' : '#43a047',
+                            borderColor: completed ? '#1b5e20' : '#2e7d32',
+                            textColor: 'var(--b3-theme-on-background)',
+                            className: `habit-calendar-event habit-reminder-time-event${completed ? ' completed' : ''}`,
+                            editable: !completed,
+                            startEditable: !completed,
+                            durationEditable: !completed,
+                            extendedProps: {
+                                type: 'habitReminderTime',
+                                isHabit: true,
+                                habitId: habit.id,
+                                icon: habit.icon,
+                                color: habit.color,
+                                date: dateStr,
+                                completed,
+                                checkedEmojis,
+                                note: entry.note || habit.note || '',
+                                target: habit.target || 1,
+                                frequency: habit.frequency,
+                                habitOrder: habitOrderMap.get(habit.id) ?? Number.MAX_SAFE_INTEGER,
+                                reminderAt: entry.time,
+                                reminderEndAt: entry.endTime,
+                                reminderTimeNote: entry.note,
+                                reminderTimeIndex: index,
+                                time: parsed.time,
+                                endTime: entry.endTime || null
+                            }
+                        });
                     });
                 }
             }
@@ -7627,6 +7801,17 @@ export class CalendarView {
                     `<div style="color: var(--b3-theme-on-surface); margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">`,
                     `<span style="opacity: 0.7;">📅</span>`,
                     `<span>${this.escapeHtml(dateText)}</span>`,
+                    `</div>`
+                );
+            }
+            if (reminder.time) {
+                const timeText = reminder.endTime && reminder.endTime !== reminder.time
+                    ? `${reminder.time} - ${reminder.endTime}`
+                    : reminder.time;
+                htmlParts.push(
+                    `<div style="color: var(--b3-theme-on-surface); margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">`,
+                    `<span style="opacity: 0.7;">⏰</span>`,
+                    `<span>${this.escapeHtml(timeText)}</span>`,
                     `</div>`
                 );
             }

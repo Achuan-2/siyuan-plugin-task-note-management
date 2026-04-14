@@ -341,12 +341,16 @@ export class HabitEditDialog {
         addTimeBtn.textContent = i18n("habitAddReminderTime");
         addTimeBtn.style.cssText = 'align-self:flex-start;';
 
-        const addTimeInput = (timeVal: string | { time: string; note?: string } = '') => {
+        const addTimeInput = (timeVal: string | { time: string; endTime?: string; note?: string } = '') => {
             const row = document.createElement('div');
-            row.style.cssText = 'display:flex; gap:8px; align-items:center;';
+            row.style.cssText = 'display:flex; gap:8px; align-items:center; flex-wrap:wrap;';
 
             const timeStr = typeof timeVal === 'string' ? timeVal : timeVal.time;
+            const endTimeStr = typeof timeVal === 'object' ? timeVal.endTime || '' : '';
             const noteStr = typeof timeVal === 'object' ? timeVal.note || '' : '';
+
+            const timeRangeWrap = document.createElement('div');
+            timeRangeWrap.style.cssText = 'display:flex; gap:6px; align-items:center; flex-wrap:nowrap;';
 
             const input = document.createElement('input');
             input.type = 'time';
@@ -355,13 +359,28 @@ export class HabitEditDialog {
             input.value = timeStr;
             input.style.cssText = 'width: 120px;';
 
+            const rangeSeparator = document.createElement('span');
+            rangeSeparator.textContent = '-';
+            rangeSeparator.style.cssText = 'color: var(--b3-theme-on-surface-light);';
+
+            const endInput = document.createElement('input');
+            endInput.type = 'time';
+            endInput.name = 'reminderEndTimeValue';
+            endInput.className = 'b3-text-field';
+            endInput.value = endTimeStr;
+            endInput.style.cssText = 'width: 120px;';
+
+            timeRangeWrap.appendChild(input);
+            timeRangeWrap.appendChild(rangeSeparator);
+            timeRangeWrap.appendChild(endInput);
+
             const noteInput = document.createElement('input');
             noteInput.type = 'text';
             noteInput.name = 'reminderTimeNote';
             noteInput.className = 'b3-text-field';
             noteInput.placeholder = i18n("reminderNoteHint");
             noteInput.value = noteStr;
-            noteInput.style.cssText = 'flex: 1; min-width: 100px;';
+            noteInput.style.cssText = 'flex: 1; min-width: 180px;';
             noteInput.spellcheck = false;
 
             const removeBtn = document.createElement('button');
@@ -372,7 +391,7 @@ export class HabitEditDialog {
                 row.remove();
             });
 
-            row.appendChild(input);
+            row.appendChild(timeRangeWrap);
             row.appendChild(noteInput);
             row.appendChild(removeBtn);
             reminderTimesContainer.appendChild(row);
@@ -1039,6 +1058,9 @@ export class HabitEditDialog {
             endDate: formData.get('endDate') as string || undefined,
             reminderTime: undefined, // deprecated: will keep first value for compatibility below
             reminderTimes: [],
+            reminderTimeModifications: this.habit?.reminderTimeModifications
+                ? JSON.parse(JSON.stringify(this.habit.reminderTimeModifications))
+                : undefined,
             blockId: parsedBlockId || undefined,
             url,
             sort: this.habit?.sort,
@@ -1061,16 +1083,22 @@ export class HabitEditDialog {
 
         // 从表单中收集 reminderTimes
         const timeInputs = form.querySelectorAll('input[name="reminderTimeValue"]') as NodeListOf<HTMLInputElement>;
+        const endTimeInputs = form.querySelectorAll('input[name="reminderEndTimeValue"]') as NodeListOf<HTMLInputElement>;
         const noteInputs = form.querySelectorAll('input[name="reminderTimeNote"]') as NodeListOf<HTMLInputElement>;
 
-        const reminderTimesArr: (string | { time: string; note?: string })[] = [];
+        const reminderTimesArr: (string | { time: string; endTime?: string; note?: string })[] = [];
 
         timeInputs.forEach((input, index) => {
             const time = input.value?.trim();
             if (time) {
+                const endTime = endTimeInputs[index]?.value?.trim();
                 const note = noteInputs[index]?.value?.trim();
-                if (note) {
-                    reminderTimesArr.push({ time, note });
+                if (note || endTime) {
+                    reminderTimesArr.push({
+                        time,
+                        endTime: endTime || undefined,
+                        note: note || undefined
+                    });
                 } else {
                     reminderTimesArr.push(time);
                 }
