@@ -36,6 +36,8 @@ export class TaskNoteDOMManager {
     private lastBoundReminderDateDisplayByBlock: Map<string, BoundReminderDateDisplayInfo> = new Map();
     private latestMilestoneDateTaskByBlock: Map<string, number> = new Map();
     private lastMilestoneDateDisplayByBlock: Map<string, MilestoneDateDisplayInfo> = new Map();
+    private dialogPreloadTimer: number | null = null;
+    private dialogsPreloaded = false;
 
     constructor(plugin: any) {
         this.plugin = plugin;
@@ -44,9 +46,54 @@ export class TaskNoteDOMManager {
             this.refreshBoundReminderDateButtonsForAllProtyles();
         };
         window.addEventListener("reminderUpdated", onReminderUpdated as EventListener);
+        this.scheduleDialogPreload();
         this.plugin.addCleanup(() => {
             window.removeEventListener("reminderUpdated", onReminderUpdated as EventListener);
+            if (this.dialogPreloadTimer) {
+                window.clearTimeout(this.dialogPreloadTimer);
+                this.dialogPreloadTimer = null;
+            }
         });
+    }
+
+    private scheduleDialogPreload() {
+        if (this.dialogsPreloaded || this.dialogPreloadTimer) return;
+        this.dialogPreloadTimer = window.setTimeout(() => {
+            this.dialogPreloadTimer = null;
+            this.preloadDialogs();
+        }, 1200);
+    }
+
+    private preloadDialogs() {
+        if (this.dialogsPreloaded) return;
+        this.dialogsPreloaded = true;
+        void Promise.allSettled([
+            import("../components/BlockRemindersDialog"),
+            import("../components/PomodoroSessionsDialog"),
+        ]);
+    }
+
+    private isPluginManagedNode(node: Node | null): boolean {
+        if (!node) return false;
+        if (node instanceof Element) {
+            return !!(node.matches?.('[data-plugin-added="reminder-plugin"]') || node.closest?.('[data-plugin-added="reminder-plugin"]'));
+        }
+        if (node.nodeType === Node.TEXT_NODE) {
+            return this.isPluginManagedNode(node.parentElement);
+        }
+        return false;
+    }
+
+    private shouldIgnoreMutation(mutation: MutationRecord): boolean {
+        if (mutation.type === "attributes") {
+            return this.isPluginManagedNode(mutation.target);
+        }
+        if (mutation.type === "childList") {
+            const changedNodes = [...Array.from(mutation.addedNodes), ...Array.from(mutation.removedNodes)];
+            if (changedNodes.length === 0) return false;
+            return changedNodes.every((node) => this.isPluginManagedNode(node));
+        }
+        return false;
     }
 
     private refreshBoundReminderDateButtonsForAllProtyles() {
@@ -586,6 +633,9 @@ export class TaskNoteDOMManager {
             const observer = new MutationObserver((mutations) => {
                 let shouldUpdate = false;
                 for (const mutation of mutations) {
+                    if (this.shouldIgnoreMutation(mutation)) {
+                        continue;
+                    }
                     if (mutation.type === "attributes") {
                         shouldUpdate = true;
                         const target = mutation.target as Element;
@@ -644,6 +694,9 @@ export class TaskNoteDOMManager {
 
             const attrObserver = new MutationObserver((mutations) => {
                 for (const m of mutations) {
+                    if (this.shouldIgnoreMutation(m)) {
+                        continue;
+                    }
                     if (m.target instanceof Element && m.target.classList.contains("protyle-attr")) {
                         const block = m.target.closest("[data-node-id]");
                         if (block) this._processSingleBlock(protyle, block);

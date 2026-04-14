@@ -1360,6 +1360,13 @@ export default class ReminderPlugin extends Plugin {
         // 数据加载
         await this.loadSettings();
         this.taskNoteDOM = new TaskNoteDOMManager(this);
+        const taskNoteWarmupTimer = window.setTimeout(() => {
+            void Promise.allSettled([
+                this.loadReminderData(),
+                this.loadProjectData(),
+            ]);
+        }, 800);
+        this.addCleanup(() => clearTimeout(taskNoteWarmupTimer));
         // 检查版本更新提醒
         ChangelogUtils.checkAndNotify(this);
 
