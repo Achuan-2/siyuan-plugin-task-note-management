@@ -1956,7 +1956,7 @@ export class ProjectKanbanView {
                 name.style.cssText = `overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500;`;
                 if (ms.blockId) {
                     name.style.textDecoration = 'underline dotted';
-                    name.style.color = 'var(--b3-theme-primary)';
+                    name.style.color = 'var(--b3-protyle-inline-blockref-color)';
                     name.style.cursor = 'pointer';
                     name.setAttribute('data-type', 'a');
                     name.setAttribute('data-href', `siyuan://blocks/${ms.blockId}`);
@@ -2447,7 +2447,7 @@ export class ProjectKanbanView {
                     titleEl.setAttribute('data-href', `siyuan://blocks/${targetId}`);
                     titleEl.style.cssText = `
                         font-weight: 500;
-                        color: var(--b3-theme-primary);
+                        color: var(--b3-protyle-inline-blockref-color);
                         line-height: 1.4;
                         cursor: pointer;
                         text-decoration: underline dotted;
@@ -2677,10 +2677,10 @@ export class ProjectKanbanView {
                 const updateItemStyle = (completed: boolean) => {
                     if (completed) {
                         titleEl.style.textDecoration = task.blockId ? 'line-through underline dotted ' : 'line-through';
-                        titleEl.style.color = task.blockId ? 'var(--b3-theme-primary)' : 'var(--b3-theme-on-surface-light)';
+                        titleEl.style.color = task.blockId ? 'var(--b3-protyle-inline-blockref-color)' : 'var(--b3-theme-on-surface-light)';
                     } else {
                         titleEl.style.textDecoration = task.blockId ? 'underline dotted' : 'none';
-                        titleEl.style.color = task.blockId ? 'var(--b3-theme-primary)' : 'var(--b3-theme-on-surface)';
+                        titleEl.style.color = task.blockId ? 'var(--b3-protyle-inline-blockref-color)' : 'var(--b3-theme-on-surface)';
                     }
                 };
 
@@ -3193,7 +3193,7 @@ export class ProjectKanbanView {
                 const hasBlockId = !!group.blockId;
                 groupName.style.cssText = `
                     font-weight: 500;
-                    color: ${hasBlockId ? 'var(--b3-theme-primary)' : 'var(--b3-theme-on-surface)'};
+                    color: ${hasBlockId ? 'var(--b3-protyle-inline-blockref-color)' : 'var(--b3-theme-on-surface)'};
                     overflow: hidden;
                     text-overflow: ellipsis;
                     white-space: nowrap;
@@ -3530,6 +3530,7 @@ export class ProjectKanbanView {
                             if (newBlockId) {
                                 titleEl.dataset.type = 'a';
                                 titleEl.dataset.href = `siyuan://blocks/${newBlockId}`;
+                                titleEl.style.color = 'var(--b3-protyle-inline-blockref-color)';
                                 titleEl.style.cursor = 'pointer';
                                 titleEl.style.textDecoration = 'underline dotted';
                                 titleEl.style.paddingBottom = '2px';
@@ -3750,6 +3751,7 @@ export class ProjectKanbanView {
 
         // 如果项目有关联的笔记ID，添加点击跳转功能
         if (this.project?.blockId) {
+            titleEl.style.color = 'var(--b3-protyle-inline-blockref-color)';
             titleEl.style.cursor = 'pointer';
             titleEl.style.textDecoration = 'underline dotted';
             titleEl.style.textDecorationStyle = 'dotted';
@@ -9254,6 +9256,7 @@ export class ProjectKanbanView {
         if (group.blockId) {
             titleEl.dataset.type = 'a';
             titleEl.dataset.href = `siyuan://blocks/${group.blockId}`;
+            titleEl.style.color = 'var(--b3-protyle-inline-blockref-color)';
             titleEl.style.cursor = 'pointer';
             titleEl.style.textDecoration = 'underline dotted';
             titleEl.style.paddingBottom = '2px';
@@ -10297,7 +10300,7 @@ export class ProjectKanbanView {
             titleEl.setAttribute('data-href', `siyuan://blocks/${targetId}`);
             titleEl.style.cssText = `
                 font-weight: 500;
-                color: var(--b3-theme-primary);
+                color: var(--b3-protyle-inline-blockref-color);
                 line-height: 1.4;
                 cursor: pointer;
                 text-decoration: underline dotted;
@@ -10615,7 +10618,7 @@ export class ProjectKanbanView {
                 if (milestone.blockId) {
                     milestoneEl.setAttribute('data-type', 'a');
                     milestoneEl.setAttribute('data-href', `siyuan://blocks/${milestone.blockId}`);
-                    milestoneEl.style.color = 'var(--b3-theme-primary)';
+                    milestoneEl.style.color = 'var(--b3-protyle-inline-blockref-color)';
                     milestoneEl.style.cursor = 'pointer';
                     milestoneEl.style.textDecoration = 'underline dotted';
                 }
@@ -15283,7 +15286,7 @@ export class ProjectKanbanView {
             const titleEl = taskEl.querySelector('.kanban-task-title') as HTMLElement;
             if (titleEl) {
                 // 直接更新样式和行为，避免全量重绘导致的闪烁
-                titleEl.style.color = 'var(--b3-theme-primary)';
+                titleEl.style.color = 'var(--b3-protyle-inline-blockref-color)';
                 titleEl.style.textDecoration = 'underline dotted';
                 titleEl.style.cursor = 'pointer';
                 titleEl.classList.add('ariaLabel'); titleEl.setAttribute('aria-label', i18n('clickToOpenBoundBlock', { title: reminder.title || i18n('noContentHint') }));

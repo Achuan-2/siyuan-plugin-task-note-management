@@ -921,6 +921,7 @@
 
 .habit-card__title {
     flex: 1;
+    min-width: 0;
     font-weight: 600;
     font-size: 15px;
     color: var(--b3-theme-on-background);
@@ -930,25 +931,34 @@
     white-space: nowrap;
 }
 
-.habit-card__title-link {
-    color: var(--b3-theme-primary);
+.habit-card__title-text {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: bottom;
+}
+
+.habit-card__title-link-text {
+    color: var(--b3-protyle-inline-blockref-color);
     text-decoration: none;
     position: relative;
 }
 
-.habit-card__title-link::after {
+.habit-card__title-link-text::after {
     content: '';
     position: absolute;
     bottom: -2px;
     left: 0;
     width: 0;
     height: 2px;
-    background: linear-gradient(90deg, var(--b3-theme-primary), var(--b3-theme-primary-light));
+    background: linear-gradient(90deg, var(--b3-protyle-inline-blockref-color), var(--b3-protyle-inline-blockref-color));
     transition: width 0.3s ease;
     border-radius: 1px;
 }
 
-.habit-card__title-link:hover::after {
+.habit-card__title-link:hover .habit-card__title-link-text::after {
     width: 100%;
 }
 

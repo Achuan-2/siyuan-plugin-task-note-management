@@ -3041,7 +3041,7 @@ export class ReminderPanel {
         if (reminder.blockId) {
             titleEl.setAttribute('data-type', 'a');
             titleEl.setAttribute('data-href', `siyuan://blocks/${reminder.blockId}`);
-            titleEl.style.cssText = `cursor: pointer; color: var(--b3-theme-primary); text-decoration: underline; text-decoration-style: dotted; font-weight: 500;`;
+            titleEl.style.cssText = `cursor: pointer; color: var(--b3-protyle-inline-blockref-color); text-decoration: underline; text-decoration-style: dotted; font-weight: 500;`;
             titleEl.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();

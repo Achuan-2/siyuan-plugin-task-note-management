@@ -214,6 +214,7 @@ export const DEFAULT_SETTINGS = {
     pomodoroLongBreakDuration: 30,
     pomodoroLongBreakInterval: 4,
     pomodoroAutoMode: false,
+    pomodoroGlobalWindow: false, // 新增：桌面端启用全局独立番茄钟窗口
     pomodoroSystemNotification: true, // 新增：番茄结束后系统弹窗
     pomodoroEndPopupWindow: true, // 新增：番茄钟结束弹窗提醒，默认关闭
     pomodoroDockPosition: 'top', // 新增：番茄钟吸附位置 'right' | 'left' | 'top'
@@ -1794,6 +1795,7 @@ export default class ReminderPlugin extends Plugin {
             longBreakDuration: settings.pomodoroLongBreakDuration,
             longBreakInterval: Math.max(1, settings.pomodoroLongBreakInterval),
             autoMode: settings.pomodoroAutoMode,
+            globalWindowEnabled: settings.pomodoroGlobalWindow === true,
             workSound: settings.audioSelected?.pomodoroWorkSound || '',
             breakSound: settings.audioSelected?.pomodoroBreakSound || '',
             longBreakSound: settings.audioSelected?.pomodoroLongBreakSound || '',

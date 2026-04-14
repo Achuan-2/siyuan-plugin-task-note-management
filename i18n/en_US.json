@@ -541,6 +541,8 @@
     "blockEditFailed": "Block edit failed",
     "pomodoroSystemNotification": "System Notification",
     "pomodoroSystemNotificationDesc": "Show system notification popup when pomodoro session ends",
+    "pomodoroGlobalWindow": "Enable Global Pomodoro Window",
+    "pomodoroGlobalWindowDesc": "Desktop app only. When enabled, the pomodoro timer is shown in a standalone window that can stay visible over other applications",
     "reminderSystemNotification": "Reminder System Notification",
     "reminderSystemNotificationDesc": "Show system notification popup when events are due, supports clicking to jump to related blocks",
     "showInternalNotification": "Show Internal Notification",

@@ -1220,7 +1220,7 @@ export class EisenhowerMatrixView {
             taskTitle.setAttribute('data-href', `siyuan://blocks/${task.blockId}`);
             taskTitle.style.cssText += `
                 cursor: pointer;
-                color: var(--b3-theme-primary);
+                color: var(--b3-protyle-inline-blockref-color);
                 text-decoration: underline;
                 font-weight: 500;
             `;

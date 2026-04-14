@@ -1005,7 +1005,10 @@ export class HabitPanel {
         if (habit.blockId) {
             title.setAttribute('data-href', `siyuan://blocks/${habit.blockId}`);
         }
-        title.textContent = habit.title;
+        const titleText = document.createElement('span');
+        titleText.className = habit.blockId ? 'habit-card__title-text habit-card__title-link-text' : 'habit-card__title-text';
+        titleText.textContent = habit.title;
+        title.appendChild(titleText);
         title.classList.add('ariaLabel'); title.setAttribute('aria-label', habit.title);
         if (isInactive) {
             title.style.opacity = '0.6';

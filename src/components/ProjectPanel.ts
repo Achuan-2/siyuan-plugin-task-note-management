@@ -982,7 +982,7 @@ export class ProjectPanel {
             titleEl.setAttribute('data-href', `siyuan://blocks/${project.blockId}`);
             titleEl.style.cssText = `
                 cursor: pointer;
-                color: var(--b3-theme-primary);
+                color: var(--b3-protyle-inline-blockref-color);
                 text-decoration: underline;
                 font-weight: 500;
             `;

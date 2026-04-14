@@ -541,6 +541,8 @@
     "blockEditFailed": "块编辑失败",
     "pomodoroSystemNotification": "番茄钟结束系统通知",
     "pomodoroSystemNotificationDesc": "番茄时间结束时显示系统通知(仅电脑桌面端、安卓端v3.5.10及以上版本有效)",
+    "pomodoroGlobalWindow": "启用全局番茄钟提示",
+    "pomodoroGlobalWindowDesc": "只有电脑桌面端可用，启用后番茄钟会以独立窗口显示，可在其他程序上方显示",
     "reminderSystemNotification": "任务/习惯提醒系统通知",
     "reminderSystemNotificationDesc": "任务/习惯提醒时显示系统通知(仅电脑桌面端、安卓端v3.5.10及以上版本有效)",
     "showInternalNotification": "显示内部通知框",
