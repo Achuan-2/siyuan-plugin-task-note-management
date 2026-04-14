@@ -30,6 +30,8 @@ export class PomodoroTimer {
     private minimizeBtn: HTMLElement;
     private mainSwitchBtn: HTMLElement; // 新增：主切换按钮
     private switchMenu: HTMLElement; // 新增：切换菜单
+    private switchMenuAnchor: HTMLElement | null = null;
+    private switchMenuHideTimer: number | null = null;
     private soundControlBtn: HTMLElement; // 新增：声音控制按钮
     private volumeSlider: HTMLInputElement; // 新增：音量滑块
     private volumeContainer: HTMLElement; // 新增：音量容器
@@ -2274,6 +2276,7 @@ export class PomodoroTimer {
             display: flex;
             align-items: center;
         `;
+        this.switchMenuAnchor = switchContainer;
 
         // 主切换按钮（根据当前状态显示不同图标）
         this.mainSwitchBtn = document.createElement('button');
@@ -2399,7 +2402,8 @@ export class PomodoroTimer {
 
         // 点击外部关闭菜单
         document.addEventListener('click', (e) => {
-            if (!switchContainer.contains(e.target as Node)) {
+            const target = e.target as Node;
+            if (!switchContainer.contains(target) && !this.switchMenu.contains(target)) {
                 this.hideSwitchMenu();
             }
         });
@@ -3810,32 +3814,105 @@ export class PomodoroTimer {
      * 显示切换菜单
      */
     private showSwitchMenu() {
+        if (!this.switchMenu || !this.mainSwitchBtn) return;
+
+        if (this.switchMenuHideTimer) {
+            window.clearTimeout(this.switchMenuHideTimer);
+            this.switchMenuHideTimer = null;
+        }
+
+        if (this.switchMenu.parentElement !== document.body) {
+            document.body.appendChild(this.switchMenu);
+        }
+
+        this.switchMenu.style.position = 'fixed';
+        this.switchMenu.style.right = 'auto';
+        this.switchMenu.style.zIndex = String(this.resolveSwitchMenuZIndex());
+        this.switchMenu.style.transition = 'none';
+        this.switchMenu.style.opacity = '1';
+        this.switchMenu.style.transform = 'none';
         this.switchMenu.style.display = 'flex';
         // 更新菜单内容
         this.updateSwitchMenuContent();
-
-        // 添加动画效果
-        this.switchMenu.style.opacity = '0';
-        this.switchMenu.style.transform = 'translateY(-10px) scale(0.95)';
-
-        requestAnimationFrame(() => {
-            this.switchMenu.style.transition = 'all 0.2s ease';
-            this.switchMenu.style.opacity = '1';
-            this.switchMenu.style.transform = 'translateY(0) scale(1)';
-        });
+        this.updateSwitchMenuPosition();
     }
 
     /**
      * 隐藏切换菜单
      */
-    private hideSwitchMenu() {
-        this.switchMenu.style.transition = 'all 0.2s ease';
-        this.switchMenu.style.opacity = '0';
-        this.switchMenu.style.transform = 'translateY(-10px) scale(0.95)';
+    private hideSwitchMenu(immediate: boolean = false) {
+        if (!this.switchMenu) return;
 
-        setTimeout(() => {
-            this.switchMenu.style.display = 'none';
-        }, 200);
+        if (this.switchMenuHideTimer) {
+            window.clearTimeout(this.switchMenuHideTimer);
+            this.switchMenuHideTimer = null;
+        }
+
+        this.switchMenu.style.transition = 'none';
+        this.switchMenu.style.opacity = '1';
+        this.switchMenu.style.transform = 'none';
+        this.switchMenu.style.display = 'none';
+        this.restoreSwitchMenuPosition();
+    }
+
+    private updateSwitchMenuPosition() {
+        if (!this.switchMenu || !this.mainSwitchBtn) return;
+        if (this.switchMenu.style.display !== 'flex') return;
+
+        const buttonRect = this.mainSwitchBtn.getBoundingClientRect();
+        const menuRect = this.switchMenu.getBoundingClientRect();
+        const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+        const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+        const gap = 6;
+        const viewportPadding = 8;
+
+        let left = buttonRect.right - menuRect.width;
+        left = Math.max(viewportPadding, Math.min(left, viewportWidth - menuRect.width - viewportPadding));
+
+        let top = buttonRect.bottom + gap;
+        const topAbove = buttonRect.top - menuRect.height - gap;
+        if (top + menuRect.height > viewportHeight - viewportPadding && topAbove >= viewportPadding) {
+            top = topAbove;
+        } else {
+            top = Math.max(viewportPadding, Math.min(top, viewportHeight - menuRect.height - viewportPadding));
+        }
+
+        this.switchMenu.style.left = `${Math.round(left)}px`;
+        this.switchMenu.style.top = `${Math.round(top)}px`;
+    }
+
+    private restoreSwitchMenuPosition() {
+        if (!this.switchMenu) return;
+
+        this.switchMenu.style.position = 'absolute';
+        this.switchMenu.style.top = '100%';
+        this.switchMenu.style.right = '0';
+        this.switchMenu.style.left = '';
+        this.switchMenu.style.zIndex = '1000';
+
+        if (this.switchMenuAnchor && this.switchMenu.parentElement !== this.switchMenuAnchor) {
+            this.switchMenuAnchor.appendChild(this.switchMenu);
+        }
+    }
+
+    private resolveSwitchMenuZIndex(): number {
+        const fallbackZIndex = 10001;
+        if (!this.container || typeof window === 'undefined') {
+            return fallbackZIndex;
+        }
+
+        const computedZIndex = window.getComputedStyle(this.container).zIndex;
+        const parsedZIndex = Number.parseInt(computedZIndex, 10);
+        if (Number.isFinite(parsedZIndex)) {
+            return parsedZIndex + 1;
+        }
+
+        const inlineZIndex = Number.parseInt(this.container.style.zIndex || '', 10);
+        if (Number.isFinite(inlineZIndex)) {
+            return inlineZIndex + 1;
+        }
+
+        return fallbackZIndex;
     }
 
     /**
@@ -6134,6 +6211,7 @@ export class PomodoroTimer {
 
     close() {
         this.isWindowClosed = true; // 标记窗口已关闭
+        this.hideSwitchMenu(true);
 
         if (this.timer) {
             clearInterval(this.timer);
