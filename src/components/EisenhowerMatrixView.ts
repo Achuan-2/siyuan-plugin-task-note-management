@@ -2141,7 +2141,7 @@ export class EisenhowerMatrixView {
      */
     private async completeAllChildInstances(parentId: string, date: string, reminderData: any): Promise<string[]> {
         const completedTaskIds: string[] = [];
-        
+
         // 1. 处理 Ghost 子任务 (基于 originalId 的后代)
         const ghostChildren = (Object.values(reminderData) as any[]).filter((r: any) => r.parentId === parentId);
 
@@ -2174,7 +2174,7 @@ export class EisenhowerMatrixView {
         const instanceId = `${parentId}_${date}`;
         const childIds = await this.completeAllChildTasks(instanceId, reminderData);
         completedTaskIds.push(...childIds);
-        
+
         return completedTaskIds;
     }
 
@@ -3602,7 +3602,7 @@ export class EisenhowerMatrixView {
         try {
             const reminderData = await getAllReminders(this.plugin);
             const targetId = task.isRepeatInstance && task.originalId ? task.originalId : task.id;
-            
+
             if (!targetId || !reminderData[targetId]) {
                 showMessage(i18n("taskNotExist"));
                 return;
@@ -3615,7 +3615,7 @@ export class EisenhowerMatrixView {
             }
 
             await saveReminders(this.plugin, reminderData);
-            
+
             // Sync local cache
             this.allTasks.forEach(item => {
                 const itemTargetId = item.isRepeatInstance && item.originalId ? item.originalId : item.id;
