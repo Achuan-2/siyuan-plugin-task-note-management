@@ -4150,6 +4150,7 @@ export class CalendarView {
     private renderEventContent(eventInfo) {
         const { event, timeText } = eventInfo;
         const props = event.extendedProps;
+        const isReminderTimeEvent = props.type === 'reminderTime';
 
         // Special rendering for Pomodoro events
         if (props.type === 'pomodoro') {
@@ -4231,7 +4232,7 @@ export class CalendarView {
             subIcon.style.lineHeight = '1';
             subIcon.style.flexShrink = '0';
             topRow.appendChild(subIcon);
-        } else if (this.showEventCheckbox) {
+        } else if (this.showEventCheckbox && !isReminderTimeEvent) {
             const checkbox = document.createElement('input');
             checkbox.type = 'checkbox';
             checkbox.className = 'reminder-calendar-event-checkbox';
@@ -4331,7 +4332,7 @@ export class CalendarView {
         // 3. 指标行：放置状态图标
         const indicatorsRow = document.createElement('div');
         indicatorsRow.className = 'reminder-event-indicators-row';
-        if (!props.isSubscribed && !props.isHabit && !this.showEventCheckbox) {
+        if (!props.isSubscribed && !props.isHabit && (!this.showEventCheckbox || isReminderTimeEvent)) {
             indicatorsRow.style.paddingLeft = '0';
         }
 
