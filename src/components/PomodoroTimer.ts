@@ -460,6 +460,16 @@ export class PomodoroTimer {
         return emojiMap[pos] || '⬆️';
     }
 
+    private supportsGlobalPomodoroWindow(): boolean {
+        const frontend = getFrontend();
+        const isBrowserDesktop = frontend === 'browser-desktop';
+        return !this.isTabMode && !this.plugin?.isInMobileApp && !isBrowserDesktop;
+    }
+
+    private shouldUseGlobalPomodoroWindow(settings: any = this.settings): boolean {
+        return this.supportsGlobalPomodoroWindow() && settings?.globalWindowEnabled === true;
+    }
+
     private async initComponents(container?: HTMLElement, orphanedWindow?: any) {
         await this.recordManager.initialize();
         await this.initAudio();
@@ -2128,18 +2138,14 @@ export class PomodoroTimer {
     }
 
     private async createWindow(targetContainer?: HTMLElement) {
-        // 检测前端类型
-        const frontend = getFrontend();
-        const isBrowserDesktop = frontend === 'browser-desktop';
-
         // 如果提供了 targetContainer，则创建 DOM 元素（Tab 模式）
         if (this.isTabMode && targetContainer) {
             this.createDOMWindow(targetContainer);
             return;
         }
 
-        // 移动端或浏览器桌面端强制使用 DOM 窗口（因为不支持 BrowserWindow）
-        if (this.plugin?.isInMobileApp || isBrowserDesktop) {
+        // 仅在电脑桌面端显式开启后使用全局独立窗口，其他情况保持思源内悬浮窗
+        if (!this.shouldUseGlobalPomodoroWindow()) {
             // 创建一个悬浮的 DOM 窗口
             const container = document.createElement('div');
             document.body.appendChild(container);
@@ -2151,7 +2157,11 @@ export class PomodoroTimer {
         try {
             await this.createBrowserWindow();
         } catch (e) {
-            this.createDOMWindow(targetContainer);
+            const container = targetContainer ?? document.createElement('div');
+            if (!targetContainer) {
+                document.body.appendChild(container);
+            }
+            this.createDOMWindow(container);
         }
     }
 
@@ -8930,12 +8940,51 @@ document.body.classList.remove('mini-mode');
      * 这个方法主要用于兼容性，实际上 initializeAudioPlayback 会在 BrowserWindow 模式下直接返回
      */
     public async updateSettings(settings: any) {
+        const oldUseGlobalWindow = this.shouldUseGlobalPomodoroWindow(this.settings);
         const oldDockPosition = this.settings?.pomodoroDockPosition;
         this.settings = settings;
 
         // 更新 DOM 模式下吸附按钮的 emoji（无论是否处于吸附模式）
         if ((this as any).dockBtnElement) {
             (this as any).dockBtnElement.innerHTML = this.getDockPositionEmoji(settings.pomodoroDockPosition);
+        }
+
+        const newUseGlobalWindow = this.shouldUseGlobalPomodoroWindow(settings);
+        const isBrowserWindow =
+            !this.isTabMode &&
+            this.container &&
+            typeof (this.container as any).webContents !== 'undefined';
+
+        if (!this.isRunning && oldUseGlobalWindow !== newUseGlobalWindow) {
+            if (newUseGlobalWindow && !isBrowserWindow) {
+                if (this.container?.parentNode) {
+                    this.container.parentNode.removeChild(this.container);
+                }
+                this.isWindowClosed = false;
+                await this.createBrowserWindow();
+            } else if (!newUseGlobalWindow && isBrowserWindow) {
+                this.isRecreatingWindow = true;
+                try {
+                    const currentWindow = PomodoroTimer.browserWindowInstance;
+                    if (currentWindow && !currentWindow.isDestroyed()) {
+                        currentWindow.destroy();
+                    }
+                } finally {
+                    const host = document.createElement('div');
+                    document.body.appendChild(host);
+                    this.createDOMWindow(host);
+                    if (this.isDocked) {
+                        this.enterDOMWindowDock();
+                    }
+                    this.isWindowClosed = false;
+                    if (PomodoroTimer.browserWindowTimer === this) {
+                        PomodoroTimer.browserWindowTimer = null;
+                    }
+                    this.isRecreatingWindow = false;
+                    this.updateDisplay();
+                    this.updateStatsDisplay();
+                }
+            }
         }
 
         const pomodoroWindow = PomodoroTimer.browserWindowInstance;

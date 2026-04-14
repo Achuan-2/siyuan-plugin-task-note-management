@@ -743,6 +743,13 @@
                     description: i18n('pomodoroSystemNotificationDesc'),
                 },
                 {
+                    key: 'pomodoroGlobalWindow',
+                    value: settings.pomodoroGlobalWindow,
+                    type: 'checkbox',
+                    title: i18n('pomodoroGlobalWindow'),
+                    description: i18n('pomodoroGlobalWindowDesc'),
+                },
+                {
                     key: 'pomodoroEndPopupWindow',
                     value: settings.pomodoroEndPopupWindow,
                     type: 'checkbox',
