@@ -128,14 +128,14 @@ export class EisenhowerMatrixView {
                 key: 'important-not-urgent',
                 title: i18n('quadrantImportantNotUrgent'),
                 description: i18n('quadrantImportantNotUrgentDesc'),
-                color: '#f39c12',
+                color: '#3498db',
                 tasks: []
             },
             {
                 key: 'not-important-urgent',
                 title: i18n('quadrantNotImportantUrgent'),
                 description: i18n('quadrantNotImportantUrgentDesc'),
-                color: '#3498db',
+                color: '#f39c12',
                 tasks: []
             },
             {
