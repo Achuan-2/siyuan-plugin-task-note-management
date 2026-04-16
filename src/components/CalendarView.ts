@@ -7701,6 +7701,144 @@ export class CalendarView {
         this.tooltip.style.top = `${top}px`;
     }
 
+    private parseReminderInstanceInfo(taskId?: string | null): { originalId: string; instanceDate: string | null } {
+        if (!taskId) {
+            return { originalId: '', instanceDate: null };
+        }
+
+        const match = taskId.match(/^(.*)_(\d{4}-\d{2}-\d{2})$/);
+        if (!match) {
+            return { originalId: taskId, instanceDate: null };
+        }
+
+        return {
+            originalId: match[1],
+            instanceDate: match[2]
+        };
+    }
+
+    private async getTooltipSubtasks(calendarEvent: any): Promise<Array<{ id: string; title: string; completed: boolean; sort: number; depth: number }>> {
+        const reminder = calendarEvent.extendedProps || {};
+        const reminderData = await getAllReminders(this.plugin);
+        const allReminders = Object.values(reminderData) as any[];
+        const childrenMap = new Map<string, any[]>();
+
+        allReminders.forEach((item: any) => {
+            if (!item?.parentId) return;
+            if (!childrenMap.has(item.parentId)) {
+                childrenMap.set(item.parentId, []);
+            }
+            childrenMap.get(item.parentId)!.push(item);
+        });
+
+        const sortChildren = (items: any[]) => items.sort((a: any, b: any) => {
+            const sortDiff = (a?.sort || 0) - (b?.sort || 0);
+            if (sortDiff !== 0) return sortDiff;
+            return String(a?.title || '').localeCompare(String(b?.title || ''), 'zh-CN');
+        });
+
+        const sourceTaskId =
+            reminder.type === 'completedTaskTime'
+                ? (reminder.eventId || calendarEvent.id)
+                : reminder.type === 'reminderTime'
+                    ? (reminder.sourceEventId || calendarEvent.id)
+                    : calendarEvent.id;
+
+        const { originalId: parsedOriginalId, instanceDate: parsedInstanceDate } = this.parseReminderInstanceInfo(sourceTaskId);
+        const originalParentId = reminder.isRepeated ? (reminder.originalId || parsedOriginalId) : parsedOriginalId;
+        const instanceDate = reminder.isRepeated
+            ? (reminder.completedInstanceDate || reminder.date || parsedInstanceDate)
+            : parsedInstanceDate;
+
+        const subtasks: Array<{ id: string; title: string; completed: boolean; sort: number; depth: number }> = [];
+        const visited = new Set<string>();
+
+        const collectNormalChildren = (parentId: string, depth: number) => {
+            const children = sortChildren([...(childrenMap.get(parentId) || [])]);
+            children.forEach((child: any) => {
+                if (visited.has(child.id)) return;
+                visited.add(child.id);
+
+                subtasks.push({
+                    id: child.id,
+                    title: child.title || i18n("unnamedTask") || "未命名任务",
+                    completed: !!child.completed,
+                    sort: typeof child.sort === 'number' ? child.sort : 0,
+                    depth
+                });
+
+                collectNormalChildren(child.id, depth + 1);
+            });
+        };
+
+        const collectRepeatedChildren = (currentParentId: string, currentOriginalParentId: string, depth: number) => {
+            const candidates: Array<{
+                id: string;
+                title: string;
+                completed: boolean;
+                sort: number;
+                depth: number;
+                nextParentId: string;
+                nextOriginalParentId: string | null;
+            }> = [];
+
+            const ghostChildren = sortChildren([...(childrenMap.get(currentOriginalParentId) || [])]);
+            ghostChildren.forEach((child: any) => {
+                const excludeDates = child.repeat?.excludeDates || [];
+                if (excludeDates.includes(instanceDate)) return;
+
+                const instanceMod = child.repeat?.instanceModifications?.[instanceDate];
+                candidates.push({
+                    id: `${child.id}_${instanceDate}`,
+                    title: instanceMod?.title !== undefined ? instanceMod.title : (child.title || i18n("unnamedTask") || "未命名任务"),
+                    completed: (child.repeat?.completedInstances || []).includes(instanceDate),
+                    sort: typeof instanceMod?.sort === 'number' ? instanceMod.sort : (child.sort || 0),
+                    depth,
+                    nextParentId: `${child.id}_${instanceDate}`,
+                    nextOriginalParentId: child.id
+                });
+            });
+
+            const realChildren = sortChildren([...(childrenMap.get(currentParentId) || [])]);
+            realChildren.forEach((child: any) => {
+                candidates.push({
+                    id: child.id,
+                    title: child.title || i18n("unnamedTask") || "未命名任务",
+                    completed: !!child.completed,
+                    sort: typeof child.sort === 'number' ? child.sort : 0,
+                    depth,
+                    nextParentId: child.id,
+                    nextOriginalParentId: null
+                });
+            });
+
+            candidates.sort((a, b) => {
+                if (a.sort !== b.sort) return a.sort - b.sort;
+                return a.title.localeCompare(b.title, 'zh-CN');
+            });
+
+            candidates.forEach((item) => {
+                if (visited.has(item.id)) return;
+                visited.add(item.id);
+                subtasks.push(item);
+
+                if (item.nextOriginalParentId) {
+                    collectRepeatedChildren(item.nextParentId, item.nextOriginalParentId, depth + 1);
+                } else {
+                    collectNormalChildren(item.nextParentId, depth + 1);
+                }
+            });
+        };
+
+        if (reminder.isRepeated && originalParentId && instanceDate) {
+            collectRepeatedChildren(sourceTaskId, originalParentId, 0);
+        } else {
+            collectNormalChildren(sourceTaskId, 0);
+        }
+
+        return subtasks;
+    }
+
     private async buildTooltipContent(calendarEvent: any): Promise<string> {
         const reminder = calendarEvent.extendedProps;
 
@@ -7773,6 +7911,34 @@ export class CalendarView {
                     `<span>${i18n("completedAt") || "完成于"} ${formattedDate} ${formattedTime}</span>`,
                     `</div>`
                 );
+            }
+
+            const subtasks = await this.getTooltipSubtasks(calendarEvent);
+            if (subtasks.length > 0) {
+                const completedCount = subtasks.filter(item => item.completed).length;
+                const visibleSubtasks = subtasks.slice(0, 12);
+                htmlParts.push(
+                    `<div style="color: var(--b3-theme-on-surface-light); margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--b3-theme-border); font-size: 12px;">`,
+                    `<div style="margin-bottom: 6px; opacity: 0.7;">${this.escapeHtml(`${i18n("subtasks") || "子任务"} (${completedCount}/${subtasks.length})`)}</div>`,
+                    `<div style="display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow-y: auto;">`
+                );
+
+                visibleSubtasks.forEach(item => {
+                    htmlParts.push(
+                        `<div style="display: flex; align-items: flex-start; gap: 6px; color: var(--b3-theme-on-surface); padding-left: ${item.depth * 16}px;">`,
+                        `<span>${item.completed ? '✅' : '⬜'}</span>`,
+                        `<span style="${item.completed ? 'opacity: 0.7; text-decoration: line-through;' : ''}">${this.escapeHtml(item.title)}</span>`,
+                        `</div>`
+                    );
+                });
+
+                if (subtasks.length > visibleSubtasks.length) {
+                    htmlParts.push(
+                        `<div style="opacity: 0.7;">${this.escapeHtml(`还有 ${subtasks.length - visibleSubtasks.length} 项`)}</div>`
+                    );
+                }
+
+                htmlParts.push(`</div>`, `</div>`);
             }
 
 
@@ -8028,6 +8194,34 @@ export class CalendarView {
                 }
 
                 htmlParts.push(`</div>`);
+            }
+
+            const subtasks = await this.getTooltipSubtasks(calendarEvent);
+            if (subtasks.length > 0) {
+                const completedCount = subtasks.filter(item => item.completed).length;
+                const visibleSubtasks = subtasks.slice(0, 12);
+                htmlParts.push(
+                    `<div style="color: var(--b3-theme-on-surface-light); margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--b3-theme-border); font-size: 12px;">`,
+                    `<div style="margin-bottom: 6px; opacity: 0.7;">${this.escapeHtml(`${i18n("subtasks") || "子任务"} (${completedCount}/${subtasks.length})`)}</div>`,
+                    `<div style="display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow-y: auto;">`
+                );
+
+                visibleSubtasks.forEach(item => {
+                    htmlParts.push(
+                        `<div style="display: flex; align-items: flex-start; gap: 6px; color: var(--b3-theme-on-surface); padding-left: ${item.depth * 16}px;">`,
+                        `<span>${item.completed ? '✅' : '⬜'}</span>`,
+                        `<span style="${item.completed ? 'opacity: 0.7; text-decoration: line-through;' : ''}">${this.escapeHtml(item.title)}</span>`,
+                        `</div>`
+                    );
+                });
+
+                if (subtasks.length > visibleSubtasks.length) {
+                    htmlParts.push(
+                        `<div style="opacity: 0.7;">${this.escapeHtml(`还有 ${subtasks.length - visibleSubtasks.length} 项`)}</div>`
+                    );
+                }
+
+                htmlParts.push(`</div>`, `</div>`);
             }
 
             // 使用join一次性拼接所有HTML片段，比多次字符串拼接更高效
