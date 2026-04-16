@@ -85,7 +85,7 @@ div[data-subtype='t'][data-type='NodeList'] {
 }
 
 .protyle-wysiwyg .li.protyle-task--done[data-task="/"]>.protyle-action--task:before {
-    content: '/' !important;
+    content: '◔' !important;
     color: var(--b3-card-warning-color) !important;
     border-color: var(--b3-card-warning-color) !important;
     background-color: transparent !important;
