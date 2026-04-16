@@ -31,7 +31,7 @@ import { ProjectKanbanView } from "./components/ProjectKanbanView";
 import { PomodoroManager } from "./utils/pomodoroManager";
 import SettingPanelComponent from "./SettingPanel.svelte";
 import { exportIcsFile } from "./utils/icsUtils";
-import { getFile, sendNotification, cancelNotification, pushErrMsg, pushMsg, isInMobileApp } from "./api";
+import { getFile, sendNotification, cancelNotification, pushErrMsg, pushMsg, isInMobileApp, batchUpdateTaskListItemMarker, isTaskListLikeBlock, type TaskListItemMarker } from "./api";
 import { resolveAudioPath } from "./utils/audioUtils";
 import { showVipDialog } from "./components/VipDialog";
 import { performDataMigration } from "./utils/dataMigration";
@@ -2789,13 +2789,15 @@ export default class ReminderPlugin extends Plugin {
     }
 
     private handleBlockMenu({ detail }) {
+        const blockElements = Array.isArray(detail.blockElements) ? detail.blockElements : [];
+
         // 检查选中的块是否为列表块
-        const isListBlock = detail.blockElements && detail.blockElements.length === 1 &&
-            detail.blockElements[0].getAttribute("data-type") === "NodeList";
+        const isListBlock = blockElements.length === 1 &&
+            blockElements[0].getAttribute("data-type") === "NodeList";
 
         // 列表块同时显示"设置任务"和"批量设置任务"
         if (isListBlock) {
-            const listBlockElement = detail.blockElements[0];
+            const listBlockElement = blockElements[0];
             const listBlockId = listBlockElement.getAttribute("data-node-id");
             // 从DOM中获取列表项数量（列表项的data-type为"NodeListItem"）
             // 思源列表结构：列表块 > 子元素（直接是列表项div[data-type="NodeListItem"]）
@@ -2831,10 +2833,10 @@ export default class ReminderPlugin extends Plugin {
             // 非列表块，按原有逻辑显示
             detail.menu.addItem({
                 iconHTML: "⏰",
-                label: detail.blockElements.length > 1 ? i18n("batchSetReminderBlocks", { count: detail.blockElements.length.toString() }) : i18n("setTimeReminder"),
+                label: blockElements.length > 1 ? i18n("batchSetReminderBlocks", { count: blockElements.length.toString() }) : i18n("setTimeReminder"),
                 click: () => {
-                    if (detail.blockElements && detail.blockElements.length > 0) {
-                        const blockIds = detail.blockElements
+                    if (blockElements.length > 0) {
+                        const blockIds = blockElements
                             .map(el => el.getAttribute("data-node-id"))
                             .filter(id => id);
 
@@ -2846,9 +2848,17 @@ export default class ReminderPlugin extends Plugin {
             });
         }
 
+        if (this.shouldShowTaskListStatusMenu(blockElements)) {
+            detail.menu.addItem({
+                iconHTML: "✅",
+                label: i18n("taskListStatusMenu") || "任务状态设置",
+                submenu: this.createTaskListStatusSubmenu(blockElements)
+            });
+        }
+
         // 添加查看绑定任务菜单项（仅当选中单个块且有custom-bind-reminders属性时显示）
-        if (detail.blockElements && detail.blockElements.length === 1) {
-            const blockElement = detail.blockElements[0];
+        if (blockElements.length === 1) {
+            const blockElement = blockElements[0];
             const blockId = blockElement.getAttribute("data-node-id");
 
             if (blockId) {
@@ -2872,6 +2882,77 @@ export default class ReminderPlugin extends Plugin {
             }
         }
 
+    }
+
+    private shouldShowTaskListStatusMenu(blockElements: HTMLElement[]): boolean {
+        return blockElements.some((blockElement) => {
+            const dataType = blockElement?.getAttribute("data-type");
+            return dataType === "NodeList" || dataType === "NodeListItem";
+        });
+    }
+
+    private createTaskListStatusSubmenu(blockElements: HTMLElement[]): any[] {
+        const statusOptions: Array<{ label: string; marker: TaskListItemMarker; iconHTML: string }> = [
+            { label: i18n("taskListStatusInProgress") || "进行中", marker: "/", iconHTML: "" },
+            { label: i18n("taskListStatusAbandoned") || "放弃", marker: "-", iconHTML: "" },
+            { label: i18n("taskListStatusCompleted") || "已完成", marker: "x", iconHTML: "" }
+        ];
+
+        return statusOptions.map((option) => ({
+            iconHTML: option.iconHTML,
+            label: option.label,
+            click: async () => {
+                await this.updateTaskListStatusForBlocks(blockElements, option.marker, option.label);
+            }
+        }));
+    }
+
+    private async updateTaskListStatusForBlocks(blockElements: HTMLElement[], marker: TaskListItemMarker, statusLabel: string): Promise<void> {
+        try {
+            const blockIds = await this.getTaskListStatusTargetIds(blockElements);
+            if (blockIds.length === 0) {
+                showMessage(i18n("taskListStatusTargetNotFound") || "未找到可更新状态的任务列表项", 3000, "info");
+                return;
+            }
+
+            await batchUpdateTaskListItemMarker(blockIds.map((id) => ({ id, marker })));
+            showMessage(
+                i18n("taskListStatusUpdated", {
+                    status: statusLabel,
+                    count: blockIds.length.toString()
+                }) || `已将 ${blockIds.length} 个任务设置为${statusLabel}`,
+                3000
+            );
+        } catch (error) {
+            console.error("更新任务列表状态失败:", error);
+            showMessage(
+                i18n("taskListStatusUpdateFailed", { status: statusLabel }) || `设置任务状态失败：${statusLabel}`,
+                3000,
+                "error"
+            );
+        }
+    }
+
+    private async getTaskListStatusTargetIds(blockElements: HTMLElement[]): Promise<string[]> {
+        const taskListItemIds = new Set<string>();
+
+        for (const blockElement of blockElements) {
+            const blockId = blockElement?.getAttribute("data-node-id");
+            if (!blockId) continue;
+
+            const dataType = blockElement.getAttribute("data-type");
+            if (dataType === "NodeList") {
+                const listItemBlockIds = await this.getListItemBlockIds(blockId);
+                listItemBlockIds.forEach((id) => taskListItemIds.add(id));
+                continue;
+            }
+
+            if (await isTaskListLikeBlock(blockId)) {
+                taskListItemIds.add(blockId);
+            }
+        }
+
+        return Array.from(taskListItemIds);
     }
 
     private async buildPomodoroReminderFromBlock(blockId: string): Promise<any | null> {

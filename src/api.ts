@@ -193,6 +193,8 @@ export async function upload(assetsDirPath: string, files: any[]): Promise<IResU
 
 // **************************************** Block ****************************************
 type DataType = "markdown" | "dom";
+export type TaskListItemMarker = " " | "/" | "-" | "x";
+
 export async function insertBlock(
     dataType: DataType, data: string,
     nextID?: BlockId, previousID?: BlockId, parentID?: BlockId
@@ -319,6 +321,14 @@ export async function transferBlockRef(fromID: BlockId, toID: BlockId, refIDs: B
         refIDs: refIDs
     }
     let url = '/api/block/transferBlockRef';
+    return request(url, data);
+}
+
+export async function batchUpdateTaskListItemMarker(items: Array<{ id: BlockId; marker: TaskListItemMarker }>) {
+    let data = {
+        items: items
+    };
+    let url = '/api/block/batchUpdateTaskListItemMarker';
     return request(url, data);
 }
 
@@ -900,35 +910,7 @@ function formatDate(date) {
     return `${year}-${month}-${day} ${hours}:${minutes}`;
 }
 
-function toggleTaskCheckboxInKramdown(kramdown: string, completed: boolean): string {
-    if (completed) {
-        let updated = kramdown.replace(
-            /^(\s*[-*+]\s*\{:[^}]*\}\s*)\[\s*\]/gm,
-            '$1[X]'
-        );
-        if (updated !== kramdown) return updated;
-
-        updated = kramdown.replace(
-            /^(\s*[-*+]\s*)\[\s*\](\s*\{:[^}]*\})?/gm,
-            '$1[X]$2'
-        );
-        return updated;
-    }
-
-    let updated = kramdown.replace(
-        /^(\s*[-*+]\s*\{:[^}]*\}\s*)\[(?:x|X)\]/gm,
-        '$1[ ]'
-    );
-    if (updated !== kramdown) return updated;
-
-    updated = kramdown.replace(
-        /^(\s*[-*+]\s*)\[(?:x|X)\](\s*\{:[^}]*\})?/gm,
-        '$1[ ]$2'
-    );
-    return updated;
-}
-
-async function isTaskListLikeBlock(blockId: string): Promise<boolean> {
+export async function isTaskListLikeBlock(blockId: string): Promise<boolean> {
     try {
         const result = await sql(`SELECT type, subtype FROM blocks WHERE id = '${blockId}'`);
         if (result && result.length > 0) {
@@ -950,17 +932,43 @@ async function isTaskListLikeBlock(blockId: string): Promise<boolean> {
     }
 }
 
-async function syncTaskListBlockCompletion(blockId: string, completed: boolean): Promise<void> {
+function normalizeReminderKanbanStatus(status: any): string {
+    if (typeof status !== "string") return "";
+    return status.trim().toLowerCase();
+}
+
+function getTaskListMarkerByReminders(reminders: any[]): TaskListItemMarker {
+    if (!Array.isArray(reminders) || reminders.length === 0) {
+        return " ";
+    }
+
+    if (reminders.every((reminder: any) => reminder?.completed)) {
+        return "x";
+    }
+
+    const incompleteReminders = reminders.filter((reminder: any) => reminder && !reminder.completed);
+    if (incompleteReminders.some((reminder: any) => normalizeReminderKanbanStatus(reminder?.kanbanStatus) === "doing")) {
+        return "/";
+    }
+
+    if (incompleteReminders.some((reminder: any) => {
+        const status = normalizeReminderKanbanStatus(reminder?.kanbanStatus);
+        return status === "abort" || status === "abandoned";
+    })) {
+        return "-";
+    }
+
+    return " ";
+}
+
+async function syncTaskListBlockCompletion(blockId: string, reminders: any[]): Promise<void> {
     const isTaskList = await isTaskListLikeBlock(blockId);
     if (!isTaskList) return;
 
-    // 统一基于 kramdown 更新，避免 markdown 更新导致属性丢失
-    const kramdown = (await getBlockKramdown(blockId)).kramdown;
-    if (!kramdown) return;
-    const updatedKramdown = toggleTaskCheckboxInKramdown(kramdown, completed);
-    if (updatedKramdown !== kramdown) {
-        await updateBlock("markdown", updatedKramdown, blockId);
-    }
+    await batchUpdateTaskListItemMarker([{
+        id: blockId,
+        marker: getTaskListMarkerByReminders(reminders)
+    }]);
 }
 /**
  * 检查并更新块的提醒书签状态
@@ -1027,7 +1035,7 @@ export async function updateBindBlockAtrrs(blockId: string, plugin: any): Promis
 
         // 统一在 API 层同步任务列表块勾选状态，避免各面板重复实现
         try {
-            await syncTaskListBlockCompletion(blockId, allCompleted);
+            await syncTaskListBlockCompletion(blockId, blockReminders as any[]);
         } catch (syncErr) {
             console.warn('同步任务列表块勾选状态失败:', blockId, syncErr);
         }

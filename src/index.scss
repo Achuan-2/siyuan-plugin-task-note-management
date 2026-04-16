@@ -4,7 +4,7 @@
 @use './styles/pomodoroTimer.scss';
 @use './styles/pomodoroStats.scss';
 @use './styles/calendar.scss';
-
+@use './styles/taskListStatus.scss';
 
 .smart-batch-dialog {
     .b3-dialog__content {
@@ -2756,3 +2756,5 @@
         margin-right: 0;
     }
 }
+
+

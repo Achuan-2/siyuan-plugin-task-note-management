@@ -1,0 +1,107 @@
+.b3-typography .protyle-task input {
+    opacity: 1;
+}
+
+/* 待办事项的鼠标光标为点击 */
+.protyle-wysiwyg [data-node-id].li>.protyle-action--task {
+    cursor: pointer;
+}
+
+.protyle-wysiwyg [data-node-id].li>.protyle-action--task svg {
+    opacity: 0;
+}
+
+.protyle-wysiwyg [data-node-id].li>.protyle-action--task:hover:after {
+    background-color: transparent !important;
+    opacity: 0 !important;
+}
+
+/* 复选框样式 */
+.protyle-wysiwyg .protyle-action--task:before {
+    content: '';
+    position: absolute;
+    display: inline-block;
+    cursor: pointer;
+    width: 1em;
+    height: 1em;
+    vertical-align: middle;
+    text-align: center;
+    border: 1.7px solid #5f6368;
+    border-radius: 0.2em;
+    top: 0.65em;
+    font-size: 0.8em;
+}
+
+.b3-typography .protyle-task:before {
+    left: -1.2em;
+    top: 0.5em;
+}
+
+
+/* 复选框选中 */
+.protyle-task--done>.protyle-action--task:before {
+    content: '\2713';
+    font-size: 0.8em;
+    font-weight: bold;
+    border: 1.7px solid #289aa2;
+    line-height: 1em;
+    color: #289aa2;
+    background-color: transparent;
+}
+
+/* 复选框鼠标悬停 */
+.protyle-wysiwyg [data-node-id].li>.protyle-action--task:hover:before {
+    content: '\2713';
+    font-size: 0.8em;
+    vertical-align: middle;
+    line-height: 1em;
+    color: #436681;
+}
+
+.protyle-task--done[fold='1']>.protyle-action--task:before {
+    content: '\2713';
+    background-color: transparent;
+    color: #476796;
+}
+
+div[data-subtype='t'][data-type='NodeList'] {
+    position: relative;
+}
+
+/* 调整透明度 */
+.protyle-task--done {
+    opacity: 1;
+    transition: opacity 0.5s ease-in-out;
+}
+
+.protyle-task--done .protyle-task--done {
+    opacity: 1;
+    transition: opacity 0.5s ease-in-out;
+}
+
+.protyle-task--done div[data-type='NodeParagraph'],
+.protyle-task--done .protyle-action--task {
+    opacity: 1;
+}
+
+.protyle-wysiwyg .li.protyle-task--done[data-task="/"]>.protyle-action--task:before {
+    content: '◔' !important;
+    color: var(--b3-card-warning-color) !important;
+    border-color: var(--b3-card-warning-color) !important;
+    background-color: transparent !important;
+    mask-image: none !important;
+    -webkit-mask-image: none !important;
+}
+/* 取消2.7.7 更新的待办列表完成样式 */
+.protyle-wysiwyg .li.protyle-task--done[data-task="/"]>div:not([data-subtype='t']) {
+    text-decoration: none !important;
+}
+
+.protyle-wysiwyg .li.protyle-task--done[data-task="-"]>.protyle-action--task:before {
+    content: '✕' !important;
+    color: var(--b3-card-error-color) !important;
+    border-color: var(--b3-card-error-color) !important;
+    background-color: transparent !important;
+    mask-image: none !important;
+    -webkit-mask-image: none !important;
+}
