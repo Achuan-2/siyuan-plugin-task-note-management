@@ -175,6 +175,8 @@
     "noExistingReminders": "No existing reminders",
     "syncBlockTitle": "Update title to bound block content",
     "syncTitleToBlock": "Update bound block content to current title",
+    "confirmSyncTitleToBlockTitle": "Confirm bound block content update",
+    "confirmSyncTitleToBlockMessage": "Are you sure you want to update the bound block content to the current title?",
     "subtasks": "Subtasks",
     "viewSubtasks": "View Subtasks",
     "noSubtasks": "No Subtasks",

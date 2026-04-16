@@ -175,6 +175,8 @@
     "noExistingReminders": "暂无现有提醒",
     "syncBlockTitle": "更新标题为绑定块内容",
     "syncTitleToBlock": "更新绑定块内容为当前标题",
+    "confirmSyncTitleToBlockTitle": "确认更新绑定块内容",
+    "confirmSyncTitleToBlockMessage": "确定要将绑定块内容更新为当前标题吗？",
     "subtasks": "子任务",
     "viewSubtasks": "查看子任务",
     "noSubtasks": "暂无子任务",
