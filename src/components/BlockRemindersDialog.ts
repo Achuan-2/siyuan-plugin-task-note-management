@@ -292,9 +292,11 @@ export class BlockRemindersDialog {
             timeEl.style.color = 'var(--b3-theme-on-surface-light)';
             timeContainer.appendChild(timeEl);
 
-            const countdownEl = this.createReminderCountdownElement(reminder);
-            if (countdownEl) {
-                timeContainer.appendChild(countdownEl);
+            if (!isCompleted) {
+                const countdownEl = this.createReminderCountdownElement(reminder);
+                if (countdownEl) {
+                    timeContainer.appendChild(countdownEl);
+                }
             }
         }
 
@@ -736,15 +738,21 @@ export class BlockRemindersDialog {
         const now = new Date();
         const diffMs = now.getTime() - completed.getTime();
         const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+        const cleanCompletedTemplate = (template: string) => template.replace(/^[\s(（]+/, '').replace(/[)）\s]+$/, '');
+        const completedAtTemplate = cleanCompletedTemplate(i18n("completedAtTemplate") || "完成于 ${time}");
+        const completedAtWithDateTemplate = cleanCompletedTemplate(i18n("completedAtWithDateTemplate") || "完成于 ${date} ${time}");
+        const timeText = completed.toLocaleTimeString(getLocaleTag(), { hour: '2-digit', minute: '2-digit' });
 
         if (diffDays === 0) {
-            return `${i18n("today") || "今天"} ${completed.toLocaleTimeString(getLocaleTag(), { hour: '2-digit', minute: '2-digit' })}`;
+            return completedAtTemplate.replace("${time}", `${i18n("today") || "今天"} ${timeText}`);
         } else if (diffDays === 1) {
-            return `${i18n("yesterday") || "昨天"} ${completed.toLocaleTimeString(getLocaleTag(), { hour: '2-digit', minute: '2-digit' })}`;
+            return completedAtTemplate.replace("${time}", `${i18n("yesterday") || "昨天"} ${timeText}`);
         } else if (diffDays <= 7) {
-            return `${i18n("daysAgo")?.replace("${days}", diffDays.toString()) || diffDays + "天前"} ${completed.toLocaleTimeString(getLocaleTag(), { hour: '2-digit', minute: '2-digit' })}`;
+            return completedAtTemplate.replace("${time}", `${i18n("daysAgo")?.replace("${days}", diffDays.toString()) || diffDays + "天前"} ${timeText}`);
         } else {
-            return completed.toLocaleDateString(getLocaleTag());
+            return completedAtWithDateTemplate
+                .replace("${date}", completed.toLocaleDateString(getLocaleTag()))
+                .replace("${time}", timeText);
         }
     }
 
