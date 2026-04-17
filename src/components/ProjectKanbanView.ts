@@ -149,6 +149,13 @@ export class ProjectKanbanView {
     private lute: any;
     private showCompletedSubtasks: boolean = true; // 是否显示已完成的子任务
     private hideEmptyStatusBars: boolean = false; // 是否隐藏没有任务的状态栏/分组
+    private hideNoDoingGroups: boolean = false; // 是否隐藏没有进行中任务的分组
+    private hideNoTodayGroups: boolean = false; // 是否隐藏没有今日任务的分组
+    private hasCustomGroups: boolean = false; // 当前项目是否存在未归档分组
+    private displayHideNoDoingGroupsCheckbox: HTMLInputElement | null = null;
+    private displayHideNoTodayGroupsCheckbox: HTMLInputElement | null = null;
+    private manageGroupsHideNoDoingCheckbox: HTMLInputElement | null = null;
+    private manageGroupsHideNoTodayCheckbox: HTMLInputElement | null = null;
     private customGroupTabsMode: boolean = false; // 自定义分组看板是否使用页签显示
     private activeCustomGroupTabId: string | null = null; // 当前选中的分组页签
 
@@ -314,6 +321,69 @@ export class ProjectKanbanView {
 
     private isStatusVisibleForGroup(group: any, statusId: string): boolean {
         return this.getVisibleStatusesForGroup(group).some(status => status.id === statusId);
+    }
+
+    private hasDoingTasks(tasks: any[]): boolean {
+        return tasks.some(task => !task.completed && this.getTaskStatus(task) === 'doing');
+    }
+
+    private hasTodayTasks(tasks: any[], todayStr: string): boolean {
+        return tasks.some(task =>
+            task.date && compareDateStrings(this.getTaskLogicalDate(task.date, task.time), todayStr) === 0
+        );
+    }
+
+    private shouldDisplayGroupBySettings(
+        tasks: any[],
+        todayStr: string,
+        options: { skipDoingCheck?: boolean } = {}
+    ): boolean {
+        if (this.hideNoDoingGroups && !options.skipDoingCheck && !this.hasDoingTasks(tasks)) {
+            return false;
+        }
+
+        if (this.hideNoTodayGroups && !this.hasTodayTasks(tasks, todayStr)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private syncGroupVisibilityCheckboxes(): void {
+        const checkboxRefs = [
+            ['displayHideNoDoingGroupsCheckbox', this.hideNoDoingGroups],
+            ['displayHideNoTodayGroupsCheckbox', this.hideNoTodayGroups],
+            ['manageGroupsHideNoDoingCheckbox', this.hideNoDoingGroups],
+            ['manageGroupsHideNoTodayCheckbox', this.hideNoTodayGroups]
+        ] as const;
+
+        checkboxRefs.forEach(([key, checked]) => {
+            const checkbox = this[key];
+            if (checkbox && checkbox.isConnected) {
+                checkbox.checked = checked;
+            } else {
+                this[key] = null;
+            }
+        });
+    }
+
+    private async saveGroupVisibilitySettings(hideNoDoingGroups: boolean, hideNoTodayGroups: boolean): Promise<void> {
+        this.hideNoDoingGroups = hideNoDoingGroups;
+        this.hideNoTodayGroups = hideNoTodayGroups;
+
+        const projectData = await this.plugin.loadProjectData() || {};
+        if (projectData[this.projectId]) {
+            projectData[this.projectId].hideNoDoingGroups = hideNoDoingGroups;
+            projectData[this.projectId].hideNoTodayGroups = hideNoTodayGroups;
+            await this.plugin.saveProjectData(projectData);
+        }
+
+        if (this.project) {
+            this.project.hideNoDoingGroups = hideNoDoingGroups;
+            this.project.hideNoTodayGroups = hideNoTodayGroups;
+        }
+
+        this.syncGroupVisibilityCheckboxes();
     }
 
     private async getCustomGroupById(groupId: string | null): Promise<any | null> {
@@ -590,6 +660,18 @@ export class ProjectKanbanView {
             } else {
                 this.hideEmptyStatusBars = false;
             }
+            if (this.project && typeof this.project.hideNoDoingGroups === 'boolean') {
+                this.hideNoDoingGroups = this.project.hideNoDoingGroups;
+            } else {
+                this.hideNoDoingGroups = false;
+            }
+            if (this.project && typeof this.project.hideNoTodayGroups === 'boolean') {
+                this.hideNoTodayGroups = this.project.hideNoTodayGroups;
+            } else {
+                this.hideNoTodayGroups = false;
+            }
+            const customGroups = await this.projectManager.getProjectCustomGroups(this.projectId);
+            this.hasCustomGroups = customGroups.some((group: any) => !group.archived);
             this.customGroupTabsMode = !!this.project?.customGroupTabsMode;
             this.activeCustomGroupTabId = typeof this.project?.activeCustomGroupTabId === 'string'
                 ? this.project.activeCustomGroupTabId
@@ -780,11 +862,11 @@ export class ProjectKanbanView {
                     <div class="b3-dialog__content">
                         <div class="groups-filter" style="display: flex; align-items: center; ">
                             <label class="b3-label" style="display: flex; align-items: center; gap: 4px; cursor: pointer; flex: 1;">
-                                <input type="checkbox" id="hideNoDoingGroupCb" class="b3-switch b3-switch--small" ${this.project?.hideNoDoingGroups ? 'checked' : ''}>
+                                <input type="checkbox" id="hideNoDoingGroupCb" class="b3-switch b3-switch--small" ${this.hideNoDoingGroups ? 'checked' : ''}>
                                 <span style="font-size: 13px;">${i18n('hideNoDoingGroups')}</span>
                             </label>
                             <label class="b3-label" style="display: flex; align-items: center; gap: 4px; cursor: pointer; flex: 1;">
-                                <input type="checkbox" id="hideNoTodayGroupCb" class="b3-switch b3-switch--small" ${this.project?.hideNoTodayGroups ? 'checked' : ''}>
+                                <input type="checkbox" id="hideNoTodayGroupCb" class="b3-switch b3-switch--small" ${this.hideNoTodayGroups ? 'checked' : ''}>
                                 <span style="font-size: 13px;">${i18n('hideNoTodayGroups')}</span>
                             </label>
                         </div>
@@ -833,20 +915,21 @@ export class ProjectKanbanView {
         const groupsContainer = dialog.element.querySelector('#groupsContainer') as HTMLElement;
         const hideNoDoingGroupCb = dialog.element.querySelector('#hideNoDoingGroupCb') as HTMLInputElement;
         const hideNoTodayGroupCb = dialog.element.querySelector('#hideNoTodayGroupCb') as HTMLInputElement;
+        this.manageGroupsHideNoDoingCheckbox = hideNoDoingGroupCb;
+        this.manageGroupsHideNoTodayCheckbox = hideNoTodayGroupCb;
+        this.syncGroupVisibilityCheckboxes();
 
         const updateFilters = async () => {
-            const projectData = await this.plugin.loadProjectData();
-            if (projectData[this.projectId]) {
-                projectData[this.projectId].hideNoDoingGroups = hideNoDoingGroupCb.checked;
-                projectData[this.projectId].hideNoTodayGroups = hideNoTodayGroupCb.checked;
-                await this.plugin.saveProjectData(projectData);
-                await this.loadProject();
-                this.queueLoadTasks(); // 刷新看板内容
-            }
+            await this.saveGroupVisibilitySettings(hideNoDoingGroupCb.checked, hideNoTodayGroupCb.checked);
+            this.queueLoadTasks(); // 刷新看板内容
         };
 
         hideNoDoingGroupCb.addEventListener('change', updateFilters);
         hideNoTodayGroupCb.addEventListener('change', updateFilters);
+        dialog.element.addEventListener('destroy', () => {
+            this.manageGroupsHideNoDoingCheckbox = null;
+            this.manageGroupsHideNoTodayCheckbox = null;
+        });
         const addGroupBtn = dialog.element.querySelector('#addGroupBtn') as HTMLButtonElement;
         const groupForm = dialog.element.querySelector('#groupForm') as HTMLElement;
         const formTitle = dialog.element.querySelector('#formTitle') as HTMLElement;
@@ -3886,6 +3969,24 @@ export class ProjectKanbanView {
             }
             await this.queueLoadTasks();
         }));
+
+        const shouldShowGroupVisibilitySettings = this.hasCustomGroups || this.hideNoDoingGroups || this.hideNoTodayGroups;
+        if (shouldShowGroupVisibilitySettings) {
+            const hideNoDoingItem = createSwitchItem(i18n("hideNoDoingGroups") || "隐藏无进行中任务的分组", this.hideNoDoingGroups, async (checked) => {
+                await this.saveGroupVisibilitySettings(checked, this.hideNoTodayGroups);
+                await this.queueLoadTasks();
+            });
+            this.displayHideNoDoingGroupsCheckbox = hideNoDoingItem.querySelector('input') as HTMLInputElement;
+            displaySettingsDropdown.appendChild(hideNoDoingItem);
+
+            const hideNoTodayItem = createSwitchItem(i18n("hideNoTodayGroups") || "隐藏无今日任务的分组", this.hideNoTodayGroups, async (checked) => {
+                await this.saveGroupVisibilitySettings(this.hideNoDoingGroups, checked);
+                await this.queueLoadTasks();
+            });
+            this.displayHideNoTodayGroupsCheckbox = hideNoTodayItem.querySelector('input') as HTMLInputElement;
+            displaySettingsDropdown.appendChild(hideNoTodayItem);
+            this.syncGroupVisibilityCheckboxes();
+        }
 
         // 自定义分组看板：页签显示模式
         displaySettingsDropdown.appendChild(createSwitchItem(i18n("customGroupTabsMode") || "分组看板使用页签显示", this.customGroupTabsMode, async (checked) => {
@@ -7268,35 +7369,16 @@ export class ProjectKanbanView {
                 groupStatusTasks[status.id] = statusTasks[status.id].filter(task => task.customGroupId === group.id);
             });
 
-            if (this.project?.hideNoDoingGroups) {
+            const groupTasks = Object.values(groupStatusTasks).flat();
+            const shouldDisplayGroup = this.shouldDisplayGroupBySettings(groupTasks, todayStr, {
                 // 分组隐藏了 doing 状态时，不参与“隐藏无进行中分组”判断
-                if (this.isStatusVisibleForGroup(group, 'doing')) {
-                    const doingTasks = groupStatusTasks['doing'] || [];
-                    if (doingTasks.length === 0) {
-                        const columnId = `custom-group-${group.id}`;
-                        const column = kanbanContainer.querySelector(`.kanban-column-${columnId}`);
-                        if (column) column.remove();
-                        return; // 隐藏没有进行中任务的分组
-                    }
-                }
-            }
-
-            if (this.project?.hideNoTodayGroups) {
-                let hasToday = false;
-                for (const statusId in groupStatusTasks) {
-                    if (groupStatusTasks[statusId].some(task => {
-                        return task.date && compareDateStrings(this.getTaskLogicalDate(task.date, task.time), todayStr) === 0;
-                    })) {
-                        hasToday = true;
-                        break;
-                    }
-                }
-                if (!hasToday) {
-                    const columnId = `custom-group-${group.id}`;
-                    const column = kanbanContainer.querySelector(`.kanban-column-${columnId}`);
-                    if (column) column.remove();
-                    return; // 隐藏没有今日任务的分组
-                }
+                skipDoingCheck: !this.isStatusVisibleForGroup(group, 'doing')
+            });
+            if (!shouldDisplayGroup) {
+                const columnId = `custom-group-${group.id}`;
+                const column = kanbanContainer.querySelector(`.kanban-column-${columnId}`);
+                if (column) column.remove();
+                return;
             }
 
             // 即使没有任务也要显示分组列
@@ -7321,26 +7403,9 @@ export class ProjectKanbanView {
             }
         });
 
-        if (this.project?.hideNoDoingGroups) {
-            const doingTasks = ungroupedStatusTasks['doing'] || [];
-            if (doingTasks.length === 0) {
-                hasUngrouped = false;
-            }
-        }
-
-        if (this.project?.hideNoTodayGroups && hasUngrouped) {
-            let hasToday = false;
-            for (const statusId in ungroupedStatusTasks) {
-                if (ungroupedStatusTasks[statusId].some(task => {
-                    return task.date && compareDateStrings(this.getTaskLogicalDate(task.date, task.time), todayStr) === 0;
-                })) {
-                    hasToday = true;
-                    break;
-                }
-            }
-            if (!hasToday) {
-                hasUngrouped = false;
-            }
+        if (hasUngrouped) {
+            const ungroupedTasks = Object.values(ungroupedStatusTasks).flat();
+            hasUngrouped = this.shouldDisplayGroupBySettings(ungroupedTasks, todayStr);
         }
 
         if (hasUngrouped) {
@@ -7660,28 +7725,11 @@ export class ProjectKanbanView {
                 groupStatusTasks[status.id] = (statusTasks[status.id] || []).filter(task => task.customGroupId === group.id);
             });
 
-            if (this.project?.hideNoDoingGroups) {
-                if (this.isStatusVisibleForGroup(group, 'doing')) {
-                    const doingTasks = groupStatusTasks['doing'] || [];
-                    if (doingTasks.length === 0) {
-                        return;
-                    }
-                }
-            }
-
-            if (this.project?.hideNoTodayGroups) {
-                let hasToday = false;
-                for (const statusId in groupStatusTasks) {
-                    if (groupStatusTasks[statusId].some(task => {
-                        return task.date && compareDateStrings(this.getTaskLogicalDate(task.date, task.time), todayStr) === 0;
-                    })) {
-                        hasToday = true;
-                        break;
-                    }
-                }
-                if (!hasToday) {
-                    return;
-                }
+            const groupTasks = Object.values(groupStatusTasks).flat();
+            if (!this.shouldDisplayGroupBySettings(groupTasks, todayStr, {
+                skipDoingCheck: !this.isStatusVisibleForGroup(group, 'doing')
+            })) {
+                return;
             }
 
             tabEntries.push({
@@ -7701,26 +7749,9 @@ export class ProjectKanbanView {
             }
         });
 
-        if (this.project?.hideNoDoingGroups) {
-            const doingTasks = ungroupedStatusTasks['doing'] || [];
-            if (doingTasks.length === 0) {
-                hasUngrouped = false;
-            }
-        }
-
-        if (this.project?.hideNoTodayGroups && hasUngrouped) {
-            let hasToday = false;
-            for (const statusId in ungroupedStatusTasks) {
-                if (ungroupedStatusTasks[statusId].some(task => {
-                    return task.date && compareDateStrings(this.getTaskLogicalDate(task.date, task.time), todayStr) === 0;
-                })) {
-                    hasToday = true;
-                    break;
-                }
-            }
-            if (!hasToday) {
-                hasUngrouped = false;
-            }
+        if (hasUngrouped) {
+            const ungroupedTasks = Object.values(ungroupedStatusTasks).flat();
+            hasUngrouped = this.shouldDisplayGroupBySettings(ungroupedTasks, todayStr);
         }
 
         if (hasUngrouped) {
@@ -8064,17 +8095,12 @@ export class ProjectKanbanView {
         let displayGroups = allActiveGroups;
         const todayStr = getLogicalDateString();
 
-        if (this.project?.hideNoDoingGroups) {
-            displayGroups = displayGroups.filter((g: any) => {
-                if (!this.isStatusVisibleForGroup(g, 'doing')) return true;
-                return this.tasks.some(task => task.customGroupId === g.id && !task.completed && this.getTaskStatus(task) === 'doing');
+        displayGroups = displayGroups.filter((g: any) => {
+            const groupTasks = this.tasks.filter(task => task.customGroupId === g.id);
+            return this.shouldDisplayGroupBySettings(groupTasks, todayStr, {
+                skipDoingCheck: !this.isStatusVisibleForGroup(g, 'doing')
             });
-        }
-        if (this.project?.hideNoTodayGroups) {
-            displayGroups = displayGroups.filter((g: any) => {
-                return this.tasks.some(task => task.customGroupId === g.id && task.date && compareDateStrings(this.getTaskLogicalDate(task.date, task.time), todayStr) === 0);
-            });
-        }
+        });
 
         // 获取对应的状态分组容器
         const groupContainer = groupsContainer.querySelector(`.status-stable-group[data-status="${status}"]`) as HTMLElement;
@@ -8123,13 +8149,8 @@ export class ProjectKanbanView {
             const ungroupedTasks = tasks.filter(task => !task.customGroupId || !validGroupIds.has(task.customGroupId));
             let showUngrouped = ungroupedTasks.length > 0;
 
-            if (showUngrouped && this.project?.hideNoDoingGroups) {
-                const hasDoing = this.tasks.some(task => (!task.customGroupId || !validGroupIds.has(task.customGroupId)) && !task.completed && this.getTaskStatus(task) === 'doing');
-                if (!hasDoing) showUngrouped = false;
-            }
-            if (showUngrouped && this.project?.hideNoTodayGroups) {
-                const hasToday = this.tasks.some(task => (!task.customGroupId || !validGroupIds.has(task.customGroupId)) && task.date && compareDateStrings(this.getTaskLogicalDate(task.date, task.time), todayStr) === 0);
-                if (!hasToday) showUngrouped = false;
+            if (showUngrouped) {
+                showUngrouped = this.shouldDisplayGroupBySettings(ungroupedTasks, todayStr);
             }
 
             if (showUngrouped) {
@@ -8328,16 +8349,10 @@ export class ProjectKanbanView {
         let displayGroups = [...groups].sort((a, b) => (a.sort || 0) - (b.sort || 0));
         const todayStr = getLogicalDateString();
 
-        if (this.project?.hideNoDoingGroups) {
-            displayGroups = displayGroups.filter((g: any) => {
-                return listVisibleTasks.some(task => task.customGroupId === g.id && !task.completed && this.getTaskStatus(task) === 'doing');
-            });
-        }
-        if (this.project?.hideNoTodayGroups) {
-            displayGroups = displayGroups.filter((g: any) => {
-                return listVisibleTasks.some(task => task.customGroupId === g.id && task.date && compareDateStrings(this.getTaskLogicalDate(task.date, task.time), todayStr) === 0);
-            });
-        }
+        displayGroups = displayGroups.filter((g: any) => {
+            const groupTasks = listVisibleTasks.filter(task => task.customGroupId === g.id);
+            return this.shouldDisplayGroupBySettings(groupTasks, todayStr);
+        });
 
         const tabEntries: Array<{ group: any; tasks: any[] }> = [];
         displayGroups.forEach(group => {
@@ -8348,13 +8363,8 @@ export class ProjectKanbanView {
         });
 
         let showUngrouped = ungroupedTasks.length > 0;
-        if (showUngrouped && this.project?.hideNoDoingGroups) {
-            const hasDoing = listVisibleTasks.some(task => (!task.customGroupId || !validGroupIds.has(task.customGroupId)) && !task.completed && this.getTaskStatus(task) === 'doing');
-            if (!hasDoing) showUngrouped = false;
-        }
-        if (showUngrouped && this.project?.hideNoTodayGroups) {
-            const hasToday = listVisibleTasks.some(task => (!task.customGroupId || !validGroupIds.has(task.customGroupId)) && task.date && compareDateStrings(this.getTaskLogicalDate(task.date, task.time), todayStr) === 0);
-            if (!hasToday) showUngrouped = false;
+        if (showUngrouped) {
+            showUngrouped = this.shouldDisplayGroupBySettings(ungroupedTasks, todayStr);
         }
         if (showUngrouped) {
             tabEntries.push({
@@ -8454,16 +8464,10 @@ export class ProjectKanbanView {
         let displayGroups = [...groups].sort((a, b) => (a.sort || 0) - (b.sort || 0));
         const todayStr = getLogicalDateString();
 
-        if (this.project?.hideNoDoingGroups) {
-            displayGroups = displayGroups.filter((g: any) => {
-                return listVisibleTasks.some(task => task.customGroupId === g.id && !task.completed && this.getTaskStatus(task) === 'doing');
-            });
-        }
-        if (this.project?.hideNoTodayGroups) {
-            displayGroups = displayGroups.filter((g: any) => {
-                return listVisibleTasks.some(task => task.customGroupId === g.id && task.date && compareDateStrings(this.getTaskLogicalDate(task.date, task.time), todayStr) === 0);
-            });
-        }
+        displayGroups = displayGroups.filter((g: any) => {
+            const groupTasks = listVisibleTasks.filter(task => task.customGroupId === g.id);
+            return this.shouldDisplayGroupBySettings(groupTasks, todayStr);
+        });
 
         // Use a set to track rendered group IDs to remove obsolete columns
         const renderedGroupIds = new Set<string>();
@@ -8476,14 +8480,8 @@ export class ProjectKanbanView {
         }
 
         let showUngrouped = ungroupedTasks.length > 0;
-
-        if (showUngrouped && this.project?.hideNoDoingGroups) {
-            const hasDoing = listVisibleTasks.some(task => (!task.customGroupId || !validGroupIds.has(task.customGroupId)) && !task.completed && this.getTaskStatus(task) === 'doing');
-            if (!hasDoing) showUngrouped = false;
-        }
-        if (showUngrouped && this.project?.hideNoTodayGroups) {
-            const hasToday = listVisibleTasks.some(task => (!task.customGroupId || !validGroupIds.has(task.customGroupId)) && task.date && compareDateStrings(this.getTaskLogicalDate(task.date, task.time), todayStr) === 0);
-            if (!hasToday) showUngrouped = false;
+        if (showUngrouped) {
+            showUngrouped = this.shouldDisplayGroupBySettings(ungroupedTasks, todayStr);
         }
 
         if (showUngrouped) {
