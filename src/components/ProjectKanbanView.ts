@@ -6874,18 +6874,6 @@ export class ProjectKanbanView {
         }
     }
 
-    private async ensurePriorityPrimarySortForManualReorder() {
-        if (this.isPriorityPrimarySort()) {
-            return;
-        }
-
-        const order = this.currentSortOrder === 'asc' ? 'asc' : 'desc';
-        const rest = this.getActiveSortCriteria().filter(c => c.method !== 'priority');
-        await this.saveKanbanSortConfig([{ method: 'priority', order }, ...rest]);
-        this.updateSortButtonTitle();
-        showMessage("已切换为手动操作排序模式");
-    }
-
     private updateSortButtonTitle() {
         if (this.sortButton) {
             const activeCriteria = this.getActiveSortCriteria();
@@ -16257,9 +16245,6 @@ export class ProjectKanbanView {
     }
 
     private async reorderTasks(draggedTask: any, targetTask: any, insertBefore: boolean): Promise<boolean> {
-        // 非优先级主排序时，拖拽会自动切换到优先级主排序
-        await this.ensurePriorityPrimarySortForManualReorder();
-
         try {
             const reminderData = await this.getReminders();
 
@@ -17384,67 +17369,19 @@ export class ProjectKanbanView {
                     targetPriority = targetTask.priority;
                 }
 
-                if (options.insertBefore) {
-                    // Insert before target task.
-                    // IMPORTANT: siblings must be sorted to match VISUAL order.
-                    // sortTasks logic:
-                    // DESC (default): Small sort value first -> sort by (a.sort - b.sort)
-                    // ASC: Large sort value first -> sort by (b.sort - a.sort)
-                    const siblings = this.tasks.filter(t =>
-                        this.getTaskStatus(t) === status &&
-                        (t.customGroupId || 'ungrouped') === (customGroupId || 'ungrouped')
-                    ).sort((a, b) => (this.currentSortOrder === 'asc' ? b.sort - a.sort : a.sort - b.sort));
-
-                    const targetIndex = siblings.findIndex(t => t.id === targetTask.id);
-                    if (targetIndex !== -1) {
-                        const targetSort = targetTask.sort;
-                        if (this.currentSortOrder === 'asc') {
-                            // In Priority-ASC mode, larger sort values actually appear visually BEFORE smaller ones.
-                            // So "Before" means LARGER.
-                            const prevTask = siblings[targetIndex - 1];
-                            const prevSort = prevTask ? prevTask.sort : targetSort + 2000;
-                            targetSortPercentage = (targetSort + prevSort) / 2;
-                        } else {
-                            // In Priority-DESC (default) mode, smaller sort values appear VISUALLY FIRST (on top).
-                            // So "Before" (above) means a SMALLER sort value. (Target - offset)
-                            const prevTask = siblings[targetIndex - 1]; // Visually above
-                            const prevSort = prevTask ? prevTask.sort : targetSort - 2000;
-                            targetSortPercentage = (targetSort + prevSort) / 2;
-                        }
-                        useSort = true;
-                    }
-                } else {
-                    // Insert After
-                    const siblings = this.tasks.filter(t =>
-                        this.getTaskStatus(t) === status &&
-                        (t.customGroupId || 'ungrouped') === (customGroupId || 'ungrouped')
-                    ).sort((a, b) => (this.currentSortOrder === 'asc' ? b.sort - a.sort : a.sort - b.sort));
-
-                    const targetIndex = siblings.findIndex(t => t.id === targetTask.id);
-                    if (targetIndex !== -1) {
-                        const targetSort = targetTask.sort;
-                        if (this.currentSortOrder === 'asc') {
-                            // In ASC, After means SMALLER
-                            const nextTask = siblings[targetIndex + 1];
-                            const nextSort = nextTask ? nextTask.sort : targetSort - 2000;
-                            targetSortPercentage = (targetSort + nextSort) / 2;
-                        } else {
-                            // In DESC (default), After (below) means LARGER sort value.
-                            const nextTask = siblings[targetIndex + 1];
-                            const nextSort = nextTask ? nextTask.sort : targetSort + 2000;
-                            targetSortPercentage = (targetSort + nextSort) / 2;
-                        }
-                        useSort = true;
-                    }
+                const reminderData = await this.getReminders();
+                const calculatedSort = this.calculateAdjacentInsertSort(targetTask, !!options.insertBefore, reminderData);
+                if (calculatedSort !== undefined) {
+                    targetSortPercentage = calculatedSort;
+                    useSort = true;
                 }
             }
 
             // Iterate and add/update
             // If multiple items, we need to distribute their sort values so they appear in order
             let currentSort = useSort ? targetSortPercentage : 0;
-            // In DESC (default): top=smaller, bottom=larger. To keep dropped items in order (1, 2, 3), 
-            // each subsequent item needs a LARGER sort value. So sortStep = +10.
-            const sortStep = (this.currentSortOrder === 'asc' ? -10 : 10); // Spacing
+            // sort 值始终按从小到大表示从前到后，拖拽/插入只修改 sort，不影响当前排序方式。
+            const sortStep = 10;
 
             // Reverse blockIds if we are inserting 'before' in DESC mode or 'after' in ASC mode?
             // Dragging multiple items usually keeps their relative order.
@@ -18118,8 +18055,6 @@ export class ProjectKanbanView {
     }
 
     private async batchReorderTasks(taskIds: string[], targetTask: any, insertBefore: boolean): Promise<boolean> {
-        // 非优先级主排序时，拖拽会自动切换到优先级主排序
-        await this.ensurePriorityPrimarySortForManualReorder();
         try {
             const reminderData = await this.getReminders();
             const blocksToUpdate = new Set<string>();
