@@ -367,6 +367,11 @@
     "pomodoroLongBreakIntervalDesc": "Set how many pomodoros before automatically entering long break mode, default 4 pomodoros",
     "pomodoroAutoMode": "Auto Pomodoro Mode",
     "pomodoroAutoModeDesc": "(For countdown pomodoro only) When enabled, work timer automatically enters break timer after completion, break automatically starts work timer, and automatically enters long break mode based on set interval",
+    "pomodoroMiniWindowStyle": "Mini Window Style",
+    "pomodoroMiniWindowStyleDesc": "Choose the display style for the pomodoro mini window: ring, horizontal progress bar, or minimal progress bar",
+    "pomodoroMiniWindowStyleRing": "Ring",
+    "pomodoroMiniWindowStyleHorizontal": "Horizontal Progress Bar",
+    "pomodoroMiniWindowStyleMinimal": "Minimal Progress Bar",
     "dailyFocusGoal": "Daily Focus Goal (hours)",
     "dailyFocusGoalDesc": "Set daily focus goal duration (hours), 0 means no progress display",
     "workVolume": "Work Background Volume",
@@ -2039,5 +2044,6 @@
     "multiSelect": "Multi Select",
     "refreshSuccess": "Refresh successfully",
     "globalKanbanStatuses": "Set Global Kanban Statuses",
+    "globalKanbanStatusesDesc": "Configure the default status columns used by project kanban boards for new projects or projects without custom statuses",
     "task": "Tasks"
 }

@@ -40,6 +40,11 @@ export class PomodoroTimer {
     private minimizedBg: HTMLElement;
     private minimizedOverlay: HTMLElement;
     private restoreBtn: HTMLElement;
+    private minimizedModeBtn: HTMLElement;
+    private minimizedTimeDisplay: HTMLElement;
+    private minimizedProgressFill: HTMLElement;
+    private minimizedPlayPauseBtn: HTMLElement;
+    private minimizedStopBtn: HTMLElement;
     private fullscreenBtn: HTMLElement; // 新增：全屏模式按钮
     private exitFullscreenBtn: HTMLElement; // 新增：退出全屏按钮
     private plugin: any; // 插件实例引用，用于调用插件方法
@@ -3582,6 +3587,17 @@ export class PomodoroTimer {
             justify-content: center;
         `;
 
+        const miniCard = document.createElement('div');
+        miniCard.className = 'pomodoro-minimized-card';
+        miniCard.style.cssText = `
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        `;
+
         // 进度背景
         this.minimizedBg = document.createElement('div');
         this.minimizedBg.className = 'pomodoro-minimized-bg';
@@ -3626,21 +3642,142 @@ export class PomodoroTimer {
         `;
         this.minimizedIcon.innerHTML = '🍅';
 
+        this.minimizedModeBtn = document.createElement('button');
+        this.minimizedModeBtn.className = 'pomodoro-minimized-mode-btn';
+        this.minimizedModeBtn.style.cssText = `
+            display: none;
+            position: relative;
+            z-index: 2;
+            border: none;
+            background: transparent;
+            color: var(--b3-theme-on-surface);
+            cursor: pointer;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+        `;
+        this.minimizedModeBtn.innerHTML = '🍅';
+        this.minimizedModeBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.toggleSwitchMenu();
+        });
+
+        const minimizedBarLayout = document.createElement('div');
+        minimizedBarLayout.className = 'pomodoro-minimized-bar-layout';
+        minimizedBarLayout.style.cssText = `
+            display: none;
+            width: 100%;
+            height: 100%;
+            align-items: center;
+            position: relative;
+            z-index: 2;
+        `;
+
+        const minimizedInfo = document.createElement('div');
+        minimizedInfo.className = 'pomodoro-minimized-info';
+        minimizedInfo.style.cssText = `
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            flex: 1;
+        `;
+
+        const minimizedTopRow = document.createElement('div');
+        minimizedTopRow.className = 'pomodoro-minimized-top-row';
+        minimizedTopRow.style.cssText = `
+            display: flex;
+            align-items: center;
+            min-width: 0;
+        `;
+
+        this.minimizedTimeDisplay = document.createElement('div');
+        this.minimizedTimeDisplay.className = 'pomodoro-minimized-time';
+        this.minimizedTimeDisplay.style.cssText = `
+            min-width: 0;
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+        `;
+
+        const minimizedActions = document.createElement('div');
+        minimizedActions.className = 'pomodoro-minimized-actions';
+        minimizedActions.style.cssText = `
+            display: flex;
+            align-items: center;
+        `;
+
+        this.minimizedPlayPauseBtn = document.createElement('button');
+        this.minimizedPlayPauseBtn.className = 'pomodoro-minimized-action-btn pomodoro-minimized-play-btn';
+        this.minimizedPlayPauseBtn.style.cssText = `
+            border: none;
+            background: rgba(255,255,255,0.92);
+            color: #2f2f2f;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        `;
+        this.minimizedPlayPauseBtn.innerHTML = '▶️';
+        this.minimizedPlayPauseBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.toggleTimer();
+        });
+
+        this.minimizedStopBtn = document.createElement('button');
+        this.minimizedStopBtn.className = 'pomodoro-minimized-action-btn pomodoro-minimized-stop-btn';
+        this.minimizedStopBtn.style.cssText = `
+            border: none;
+            background: rgba(255,255,255,0.92);
+            color: #2f2f2f;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        `;
+        this.minimizedStopBtn.innerHTML = '⏹';
+        this.minimizedStopBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.resetTimer();
+        });
+
+        const minimizedProgressTrack = document.createElement('div');
+        minimizedProgressTrack.className = 'pomodoro-minimized-progress-track';
+        minimizedProgressTrack.style.cssText = `
+            width: 100%;
+            overflow: hidden;
+            position: relative;
+        `;
+        this.minimizedProgressFill = document.createElement('div');
+        this.minimizedProgressFill.className = 'pomodoro-minimized-progress-fill';
+        this.minimizedProgressFill.style.cssText = `
+            width: 0%;
+            height: 100%;
+            transition: width 0.3s ease, background-color 0.3s ease;
+        `;
+        minimizedProgressTrack.appendChild(this.minimizedProgressFill);
+
+        minimizedActions.appendChild(this.minimizedPlayPauseBtn);
+        minimizedActions.appendChild(this.minimizedStopBtn);
+        minimizedTopRow.appendChild(this.minimizedTimeDisplay);
+        minimizedTopRow.appendChild(minimizedActions);
+        minimizedInfo.appendChild(minimizedTopRow);
+        minimizedInfo.appendChild(minimizedProgressTrack);
+        minimizedBarLayout.appendChild(this.minimizedModeBtn);
+        minimizedBarLayout.appendChild(minimizedInfo);
+
         // 恢复按钮
         this.restoreBtn = document.createElement('button');
         this.restoreBtn.className = 'pomodoro-restore-btn';
         this.restoreBtn.style.cssText = `
             position: absolute;
-            top: 25px;
-            right: 21px;
-            width: 15px;
-            height: 15px;
             background: var(--b3-theme-primary);
             color: #fff;
             border: none;
             border-radius: 50%;
             cursor: pointer;
-            font-size: 10px;
             display: none;
             align-items: center;
             justify-content: center;
@@ -3666,10 +3803,12 @@ export class PomodoroTimer {
             this.restoreBtn.style.transform = 'scale(1)';
         });
 
-        this.minimizedView.appendChild(this.minimizedBg);
-        this.minimizedView.appendChild(this.minimizedOverlay);
-        this.minimizedView.appendChild(this.minimizedIcon);
-        this.minimizedView.appendChild(this.restoreBtn);
+        miniCard.appendChild(this.minimizedBg);
+        miniCard.appendChild(this.minimizedOverlay);
+        miniCard.appendChild(this.minimizedIcon);
+        miniCard.appendChild(minimizedBarLayout);
+        miniCard.appendChild(this.restoreBtn);
+        this.minimizedView.appendChild(miniCard);
 
         // 最小化视图悬停时显示恢复按钮
         this.minimizedView.addEventListener('mouseenter', () => {
@@ -3681,7 +3820,8 @@ export class PomodoroTimer {
 
         // 为最小化视图添加拖拽支持
         this.minimizedView.addEventListener('mousedown', (e) => {
-            if (e.target !== this.restoreBtn && !this.restoreBtn.contains(e.target as Node)) {
+            const target = e.target as Element;
+            if (!target.closest('button') && !target.closest('.pomodoro-switch-menu')) {
                 // 触发容器的拖拽，因为最小化视图在容器内部
                 const mousedownEvent = new MouseEvent('mousedown', {
                     bubbles: true,
@@ -3704,15 +3844,22 @@ export class PomodoroTimer {
 
     private minimize() {
         this.isMinimized = true;
+        this.applyDomMinimizedStyle();
+        const miniStyle = this.getMiniWindowStyle();
 
         // 添加最小化动画类
-        this.container.classList.add('minimizing');
+        if (miniStyle === 'ring') {
+            this.container.classList.add('minimizing');
 
-        setTimeout(() => {
-            this.container.classList.remove('minimizing');
+            setTimeout(() => {
+                this.container.classList.remove('minimizing');
+                this.container.classList.add('minimized');
+                this.updateMinimizedDisplay();
+            }, 300);
+        } else {
             this.container.classList.add('minimized');
             this.updateMinimizedDisplay();
-        }, 300);
+        }
     }
 
     private restore() {
@@ -3720,6 +3867,8 @@ export class PomodoroTimer {
 
         // 添加展开动画类
         this.container.classList.remove('minimized');
+        this.container.classList.remove('minimized-style-ring', 'minimized-style-horizontal', 'minimized-style-minimal');
+        this.hideSwitchMenu(true);
 
         setTimeout(() => {
             // 恢复时不显示统计数据
@@ -3733,38 +3882,10 @@ export class PomodoroTimer {
 
     private updateMinimizedDisplay() {
         if (!this.isMinimized) return;
+        this.applyDomMinimizedStyle();
 
         // 计算进度
-        let progress = 0;
-        let color = '#FF6B6B'; // 默认工作时间颜色
-
-        if (this.isCountUp) {
-            if (this.isWorkPhase) {
-                // 正计时工作时间：显示当前番茄的进度
-                const pomodoroLength = this.settings.workDuration * 60;
-                const currentCycleTime = this.timeElapsed % pomodoroLength;
-                progress = currentCycleTime / pomodoroLength;
-                color = '#FF6B6B';
-            } else {
-                // 正计时休息时间：显示休息进度
-                const totalBreakTime = this.isLongBreak ?
-                    this.settings.longBreakDuration * 60 :
-                    this.settings.breakDuration * 60;
-                progress = (totalBreakTime - this.breakTimeLeft) / totalBreakTime;
-                color = this.isLongBreak ? '#9C27B0' : '#4CAF50';
-            }
-        } else {
-            // 倒计时模式：显示完成进度
-            progress = (this.totalTime - this.timeLeft) / this.totalTime;
-            if (this.isWorkPhase) {
-                color = '#FF6B6B';
-            } else {
-                color = this.isLongBreak ? '#9C27B0' : '#4CAF50';
-            }
-        }
-
-        // 确保进度在0-1范围内
-        progress = Math.max(0, Math.min(1, progress));
+        const { progress, color, icon, timeText } = this.getDomMinimizedState();
 
         // 转换为角度（360度 = 100%进度）
         const angle = progress * 360;
@@ -3772,21 +3893,40 @@ export class PomodoroTimer {
         // 更新CSS变量
         this.minimizedBg.style.setProperty('--progress-color', color);
         this.minimizedBg.style.setProperty('--progress-angle', `${angle}deg`);
+        if (this.minimizedProgressFill) {
+            this.minimizedProgressFill.style.width = `${progress * 100}%`;
+            this.minimizedProgressFill.style.backgroundColor = color;
+        }
 
-        // 更新图标
-        if (this.isWorkPhase) {
-            this.minimizedIcon.innerHTML = this.isCountUp ? '⏱️' : '🍅';
-        } else {
-            this.minimizedIcon.innerHTML = this.isLongBreak ? '🧘' : '🍵';
+        if (this.minimizedIcon) {
+            this.minimizedIcon.innerHTML = icon;
+        }
+        if (this.minimizedModeBtn) {
+            this.minimizedModeBtn.innerHTML = icon;
+        }
+        if (this.minimizedTimeDisplay) {
+            this.minimizedTimeDisplay.textContent = timeText;
+        }
+        if (this.minimizedPlayPauseBtn) {
+            this.minimizedPlayPauseBtn.innerHTML = this.isRunning && !this.isPaused ? '⏸' : '▶️';
+        }
+        if (this.minimizedStopBtn) {
+            this.minimizedStopBtn.style.display = this.isRunning && this.isPaused ? 'inline-flex' : 'none';
         }
     }
 
     private makeDraggable(handle: HTMLElement) {
         let isDragging = false;
+        let isTouchDragging = false;
         let currentX = 0;
         let currentY = 0;
         let initialX = 0;
         let initialY = 0;
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let touchDragTimer: number | null = null;
+        const TOUCH_LONG_PRESS_DELAY = 380;
+        const TOUCH_MOVE_CANCEL_THRESHOLD = 10;
 
         const startDrag = (e: MouseEvent) => {
             // 如果点击的是恢复按钮，不触发拖拽
@@ -3794,8 +3934,11 @@ export class PomodoroTimer {
                 return;
             }
 
-            // 如果是最小化视图或非按钮区域，允许拖拽
-            if (this.isMinimized || !(e.target as Element).closest('button')) {
+            const targetElement = e.target as Element;
+            const isInteractiveTarget = !!targetElement.closest('button') || !!targetElement.closest('.pomodoro-switch-menu');
+
+            // 如果是最小化视图中的非交互区域，或普通模式中的非按钮区域，允许拖拽
+            if ((this.isMinimized && !isInteractiveTarget) || (!this.isMinimized && !targetElement.closest('button'))) {
                 e.preventDefault();
                 isDragging = true;
 
@@ -3823,11 +3966,121 @@ export class PomodoroTimer {
             }
         };
 
+        const getTouchTarget = (touchEvent: TouchEvent): Element | null => {
+            const touch = touchEvent.touches[0] || touchEvent.changedTouches[0];
+            if (!touch) return null;
+            return document.elementFromPoint(touch.clientX, touch.clientY);
+        };
+
+        const shouldAllowTouchDrag = (touchEvent: TouchEvent): boolean => {
+            if (!touchEvent.touches.length) return false;
+
+            const targetElement = (touchEvent.target as Element) || getTouchTarget(touchEvent);
+            if (!targetElement) return false;
+
+            if (targetElement === this.restoreBtn || this.restoreBtn?.contains(targetElement)) {
+                return false;
+            }
+
+            const isInteractiveTarget = !!targetElement.closest('button') || !!targetElement.closest('.pomodoro-switch-menu');
+            return (this.isMinimized && !isInteractiveTarget) || (!this.isMinimized && !targetElement.closest('button'));
+        };
+
+        const clearTouchDragTimer = () => {
+            if (touchDragTimer !== null) {
+                window.clearTimeout(touchDragTimer);
+                touchDragTimer = null;
+            }
+        };
+
+        const startTouchDrag = (touchEvent: TouchEvent) => {
+            if (!shouldAllowTouchDrag(touchEvent)) {
+                return;
+            }
+
+            const touch = touchEvent.touches[0];
+            if (!touch) return;
+
+            isDragging = true;
+            isTouchDragging = true;
+
+            const rect = this.container.getBoundingClientRect();
+            initialX = touch.clientX - rect.left;
+            initialY = touch.clientY - rect.top;
+
+            this.container.style.transition = 'none';
+            this.container.style.pointerEvents = 'auto';
+            this.restoreBtn.style.pointerEvents = 'auto';
+
+            document.addEventListener('touchmove', dragTouch, { passive: false });
+            document.addEventListener('touchend', stopTouchDrag);
+            document.addEventListener('touchcancel', stopTouchDrag);
+        };
+
+        const scheduleTouchDrag = (touchEvent: TouchEvent) => {
+            if (!shouldAllowTouchDrag(touchEvent)) {
+                clearTouchDragTimer();
+                return;
+            }
+
+            const touch = touchEvent.touches[0];
+            if (!touch) return;
+
+            touchStartX = touch.clientX;
+            touchStartY = touch.clientY;
+            clearTouchDragTimer();
+            touchDragTimer = window.setTimeout(() => {
+                startTouchDrag(touchEvent);
+            }, TOUCH_LONG_PRESS_DELAY);
+        };
+
         // 为头部和容器都添加拖拽监听
         handle.addEventListener('mousedown', startDrag);
         this.container.addEventListener('mousedown', (e) => {
             if (this.isMinimized) {
                 startDrag(e);
+            }
+        });
+        handle.addEventListener('touchstart', (e) => {
+            scheduleTouchDrag(e);
+        }, { passive: true });
+        handle.addEventListener('touchmove', (e) => {
+            if (!touchDragTimer || !e.touches.length || isTouchDragging) return;
+            const touch = e.touches[0];
+            const moved = Math.hypot(touch.clientX - touchStartX, touch.clientY - touchStartY);
+            if (moved > TOUCH_MOVE_CANCEL_THRESHOLD) {
+                clearTouchDragTimer();
+            }
+        }, { passive: true });
+        handle.addEventListener('touchend', () => {
+            if (!isTouchDragging) {
+                clearTouchDragTimer();
+            }
+        });
+        handle.addEventListener('touchcancel', () => {
+            clearTouchDragTimer();
+        });
+        this.container.addEventListener('touchstart', (e) => {
+            if (this.isMinimized) {
+                scheduleTouchDrag(e);
+            }
+        }, { passive: true });
+        this.container.addEventListener('touchmove', (e) => {
+            if (!this.isMinimized || !touchDragTimer || !e.touches.length || isTouchDragging) return;
+            const touch = e.touches[0];
+            const moved = Math.hypot(touch.clientX - touchStartX, touch.clientY - touchStartY);
+            if (moved > TOUCH_MOVE_CANCEL_THRESHOLD) {
+                clearTouchDragTimer();
+            }
+        }, { passive: true });
+        this.container.addEventListener('touchend', () => {
+            if (this.isMinimized && !isTouchDragging) {
+                clearTouchDragTimer();
+            }
+        });
+        this.container.addEventListener('touchcancel', () => {
+            if (this.isMinimized) {
+                clearTouchDragTimer();
             }
         });
 
@@ -3851,13 +4104,48 @@ export class PomodoroTimer {
             this.container.style.bottom = 'auto';
         };
 
+        const dragTouch = (e: TouchEvent) => {
+            if (!isDragging || !isTouchDragging || !e.touches.length) return;
+
+            e.preventDefault();
+            const touch = e.touches[0];
+            currentX = touch.clientX - initialX;
+            currentY = touch.clientY - initialY;
+
+            const maxX = window.innerWidth - this.container.offsetWidth;
+            const maxY = window.innerHeight - this.container.offsetHeight;
+
+            currentX = Math.max(0, Math.min(currentX, maxX));
+            currentY = Math.max(0, Math.min(currentY, maxY));
+
+            this.container.style.left = currentX + 'px';
+            this.container.style.top = currentY + 'px';
+            this.container.style.right = 'auto';
+            this.container.style.bottom = 'auto';
+        };
+
         const stopDrag = () => {
             isDragging = false;
+            isTouchDragging = false;
             this.container.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
             this.container.style.pointerEvents = 'auto';
 
             document.removeEventListener('mousemove', drag);
             document.removeEventListener('mouseup', stopDrag);
+            clearTouchDragTimer();
+        };
+
+        const stopTouchDrag = () => {
+            if (!isTouchDragging && !touchDragTimer) return;
+            isDragging = false;
+            isTouchDragging = false;
+            this.container.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
+            this.container.style.pointerEvents = 'auto';
+
+            document.removeEventListener('touchmove', dragTouch);
+            document.removeEventListener('touchend', stopTouchDrag);
+            document.removeEventListener('touchcancel', stopTouchDrag);
+            clearTouchDragTimer();
         };
     }
 
@@ -3926,7 +4214,8 @@ export class PomodoroTimer {
      * 显示切换菜单
      */
     private showSwitchMenu() {
-        if (!this.switchMenu || !this.mainSwitchBtn) return;
+        const anchorBtn = this.isMinimized && this.minimizedModeBtn ? this.minimizedModeBtn : this.mainSwitchBtn;
+        if (!this.switchMenu || !anchorBtn) return;
 
         if (this.switchMenuHideTimer) {
             window.clearTimeout(this.switchMenuHideTimer);
@@ -3968,10 +4257,11 @@ export class PomodoroTimer {
     }
 
     private updateSwitchMenuPosition() {
-        if (!this.switchMenu || !this.mainSwitchBtn) return;
+        const anchorBtn = this.isMinimized && this.minimizedModeBtn ? this.minimizedModeBtn : this.mainSwitchBtn;
+        if (!this.switchMenu || !anchorBtn) return;
         if (this.switchMenu.style.display !== 'flex') return;
 
-        const buttonRect = this.mainSwitchBtn.getBoundingClientRect();
+        const buttonRect = anchorBtn.getBoundingClientRect();
         const menuRect = this.switchMenu.getBoundingClientRect();
         const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
         const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
@@ -7165,10 +7455,10 @@ export class PomodoroTimer {
                 transparent = true;
                 backgroundColor = '#00000000';
             } else if (this.isMiniMode) {
-                // 迷你模式：设置为小圆形窗口
-                const miniSize = this.resolveMiniWindowSize(this.inheritedWindowBounds);
-                winWidth = miniSize;
-                winHeight = miniSize;
+                // 迷你模式：根据样式设置窗口尺寸
+                const miniBounds = this.resolveMiniWindowBounds(this.inheritedWindowBounds);
+                winWidth = miniBounds.width;
+                winHeight = miniBounds.height;
                 // 如果有继承的窗口位置，使用它；否则使用默认位置
                 if (this.inheritedWindowBounds) {
                     x = this.inheritedWindowBounds.x;
@@ -7334,10 +7624,7 @@ export class PomodoroTimer {
                 // 如果继承了迷你模式状态，应用迷你模式设置
                 if (this.isMiniMode) {
                     console.log('[PomodoroTimer] 应用继承的迷你模式设置');
-                    const miniSize = this.resolveMiniWindowSize(this.inheritedWindowBounds || pomodoroWindow.getBounds());
-                    pomodoroWindow.setSize(miniSize, miniSize);
-                    pomodoroWindow.setResizable(true);
-                    pomodoroWindow.setAspectRatio(1);
+                    this.applyMiniWindowBounds(pomodoroWindow, this.inheritedWindowBounds || pomodoroWindow.getBounds());
 
                     // 添加迷你模式样式
                     setTimeout(() => {
@@ -7851,6 +8138,12 @@ document.body.classList.remove('docked-mode');
         } else {
             initialStatusIcon = currentState.isCountUp ? '⏱' : '🍅';
         }
+        const miniStyle = this.getMiniWindowStyle();
+        const switchToCountdownText = i18n('switchToCountdown') || '切换到倒计时';
+        const switchToCountUpText = i18n('switchToCountUp') || '切换到正计时';
+        const workText = i18n('pomodoroWork') || '工作时间';
+        const shortBreakText = i18n('pomodoroBreak') || '短时休息';
+        const longBreakText = i18n('pomodoroLongBreak') || '长时休息';
 
         return `<!DOCTYPE html>
 <html>
@@ -8058,86 +8351,333 @@ document.body.classList.remove('docked-mode');
         .stat-value { font-size: clamp(14px, 3.5vmin, 2.8vh); font-weight: 600; color: #FF6B6B; }
         
         /* 迷你模式样式 */
+        .mini-layout,
+        .mini-switch-menu {
+            display: none;
+        }
+        :root {
+            --mini-w: 320px;
+            --mini-h: 80px;
+            --mini-base: 80px;
+        }
+        .mini-restore-btn,
+        .mini-emoji-btn,
+        .mini-action-btn,
+        .mini-switch-menu {
+            -webkit-app-region: no-drag;
+        }
+        .mini-restore-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 26px;
+            height: 26px;
+            border: none;
+            border-radius: 50%;
+            background: var(--b3-theme-primary, #4CAF50);
+            color: #fff;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+            z-index: 30;
+            font-size: 15px;
+            transition: transform 0.18s ease, background 0.18s ease;
+        }
+        .mini-restore-btn:hover {
+            background: var(--b3-theme-primary-light, #66BB6A);
+            transform: scale(1.06);
+        }
+        .mini-switch-menu {
+            position: absolute;
+            top: 54px;
+            left: 12px;
+            min-width: 150px;
+            padding: 6px;
+            border-radius: 12px;
+            border: 1px solid ${borderColor};
+            background: ${surfaceColor};
+            box-shadow: 0 18px 36px rgba(15, 23, 42, 0.2);
+            flex-direction: column;
+            gap: 4px;
+            z-index: 40;
+        }
+        .mini-switch-menu.show {
+            display: flex;
+        }
+        .mini-switch-item {
+            border: none;
+            background: transparent;
+            color: ${textColor};
+            font-family: inherit;
+            font-size: 12px;
+            text-align: left;
+            border-radius: 9px;
+            padding: 8px 10px;
+            cursor: pointer;
+            transition: background 0.18s ease;
+        }
+        .mini-switch-item:hover {
+            background: ${hoverColor};
+        }
+        .mini-emoji-btn {
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: ${textColor};
+        }
+        .mini-action-btn {
+            border: none;
+            background: rgba(255, 255, 255, 0.92);
+            color: #2f2f2f;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 8px 16px rgba(15, 23, 42, 0.12);
+            transition: transform 0.18s ease, background 0.18s ease, opacity 0.18s ease;
+        }
+        .mini-action-btn:hover {
+            transform: translateY(-1px);
+            background: #fff;
+        }
+        .mini-action-btn.is-hidden {
+            display: none !important;
+        }
+        .mini-progress-track {
+            width: 100%;
+            position: relative;
+            display: block;
+            flex-shrink: 0;
+            border-radius: 999px;
+            overflow: hidden;
+            background: ${backgroundLightColor};
+        }
+        .mini-progress-fill {
+            display: block;
+            width: 0%;
+            height: 100%;
+            border-radius: inherit;
+            background: #FF6B6B;
+            transition: width 0.3s ease, background-color 0.3s ease;
+        }
+        .mini-bar-center,
+        .mini-bar-actions,
+        .mini-minimal-actions {
+            display: none;
+        }
         body.mini-mode .custom-titlebar { display: none; }
-        body.mini-mode .pomodoro-content { 
+        body.mini-mode .pomodoro-content {
             -webkit-app-region: drag;
-            padding: 0; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             cursor: move;
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+        body.mini-mode .mini-restore-btn {
+            display: flex;
         }
         body.mini-mode .pomodoro-event-title,
         body.mini-mode .time-info,
-        body.mini-mode .pomodoro-stats { display: none; }
-        body.mini-mode .pomodoro-main-container { 
-            -webkit-app-region: drag;
-            margin: 0; 
+        body.mini-mode .pomodoro-stats {
+            display: none;
         }
-        body.mini-mode .progress-container { 
+        body.mini-mode.mini-style-ring .pomodoro-main-container {
             -webkit-app-region: drag;
-            width: calc(100vw - 4px); 
-            height: calc(100vh - 4px); 
+            margin: 0;
+        }
+        body.mini-mode.mini-style-ring .progress-container {
+            -webkit-app-region: drag;
+            width: calc(100vw - 4px);
+            height: calc(100vh - 4px);
             max-width: calc(100vh - 4px);
             max-height: calc(100vw - 4px);
             cursor: move;
             overflow: hidden;
         }
-        body.mini-mode .progress-ring,
-        body.mini-mode .progress-ring-bg,
-        body.mini-mode .progress-ring-circle {
+        body.mini-mode.mini-style-ring .progress-ring,
+        body.mini-mode.mini-style-ring .progress-ring-bg,
+        body.mini-mode.mini-style-ring .progress-ring-circle {
             -webkit-app-region: drag;
             pointer-events: none;
         }
-        /* mini 模式下：emoji 和按钮区域不可拖动，其他区域可拖动 */
-        body.mini-mode .pomodoro-status-icon { 
+        body.mini-mode.mini-style-ring .pomodoro-status-icon {
             -webkit-app-region: no-drag;
             font-size: 35vmin;
             cursor: pointer;
         }
-        body.mini-mode .control-buttons {
+        body.mini-mode.mini-style-ring .control-buttons {
             -webkit-app-region: no-drag;
         }
-        body.mini-mode .circle-control-btn { 
+        body.mini-mode.mini-style-ring .circle-control-btn {
             -webkit-app-region: no-drag;
-            width: 45vmin; 
+            width: 45vmin;
             height: 45vmin;
             font-size: 20vmin;
         }
-        .mini-restore-btn {
-            -webkit-app-region: no-drag;
-            position: absolute;
-            background: var(--b3-theme-primary, #4CAF50);
-            color: #fff;
-            border: none;
-            border-radius: 50%;
-            cursor: pointer;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            line-height: 1;
-            flex-shrink: 0;
-            box-sizing: border-box;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-            transform-origin: top right;
-            z-index: 100;
-            transition: none;
-        }
-        /* mini 模式下始终显示恢复按钮 */
-        body.mini-mode .mini-restore-btn {
+        body.mini-mode.mini-style-ring .mini-restore-btn {
             position: fixed;
             top: 6vh;
             right: 6vw;
             width: clamp(10px, 13vmin, 130px);
             height: clamp(10px, 13vmin, 130px);
             font-size: clamp(8px, 11vmin, 110px);
-            aspect-ratio: 1 / 1;
-            display: flex;
-            opacity: 1;
         }
-        .mini-restore-btn:hover {
-            background: var(--b3-theme-primary-light, #66BB6A);
-            transform: scale(1.05);
+        body.mini-mode:not(.mini-style-ring) .pomodoro-main-container {
+            display: none;
+        }
+        body.mini-mode:not(.mini-style-ring) .mini-layout {
+            display: flex;
+            position: relative;
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        body.mini-mode.mini-style-bar .mini-card {
+            width: 100%;
+            height: 100%;
+            box-sizing: border-box;
+            overflow: hidden;
+            border-radius: clamp(10px, 2vh, 14px);
+            background: linear-gradient(135deg, ${surfaceColor}, ${bgColor});
+            border: none;
+            box-shadow: 0 14px 32px rgba(15, 23, 42, 0.18);
+            display: flex;
+            align-items: center;
+            padding: clamp(4px, 0.9vh, 7px) clamp(8px, 1.3vw, 12px);
+            gap: clamp(6px, 1vw, 10px);
+            position: relative;
+        }
+        body.mini-mode.mini-style-bar .mini-emoji-btn {
+            width: clamp(18px, calc(var(--mini-h) * 0.52), 32px);
+            height: clamp(18px, calc(var(--mini-h) * 0.52), 32px);
+            border-radius: clamp(5px, calc(var(--mini-h) * 0.16), 10px);
+            background: rgba(255, 255, 255, 0.48);
+            font-size: clamp(12px, calc(var(--mini-h) * 0.34), 18px);
+            flex-shrink: 0;
+        }
+        body.mini-mode.mini-style-bar .mini-bar-center {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: clamp(3px, 0.5vh, 4px);
+        }
+        body.mini-mode.mini-style-bar .mini-bar-header {
+            display: flex;
+            align-items: center;
+            gap: clamp(4px, calc(var(--mini-w) * 0.015), 10px);
+            min-width: 0;
+        }
+        body.mini-mode.mini-style-bar .mini-time-label {
+            flex: 0 0 auto;
+            font-size: clamp(10px, calc(var(--mini-h) * 0.4), 20px);
+            font-weight: 700;
+            line-height: 1;
+            letter-spacing: 0.2px;
+            color: ${textColor};
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+        }
+        body.mini-mode.mini-style-bar .mini-progress-track {
+            width: 100%;
+            height: clamp(3px, 0.5vh, 4px);
+        }
+        body.mini-mode.mini-style-bar .mini-bar-actions {
+            display: flex;
+            align-items: center;
+            gap: clamp(3px, calc(var(--mini-w) * 0.01), 6px);
+            flex-shrink: 0;
+            margin-left: 0;
+        }
+        body.mini-mode.mini-style-bar .mini-action-btn {
+            width: clamp(16px, calc(var(--mini-h) * 0.42), 24px);
+            height: clamp(16px, calc(var(--mini-h) * 0.42), 24px);
+            border-radius: clamp(4px, calc(var(--mini-h) * 0.12), 8px);
+            font-size: clamp(9px, calc(var(--mini-h) * 0.22), 13px);
+        }
+        body.mini-mode.mini-style-bar .mini-restore-btn {
+            top: 4px;
+            right: 4px;
+            width: clamp(16px, calc(var(--mini-h) * 0.38), 22px);
+            height: clamp(16px, calc(var(--mini-h) * 0.38), 22px);
+            font-size: clamp(9px, calc(var(--mini-h) * 0.2), 12px);
+        }
+        body.mini-mode.mini-style-minimal .mini-card {
+            width: 100%;
+            height: 100%;
+            box-sizing: border-box;
+            overflow: hidden;
+            border-radius: clamp(6px, 1.1vh, 8px);
+            background: transparent;
+            border: none;
+            box-shadow: none;
+            display: flex;
+            align-items: center;
+            gap: clamp(3px, 0.5vw, 4px);
+            padding: clamp(2px, 0.4vh, 3px) clamp(4px, 0.8vw, 6px);
+            position: relative;
+        }
+        body.mini-mode.mini-style-minimal {
+            background: transparent !important;
+        }
+        body.mini-mode.mini-style-minimal .mini-emoji-btn {
+            display: none;
+        }
+        body.mini-mode.mini-style-minimal .mini-bar-center {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            align-items: center;
+            gap: 0;
+            padding-top: clamp(6px, calc(var(--mini-h) * 0.32), 10px);
+        }
+        body.mini-mode.mini-style-minimal .mini-time-label {
+            display: none;
+        }
+        body.mini-mode.mini-style-minimal .mini-progress-track {
+            flex: 1;
+            width: 100%;
+            height: clamp(4px, calc(var(--mini-h) * 0.22), 6px);
+        }
+        body.mini-mode.mini-style-minimal .mini-minimal-actions {
+            display: flex;
+            position: absolute;
+            top: 1px;
+            left: 50%;
+            transform: translateX(-50%);
+            gap: clamp(2px, calc(var(--mini-w) * 0.012), 5px);
+            z-index: 2;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.18s ease;
+        }
+        body.mini-mode.mini-style-minimal .mini-layout:hover .mini-minimal-actions {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        body.mini-mode.mini-style-minimal .mini-action-btn {
+            width: clamp(9px, calc(var(--mini-h) * 0.5), 18px);
+            height: clamp(9px, calc(var(--mini-h) * 0.5), 18px);
+            border-radius: clamp(3px, calc(var(--mini-h) * 0.12), 6px);
+            font-size: clamp(7px, calc(var(--mini-h) * 0.22), 10px);
+        }
+        body.mini-mode.mini-style-minimal .mini-restore-btn {
+            top: 2px;
+            right: 2px;
+            width: clamp(10px, calc(var(--mini-h) * 0.45), 16px);
+            height: clamp(10px, calc(var(--mini-h) * 0.45), 16px);
+            font-size: clamp(6px, calc(var(--mini-h) * 0.18), 9px);
         }
         
         /* 吸附模式样式 */
@@ -8180,7 +8720,7 @@ document.body.classList.remove('docked-mode');
     </style>
 </head>
 </head>
-<body class="${this.isDocked ? 'docked-mode' : ''} ${this.isMiniMode ? 'mini-mode' : ''}">
+<body class="${this.isDocked ? 'docked-mode' : ''} ${this.isMiniMode ? `mini-mode mini-style-${miniStyle}` : ''}">
     <div class="custom-titlebar">
         <div class="titlebar-left">
             <button class="titlebar-btn" id="miniModeBtn" onclick="toggleMiniMode()" title="${miniModeTitle}">
@@ -8194,12 +8734,12 @@ document.body.classList.remove('docked-mode');
                     ⚙️
                 </button>
                 <div class="switch-menu" id="switchMenu">
-                    <button class="menu-item" onclick="callMethod('toggleMode')">
-                        ${currentState.isCountUp ? '🍅' : '⏱'} ${currentState.isCountUp ? (i18n('switchToCountdown') || '切换到倒计时') : (i18n('switchToCountUp') || '切换到正计时')}
+                    <button class="menu-item" id="switchModeMenuItem" onclick="callMethod('toggleMode')">
+                        ${currentState.isCountUp ? '🍅' : '⏱'} ${currentState.isCountUp ? switchToCountdownText : switchToCountUpText}
                     </button>
-                    <button class="menu-item" onclick="callMethod('startWorkTime')">💪 ${i18n('pomodoroWork') || '工作时间'}</button>
-                    <button class="menu-item" onclick="callMethod('startShortBreak')">🍵 ${i18n('pomodoroBreak') || '短时休息'}</button>
-                    <button class="menu-item" onclick="callMethod('startLongBreak')">🧘 ${i18n('pomodoroLongBreak') || '长时休息'}</button>
+                    <button class="menu-item" onclick="callMethod('startWorkTime')">💪 ${workText}</button>
+                    <button class="menu-item" onclick="callMethod('startShortBreak')">🍵 ${shortBreakText}</button>
+                    <button class="menu-item" onclick="callMethod('startLongBreak')">🧘 ${longBreakText}</button>
                 </div>
             </div>
         </div>
@@ -8226,9 +8766,9 @@ document.body.classList.remove('docked-mode');
                     <circle class="progress-ring-circle" id="progressCircle" cx="40" cy="40" r="36"></circle>
                 </svg>
                 <div class="center-content" ondblclick="handleDoubleClick()">
-                    <div class="pomodoro-status-icon" id="statusIcon">${initialStatusIcon}</div>
+                    <div class="pomodoro-status-icon" id="statusIcon" onclick="toggleMiniSwitchMenu(event)">${initialStatusIcon}</div>
                     <div class="control-buttons">
-                        <button class="circle-control-btn" onclick="callMethod('toggleTimer')">▶️</button>
+                        <button class="circle-control-btn" id="ringPlayPauseBtn" onclick="callMethod('toggleTimer')">▶️</button>
                         <button class="circle-control-btn" id="stopBtn" onclick="callMethod('resetTimer')" style="display:none">⏹</button>
                     </div>
                 </div>
@@ -8253,6 +8793,36 @@ document.body.classList.remove('docked-mode');
             <div class="stat-item">
                 <div class="stat-label">${i18n('weekFocus') || '本周专注'}</div>
                 <div class="stat-value" id="weekFocusTime">${weekTimeStr}</div>
+            </div>
+        </div>
+        <div class="mini-layout">
+            <div class="mini-card">
+                <button class="mini-restore-btn" onclick="toggleMiniMode()" title="${i18n('restoreWindow') || '恢复窗口'}">↗</button>
+                <button class="mini-emoji-btn" id="miniStatusTrigger" onclick="toggleMiniSwitchMenu(event)">${initialStatusIcon}</button>
+                <div class="mini-bar-center">
+                    <div class="mini-bar-header">
+                        <div class="mini-time-label" id="miniTimeDisplay">${timeStr}</div>
+                        <div class="mini-bar-actions">
+                            <button class="mini-action-btn" id="miniPlayPauseBtn" onclick="callMethod('toggleTimer')">▶️</button>
+                            <button class="mini-action-btn is-hidden" id="miniStopBtn" onclick="callMethod('resetTimer')">⏹</button>
+                        </div>
+                    </div>
+                    <div class="mini-progress-track">
+                        <div class="mini-progress-fill" id="miniProgressFill"></div>
+                    </div>
+                </div>
+                <div class="mini-minimal-actions">
+                    <button class="mini-action-btn" id="miniMinimalPlayPauseBtn" onclick="callMethod('toggleTimer')">▶️</button>
+                    <button class="mini-action-btn is-hidden" id="miniMinimalStopBtn" onclick="callMethod('resetTimer')">⏹</button>
+                </div>
+            </div>
+            <div class="mini-switch-menu" id="miniSwitchMenu">
+                <button class="mini-switch-item" id="miniSwitchModeMenuItem" onclick="callMethod('toggleMode')">
+                    ${currentState.isCountUp ? '🍅' : '⏱'} ${currentState.isCountUp ? switchToCountdownText : switchToCountUpText}
+                </button>
+                <button class="mini-switch-item" onclick="callMethod('startWorkTime')">💪 ${workText}</button>
+                <button class="mini-switch-item" onclick="callMethod('startShortBreak')">🍵 ${shortBreakText}</button>
+                <button class="mini-switch-item" onclick="callMethod('startLongBreak')">🧘 ${longBreakText}</button>
             </div>
         </div>
     </div>
@@ -8292,7 +8862,8 @@ document.body.classList.remove('docked-mode');
                 breakDuration: this.settings.breakDuration,
                 longBreakDuration: this.settings.longBreakDuration,
                 dailyFocusGoal: dailyFocusGoal,
-                pomodoroDockPosition: this.settings.pomodoroDockPosition || 'top'
+                pomodoroDockPosition: this.settings.pomodoroDockPosition || 'top',
+                pomodoroMiniWindowStyle: this.getMiniWindowStyle()
             })};
         let syncTimerStatePending = false;
 
@@ -8308,16 +8879,49 @@ document.body.classList.remove('docked-mode');
         function closeSwitchMenu() {
             const m = document.getElementById('switchMenu');
             if (m) m.classList.remove('show');
+            const miniMenu = document.getElementById('miniSwitchMenu');
+            if (miniMenu) miniMenu.classList.remove('show');
         }
         
         document.addEventListener('click', e => {
-            if (!e.target.closest('.switch-container')) closeSwitchMenu();
+            if (!e.target.closest('.switch-container') && !e.target.closest('.mini-layout')) closeSwitchMenu();
         });
         
         function toggleSwitchMenu(e) {
             e.stopPropagation();
             const m = document.getElementById('switchMenu');
             if (m) m.classList.toggle('show');
+            const miniMenu = document.getElementById('miniSwitchMenu');
+            if (miniMenu) miniMenu.classList.remove('show');
+        }
+
+        function toggleMiniSwitchMenu(e) {
+            if (e) e.stopPropagation();
+            const m = document.getElementById('miniSwitchMenu');
+            if (m) m.classList.toggle('show');
+            const desktopMenu = document.getElementById('switchMenu');
+            if (desktopMenu) desktopMenu.classList.remove('show');
+        }
+
+        function applyMiniStyleClass() {
+            document.body.classList.remove('mini-style-ring', 'mini-style-bar', 'mini-style-minimal');
+            const styleMap = {
+                ring: 'mini-style-ring',
+                horizontal: 'mini-style-bar',
+                minimal: 'mini-style-minimal'
+            };
+            const styleClass = styleMap[settings.pomodoroMiniWindowStyle] || 'mini-style-ring';
+            document.body.classList.add(styleClass);
+        }
+
+        function applyMiniResponsiveVars() {
+            const root = document.documentElement;
+            const width = Math.max(window.innerWidth || 0, 1);
+            const height = Math.max(window.innerHeight || 0, 1);
+            const base = Math.max(Math.min(width, height), 1);
+            root.style.setProperty('--mini-w', width + 'px');
+            root.style.setProperty('--mini-h', height + 'px');
+            root.style.setProperty('--mini-base', base + 'px');
         }
         
         function togglePin() {
@@ -8388,8 +8992,9 @@ document.body.classList.remove('docked-mode');
 
         function render() {
             if (!localState) return;
+            applyMiniStyleClass();
+            applyMiniResponsiveVars();
 
-            // 1. Calculate Time to Display
             let displayTime = 0;
             if (localState.isCountUp) {
                 displayTime = localState.isWorkPhase ? localState.timeElapsed : localState.breakTimeLeft;
@@ -8397,14 +9002,16 @@ document.body.classList.remove('docked-mode');
                 displayTime = localState.timeLeft;
             }
             const timeStr = formatTime(displayTime);
-            
-            // 2. Update Time Display
+
             const timeDisplay = document.getElementById('timeDisplay');
             if (timeDisplay && timeDisplay.textContent !== timeStr) {
                 timeDisplay.textContent = timeStr;
             }
+            const miniTimeDisplay = document.getElementById('miniTimeDisplay');
+            if (miniTimeDisplay && miniTimeDisplay.textContent !== timeStr) {
+                miniTimeDisplay.textContent = timeStr;
+            }
 
-            // 3. Update Progress Circle
             const progress = calculateProgress(localState);
             const circumference = 226.19;
             const offset = circumference * (1 - progress);
@@ -8412,42 +9019,41 @@ document.body.classList.remove('docked-mode');
             if (circle) {
                 circle.style.strokeDashoffset = offset;
             }
+            const miniProgressFill = document.getElementById('miniProgressFill');
+            if (miniProgressFill) {
+                miniProgressFill.style.width = (progress * 100) + '%';
+            }
             
-            // 4. Update Docked Mode Progress
-            const dockPos = '${this.settings.pomodoroDockPosition || "right"}';
+            const dockPos = settings.pomodoroDockPosition || 'right';
             const dockedBar = document.getElementById('dockedProgressBar');
             if (dockedBar) {
                 if (dockPos === 'top' || dockPos === 'bottom') {
                     dockedBar.style.width = (progress * 100) + '%';
-                    // Height is handled by CSS (100%) but ensuring it here doesn't hurt
                     dockedBar.style.height = '100%'; 
                 } else {
                     dockedBar.style.height = (progress * 100) + '%';
-                    // Width is handled by CSS (100%)
                     dockedBar.style.width = '100%';
                 }
             }
 
-            // 5. Update Status Text/Icon
-             let statusText = '${i18n('pomodoroWork') || '工作时间'}';
+            let statusText = '${workText}';
             let statusIcon = localState.isCountUp ? '⏱' : '🍅';
-            let color = '#FF6B6B'; // Default red
+            let color = '#FF6B6B';
 
             if (!localState.isWorkPhase) {
                 if (localState.isLongBreak) {
-                    statusText = '${i18n('pomodoroLongBreak') || '长时休息'}';
+                    statusText = '${longBreakText}';
                     statusIcon = '🧘';
                     color = '#9C27B0';
                 } else {
-                    statusText = '${i18n('pomodoroBreak') || '短时休息'}';
+                    statusText = '${shortBreakText}';
                     statusIcon = '🍵';
                     color = '#4CAF50';
                 }
             } else {
-                // Work phase
-                 statusText = '${i18n('pomodoroWork') || '工作时间'}';
-                 statusIcon = localState.isCountUp ? '⏱' : '🍅';
-                 color = '#FF6B6B';
+                statusText = '${workText}';
+                statusIcon = localState.isCountUp ? '⏱' : '🍅';
+                color = '#FF6B6B';
             }
             
             const statusDisplay = document.getElementById('statusDisplay');
@@ -8455,32 +9061,62 @@ document.body.classList.remove('docked-mode');
             
             const statusIconEl = document.getElementById('statusIcon');
             if (statusIconEl && statusIconEl.textContent !== statusIcon) statusIconEl.textContent = statusIcon;
+            const miniStatusTrigger = document.getElementById('miniStatusTrigger');
+            if (miniStatusTrigger && miniStatusTrigger.textContent !== statusIcon) miniStatusTrigger.textContent = statusIcon;
 
             if (circle) circle.style.stroke = color;
             if (dockedBar) dockedBar.style.backgroundColor = color;
+            if (miniProgressFill) miniProgressFill.style.backgroundColor = color;
+
+            const switchModeMenuItem = document.getElementById('switchModeMenuItem');
+            const miniSwitchModeMenuItem = document.getElementById('miniSwitchModeMenuItem');
+            const modeLabel = (localState.isCountUp ? '🍅 ' + '${switchToCountdownText}' : '⏱ ' + '${switchToCountUpText}');
+            if (switchModeMenuItem && switchModeMenuItem.textContent !== modeLabel) {
+                switchModeMenuItem.textContent = modeLabel;
+            }
+            if (miniSwitchModeMenuItem && miniSwitchModeMenuItem.textContent !== modeLabel) {
+                miniSwitchModeMenuItem.textContent = modeLabel;
+            }
             
-            // 6. Update Controls
             const stopBtn = document.getElementById('stopBtn');
-            const playBtn = document.querySelector('.circle-control-btn'); // First one is Play/Pause
-            
+            const ringPlayBtn = document.getElementById('ringPlayPauseBtn');
+            const miniPlayPauseBtn = document.getElementById('miniPlayPauseBtn');
+            const miniStopBtn = document.getElementById('miniStopBtn');
+            const miniMinimalPlayPauseBtn = document.getElementById('miniMinimalPlayPauseBtn');
+            const miniMinimalStopBtn = document.getElementById('miniMinimalStopBtn');
+
+            const playLabel = localState.isRunning && !localState.isPaused ? '⏸' : '▶️';
+            const showStop = localState.isRunning && localState.isPaused;
+
             if (localState.isRunning) {
                 if (localState.isPaused) {
-                     if (playBtn) playBtn.textContent = '▶️';
+                     if (ringPlayBtn) ringPlayBtn.textContent = '▶️';
                      if (stopBtn) stopBtn.style.display = 'flex';
                 } else {
-                     if (playBtn) playBtn.textContent = '⏸';
+                     if (ringPlayBtn) ringPlayBtn.textContent = '⏸';
                      if (stopBtn) stopBtn.style.display = 'none';
                 }
             } else {
-                 if (playBtn) playBtn.textContent = '▶️';
+                 if (ringPlayBtn) ringPlayBtn.textContent = '▶️';
                  if (stopBtn) stopBtn.style.display = 'none';
             }
+            [miniPlayPauseBtn, miniMinimalPlayPauseBtn].forEach(btn => {
+                if (btn) btn.textContent = playLabel;
+            });
+            [miniStopBtn, miniMinimalStopBtn].forEach(btn => {
+                if (!btn) return;
+                btn.classList.toggle('is-hidden', !showStop);
+                btn.style.display = showStop ? 'inline-flex' : 'none';
+            });
+
+            const miniCard = document.querySelector('.mini-card');
+            if (miniCard) {
+                miniCard.title = statusText;
+            }
             
-            // 7. Update Counts
             const pomodoroCount = document.getElementById('pomodoroCount');
             if (pomodoroCount) pomodoroCount.textContent = localState.completedPomodoros;
 
-            // 8. Update Stats and Title
             if (localState.todayFocusTime) {
                 const el = document.getElementById('todayFocusTime');
                 if (el) el.textContent = localState.todayFocusTime;
@@ -8497,7 +9133,6 @@ document.body.classList.remove('docked-mode');
                  }
             }
 
-            // 8.1 Update Today's Focus Progress Bar (Gradient background)
             const dailyGoalHours = settings.dailyFocusGoal || 0;
             const statsContainer = document.querySelector('.pomodoro-stats');
             if (statsContainer) {
@@ -8520,7 +9155,6 @@ document.body.classList.remove('docked-mode');
                 }
             }
 
-            // 9. Update Random Notification Count
             const randomCountDisp = document.getElementById('randomCount');
             const diceIcon = document.getElementById('diceIcon');
             
@@ -8535,14 +9169,12 @@ document.body.classList.remove('docked-mode');
                  if (diceIcon) diceIcon.style.display = 'none';
             }
 
-            // 10. Update Sound Button (reflect mute state)
             const soundBtn = document.getElementById('soundBtn');
             if (soundBtn) {
                 soundBtn.textContent = localState.isBackgroundAudioMuted ? '🔇' : '🔊';
                 soundBtn.title = localState.isBackgroundAudioMuted ? '${i18n('enableBackgroundAudio') || '开启背景音'}' : '${i18n('muteBackgroundAudio') || '静音背景音'}';
             }
             
-            // 11. Update Dock Button Emoji based on position
             const dockBtn = document.getElementById('dockBtn');
             if (dockBtn) {
                 const posEmojiMap = {
@@ -8623,6 +9255,10 @@ document.body.classList.remove('docked-mode');
         
         // Initial render
         render();
+        window.addEventListener('resize', () => {
+            applyMiniResponsiveVars();
+            render();
+        });
 
     </script>
 </body>
@@ -8681,14 +9317,13 @@ document.body.classList.remove('docked-mode');
                         try { this.normalWindowBounds = pomodoroWindow.getBounds(); } catch (e) { this.normalWindowBounds = null; }
                     }
                     try {
-                        // 如果当前大小明显不对（比如还没初始化），才设置默认大小
                         const bounds = pomodoroWindow.getBounds();
-                        const targetSize = this.resolveMiniWindowSize(this.inheritedWindowBounds || bounds);
-                        if (Math.round(bounds.width) !== targetSize || Math.round(bounds.height) !== targetSize) {
-                            pomodoroWindow.setSize(targetSize, targetSize);
+                        const targetBounds = this.resolveMiniWindowBounds(this.inheritedWindowBounds || bounds);
+                        if (Math.round(bounds.width) !== targetBounds.width || Math.round(bounds.height) !== targetBounds.height) {
+                            pomodoroWindow.setSize(targetBounds.width, targetBounds.height);
                         }
                         pomodoroWindow.setResizable(true);
-                        pomodoroWindow.setAspectRatio(1);
+                        pomodoroWindow.setAspectRatio(this.getMiniWindowStyle() === 'ring' ? 1 : 0);
                     } catch (e) { }
                     try {
                         await pomodoroWindow.webContents.executeJavaScript(`document.body.classList.add('mini-mode');document.body.classList.remove('docked-mode');`);
@@ -8855,7 +9490,8 @@ document.body.classList.remove('docked-mode');
                 breakDuration: this.settings.breakDuration,
                 longBreakDuration: this.settings.longBreakDuration,
                 dailyFocusGoal: (this.settings.dailyFocusGoal || 0),
-                pomodoroDockPosition: this.settings.pomodoroDockPosition || 'top'
+                pomodoroDockPosition: this.settings.pomodoroDockPosition || 'top',
+                pomodoroMiniWindowStyle: this.getMiniWindowStyle()
             };
 
             // Send state to window using executeJavaScript
@@ -8951,11 +9587,11 @@ document.body.classList.remove('docked-mode');
                     this.normalWindowBounds = pomodoroWindow.getBounds();
                 }
 
-                // 设置为圆形小窗口
-                const size = 80;
-                pomodoroWindow.setSize(size, size);
-                pomodoroWindow.setResizable(true);
-                pomodoroWindow.setAspectRatio(1);
+                const miniStyle = this.getMiniWindowStyle();
+                const miniBoundsSource = (miniStyle === 'ring' || miniStyle === 'horizontal' || miniStyle === 'minimal')
+                    ? null
+                    : pomodoroWindow.getBounds();
+                this.applyMiniWindowBounds(pomodoroWindow, miniBoundsSource);
 
                 // 添加迷你模式样式
                 pomodoroWindow.webContents.executeJavaScript(`
@@ -9113,21 +9749,116 @@ document.body.classList.remove('mini-mode');
         return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')} `;
     }
 
-    private resolveMiniWindowSize(bounds?: { width: number; height: number } | null): number {
-        const defaultSize = 80;
+    private applyDomMinimizedStyle() {
+        if (!this.container) return;
+        this.container.classList.remove('minimized-style-ring', 'minimized-style-horizontal', 'minimized-style-minimal');
+
+        const style = this.getMiniWindowStyle();
+        if (style === 'horizontal') {
+            this.container.classList.add('minimized-style-horizontal');
+        } else if (style === 'minimal') {
+            this.container.classList.add('minimized-style-minimal');
+        } else {
+            this.container.classList.add('minimized-style-ring');
+        }
+    }
+
+    private getDomMinimizedState(): { progress: number; color: string; icon: string; timeText: string } {
+        let progress = 0;
+        let color = '#FF6B6B';
+
+        if (this.isCountUp) {
+            if (this.isWorkPhase) {
+                const pomodoroLength = Math.max(1, this.settings.workDuration * 60);
+                const currentCycleTime = this.timeElapsed % pomodoroLength;
+                progress = currentCycleTime / pomodoroLength;
+                color = '#FF6B6B';
+            } else {
+                const totalBreakTime = this.isLongBreak ?
+                    this.settings.longBreakDuration * 60 :
+                    this.settings.breakDuration * 60;
+                progress = totalBreakTime > 0 ? (totalBreakTime - this.breakTimeLeft) / totalBreakTime : 0;
+                color = this.isLongBreak ? '#9C27B0' : '#4CAF50';
+            }
+        } else {
+            progress = this.totalTime > 0 ? (this.totalTime - this.timeLeft) / this.totalTime : 0;
+            color = this.isWorkPhase ? '#FF6B6B' : (this.isLongBreak ? '#9C27B0' : '#4CAF50');
+        }
+
+        progress = Math.max(0, Math.min(1, progress));
+
+        let icon = '🍅';
+        if (this.isWorkPhase) {
+            icon = this.isCountUp ? '⏱️' : '🍅';
+        } else {
+            icon = this.isLongBreak ? '🧘' : '🍵';
+        }
+
+        const displaySeconds = this.isCountUp
+            ? (this.isWorkPhase ? this.timeElapsed : this.breakTimeLeft)
+            : this.timeLeft;
+
+        return {
+            progress,
+            color,
+            icon,
+            timeText: this.formatTime(displaySeconds).trim()
+        };
+    }
+
+    private getMiniWindowStyle(): 'ring' | 'horizontal' | 'minimal' {
+        const style = this.settings?.pomodoroMiniWindowStyle;
+        if (style === 'horizontal' || style === 'minimal') {
+            return style;
+        }
+        return 'ring';
+    }
+
+    private resolveMiniWindowBounds(bounds?: { width: number; height: number } | null): { width: number; height: number } {
+        const style = this.getMiniWindowStyle();
+        const defaults = {
+            ring: { width: 50, height: 50 },
+            horizontal: { width: 130, height: 22 },
+            minimal: { width: 130, height: 22 }
+        };
+        const fallback = defaults[style];
+
         if (!bounds) {
-            return defaultSize;
+            return fallback;
         }
 
         const width = Number(bounds.width);
         const height = Number(bounds.height);
-        const candidate = width > 0 ? width : (height > 0 ? height : defaultSize);
 
-        if (!Number.isFinite(candidate) || candidate <= 0) {
-            return defaultSize;
+        if (style === 'ring') {
+            const candidate = width > 0 ? width : (height > 0 ? height : fallback.width);
+            if (!Number.isFinite(candidate) || candidate <= 0) {
+                return fallback;
+            }
+            const size = Math.max(40, Math.round(candidate));
+            return { width: size, height: size };
         }
 
-        return Math.max(40, Math.round(candidate));
+        const minWidth = style === 'horizontal' ? 130 : 88;
+        const maxWidth = style === 'horizontal' ? 260 : 220;
+        const minHeight = style === 'horizontal' ? 18 : 18;
+        const maxHeight = style === 'horizontal' ? 40 : 50;
+
+        const nextWidth = Number.isFinite(width) && width > 0
+            ? Math.max(minWidth, Math.min(maxWidth, Math.round(width)))
+            : fallback.width;
+        const nextHeight = Number.isFinite(height) && height > 0
+            ? Math.max(minHeight, Math.min(maxHeight, Math.round(height)))
+            : fallback.height;
+
+        return { width: nextWidth, height: nextHeight };
+    }
+
+    private applyMiniWindowBounds(pomodoroWindow: any, bounds?: { width: number; height: number } | null) {
+        const { width, height } = this.resolveMiniWindowBounds(bounds);
+        pomodoroWindow.setSize(width, height);
+        pomodoroWindow.setResizable(true);
+        pomodoroWindow.setAspectRatio(this.getMiniWindowStyle() === 'ring' ? 1 : 0);
     }
 
     /**
@@ -9197,6 +9928,11 @@ document.body.classList.remove('mini-mode');
                 this.exitDOMWindowDock();
                 this.enterDOMWindowDock();
             }
+        }
+
+        if (this.isMinimized && this.container && typeof (this.container as any).webContents === 'undefined') {
+            this.applyDomMinimizedStyle();
+            this.updateMinimizedDisplay();
         }
     }
 

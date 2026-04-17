@@ -219,6 +219,7 @@ export const DEFAULT_SETTINGS = {
     pomodoroSystemNotification: true, // 新增：番茄结束后系统弹窗
     pomodoroEndPopupWindow: true, // 新增：番茄钟结束弹窗提醒，默认关闭
     pomodoroDockPosition: 'top', // 新增：番茄钟吸附位置 'right' | 'left' | 'top'
+    pomodoroMiniWindowStyle: 'ring', // mini窗口样式 'ring' | 'horizontal' | 'minimal'
     reminderSystemNotification: true, // 新增：事件到期提醒系统弹窗
     showInternalNotification: false, // 新增：是否显示内部通知框
     dailyNotificationTime: '08:00', // 新增：每日通知时间，默认08:00
@@ -1428,7 +1429,7 @@ export default class ReminderPlugin extends Plugin {
                         'workDuration', 'breakDuration', 'longBreakDuration', 'longBreakInterval', 'autoMode',
                         'workVolume', 'breakVolume', 'longBreakVolume',
                         'randomRestEnabled', 'randomRestMinInterval', 'randomRestMaxInterval', 'randomRestBreakDuration',
-                        'randomRestSounds', 'randomRestEndSound', 'dailyFocusGoal'
+                        'randomRestSounds', 'randomRestEndSound', 'dailyFocusGoal', 'pomodoroMiniWindowStyle'
                     ]; let relevantChanged = false;
                     for (const f of relevantFields) {
                         const pv = prev[f];
@@ -1827,7 +1828,8 @@ export default class ReminderPlugin extends Plugin {
             dailyFocusGoal: settings.dailyFocusGoal,
             randomRestPopupWindow: settings.randomRestPopupWindow,
             pomodoroEndPopupWindow: settings.pomodoroEndPopupWindow,
-            pomodoroDockPosition: settings.pomodoroDockPosition || 'top'
+            pomodoroDockPosition: settings.pomodoroDockPosition || 'top',
+            pomodoroMiniWindowStyle: settings.pomodoroMiniWindowStyle || 'ring'
         };
     }
 

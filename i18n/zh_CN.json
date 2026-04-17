@@ -367,6 +367,11 @@
     "pomodoroLongBreakIntervalDesc": "设置连续工作几个番茄钟后自动进入长休息模式，默认4个番茄钟",
     "pomodoroAutoMode": "自动番茄钟模式",
     "pomodoroAutoModeDesc": "（仅用于倒计时番茄）启用后，工作计时结束自动进入休息计时，休息结束自动开始工作计时，并根据设定的间隔自动进入长休息模式",
+    "pomodoroMiniWindowStyle": "Mini窗口样式",
+    "pomodoroMiniWindowStyleDesc": "设置番茄钟 mini 窗口的显示样式，可选圆环、横向进度条或极简进度条",
+    "pomodoroMiniWindowStyleRing": "圆环",
+    "pomodoroMiniWindowStyleHorizontal": "横向进度条",
+    "pomodoroMiniWindowStyleMinimal": "极简进度条",
     "dailyFocusGoal": "每日专注目标（小时）",
     "dailyFocusGoalDesc": "设置每日专注目标时长(小时)，为0则不显示进度",
     "workVolume": "工作背景音音量",
@@ -2039,5 +2044,6 @@
     "multiSelect": "多选",
     "refreshSuccess": "刷新成功",
     "globalKanbanStatuses": "管理项目默认看板状态",
+    "globalKanbanStatusesDesc": "设置项目看板默认显示的状态列，供新项目或未自定义状态的项目使用",
     "task": "任务"
 }

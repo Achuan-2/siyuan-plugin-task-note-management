@@ -770,6 +770,20 @@
                     },
                 },
                 {
+                    key: 'pomodoroMiniWindowStyle',
+                    value: settings.pomodoroMiniWindowStyle || 'ring',
+                    type: 'select',
+                    title: i18n('pomodoroMiniWindowStyle') || 'Mini窗口样式',
+                    description:
+                        i18n('pomodoroMiniWindowStyleDesc') ||
+                        '设置番茄钟 mini 窗口的样式：圆环、横向进度条或极简进度条',
+                    options: {
+                        ring: i18n('pomodoroMiniWindowStyleRing') || '圆环',
+                        horizontal: i18n('pomodoroMiniWindowStyleHorizontal') || '横向进度条',
+                        minimal: i18n('pomodoroMiniWindowStyleMinimal') || '极简进度条',
+                    },
+                },
+                {
                     key: 'dailyFocusGoal',
                     value: settings.dailyFocusGoal,
                     type: 'number',
