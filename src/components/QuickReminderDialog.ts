@@ -67,7 +67,7 @@ export class QuickReminderDialog {
                     </div>
                     <div style="display: flex; gap: 8px;">
                         <button class="b3-button b3-button--outline" id="jumpBtn" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px;">
-                            <svg style="width: 14px; height: 14px;"><use xlink:href="#iconLink"></use></svg>
+                            <svg style="width: 14px; height: 14px;"><use xlink:href="#iconOpenWindow"></use></svg>
                             ${i18n('jump') || '打开链接'}
                         </button>
                         <button class="b3-button b3-button--outline" id="editLinkBtn" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px;">
@@ -2010,6 +2010,115 @@ export class QuickReminderDialog {
                                 </button>
                             </div>
                         </div>
+                        <div class="b3-form__group">
+                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                <label class="b3-form__label" style="margin-bottom: 0;">${i18n("eventCategory")}
+                                    <button type="button" id="quickManageCategoriesBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("manageCategories")}">
+                                        <svg class="b3-button__icon"><use xlink:href="#iconSettings"></use></svg>
+                                    </button>
+                                </label>
+                                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; color: var(--b3-theme-on-surface);">
+                                    <input type="checkbox" class="b3-switch" id="quickMultiSelectCategory">
+                                    <span>${i18n('multiSelect') || '多选'}</span>
+                                </label>
+                            </div>
+                            <div class="category-selector" id="quickCategorySelector" style="display: flex; flex-wrap: wrap; gap: 6px;">
+                                <!-- 分类选择器将在这里渲染 -->
+                            </div>
+                        </div>
+                        <div class="b3-form__group">
+                            <label class="b3-form__label">${i18n("priority")}</label>
+                            <div class="priority-selector" id="quickPrioritySelector">
+                                <div class="priority-option" data-priority="none">
+                                    <div class="priority-dot none"></div>
+                                    <span>${i18n("noPriority")}</span>
+                                </div>
+                                <div class="priority-option" data-priority="low">
+                                    <div class="priority-dot low"></div>
+                                    <span>${i18n("lowPriority")}</span>
+                                </div>
+                                <div class="priority-option" data-priority="medium">
+                                    <div class="priority-dot medium"></div>
+                                    <span>${i18n("mediumPriority")}</span>
+                                </div>
+                                <div class="priority-option" data-priority="high">
+                                    <div class="priority-dot high"></div>
+                                    <span>${i18n("highPriority")}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="b3-form__group" id="quickProjectGroup" style="${this.hideProjectSelector ? 'display: none;' : ''}">
+                            <label class="b3-form__label">${i18n("setProject")}</label>
+                            <div class="custom-select" id="quickProjectSelectCustom" style="position: relative;">
+                                <div style="position: relative;">
+                                    <input type="text" id="quickProjectSearchInput" class="b3-text-field" placeholder="${i18n("searchProject")}" autocomplete="off" style="width: 100%; padding-right: 30px;  background: var(--b3-select-background);" spellcheck="false">
+                                    <input type="hidden" id="quickProjectSelector">
+                                </div>
+                                <div id="quickProjectDropdown" class="b3-menu" style="display: none; position: absolute; width: 100%; max-height: 200px; overflow-y: auto; z-index: 10; margin-top: 4px; box-shadow: var(--b3-menu-shadow); background: var(--b3-menu-background); border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius);">
+                                    <!-- 项目选项将在这里渲染 -->
+                                </div>
+                            </div>
+                        </div>
+                        <div class="b3-form__group" id="quickCustomGroup" style="display: none;">
+                            <label class="b3-form__label">${i18n("setTaskGroup")}</label>
+                            <div class="custom-select" id="quickCustomGroupSelectCustom" style="position: relative;">
+                                <div style="position: relative;">
+                                    <input type="text" id="quickCustomGroupSearchInput" class="b3-text-field" placeholder="${i18n("searchGroup")}" autocomplete="off" style="width: 100%; padding-right: 30px; background: var(--b3-select-background);" spellcheck="false">
+                                    <input type="hidden" id="quickCustomGroupSelector">
+                                </div>
+                                <div id="quickCustomGroupDropdown" class="b3-menu" style="display: none; position: absolute; width: 100%; max-height: 200px; overflow-y: auto; z-index: 10; margin-top: 4px; box-shadow: var(--b3-menu-shadow); background: var(--b3-menu-background); border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius);">
+                                    <!-- 自定义分组选择器将在这里渲染 -->
+                                </div>
+                            </div>
+                        </div>
+                        <div class="b3-form__group" id="quickMilestoneGroup" style="display: none;">
+                            <label class="b3-form__label">${i18n("milestone")}</label>
+                            <div class="custom-select" id="quickMilestoneSelectCustom" style="position: relative;">
+                                <div style="position: relative;">
+                                    <input type="text" id="quickMilestoneSearchInput" class="b3-text-field" placeholder="${i18n("searchMilestone")}" autocomplete="off" style="width: 100%; padding-right: 30px; background: var(--b3-select-background);" spellcheck="false">
+                                    <input type="hidden" id="quickMilestoneSelector">
+                                </div>
+                                <div id="quickMilestoneDropdown" class="b3-menu" style="display: none; position: absolute; width: 100%; max-height: 200px; overflow-y: auto; z-index: 10; margin-top: 4px; box-shadow: var(--b3-menu-shadow); background: var(--b3-menu-background); border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius);">
+                                    <!-- 里程碑选择器将在这里渲染 -->
+                                </div>
+                            </div>
+                        </div>
+                        <div class="b3-form__group" id="quickTagsGroup" style="display: none;">
+                            <label class="b3-form__label">${i18n("setTags")}</label>
+                            <div id="quickTagsSelector" class="tags-selector" style="display: flex; flex-wrap: wrap; gap: 6px;">
+                                <!-- 标签选择器将在这里渲染 -->
+                            </div>
+                        </div>
+                        <!-- 任务状态渲染 -->
+                        ${this.renderStatusSelector()}
+                        <div class="b3-form__group" id="quickHabitGroup">
+                            <label class="b3-form__label">${i18n("bindHabit") || "绑定习惯"}</label>
+                            <div class="custom-select" id="quickHabitSelectCustom" style="position: relative;">
+                                <div style="position: relative;">
+                                    <input type="text" id="quickHabitSearchInput" class="b3-text-field" placeholder="${i18n("searchHabit") || "搜索习惯"}" autocomplete="off" style="width: 100%; padding-right: 30px; background: var(--b3-select-background);" spellcheck="false">
+                                    <input type="hidden" id="quickHabitSelector">
+                                </div>
+                                <div id="quickHabitDropdown" class="b3-menu" style="display: none; position: absolute; width: 100%; max-height: 200px; overflow-y: auto; z-index: 10; margin-top: 4px; box-shadow: var(--b3-menu-shadow); background: var(--b3-menu-background); border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius);">
+                                    <!-- 习惯选项将在这里渲染 -->
+                                </div>
+                            </div>
+                            <div id="quickHabitBindingOptions" style="display: none; margin-top: 8px; padding: 8px; border-radius: 6px; background: var(--b3-theme-background-light);">
+                                <label class="b3-checkbox" style="display: flex; align-items: center; margin-bottom: 6px;">
+                                    <input type="checkbox" class="b3-switch" id="quickHabitSyncPomodoroToday">
+                                    <span class="b3-checkbox__graphic"></span>
+                                    <span class="b3-checkbox__label">${i18n("taskPomodoroSyncToHabitToday") || "将任务今日番茄钟计入习惯今日番茄钟"}</span>
+                                </label>
+                                <label class="b3-checkbox" style="display: flex; align-items: center;">
+                                    <input type="checkbox" class="b3-switch" id="quickHabitAutoCheckInOnComplete">
+                                    <span class="b3-checkbox__graphic"></span>
+                                    <span class="b3-checkbox__label">${i18n("taskAutoCheckInHabitOnComplete") || "任务完成时自动完成习惯打卡"}</span>
+                                </label>
+                                <div id="quickHabitAutoCheckInOptionRow" style="display: none; margin-top: 8px; gap: 8px; align-items: center;">
+                                    <label class="b3-form__label" style="margin: 0; white-space: nowrap;">${i18n("taskAutoCheckInOption") || "打卡选项"}</label>
+                                    <select id="quickHabitAutoCheckInOption" class="b3-select" style="flex: 1; min-width: 0;"></select>
+                                </div>
+                            </div>
+                        </div>
                         <!-- 绑定块/文档输入，允许手动输入块 ID 或文档 ID -->
                         <div class="b3-form__group">
                             <label class="b3-form__label">${i18n("bindToBlock") || '块或文档 ID'}</label>
@@ -2039,7 +2148,7 @@ export class QuickReminderDialog {
                             <div style="display: flex; gap: 8px;">
                                 <input type="url" id="quickUrlInput" class="b3-text-field" placeholder="${i18n("enterUrl")}" style="flex: 1;" spellcheck="false">
                                 <button type="button" id="quickOpenUrlBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("openUrl") || '在浏览器中打开'}">
-                                    <svg class="b3-button__icon"><use xlink:href="#iconLink"></use></svg>
+                                    <svg class="b3-button__icon"><use xlink:href="#iconOpenWindow"></use></svg>
                                 </button>
                             </div>
                         </div>
@@ -2095,115 +2204,6 @@ export class QuickReminderDialog {
                             </div>
                         </div>
 
-                        <div class="b3-form__group">
-                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                                <label class="b3-form__label" style="margin-bottom: 0;">${i18n("eventCategory")}
-                                    <button type="button" id="quickManageCategoriesBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("manageCategories")}">
-                                        <svg class="b3-button__icon"><use xlink:href="#iconSettings"></use></svg>
-                                    </button>
-                                </label>
-                                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; color: var(--b3-theme-on-surface);">
-                                    <input type="checkbox" class="b3-switch" id="quickMultiSelectCategory">
-                                    <span>${i18n('multiSelect') || '多选'}</span>
-                                </label>
-                            </div>
-                            <div class="category-selector" id="quickCategorySelector" style="display: flex; flex-wrap: wrap; gap: 6px;">
-                                <!-- 分类选择器将在这里渲染 -->
-                            </div>
-                        </div>
-                        <div class="b3-form__group" id="quickProjectGroup" style="${this.hideProjectSelector ? 'display: none;' : ''}">
-                            <label class="b3-form__label">${i18n("setProject")}</label>
-                            <div class="custom-select" id="quickProjectSelectCustom" style="position: relative;">
-                                <div style="position: relative;">
-                                    <input type="text" id="quickProjectSearchInput" class="b3-text-field" placeholder="${i18n("searchProject")}" autocomplete="off" style="width: 100%; padding-right: 30px;  background: var(--b3-select-background);" spellcheck="false">
-                                    <input type="hidden" id="quickProjectSelector">
-                                </div>
-                                <div id="quickProjectDropdown" class="b3-menu" style="display: none; position: absolute; width: 100%; max-height: 200px; overflow-y: auto; z-index: 10; margin-top: 4px; box-shadow: var(--b3-menu-shadow); background: var(--b3-menu-background); border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius);">
-                                    <!-- 项目选项将在这里渲染 -->
-                                </div>
-                            </div>
-                        </div>
-                        <div class="b3-form__group" id="quickCustomGroup" style="display: none;">
-                            <label class="b3-form__label">${i18n("setTaskGroup")}</label>
-                            <div class="custom-select" id="quickCustomGroupSelectCustom" style="position: relative;">
-                                <div style="position: relative;">
-                                    <input type="text" id="quickCustomGroupSearchInput" class="b3-text-field" placeholder="${i18n("searchGroup")}" autocomplete="off" style="width: 100%; padding-right: 30px; background: var(--b3-select-background);" spellcheck="false">
-                                    <input type="hidden" id="quickCustomGroupSelector">
-                                </div>
-                                <div id="quickCustomGroupDropdown" class="b3-menu" style="display: none; position: absolute; width: 100%; max-height: 200px; overflow-y: auto; z-index: 10; margin-top: 4px; box-shadow: var(--b3-menu-shadow); background: var(--b3-menu-background); border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius);">
-                                    <!-- 自定义分组选择器将在这里渲染 -->
-                                </div>
-                            </div>
-                        </div>
-                        <div class="b3-form__group" id="quickMilestoneGroup" style="display: none;">
-                            <label class="b3-form__label">${i18n("milestone")}</label>
-                            <div class="custom-select" id="quickMilestoneSelectCustom" style="position: relative;">
-                                <div style="position: relative;">
-                                    <input type="text" id="quickMilestoneSearchInput" class="b3-text-field" placeholder="${i18n("searchMilestone")}" autocomplete="off" style="width: 100%; padding-right: 30px; background: var(--b3-select-background);" spellcheck="false">
-                                    <input type="hidden" id="quickMilestoneSelector">
-                                </div>
-                                <div id="quickMilestoneDropdown" class="b3-menu" style="display: none; position: absolute; width: 100%; max-height: 200px; overflow-y: auto; z-index: 10; margin-top: 4px; box-shadow: var(--b3-menu-shadow); background: var(--b3-menu-background); border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius);">
-                                    <!-- 里程碑选择器将在这里渲染 -->
-                                </div>
-                            </div>
-                        </div>
-                        <div class="b3-form__group" id="quickHabitGroup">
-                            <label class="b3-form__label">${i18n("bindHabit") || "绑定习惯"}</label>
-                            <div class="custom-select" id="quickHabitSelectCustom" style="position: relative;">
-                                <div style="position: relative;">
-                                    <input type="text" id="quickHabitSearchInput" class="b3-text-field" placeholder="${i18n("searchHabit") || "搜索习惯"}" autocomplete="off" style="width: 100%; padding-right: 30px; background: var(--b3-select-background);" spellcheck="false">
-                                    <input type="hidden" id="quickHabitSelector">
-                                </div>
-                                <div id="quickHabitDropdown" class="b3-menu" style="display: none; position: absolute; width: 100%; max-height: 200px; overflow-y: auto; z-index: 10; margin-top: 4px; box-shadow: var(--b3-menu-shadow); background: var(--b3-menu-background); border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius);">
-                                    <!-- 习惯选项将在这里渲染 -->
-                                </div>
-                            </div>
-                            <div id="quickHabitBindingOptions" style="display: none; margin-top: 8px; padding: 8px; border-radius: 6px; background: var(--b3-theme-background-light);">
-                                <label class="b3-checkbox" style="display: flex; align-items: center; margin-bottom: 6px;">
-                                    <input type="checkbox" class="b3-switch" id="quickHabitSyncPomodoroToday">
-                                    <span class="b3-checkbox__graphic"></span>
-                                    <span class="b3-checkbox__label">${i18n("taskPomodoroSyncToHabitToday") || "将任务今日番茄钟计入习惯今日番茄钟"}</span>
-                                </label>
-                                <label class="b3-checkbox" style="display: flex; align-items: center;">
-                                    <input type="checkbox" class="b3-switch" id="quickHabitAutoCheckInOnComplete">
-                                    <span class="b3-checkbox__graphic"></span>
-                                    <span class="b3-checkbox__label">${i18n("taskAutoCheckInHabitOnComplete") || "任务完成时自动完成习惯打卡"}</span>
-                                </label>
-                                <div id="quickHabitAutoCheckInOptionRow" style="display: none; margin-top: 8px; gap: 8px; align-items: center;">
-                                    <label class="b3-form__label" style="margin: 0; white-space: nowrap;">${i18n("taskAutoCheckInOption") || "打卡选项"}</label>
-                                    <select id="quickHabitAutoCheckInOption" class="b3-select" style="flex: 1; min-width: 0;"></select>
-                                </div>
-                            </div>
-                        </div>
-                        <!-- 任务状态渲染 -->
-                        ${this.renderStatusSelector()}
-                        <div class="b3-form__group" id="quickTagsGroup" style="display: none;">
-                            <label class="b3-form__label">${i18n("setTags")}</label>
-                            <div id="quickTagsSelector" class="tags-selector" style="display: flex; flex-wrap: wrap; gap: 6px;">
-                                <!-- 标签选择器将在这里渲染 -->
-                            </div>
-                        </div>
-                        <div class="b3-form__group">
-                            <label class="b3-form__label">${i18n("priority")}</label>
-                            <div class="priority-selector" id="quickPrioritySelector">
-                                <div class="priority-option" data-priority="none">
-                                    <div class="priority-dot none"></div>
-                                    <span>${i18n("noPriority")}</span>
-                                </div>
-                                <div class="priority-option" data-priority="low">
-                                    <div class="priority-dot low"></div>
-                                    <span>${i18n("lowPriority")}</span>
-                                </div>
-                                <div class="priority-option" data-priority="medium">
-                                    <div class="priority-dot medium"></div>
-                                    <span>${i18n("mediumPriority")}</span>
-                                </div>
-                                <div class="priority-option" data-priority="high">
-                                    <div class="priority-dot high"></div>
-                                    <span>${i18n("highPriority")}</span>
-                                </div>
-                            </div>
-                        </div>
                         <div class="b3-form__group">
                             <label class="b3-form__label">${i18n("displaySettings")}</label>
                             <div style="display: flex; flex-direction: column; gap: 8px;">
