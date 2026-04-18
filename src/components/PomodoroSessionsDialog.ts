@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2024 by frostime. All Rights Reserved.
  * @Author       : frostime
  * @Date         : 2026-01-10
@@ -7,7 +7,10 @@
  * @Description  : 番茄钟会话管理对话框，用于查看、编辑、删除和补录番茄钟记录
  */
 
-import { Dialog, confirm, showMessage } from "siyuan";
+import { Dialog, Menu, confirm, showMessage } from "siyuan";
+import { PomodoroTimer } from "./PomodoroTimer";
+import { PomodoroManager } from "../utils/pomodoroManager";
+import { createPomodoroStartSubmenu } from "../utils/pomodoroPresets";
 import { PomodoroRecordManager, PomodoroSession } from "../utils/pomodoroRecord";
 import { i18n } from "../pluginInstance";
 import { getLocaleTag } from "../utils/dateUtils";
@@ -132,10 +135,17 @@ export class PomodoroSessionsDialog {
                     <div id="pomodoroSessionsList" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; min-height: 100px;">
                         <!-- 番茄钟列表 -->
                     </div>
-                    <div class="pomodoro-actions" style="display: flex; gap: 8px; justify-content: flex-end; padding-top: 8px; border-top: 1px solid var(--b3-border-color);">
-                        <button id="addPomodoroBtn" class="b3-button b3-button--primary">
+                    <div class="pomodoro-actions" style="display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; padding-top: 8px; border-top: 1px solid var(--b3-border-color);">
+                        <button id="addPomodoroBtn" class="b3-button b3-button--outline">
                             <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
                             ${i18n("addPomodoro") || "补录番茄钟"}
+                        </button>
+                        <button id="startPomodoroBtn" class="b3-button b3-button--primary">
+                            <svg class="b3-button__icon"><use xlink:href="#iconPlay"></use></svg>
+                            ${i18n("startPomodoro") || "开始番茄钟"}
+                        </button>
+                        <button id="startCountUpBtn" class="b3-button b3-button--outline">
+                            ⏱️ ${i18n("startCountUp") || "正计时"}
                         </button>
                     </div>
                 </div>
@@ -282,12 +292,12 @@ export class PomodoroSessionsDialog {
 
         listEl.innerHTML = `
             <div class="pomodoro-stats" style="padding: 12px; background: var(--b3-theme-background-light); border-radius: 6px; margin-bottom: 8px;">
-                <div style="display: flex; justify-content: space-around;">
-                    <div style="text-align: center;">
+                <div style="display: flex; justify-content: space-around; flex-wrap: wrap; gap: 8px;">
+                    <div style="text-align: center; min-width: 80px;">
                         <div style="font-size: 24px; font-weight: bold; color: var(--b3-theme-primary);">${totalSessions}</div>
                         <div style="font-size: 12px; color: var(--b3-theme-on-surface-light);">完成番茄数</div>
                     </div>
-                    <div style="text-align: center;">
+                    <div style="text-align: center; min-width: 80px;">
                         <div style="font-size: 24px; font-weight: bold; color: var(--b3-theme-primary);">${this.formatDuration(totalFocusTime)}</div>
                         <div style="font-size: 12px; color: var(--b3-theme-on-surface-light);">总专注时长</div>
                     </div>
@@ -363,10 +373,10 @@ export class PomodoroSessionsDialog {
                 border-radius: 6px;
                 transition: all 0.2s;
             ">
-                <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <span style="font-size: 18px;">${typeIcon}</span>
-                        <span style="font-weight: 500; width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" class="ariaLabel" aria-label="${session.eventTitle}">${session.eventTitle}</span>
+                <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px;">
+                    <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                        <span style="font-size: 18px; flex-shrink: 0;">${typeIcon}</span>
+                        <span style="font-weight: 500; min-width: 0; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" class="ariaLabel" aria-label="${session.eventTitle}">${session.eventTitle}</span>
                         ${statusBadge}
                         ${extraBadges}
                     </div>
@@ -412,16 +422,201 @@ export class PomodoroSessionsDialog {
 
     private bindEvents() {
         const addBtn = this.dialog.element.querySelector("#addPomodoroBtn") as HTMLButtonElement;
+        const startPomodoroBtn = this.dialog.element.querySelector("#startPomodoroBtn") as HTMLButtonElement;
+        const startCountUpBtn = this.dialog.element.querySelector("#startCountUpBtn") as HTMLButtonElement;
         const showBreakSessionsToggle = this.dialog.element.querySelector("#showBreakSessionsToggle") as HTMLInputElement;
 
         addBtn?.addEventListener("click", () => {
             this.addNewSession();
         });
 
+        startPomodoroBtn?.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.showPomodoroStartMenu(e);
+        });
+
+        startCountUpBtn?.addEventListener("click", () => {
+            this._startPomodoroCountUp();
+        });
+
         showBreakSessionsToggle?.addEventListener("change", () => {
             this.showBreakSessions = showBreakSessionsToggle.checked;
             this.renderSessions();
         });
+    }
+
+    /**
+     * 弹出开始番茄钟子菜单（带默认时长 + 预设列表）
+     */
+    private showPomodoroStartMenu(event: MouseEvent) {
+        try {
+            const menu = new Menu("");
+            const source = { id: this.reminderId };
+            const submenuItems = createPomodoroStartSubmenu({
+                source,
+                plugin: this.plugin,
+                startPomodoro: (workDurationOverride?: number) => this._startPomodoro(workDurationOverride)
+            });
+            submenuItems.forEach(item => {
+                if ((item as any).type === 'separator') {
+                    menu.addSeparator();
+                } else {
+                    menu.addItem(item);
+                }
+            });
+            if (event.target instanceof HTMLElement) {
+                const rect = event.target.getBoundingClientRect();
+                menu.open({ x: rect.left, y: rect.bottom + 4 });
+            } else {
+                menu.open({ x: event.clientX, y: event.clientY });
+            }
+        } catch (error) {
+            console.error('显示番茄钟启动菜单失败:', error);
+        }
+    }
+
+    /**
+     * 启动番茄钟（倒计时模式），复用 PomodoroManager 逻辑
+     */
+    private async _startPomodoro(workDurationOverride?: number) {
+        if (!this.plugin) {
+            showMessage("无法启动番茄钟：插件实例不可用");
+            return;
+        }
+
+        const reminder = await this._resolveReminderSource();
+        const settings = await this.plugin.getPomodoroSettings?.() || {};
+        const runtimeSettings = workDurationOverride && workDurationOverride > 0
+            ? { ...settings, workDuration: workDurationOverride }
+            : settings;
+
+        const pomodoroManager = PomodoroManager.getInstance();
+
+        const doStart = (inheritState?: any) => {
+            pomodoroManager.cleanupInactiveTimer();
+            const hasStandaloneWindow = this.plugin?.pomodoroWindowId;
+            if (hasStandaloneWindow && typeof this.plugin.openPomodoroWindow === 'function') {
+                this.plugin.openPomodoroWindow(reminder, runtimeSettings, false, inheritState);
+            } else {
+                pomodoroManager.closeCurrentTimer();
+                const timer = new PomodoroTimer(reminder, runtimeSettings, false, inheritState, this.plugin);
+                pomodoroManager.setCurrentPomodoroTimer(timer);
+                timer.show();
+            }
+        };
+
+        if (pomodoroManager.hasActivePomodoroTimer()) {
+            const currentState = pomodoroManager.getCurrentState();
+            if (currentState.isRunning && !currentState.isPaused) {
+                pomodoroManager.pauseCurrentTimer();
+            }
+            confirm(
+                i18n("switchPomodoro") || "切换番茄钟任务",
+                `${i18n("confirmSwitchPomodoro") || "当前有正在进行的番茄钟，是否切换？选择确定将继承当前进度。"}`,
+                () => doStart(currentState),
+                () => {
+                    if (currentState.isRunning && !currentState.isPaused) {
+                        pomodoroManager.resumeCurrentTimer();
+                    }
+                }
+            );
+        } else {
+            doStart();
+        }
+    }
+
+    /**
+     * 启动番茄钟（正计时模式）
+     */
+    private async _startPomodoroCountUp() {
+        if (!this.plugin) {
+            showMessage("无法启动番茄钟：插件实例不可用");
+            return;
+        }
+
+        const reminder = await this._resolveReminderSource();
+        const settings = await this.plugin.getPomodoroSettings?.() || {};
+        const pomodoroManager = PomodoroManager.getInstance();
+
+        const doStart = (inheritState?: any) => {
+            pomodoroManager.cleanupInactiveTimer();
+            const hasStandaloneWindow = this.plugin?.pomodoroWindowId;
+            if (hasStandaloneWindow && typeof this.plugin.openPomodoroWindow === 'function') {
+                this.plugin.openPomodoroWindow(reminder, settings, true, inheritState);
+            } else {
+                pomodoroManager.closeCurrentTimer();
+                const timer = new PomodoroTimer(reminder, settings, true, inheritState, this.plugin);
+                pomodoroManager.setCurrentPomodoroTimer(timer);
+                timer.show();
+            }
+            showMessage(i18n("startedCountUp") || "已启动正计时番茄钟", 2000);
+        };
+
+        if (pomodoroManager.hasActivePomodoroTimer()) {
+            const currentState = pomodoroManager.getCurrentState();
+            if (currentState.isRunning && !currentState.isPaused) {
+                pomodoroManager.pauseCurrentTimer();
+            }
+            confirm(
+                i18n("switchPomodoro") || "切换番茄钟任务",
+                `${i18n("confirmSwitchPomodoro") || "当前有正在进行的番茄钟，是否切换？"}`,
+                () => doStart(currentState),
+                () => {
+                    if (currentState.isRunning && !currentState.isPaused) {
+                        pomodoroManager.resumeCurrentTimer();
+                    }
+                }
+            );
+        } else {
+            doStart();
+        }
+    }
+
+    /**
+     * 构建传给 PomodoroTimer 的 reminder 源对象。
+     * 优先返回 reminderData 中的完整对象（含 blockId、isRepeatInstance 等），
+     * 以确保 PomodoroTimer 能正确打开绑定块。
+     * 若找不到则降级为仅含 { id, title } 的精简对象。
+     */
+    private async _resolveReminderSource(): Promise<any> {
+        const eventId = this.getDefaultAddTargetEventId();
+
+        // 1. 优先从 reminderData 取完整对象（含 blockId）
+        try {
+            const reminderData = await this.plugin.loadReminderData?.();
+            if (reminderData?.[eventId]) {
+                return reminderData[eventId];
+            }
+        } catch (_) { /* noop */ }
+
+        // 2. 兼容重复事件实例 ID（格式：originalId_YYYY-MM-DD）
+        if (eventId.includes('_')) {
+            try {
+                const reminderData = await this.plugin.loadReminderData?.();
+                const parts = eventId.split('_');
+                const lastPart = parts[parts.length - 1];
+                if (/^\d{4}-\d{2}-\d{2}$/.test(lastPart)) {
+                    const originalId = parts.slice(0, -1).join('_');
+                    if (reminderData?.[originalId]) {
+                        // 返回实例对象，合并 blockId 等字段
+                        return { ...reminderData[originalId], id: eventId };
+                    }
+                }
+            } catch (_) { /* noop */ }
+        }
+
+        // 3. 尝试习惯数据
+        try {
+            const habitData = await this.plugin.loadHabitData?.();
+            if (habitData?.[eventId]) {
+                return habitData[eventId];
+            }
+        } catch (_) { /* noop */ }
+
+        // 4. 降级：只有 id + title
+        const title = await this.resolveEventTitle(eventId);
+        return { id: eventId, title };
     }
 
     /**
