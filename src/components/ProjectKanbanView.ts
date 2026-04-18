@@ -9242,7 +9242,7 @@ export class ProjectKanbanView {
         if (group.blockId) {
             titleEl.dataset.type = 'a';
             titleEl.dataset.href = `siyuan://blocks/${group.blockId}`;
-            titleEl.style.color = 'var(--b3-protyle-inline-blockref-color)';
+            titleEl.style.color = group.color;
             titleEl.style.cursor = 'pointer';
             titleEl.style.textDecoration = 'underline dotted';
             titleEl.style.paddingBottom = '2px';
