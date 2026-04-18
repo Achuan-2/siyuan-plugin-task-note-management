@@ -649,8 +649,9 @@
         .pomodoro-count {
             font-size: 2.5vh !important;
             margin-top: 2vh !important;
-            justify-content: flex-start !important;
+            justify-content: flex-end !important;
             gap: 2vw !important;
+            width: 100% !important;
         }
 
         // 全屏模式下的音量控制
@@ -675,8 +676,6 @@
             transition: opacity 0.3s ease !important;
             z-index: 1000 !important;
 
-
-
             >div {
                 padding: 0 20px !important;
                 text-align: center !important;
@@ -695,38 +694,113 @@
                 font-size: 28px !important;
             }
         }
-    }
+        
+        .pomodoro-time {
+            font-size: 16vh !important;
+            font-weight: 600 !important;
+            text-align: left !important;
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.3) !important;
+            line-height: 1 !important;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace !important;
+            margin: 0 !important;
+        }
 
-    /* 全屏模式下的时间显示 */
-    &.fullscreen .pomodoro-time {
-        font-size: 16vh !important;
-        font-weight: 600 !important;
-        text-align: left !important;
-        text-shadow: 0 0 20px rgba(255, 255, 255, 0.3) !important;
-        line-height: 1 !important;
-        font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace !important;
-        margin: 0 !important;
-    }
+        /* 移动端全屏模式适配 */
+        @media (max-width: 768px) {
+            .pomodoro-header {
+                height: 60px !important;
+                padding: 10px 20px !important;
 
-    /* 全屏模式下的退出按钮 */
-    .pomodoro-exit-fullscreen {
-        position: fixed;
-        top: 30px;
-        right: 30px;
-        background: rgba(255, 255, 255, 0.1);
-        border: 2px solid rgba(255, 255, 255, 0.3);
-        cursor: pointer;
-        padding: 12px 20px;
-        border-radius: 8px;
-        font-size: 16px;
-        font-weight: 600;
-        z-index: 10001;
-        transition: all 0.3s ease;
-        backdrop-filter: blur(8px);
+                button {
+                    font-size: 18px !important;
+                    padding: 8px 12px !important;
+                    min-width: 40px !important;
+                    min-height: 40px !important;
+                }
+            }
 
-        &:hover {
-            background: rgba(255, 255, 255, 0.2);
-            border-color: rgba(255, 255, 255, 0.5);
+            .pomodoro-content {
+                padding: 60px 20px 80px !important;
+                transform: none !important;
+            }
+
+            .pomodoro-event-title {
+                font-size: 24px !important;
+                margin-bottom: 20px !important;
+                padding: 10px 20px !important;
+                max-width: 90% !important;
+                text-align: center !important;
+                word-break: break-all !important;
+            }
+
+            .pomodoro-main-container {
+                flex-direction: column !important;
+                gap: 30px !important;
+
+                >div:first-child {
+                    width: 250px !important;
+                    height: 250px !important;
+
+                    svg {
+                        width: 250px !important;
+                        height: 250px !important;
+                    }
+
+                    >div {
+                        width: 180px !important;
+                        height: 180px !important;
+                    }
+
+                    .pomodoro-status-icon {
+                        font-size: 60px !important;
+                    }
+                }
+
+                >div:last-child {
+                    align-items: center !important;
+                    height: auto !important;
+                }
+            }
+            
+            .pomodoro-time {
+                font-size: 72px !important;
+                text-align: center !important;
+            }
+
+            .pomodoro-status {
+                font-size: 20px !important;
+            }
+
+            .pomodoro-count {
+                font-size: 16px !important;
+                margin-top: 10px !important;
+                justify-content: center !important;
+            }
+
+            .pomodoro-sound-control {
+                font-size: 18px !important;
+                margin-top: 10px !important;
+            }
+
+            .pomodoro-stats {
+                width: 90% !important;
+                bottom: 20px !important;
+                padding: 15px !important;
+                display: flex !important;
+                justify-content: space-around !important;
+
+                >div {
+                    padding: 0 10px !important;
+                }
+
+                div[style*="font-size: 11px"] {
+                    font-size: 12px !important;
+                }
+
+                div[style*="font-size: 16px"] {
+                    font-size: 20px !important;
+                }
+            }
         }
     }
 
@@ -778,6 +852,35 @@
         height: 100%;
         align-items: center;
         justify-content: center;
+    }
+}
+
+/* 全屏模式下的退出按钮（移动到顶层避免被限定在pomodoro-timer-window下，因为DOM上是添加在body里的） */
+.pomodoro-exit-fullscreen {
+    position: fixed;
+    top: 30px;
+    right: 30px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    cursor: pointer;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    z-index: 10001;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(8px);
+
+    &:hover {
+        background: rgba(255, 255, 255, 0.2);
+        border-color: rgba(255, 255, 255, 0.5);
+    }
+
+    @media (max-width: 768px) {
+        top: 10px;
+        right: 10px;
+        padding: 8px 12px;
+        font-size: 14px;
     }
 }
 

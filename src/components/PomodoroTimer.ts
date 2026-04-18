@@ -3001,7 +3001,7 @@ export class PomodoroTimer {
         randomCountEl.textContent = this.randomRestCount.toString();
         randomCountEl.style.cssText = `
             margin-left:4px;
-            font-size:12px;
+            font-weight:600;
             color: var(--b3-theme-on-surface-variant);
             display: ${this.randomRestEnabled ? 'inline' : 'none'};
         `;
@@ -8422,6 +8422,9 @@ document.body.classList.remove('docked-mode');
             display: flex;
             align-items: center;
             gap: 4px;
+        }
+        .pomodoro-count span:nth-child(2), #randomCount {
+            font-weight: 600;
         }
         .pomodoro-dice { margin-left: 8px; font-size: clamp(12px, 3vmin, 2.5vh); opacity: 0.9; }
         .pomodoro-stats {
