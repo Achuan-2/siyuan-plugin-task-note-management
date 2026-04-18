@@ -125,29 +125,29 @@ export class PomodoroSessionsDialog {
         this.dialog = new Dialog({
             title: this.dialogTitle || ("🍅 " + (i18n("pomodoros") || "番茄钟记录")),
             content: `
-                <div class="pomodoro-sessions-dialog" style="padding: 16px; display: flex; flex-direction: column; gap: 16px; max-height: 80vh;">
+                <div class="b3-dialog__content" style="display: flex; flex-direction: column; gap: 12px;">
                     <div class="pomodoro-filters" style="display: flex; justify-content: flex-end; align-items: center;">
                         <label for="showBreakSessionsToggle" style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;">
                             <span style="font-size: 13px; color: var(--b3-theme-on-surface);">${i18n("showBreakSessions") || "显示休息记录"}</span>
                             <input type="checkbox" id="showBreakSessionsToggle" class="b3-switch" ${this.showBreakSessions ? "checked" : ""}>
                         </label>
                     </div>
-                    <div id="pomodoroSessionsList" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; min-height: 100px;">
+                    <div id="pomodoroSessionsList" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; min-height: 100px; max-height: 60vh;">
                         <!-- 番茄钟列表 -->
                     </div>
-                    <div class="pomodoro-actions" style="display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; padding-top: 8px; border-top: 1px solid var(--b3-border-color);">
-                        <button id="addPomodoroBtn" class="b3-button b3-button--outline">
-                            <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
-                            ${i18n("addPomodoro") || "补录番茄钟"}
-                        </button>
-                        <button id="startPomodoroBtn" class="b3-button b3-button--primary">
-                            <svg class="b3-button__icon"><use xlink:href="#iconPlay"></use></svg>
-                            ${i18n("startPomodoro") || "开始番茄钟"}
-                        </button>
-                        <button id="startCountUpBtn" class="b3-button b3-button--outline">
-                            ⏱️ ${i18n("startCountUp") || "正计时"}
-                        </button>
-                    </div>
+                </div>
+                <div class="b3-dialog__action">
+                    <button id="addPomodoroBtn" class="b3-button b3-button--outline">
+                        <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
+                        ${i18n("addPomodoro") || "补录番茄钟"}
+                    </button>
+                    <button id="startPomodoroBtn" class="b3-button b3-button--primary">
+                        <svg class="b3-button__icon"><use xlink:href="#iconPlay"></use></svg>
+                        ${i18n("startPomodoro") || "开始番茄钟"}
+                    </button>
+                    <button id="startCountUpBtn" class="b3-button b3-button--outline">
+                        ⏱️ ${i18n("startCountUp") || "正计时"}
+                    </button>
                 </div>
             `,
             width: "600px",
