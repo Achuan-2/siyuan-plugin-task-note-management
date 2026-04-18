@@ -4351,6 +4351,47 @@ export class PomodoroTimer {
         showMessage((i18n('switchedToMode') || '已切换到') + modeText + (i18n('mode') || '模式'), 2000);
     }
 
+    private showNativeSwitchMenuPopup() {
+        const electronReq = typeof window !== 'undefined' ? ((window as any).require || (window as any).exports?.require || (window as any).parent?.require) : null;
+        if (!electronReq) return;
+        const remote = electronReq('@electron/remote') || electronReq('electron')?.remote;
+        if (!remote || !remote.Menu) return;
+
+        const { Menu, MenuItem } = remote;
+        const menu = new Menu();
+
+        const workText = i18n('pomodoroWork') || '工作时间';
+        const shortBreakText = i18n('pomodoroBreak') || '短时休息';
+        const longBreakText = i18n('pomodoroLongBreak') || '长时休息';
+        const switchToCountdownText = i18n('switchToCountdown') || '切换到倒计时';
+        const switchToCountUpText = i18n('switchToCountUp') || '切换到正计时';
+
+        menu.append(new MenuItem({
+            label: `${this.isCountUp ? '🍅' : '⏱'} ${this.isCountUp ? switchToCountdownText : switchToCountUpText}`,
+            click: () => this.toggleMode()
+        }));
+        menu.append(new MenuItem({ type: 'separator' }));
+        menu.append(new MenuItem({
+            label: `💪 ${workText}`,
+            click: () => this.startWorkTime()
+        }));
+        menu.append(new MenuItem({
+            label: `🍵 ${shortBreakText}`,
+            click: () => this.startShortBreak()
+        }));
+        menu.append(new MenuItem({
+            label: `🧘 ${longBreakText}`,
+            click: () => this.startLongBreak()
+        }));
+
+        const pomodoroWindow = PomodoroTimer.browserWindowInstance;
+        if (pomodoroWindow && !pomodoroWindow.isDestroyed()) {
+            menu.popup({ window: pomodoroWindow });
+        } else {
+            menu.popup();
+        }
+    }
+
     /**
      * 设置响应式布局，根据窗口大小调整元素尺寸
      */
@@ -8897,10 +8938,7 @@ document.body.classList.remove('docked-mode');
 
         function toggleMiniSwitchMenu(e) {
             if (e) e.stopPropagation();
-            const m = document.getElementById('miniSwitchMenu');
-            if (m) m.classList.toggle('show');
-            const desktopMenu = document.getElementById('switchMenu');
-            if (desktopMenu) desktopMenu.classList.remove('show');
+            ipcRenderer.send('${actionChannel}', 'showSwitchMenuPopup');
         }
 
         function applyMiniStyleClass() {
@@ -9532,6 +9570,9 @@ document.body.classList.remove('docked-mode');
                     break;
                 case 'toggleMode':
                     this.toggleMode();
+                    break;
+                case 'showSwitchMenuPopup':
+                    this.showNativeSwitchMenuPopup();
                     break;
                 case 'openRelatedNote':
                     this.openRelatedNote();
