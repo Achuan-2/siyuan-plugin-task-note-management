@@ -1172,6 +1172,7 @@ export class PomodoroTimer {
                 hasShadow: true,
                 transparent: false,
                 parent: null, // 确保独立窗口，不依赖主窗口
+                fullscreenable: false,
                 webPreferences: {
                     nodeIntegration: true,
                     contextIsolation: false,
@@ -1370,6 +1371,7 @@ export class PomodoroTimer {
                 hasShadow: true,
                 transparent: false,
                 parent: null, // 确保独立窗口，不依赖主窗口
+                fullscreenable: false,
                 webPreferences: {
                     nodeIntegration: false,
                     contextIsolation: true,
@@ -1554,6 +1556,7 @@ export class PomodoroTimer {
                 hasShadow: true,
                 transparent: false,
                 parent: null, // 确保独立窗口，不依赖主窗口
+                fullscreenable: false,
                 webPreferences: {
                     nodeIntegration: false,
                     contextIsolation: true,
@@ -7541,6 +7544,7 @@ export class PomodoroTimer {
                 skipTaskbar: false,
                 hasShadow: !this.isDocked,
                 resizable: !this.isDocked,
+                fullscreenable: false,
                 minWidth: 40,
                 minHeight: 40,
                 transparent: transparent,
