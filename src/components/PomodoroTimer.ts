@@ -6346,13 +6346,25 @@ export class PomodoroTimer {
                 // 正计时休息模式
                 this.breakTimeLeft = newTimeInSeconds;
                 // 更新当前休息阶段的原始时长
-                this.currentPhaseOriginalDuration = Math.floor(newTimeInSeconds / 60);
+                this.currentPhaseOriginalDuration = newTimeInSeconds / 60;
+                if (this.isLongBreak) {
+                    this.settings.longBreakDuration = this.currentPhaseOriginalDuration;
+                } else {
+                    this.settings.breakDuration = this.currentPhaseOriginalDuration;
+                }
             } else if (!this.isCountUp) {
                 // 倒计时模式
                 this.timeLeft = newTimeInSeconds;
                 this.totalTime = newTimeInSeconds;
                 // 更新当前阶段的原始时长
-                this.currentPhaseOriginalDuration = Math.floor(newTimeInSeconds / 60);
+                this.currentPhaseOriginalDuration = newTimeInSeconds / 60;
+                if (this.isWorkPhase) {
+                    this.settings.workDuration = this.currentPhaseOriginalDuration;
+                } else if (this.isLongBreak) {
+                    this.settings.longBreakDuration = this.currentPhaseOriginalDuration;
+                } else {
+                    this.settings.breakDuration = this.currentPhaseOriginalDuration;
+                }
             }
 
             // 恢复时间显示
@@ -6591,9 +6603,23 @@ export class PomodoroTimer {
 
                 if (this.isCountUp && !this.isWorkPhase) {
                     this.breakTimeLeft = newTimeInSeconds;
+                    this.currentPhaseOriginalDuration = newTimeInSeconds / 60;
+                    if (this.isLongBreak) {
+                        this.settings.longBreakDuration = this.currentPhaseOriginalDuration;
+                    } else {
+                        this.settings.breakDuration = this.currentPhaseOriginalDuration;
+                    }
                 } else if (!this.isCountUp) {
                     this.timeLeft = newTimeInSeconds;
                     this.totalTime = newTimeInSeconds;
+                    this.currentPhaseOriginalDuration = newTimeInSeconds / 60;
+                    if (this.isWorkPhase) {
+                        this.settings.workDuration = this.currentPhaseOriginalDuration;
+                    } else if (this.isLongBreak) {
+                        this.settings.longBreakDuration = this.currentPhaseOriginalDuration;
+                    } else {
+                        this.settings.breakDuration = this.currentPhaseOriginalDuration;
+                    }
                 }
 
                 this.updateBrowserWindowDisplay(window);
@@ -9863,7 +9889,7 @@ document.body.classList.remove('mini-mode');
         const style = this.getMiniWindowStyle();
         const defaults = {
             ring: { width: 50, height: 50 },
-            horizontal: { width: 130, height: 22 },
+            horizontal: { width: 140, height: 22 },
             minimal: { width: 130, height: 22 }
         };
         const fallback = defaults[style];
