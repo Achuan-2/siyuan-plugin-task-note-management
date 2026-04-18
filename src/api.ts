@@ -915,13 +915,18 @@ export async function isTaskListLikeBlock(blockId: string): Promise<boolean> {
         const result = await sql(`SELECT type, subtype FROM blocks WHERE id = '${blockId}'`);
         if (result && result.length > 0) {
             const block = result[0];
-            // 兼容任务列表项（i/t）和任务列表容器（l/t）
-            if ((block.type === 'i' || block.type === 'l') && block.subtype === 't') {
+            // 只允许列表项（i/t），不允许列表容器（l/t）
+            // batchUpdateTaskListItemMarker 只接受列表项，传入容器会报 "block is not a list item"
+            if (block.type === 'i' && block.subtype === 't') {
                 return true;
+            }
+            // 明确排除非列表项类型，避免走到兜底 kramdown 检测
+            if (block.type !== 'i') {
+                return false;
             }
         }
 
-        // 兜底：按 kramdown 内容识别，避免依赖 markdown
+        // 兜底：按 kramdown 内容识别（仅当 SQL 无结果时使用）
         const kramdown = (await getBlockKramdown(blockId)).kramdown || '';
         if (!kramdown) return false;
         return /^\s*[-*+]\s*(?:\{:[^}]*\}\s*)?\[(?: |x|X)\]/m.test(kramdown)
