@@ -5696,11 +5696,16 @@ export class PomodoroTimer {
                 this.updateDisplay();
                 this.updateMainSwitchButton();
 
-                // 自动切换到工作阶段
-                this.autoTransitionTimer = window.setTimeout(() => {
-                    this.autoTransitionTimer = null;
+                // 检查是否为 BrowserWindow 模式，如果是则跳过 setTimeout 延迟以防被 Chromium 挂起后台节流
+                const isBrowserWindowActive = PomodoroTimer.browserWindowInstance && !PomodoroTimer.browserWindowInstance.isDestroyed();
+                if (isBrowserWindowActive) {
                     this.autoSwitchToWork();
-                }, 1000); // 延迟1秒切换
+                } else {
+                    this.autoTransitionTimer = window.setTimeout(() => {
+                        this.autoTransitionTimer = null;
+                        this.autoSwitchToWork();
+                    }, 1000); // 延迟1秒切换
+                }
             } else {
                 showMessage(`☕ ${breakType}${i18n('pomodoroBreakEndAutoWork') || '结束！自动开始下一个工作阶段'}`, 3000);
 
@@ -5817,11 +5822,16 @@ export class PomodoroTimer {
                     this.updateDisplay();
                     this.updateMainSwitchButton();
 
-                    // 自动切换到休息阶段
-                    this.autoTransitionTimer = window.setTimeout(() => {
-                        this.autoTransitionTimer = null;
+                    // 自动切换到休息阶段（如果是 BrowserWindow 模式，跳过延迟防 Chromium 挂起）
+                    const isBrowserWindowActive = PomodoroTimer.browserWindowInstance && !PomodoroTimer.browserWindowInstance.isDestroyed();
+                    if (isBrowserWindowActive) {
                         this.autoSwitchToBreak(shouldTakeLongBreak);
-                    }, 1000);
+                    } else {
+                        this.autoTransitionTimer = window.setTimeout(() => {
+                            this.autoTransitionTimer = null;
+                            this.autoSwitchToBreak(shouldTakeLongBreak);
+                        }, 1000);
+                    }
                 } else {                // 非自动模式下，也要根据番茄钟数量判断休息类型
                     if (shouldTakeLongBreak) {
                         // 只有在系统弹窗关闭时才显示思源笔记弹窗
@@ -5905,11 +5915,16 @@ export class PomodoroTimer {
                     this.updateDisplay();
                     this.updateMainSwitchButton();
 
-                    // 自动切换到工作阶段
-                    this.autoTransitionTimer = window.setTimeout(() => {
-                        this.autoTransitionTimer = null;
+                    // 自动切换到工作阶段（如果是 BrowserWindow 模式，跳过延迟防 Chromium 挂起）
+                    const isBrowserWindowActive = PomodoroTimer.browserWindowInstance && !PomodoroTimer.browserWindowInstance.isDestroyed();
+                    if (isBrowserWindowActive) {
                         this.autoSwitchToWork();
-                    }, 1000);
+                    } else {
+                        this.autoTransitionTimer = window.setTimeout(() => {
+                            this.autoTransitionTimer = null;
+                            this.autoSwitchToWork();
+                        }, 1000);
+                    }
                 } else {
                     // 非自动模式：切换到工作阶段（不自动开始）
                     if (!this.systemNotificationEnabled) {
