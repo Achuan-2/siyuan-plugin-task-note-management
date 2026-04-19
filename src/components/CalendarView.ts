@@ -86,6 +86,7 @@ export class CalendarView {
     } | null = null;
     private allDayDragListener: ((e: MouseEvent) => void) | null = null;
     private isAllDayReordering: boolean = false; // 标记是否正在处理全天重排序
+    private allDayReorderPromise: Promise<void> | null = null; // 串行化全天重排序与 eventDrop 保存
 
     // 全天事件区域调整相关
     private allDayHeight: number = 200;
@@ -4724,9 +4725,14 @@ export class CalendarView {
         const stateToProcess = { ...this.allDayDragState };
 
         // 4. 执行异步重排序
+        const reorderPromise = this.handleAllDayReorder(stateToProcess);
+        this.allDayReorderPromise = reorderPromise;
         try {
-            await this.handleAllDayReorder(stateToProcess);
+            await reorderPromise;
         } finally {
+            if (this.allDayReorderPromise === reorderPromise) {
+                this.allDayReorderPromise = null;
+            }
             this.isAllDayReordering = false;
             this.allDayDragState = null;
             this.isDragging = false;
@@ -4965,15 +4971,10 @@ export class CalendarView {
                         const mod = reminder.repeat.instanceModifications[instanceDate];
                         mod.sort = newSortValue;
 
-                        // 如果是被拖拽的任务，可能还需要更新其优先级、日期等
+                        // 如果是被拖拽的任务，仅更新排序和优先级。
+                        // 实际日期由 eventDrop / updateSingleInstance 统一保存。
                         if (event.id === draggedId) {
                             mod.priority = priority;
-
-                            // 如果日期也发生了改变（跨天重排序）
-                            if (instanceDate !== targetDate) {
-                                // 处理重复实例的跨天拖动比较复杂，通常我们只更新修改中的 date
-                                mod.date = targetDate;
-                            }
                         }
                     }
                 } else {
@@ -4982,16 +4983,6 @@ export class CalendarView {
 
                     if (event.id === draggedId) {
                         reminder.priority = priority;
-
-                        // 更新日期
-                        const oldDate = reminder.date || '';
-                        if (oldDate !== targetDate) {
-                            reminder.date = targetDate;
-                            if (reminder.endDate) {
-                                const diff = getDaysDifference(oldDate, targetDate);
-                                reminder.endDate = addDaysToDate(reminder.endDate, diff);
-                            }
-                        }
                     }
                 }
             }
@@ -5072,9 +5063,9 @@ export class CalendarView {
     }
 
     private async handleEventDrop(info) {
-        // 如果正在进行全天重排序，直接跳过通用的 eventDrop 处理
-        if (this.isAllDayReordering || (this.allDayDragState && this.allDayDragState.targetEvent)) {
-            return;
+        // 全天重排序在 eventDragStop 中先执行；这里等待它完成后再保存实际日期，避免相互覆盖。
+        if (info.event.allDay && this.allDayReorderPromise) {
+            await this.allDayReorderPromise;
         }
 
         if (info.event.extendedProps.type === 'habitReminderTime') {
@@ -5746,6 +5737,7 @@ export class CalendarView {
             }
 
             const modifications = reminderData[originalId].repeat.instanceModifications;
+            const existingModification = modifications[instanceDate] || {};
 
             // 如果修改了日期，需要清理可能存在的中间修改记录
             // 例如：原始日期 12-01 改为 12-03，再改为 12-06
@@ -5766,6 +5758,7 @@ export class CalendarView {
 
             // 保存此实例的修改数据（始终使用原始实例日期作为键）
             modifications[instanceDate] = {
+                ...existingModification,
                 title: instanceData.title,
                 date: instanceData.date,
                 endDate: instanceData.endDate,
