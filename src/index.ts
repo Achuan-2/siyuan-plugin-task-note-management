@@ -1974,7 +1974,7 @@ export default class ReminderPlugin extends Plugin {
         this.registerDockPanel({
             type: "habit_dock",
             icon: "iconCheck",
-            title: "习惯打卡",
+            title: "习惯打卡侧栏",
             text: "Habit tracking dock",
             init: (element) => {
                 new HabitPanel(element, this);
