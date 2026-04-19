@@ -218,7 +218,7 @@ export const DEFAULT_SETTINGS = {
     pomodoroGlobalWindow: true, // 新增：桌面端启用全局独立番茄钟窗口
     pomodoroSystemNotification: true, // 新增：番茄结束后系统弹窗
     pomodoroEndPopupWindow: true, // 新增：番茄钟结束弹窗提醒，默认关闭
-    pomodoroDockPosition: 'top', // 新增：番茄钟吸附位置 'right' | 'left' | 'top'
+    pomodoroDockPosition: 'right', // 新增：番茄钟吸附位置 'right' | 'left' | 'top'
     pomodoroMiniWindowStyle: 'ring', // mini窗口样式 'ring' | 'horizontal' | 'minimal'
     reminderSystemNotification: true, // 新增：事件到期提醒系统弹窗
     showInternalNotification: false, // 新增：是否显示内部通知框
