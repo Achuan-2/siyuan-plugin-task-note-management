@@ -8258,8 +8258,12 @@ document.body.classList.remove('docked-mode');
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 8px;
+            min-width: 0;
         }
-        .titlebar-left, .titlebar-buttons { display: flex; align-items: center; gap: 4px; }
+        .titlebar-left, .titlebar-buttons { display: flex; align-items: center; gap: 4px; min-width: 0; }
+        .titlebar-left { flex: 1 1 auto; overflow: hidden; }
+        .titlebar-buttons { flex: 0 0 auto; }
         .titlebar-btn {
             -webkit-app-region: no-drag;
             background: none;
@@ -8276,6 +8280,24 @@ document.body.classList.remove('docked-mode');
         .titlebar-btn:hover { opacity: 1; background: ${hoverColor}; }
         .titlebar-btn.close-btn:hover { background: #e81123; color: white; }
         .pin-btn.active { opacity: 1 !important; background: ${hoverColor} !important;  }
+        body.normal-compact-titlebar .custom-titlebar {
+            padding: 4px;
+            gap: 4px;
+        }
+        body.normal-compact-titlebar .titlebar-left,
+        body.normal-compact-titlebar .titlebar-buttons {
+            gap: 2px;
+        }
+        body.normal-compact-titlebar .titlebar-btn {
+            padding: 2px;
+            font-size: clamp(11px, 2.5vmin, 2vh);
+        }
+        body.normal-hide-titlebar-sound #soundBtn {
+            display: none;
+        }
+        body.normal-hide-left-buttons .titlebar-left {
+            display: none;
+        }
         .switch-container { position: relative; }
         .switch-menu {
             position: absolute;
@@ -8326,8 +8348,8 @@ document.body.classList.remove('docked-mode');
             transition: all 0.2s;
         }
         .pomodoro-event-title:hover { background: ${hoverColor}; border-color: #4CAF50; }
-        .pomodoro-main-container { display: flex; align-items: center; justify-content: center; gap: clamp(16px, 4vw, 8vw); margin-bottom: 10px; flex: 1; }
-        .progress-container { position: relative; width: clamp(80px, 45vmin, 40vh); height: clamp(80px, 45vmin, 40vh); flex-shrink: 1; min-width: 80px; }
+        .pomodoro-main-container { -webkit-app-region: drag; display: flex; align-items: center; justify-content: center; gap: var(--normal-gap); margin-bottom: 10px; flex: 1; min-height: 0; }
+        .progress-container { -webkit-app-region: drag; position: relative; width: var(--normal-ring-size); height: var(--normal-ring-size); flex-shrink: 0; min-width: 0; min-height: 0; }
         .progress-ring { width: 100%; height: 100%; transform: rotate(-90deg); }
         .progress-ring-bg { fill: none; stroke: ${backgroundLightColor}; stroke-width: 6; opacity: 0.3; }
         .progress-ring-circle {
@@ -8340,6 +8362,7 @@ document.body.classList.remove('docked-mode');
             transition: stroke-dashoffset 0.5s ease, stroke 0.3s ease;
         }
         .center-content {
+            -webkit-app-region: no-drag;
             position: absolute;
             top: 50%;
             left: 50%;
@@ -8394,16 +8417,16 @@ document.body.classList.remove('docked-mode');
             transition: all 0.2s;
         }
         .circle-control-btn:hover { transform: scale(1.1); }
-        .time-info { display: flex; flex-direction: column; gap: 4px; }
+        .time-info { -webkit-app-region: no-drag; display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 0 1 auto; }
         .pomodoro-status {
-            font-size: clamp(10px, 2.5vmin, 3vh);
+            font-size: var(--normal-status-size);
             opacity: 0.7;
             font-weight: 500;
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
         .pomodoro-time {
-            font-size: clamp(18px, 10vmin, 16vh);
+            font-size: var(--normal-time-size);
             font-weight: 700;
             font-variant-numeric: tabular-nums;
             line-height: 1.2;
@@ -8412,32 +8435,34 @@ document.body.classList.remove('docked-mode');
             padding: 2px 4px;
             transition: background 0.2s;
             font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
-            max-width: 40vw;
+            max-width: min(40vw, calc(100vw - var(--normal-ring-size) - 56px));
             text-align: center;
         }
         .pomodoro-time:hover { background: ${hoverColor}; }
         .pomodoro-count {
-            font-size: clamp(12px, 3vmin, 2.5vh);
+            font-size: var(--normal-count-size);
             opacity: 0.7;
             display: flex;
             align-items: center;
             gap: 4px;
         }
-        .pomodoro-count span:nth-child(2), #randomCount {
-            font-weight: 600;
-        }
-        .pomodoro-dice { margin-left: 8px; font-size: clamp(12px, 3vmin, 2.5vh); opacity: 0.9; }
+        .pomodoro-count span:nth-child(2), #randomCount { font-weight: 600; }
+        .pomodoro-dice { margin-left: 8px; font-size: var(--normal-count-size); opacity: 0.9; }
         .pomodoro-stats {
             display: flex;
             justify-content: space-between;
             padding: 12px;
             background: ${surfaceColor};
             border-radius: 8px;
+            flex-shrink: 0;
         }
         .stat-item { flex: 1; text-align: center; padding: 0 8px; }
         .stat-item:first-child { border-right: 1px solid ${borderColor}; }
-        .stat-label { font-size: clamp(9px, 2.2vmin, 1.8vh); opacity: 0.7; margin-bottom: 4px; }
-        .stat-value { font-size: clamp(14px, 3.5vmin, 2.8vh); font-weight: 600; color: #FF6B6B; }
+        .stat-label { font-size: var(--normal-stat-label-size); opacity: 0.7; margin-bottom: 4px; }
+        .stat-value { font-size: var(--normal-stat-value-size); font-weight: 600; color: #FF6B6B; }
+        body.normal-hide-time .time-info { display: none; }
+        body.normal-hide-time .pomodoro-main-container { justify-content: center; gap: 0; }
+        body.normal-hide-stats .pomodoro-stats { display: none; }
         
         /* 迷你模式样式 */
         .mini-layout,
@@ -8445,6 +8470,13 @@ document.body.classList.remove('docked-mode');
             display: none;
         }
         :root {
+            --normal-ring-size: clamp(80px, 45vmin, 40vh);
+            --normal-gap: clamp(16px, 4vw, 8vw);
+            --normal-time-size: clamp(16px, 8vmin, 12vh);
+            --normal-status-size: clamp(10px, 2.5vmin, 3vh);
+            --normal-count-size: clamp(12px, 3vmin, 2.5vh);
+            --normal-stat-label-size: clamp(9px, 2.2vmin, 1.8vh);
+            --normal-stat-value-size: clamp(14px, 3.5vmin, 2.8vh);
             --mini-w: 320px;
             --mini-h: 80px;
             --mini-base: 80px;
@@ -9009,6 +9041,126 @@ document.body.classList.remove('docked-mode');
             root.style.setProperty('--mini-h', height + 'px');
             root.style.setProperty('--mini-base', base + 'px');
         }
+
+        function applyNormalResponsiveLayout() {
+            document.body.classList.remove(
+                'normal-hide-time',
+                'normal-hide-stats',
+                'normal-compact-titlebar',
+                'normal-hide-titlebar-sound',
+                'normal-hide-left-buttons'
+            );
+
+            if (document.body.classList.contains('mini-mode') || document.body.classList.contains('docked-mode')) {
+                return;
+            }
+
+            const root = document.documentElement;
+            const width = Math.max(window.innerWidth || 0, 1);
+            const height = Math.max(window.innerHeight || 0, 1);
+            const titlebar = document.querySelector('.custom-titlebar');
+            const titlebarLeft = document.querySelector('.titlebar-left');
+            const titlebarButtons = document.querySelector('.titlebar-buttons');
+            const eventTitle = document.querySelector('.pomodoro-event-title');
+
+            const titlebarHeight = titlebar ? Math.ceil(titlebar.getBoundingClientRect().height) : 36;
+            const eventHeight = eventTitle ? Math.ceil(eventTitle.getBoundingClientRect().height) : 32;
+            const compactGap = Math.max(8, Math.min(16, width * 0.06));
+            const horizontalPadding = 40;
+            const contentBuffer = 18;
+            const statsReserve = 60;
+            const preferredRingSize = 80;
+            const minRingSize = Math.max(36, Math.min(56, width - 24, height - titlebarHeight - 24));
+            const minTimeInfoWidth = 86;
+            const maxRingSize = Math.max(220, Math.min(420, Math.floor(Math.min(width * 0.54, height * 0.56))));
+            let compactTitlebar = false;
+            let hideTitlebarSound = false;
+            let hideLeftButtons = false;
+
+            const titlebarNeedsCompression = () => {
+                if (!titlebar || !titlebarButtons) {
+                    return false;
+                }
+
+                const totalWidth = Math.ceil(titlebar.getBoundingClientRect().width);
+                const rightWidth = Math.ceil(titlebarButtons.getBoundingClientRect().width);
+                const leftWidth = titlebarLeft ? Math.ceil(titlebarLeft.getBoundingClientRect().width) : 0;
+                const reservedGap = 12;
+
+                return leftWidth + rightWidth + reservedGap > totalWidth;
+            };
+
+            let hideStats = width < 220 || (height - titlebarHeight - eventHeight - contentBuffer) < 132;
+            let availableHeight = height - titlebarHeight - eventHeight - contentBuffer - (hideStats ? 0 : statsReserve);
+            let hideTime = width < (horizontalPadding + preferredRingSize + minTimeInfoWidth + compactGap) || availableHeight < 92;
+            let availableWidth = width - horizontalPadding - (hideTime ? 0 : (minTimeInfoWidth + compactGap));
+
+            let ringSize = Math.min(maxRingSize, availableWidth, availableHeight);
+
+            if (!hideTime && ringSize < preferredRingSize) {
+                hideTime = true;
+                availableWidth = width - horizontalPadding;
+                ringSize = Math.min(maxRingSize, availableWidth, availableHeight);
+            }
+
+            if (!hideStats && ringSize < preferredRingSize) {
+                hideStats = true;
+                availableHeight = height - titlebarHeight - eventHeight - contentBuffer;
+                ringSize = Math.min(maxRingSize, availableWidth, availableHeight);
+
+                if (!hideTime && ringSize < preferredRingSize) {
+                    hideTime = true;
+                    availableWidth = width - horizontalPadding;
+                    ringSize = Math.min(maxRingSize, availableWidth, availableHeight);
+                }
+            }
+
+            ringSize = Math.max(minRingSize, Math.min(maxRingSize, ringSize));
+
+            root.style.setProperty('--normal-ring-size', ringSize + 'px');
+            root.style.setProperty('--normal-gap', (hideTime ? 0 : compactGap) + 'px');
+            root.style.setProperty('--normal-time-size', Math.max(16, Math.min(64, ringSize * 0.23)) + 'px');
+            root.style.setProperty('--normal-status-size', Math.max(10, Math.min(22, ringSize * 0.125)) + 'px');
+            root.style.setProperty('--normal-count-size', Math.max(11, Math.min(22, ringSize * 0.135)) + 'px');
+            root.style.setProperty('--normal-stat-label-size', Math.max(9, Math.min(16, width * 0.038)) + 'px');
+            root.style.setProperty('--normal-stat-value-size', Math.max(13, Math.min(28, Math.min(width * 0.058, ringSize * 0.11))) + 'px');
+
+            if (hideTime) {
+                document.body.classList.add('normal-hide-time');
+            }
+
+            if (hideStats) {
+                document.body.classList.add('normal-hide-stats');
+            }
+
+            if (titlebarNeedsCompression()) {
+                compactTitlebar = true;
+                document.body.classList.add('normal-compact-titlebar');
+            }
+
+            if (titlebarNeedsCompression()) {
+                hideTitlebarSound = true;
+                document.body.classList.add('normal-hide-titlebar-sound');
+            }
+
+            if (titlebarNeedsCompression()) {
+                hideLeftButtons = true;
+                closeSwitchMenu();
+                document.body.classList.add('normal-hide-left-buttons');
+            }
+
+            if (compactTitlebar) {
+                document.body.classList.add('normal-compact-titlebar');
+            }
+
+            if (hideTitlebarSound) {
+                document.body.classList.add('normal-hide-titlebar-sound');
+            }
+
+            if (hideLeftButtons) {
+                document.body.classList.add('normal-hide-left-buttons');
+            }
+        }
         
         function togglePin() {
             isPinned = !isPinned;
@@ -9080,6 +9232,7 @@ document.body.classList.remove('docked-mode');
             if (!localState) return;
             applyMiniStyleClass();
             applyMiniResponsiveVars();
+            applyNormalResponsiveLayout();
 
             let displayTime = 0;
             if (localState.isCountUp) {
