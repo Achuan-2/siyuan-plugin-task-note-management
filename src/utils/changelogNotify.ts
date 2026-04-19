@@ -5,6 +5,7 @@ import { i18n } from "../pluginInstance";
 
 // 更新日志功能的起始版本
 const CHANGELOG_START_VERSION = "6.5.5";
+const MAX_DISPLAYED_CHANGELOG_VERSIONS = 10;
 
 export class ChangelogUtils {
     private static getCurrentLang(): string {
@@ -34,6 +35,14 @@ export class ChangelogUtils {
 
         // 非中文优先英文，英文为空则回退中文
         return englishNotes || chineseNotes || (i18n("noUpdateNotes") || "无更新内容");
+    }
+
+    private static getChangelogTruncatedNotice(totalVersions: number): string {
+        if (this.getCurrentLang() === "zh_CN") {
+            return `仅展示最近 ${MAX_DISPLAYED_CHANGELOG_VERSIONS} 个版本的更新日志，共匹配到 ${totalVersions} 个版本。更早内容请查看完整 CHANGELOG。`;
+        }
+
+        return `Showing the latest ${MAX_DISPLAYED_CHANGELOG_VERSIONS} changelog versions only. ${totalVersions} versions matched in total. See the full CHANGELOG for older updates.`;
     }
 
     /**
@@ -161,6 +170,7 @@ export class ChangelogUtils {
         const matches = content.matchAll(versionRegex);
         
         const results: string[] = [];
+        let totalMatchedVersions = 0;
         
         for (const match of matches) {
             const versionHeader = match[0];
@@ -177,11 +187,19 @@ export class ChangelogUtils {
             // 仅包含起始版本之后（或包含起始版本）且小于等于 toVersion 的版本
             if (isAfterFromVersion &&
                 this.compareVersions(version, toVersion) <= 0) {
-                results.push(this.getLocalizedVersionNotes(match[0]));
+                totalMatchedVersions++;
+
+                if (results.length < MAX_DISPLAYED_CHANGELOG_VERSIONS) {
+                    results.push(this.getLocalizedVersionNotes(match[0]));
+                }
             }
         }
         
         if (results.length > 0) {
+            if (totalMatchedVersions > MAX_DISPLAYED_CHANGELOG_VERSIONS) {
+                results.push(this.getChangelogTruncatedNotice(totalMatchedVersions));
+            }
+
             return results.join('\n\n---\n\n');
         }
         
