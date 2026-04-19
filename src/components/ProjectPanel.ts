@@ -1046,13 +1046,6 @@ export class ProjectPanel {
         infoEl.appendChild(titleEl);
         infoEl.appendChild(timeContainer);
 
-        // 添加状态标签
-        const statusLabel = document.createElement('div');
-        statusLabel.className = `project-status-label project-status-${status}`;
-        const statusInfo = this.statusManager.getStatusById(status);
-        statusLabel.textContent = statusInfo ? `${statusInfo.icon || ''} ${statusInfo.name}` : (i18n("unknownStatus") || '未知状态');
-        infoEl.appendChild(statusLabel);
-
         // 添加项目下顶级任务计数（todo/doing/done）
         const countsContainer = document.createElement('div');
         countsContainer.className = 'project-item__counts';
@@ -1730,6 +1723,7 @@ export class ProjectPanel {
         if (startDate) {
             const start = new Date(startDate + 'T00:00:00');
             const startStr = start.toLocaleDateString(getLocaleTag(), {
+                year: 'numeric',
                 month: 'short',
                 day: 'numeric'
             });
@@ -1739,6 +1733,7 @@ export class ProjectPanel {
         if (endDate) {
             const end = new Date(endDate + 'T00:00:00');
             const endStr = end.toLocaleDateString(getLocaleTag(), {
+                year: 'numeric',
                 month: 'short',
                 day: 'numeric'
             });
