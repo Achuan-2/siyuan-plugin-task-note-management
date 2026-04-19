@@ -1941,7 +1941,6 @@ export class QuickReminderDialog {
                                     </div>
                                 </div>
                             </div>
-                            <div class="b3-form__desc">${i18n("dateTimeOptionalDesc")}</div>
                         </div>
                         <!-- 完成时间显示和编辑 -->
                         <div class="b3-form__group" id="quickCompletedTimeGroup" style="display: none;">
