@@ -770,6 +770,8 @@
     "removeFromProject": "从项目中移除",
     "pleaseEnterProjectName": "请输入项目名称",
     "createProject": "创建项目",
+    "projectTitle": "项目标题",
+    "pleaseEnterProjectTitle": "请输入项目标题",
     "repeatSeries": "重复系列",
     "copyEventTitle": "复制事件标题",
     "eventTitleCopied": "事件标题已复制到剪贴板",

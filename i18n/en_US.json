@@ -770,6 +770,8 @@
     "removeFromProject": "Remove from Project",
     "pleaseEnterProjectName": "Please enter project name",
     "createProject": "Create Project",
+    "projectTitle": "Project Title",
+    "pleaseEnterProjectTitle": "Please enter project title",
     "repeatSeries": "Repeat Series",
     "copyEventTitle": "Copy Event Title",
     "eventTitleCopied": "Event title copied to clipboard",

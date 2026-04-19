@@ -1,4 +1,4 @@
-﻿import { Dialog, showMessage } from "siyuan";
+import { Dialog, showMessage } from "siyuan";
 import { getBlockByID } from "../api";
 import { getLogicalDateString } from "../utils/dateUtils";
 import { CategoryManager } from "../utils/categoryManager";
@@ -66,8 +66,8 @@ export class ProjectDialog {
             <div class="project-dialog">
                 <div class="b3-dialog__content">
                     <div class="form-group">
-                        <label>${i18n("eventName") || "项目名称"}:</label>
-                        <input type="text" id="projectTitle" class="b3-text-field" style="width: 100%;" value="${existingProject?.title || title}" placeholder="${i18n("pleaseEnterTitle") || "输入项目名称"}">
+                        <label>${i18n("projectTitle") || "项目标题"}:</label>
+                        <input type="text" id="projectTitle" class="b3-text-field" style="width: 100%;" value="${existingProject?.title || title}" placeholder="${i18n("pleaseEnterProjectTitle") || "输入项目标题"}">
                     </div>
                     
                     <div class="form-group">
@@ -330,7 +330,7 @@ export class ProjectDialog {
 
             const title = titleEl.value.trim();
             if (!title) {
-                showMessage(i18n("pleaseEnterTitle"));
+                showMessage(i18n("pleaseEnterProjectTitle"));
                 titleEl.focus();
                 return;
             }
