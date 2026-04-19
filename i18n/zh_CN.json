@@ -577,7 +577,7 @@
     "randomRest": "请闭眼休息${duration}s，然后继续工作。",
     "randomRestComplete": "微休息结束，请继续工作。",
     "pomodoroHintTitle": "番茄钟的使用介绍",
-    "pomodoroHintDesc": "见我的文章<a href=\"https://mp.weixin.qq.com/s/SoZ0ccPc7kJTYfwBnB5IGw\" target=\"_blank\">《深入讲解番茄钟工作法》</a>",
+    "pomodoroHintDesc": "见我的文章<a href=\"https://mp.weixin.qq.com/s/SoZ0ccPc7kJTYfwBnB5IGw\" target=\"_blank\">《深入讲解番茄钟工作法》</a>和<a href=\"https://zhuanlan.zhihu.com/p/2028818775563150662\" target=\"_blank\">插件番茄钟使用说明</a>",
     "fullscreenMode": "全屏模式",
     "openInNewWindow": "在新窗口中打开",
     "pomodoroTimer": "番茄钟",
