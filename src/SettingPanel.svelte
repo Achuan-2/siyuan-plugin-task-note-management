@@ -2214,7 +2214,6 @@
         width: min(30%, 200px);
         display: flex;
         flex-direction: column;
-        min-width: 160px;
 
         .b3-tab-bar {
             flex: 1;
