@@ -368,10 +368,10 @@
     <div class="vip-section">
         <h3>{i18n('vipUserInfo')}</h3>
         <div class="user-info">
-            <div class="user-id">
-                <div class="user-id-text">
-                    <span>{i18n('vipAccountId')}</span>
-                    {#if userId === 'unknown' || !userId}
+                <div class="user-id">
+                    <div class="user-id-text">
+                        <span class="user-id-label">{i18n('vipAccountId')}</span>
+                        {#if userId === 'unknown' || !userId}
                         <span class="id-value" style="letter-spacing: normal;">
                             {userId || i18n('vipUnknown')}
                         </span>
@@ -717,6 +717,7 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
+        gap: 8px;
         padding: 12px;
         border-bottom: 1px solid var(--b3-border-color);
     }
@@ -727,13 +728,16 @@
 
     .key-info {
         flex: 1;
+        min-width: 0;
     }
 
     .key-text {
+        display: block;
         font-family: monospace;
         font-size: 1em;
         color: var(--b3-theme-on-surface);
-        width: 30ch;
+        width: min(30ch, 100%);
+        max-width: 100%;
         white-space: nowrap; /* 强制不换行 */
         overflow: hidden; /* 超出部分隐藏 */
         text-overflow: ellipsis; /* 超出部分显示省略号 */
@@ -748,6 +752,7 @@
     .copy-key-btn {
         color: var(--b3-theme-primary) !important;
         font-size: 12px;
+        flex-shrink: 0;
     }
     .vip-container {
         padding: 16px;
@@ -853,6 +858,7 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
+        gap: 8px;
         font-family: monospace;
     }
 
@@ -860,9 +866,26 @@
         display: flex;
         align-items: center;
         gap: 8px;
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+    }
+
+    .user-id-label {
+        flex-shrink: 0;
+    }
+
+    .id-value {
+        display: block;
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: clip;
+        white-space: nowrap;
     }
 
     .eye-icon {
+        flex-shrink: 0;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -1061,5 +1084,31 @@
     .in-dialog {
         max-height: 80vh;
         overflow-y: auto;
+    }
+
+    @media (max-width: 520px) {
+        .user-id {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .user-id-text {
+            width: 100%;
+        }
+
+        .user-id .b3-button {
+            width: 100%;
+            justify-content: center;
+        }
+
+        .active-key-item {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .copy-key-btn {
+            width: 100%;
+            justify-content: center;
+        }
     }
 </style>
