@@ -956,134 +956,6 @@
                 },
             ],
         },
-
-        {
-            name: '📁' + i18n('dataStorageLocation'),
-            items: [
-                {
-                    key: 'dataStorageInfo',
-                    value: 'data/storage/petal/siyuan-plugin-task-note-management',
-                    type: 'hint',
-                    title: i18n('dataStorageLocationTitle'),
-                    description: i18n('dataStorageLocationDesc'),
-                },
-                {
-                    key: 'openDataFolder',
-                    value: '',
-                    type: 'button',
-                    title: i18n('openDataFolder'),
-                    description: i18n('openDataFolderDesc'),
-                    button: {
-                        label: i18n('openFolder'),
-                        callback: async () => {
-                            const path =
-                                window.siyuan.config.system.dataDir +
-                                '/storage/petal/siyuan-plugin-task-note-management';
-                            await useShell('openPath', path);
-                        },
-                    },
-                },
-                {
-                    key: 'deletePluginData',
-                    value: '',
-                    type: 'button',
-                    title: i18n('deletePluginData'),
-                    description: i18n('deletePluginDataDesc'),
-                    button: {
-                        label: i18n('deleteData'),
-                        callback: async () => {
-                            const confirmed = confirm(i18n('confirmDeletePluginData'));
-                            if (confirmed) {
-                                const dataDir =
-                                    '/data/storage/petal/siyuan-plugin-task-note-management/';
-                                const files = [
-                                    SETTINGS_FILE,
-                                    PROJECT_DATA_FILE,
-                                    CATEGORIES_DATA_FILE,
-                                    REMINDER_DATA_FILE,
-                                    HABIT_DATA_FILE,
-                                    NOTIFY_DATA_FILE,
-                                    POMODORO_RECORD_DATA_FILE,
-                                    HABIT_GROUP_DATA_FILE,
-                                    STATUSES_DATA_FILE,
-                                ];
-                                let successCount = 0;
-                                for (const file of files) {
-                                    try {
-                                        await removeFile(dataDir + file);
-                                        successCount++;
-                                    } catch (e) {
-                                        console.error('删除文件失败:', file, e);
-                                    }
-                                }
-                                pushErrMsg(
-                                    i18n('dataDeletedCount').replace(
-                                        '${count}',
-                                        String(successCount)
-                                    )
-                                );
-                                window.dispatchEvent(new CustomEvent('reminderUpdated'));
-                            }
-                        },
-                    },
-                },
-            ],
-        },
-        {
-            name: '⬆️' + i18n('exportSettings'),
-            items: [
-                {
-                    key: 'exportIcs',
-                    value: '',
-                    type: 'button',
-                    title: i18n('exportIcs'),
-                    description: i18n('exportIcsDesc'),
-                    button: {
-                        label: i18n('generateIcs'),
-                        callback: async () => {
-                            await exportIcsFile(plugin, true, false, settings.icsTaskFilter as any);
-                        },
-                    },
-                },
-            ],
-        },
-        {
-            name: '⬇️' + i18n('importSettings'),
-            items: [
-                {
-                    key: 'importIcs',
-                    value: '',
-                    type: 'button',
-                    title: i18n('importIcs'),
-                    description: i18n('importIcsDesc'),
-                    button: {
-                        label: i18n('selectFileToImport'),
-                        callback: async () => {
-                            // 创建文件输入元素
-                            const input = document.createElement('input');
-                            input.type = 'file';
-                            input.accept = '.ics';
-                            input.onchange = async (e: Event) => {
-                                const target = e.target as HTMLInputElement;
-                                const file = target.files?.[0];
-                                if (!file) return;
-
-                                try {
-                                    const content = await file.text();
-
-                                    // 显示批量设置对话框
-                                    showImportDialog(content);
-                                } catch (error) {
-                                    console.error('读取文件失败:', error);
-                                    await pushErrMsg(i18n('readFileFailed'));
-                                }
-                            };
-                            input.click();
-                        },
-                    },
-                },
-            ],
-        },
         {
             name: '📅' + i18n('icsSubscription'),
             items: [], // 使用 SubscriptionPanel 组件渲染
@@ -1318,6 +1190,133 @@
                     type: 'password',
                     title: i18n('webdavPassword'),
                     description: i18n('webdavPasswordDesc'),
+                },
+            ],
+        },
+        {
+            name: '📁' + i18n('dataStorageLocation'),
+            items: [
+                {
+                    key: 'dataStorageInfo',
+                    value: 'data/storage/petal/siyuan-plugin-task-note-management',
+                    type: 'hint',
+                    title: i18n('dataStorageLocationTitle'),
+                    description: i18n('dataStorageLocationDesc'),
+                },
+                {
+                    key: 'openDataFolder',
+                    value: '',
+                    type: 'button',
+                    title: i18n('openDataFolder'),
+                    description: i18n('openDataFolderDesc'),
+                    button: {
+                        label: i18n('openFolder'),
+                        callback: async () => {
+                            const path =
+                                window.siyuan.config.system.dataDir +
+                                '/storage/petal/siyuan-plugin-task-note-management';
+                            await useShell('openPath', path);
+                        },
+                    },
+                },
+                {
+                    key: 'deletePluginData',
+                    value: '',
+                    type: 'button',
+                    title: i18n('deletePluginData'),
+                    description: i18n('deletePluginDataDesc'),
+                    button: {
+                        label: i18n('deleteData'),
+                        callback: async () => {
+                            const confirmed = confirm(i18n('confirmDeletePluginData'));
+                            if (confirmed) {
+                                const dataDir =
+                                    '/data/storage/petal/siyuan-plugin-task-note-management/';
+                                const files = [
+                                    SETTINGS_FILE,
+                                    PROJECT_DATA_FILE,
+                                    CATEGORIES_DATA_FILE,
+                                    REMINDER_DATA_FILE,
+                                    HABIT_DATA_FILE,
+                                    NOTIFY_DATA_FILE,
+                                    POMODORO_RECORD_DATA_FILE,
+                                    HABIT_GROUP_DATA_FILE,
+                                    STATUSES_DATA_FILE,
+                                ];
+                                let successCount = 0;
+                                for (const file of files) {
+                                    try {
+                                        await removeFile(dataDir + file);
+                                        successCount++;
+                                    } catch (e) {
+                                        console.error('删除文件失败:', file, e);
+                                    }
+                                }
+                                pushErrMsg(
+                                    i18n('dataDeletedCount').replace(
+                                        '${count}',
+                                        String(successCount)
+                                    )
+                                );
+                                window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                            }
+                        },
+                    },
+                },
+            ],
+        },
+        {
+            name: '⬆️' + i18n('exportSettings'),
+            items: [
+                {
+                    key: 'exportIcs',
+                    value: '',
+                    type: 'button',
+                    title: i18n('exportIcs'),
+                    description: i18n('exportIcsDesc'),
+                    button: {
+                        label: i18n('generateIcs'),
+                        callback: async () => {
+                            await exportIcsFile(plugin, true, false, settings.icsTaskFilter as any);
+                        },
+                    },
+                },
+            ],
+        },
+        {
+            name: '⬇️' + i18n('importSettings'),
+            items: [
+                {
+                    key: 'importIcs',
+                    value: '',
+                    type: 'button',
+                    title: i18n('importIcs'),
+                    description: i18n('importIcsDesc'),
+                    button: {
+                        label: i18n('selectFileToImport'),
+                        callback: async () => {
+                            // 创建文件输入元素
+                            const input = document.createElement('input');
+                            input.type = 'file';
+                            input.accept = '.ics';
+                            input.onchange = async (e: Event) => {
+                                const target = e.target as HTMLInputElement;
+                                const file = target.files?.[0];
+                                if (!file) return;
+
+                                try {
+                                    const content = await file.text();
+
+                                    // 显示批量设置对话框
+                                    showImportDialog(content);
+                                } catch (error) {
+                                    console.error('读取文件失败:', error);
+                                    await pushErrMsg(i18n('readFileFailed'));
+                                }
+                            };
+                            input.click();
+                        },
+                    },
                 },
             ],
         },
