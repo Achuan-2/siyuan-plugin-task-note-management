@@ -547,6 +547,7 @@
 
     .panel-header {
         display: flex;
+        flex-wrap: wrap;
         justify-content: space-between;
         align-items: flex-start;
         margin-bottom: 12px;
@@ -554,10 +555,16 @@
     }
 
     .header-info {
-        flex: 1;
+        flex: 1 1 280px;
+        min-width: 0;
         display: flex;
         flex-direction: column;
         gap: 4px;
+    }
+
+    .panel-header > .b3-button {
+        flex: 0 0 auto;
+        max-width: 100%;
     }
 
     .panel-title {
