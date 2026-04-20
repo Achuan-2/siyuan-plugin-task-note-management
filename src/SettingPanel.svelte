@@ -1334,10 +1334,10 @@
                     title: i18n('donateTitle'),
                     description: `
                         <div style="margin-top:12px;">
-                            <img src="plugins/siyuan-plugin-task-note-management/assets/donate.png" alt="donate" style="max-width:260px; height:auto; border:1px solid var(--b3-border-color);"/>
+                            <img src="plugins/siyuan-plugin-task-note-management/assets/donate.png" alt="donate" style="width:260px; height:auto; border:1px solid var(--b3-border-color);"/>
 
                             <p style="margin-top:12px;">Non-Chinese users can transfer money via Wise, Western Union, etc.</p>
-                            <img src="plugins/siyuan-plugin-task-note-management/assets/Alipay.jpg"alt="donate" style="max-width:260px; height:auto; border:1px solid var(--b3-border-color);"/>
+                            <img src="plugins/siyuan-plugin-task-note-management/assets/Alipay.jpg"alt="donate" style="width:260px; height:auto; border:1px solid var(--b3-border-color);"/>
                         </div>
                     `,
                 },
