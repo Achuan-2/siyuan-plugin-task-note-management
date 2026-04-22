@@ -8262,7 +8262,7 @@ document.body.classList.remove('docked-mode');
             min-width: 0;
         }
         .titlebar-left, .titlebar-buttons { display: flex; align-items: center; gap: 4px; min-width: 0; }
-        .titlebar-left { flex: 1 1 auto; overflow: hidden; }
+        .titlebar-left { flex: 1 1 auto; overflow: visible; }
         .titlebar-buttons { flex: 0 0 auto; }
         .titlebar-btn {
             -webkit-app-region: no-drag;
@@ -8298,8 +8298,14 @@ document.body.classList.remove('docked-mode');
         body.normal-hide-left-buttons .titlebar-left {
             display: none;
         }
-        .switch-container { position: relative; }
+        .switch-container {
+            position: relative;
+            -webkit-app-region: no-drag;
+            overflow: visible;
+            flex-shrink: 0;
+        }
         .switch-menu {
+            -webkit-app-region: no-drag;
             position: absolute;
             top: 100%;
             left: 0;
@@ -8316,6 +8322,7 @@ document.body.classList.remove('docked-mode');
         }
         .switch-menu.show { display: flex; }
         .menu-item {
+            -webkit-app-region: no-drag;
             background: none;
             border: none;
             color: ${textColor};
