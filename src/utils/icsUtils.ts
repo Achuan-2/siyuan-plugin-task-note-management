@@ -1320,8 +1320,9 @@ async function uploadToS3(settings: any, icsContent: string, fileName: string, p
         };
         const command = new PutObjectCommand(putInput);
         let uploadedByProxy = false;
+        const endpointIsPrivate = isPrivateEndpoint(endpoint);
 
-        if (shouldPreferS3ProxyUpload()) {
+        if (shouldPreferS3ProxyUpload() && !endpointIsPrivate) {
             await uploadToS3ByForwardProxy(s3Client, s3Bucket, s3Key, icsContent);
             uploadedByProxy = true;
         } else {
@@ -1330,6 +1331,13 @@ async function uploadToS3(settings: any, icsContent: string, fileName: string, p
             } catch (directErr: any) {
                 if (!isLikelyCorsOrBrowserFetchError(directErr)) {
                     throw directErr;
+                }
+                if (endpointIsPrivate) {
+                    throw new Error(
+                        '检测到局域网 S3 地址（' + endpoint + '），直连上传失败（CORS）。' +
+                        '思源 v3.6.5+ 禁止通过代理访问私有 IP，' +
+                        '请在思源桌面客户端中使用，或将 MinIO 部署到公网可访问地址。'
+                    );
                 }
                 console.warn('S3 直连上传失败，尝试通过思源代理重试（通常由浏览器 CORS 导致）:', directErr);
                 await uploadToS3ByForwardProxy(s3Client, s3Bucket, s3Key, icsContent);
@@ -1410,6 +1418,25 @@ function shouldPreferS3ProxyUpload(): boolean {
     }
 }
 
+/**
+ * 检测 endpoint 是否为局域网/私有 IP 地址。
+ * 思源 v3.6.5+ 的 forwardProxy 禁止访问私有 IP，需避免走代理路径。
+ */
+function isPrivateEndpoint(endpoint: string): boolean {
+    try {
+        const url = new URL(endpoint);
+        const hostname = url.hostname;
+        if (hostname === 'localhost' || hostname.startsWith('127.')) return true;
+        if (hostname.startsWith('10.')) return true;
+        if (/^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) return true;
+        if (hostname.startsWith('192.168.')) return true;
+        if (hostname.startsWith('169.254.')) return true;
+        return false;
+    } catch {
+        return false;
+    }
+}
+
 function isLikelyCorsOrBrowserFetchError(err: any): boolean {
     const msg = String(err?.message || err || '').toLowerCase();
     const name = String(err?.name || '').toLowerCase();
@@ -1427,8 +1454,15 @@ async function uploadToS3ByForwardProxy(
     s3Client: S3Client,
     bucket: string,
     key: string,
-    icsContent: string
+    icsContent: string,
+    endpoint?: string
 ): Promise<void> {
+    if (endpoint && isPrivateEndpoint(endpoint)) {
+        throw new Error(
+            '思源 v3.6.5+ 禁止通过代理访问局域网 S3 地址（' + endpoint + '）。' +
+            '请在思源桌面客户端中使用直连模式，或将 MinIO 部署到公网可访问地址。'
+        );
+    }
     const signedUrl = await getSignedUrl(
         s3Client,
         new PutObjectCommand({
