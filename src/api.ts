@@ -968,12 +968,28 @@ function getTaskListMarkerByReminders(reminders: any[]): TaskListItemMarker {
 
 async function syncTaskListBlockCompletion(blockId: string, reminders: any[]): Promise<void> {
     const isTaskList = await isTaskListLikeBlock(blockId);
-    if (!isTaskList) return;
+    if (isTaskList) {
+        await batchUpdateTaskListItemMarker([{
+            id: blockId,
+            marker: getTaskListMarkerByReminders(reminders)
+        }]);
+        return;
+    }
 
-    await batchUpdateTaskListItemMarker([{
-        id: blockId,
-        marker: getTaskListMarkerByReminders(reminders)
-    }]);
+    // 绑定块是列表容器（type='l'）时，如果只有一个列表项子块，同步其勾选状态
+    const block = await getBlockByID(blockId);
+    if (block && block.type === 'l') {
+        const children = await getChildBlocks(blockId);
+        if (children && children.length === 1) {
+            const child = children[0];
+            if (child.type === 'i') {
+                await batchUpdateTaskListItemMarker([{
+                    id: child.id,
+                    marker: getTaskListMarkerByReminders(reminders)
+                }]);
+            }
+        }
+    }
 }
 /**
  * 检查并更新块的提醒书签状态
