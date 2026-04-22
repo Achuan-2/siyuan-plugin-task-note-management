@@ -1,4 +1,4 @@
-import { colorWithOpacity } from "../utils/uiUtils";
+import { colorWithOpacity, generateRandomColor } from "../utils/uiUtils";
 import { showMessage, confirm, Menu, Dialog, Constants, openEmoji, platformUtils } from "siyuan";
 
 
@@ -1637,9 +1637,17 @@ export class ProjectKanbanView {
                         <div class="tags-list" style="margin-bottom: 16px;">
                             <div class="tags-header" style="display: flex; justify-content: space-between; align-items: center;">
                                 <h4 style="margin: 0;">${i18n('existingTags')}</h4>
-                                <button id="addTagBtn" class="b3-button b3-button--small b3-button--primary">
-                                    <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg> ${i18n('newTag')}
-                                </button>
+                                <div style="display: flex; gap: 8px;">
+                                    <button id="syncTagsBtn" class="b3-button b3-button--small">
+                                        <svg class="b3-button__icon"><use xlink:href="#iconRefresh"></use></svg> ${i18n('syncTagsToProject')}
+                                    </button>
+                                    <button id="pasteTagsBtn" class="b3-button b3-button--small">
+                                        <svg class="b3-button__icon"><use xlink:href="#iconPaste"></use></svg> ${i18n('pasteNewTags')}
+                                    </button>
+                                    <button id="addTagBtn" class="b3-button b3-button--small b3-button--primary">
+                                        <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg> ${i18n('newTag')}
+                                    </button>
+                                </div>
                             </div>
                             <div id="tagsContainer" class="tags-container" style="margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px;">
                                 <!-- 标签列表将在这里动态生成 -->
@@ -1654,6 +1662,8 @@ export class ProjectKanbanView {
 
         const tagsContainer = dialog.element.querySelector('#tagsContainer') as HTMLElement;
         const addTagBtn = dialog.element.querySelector('#addTagBtn') as HTMLButtonElement;
+        const syncTagsBtn = dialog.element.querySelector('#syncTagsBtn') as HTMLButtonElement;
+        const pasteTagsBtn = dialog.element.querySelector('#pasteTagsBtn') as HTMLButtonElement;
 
         // 加载并显示现有标签
         const loadAndDisplayTags = async () => {
@@ -1771,7 +1781,7 @@ export class ProjectKanbanView {
         // 新建/编辑标签对话框
         const showTagEditDialog = (existingTag: { id: string, name: string, color: string } | null, onSave: (tag: { id: string, name: string, color: string }) => void) => {
             const isEdit = existingTag !== null;
-            const defaultColor = existingTag?.color || '#3498db';
+            const defaultColor = existingTag?.color || generateRandomColor();
             const defaultName = existingTag?.name || '';
 
             const tagDialog = new Dialog({
@@ -1843,6 +1853,191 @@ export class ProjectKanbanView {
                 tagDialog.destroy();
             });
         };
+
+        // 同步标签到其他项目
+        syncTagsBtn.addEventListener('click', async () => {
+            try {
+                const projectManager = this.projectManager;
+                const currentTags = await projectManager.getProjectTags(this.projectId);
+
+                if (currentTags.length === 0) {
+                    showMessage(i18n('noTags'));
+                    return;
+                }
+
+                // 获取所有项目列表（排除当前项目）
+                const projectData = await this.plugin.loadProjectData() || {};
+                const otherProjects = Object.entries(projectData)
+                    .filter(([key]) => !key.startsWith('_') && key !== this.projectId)
+                    .map(([id, project]: [string, any]) => ({
+                        id,
+                        name: project.title || i18n('unnamedProject')
+                    }));
+
+                if (otherProjects.length === 0) {
+                    showMessage(i18n('noOtherProjects'));
+                    return;
+                }
+
+                const syncDialog = new Dialog({
+                    title: i18n('syncTagsToProject'),
+                    content: `
+                        <div class="b3-dialog__content">
+                            <div class="b3-form__group">
+                                <label class="b3-form__label">${i18n('selectTargetProject')}</label>
+                                <select id="targetProjectSelect" class="b3-select" style="width: 100%;">
+                                    <option value="">${i18n('pleaseSelect')}</option>
+                                    ${otherProjects.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="b3-form__group" style="margin-top: 12px;">
+                                <label class="b3-form__label">${i18n('selectTagsToSync')}</label>
+                                <div id="syncTagsList" style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; max-height: 300px; overflow-y: auto;">
+                                    ${currentTags.map(tag => `
+                                        <label style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: ${tag.color}20; border: 1px solid ${tag.color}; border-radius: 16px; font-size: 14px; color: ${tag.color}; cursor: pointer;">
+                                            <input type="checkbox" value="${tag.name}" data-color="${tag.color}" checked style="cursor: pointer;">
+                                            <span>#${tag.name}</span>
+                                        </label>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="b3-dialog__action">
+                            <button class="b3-button b3-button--cancel" id="syncDialogCancel">${i18n('cancel')}</button>
+                            <button class="b3-button b3-button--primary" id="syncDialogConfirm">${i18n('sync')}</button>
+                        </div>
+                    `,
+                    width: '500px'
+                });
+
+                const targetSelect = syncDialog.element.querySelector('#targetProjectSelect') as HTMLSelectElement;
+                const cancelSyncBtn = syncDialog.element.querySelector('#syncDialogCancel') as HTMLButtonElement;
+                const confirmSyncBtn = syncDialog.element.querySelector('#syncDialogConfirm') as HTMLButtonElement;
+
+                cancelSyncBtn.addEventListener('click', () => syncDialog.destroy());
+
+                confirmSyncBtn.addEventListener('click', async () => {
+                    const targetProjectId = targetSelect.value;
+                    if (!targetProjectId) {
+                        showMessage(i18n('noTargetProject'));
+                        return;
+                    }
+
+                    const checkboxes = syncDialog.element.querySelectorAll('#syncTagsList input[type="checkbox"]:checked') as NodeListOf<HTMLInputElement>;
+                    if (checkboxes.length === 0) {
+                        showMessage(i18n('noTagsSelected'));
+                        return;
+                    }
+
+                    const targetTags = await projectManager.getProjectTags(targetProjectId);
+                    const targetTagNames = new Set(targetTags.map(t => t.name));
+
+                    let addedCount = 0;
+                    for (const checkbox of checkboxes) {
+                        const tagName = checkbox.value;
+                        const tagColor = checkbox.getAttribute('data-color') || '#3498db';
+
+                        // 只添加目标项目中不存在的标签
+                        if (!targetTagNames.has(tagName)) {
+                            targetTags.push({
+                                id: `tag_${Date.now()}_${Math.random().toString(36).substr(2, 9)}_${addedCount}`,
+                                name: tagName,
+                                color: tagColor
+                            });
+                            addedCount++;
+                        }
+                    }
+
+                    if (addedCount > 0) {
+                        await projectManager.setProjectTags(targetProjectId, targetTags);
+                        showMessage(i18n('tagsSynced'));
+                    } else {
+                        showMessage(i18n('tagsAlreadyExist'));
+                    }
+
+                    syncDialog.destroy();
+                });
+            } catch (error) {
+                console.error(i18n('syncTagsFailed'), error);
+                showMessage(i18n('syncTagsFailed'));
+            }
+        });
+
+        // 粘贴新建标签
+        pasteTagsBtn.addEventListener('click', async () => {
+            try {
+                const projectManager = this.projectManager;
+                const projectTags = await projectManager.getProjectTags(this.projectId);
+                const existingTagNames = new Set(projectTags.map(t => t.name));
+
+                const pasteDialog = new Dialog({
+                    title: i18n('pasteNewTags'),
+                    content: `
+                        <div class="b3-dialog__content">
+                            <div class="b3-form__group">
+                                <label class="b3-form__label">${i18n('pasteNewTags')}</label>
+                                <textarea id="pasteTagsInput" class="b3-text-field" rows="10" placeholder="${i18n('pasteTagsPlaceholder')}" style="width: 100%; resize: vertical;"></textarea>
+                            </div>
+                        </div>
+                        <div class="b3-dialog__action">
+                            <button class="b3-button b3-button--cancel" id="pasteDialogCancel">${i18n('cancel')}</button>
+                            <button class="b3-button b3-button--primary" id="pasteDialogSave">${i18n('save')}</button>
+                        </div>
+                    `,
+                    width: '400px'
+                });
+
+                const pasteInput = pasteDialog.element.querySelector('#pasteTagsInput') as HTMLTextAreaElement;
+                const cancelPasteBtn = pasteDialog.element.querySelector('#pasteDialogCancel') as HTMLButtonElement;
+                const savePasteBtn = pasteDialog.element.querySelector('#pasteDialogSave') as HTMLButtonElement;
+
+                cancelPasteBtn.addEventListener('click', () => pasteDialog.destroy());
+
+                savePasteBtn.addEventListener('click', async () => {
+                    const rawText = pasteInput.value.trim();
+                    if (!rawText) {
+                        showMessage(i18n('pleaseEnterTagName'));
+                        return;
+                    }
+
+                    // 解析每行标签：去除 - 或 * 列表符号，去重
+                    const lines = rawText.split('\n');
+                    const newTagNames: string[] = [];
+                    for (const line of lines) {
+                        const trimmed = line.trim();
+                        if (!trimmed) continue;
+                        // 去除 - 或 * 开头的列表符号
+                        const cleaned = trimmed.replace(/^[-*]\s*/, '').trim();
+                        if (cleaned && !existingTagNames.has(cleaned) && !newTagNames.includes(cleaned)) {
+                            newTagNames.push(cleaned);
+                        }
+                    }
+
+                    if (newTagNames.length === 0) {
+                        showMessage(i18n('tagAlreadyExists'));
+                        return;
+                    }
+
+                    // 批量新增标签，每个标签随机颜色
+                    for (const tagName of newTagNames) {
+                        projectTags.push({
+                            id: `tag_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                            name: tagName,
+                            color: generateRandomColor()
+                        });
+                    }
+
+                    await projectManager.setProjectTags(this.projectId, projectTags);
+                    await loadAndDisplayTags();
+                    await this.loadProject();
+                    showMessage(i18n('batchTagsCreated'));
+                    pasteDialog.destroy();
+                });
+            } catch (error) {
+                console.error(i18n('createTagFailed'), error);
+                showMessage(i18n('createTagFailed'));
+            }
+        });
 
         // 新建标签
         addTagBtn.addEventListener('click', () => {
