@@ -9445,7 +9445,7 @@ export class ReminderPanel {
                 font-weight: bold;
             }
             .category-selector .category-option[data-category=""] {
-                background-color: var(--b3-theme-background-light);
+                background: var(--b3-theme-on-surface);
                 color: var(--b3-theme-on-surface);
             }
 

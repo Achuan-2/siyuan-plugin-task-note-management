@@ -2129,21 +2129,18 @@
 
 // 无分类选项特殊样式
 .category-option[data-category=""] {
-    background: var(--b3-theme-background);
+    background: var(--b3-theme-on-surface);
     color: var(--b3-theme-on-surface-light);
     border-style: dashed;
     border-width: 2px;
 }
 
 .category-option[data-category=""]:hover {
-    background: var(--b3-theme-surface-light);
     color: var(--b3-theme-on-background);
     border-style: solid;
 }
 
 .category-option[data-category=""].selected {
-    background: var(--b3-theme-primary-lightest) !important;
-    color: var(--b3-theme-primary) !important;
     border-style: solid !important;
     border-color: var(--b3-theme-primary) !important;
     font-weight: bold;
