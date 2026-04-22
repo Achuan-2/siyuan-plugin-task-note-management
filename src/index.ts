@@ -219,7 +219,7 @@ export const DEFAULT_SETTINGS = {
     pomodoroSystemNotification: true, // 新增：番茄结束后系统弹窗
     pomodoroEndPopupWindow: true, // 新增：番茄钟结束弹窗提醒，默认关闭
     pomodoroDockPosition: 'right', // 新增：番茄钟吸附位置 'right' | 'left' | 'top'
-    pomodoroMiniWindowStyle: 'ring', // mini窗口样式 'ring' | 'horizontal' | 'minimal'
+    pomodoroMiniWindowStyle: 'horizontal', // mini窗口样式 'ring' | 'horizontal' | 'minimal'
     reminderSystemNotification: true, // 新增：事件到期提醒系统弹窗
     showInternalNotification: false, // 新增：是否显示内部通知框
     dailyNotificationTime: '08:00', // 新增：每日通知时间，默认08:00
