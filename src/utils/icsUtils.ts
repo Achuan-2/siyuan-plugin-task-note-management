@@ -1323,7 +1323,7 @@ async function uploadToS3(settings: any, icsContent: string, fileName: string, p
         const endpointIsPrivate = isPrivateEndpoint(endpoint);
 
         if (shouldPreferS3ProxyUpload() && !endpointIsPrivate) {
-            await uploadToS3ByForwardProxy(s3Client, s3Bucket, s3Key, icsContent);
+            await uploadToS3ByForwardProxy(s3Client, s3Bucket, s3Key, icsContent, endpoint);
             uploadedByProxy = true;
         } else {
             try {
@@ -1340,7 +1340,7 @@ async function uploadToS3(settings: any, icsContent: string, fileName: string, p
                     );
                 }
                 console.warn('S3 直连上传失败，尝试通过思源代理重试（通常由浏览器 CORS 导致）:', directErr);
-                await uploadToS3ByForwardProxy(s3Client, s3Bucket, s3Key, icsContent);
+                await uploadToS3ByForwardProxy(s3Client, s3Bucket, s3Key, icsContent, endpoint);
                 uploadedByProxy = true;
             }
         }
