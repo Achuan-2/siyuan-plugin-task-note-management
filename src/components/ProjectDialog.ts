@@ -117,7 +117,7 @@ export class ProjectDialog {
                     <div class="form-group">
                         <label>${i18n("projectColor") || "项目颜色"}:</label>
                         <div style="display: flex; gap: 8px; align-items: center;">
-                            <input type="color" id="projectColor" class="b3-text-field" value="${existingProject?.color || '#3498db'}" style="width: 64px; height: 36px; padding: 2px 4px; cursor: pointer;">
+                            <input type="color" id="projectColor" class="b3-text-field" value="${existingProject?.color || generateRandomColor()}" style="width: 64px; height: 36px; padding: 2px 4px; cursor: pointer;">
                             <button type="button" id="projectRandomColorBtn" class="b3-button b3-button--outline">${i18n("randomColor") || '随机颜色'}</button>
                         </div>
                     </div>
