@@ -6065,6 +6065,7 @@ export class ReminderPanel {
                 categoryId: defaultCategoryId,
                 projectId: defaultProjectId,
                 priority: defaultPriority,
+                kanbanStatus: 'doing', // 拖动块新建任务，默认添加进行中看板状态
                 createdAt: new Date().toISOString(),
                 createdTime: new Date().toISOString(),
                 completed: false
