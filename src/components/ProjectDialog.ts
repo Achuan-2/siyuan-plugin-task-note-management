@@ -5,6 +5,7 @@ import { CategoryManager } from "../utils/categoryManager";
 import { StatusManager } from "../utils/statusManager";
 import { BlockBindingDialog } from "./BlockBindingDialog";
 import { i18n } from "../pluginInstance";
+import { generateRandomColor } from "../utils/uiUtils";
 
 export class ProjectDialog {
     private dialog: Dialog;
@@ -115,7 +116,10 @@ export class ProjectDialog {
                     
                     <div class="form-group">
                         <label>${i18n("projectColor") || "项目颜色"}:</label>
-                        <input type="color" id="projectColor" class="b3-text-field" value="${existingProject?.color || '#3498db'}" style="width: 100%; height: 40px; cursor: pointer;">
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <input type="color" id="projectColor" class="b3-text-field" value="${existingProject?.color || '#3498db'}" style="width: 64px; height: 36px; padding: 2px 4px; cursor: pointer;">
+                            <button type="button" id="projectRandomColorBtn" class="b3-button b3-button--outline">${i18n("randomColor") || '随机颜色'}</button>
+                        </div>
                     </div>
                     
                     <div class="form-group">
@@ -217,6 +221,13 @@ export class ProjectDialog {
             if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                 this.saveProject();
             }
+        });
+
+        // 随机颜色按钮
+        const randomColorBtn = this.dialog.element.querySelector('#projectRandomColorBtn') as HTMLButtonElement;
+        const colorInput = this.dialog.element.querySelector('#projectColor') as HTMLInputElement;
+        randomColorBtn?.addEventListener('click', () => {
+            if (colorInput) colorInput.value = generateRandomColor();
         });
     }
 
