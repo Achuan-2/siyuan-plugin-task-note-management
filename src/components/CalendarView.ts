@@ -9368,6 +9368,25 @@ export class CalendarView {
             const dateStr = getLocalDateString(startDate);
             const timeStr = isAllDay ? "" : startDate.toLocaleTimeString(getLocaleTag(), { hour: '2-digit', minute: '2-digit', hour12: false });
 
+            // 获取块继承的项目、分组、分类（同块右键新建任务逻辑）
+            let inheritedProjectId: string | undefined = undefined;
+            let inheritedCategoryId: string | undefined = undefined;
+            let inheritedGroupId: string | undefined = undefined;
+            let inheritedMilestoneId: string | undefined = undefined;
+            try {
+                if (this.plugin && typeof (this.plugin as any).getInheritedProjectAndGroup === 'function') {
+                    const inherited = await (this.plugin as any).getInheritedProjectAndGroup(blockId);
+                    if (inherited) {
+                        inheritedProjectId = inherited.projectId;
+                        inheritedCategoryId = inherited.categoryId;
+                        inheritedGroupId = inherited.groupId;
+                        inheritedMilestoneId = inherited.milestoneId;
+                    }
+                }
+            } catch (e) {
+                // 忽略继承检测失败
+            }
+
             const reminderId = window.Lute?.NewNodeID?.() || `reminder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
             let title = block.content || i18n('unnamedNote') || '未命名任务';
             if (title.length > 100) title = title.substring(0, 100) + '...';
@@ -9384,6 +9403,10 @@ export class CalendarView {
                 createdTime: new Date().toISOString(),
                 completed: false
             };
+            if (inheritedProjectId) newReminder.projectId = inheritedProjectId;
+            if (inheritedCategoryId) newReminder.categoryId = inheritedCategoryId;
+            if (inheritedGroupId) newReminder.customGroupId = inheritedGroupId;
+            if (inheritedMilestoneId) newReminder.milestoneId = inheritedMilestoneId;
 
             reminderData[reminderId] = newReminder;
             await saveReminders(this.plugin, reminderData);

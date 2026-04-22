@@ -6048,6 +6048,25 @@ export class ReminderPanel {
             const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
             const { defaultDate, defaultEndDate, defaultCategoryId, defaultProjectId, defaultPriority } = await this.getFilterAttributes();
 
+            // 获取块继承的项目、分组、分类（同块右键新建任务逻辑）
+            let inheritedProjectId = defaultProjectId;
+            let inheritedCategoryId = defaultCategoryId;
+            let inheritedGroupId: string | undefined = undefined;
+            let inheritedMilestoneId: string | undefined = undefined;
+            try {
+                if (this.plugin && typeof this.plugin.getInheritedProjectAndGroup === 'function') {
+                    const inherited = await this.plugin.getInheritedProjectAndGroup(blockId);
+                    if (inherited) {
+                        inheritedProjectId = inherited.projectId || defaultProjectId;
+                        inheritedCategoryId = inherited.categoryId || defaultCategoryId;
+                        inheritedGroupId = inherited.groupId;
+                        inheritedMilestoneId = inherited.milestoneId;
+                    }
+                }
+            } catch (e) {
+                // 忽略继承检测失败，使用默认值
+            }
+
             // 不需要去重，直接创建新任务
 
             const reminderId = window.Lute?.NewNodeID?.() || `reminder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -6062,14 +6081,16 @@ export class ReminderPanel {
                 date: defaultDate || getLogicalDateString(), // 默认为今天
                 endDate: defaultEndDate || undefined,
                 time: '', // 默认不设置时间
-                categoryId: defaultCategoryId,
-                projectId: defaultProjectId,
+                categoryId: inheritedCategoryId,
+                projectId: inheritedProjectId,
                 priority: defaultPriority,
                 kanbanStatus: 'doing', // 拖动块新建任务，默认添加进行中看板状态
                 createdAt: new Date().toISOString(),
                 createdTime: new Date().toISOString(),
                 completed: false
             };
+            if (inheritedGroupId) newReminder.customGroupId = inheritedGroupId;
+            if (inheritedMilestoneId) newReminder.milestoneId = inheritedMilestoneId;
 
             // 如果是“明天”视图，设置为明天
             // (已在 getFilterAttributes 中处理)
