@@ -9379,6 +9379,7 @@ export class CalendarView {
                 docId: block.root_id || (block.type === 'd' ? block.id : null),
                 date: dateStr,
                 time: timeStr,
+                kanbanStatus: 'doing', // 拖动块新建任务，默认添加进行中看板状态
                 createdAt: new Date().toISOString(),
                 createdTime: new Date().toISOString(),
                 completed: false
