@@ -1722,6 +1722,7 @@
     "deadline": "Deadline",
     "showCompletedSubtasks": "Show Completed Subtasks",
     "showProjectKanbanStatus": "Show Project Kanban Status",
+    "clipTitleToOneLine": "Clip Title to One Line",
     "hideEmptyStatusBars": "Hide Status Sections Without Tasks",
     "taskManagement": "Task Management",
     "todayIgnored": "⭕ Today's Ignored",

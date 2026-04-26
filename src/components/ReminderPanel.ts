@@ -58,6 +58,8 @@ export class ReminderPanel {
 
     // 是否在”今日任务”视图下显示已完成的子任务（由显示设置菜单控制）
     private showCompletedSubtasks: boolean = false;
+    // 是否将任务标题限制在一行显示（超出部分省略号截断）
+    private clipTitleToOneLine: boolean = false;
 
     // 使用全局番茄钟管理器
     private pomodoroManager: PomodoroManager = PomodoroManager.getInstance();
@@ -167,6 +169,9 @@ export class ReminderPanel {
             }
             if (typeof settings.reminderPanelShowProjectKanbanStatus === 'boolean') {
                 this.showProjectKanbanStatus = settings.reminderPanelShowProjectKanbanStatus;
+            }
+            if (typeof settings.clipTitleToOneLine === 'boolean') {
+                this.clipTitleToOneLine = settings.clipTitleToOneLine;
             }
             if (Array.isArray(settings.reminderPanelSelectedCategories)) {
                 this.selectedCategories = settings.reminderPanelSelectedCategories;
@@ -3016,6 +3021,9 @@ export class ReminderPanel {
         }
         if (this.plugin?.isInMobileApp) {
             titleEl.style.setProperty('-webkit-user-select', 'none');
+        }
+        if (this.clipTitleToOneLine) {
+            titleEl.style.cssText += `; display: inline-block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle;`;
         }
 
         titleEl.textContent = reminder.title || i18n("unnamedNote");
@@ -10011,6 +10019,17 @@ export class ReminderPanel {
                             this.showCompletedSubtasks = !this.showCompletedSubtasks;
                             void this.savePanelSettings({
                                 showCompletedSubtasks: this.showCompletedSubtasks
+                            });
+                            void this.loadReminders(true);
+                        }
+                    },
+                    {
+                        icon: this.clipTitleToOneLine ? 'iconSelect' : '',
+                        label: i18n("clipTitleToOneLine") || "标题限制一行显示",
+                        click: () => {
+                            this.clipTitleToOneLine = !this.clipTitleToOneLine;
+                            void this.savePanelSettings({
+                                clipTitleToOneLine: this.clipTitleToOneLine
                             });
                             void this.loadReminders(true);
                         }
