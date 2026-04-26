@@ -1809,6 +1809,7 @@
     "checkInMenuItem": "Check In",
     "viewStatsMenuItem": "View Stats",
     "editHabitMenuItem": "Edit Habit",
+    "editDayCheckInData": "Edit Day Check-ins",
     "openBoundBlock": "Open Linked Block",
     "deleteHabitMenuItem": "Delete Habit",
     "confirmDeleteHabit": "Delete habit \"${title}\"?",

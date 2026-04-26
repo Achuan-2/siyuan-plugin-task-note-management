@@ -30,6 +30,7 @@ import { VipManager } from "../utils/vip";
 import { createPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
 import { HabitEditDialog } from "./HabitEditDialog";
 import { HabitStatsDialog } from "./stats/HabitStatsDialog";
+import { HabitDayDialog } from "./HabitDayDialog";
 import { getHabitProgressOnDate, getHabitReminderTimes, getHabitReminderTimesForDate, shouldCheckInOnDate as shouldCheckInOnDateUtil, isHabitActiveOnDate } from "../utils/habitUtils";
 import { HabitGroupManager } from "../utils/habitGroupManager";
 export class CalendarView {
@@ -3213,6 +3214,13 @@ export class CalendarView {
                 submenu: this.createHabitCheckInSubmenu(habit, habitDate)
             });
             menu.addItem({
+                iconHTML: "🗓️",
+                label: i18n("editDayCheckInData") || "编辑当天打卡数据",
+                click: async () => {
+                    await this.openHabitDayDialog(calendarEvent.extendedProps.habitId, habitDate);
+                }
+            });
+            menu.addItem({
                 iconHTML: "📝",
                 label: i18n("editHabitMenuItem") || "编辑习惯",
                 click: async () => {
@@ -3625,6 +3633,36 @@ export class CalendarView {
         }
     }
 
+    private async openHabitDayDialog(habitId?: string, dateStr?: string) {
+        try {
+            if (!habitId || !dateStr) {
+                showMessage(i18n("operationFailed") || "操作失败");
+                return;
+            }
+
+            const habitData = await this.plugin.loadHabitData();
+            const habit = habitData?.[habitId];
+            if (!habit) {
+                showMessage(i18n("noHabits") || "未找到习惯");
+                return;
+            }
+
+            const habitCopy = JSON.parse(JSON.stringify(habit));
+            const dialog = new HabitDayDialog(habitCopy, dateStr, async (updatedHabit) => {
+                const data = await this.plugin.loadHabitData();
+                data[updatedHabit.id] = updatedHabit;
+                await this.plugin.saveHabitData(data);
+                window.dispatchEvent(new CustomEvent('habitUpdated'));
+                window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
+                await this.refreshEvents(true);
+            }, this.plugin);
+            dialog.show();
+        } catch (error) {
+            console.error('打开当天习惯打卡数据失败:', error);
+            showMessage(i18n("operationFailed") || "操作失败", 3000, 'error');
+        }
+    }
+
     private createHabitCheckInSubmenu(habit: any, targetDate: string): any[] {
         const submenu: any[] = [];
         const checkInEmojis = Array.isArray(habit?.checkInEmojis) ? habit.checkInEmojis : [];
@@ -3637,7 +3675,7 @@ export class CalendarView {
         }
 
         // 这里的逻辑与 HabitPanel.ts 保持高度一致，以解决相同 emoji 不同分组时的显示问题
-        const filterDate = getLogicalDateString(); // 默认按逻辑本日过滤，CalendarView 的逻辑通常也基于此
+        const filterDate = targetDate || getLogicalDateString();
         const dayCheckIn = habit.checkIns?.[filterDate];
         const checkedEmojisToday = new Set<string>();
         const checkedGroupsToday = new Set<string>();
@@ -6648,6 +6686,46 @@ export class CalendarView {
         return emojis;
     }
 
+    private getHabitCheckInTimeEntriesOnDate(habit: any, date: string): Array<{ emoji?: string; time: string; note?: string; timestamp?: string }> {
+        const checkIn = habit?.checkIns?.[date];
+        if (!checkIn) return [];
+
+        const entries: Array<{ emoji?: string; time: string; note?: string; timestamp?: string }> = [];
+        const extractTime = (timestamp?: string): string | null => {
+            if (!timestamp || typeof timestamp !== 'string') return null;
+            const match = timestamp.match(/(\d{1,2}):(\d{2})/);
+            if (!match) return null;
+            const hour = Math.max(0, Math.min(23, parseInt(match[1], 10) || 0));
+            const minute = Math.max(0, Math.min(59, parseInt(match[2], 10) || 0));
+            return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+        };
+
+        if (Array.isArray(checkIn.entries) && checkIn.entries.length > 0) {
+            checkIn.entries.forEach((entry: any) => {
+                const time = extractTime(entry?.timestamp || checkIn.timestamp);
+                if (!time) return;
+                entries.push({
+                    emoji: entry?.emoji,
+                    time,
+                    note: entry?.note,
+                    timestamp: entry?.timestamp || checkIn.timestamp
+                });
+            });
+            return entries;
+        }
+
+        const legacyTime = extractTime(checkIn.timestamp);
+        if (!legacyTime) return entries;
+
+        entries.push({
+            emoji: Array.isArray(checkIn.status) && checkIn.status.length === 1 ? checkIn.status[0] : undefined,
+            time: legacyTime,
+            timestamp: checkIn.timestamp
+        });
+
+        return entries;
+    }
+
     private sortHabitsInGroupForCalendar(habits: any[]): any[] {
         return [...habits].sort((a, b) => {
             const sa = typeof a?.sort === 'number' ? a.sort : 0;
@@ -6729,6 +6807,58 @@ export class CalendarView {
                     
                     if (this.currentCompletionFilter === 'completed' && !completed) continue;
                     if (this.currentCompletionFilter === 'incomplete' && completed) continue;
+
+                    const isPastDate = compareDateStrings(dateStr, today) < 0;
+                    if (isPastDate) {
+                        const checkInTimeEntries = this.getHabitCheckInTimeEntriesOnDate(habit, dateStr);
+                        if (!checkInTimeEntries.length) continue;
+
+                        checkInTimeEntries.forEach((entry, index) => {
+                            const startTime = new Date(`${dateStr}T${entry.time}:00`);
+                            if (Number.isNaN(startTime.getTime())) return;
+
+                            const endTime = new Date(startTime.getTime() + 15 * 60 * 1000);
+                            const endDateStr = getLocalDateString(endTime);
+                            const endTimeStr = endTime.toTimeString().substring(0, 5);
+                            const entryNote = entry.note || habit.note || '';
+
+                            events.push({
+                                id: `habit-${habit.id}-${dateStr}__checkin__${index}`,
+                                title: habit.title || i18n("unnamedTask"),
+                                start: `${dateStr}T${entry.time}:00`,
+                                end: `${endDateStr}T${endTimeStr}:00`,
+                                allDay: false,
+                                display: 'block',
+                                backgroundColor: completed ? 'rgba(46, 125, 50, 0.62)' : '#43a047',
+                                borderColor: completed ? '#1b5e20' : '#2e7d32',
+                                textColor: 'var(--b3-theme-on-background)',
+                                className: `habit-calendar-event habit-check-in-time-event${completed ? ' completed' : ''}`,
+                                editable: false,
+                                startEditable: false,
+                                durationEditable: false,
+                                extendedProps: {
+                                    type: 'habitCheckInTime',
+                                    isHabit: true,
+                                    habitId: habit.id,
+                                    icon: habit.icon,
+                                    color: habit.color,
+                                    date: dateStr,
+                                    completed,
+                                    checkedEmojis,
+                                    checkInEmoji: entry.emoji,
+                                    checkInTimestamp: entry.timestamp,
+                                    note: entryNote,
+                                    target: habit.target || 1,
+                                    frequency: habit.frequency,
+                                    habitOrder: habitOrderMap.get(habit.id) ?? Number.MAX_SAFE_INTEGER,
+                                    time: entry.time,
+                                    endTime: endTimeStr
+                                }
+                            });
+                        });
+                        continue;
+                    }
+
                     const reminderTimes = getHabitReminderTimesForDate(habit, dateStr);
                     if (!reminderTimes.length) continue;
 

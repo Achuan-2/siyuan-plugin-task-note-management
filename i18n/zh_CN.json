@@ -1809,6 +1809,7 @@
     "checkInMenuItem": "打卡",
     "viewStatsMenuItem": "查看统计",
     "editHabitMenuItem": "编辑习惯",
+    "editDayCheckInData": "编辑当天打卡数据",
     "openBoundBlock": "打开绑定块",
     "deleteHabitMenuItem": "删除习惯",
     "confirmDeleteHabit": "确定要删除习惯\"${title}\"吗？",
