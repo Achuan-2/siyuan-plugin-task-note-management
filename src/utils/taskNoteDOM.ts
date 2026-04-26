@@ -267,7 +267,11 @@ export class TaskNoteDOMManager {
 
         const wsMainHandler = (event: CustomEvent) => {
             const data = event.detail;
-            if (data.cmd === "transactions" && data.data) {
+            if (data?.cmd === "setAppearance") {
+                debouncedUpdate();
+                return;
+            }
+            if (data?.cmd === "transactions" && data.data) {
                 let shouldUpdate = false;
                 for (const transaction of data.data) {
                     if (transaction.doOperations) {

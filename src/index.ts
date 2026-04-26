@@ -2145,6 +2145,18 @@ export default class ReminderPlugin extends Plugin {
         };
         window.addEventListener('reminderUpdated', onReminderUpdated);
         this.addCleanup(() => window.removeEventListener('reminderUpdated', onReminderUpdated));
+
+        const onWsMain = (event: CustomEvent) => {
+            if (event.detail?.cmd !== 'setAppearance') return;
+            window.dispatchEvent(new CustomEvent('reminderUpdated', {
+                detail: {
+                    source: 'setAppearance'
+                }
+            }));
+        };
+        this.eventBus.on('ws-main', onWsMain);
+        this.addCleanup(() => this.eventBus.off('ws-main', onWsMain));
+
         this.addCleanup(() => {
             if (this.habitPomodoroAutoSyncTimer) {
                 clearTimeout(this.habitPomodoroAutoSyncTimer);
