@@ -2634,8 +2634,8 @@ export class ProjectKanbanView {
                         borderColor = 'var(--b3-card-info-color)';
                         break;
                     default:
-                        backgroundColor = colorWithOpacity('var(--b3-theme-background-light)', 0.1);
-                        borderColor = 'var(--b3-theme-background-light)';
+                        backgroundColor = 'var(--b3-theme-background)';
+                        borderColor = 'var(--b3-theme-surface-lighter)';
                 }
 
                 // 任务卡片容器 - 与看板任务卡片一致
@@ -10210,8 +10210,8 @@ export class ProjectKanbanView {
                 borderColor = 'var(--b3-card-info-color)';
                 break;
             default:
-                backgroundColor = colorWithOpacity('var(--b3-theme-background-light)', 0.1);
-                borderColor = 'var(--b3-theme-background-light)';
+                backgroundColor = 'var(--b3-theme-background)';
+                borderColor = 'var(--b3-theme-surface-lighter)';
         }
 
         // 设置任务元素的背景色和边框
@@ -14433,7 +14433,7 @@ export class ProjectKanbanView {
 
             /* 基础任务卡片样式 */
             .kanban-task {
-                background: var(--b3-theme-surface-lighter);
+                background: var(--b3-theme-background);
                 border: 1px solid var(--b3-theme-border);
                 border-radius: 6px;
                 padding: 12px;
@@ -14807,7 +14807,6 @@ export class ProjectKanbanView {
            .kanban-task-checkbox {
                 -webkit-appearance: none;
                 appearance: none;
-                background-color: ${colorWithOpacity('var(--b3-theme-background-light)', 0.1)};
                 margin: 0;
                 margin-top: 5px; /* 微调对齐 */
                 font: inherit;
@@ -15359,8 +15358,8 @@ export class ProjectKanbanView {
                     borderColor = 'var(--b3-card-info-color)';
                     break;
                 default:
-                    backgroundColor = colorWithOpacity('var(--b3-theme-background-light)', 0.1);
-                    borderColor = 'var(--b3-theme-background-light)';
+                    backgroundColor = 'var(--b3-theme-background)';
+                    borderColor = 'var(--b3-theme-surface-lighter)';
             }
             taskEl.style.backgroundColor = backgroundColor;
             taskEl.style.borderColor = borderColor;
@@ -17830,8 +17829,8 @@ export class ProjectKanbanView {
                     borderColor = 'var(--b3-card-info-color)';
                     break;
                 default:
-                    backgroundColor = colorWithOpacity('var(--b3-theme-background-light)', 0.1);
-                    borderColor = 'var(--b3-theme-background-light)';
+                    backgroundColor = 'var(--b3-theme-background)';
+                    borderColor = 'var(--b3-theme-surface-lighter)';
             }
             taskEl.style.backgroundColor = backgroundColor;
             taskEl.style.borderColor = borderColor;
