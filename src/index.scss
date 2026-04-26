@@ -839,16 +839,16 @@
 /* 习惯卡片：现代毛玻璃风格 */
 .habit-card {
     position: relative;
-    background: linear-gradient(145deg, 
-        var(--b3-theme-background) 0%, 
-        var(--b3-theme-surface) 100%);
+    background: linear-gradient(145deg,
+            var(--b3-theme-background) 0%,
+            var(--b3-theme-surface) 100%);
     border: 1px solid var(--b3-theme-surface-lighter);
     border-radius: 16px;
     padding: 16px;
     margin-bottom: 12px;
     cursor: pointer;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 
+    box-shadow:
         0 2px 8px rgba(0, 0, 0, 0.04),
         0 0 1px rgba(0, 0, 0, 0.08);
     overflow: hidden;
@@ -857,7 +857,7 @@
 
 .habit-card:hover {
     transform: translateY(-3px) scale(1.01);
-    box-shadow: 
+    box-shadow:
         0 12px 32px rgba(0, 0, 0, 0.1),
         0 4px 12px rgba(0, 0, 0, 0.05);
     border-color: var(--b3-theme-primary-light);
@@ -1011,10 +1011,10 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: linear-gradient(90deg, 
-        transparent 0%, 
-        rgba(255, 255, 255, 0.2) 50%, 
-        transparent 100%);
+    background: linear-gradient(90deg,
+            transparent 0%,
+            rgba(255, 255, 255, 0.2) 50%,
+            transparent 100%);
 }
 
 /* 习惯信息网格 */
@@ -1061,9 +1061,9 @@
     flex-direction: column;
     gap: 10px;
     padding: 14px;
-    background: linear-gradient(145deg, 
-        rgba(var(--b3-theme-primary-rgb, 64, 150, 255), 0.06), 
-        rgba(var(--b3-theme-primary-rgb, 64, 150, 255), 0.02));
+    background: linear-gradient(145deg,
+            rgba(var(--b3-theme-primary-rgb, 64, 150, 255), 0.06),
+            rgba(var(--b3-theme-primary-rgb, 64, 150, 255), 0.02));
     border-radius: 14px;
     margin-bottom: 14px;
     border: 1px solid rgba(var(--b3-theme-primary-rgb, 64, 150, 255), 0.1);
@@ -1087,9 +1087,9 @@
 }
 
 .habit-card__pomodoro-row--active {
-    background: linear-gradient(135deg, 
-        rgba(46, 204, 113, 0.08), 
-        rgba(46, 204, 113, 0.02));
+    background: linear-gradient(135deg,
+            rgba(46, 204, 113, 0.08),
+            rgba(46, 204, 113, 0.02));
     border-color: rgba(46, 204, 113, 0.2);
 }
 
@@ -1130,8 +1130,15 @@
 }
 
 @keyframes pulseIcon {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.05); }
+
+    0%,
+    100% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.05);
+    }
 }
 
 .habit-card__pomodoro-info {
@@ -1217,9 +1224,19 @@
 }
 
 @keyframes popIn {
-    0% { transform: scale(0); opacity: 0; }
-    70% { transform: scale(1.1); }
-    100% { transform: scale(1); opacity: 1; }
+    0% {
+        transform: scale(0);
+        opacity: 0;
+    }
+
+    70% {
+        transform: scale(1.1);
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
 }
 
 .habit-card__emoji-item:hover {
@@ -1307,8 +1324,15 @@
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .habit-completed-section__title {
@@ -1346,7 +1370,7 @@
     margin-bottom: 12px;
 }
 
-.habit-header > .habit-title,
+.habit-header>.habit-title,
 .reminder-title {
     display: flex;
     align-items: center;
@@ -2754,5 +2778,3 @@
         margin-right: 0;
     }
 }
-
-
