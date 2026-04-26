@@ -599,6 +599,9 @@
                     const newChild = { ...child };
                     newChild.extendedProps = { ...child.extendedProps };
                     newChild.extendedProps.date = parentDate;
+                    if (parent.extendedProps.isRepeated) {
+                        newChild.extendedProps.parentId = parent.id;
+                    }
                     newChild.start = parentDate;
                     if (parent.extendedProps.endDate) {
                         newChild.extendedProps.endDate = parent.extendedProps.endDate;
@@ -635,6 +638,7 @@
         };
 
         const addedTasks = new Map<string, Set<string>>();
+        const addedRepeatedOriginalIds = new Map<string, Set<string>>();
 
         const createItemFromEvent = (event: any, dateStrForPerDateCompleted: string): TaskItem => {
             const perDateCompleted = (d: string) => {
@@ -665,10 +669,18 @@
 
         const addTaskToDate = (dateStr: string, taskItem: TaskItem) => {
             const taskId = taskItem.id;
+            const originalId = taskItem.extendedProps?.originalId || taskId;
+            const isRepeated = !!taskItem.extendedProps?.isRepeated;
             if (!addedTasks.has(dateStr)) {
                 addedTasks.set(dateStr, new Set());
             }
+            if (!addedRepeatedOriginalIds.has(dateStr)) {
+                addedRepeatedOriginalIds.set(dateStr, new Set());
+            }
             if (addedTasks.get(dateStr)!.has(taskId)) {
+                return;
+            }
+            if (!isRepeated && addedRepeatedOriginalIds.get(dateStr)!.has(originalId)) {
                 return;
             }
 
@@ -685,6 +697,9 @@
             dateGroup.get(projectName)!.push(taskItem);
 
             addedTasks.get(dateStr)!.add(taskId);
+            if (isRepeated) {
+                addedRepeatedOriginalIds.get(dateStr)!.add(originalId);
+            }
         };
 
         events.forEach(event => {
