@@ -148,6 +148,7 @@ export class ProjectKanbanView {
 
     private lute: any;
     private showCompletedSubtasks: boolean = true; // 是否显示已完成的子任务
+    private clipTitleToOneLine: boolean = false; // 是否将任务标题限制在一行显示
     private hideEmptyStatusBars: boolean = false; // 是否隐藏没有任务的状态栏/分组
     private hideNoDoingGroups: boolean = false; // 是否隐藏没有进行中任务的分组
     private hideNoTodayGroups: boolean = false; // 是否隐藏没有今日任务的分组
@@ -654,6 +655,11 @@ export class ProjectKanbanView {
                 this.showCompletedSubtasks = this.project.showCompletedSubtasks;
             } else {
                 this.showCompletedSubtasks = true;
+            }
+            if (this.project && typeof this.project.clipTitleToOneLine === 'boolean') {
+                this.clipTitleToOneLine = this.project.clipTitleToOneLine;
+            } else {
+                this.clipTitleToOneLine = false;
             }
             if (this.project && typeof this.project.hideEmptyStatusBars === 'boolean') {
                 this.hideEmptyStatusBars = this.project.hideEmptyStatusBars;
@@ -2749,9 +2755,14 @@ export class ProjectKanbanView {
                 if (this.plugin?.isInMobileApp) {
                     titleEl.style.setProperty('-webkit-user-select', 'none');
                 }
+                if (this.clipTitleToOneLine) {
+                    titleEl.style.cssText += `; display: block; max-width: 100%; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;`;
+                }
 
                 titleEl.textContent = task.title || i18n('noContentHint');
                 titleEl.classList.add('ariaLabel'); titleEl.setAttribute('aria-label', (task.blockId || task.docId) ? i18n('clickToOpenBoundBlock', { title: task.title || i18n('noContentHint') }) : (task.title || i18n('noContentHint')));
+
+                titleContainer.appendChild(titleEl);
 
                 // 子任务数量（根据设置过滤已完成的子任务）
                 let children = childMap.get(task.id) || [];
@@ -2767,11 +2778,11 @@ export class ProjectKanbanView {
                         font-size: 12px;
                         color: var(--b3-theme-on-surface);
                         opacity: 0.7;
+                        flex-shrink: 0;
                     `;
-                    titleEl.appendChild(subtaskIndicator);
+                    titleContainer.appendChild(subtaskIndicator);
                 }
 
-                titleContainer.appendChild(titleEl);
                 taskContentContainer.appendChild(titleContainer);
 
                 // 任务信息容器 - 包含优先级、日期等
@@ -4146,6 +4157,21 @@ export class ProjectKanbanView {
             if (projectData[this.projectId]) {
                 projectData[this.projectId].showCompletedSubtasks = checked;
                 await this.plugin.saveProjectData(projectData);
+            }
+            await this.queueLoadTasks();
+        }));
+
+        // 标题限制一行显示
+        displaySettingsDropdown.appendChild(createSwitchItem(i18n("clipTitleToOneLine") || "标题限制一行显示", this.clipTitleToOneLine, async (checked) => {
+            this.clipTitleToOneLine = checked;
+            // 保存到项目数据
+            const projectData = await this.plugin.loadProjectData() || {};
+            if (projectData[this.projectId]) {
+                projectData[this.projectId].clipTitleToOneLine = checked;
+                await this.plugin.saveProjectData(projectData);
+                if (this.project) {
+                    this.project.clipTitleToOneLine = checked;
+                }
             }
             await this.queueLoadTasks();
         }));
@@ -10409,7 +10435,7 @@ export class ProjectKanbanView {
         taskContentContainer.className = 'kanban-task-content';
         taskContentContainer.style.flex = '1';
         taskContentContainer.style.overflow = 'auto';
-        taskContentContainer.style.paddingRight = '30px';
+        taskContentContainer.style.paddingRight = '18px';
 
         // 如果是子任务且状态与父任务不同，且不是作为嵌套子任务显示（level=0表示顶层任务），则显示父任务名称
         // level > 0 表示该任务是作为父任务的子任务嵌套显示的，此时不需要显示父任务名
@@ -10509,24 +10535,12 @@ export class ProjectKanbanView {
         if (this.plugin?.isInMobileApp) {
             titleEl.style.setProperty('-webkit-user-select', 'none');
         }
+        if (this.clipTitleToOneLine) {
+            titleEl.style.cssText += `; display: block; max-width: 100%; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;`;
+        }
 
         titleEl.textContent = task.title || i18n('noContentHint');
         titleEl.classList.add('ariaLabel'); titleEl.setAttribute('aria-label', (task.blockId || task.docId) ? i18n('clickToOpenBoundBlock', { title: task.title || i18n('noContentHint') }) : (task.title || i18n('noContentHint')));
-
-        // 如果有子任务，添加数量指示器（根据设置过滤已完成的子任务）
-        const visibleChildTasks = this.showCompletedSubtasks ? childTasks : childTasks.filter(t => !t.completed);
-        if (visibleChildTasks.length > 0) {
-            const subtaskIndicator = document.createElement('span');
-            subtaskIndicator.className = 'subtask-indicator';
-            subtaskIndicator.textContent = ` (${visibleChildTasks.length})`;
-            subtaskIndicator.classList.add('ariaLabel'); subtaskIndicator.setAttribute('aria-label', i18n('containsNSubtasks', { count: String(visibleChildTasks.length) }));
-            subtaskIndicator.style.cssText = `
-                font-size: 12px;
-                color: var(--b3-theme-on-surface);
-                opacity: 0.7;
-            `;
-            titleEl.appendChild(subtaskIndicator);
-        }
 
         // 创建标题和链接的容器
         const titleContainer = document.createElement('div');
@@ -10544,6 +10558,22 @@ export class ProjectKanbanView {
         }
 
         titleRow.appendChild(titleEl);
+
+        // 如果有子任务，添加数量指示器（根据设置过滤已完成的子任务）
+        const visibleChildTasks = this.showCompletedSubtasks ? childTasks : childTasks.filter(t => !t.completed);
+        if (visibleChildTasks.length > 0) {
+            const subtaskIndicator = document.createElement('span');
+            subtaskIndicator.className = 'subtask-indicator';
+            subtaskIndicator.textContent = ` (${visibleChildTasks.length})`;
+            subtaskIndicator.classList.add('ariaLabel'); subtaskIndicator.setAttribute('aria-label', i18n('containsNSubtasks', { count: String(visibleChildTasks.length) }));
+            subtaskIndicator.style.cssText = `
+                font-size: 12px;
+                color: var(--b3-theme-on-surface);
+                opacity: 0.7;
+                flex-shrink: 0;
+            `;
+            titleRow.appendChild(subtaskIndicator);
+        }
 
         // 添加URL链接图标作为兄弟节点
         if (task.url) {
