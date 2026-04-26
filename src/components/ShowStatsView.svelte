@@ -21,8 +21,8 @@
     <div class="stats-tabs">
         <button class:active={activeTab === "pomodoro"} on:click={() => switchTab("pomodoro")}>🍅 番茄统计</button>
         <button class:active={activeTab === "task"} on:click={() => switchTab("task")}>✅ 任务统计</button>
-        <button class:active={activeTab === "habit"} on:click={() => switchTab("habit")}>📅 习惯统计</button>
         <button class:active={activeTab === "summary"} on:click={() => switchTab("summary")}>📝 任务摘要</button>
+        <button class:active={activeTab === "habit"} on:click={() => switchTab("habit")}>📅 习惯统计</button>
     </div>
 
     <div class="stats-content">
