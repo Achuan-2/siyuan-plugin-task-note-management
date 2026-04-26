@@ -5644,6 +5644,9 @@ export class QuickReminderDialog {
                             endDate: endDate,
                             time: time,
                             endTime: endTime,
+                            blockId: inputId || null,
+                            docId: optimisticDocId || null,
+                            url: url,
                             note: note,
                             priority: priority,
                             notified: false, // 重置通知状态
@@ -5669,6 +5672,17 @@ export class QuickReminderDialog {
                             instanceDate: this.reminder.instanceDate,
                             ...instanceModification
                         });
+
+                        const oldBlockId = this.reminder.blockId;
+                        const newBlockId = inputId || null;
+                        const blockIdsToRefresh = Array.from(new Set([oldBlockId, newBlockId].filter(Boolean)));
+                        for (const blockId of blockIdsToRefresh) {
+                            try {
+                                await updateBindBlockAtrrs(blockId as string, this.plugin);
+                            } catch (error) {
+                                console.warn('更新实例绑定块属性失败:', blockId, error);
+                            }
+                        }
 
                         showMessage(i18n("editInstanceSuccess"));
 
@@ -6184,6 +6198,7 @@ export class QuickReminderDialog {
             // 获取旧值以检测变更
             const oldMod = modifications[instanceDate] || {};
             const originalTask = reminderData[originalId];
+            const hasInstanceField = (field: string) => Object.prototype.hasOwnProperty.call(instanceData, field);
 
             // 确定是否需要级联更新
             const oldStatus = oldMod.kanbanStatus !== undefined ? oldMod.kanbanStatus : originalTask.kanbanStatus;
@@ -6202,6 +6217,9 @@ export class QuickReminderDialog {
                 endDate: instanceData.endDate,
                 time: instanceData.time,
                 endTime: instanceData.endTime,
+                blockId: hasInstanceField('blockId') ? instanceData.blockId : oldMod.blockId,
+                docId: hasInstanceField('docId') ? instanceData.docId : oldMod.docId,
+                url: hasInstanceField('url') ? instanceData.url : oldMod.url,
                 note: instanceData.note,
                 priority: instanceData.priority,
                 notified: instanceData.notified,

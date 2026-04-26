@@ -11,6 +11,9 @@ export interface RepeatInstance {
     endTime?: string;
     reminderTimes?: Array<{ time: string, endTime?: string, note?: string }>; // 提醒时间列表
     customReminderPreset?: string; // 提醒预设
+    blockId?: string | null;
+    docId?: string | null;
+    url?: string;
     instanceId: string; // 实例标识符
     originalId: string; // 原始提醒ID
     isRepeatedInstance: boolean;
@@ -281,6 +284,9 @@ export function generateRepeatInstances(
                             reminder.endDate
                         ),
                         customReminderPreset: modification?.customReminderPreset !== undefined ? modification.customReminderPreset : reminder.customReminderPreset,
+                        blockId: modification?.blockId !== undefined ? modification.blockId : reminder.blockId,
+                        docId: modification?.docId !== undefined ? modification.docId : reminder.docId,
+                        url: modification?.url !== undefined ? modification.url : reminder.url,
                         instanceId: `${reminder.id}_${currentDateStr}`,
                         originalId: reminder.id,
                         isRepeatedInstance: true,
@@ -658,6 +664,9 @@ export function generateSubtreeInstances(
             endDate: instanceMod?.endDate || (child.endDate && child.date ? addDaysToDate(instanceDate, getDaysDifference(child.date, child.endDate)) : undefined),
             time: instanceMod?.time || child.time,
             endTime: instanceMod?.endTime || child.endTime,
+            blockId: instanceMod?.blockId !== undefined ? instanceMod.blockId : child.blockId,
+            docId: instanceMod?.docId !== undefined ? instanceMod.docId : child.docId,
+            url: instanceMod?.url !== undefined ? instanceMod.url : child.url,
             // 确保实例级 title 会覆盖模板 title（修复 ghost 子任务实例标题未更新的问题）
             title: instanceMod?.title !== undefined ? instanceMod.title : child.title,
             isRepeatInstance: true,

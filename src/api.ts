@@ -1001,9 +1001,35 @@ export async function updateBindBlockAtrrs(blockId: string, plugin: any): Promis
         const reminderData = await plugin.loadReminderData();
 
         // 查找该块的所有提醒
-        const blockReminders = Object.values(reminderData).filter((reminder: any) =>
+        const directBlockReminders = Object.values(reminderData).filter((reminder: any) =>
             reminder && reminder.blockId === blockId
         );
+        const instanceBlockReminders = (Object.values(reminderData) as any[]).flatMap((reminder: any) => {
+            const modifications = reminder?.repeat?.instanceModifications;
+            if (!reminder || !modifications || typeof modifications !== 'object') {
+                return [];
+            }
+
+            const excludeDates = reminder.repeat?.excludeDates || [];
+            return Object.entries(modifications as Record<string, any>)
+                .filter(([instanceDate, mod]: [string, any]) => mod?.blockId === blockId && !excludeDates.includes(instanceDate))
+                .map(([instanceDate, mod]: [string, any]) => {
+                    const completedInstances = reminder.repeat?.completedInstances || [];
+                    const completedTimes = reminder.repeat?.completedTimes || reminder.repeat?.instanceCompletedTimes || {};
+                    const isCompleted = completedInstances.includes(instanceDate);
+                    return {
+                        ...reminder,
+                        ...mod,
+                        id: `${reminder.id}_${instanceDate}`,
+                        originalId: reminder.id,
+                        isRepeatInstance: true,
+                        completed: isCompleted,
+                        completedTime: isCompleted ? completedTimes[instanceDate] : undefined,
+                        projectId: mod.projectId !== undefined ? mod.projectId : reminder.projectId
+                    };
+                });
+        });
+        const blockReminders = [...directBlockReminders, ...instanceBlockReminders];
 
         const attrs: { [key: string]: string } = {};
 

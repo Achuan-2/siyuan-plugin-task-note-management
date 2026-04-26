@@ -48,9 +48,7 @@ export class BlockRemindersDialog {
             // 获取提醒数据
             const reminderData = await this.plugin.loadReminderData();
             this.allRemindersMap = new Map(Object.entries(reminderData || {}));
-            const reminders = reminderIds
-                .map(id => reminderData[id])
-                .filter(r => r); // 过滤掉不存在的提醒
+            const reminders = this.resolveBoundReminders(reminderData, reminderIds);
 
             if (reminders.length === 0) {
                 showMessage(i18n("noBoundTasks") || "该块没有绑定任务", 3000, "info");
@@ -75,9 +73,7 @@ export class BlockRemindersDialog {
                 const updatedReminderData = await this.plugin.loadReminderData();
                 this.allRemindersMap = new Map(Object.entries(updatedReminderData || {}));
                 const updatedReminderIds = await getBlockReminderIds(this.blockId);
-                const updatedReminders = updatedReminderIds
-                    .map(id => updatedReminderData[id])
-                    .filter(r => r);
+                const updatedReminders = this.resolveBoundReminders(updatedReminderData, updatedReminderIds);
                 const updatedContainer = this.dialog.element.querySelector("#blockRemindersContent") as HTMLElement;
                 if (updatedContainer) {
                     await this.renderReminders(updatedContainer, updatedReminders);
@@ -141,6 +137,42 @@ export class BlockRemindersDialog {
 
             container.appendChild(completedSection);
         }
+    }
+
+    private resolveBoundReminders(reminderData: any, reminderIds: string[]): any[] {
+        return reminderIds
+            .map(id => {
+                if (reminderData[id]) return reminderData[id];
+
+                const splitIndex = id.lastIndexOf('_');
+                if (splitIndex <= 0) return null;
+                const originalId = id.substring(0, splitIndex);
+                const instanceDate = id.substring(splitIndex + 1);
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(instanceDate)) return null;
+
+                const originalReminder = reminderData[originalId];
+                const instanceMod = originalReminder?.repeat?.instanceModifications?.[instanceDate];
+                if (!originalReminder || !instanceMod || instanceMod.blockId !== this.blockId) return null;
+                if ((originalReminder.repeat?.excludeDates || []).includes(instanceDate)) return null;
+
+                const completedInstances = originalReminder.repeat?.completedInstances || [];
+                const completedTimes = originalReminder.repeat?.completedTimes || originalReminder.repeat?.instanceCompletedTimes || {};
+                const completed = completedInstances.includes(instanceDate);
+
+                return {
+                    ...originalReminder,
+                    ...instanceMod,
+                    id,
+                    originalId,
+                    instanceDate,
+                    isRepeatInstance: true,
+                    completed,
+                    completedAt: completed ? completedTimes[instanceDate] : undefined,
+                    completedTime: completed ? completedTimes[instanceDate] : undefined,
+                    projectId: instanceMod.projectId !== undefined ? instanceMod.projectId : originalReminder.projectId
+                };
+            })
+            .filter(Boolean);
     }
 
     private normalizeCustomProgress(value: any): number | undefined {
@@ -581,6 +613,29 @@ export class BlockRemindersDialog {
     private async toggleReminderComplete(reminder: any, completed: boolean) {
         try {
             const reminderData = await this.plugin.loadReminderData();
+            if (reminder.isRepeatInstance && reminder.originalId && reminder.instanceDate && reminderData[reminder.originalId]) {
+                const original = reminderData[reminder.originalId];
+                if (!original.repeat) original.repeat = {};
+                if (!original.repeat.completedInstances) original.repeat.completedInstances = [];
+                if (!original.repeat.completedTimes) original.repeat.completedTimes = {};
+
+                if (completed) {
+                    if (!original.repeat.completedInstances.includes(reminder.instanceDate)) {
+                        original.repeat.completedInstances.push(reminder.instanceDate);
+                    }
+                    original.repeat.completedTimes[reminder.instanceDate] = new Date().toISOString();
+                } else {
+                    original.repeat.completedInstances = original.repeat.completedInstances.filter((date: string) => date !== reminder.instanceDate);
+                    delete original.repeat.completedTimes[reminder.instanceDate];
+                }
+
+                await this.plugin.saveReminderData(reminderData);
+                await updateBindBlockAtrrs(this.blockId, this.plugin);
+                window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                showMessage(completed ? (i18n("taskCompleted") || "任务已完成") : (i18n("taskUncompleted") || "任务已取消完成"), 2000);
+                return;
+            }
+
             if (reminderData[reminder.id]) {
                 reminderData[reminder.id].completed = completed;
                 if (completed) {
@@ -763,8 +818,22 @@ export class BlockRemindersDialog {
             async () => {
                 // 用户确认删除
                 try {
-                    // 使用插件的 deleteReminder 方法，会自动取消移动端通知
-                    await this.plugin.deleteReminder(reminder.id);
+                    if (reminder.isRepeatInstance && reminder.originalId && reminder.instanceDate) {
+                        const reminderData = await this.plugin.loadReminderData();
+                        const original = reminderData[reminder.originalId];
+                        if (!original) {
+                            throw new Error('原始重复任务不存在');
+                        }
+                        if (!original.repeat) original.repeat = {};
+                        if (!original.repeat.excludeDates) original.repeat.excludeDates = [];
+                        if (!original.repeat.excludeDates.includes(reminder.instanceDate)) {
+                            original.repeat.excludeDates.push(reminder.instanceDate);
+                        }
+                        await this.plugin.saveReminderData(reminderData);
+                    } else {
+                        // 使用插件的 deleteReminder 方法，会自动取消移动端通知
+                        await this.plugin.deleteReminder(reminder.id);
+                    }
                     
                     const reminderData = await this.plugin.loadReminderData();
 
@@ -775,9 +844,7 @@ export class BlockRemindersDialog {
                     window.dispatchEvent(new CustomEvent('reminderUpdated'));
 
                     const reminderIds = await getBlockReminderIds(this.blockId);
-                    const reminders = reminderIds
-                        .map(id => reminderData[id])
-                        .filter(r => r);
+                    const reminders = this.resolveBoundReminders(reminderData, reminderIds);
 
                     if (reminders.length === 0) {
                         // 如果没有任务了，关闭对话框

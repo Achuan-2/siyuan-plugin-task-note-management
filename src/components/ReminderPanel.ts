@@ -5323,7 +5323,9 @@ export class ReminderPanel {
                 const completedTimes = original.repeat.completedTimes;
 
                 const affectedBlockIds = new Set<string>();
-                if (original.blockId) affectedBlockIds.add(original.blockId);
+                const instanceMod = original.repeat?.instanceModifications?.[instanceDate] || {};
+                const instanceBlockId = instanceMod.blockId !== undefined ? instanceMod.blockId : original.blockId;
+                if (instanceBlockId) affectedBlockIds.add(instanceBlockId);
 
                 const completedTaskIds: string[] = [];
                 if (completed) {
@@ -7568,6 +7570,27 @@ export class ReminderPanel {
                     label: i18n("copyBlockRef"),
                     click: () => this.copyBlockRef(reminder)
                 });
+                menu.addItem({
+                    iconHTML: "🔗",
+                    label: i18n("bindToBlock"),
+                    submenu: [
+                        {
+                            iconHTML: "🔗",
+                            label: i18n("bindToBlock"),
+                            click: () => this.showBindToBlockDialog(reminder, 'bind')
+                        },
+                        {
+                            iconHTML: "📑",
+                            label: i18n("newHeading"),
+                            click: () => this.showBindToBlockDialog(reminder, 'heading')
+                        },
+                        {
+                            iconHTML: "📄",
+                            label: i18n("newDocument"),
+                            click: () => this.showBindToBlockDialog(reminder, 'document')
+                        }
+                    ]
+                });
             } else {
                 // 未绑定块的事件显示绑定块选项
                 menu.addItem({
@@ -9100,6 +9123,9 @@ export class ReminderPanel {
                         endDate: reminder.endDate,
                         time: reminder.time,
                         endTime: reminder.endTime,
+                        blockId: instanceMod?.blockId !== undefined ? instanceMod.blockId : originalReminder.blockId,
+                        docId: instanceMod?.docId !== undefined ? instanceMod.docId : originalReminder.docId,
+                        url: instanceMod?.url !== undefined ? instanceMod.url : originalReminder.url,
                         note: instanceMod?.note !== undefined ? instanceMod.note : (originalReminder.note || ''),
                         priority: instanceMod?.priority !== undefined ? instanceMod.priority : (originalReminder.priority || 'none'),
                         categoryId: instanceMod?.categoryId !== undefined ? instanceMod.categoryId : originalReminder.categoryId,
@@ -9546,14 +9572,38 @@ export class ReminderPanel {
                     throw new Error('目标块不存在');
                 }
 
-                // 更新提醒数据
-                reminderData[reminderId].blockId = blockId;
-                reminderData[reminderId].docId = block.root_id || blockId;
+                const oldBlockId = reminder.blockId;
+                const docId = block.root_id || (block.type === 'd' ? block.id : blockId);
+
+                if (reminder.isRepeatInstance) {
+                    const parsedInstance = this.parseReminderInstanceId(reminder.id);
+                    const instanceDate = parsedInstance?.instanceDate || reminder.date;
+                    if (!instanceDate) {
+                        throw new Error('无法识别重复实例日期');
+                    }
+                    if (!reminderData[reminderId].repeat) {
+                        reminderData[reminderId].repeat = {};
+                    }
+                    if (!reminderData[reminderId].repeat.instanceModifications) {
+                        reminderData[reminderId].repeat.instanceModifications = {};
+                    }
+                    const mod = reminderData[reminderId].repeat.instanceModifications[instanceDate] || {};
+                    mod.blockId = blockId;
+                    mod.docId = docId;
+                    mod.modifiedAt = new Date().toISOString().split('T')[0];
+                    reminderData[reminderId].repeat.instanceModifications[instanceDate] = mod;
+                } else {
+                    // 更新提醒数据
+                    reminderData[reminderId].blockId = blockId;
+                    reminderData[reminderId].docId = docId;
+                }
 
                 await saveReminders(this.plugin, reminderData);
 
                 // 将绑定的块添加项目ID属性 custom-task-projectId
-                const projectId = reminderData[reminderId].projectId;
+                const instanceDate = reminder.isRepeatInstance ? (this.parseReminderInstanceId(reminder.id)?.instanceDate || reminder.date) : undefined;
+                const instanceMod = instanceDate ? reminderData[reminderId].repeat?.instanceModifications?.[instanceDate] : undefined;
+                const projectId = instanceMod?.projectId !== undefined ? instanceMod.projectId : reminderData[reminderId].projectId;
                 if (projectId) {
                     const { addBlockProjectId } = await import('../api');
                     await addBlockProjectId(blockId, projectId);
@@ -9561,6 +9611,9 @@ export class ReminderPanel {
                 }
 
                 // 更新块的书签状态（添加⏰书签）
+                if (oldBlockId && oldBlockId !== blockId) {
+                    await updateBindBlockAtrrs(oldBlockId, this.plugin);
+                }
                 await updateBindBlockAtrrs(blockId, this.plugin);
 
                 // 触发更新事件
@@ -10811,7 +10864,9 @@ export class ReminderPanel {
                         changedCount++;
                     }
                     original.repeat.completedTimes[originalInstanceDate] = completedTime;
-                    if (original.blockId) affectedBlockIds.add(original.blockId);
+                    const instanceMod = original.repeat?.instanceModifications?.[originalInstanceDate] || {};
+                    const instanceBlockId = instanceMod.blockId !== undefined ? instanceMod.blockId : original.blockId;
+                    if (instanceBlockId) affectedBlockIds.add(instanceBlockId);
                     recurringOriginalIds.add(originalId);
 
                     const childIds = await this.completeAllChildTasks(originalId, reminderData, affectedBlockIds, originalInstanceDate);

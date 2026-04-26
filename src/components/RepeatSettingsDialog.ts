@@ -24,6 +24,9 @@ export interface RepeatConfig {
             endDate?: string;
             time?: string;
             endTime?: string;
+            blockId?: string | null;
+            docId?: string | null;
+            url?: string;
             note?: string; // 实例级别的备注
             priority?: string;
             modifiedAt?: string;
