@@ -8186,9 +8186,11 @@ export class ProjectKanbanView {
         const groupTasksContainer = document.createElement('div');
         groupTasksContainer.className = 'status-stable-group-tasks';
         groupTasksContainer.style.cssText = `
-            padding-left: 8px; padding-right: 8px;
+            padding-left: 8px;
+            padding-right: 12px;
             padding-top: 8px;
             min-height: 20px;
+            box-sizing: border-box;
         `;
 
         // 为非已完成分组添加拖放事件
