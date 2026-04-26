@@ -2756,7 +2756,7 @@ export class ProjectKanbanView {
                     titleEl.style.setProperty('-webkit-user-select', 'none');
                 }
                 if (this.clipTitleToOneLine) {
-                    titleEl.style.cssText += `; display: block; max-width: 100%; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;`;
+                    titleEl.style.cssText += `; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; word-break: break-all; margin-bottom: 0;`;
                 }
 
                 titleEl.textContent = task.title || i18n('noContentHint');
@@ -10536,7 +10536,7 @@ export class ProjectKanbanView {
             titleEl.style.setProperty('-webkit-user-select', 'none');
         }
         if (this.clipTitleToOneLine) {
-            titleEl.style.cssText += `; display: block; max-width: 100%; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;`;
+            titleEl.style.cssText += `; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; word-break: break-all; margin-bottom: 0;`;
         }
 
         titleEl.textContent = task.title || i18n('noContentHint');

@@ -3023,7 +3023,7 @@ export class ReminderPanel {
             titleEl.style.setProperty('-webkit-user-select', 'none');
         }
         if (this.clipTitleToOneLine) {
-            titleEl.style.cssText += `; display: inline-block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle;`;
+            titleEl.style.cssText += `; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; word-break: break-all; margin-bottom: 0;`;
         }
 
         titleEl.textContent = reminder.title || i18n("unnamedNote");

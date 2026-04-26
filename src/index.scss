@@ -1417,7 +1417,7 @@
     display: flex;
     gap: 6px;
     align-items: flex-start;
-    padding-right: 34px;
+    padding-right: 24px;
 }
 
 .reminder-item__title-container {
@@ -1569,6 +1569,7 @@
 
 .reminder-item__info {
     flex: 1;
+    min-width: 0;
 }
 
 .reminder-item__title {
