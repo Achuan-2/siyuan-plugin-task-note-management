@@ -787,6 +787,25 @@ export class ProjectManager {
     }
 
     /**
+     * 获取项目看板状态映射，便于按状态 ID 快速读取名称、颜色和图标。
+     */
+    public async getProjectKanbanStatusMap(projectId: string): Promise<Map<string, KanbanStatus>> {
+        const statuses = await this.getProjectKanbanStatuses(projectId);
+        const statusMap = new Map<string, KanbanStatus>();
+
+        statuses.forEach((status) => {
+            const statusId = typeof status?.id === 'string' ? status.id.trim() : '';
+            if (!statusId) return;
+            statusMap.set(statusId, {
+                ...status,
+                id: statusId
+            });
+        });
+
+        return statusMap;
+    }
+
+    /**
      * 设置项目的看板状态配置
      * 保存所有状态的图标和颜色修改，但固定状态不能删除
      */

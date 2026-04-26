@@ -21,6 +21,7 @@ import { isEventPast } from "../utils/icsImport";
 import { PasteTaskDialog } from "./PasteTaskDialog";
 import { createPomodoroStartSubmenu as createSharedPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
 import { buildProjectCategoryOrderMap, buildProjectStatusOrderMap, compareProjectsByPanelSort, normalizeProjectPanelSortCriteria } from "./ProjectPanel";
+import type { KanbanStatus } from "../utils/projectManager";
 
 interface ReminderPanelFilterSortConfig {
     sortMode?: 'global' | 'custom';
@@ -55,10 +56,8 @@ export class ReminderPanel {
     private userExpandedTasks: Set<string> = new Set();
     private milestoneMap: Map<string, { name: string, icon?: string, projectId?: string, projectName?: string, blockId?: string }> = new Map();
 
-    // 是否在“今日任务”视图下显示已完成的子任务（由 header 中的开关控制）
+    // 是否在”今日任务”视图下显示已完成的子任务（由显示设置菜单控制）
     private showCompletedSubtasks: boolean = false;
-    private showCompletedCheckbox: HTMLInputElement | null = null;
-    private showCompletedContainer: HTMLElement | null = null;
 
     // 使用全局番茄钟管理器
     private pomodoroManager: PomodoroManager = PomodoroManager.getInstance();
@@ -80,8 +79,9 @@ export class ReminderPanel {
     private currentCustomFilterId: string | null = null;
     // 用户手动修改的分类筛选（独立于筛选器设置）
     private userManualCategories: string[] = ['all'];
-    // 项目看板状态名称缓存：projectId -> (statusId -> statusName)
-    private projectKanbanStatusNameCache: Map<string, Map<string, string>> = new Map();
+    private showProjectKanbanStatus: boolean = true;
+    // 项目看板状态缓存：projectId -> (statusId -> statusMeta)
+    private projectKanbanStatusCache: Map<string, Map<string, KanbanStatus>> = new Map();
 
     // 分页相关状态
     private currentPage: number = 1;
@@ -165,6 +165,9 @@ export class ReminderPanel {
             if (settings.showCompletedSubtasks !== undefined) {
                 this.showCompletedSubtasks = !!settings.showCompletedSubtasks;
             }
+            if (typeof settings.reminderPanelShowProjectKanbanStatus === 'boolean') {
+                this.showProjectKanbanStatus = settings.reminderPanelShowProjectKanbanStatus;
+            }
             if (Array.isArray(settings.reminderPanelSelectedCategories)) {
                 this.selectedCategories = settings.reminderPanelSelectedCategories;
             }
@@ -200,6 +203,16 @@ export class ReminderPanel {
         window.addEventListener('reminderUpdated', this.reminderUpdatedHandler);
         // 监听排序配置更新事件
         window.addEventListener('sortConfigUpdated', this.sortConfigUpdatedHandler);
+    }
+
+    private async savePanelSettings(partialSettings: Record<string, any>): Promise<void> {
+        try {
+            const settings = await this.plugin.loadSettings() || {};
+            Object.assign(settings, partialSettings);
+            await this.plugin.saveSettings(settings);
+        } catch (error) {
+            console.error('保存任务面板设置失败:', error);
+        }
     }
 
     // 添加销毁方法以清理事件监听器
@@ -520,55 +533,7 @@ export class ReminderPanel {
         this.categoryFilterButton.addEventListener('click', () => this.showCategorySelectDialog());
         controls.appendChild(this.categoryFilterButton);
 
-        // 添加“显示已完成子任务”开关，仅在“今日任务”筛选时显示
-        const showCompletedContainer = document.createElement('label');
-        showCompletedContainer.className = 'b3-label';
-        showCompletedContainer.style.cssText = `
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            margin: 0;
-            white-space: nowrap;
-            cursor: pointer;
-            padding: 0;
-        `;
-
-        this.showCompletedCheckbox = document.createElement('input');
-        this.showCompletedCheckbox.type = 'checkbox';
-        this.showCompletedCheckbox.className = 'b3-switch';
-        this.showCompletedCheckbox.checked = this.showCompletedSubtasks;
-        this.showCompletedCheckbox.addEventListener('change', () => {
-            this.showCompletedSubtasks = !!this.showCompletedCheckbox!.checked;
-            // 切换后刷新任务显示
-            this.loadReminders(true);
-            // 持久化设置
-            (async () => {
-                try {
-                    const settings = await this.plugin.loadSettings() || {};
-                    settings.showCompletedSubtasks = this.showCompletedSubtasks;
-                    await this.plugin.saveSettings(settings);
-                } catch (e) {
-                    // ignore
-                }
-            })();
-        });
-
-        const showCompletedText = document.createElement('span');
-        showCompletedText.textContent = i18n('showCompletedSubtasks');
-        showCompletedText.style.cssText = `
-            font-size: 12px;
-            color: var(--b3-theme-on-surface);
-        `;
-
-        showCompletedContainer.appendChild(this.showCompletedCheckbox);
-        showCompletedContainer.appendChild(showCompletedText);
-        // 显示已完成子任务开关在所有筛选项下都可见
-        showCompletedContainer.style.cssText += '\n            display: flex; width: 100%; margin-top: 8px;';
-
         header.appendChild(controls);
-        // 将开关单独一行放在 controls 下面
-        header.appendChild(showCompletedContainer);
-        this.showCompletedContainer = showCompletedContainer;
 
         // 搜索框（参考ProjectPanel的实现）
         const searchContainer = document.createElement('div');
@@ -3414,6 +3379,9 @@ export class ReminderPanel {
             // 兼容 title 和 name 字段（项目数据使用 title，但接口定义使用 name）
             const projectName = cachedData.project.title || cachedData.project.name;
             if (projectName) {
+                const kanbanStatusInfo = this.showProjectKanbanStatus
+                    ? this.getReminderKanbanStatusInfo(reminder)
+                    : null;
                 // Determine display text
                 let displayProjectName = projectName;
                 // 如果任务设置了分组，需要显示分组，格式为“项目/分组”
@@ -3482,6 +3450,50 @@ export class ReminderPanel {
 
                 // 将项目信息添加到信息容器底部
                 infoEl.appendChild(projectInfo);
+
+                if (kanbanStatusInfo?.name) {
+                    const statusColor = kanbanStatusInfo.color || cachedData.project.color || 'var(--b3-theme-primary)';
+                    const projectStatusInfo = document.createElement('div');
+                    projectStatusInfo.className = 'reminder-item__project-status';
+                    projectStatusInfo.style.cssText = `
+                        display: inline-flex;
+                        width: fit-content;
+                        align-items: center;
+                        gap: 4px;
+                        font-size: 11px;
+                        background-color: ${colorWithOpacity(statusColor, 0.12)};
+                        color: ${statusColor};
+                        border: 1px solid ${colorWithOpacity(statusColor, 0.28)};
+                        border-radius: 12px;
+                        padding: 2px 8px;
+                        margin-top: 4px;
+                        font-weight: 500;
+                        cursor: pointer;
+                        transition: opacity 0.2s;
+                    `;
+
+                    const statusNameSpan = document.createElement('span');
+                    statusNameSpan.textContent = `${kanbanStatusInfo.icon ? `${kanbanStatusInfo.icon} ` : ''}${kanbanStatusInfo.name}`;
+                    projectStatusInfo.appendChild(statusNameSpan);
+
+                    projectStatusInfo.classList.add('ariaLabel');
+                    projectStatusInfo.setAttribute('aria-label', `${i18n("showProjectKanbanStatus") || "显示项目看板状态"}: ${kanbanStatusInfo.name}`);
+
+                    projectStatusInfo.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        this.openProjectKanban(reminder.projectId);
+                    });
+
+                    projectStatusInfo.addEventListener('mouseenter', () => {
+                        projectStatusInfo.style.opacity = '0.8';
+                    });
+                    projectStatusInfo.addEventListener('mouseleave', () => {
+                        projectStatusInfo.style.opacity = '1';
+                    });
+
+                    infoEl.appendChild(projectStatusInfo);
+                }
             }
         }
 
@@ -4414,14 +4426,18 @@ export class ReminderPanel {
         return this.getReminderKanbanStatusId(reminder) === 'abandoned';
     }
 
-    private getReminderKanbanStatusName(reminder: any): string | null {
+    private getReminderKanbanStatusInfo(reminder: any): KanbanStatus | null {
         if (!reminder || typeof reminder !== 'object') return null;
         const projectId = typeof reminder.projectId === 'string' ? reminder.projectId : '';
         if (!projectId) return null;
-        const statusMap = this.projectKanbanStatusNameCache.get(projectId);
+        const statusMap = this.projectKanbanStatusCache.get(projectId);
         if (!statusMap) return null;
         const statusId = this.getReminderKanbanStatusId(reminder);
         return statusMap.get(statusId) || null;
+    }
+
+    private getReminderKanbanStatusName(reminder: any): string | null {
+        return this.getReminderKanbanStatusInfo(reminder)?.name || null;
     }
 
     private async ensureProjectKanbanStatusNameCache(reminders: any[]): Promise<void> {
@@ -4435,34 +4451,27 @@ export class ReminderPanel {
             );
 
             if (projectIds.length === 0) {
-                this.projectKanbanStatusNameCache.clear();
+                this.projectKanbanStatusCache.clear();
                 return;
             }
 
             const { ProjectManager } = await import('../utils/projectManager');
             const projectManager = ProjectManager.getInstance(this.plugin);
-            const nextCache: Map<string, Map<string, string>> = new Map();
+            const nextCache: Map<string, Map<string, KanbanStatus>> = new Map();
 
             await Promise.all(projectIds.map(async projectId => {
                 try {
-                    const statuses = await projectManager.getProjectKanbanStatuses(projectId);
-                    const statusMap: Map<string, string> = new Map();
-                    statuses.forEach(status => {
-                        if (!status || typeof status.id !== 'string') return;
-                        const statusName = typeof status.name === 'string' ? status.name.trim() : '';
-                        if (!statusName) return;
-                        statusMap.set(status.id, statusName);
-                    });
+                    const statusMap = await projectManager.getProjectKanbanStatusMap(projectId);
                     nextCache.set(projectId, statusMap);
                 } catch (error) {
                     console.warn(`[ReminderPanel] 加载项目状态失败: ${projectId}`, error);
                 }
             }));
 
-            this.projectKanbanStatusNameCache = nextCache;
+            this.projectKanbanStatusCache = nextCache;
         } catch (error) {
             console.warn('[ReminderPanel] 刷新项目状态名称缓存失败', error);
-            this.projectKanbanStatusNameCache.clear();
+            this.projectKanbanStatusCache.clear();
         }
     }
 
@@ -9978,6 +9987,36 @@ export class ReminderPanel {
     private showMoreMenu(event: MouseEvent) {
         try {
             const menu = new Menu("reminderMoreMenu");
+
+            // 显示设置
+            menu.addItem({
+                icon: 'iconEye',
+                label: i18n("displaySettings") || "显示设置",
+                submenu: [
+                    {
+                        icon: this.showProjectKanbanStatus ? 'iconSelect' : '',
+                        label: i18n("showProjectKanbanStatus") || "显示项目看板状态",
+                        click: () => {
+                            this.showProjectKanbanStatus = !this.showProjectKanbanStatus;
+                            void this.savePanelSettings({
+                                reminderPanelShowProjectKanbanStatus: this.showProjectKanbanStatus
+                            });
+                            void this.loadReminders(true);
+                        }
+                    },
+                    {
+                        icon: this.showCompletedSubtasks ? 'iconSelect' : '',
+                        label: i18n("showCompletedSubtasks") || "显示已完成子任务",
+                        click: () => {
+                            this.showCompletedSubtasks = !this.showCompletedSubtasks;
+                            void this.savePanelSettings({
+                                showCompletedSubtasks: this.showCompletedSubtasks
+                            });
+                            void this.loadReminders(true);
+                        }
+                    }
+                ]
+            });
 
             // 添加粘贴新建任务
             menu.addItem({
