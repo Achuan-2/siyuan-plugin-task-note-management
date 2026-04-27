@@ -6573,7 +6573,14 @@ export class CalendarView {
 
                 // For repeat tasks, we allow them to pass the initial filter because their instances have different completion statuses.
                 // Actual filtering will be performed when generating instances.
-                if (!reminder.repeat?.enabled && !this.passesCompletionFilter(reminder)) return false;
+                // 当显示完成时间功能开启时，已完成任务仍然需要在原始日期位置显示，
+                // 以便与完成时间事件独立共存。
+                if (!reminder.repeat?.enabled && !this.passesCompletionFilter(reminder)) {
+                    // 如果开启了显示完成时间，已完成的任务仍然保留在事件列表中
+                    if (!(this.showCompletedTaskTime && reminder.completed)) {
+                        return false;
+                    }
+                }
                 return true;
             });
 
@@ -6663,8 +6670,11 @@ export class CalendarView {
                         }
 
                         // Apply completion filter to instances
+                        // 当显示完成时间功能开启时，已完成实例仍保留显示
                         if (!this.passesCompletionFilter(instanceReminder)) {
-                            continue;
+                            if (!(this.showCompletedTaskTime && isInstanceCompleted)) {
+                                continue;
+                            }
                         }
 
                         // 事件 id 应使用原始实例键，以便后续的拖拽/保存逻辑能够基于原始实例键进行修改，避免产生重复的 instanceModifications 条目
@@ -6751,8 +6761,11 @@ export class CalendarView {
                             }
 
                             // Apply completion filter to modified instances
+                            // 当显示完成时间功能开启时，已完成实例仍保留显示
                             if (!this.passesCompletionFilter(instanceReminder)) {
-                                continue;
+                                if (!(this.showCompletedTaskTime && isInstanceCompleted)) {
+                                    continue;
+                                }
                             }
 
                             const uniqueInstanceId = `${reminder.id}_${originalDateKey}`;
