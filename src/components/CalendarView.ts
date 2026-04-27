@@ -5111,6 +5111,11 @@ export class CalendarView {
             return;
         }
 
+        if (info.event.extendedProps.type === 'completedTaskTime') {
+            await this.updateCompletedTaskTimeEvent(info);
+            return;
+        }
+
         if (info.event.extendedProps.type === 'reminderTime') {
             await this.updateReminderTimeEvent(info);
             return;
@@ -5736,6 +5741,53 @@ export class CalendarView {
             console.error(isResize ? '调整事件大小失败:' : '更新事件时间失败:', error);
             showMessage(i18n("operationFailed"));
             info.revert();
+        }
+    }
+
+    private async updateCompletedTaskTimeEvent(info) {
+        try {
+            const props = info.event.extendedProps || {};
+            const reminderId = props.originalId || props.eventId;
+            if (!reminderId) {
+                throw new Error('缺少任务ID');
+            }
+
+            const reminderData = await getAllReminders(this.plugin);
+            const reminder = reminderData[reminderId];
+            if (!reminder) {
+                throw new Error('提醒数据不存在');
+            }
+
+            let newCompletedDate = info.event.end || info.event.start;
+            if (!newCompletedDate) {
+                throw new Error('缺少新的完成时间');
+            }
+            newCompletedDate = this.snapToMinutes(newCompletedDate, 5);
+            const newCompletedTime = getLocalDateTimeString(newCompletedDate);
+
+            if (props.isRepeated && props.completedInstanceDate) {
+                if (!reminder.repeat) reminder.repeat = {};
+                if (!reminder.repeat.completedTimes) reminder.repeat.completedTimes = {};
+                reminder.repeat.completedTimes[props.completedInstanceDate] = newCompletedTime;
+            } else {
+                reminder.completedTime = newCompletedTime;
+            }
+
+            await saveReminders(this.plugin, reminderData);
+
+            const blockId = reminder.blockId;
+            if (blockId) {
+                await updateBindBlockAtrrs(blockId, this.plugin);
+            }
+
+            info.event.setExtendedProp('completedTime', newCompletedTime);
+            await this.refreshEvents();
+            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
+            showMessage(i18n("operationSuccess") || "操作成功");
+        } catch (error) {
+            console.error('更新完成时间失败:', error);
+            showMessage(i18n("operationFailed"));
+            if (info?.revert) info.revert();
         }
     }
 
@@ -6986,8 +7038,8 @@ export class CalendarView {
                     borderColor: 'transparent',
                     textColor: 'var(--b3-theme-on-background)',
                     className: 'completed-task-time-event',
-                    editable: false,
-                    startEditable: false,
+                    editable: !reminder.isSubscribed,
+                    startEditable: !reminder.isSubscribed,
                     durationEditable: false,
                     allDay: false,
                     extendedProps: {
@@ -7077,8 +7129,8 @@ export class CalendarView {
                         borderColor: 'transparent',
                         textColor: 'var(--b3-theme-on-background)',
                         className: 'completed-task-time-event',
-                        editable: false,
-                        startEditable: false,
+                        editable: !reminder.isSubscribed,
+                        startEditable: !reminder.isSubscribed,
                         durationEditable: false,
                         allDay: false,
                         extendedProps: {
