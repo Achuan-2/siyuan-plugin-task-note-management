@@ -61,6 +61,16 @@
     let draggedFilterId: string | null = null;
     let dragTargetId: string | null = null;
     let dragPosition: 'above' | 'below' | null = null;
+    let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+    let touchDragState: {
+        identifier: number;
+        filterId: string;
+        startX: number;
+        startY: number;
+        isDragging: boolean;
+        didMove: boolean;
+    } | null = null;
+    let suppressNextFilterClick = false;
     let categoryManager: CategoryManager;
     let projectManager: ProjectManager;
     let categories: any[] = [];
@@ -787,25 +797,28 @@
         dragPosition = null;
     }
 
-    async function handleDrop(e: DragEvent, targetFilter: FilterConfig) {
-        e.preventDefault();
-        if (!draggedFilterId || draggedFilterId === targetFilter.id) {
+    async function reorderFilters(draggedId: string, targetId: string, position: 'above' | 'below' | null) {
+        if (!draggedId || draggedId === targetId || !position) {
             resetDragState();
             return;
         }
 
-        const fromIndex = filters.findIndex(f => f.id === draggedFilterId);
+        const fromIndex = filters.findIndex(f => f.id === draggedId);
+        if (fromIndex === -1) {
+            resetDragState();
+            return;
+        }
 
-        // Remove dragged item
         const newFilters = [...filters];
         const [movedItem] = newFilters.splice(fromIndex, 1);
 
-        // Find index of target in the array (which might have shifted if fromIndex < targetIndex)
-        // Using original index of target is risky if we splice first.
-        // Let's find target in newFilters.
-        let toIndex = newFilters.findIndex(f => f.id === targetFilter.id);
+        let toIndex = newFilters.findIndex(f => f.id === targetId);
+        if (toIndex === -1) {
+            resetDragState();
+            return;
+        }
 
-        if (dragPosition === 'below') {
+        if (position === 'below') {
             toIndex++;
         }
 
@@ -816,10 +829,159 @@
         resetDragState();
     }
 
+    async function handleDrop(e: DragEvent, targetFilter: FilterConfig) {
+        e.preventDefault();
+        await reorderFilters(draggedFilterId || '', targetFilter.id, dragPosition);
+    }
+
     function resetDragState() {
         draggedFilterId = null;
         dragTargetId = null;
         dragPosition = null;
+    }
+
+    function clearLongPressTimer() {
+        if (longPressTimer) {
+            clearTimeout(longPressTimer);
+            longPressTimer = null;
+        }
+    }
+
+    function cleanupTouchDrag() {
+        clearLongPressTimer();
+        document.removeEventListener('touchmove', handleTouchMove);
+        document.removeEventListener('touchend', handleTouchEnd);
+        document.removeEventListener('touchcancel', handleTouchCancel);
+        touchDragState = null;
+    }
+
+    function getFilterDropTarget(clientX: number, clientY: number): HTMLElement | null {
+        const element = document.elementFromPoint(clientX, clientY);
+        return element?.closest?.('.filter-item[data-filter-id]') as HTMLElement | null;
+    }
+
+    function updateTouchDragTarget(clientX: number, clientY: number) {
+        if (!draggedFilterId) return;
+
+        const target = getFilterDropTarget(clientX, clientY);
+        const targetId = target?.dataset.filterId;
+
+        if (!target || !targetId || targetId === draggedFilterId) {
+            dragTargetId = null;
+            dragPosition = null;
+            return;
+        }
+
+        const rect = target.getBoundingClientRect();
+        dragTargetId = targetId;
+        dragPosition = clientY < rect.top + rect.height / 2 ? 'above' : 'below';
+    }
+
+    function getTouchByIdentifier(touchList: TouchList, identifier: number): Touch | null {
+        for (let i = 0; i < touchList.length; i++) {
+            const touch = touchList.item(i);
+            if (touch?.identifier === identifier) return touch;
+        }
+        return null;
+    }
+
+    function handleTouchStart(e: TouchEvent, filter: FilterConfig) {
+        if (e.touches.length !== 1 || (e.target as HTMLElement).closest('button')) {
+            return;
+        }
+
+        cleanupTouchDrag();
+        const touch = e.touches[0];
+        touchDragState = {
+            identifier: touch.identifier,
+            filterId: filter.id,
+            startX: touch.clientX,
+            startY: touch.clientY,
+            isDragging: false,
+            didMove: false,
+        };
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        document.addEventListener('touchmove', handleTouchMove, { passive: false });
+        document.addEventListener('touchend', handleTouchEnd);
+        document.addEventListener('touchcancel', handleTouchCancel);
+
+        longPressTimer = setTimeout(() => {
+            if (!touchDragState) return;
+            touchDragState.isDragging = true;
+            draggedFilterId = touchDragState.filterId;
+            suppressNextFilterClick = true;
+        }, 350);
+    }
+
+    function handleTouchMove(e: TouchEvent) {
+        if (!touchDragState) return;
+
+        const touch = getTouchByIdentifier(e.touches, touchDragState.identifier);
+        if (!touch) return;
+
+        const moveDistance = Math.hypot(touch.clientX - touchDragState.startX, touch.clientY - touchDragState.startY);
+        if (moveDistance > 4) {
+            touchDragState.didMove = true;
+        }
+
+        if (!touchDragState.isDragging && moveDistance > 16) {
+            cleanupTouchDrag();
+            return;
+        }
+
+        e.preventDefault();
+        e.stopPropagation();
+        if (!touchDragState.isDragging) return;
+
+        updateTouchDragTarget(touch.clientX, touch.clientY);
+    }
+
+    async function handleTouchEnd(e: TouchEvent) {
+        if (!touchDragState) return;
+
+        const endedTouch = getTouchByIdentifier(e.changedTouches, touchDragState.identifier);
+        if (!endedTouch) return;
+
+        const draggedId = touchDragState.isDragging ? touchDragState.filterId : null;
+        const shouldSelect = !touchDragState.isDragging && !touchDragState.didMove;
+        const filterToSelect = shouldSelect ? filters.find(f => f.id === touchDragState?.filterId) : null;
+        cleanupTouchDrag();
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (draggedId && dragTargetId && dragPosition) {
+            await reorderFilters(draggedId, dragTargetId, dragPosition);
+        } else if (filterToSelect) {
+            selectFilter(filterToSelect);
+        } else {
+            resetDragState();
+        }
+
+        if (draggedId) {
+            setTimeout(() => {
+                suppressNextFilterClick = false;
+            }, 400);
+        }
+    }
+
+    function handleTouchCancel() {
+        cleanupTouchDrag();
+        resetDragState();
+    }
+
+    function handleFilterClick(e: MouseEvent, filter: FilterConfig) {
+        if (suppressNextFilterClick) {
+            e.preventDefault();
+            e.stopPropagation();
+            suppressNextFilterClick = false;
+            return;
+        }
+
+        selectFilter(filter);
     }
 </script>
 
@@ -832,7 +994,7 @@
                 </button>
                 <button class="b3-button b3-button--primary" on:click={startNewFilter}>
                     <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
-                    {i18n('newFilter')}
+                    <span class="filter-action-text">{i18n('newFilter')}</span>
                 </button>
             </div>
         </div>
@@ -842,25 +1004,27 @@
                 <div
                     class="filter-item"
                     class:selected={selectedFilter?.id === filter.id}
+                    class:dragging={draggedFilterId === filter.id}
                     class:drag-over-above={dragTargetId === filter.id && dragPosition === 'above'}
                     class:drag-over-below={dragTargetId === filter.id && dragPosition === 'below'}
+                    data-filter-id={filter.id}
                     draggable={true}
                     on:dragstart={e => handleDragStart(e, filter)}
                     on:dragover={e => handleDragOver(e, filter)}
                     on:dragleave={handleDragLeave}
                     on:drop={e => handleDrop(e, filter)}
-                    on:click={() => selectFilter(filter)}
+                    on:touchstart|nonpassive={e => handleTouchStart(e, filter)}
+                    on:click={e => handleFilterClick(e, filter)}
                     on:keydown={() => {}}
                 >
                     <div class="filter-item-main">
                         <div class="filter-item-name">
                             <span
                                 class="drag-handle"
-                                style="cursor: move; opacity: 0.3; margin-right: 4px;"
                             >
                                 ⋮⋮
                             </span>
-                            {filter.name}
+                            <span class="filter-name-text">{filter.name}</span>
                             {#if filter.isBuiltIn}
                                 <span class="filter-badge">{i18n('builtInFilter')}</span>
                             {/if}
@@ -1420,14 +1584,15 @@
     }
 
     .filter-list {
-        width: 240px;
+        width: 30%;
         display: flex;
         flex-direction: column;
         height: 100%;
         background: var(--b3-theme-surface);
         border-right: 1px solid var(--b3-theme-surface-lighter);
-        flex: 0 0 240px;
-        min-width: 240px;
+        flex: 0 0 30%;
+        max-width: 240px;
+        min-width: 0;
         min-height: 0;
     }
 
@@ -1440,25 +1605,30 @@
         flex: 0 0 auto;
     }
 
-    .filter-list-header h3 {
-        margin: 0;
-        font-size: 14px;
-        font-weight: 600;
-        color: var(--b3-theme-on-surface);
-    }
-
     .filter-list-actions {
         display: flex;
         align-items: center;
         gap: 6px;
-        flex: 0 0 auto;
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .filter-list-actions .b3-button {
+        min-width: 0;
+        overflow: hidden;
+    }
+
+    .filter-action-text {
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: clip;
     }
 
     .filter-list-content {
         flex: 1;
         overflow-y: auto;
         overflow-x: hidden;
-        padding: 8px;
         min-height: 0;
     }
 
@@ -1466,12 +1636,17 @@
         display: flex;
         align-items: center;
         gap: 8px;
-        padding: 8px 12px;
+        padding: 8px 4px 8px 8px;
         margin-bottom: 4px;
         border-radius: 6px;
         cursor: pointer;
         color: var(--b3-theme-on-surface);
         border: 1px solid transparent;
+        position: relative;
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
     }
 
     .filter-item:hover {
@@ -1485,6 +1660,10 @@
         color: var(--b3-theme-primary);
     }
 
+    .filter-item.dragging {
+        opacity: 0.65;
+    }
+
     .filter-item.drag-over-above {
         border-top: 2px solid var(--b3-theme-primary);
     }
@@ -1493,20 +1672,35 @@
         border-bottom: 2px solid var(--b3-theme-primary);
     }
 
+    .drag-handle {
+        cursor: move;
+        opacity: 0.35;
+        margin-right: 4px;
+        touch-action: none;
+        flex-shrink: 0;
+    }
+
     .filter-item-main {
         flex: 1;
         min-width: 0;
+        width: 100%;
     }
 
     .filter-item-name {
-        flex: 1;
+        width: 100%;
         font-size: 14px;
         display: flex;
         align-items: center;
         gap: 6px;
+        min-width: 0;
+    }
+
+    .filter-name-text {
+        flex: 1 1 auto;
+        min-width: 0;
         overflow: hidden;
         white-space: nowrap;
-        text-overflow: ellipsis;
+        text-overflow: clip;
     }
 
     .filter-badge {
@@ -1525,16 +1719,61 @@
     .filter-item-actions {
         display: flex;
         gap: 4px;
+        position: absolute;
+        top: 50%;
+        right: 6px;
+        z-index: 1;
+        transform: translateY(-50%);
+        border-radius: 4px;
+        opacity: 0;
+        pointer-events: none;
     }
 
     .filter-item-actions button {
         padding: 4px;
         border-radius: 4px;
-        opacity: 0;
     }
 
-    .filter-item:hover .filter-item-actions button {
+    .filter-item:hover .filter-item-actions {
+        background: var(--b3-theme-surface);
         opacity: 1;
+        pointer-events: auto;
+    }
+
+    @media (max-width: 600px) {
+        .filter-list-header {
+            padding: 8px;
+        }
+
+        .filter-list-actions {
+            gap: 4px;
+            flex-wrap: wrap;
+        }
+
+        .filter-list-actions .b3-button {
+            padding-left: 6px;
+            padding-right: 6px;
+        }
+
+
+
+        .filter-item {
+            gap: 4px;
+            padding: 8px 6px;
+        }
+
+        .filter-item-actions {
+            right: 4px;
+        }
+
+        .filter-item-name {
+            font-size: 13px;
+            gap: 4px;
+        }
+
+        .filter-badge {
+            display: none;
+        }
     }
 
     .filter-editor {
