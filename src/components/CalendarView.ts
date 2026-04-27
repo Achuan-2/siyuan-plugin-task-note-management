@@ -55,6 +55,7 @@ export class CalendarView {
     private showHoliday: boolean = true; // 是否显示节假日
     private showPomodoro: boolean = true; // 是否显示番茄专注时间
     private showPomodoroBreakTime: boolean = true; // 是否显示番茄钟休息时间，默认显示
+    private pomodoroUseTaskColor: boolean = false; // 番茄钟工作时间是否使用任务上色方式
     private showCrossDayTasks: boolean = true; // 是否显示跨天任务
     private crossDayThreshold: number = -1; // 跨度多少天以下才显示
     private showSubtasks: boolean = true; // 是否显示子任务
@@ -168,6 +169,7 @@ export class CalendarView {
             this.showEventCheckbox = this.calendarConfigManager.getShowEventCheckbox();
             this.showPomodoro = this.calendarConfigManager.getShowPomodoro();
             this.showPomodoroBreakTime = this.calendarConfigManager.getShowPomodoroBreakTime();
+            this.pomodoroUseTaskColor = this.calendarConfigManager.getPomodoroUseTaskColor();
             this.showCompletedTaskTime = this.calendarConfigManager.getShowCompletedTaskTime();
             this.showCompletedTaskTimeTimed = this.calendarConfigManager.getShowCompletedTaskTimeTimed();
             this.showCompletedTaskTimeAllDay = this.calendarConfigManager.getShowCompletedTaskTimeAllDay();
@@ -498,6 +500,7 @@ export class CalendarView {
         this.showHoliday = settings.calendarShowHoliday !== false;
         this.showPomodoro = this.calendarConfigManager.getShowPomodoro(); // Use config manager for pomodoro state
         this.showPomodoroBreakTime = this.calendarConfigManager.getShowPomodoroBreakTime(); // 加载番茄钟休息时间显示设置
+        this.pomodoroUseTaskColor = this.calendarConfigManager.getPomodoroUseTaskColor(); // 加载番茄钟工作时间上色设置
         this.showCrossDayTasks = this.calendarConfigManager.getShowCrossDayTasks();
         this.crossDayThreshold = this.calendarConfigManager.getCrossDayThreshold();
         this.showSubtasks = this.calendarConfigManager.getShowSubtasks();
@@ -1068,6 +1071,7 @@ export class CalendarView {
             this.updatePomodoroButtonState();
             // 显示/隐藏子选项
             pomodoroBreakTimeItem.style.display = checked ? 'flex' : 'none';
+            pomodoroUseTaskColorItem.style.display = checked ? 'flex' : 'none';
             await this.refreshEvents();
         }));
 
@@ -1088,6 +1092,24 @@ export class CalendarView {
             await this.refreshEvents();
         });
         displaySettingsDropdown.appendChild(pomodoroBreakTimeItem);
+
+        // 番茄钟使用任务上色方式设置（子选项）
+        const pomodoroUseTaskColorItem = document.createElement('div');
+        pomodoroUseTaskColorItem.className = 'fn__flex fn__flex-center';
+        pomodoroUseTaskColorItem.style.padding = '4px 12px 4px 32px';
+        pomodoroUseTaskColorItem.style.gap = '8px';
+        pomodoroUseTaskColorItem.style.display = this.showPomodoro ? 'flex' : 'none';
+        pomodoroUseTaskColorItem.innerHTML = `
+            <input class="b3-switch" type="checkbox" ${this.pomodoroUseTaskColor ? 'checked' : ''}>
+            <span style="font-size: 0.9em; color: var(--b3-theme-on-surface-light);">${i18n("pomodoroUseTaskColor") || "使用任务上色方式"}</span>
+        `;
+        const pomodoroUseTaskColorCheckbox = pomodoroUseTaskColorItem.querySelector('input') as HTMLInputElement;
+        pomodoroUseTaskColorCheckbox.addEventListener('change', async () => {
+            this.pomodoroUseTaskColor = pomodoroUseTaskColorCheckbox.checked;
+            await this.calendarConfigManager.setPomodoroUseTaskColor(pomodoroUseTaskColorCheckbox.checked);
+            await this.refreshEvents();
+        });
+        displaySettingsDropdown.appendChild(pomodoroUseTaskColorItem);
 
         // 完成任务时间设置 - 总开关
         displaySettingsDropdown.appendChild(createSwitchItem(i18n("showCompletedTaskTime") || "显示任务完成时间", this.showCompletedTaskTime, async (checked) => {
@@ -6705,6 +6727,10 @@ export class CalendarView {
                         let backgroundColor = '#f23145'; // Default to work type
                         if (session.type === 'shortBreak' || session.type === 'longBreak') {
                             backgroundColor = '#00b36b';
+                        } else if (this.pomodoroUseTaskColor && reminder) {
+                            // 使用任务的上色方式
+                            const colors = this.getEventColors(reminder);
+                            backgroundColor = colors.backgroundColor;
                         }
 
                         const eventObj = {

@@ -12,6 +12,7 @@ export interface CalendarConfig {
     showLunar: boolean;
     showPomodoro: boolean;
     showPomodoroBreakTime: boolean; // 显示番茄钟休息时间
+    pomodoroUseTaskColor: boolean; // 番茄钟工作时间使用任务上色方式
     completionFilter: 'all' | 'completed' | 'incomplete';
     showCrossDayTasks: boolean;
     crossDayThreshold: number;
@@ -45,6 +46,7 @@ export class CalendarConfigManager {
             showLunar: true, // 默认显示农历
             showPomodoro: true, // 默认显示番茄专注时间
             showPomodoroBreakTime: true, // 默认显示番茄钟休息时间
+            pomodoroUseTaskColor: false, // 默认不使用任务上色方式
             completionFilter: 'all', // 默认显示全部状态
             showCrossDayTasks: true, // 默认显示跨天任务
             crossDayThreshold: -1, // 默认显示全部天数 (-1表示不限制)
@@ -85,6 +87,7 @@ export class CalendarConfigManager {
             settings.calendarShowLunar = this.config.showLunar;
             settings.calendarShowPomodoro = this.config.showPomodoro;
             settings.calendarShowPomodoroBreakTime = this.config.showPomodoroBreakTime;
+            settings.calendarPomodoroUseTaskColor = this.config.pomodoroUseTaskColor;
             settings.calendarCompletionFilter = this.config.completionFilter;
             settings.calendarShowCrossDayTasks = this.config.showCrossDayTasks;
             settings.calendarCrossDayThreshold = this.config.crossDayThreshold;
@@ -146,6 +149,7 @@ export class CalendarConfigManager {
                 showLunar: settings.calendarShowLunar !== false, // 默认为 true
                 showPomodoro: settings.calendarShowPomodoro !== false, // 默认为 true
                 showPomodoroBreakTime: settings.calendarShowPomodoroBreakTime !== false, // 默认为 true
+                pomodoroUseTaskColor: settings.calendarPomodoroUseTaskColor === true, // 默认为 false
                 completionFilter: (settings.calendarCompletionFilter as any) || 'all',
                 showCrossDayTasks: settings.calendarShowCrossDayTasks !== false, // 默认为 true
                 crossDayThreshold: settings.calendarCrossDayThreshold !== undefined ? settings.calendarCrossDayThreshold : -1, // 默认为 -1
@@ -173,6 +177,7 @@ export class CalendarConfigManager {
                 showLunar: true,
                 showPomodoro: true,
                 showPomodoroBreakTime: true,
+                pomodoroUseTaskColor: false,
                 completionFilter: 'all',
                 showCrossDayTasks: true,
                 crossDayThreshold: -1,
@@ -277,6 +282,15 @@ export class CalendarConfigManager {
 
     public getShowPomodoroBreakTime(): boolean {
         return this.config.showPomodoroBreakTime !== undefined ? this.config.showPomodoroBreakTime : true;
+    }
+
+    public async setPomodoroUseTaskColor(use: boolean) {
+        this.config.pomodoroUseTaskColor = use;
+        await this.saveConfig();
+    }
+
+    public getPomodoroUseTaskColor(): boolean {
+        return this.config.pomodoroUseTaskColor === true;
     }
 
     public async setShowCrossDayTasks(show: boolean) {

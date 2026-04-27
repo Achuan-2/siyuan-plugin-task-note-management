@@ -1296,6 +1296,7 @@
     "showRepeatTasks": "Show Repeat Tasks",
     "showEventCheckbox": "Show Task Checkbox",
     "showPomodoroRecords": "Show Pomodoro Records",
+    "pomodoroUseTaskColor": "Use Task Color Scheme",
     "showCompletedTaskTime": "Show task completion time",
     "showCompletedTaskTimeTimed": "Timed tasks",
     "showCompletedTaskTimeAllDay": "All-day tasks",

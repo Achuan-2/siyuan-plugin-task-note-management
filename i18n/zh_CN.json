@@ -1296,6 +1296,7 @@
     "showRepeatTasks": "显示重复任务",
     "showEventCheckbox": "显示任务复选框",
     "showPomodoroRecords": "显示番茄专注",
+    "pomodoroUseTaskColor": "使用任务上色方式",
     "showCompletedTaskTime": "显示任务完成时间",
     "showCompletedTaskTimeTimed": "非全天任务",
     "showCompletedTaskTimeAllDay": "全天任务",
