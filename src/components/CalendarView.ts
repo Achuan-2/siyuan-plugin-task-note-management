@@ -7093,7 +7093,9 @@ export class CalendarView {
 
                         const startTime = new Date(`${dateStr}T${parsed.time}:00`);
                         if (Number.isNaN(startTime.getTime())) return;
-                        if (dateStr === today && startTime.getTime() < Date.now()) return;
+                        
+                        // 移除对今天过去时间的过滤，始终显示今天的所有提醒，方便补打卡
+                        // if (dateStr === today && startTime.getTime() < Date.now()) return;
 
                         let endTime = new Date(startTime.getTime() + 15 * 60 * 1000);
                         if (entry.endTime) {
@@ -7108,6 +7110,8 @@ export class CalendarView {
                         const endDateStr = getLocalDateString(endTime);
                         const endTimeStr = endTime.toTimeString().substring(0, 5);
 
+                        const isExpired = !completed && dateStr === today && startTime.getTime() < Date.now();
+
                         events.push({
                             id: `habit-${habit.id}-${dateStr}__reminder__${index}`,
                             title: habit.title || i18n("unnamedTask"),
@@ -7118,7 +7122,7 @@ export class CalendarView {
                             backgroundColor: completed ? 'rgba(46, 125, 50, 0.62)' : '#43a047',
                             borderColor: completed ? '#1b5e20' : '#2e7d32',
                             textColor: 'var(--b3-theme-on-background)',
-                            className: `habit-calendar-event habit-reminder-time-event${completed ? ' completed' : ''}`,
+                            className: `habit-calendar-event habit-reminder-time-event${completed || isExpired ? ' completed' : ''}`,
                             editable: !completed,
                             startEditable: !completed,
                             durationEditable: !completed,
