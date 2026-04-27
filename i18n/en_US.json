@@ -1302,6 +1302,7 @@
     "showCompletedTaskTimeTimed": "Timed tasks",
     "showCompletedTaskTimeAllDay": "All-day tasks",
     "showCompletedTaskTimeNoDate": "No-date tasks",
+    "completedTaskTimeUseTaskColor": "Use Task Color Scheme",
     "show": "Show",
     "instances": "incomplete instances",
     "noLimit": "means no limit",

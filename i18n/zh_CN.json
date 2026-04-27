@@ -1302,6 +1302,7 @@
     "showCompletedTaskTimeTimed": "非全天任务",
     "showCompletedTaskTimeAllDay": "全天任务",
     "showCompletedTaskTimeNoDate": "无日期任务",
+    "completedTaskTimeUseTaskColor": "使用任务上色方式",
     "show": "显示",
     "instances": "个未完成实例",
     "noLimit": "表示不限制",

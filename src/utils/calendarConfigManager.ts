@@ -25,6 +25,7 @@ export interface CalendarConfig {
     showCompletedTaskTimeTimed: boolean; // 显示非全天（定时）任务的完成时间
     showCompletedTaskTimeAllDay: boolean; // 显示全天任务的完成时间
     showCompletedTaskTimeNoDate: boolean; // 显示无日期任务的完成时间
+    completedTaskTimeUseTaskColor: boolean; // 完成任务时间使用任务上色方式
     showTasks: boolean; // 是否显示任务
     showHabits: boolean; // 是否显示习惯
     multiDaysCount: number; // 多天视图显示的天数，默认为3天
@@ -59,6 +60,7 @@ export class CalendarConfigManager {
             showCompletedTaskTimeTimed: false, // 默认不显示非全天任务的完成时间
             showCompletedTaskTimeAllDay: true, // 默认显示全天任务的完成时间
             showCompletedTaskTimeNoDate: true, // 默认显示无日期任务的完成时间
+            completedTaskTimeUseTaskColor: false, // 默认不使用任务上色方式
             showTasks: true, // 默认显示任务
             showHabits: true, // 默认显示习惯
             multiDaysCount: 3 // 默认显示3天
@@ -100,6 +102,7 @@ export class CalendarConfigManager {
             settings.calendarShowCompletedTaskTimeTimed = this.config.showCompletedTaskTimeTimed;
             settings.calendarShowCompletedTaskTimeAllDay = this.config.showCompletedTaskTimeAllDay;
             settings.calendarShowCompletedTaskTimeNoDate = this.config.showCompletedTaskTimeNoDate;
+            settings.calendarCompletedTaskTimeUseTaskColor = this.config.completedTaskTimeUseTaskColor;
             settings.calendarShowTasks = this.config.showTasks;
             settings.calendarShowHabits = this.config.showHabits;
             settings.calendarMultiDaysCount = this.config.multiDaysCount;
@@ -162,6 +165,7 @@ export class CalendarConfigManager {
                 showCompletedTaskTimeTimed: settings.calendarShowCompletedTaskTimeTimed === true, // 默认为 false
                 showCompletedTaskTimeAllDay: settings.calendarShowCompletedTaskTimeAllDay !== false, // 默认为 true
                 showCompletedTaskTimeNoDate: settings.calendarShowCompletedTaskTimeNoDate !== false, // 默认为 true
+                completedTaskTimeUseTaskColor: settings.calendarCompletedTaskTimeUseTaskColor === true, // 默认为 false
                 showTasks: settings.calendarShowTasks !== false, // 默认为 true
                 showHabits: settings.calendarShowHabits !== false, // 默认为 true
                 multiDaysCount: settings.calendarMultiDaysCount !== undefined ? settings.calendarMultiDaysCount : 3 // 默认为3天
@@ -190,6 +194,7 @@ export class CalendarConfigManager {
                 showCompletedTaskTimeTimed: false,
                 showCompletedTaskTimeAllDay: true,
                 showCompletedTaskTimeNoDate: true,
+                completedTaskTimeUseTaskColor: false,
                 showTasks: true,
                 showHabits: true,
                 multiDaysCount: 3
@@ -390,6 +395,15 @@ export class CalendarConfigManager {
 
     public getShowCompletedTaskTimeNoDate(): boolean {
         return this.config.showCompletedTaskTimeNoDate !== undefined ? this.config.showCompletedTaskTimeNoDate : true;
+    }
+
+    public async setCompletedTaskTimeUseTaskColor(use: boolean) {
+        this.config.completedTaskTimeUseTaskColor = use;
+        await this.saveConfig();
+    }
+
+    public getCompletedTaskTimeUseTaskColor(): boolean {
+        return this.config.completedTaskTimeUseTaskColor === true;
     }
 
     public async setMultiDaysCount(count: number) {

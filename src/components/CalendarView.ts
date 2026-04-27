@@ -67,6 +67,7 @@ export class CalendarView {
     private showCompletedTaskTimeTimed: boolean = false; // 是否显示非全天（定时）任务的完成时间
     private showCompletedTaskTimeAllDay: boolean = true; // 是否显示全天任务的完成时间
     private showCompletedTaskTimeNoDate: boolean = true; // 是否显示无日期任务的完成时间
+    private completedTaskTimeUseTaskColor: boolean = false; // 完成任务时间是否使用任务上色方式
     private pomodoroToggleBtn: HTMLElement | null = null; // Pomodoro toggle button
     private holidays: { [date: string]: { title: string, type: 'holiday' | 'workday' } } = {}; // 节假日数据
     private colorBy: 'category' | 'priority' | 'project' = 'priority'; // 按分类或优先级上色
@@ -174,6 +175,7 @@ export class CalendarView {
             this.showCompletedTaskTimeTimed = this.calendarConfigManager.getShowCompletedTaskTimeTimed();
             this.showCompletedTaskTimeAllDay = this.calendarConfigManager.getShowCompletedTaskTimeAllDay();
             this.showCompletedTaskTimeNoDate = this.calendarConfigManager.getShowCompletedTaskTimeNoDate();
+            this.completedTaskTimeUseTaskColor = this.calendarConfigManager.getCompletedTaskTimeUseTaskColor();
             this.showTasks = this.calendarConfigManager.getShowTasks();
             this.showHabits = this.calendarConfigManager.getShowHabits();
 
@@ -512,6 +514,7 @@ export class CalendarView {
         this.showCompletedTaskTimeTimed = this.calendarConfigManager.getShowCompletedTaskTimeTimed();
         this.showCompletedTaskTimeAllDay = this.calendarConfigManager.getShowCompletedTaskTimeAllDay();
         this.showCompletedTaskTimeNoDate = this.calendarConfigManager.getShowCompletedTaskTimeNoDate();
+        this.completedTaskTimeUseTaskColor = this.calendarConfigManager.getCompletedTaskTimeUseTaskColor();
         this.holidays = await loadHolidays(this.plugin);
 
         // 获取周开始日设置
@@ -1174,6 +1177,23 @@ export class CalendarView {
             await this.refreshEvents();
         });
         completedTaskTimeSubItems.appendChild(noDateItem);
+
+        // 子选项：使用任务上色方式
+        const completedTaskColorItem = document.createElement('div');
+        completedTaskColorItem.className = 'fn__flex fn__flex-center';
+        completedTaskColorItem.style.padding = '4px 12px 4px 32px';
+        completedTaskColorItem.style.gap = '8px';
+        completedTaskColorItem.innerHTML = `
+            <input class="b3-switch" type="checkbox" ${this.completedTaskTimeUseTaskColor ? 'checked' : ''}>
+            <span style="font-size: 0.9em; color: var(--b3-theme-on-surface-light);">${i18n("completedTaskTimeUseTaskColor") || "使用任务上色方式"}</span>
+        `;
+        const completedTaskColorCheckbox = completedTaskColorItem.querySelector('input') as HTMLInputElement;
+        completedTaskColorCheckbox.addEventListener('change', async () => {
+            this.completedTaskTimeUseTaskColor = completedTaskColorCheckbox.checked;
+            await this.calendarConfigManager.setCompletedTaskTimeUseTaskColor(completedTaskColorCheckbox.checked);
+            await this.refreshEvents();
+        });
+        completedTaskTimeSubItems.appendChild(completedTaskColorItem);
 
         displaySettingsDropdown.appendChild(completedTaskTimeSubItems);
 
@@ -7159,7 +7179,10 @@ export class CalendarView {
 
                 // 获取任务颜色
                 let backgroundColor = '#27ae60'; // 默认绿色表示完成
-                if (this.colorBy === 'priority') {
+                if (this.completedTaskTimeUseTaskColor) {
+                    const colors = this.getEventColors(reminder);
+                    backgroundColor = colors.backgroundColor;
+                } else if (this.colorBy === 'priority') {
                     switch (reminder.priority) {
                         case 'high': backgroundColor = '#27ae60'; break;
                         case 'medium': backgroundColor = '#2ecc71'; break;
@@ -7251,7 +7274,10 @@ export class CalendarView {
 
                     // 获取任务颜色
                     let backgroundColor = '#27ae60';
-                    if (this.colorBy === 'priority') {
+                    if (this.completedTaskTimeUseTaskColor) {
+                        const colors = this.getEventColors(reminder);
+                        backgroundColor = colors.backgroundColor;
+                    } else if (this.colorBy === 'priority') {
                         switch (reminder.priority) {
                             case 'high': backgroundColor = '#27ae60'; break;
                             case 'medium': backgroundColor = '#2ecc71'; break;
