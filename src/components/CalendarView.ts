@@ -4630,10 +4630,10 @@ export class CalendarView {
 
         mainFrame.appendChild(topRow);
 
-        // 习惯日历模式下：第二行显示当天已打卡的 emoji
-        if (this.openedFromHabitPanel && props.isHabit) {
-            const checkedEmojis: string[] = Array.isArray(props.checkedEmojis) ? props.checkedEmojis : [];
-            if (checkedEmojis.length > 0) {
+        // 无论是习惯日历模式还是任务日历模式，只在习惯打卡事件上显示对应的打卡 emoji
+        if (props.type === 'habitCheckInTime') {
+            const checkInEmoji = props.checkInEmoji;
+            if (checkInEmoji) {
                 const checkInLine = document.createElement('div');
                 checkInLine.className = 'reminder-event-habit-checkins';
                 checkInLine.style.cssText = `
@@ -4645,7 +4645,7 @@ export class CalendarView {
                     text-overflow: ellipsis;
                     white-space: nowrap;
                 `;
-                checkInLine.textContent = `${i18n("habitCheckinLabel") || "打卡"}：${checkedEmojis.join(' ')}`;
+                checkInLine.textContent = `${i18n("habitCheckinLabel") || "打卡"}：${checkInEmoji}`;
                 mainFrame.appendChild(checkInLine);
             }
         }
@@ -6888,14 +6888,24 @@ export class CalendarView {
         return shouldCheckInOnDateUtil(habit, date);
     }
 
-    private isHabitCompletedOnDate(habit: any, date: string): boolean {
+    private getHabitProgressInfoOnDate(habit: any, date: string) {
         const progress = getHabitProgressOnDate(habit, date, {
             getPomodoroFocusMinutes: (habitId: string, logicalDate: string) => {
                 const manager = PomodoroRecordManager.getInstance(this.plugin);
                 return manager.getEventFocusTime(habitId, logicalDate) || 0;
             }
         });
-        return progress.current >= progress.target;
+        const goalType = habit?.goalType === "pomodoro" ? "pomodoro" : "count";
+        return {
+            current: progress.current,
+            target: progress.target,
+            completed: progress.current >= progress.target,
+            goalType
+        };
+    }
+
+    private isHabitCompletedOnDate(habit: any, date: string): boolean {
+        return this.getHabitProgressInfoOnDate(habit, date).completed;
     }
 
     private getHabitCheckInEmojisOnDate(habit: any, date: string): string[] {
@@ -7022,7 +7032,8 @@ export class CalendarView {
 
                 for (const current = new Date(start); current <= end; current.setDate(current.getDate() + 1)) {
                     const dateStr = getLocalDateString(current);
-                    const completed = this.isHabitCompletedOnDate(habit, dateStr);
+                    const progressInfo = this.getHabitProgressInfoOnDate(habit, dateStr);
+                    const completed = progressInfo.completed;
                     const checkedEmojis = this.getHabitCheckInEmojisOnDate(habit, dateStr);
                     const isDue = this.shouldCheckHabitOnDate(habit, dateStr);
 
@@ -7044,11 +7055,10 @@ export class CalendarView {
                         const endDateStr = getLocalDateString(endTime);
                         const endTimeStr = endTime.toTimeString().substring(0, 5);
                         const entryNote = entry.note || habit.note || '';
-                        const checkInTitlePrefix = entry.emoji ? `${entry.emoji} ` : '';
 
                         events.push({
                             id: `habit-${habit.id}-${dateStr}__checkin__${index}`,
-                            title: `${checkInTitlePrefix}${habit.title || i18n("unnamedTask")}`,
+                            title: habit.title || i18n("unnamedTask"),
                             start: `${dateStr}T${entry.time}:00`,
                             end: `${endDateStr}T${endTimeStr}:00`,
                             allDay: false,
@@ -7073,7 +7083,9 @@ export class CalendarView {
                                 checkInTimestamp: entry.timestamp,
                                 checkInIndex: index,
                                 note: entryNote,
-                                target: habit.target || 1,
+                                target: progressInfo.target,
+                                currentProgress: progressInfo.current,
+                                goalType: progressInfo.goalType,
                                 frequency: habit.frequency,
                                 habitOrder: habitOrderMap.get(habit.id) ?? Number.MAX_SAFE_INTEGER,
                                 time: entry.time,
@@ -7136,7 +7148,9 @@ export class CalendarView {
                                 completed,
                                 checkedEmojis,
                                 note: entry.note || habit.note || '',
-                                target: habit.target || 1,
+                                target: progressInfo.target,
+                                currentProgress: progressInfo.current,
+                                goalType: progressInfo.goalType,
                                 frequency: habit.frequency,
                                 habitOrder: habitOrderMap.get(habit.id) ?? Number.MAX_SAFE_INTEGER,
                                 reminderAt: entry.time,
@@ -8341,21 +8355,23 @@ export class CalendarView {
                 `<div style="color: ${reminder.completed ? 'var(--b3-theme-success)' : 'var(--b3-theme-on-surface-light)'}; margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">`,
                 `<span style="opacity: 0.8;">${reminder.completed ? '✅' : '⏳'}</span>`,
                 `<span>${(() => {
-                    const target = Math.max(1, Number(reminder.target) || 1);
-                    const checkedCount = Array.isArray(reminder.checkedEmojis) ? reminder.checkedEmojis.length : 0;
                     const statusText = reminder.completed ? (i18n("completed") || "已完成") : (i18n("uncompleted") || "未完成");
-                    return this.escapeHtml(`${statusText}（${checkedCount}/${target}）`);
+                    if (reminder.goalType === 'pomodoro') {
+                        const current = reminder.currentProgress || 0;
+                        const target = reminder.target || 0;
+                        return this.escapeHtml(`${statusText}（${current}m/${target}m）`);
+                    } else {
+                        const target = Math.max(1, Number(reminder.target) || 1);
+                        const current = reminder.currentProgress !== undefined 
+                            ? reminder.currentProgress 
+                            : (Array.isArray(reminder.checkedEmojis) ? reminder.checkedEmojis.length : 0);
+                        return this.escapeHtml(`${statusText}（${current}/${target}）`);
+                    }
                 })()}</span>`,
                 `</div>`
             );
             if (Array.isArray(reminder.checkedEmojis) && reminder.checkedEmojis.length > 0) {
-                const emojiCountMap = new Map<string, number>();
-                reminder.checkedEmojis.forEach((emoji: string) => {
-                    emojiCountMap.set(emoji, (emojiCountMap.get(emoji) || 0) + 1);
-                });
-                const emojiText = Array.from(emojiCountMap.entries())
-                    .map(([emoji, count]) => count > 1 ? `${emoji}×${count}` : emoji)
-                    .join(' ');
+                const emojiText = reminder.checkedEmojis.join(' ');
                 htmlParts.push(
                     `<div style="color: var(--b3-theme-on-surface); margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">`,
                     `<span>${this.escapeHtml((i18n("habitCheckinLabel") || "打卡") + "：" + emojiText)}</span>`,
