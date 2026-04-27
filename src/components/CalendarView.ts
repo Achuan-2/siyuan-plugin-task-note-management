@@ -7096,6 +7096,9 @@ export class CalendarView {
 
                     if (compareDateStrings(dateStr, today) < 0) continue;
 
+                    // 如果习惯在这一天已经完成，则不需要再显示提醒时间
+                    if (completed) continue;
+
                     const reminderTimes = getHabitReminderTimesForDate(habit, dateStr);
                     if (!reminderTimes.length) continue;
 
