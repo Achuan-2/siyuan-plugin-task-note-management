@@ -182,7 +182,8 @@ export class ReminderPanel {
 
         this.initUI();
         await this.loadSortConfig();
-        await this.loadCustomFilters(); // 加载自定义过滤器配置（先加载以确保筛选选项已创建）
+        await this.loadCustomFilters(); // 加载自定义过滤器配置
+        await this.updateFilterSelect(); // 先确保自定义筛选选项已创建，再恢复上次选择
         await this.loadFilterTab(); // 加载筛选配置（在选项创建后设置值）
         this.loadReminders();
 
@@ -485,7 +486,7 @@ export class ReminderPanel {
             <option value="yesterdayCompleted">${i18n("yesterdayCompletedReminders")}</option>
             <option value="completed">${i18n("completedReminders")}</option>
         `;
-        this.filterSelect.addEventListener('change', () => {
+        this.filterSelect.addEventListener('change', async () => {
             const newTab = this.filterSelect.value;
             const isOldTabCustom = this.currentTab.startsWith('custom_');
             const isNewTabCustom = newTab.startsWith('custom_');
@@ -494,7 +495,7 @@ export class ReminderPanel {
             this.updateSortButtonTitle();
 
             // 保存筛选配置
-            saveFilterConfig(this.plugin, newTab);
+            await saveFilterConfig(this.plugin, newTab);
 
             // 如果从自定义过滤器切换到非自定义过滤器，重置当前自定义过滤器ID
             // 这样下次切换到自定义过滤器时会重新同步分类设置
@@ -582,8 +583,6 @@ export class ReminderPanel {
         // 初始化排序按钮标题
         this.updateSortButtonTitle();
 
-        // 初始化自定义过滤器
-        this.updateFilterSelect();
     }
     private normalizeSortCriteria(criteria: any): SortCriterion[] {
         const availableMethods = new Set(['priority', 'project', 'category', 'time', 'completed', 'created', 'title']);
@@ -1291,9 +1290,20 @@ export class ReminderPanel {
                         console.log('应用过滤器:', filter);
                         showMessage(i18n("filterApplied") || "过滤器已应用");
                         // 更新filterSelect（包含重新加载配置缓存）
-                        await this.updateFilterSelect();
+                        const filterValue = filter?.id ? `custom_${filter.id}` : undefined;
+                        await this.updateFilterSelect(filterValue);
+                        if (filterValue && this.filterSelect?.value === filterValue) {
+                            this.clearTemporarySortOverride();
+                            this.currentTab = filterValue;
+                            this.currentCustomFilterId = null;
+                            this.currentPage = 1;
+                            this.totalPages = 1;
+                            this.totalItems = 0;
+                            await saveFilterConfig(this.plugin, filterValue);
+                            this.updateSortButtonTitle();
+                        }
                         // 重新加载任务以显示修改后的过滤结果
-                        this.loadReminders();
+                        this.loadReminders(true);
                     }
                 }
             });
@@ -1305,7 +1315,7 @@ export class ReminderPanel {
     }
 
     // 动态更新filterSelect选项
-    private async updateFilterSelect() {
+    private async updateFilterSelect(preferredValue?: string) {
         if (!this.filterSelect) return;
 
         const settings = await this.plugin.loadData('settings.json');
@@ -1384,7 +1394,9 @@ export class ReminderPanel {
         this.filterSelect.innerHTML = optionsHTML;
 
         // 恢复之前选中的值（如果还存在）
-        if (currentValue && Array.from(this.filterSelect.options).some(opt => opt.value === currentValue)) {
+        if (preferredValue && Array.from(this.filterSelect.options).some(opt => opt.value === preferredValue)) {
+            this.filterSelect.value = preferredValue;
+        } else if (currentValue && Array.from(this.filterSelect.options).some(opt => opt.value === currentValue)) {
             this.filterSelect.value = currentValue;
         } else {
             // 当前选中的过滤器已被删除（或不可用），切换到第一个

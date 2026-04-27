@@ -2064,5 +2064,11 @@
     "refreshSuccess": "Refresh successfully",
     "globalKanbanStatuses": "Set Global Kanban Statuses",
     "globalKanbanStatusesDesc": "Configure the default status columns used by project kanban boards for new projects or projects without custom statuses",
+    "restoreDefaultFilters": "Restore Default Filters",
+    "confirmRestoreDefaultFilters": "Restore the default filters? Custom filters will be kept and placed after the default filters.",
+    "defaultFiltersRestored": "Default filters restored",
+    "kanbanStatus": "Project Kanban Status",
+    "excludeAbandoned": "Exclude abandoned",
+    "kanbanStatusFilterByNameHint": "Filter by status name. Statuses with the same name across projects are merged, and Completed is excluded.",
     "task": "Tasks"
 }

@@ -315,13 +315,8 @@
         await loadFilters();
     });
 
-    async function loadFilters() {
-        const settings = await plugin.loadData('settings.json');
-        const customFilters = settings?.customFilters || [];
-        const filterOrder = settings?.filterOrder || [];
-        hiddenBuiltInFilters = settings?.hiddenBuiltInFilters || [];
-
-        const builtInFilters: FilterConfig[] = [
+    function createBuiltInFilters(): FilterConfig[] {
+        return [
             {
                 id: 'builtin_today',
                 name: i18n('todayReminders') || '今日任务',
@@ -443,6 +438,15 @@
                 priorityFilters: ['all'],
             },
         ];
+    }
+
+    async function loadFilters() {
+        const settings = await plugin.loadData('settings.json');
+        const customFilters = settings?.customFilters || [];
+        const filterOrder = settings?.filterOrder || [];
+        hiddenBuiltInFilters = settings?.hiddenBuiltInFilters || [];
+
+        const builtInFilters = createBuiltInFilters();
 
         const normalizedBuiltInFilters = builtInFilters
             .filter(f => !hiddenBuiltInFilters.includes(f.id))
@@ -479,7 +483,7 @@
         }
     }
 
-    async function saveFilters() {
+    async function saveFilters(appliedFilter: FilterConfig | null = null) {
         const settings = (await plugin.loadData('settings.json')) || {};
         const customFilters = filters.filter(f => !f.isBuiltIn);
         settings.customFilters = customFilters;
@@ -487,7 +491,7 @@
         settings.hiddenBuiltInFilters = hiddenBuiltInFilters;
         await plugin.saveData('settings.json', settings);
         // 通知父组件更新filterSelect
-        onFilterApplied(null);
+        onFilterApplied(appliedFilter);
     }
 
     function selectFilter(filter: FilterConfig) {
@@ -611,7 +615,7 @@
             filters = [...filters, newFilter];
         }
 
-        await saveFilters();
+        await saveFilters(newFilter);
         showMessage(i18n('filterSaved'));
         isEditing = false;
         selectedFilter = null;
@@ -633,6 +637,32 @@
                     selectedFilter = null;
                     isEditing = false;
                 }
+            }
+        );
+    }
+
+    async function restoreDefaultFilters() {
+        await confirm(
+            i18n('restoreDefaultFilters') || '恢复默认过滤器',
+            i18n('confirmRestoreDefaultFilters') ||
+                '确定要恢复默认过滤器吗？自定义过滤器会保留，并放在默认过滤器后面。',
+            async () => {
+                const defaultFilters = createBuiltInFilters().map(f => normalizeFilterConfig(f));
+                const builtInFilterIds = new Set(defaultFilters.map(f => f.id));
+                const customFilters = filters
+                    .filter(f => !f.isBuiltIn && !builtInFilterIds.has(f.id))
+                    .map(f => normalizeFilterConfig({ ...f, isBuiltIn: false } as FilterConfig));
+
+                hiddenBuiltInFilters = [];
+                filters = [
+                    ...defaultFilters,
+                    ...customFilters,
+                ];
+                selectedFilter = null;
+                isEditing = false;
+
+                await saveFilters();
+                showMessage(i18n('defaultFiltersRestored') || '已恢复默认过滤器');
             }
         );
     }
@@ -796,11 +826,15 @@
 <div class="filter-management">
     <div class="filter-list">
         <div class="filter-list-header">
-            <h3>{i18n('filterManagement')}</h3>
-            <button class="b3-button b3-button--primary" on:click={startNewFilter}>
-                <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
-                {i18n('newFilter')}
-            </button>
+            <div class="filter-list-actions">
+                <button class="b3-button b3-button--outline ariaLabel" on:click={restoreDefaultFilters} aria-label={i18n('restoreDefaultFilters') || '恢复默认过滤器'} title={i18n('restoreDefaultFilters') || '恢复默认过滤器'}>
+                    <svg class="b3-button__icon"><use xlink:href="#iconUndo"></use></svg>
+                </button>
+                <button class="b3-button b3-button--primary" on:click={startNewFilter}>
+                    <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
+                    {i18n('newFilter')}
+                </button>
+            </div>
         </div>
         <div class="filter-list-content">
             {#each filters as filter (filter.id)}
@@ -1411,6 +1445,13 @@
         font-size: 14px;
         font-weight: 600;
         color: var(--b3-theme-on-surface);
+    }
+
+    .filter-list-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: 0 0 auto;
     }
 
     .filter-list-content {

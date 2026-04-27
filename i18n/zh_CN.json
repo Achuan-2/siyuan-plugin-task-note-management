@@ -2064,5 +2064,11 @@
     "refreshSuccess": "刷新成功",
     "globalKanbanStatuses": "管理项目默认看板状态",
     "globalKanbanStatusesDesc": "设置项目看板默认显示的状态列，供新项目或未自定义状态的项目使用",
+    "restoreDefaultFilters": "恢复默认过滤器",
+    "confirmRestoreDefaultFilters": "确定要恢复默认过滤器吗？自定义过滤器会保留，并放在默认过滤器后面。",
+    "defaultFiltersRestored": "已恢复默认过滤器",
+    "kanbanStatus": "项目看板状态",
+    "excludeAbandoned": "不含放弃",
+    "kanbanStatusFilterByNameHint": "按状态名称筛选；不同项目同名状态会合并筛选，且不包含“已完成”状态。",
     "task": "任务"
 }
