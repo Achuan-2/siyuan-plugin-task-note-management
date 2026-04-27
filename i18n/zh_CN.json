@@ -1296,7 +1296,7 @@
     "showRepeatTasks": "显示重复任务",
     "showEventCheckbox": "显示任务复选框",
     "showPomodoroRecords": "显示番茄专注",
-    "showCompletedTaskTime": "单独显示任务完成时间",
+    "showCompletedTaskTime": "显示任务完成时间",
     "onlyShowWithoutDate": "只显示没有日期的任务",
     "show": "显示",
     "instances": "个未完成实例",
