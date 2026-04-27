@@ -20,8 +20,10 @@ export interface CalendarConfig {
     repeatInstanceLimit: number;
     showHiddenTasks: boolean; // 显示不在日历视图显示的任务
     showEventCheckbox: boolean; // 显示日历事件前的复选框
-    showCompletedTaskTime: boolean; // 显示已完成任务时间
-    showCompletedTaskTimeOnlyWithoutDate: boolean; // 只显示没有日期的任务的完成时间
+    showCompletedTaskTime: boolean; // 显示任务完成时间（总开关）
+    showCompletedTaskTimeTimed: boolean; // 显示非全天（定时）任务的完成时间
+    showCompletedTaskTimeAllDay: boolean; // 显示全天任务的完成时间
+    showCompletedTaskTimeNoDate: boolean; // 显示无日期任务的完成时间
     showTasks: boolean; // 是否显示任务
     showHabits: boolean; // 是否显示习惯
     multiDaysCount: number; // 多天视图显示的天数，默认为3天
@@ -51,8 +53,10 @@ export class CalendarConfigManager {
             repeatInstanceLimit: -1, // 默认显示全部实例 (-1表示不限制)
             showHiddenTasks: false, // 默认不显示隐藏任务
             showEventCheckbox: true, // 默认显示日历事件前复选框
-            showCompletedTaskTime: true, // 默认显示已完成任务时间
-            showCompletedTaskTimeOnlyWithoutDate: false, // 默认显示所有已完成任务的时间
+            showCompletedTaskTime: true, // 默认显示任务完成时间（总开关）
+            showCompletedTaskTimeTimed: false, // 默认不显示非全天任务的完成时间
+            showCompletedTaskTimeAllDay: true, // 默认显示全天任务的完成时间
+            showCompletedTaskTimeNoDate: true, // 默认显示无日期任务的完成时间
             showTasks: true, // 默认显示任务
             showHabits: true, // 默认显示习惯
             multiDaysCount: 3 // 默认显示3天
@@ -90,7 +94,9 @@ export class CalendarConfigManager {
             settings.calendarShowHiddenTasks = this.config.showHiddenTasks;
             settings.showCalendarEventCheckbox = this.config.showEventCheckbox;
             settings.calendarShowCompletedTaskTime = this.config.showCompletedTaskTime;
-            settings.calendarShowCompletedTaskTimeOnlyWithoutDate = this.config.showCompletedTaskTimeOnlyWithoutDate;
+            settings.calendarShowCompletedTaskTimeTimed = this.config.showCompletedTaskTimeTimed;
+            settings.calendarShowCompletedTaskTimeAllDay = this.config.showCompletedTaskTimeAllDay;
+            settings.calendarShowCompletedTaskTimeNoDate = this.config.showCompletedTaskTimeNoDate;
             settings.calendarShowTasks = this.config.showTasks;
             settings.calendarShowHabits = this.config.showHabits;
             settings.calendarMultiDaysCount = this.config.multiDaysCount;
@@ -149,7 +155,9 @@ export class CalendarConfigManager {
                 showHiddenTasks: settings.calendarShowHiddenTasks === true, // 默认为 false
                 showEventCheckbox: settings.showCalendarEventCheckbox !== false, // 默认为 true
                 showCompletedTaskTime: settings.calendarShowCompletedTaskTime !== false, // 默认为 true
-                showCompletedTaskTimeOnlyWithoutDate: settings.calendarShowCompletedTaskTimeOnlyWithoutDate === true, // 默认为 false
+                showCompletedTaskTimeTimed: settings.calendarShowCompletedTaskTimeTimed === true, // 默认为 false
+                showCompletedTaskTimeAllDay: settings.calendarShowCompletedTaskTimeAllDay !== false, // 默认为 true
+                showCompletedTaskTimeNoDate: settings.calendarShowCompletedTaskTimeNoDate !== false, // 默认为 true
                 showTasks: settings.calendarShowTasks !== false, // 默认为 true
                 showHabits: settings.calendarShowHabits !== false, // 默认为 true
                 multiDaysCount: settings.calendarMultiDaysCount !== undefined ? settings.calendarMultiDaysCount : 3 // 默认为3天
@@ -174,7 +182,9 @@ export class CalendarConfigManager {
                 showHiddenTasks: false,
                 showEventCheckbox: true,
                 showCompletedTaskTime: true,
-                showCompletedTaskTimeOnlyWithoutDate: false,
+                showCompletedTaskTimeTimed: false,
+                showCompletedTaskTimeAllDay: true,
+                showCompletedTaskTimeNoDate: true,
                 showTasks: true,
                 showHabits: true,
                 multiDaysCount: 3
@@ -341,13 +351,31 @@ export class CalendarConfigManager {
         return this.config.showCompletedTaskTime !== undefined ? this.config.showCompletedTaskTime : true;
     }
 
-    public async setShowCompletedTaskTimeOnlyWithoutDate(show: boolean) {
-        this.config.showCompletedTaskTimeOnlyWithoutDate = show;
+    public async setShowCompletedTaskTimeTimed(show: boolean) {
+        this.config.showCompletedTaskTimeTimed = show;
         await this.saveConfig();
     }
 
-    public getShowCompletedTaskTimeOnlyWithoutDate(): boolean {
-        return this.config.showCompletedTaskTimeOnlyWithoutDate !== undefined ? this.config.showCompletedTaskTimeOnlyWithoutDate : false;
+    public getShowCompletedTaskTimeTimed(): boolean {
+        return this.config.showCompletedTaskTimeTimed !== undefined ? this.config.showCompletedTaskTimeTimed : false;
+    }
+
+    public async setShowCompletedTaskTimeAllDay(show: boolean) {
+        this.config.showCompletedTaskTimeAllDay = show;
+        await this.saveConfig();
+    }
+
+    public getShowCompletedTaskTimeAllDay(): boolean {
+        return this.config.showCompletedTaskTimeAllDay !== undefined ? this.config.showCompletedTaskTimeAllDay : true;
+    }
+
+    public async setShowCompletedTaskTimeNoDate(show: boolean) {
+        this.config.showCompletedTaskTimeNoDate = show;
+        await this.saveConfig();
+    }
+
+    public getShowCompletedTaskTimeNoDate(): boolean {
+        return this.config.showCompletedTaskTimeNoDate !== undefined ? this.config.showCompletedTaskTimeNoDate : true;
     }
 
     public async setMultiDaysCount(count: number) {

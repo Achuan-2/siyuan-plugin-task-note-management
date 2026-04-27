@@ -62,8 +62,10 @@ export class CalendarView {
     private repeatInstanceLimit: number = -1; // 重复任务显示实例数量限制
     private showHiddenTasks: boolean = false; // 是否显示不在日历视图显示的任务
     private showEventCheckbox: boolean = true; // 是否显示日历事件前的复选框
-    private showCompletedTaskTime: boolean = true; // 是否显示已完成任务时间
-    private showCompletedTaskTimeOnlyWithoutDate: boolean = false; // 是否只显示没有日期的任务的完成时间
+    private showCompletedTaskTime: boolean = true; // 是否显示任务完成时间（总开关）
+    private showCompletedTaskTimeTimed: boolean = false; // 是否显示非全天（定时）任务的完成时间
+    private showCompletedTaskTimeAllDay: boolean = true; // 是否显示全天任务的完成时间
+    private showCompletedTaskTimeNoDate: boolean = true; // 是否显示无日期任务的完成时间
     private pomodoroToggleBtn: HTMLElement | null = null; // Pomodoro toggle button
     private holidays: { [date: string]: { title: string, type: 'holiday' | 'workday' } } = {}; // 节假日数据
     private colorBy: 'category' | 'priority' | 'project' = 'priority'; // 按分类或优先级上色
@@ -167,7 +169,9 @@ export class CalendarView {
             this.showPomodoro = this.calendarConfigManager.getShowPomodoro();
             this.showPomodoroBreakTime = this.calendarConfigManager.getShowPomodoroBreakTime();
             this.showCompletedTaskTime = this.calendarConfigManager.getShowCompletedTaskTime();
-            this.showCompletedTaskTimeOnlyWithoutDate = this.calendarConfigManager.getShowCompletedTaskTimeOnlyWithoutDate();
+            this.showCompletedTaskTimeTimed = this.calendarConfigManager.getShowCompletedTaskTimeTimed();
+            this.showCompletedTaskTimeAllDay = this.calendarConfigManager.getShowCompletedTaskTimeAllDay();
+            this.showCompletedTaskTimeNoDate = this.calendarConfigManager.getShowCompletedTaskTimeNoDate();
             this.showTasks = this.calendarConfigManager.getShowTasks();
             this.showHabits = this.calendarConfigManager.getShowHabits();
 
@@ -502,7 +506,9 @@ export class CalendarView {
         this.showHiddenTasks = this.calendarConfigManager.getShowHiddenTasks();
         this.showEventCheckbox = this.calendarConfigManager.getShowEventCheckbox();
         this.showCompletedTaskTime = this.calendarConfigManager.getShowCompletedTaskTime();
-        this.showCompletedTaskTimeOnlyWithoutDate = this.calendarConfigManager.getShowCompletedTaskTimeOnlyWithoutDate();
+        this.showCompletedTaskTimeTimed = this.calendarConfigManager.getShowCompletedTaskTimeTimed();
+        this.showCompletedTaskTimeAllDay = this.calendarConfigManager.getShowCompletedTaskTimeAllDay();
+        this.showCompletedTaskTimeNoDate = this.calendarConfigManager.getShowCompletedTaskTimeNoDate();
         this.holidays = await loadHolidays(this.plugin);
 
         // 获取周开始日设置
@@ -1083,32 +1089,71 @@ export class CalendarView {
         });
         displaySettingsDropdown.appendChild(pomodoroBreakTimeItem);
 
-        // 完成任务时间设置
-        displaySettingsDropdown.appendChild(createSwitchItem(i18n("showCompletedTaskTime") || "单独显示任务完成时间", this.showCompletedTaskTime, async (checked) => {
+        // 完成任务时间设置 - 总开关
+        displaySettingsDropdown.appendChild(createSwitchItem(i18n("showCompletedTaskTime") || "显示任务完成时间", this.showCompletedTaskTime, async (checked) => {
             this.showCompletedTaskTime = checked;
             await this.calendarConfigManager.setShowCompletedTaskTime(checked);
             // 显示/隐藏子选项
-            onlyWithoutDateCheckbox.style.display = checked ? 'flex' : 'none';
+            completedTaskTimeSubItems.style.display = checked ? 'block' : 'none';
             await this.refreshEvents();
         }));
 
-        // 子选项：只显示没有日期的任务
-        const onlyWithoutDateCheckbox = document.createElement('div');
-        onlyWithoutDateCheckbox.className = 'fn__flex fn__flex-center';
-        onlyWithoutDateCheckbox.style.padding = '4px 12px 4px 32px';
-        onlyWithoutDateCheckbox.style.gap = '8px';
-        onlyWithoutDateCheckbox.style.display = this.showCompletedTaskTime ? 'flex' : 'none';
-        onlyWithoutDateCheckbox.innerHTML = `
-            <input class="b3-switch" type="checkbox" ${this.showCompletedTaskTimeOnlyWithoutDate ? 'checked' : ''}>
-            <span style="font-size: 0.9em; color: var(--b3-theme-on-surface-light);">${i18n("onlyShowWithoutDate") || "只显示没有日期的任务"}</span>
+        // 子选项容器
+        const completedTaskTimeSubItems = document.createElement('div');
+        completedTaskTimeSubItems.style.display = this.showCompletedTaskTime ? 'block' : 'none';
+
+        // 子选项：显示非全天任务完成时间
+        const timedItem = document.createElement('div');
+        timedItem.className = 'fn__flex fn__flex-center';
+        timedItem.style.padding = '4px 12px 4px 32px';
+        timedItem.style.gap = '8px';
+        timedItem.innerHTML = `
+            <input class="b3-switch" type="checkbox" ${this.showCompletedTaskTimeTimed ? 'checked' : ''}>
+            <span style="font-size: 0.9em; color: var(--b3-theme-on-surface-light);">${i18n("showCompletedTaskTimeTimed") || "显示非全天任务"}</span>
         `;
-        const checkbox = onlyWithoutDateCheckbox.querySelector('input') as HTMLInputElement;
-        checkbox.addEventListener('change', async () => {
-            this.showCompletedTaskTimeOnlyWithoutDate = checkbox.checked;
-            await this.calendarConfigManager.setShowCompletedTaskTimeOnlyWithoutDate(checkbox.checked);
+        const timedCheckbox = timedItem.querySelector('input') as HTMLInputElement;
+        timedCheckbox.addEventListener('change', async () => {
+            this.showCompletedTaskTimeTimed = timedCheckbox.checked;
+            await this.calendarConfigManager.setShowCompletedTaskTimeTimed(timedCheckbox.checked);
             await this.refreshEvents();
         });
-        displaySettingsDropdown.appendChild(onlyWithoutDateCheckbox);
+        completedTaskTimeSubItems.appendChild(timedItem);
+
+        // 子选项：显示全天任务完成时间
+        const allDayItem = document.createElement('div');
+        allDayItem.className = 'fn__flex fn__flex-center';
+        allDayItem.style.padding = '4px 12px 4px 32px';
+        allDayItem.style.gap = '8px';
+        allDayItem.innerHTML = `
+            <input class="b3-switch" type="checkbox" ${this.showCompletedTaskTimeAllDay ? 'checked' : ''}>
+            <span style="font-size: 0.9em; color: var(--b3-theme-on-surface-light);">${i18n("showCompletedTaskTimeAllDay") || "显示全天任务"}</span>
+        `;
+        const allDayCheckbox = allDayItem.querySelector('input') as HTMLInputElement;
+        allDayCheckbox.addEventListener('change', async () => {
+            this.showCompletedTaskTimeAllDay = allDayCheckbox.checked;
+            await this.calendarConfigManager.setShowCompletedTaskTimeAllDay(allDayCheckbox.checked);
+            await this.refreshEvents();
+        });
+        completedTaskTimeSubItems.appendChild(allDayItem);
+
+        // 子选项：显示无日期任务完成时间
+        const noDateItem = document.createElement('div');
+        noDateItem.className = 'fn__flex fn__flex-center';
+        noDateItem.style.padding = '4px 12px 4px 32px';
+        noDateItem.style.gap = '8px';
+        noDateItem.innerHTML = `
+            <input class="b3-switch" type="checkbox" ${this.showCompletedTaskTimeNoDate ? 'checked' : ''}>
+            <span style="font-size: 0.9em; color: var(--b3-theme-on-surface-light);">${i18n("showCompletedTaskTimeNoDate") || "显示无日期任务"}</span>
+        `;
+        const noDateCheckbox = noDateItem.querySelector('input') as HTMLInputElement;
+        noDateCheckbox.addEventListener('change', async () => {
+            this.showCompletedTaskTimeNoDate = noDateCheckbox.checked;
+            await this.calendarConfigManager.setShowCompletedTaskTimeNoDate(noDateCheckbox.checked);
+            await this.refreshEvents();
+        });
+        completedTaskTimeSubItems.appendChild(noDateItem);
+
+        displaySettingsDropdown.appendChild(completedTaskTimeSubItems);
 
         // 隐藏任务设置（强制显示标记为不在日历显示的任务）
         displaySettingsDropdown.appendChild(createSwitchItem(i18n("showHiddenTasks") || "显示不在日历视图显示的任务", this.showHiddenTasks, async (checked) => {
@@ -6996,10 +7041,12 @@ export class CalendarView {
                     continue;
                 }
 
-                // 如果启用"只显示没有日期的任务"，过滤掉有日期（有开始日期或结束日期）的任务
-                if (this.showCompletedTaskTimeOnlyWithoutDate && (reminder.date || reminder.endDate)) {
-                    continue;
-                }
+                // 根据任务类型和对应开关过滤
+                const hasDate = !!(reminder.date || reminder.endDate);
+                const hasTime = !!reminder.time;
+                if (!hasDate && !this.showCompletedTaskTimeNoDate) continue;
+                if (hasDate && !hasTime && !this.showCompletedTaskTimeAllDay) continue;
+                if (hasDate && hasTime && !this.showCompletedTaskTimeTimed) continue;
 
                 // 筛选项目和分类
                 if (!this.passesProjectFilter(reminder)) continue;
@@ -7090,10 +7137,12 @@ export class CalendarView {
                     if (!this.passesProjectFilter(reminder)) continue;
                     if (!this.passesCategoryFilter(reminder, projectData)) continue;
 
-                    // 如果启用"只显示没有日期的任务"，过滤掉有日期（有开始日期或结束日期）的任务
-                    if (this.showCompletedTaskTimeOnlyWithoutDate && (reminder.date || reminder.endDate)) {
-                        continue;
-                    }
+                    // 根据任务类型和对应开关过滤
+                    const hasDate = !!(reminder.date || reminder.endDate);
+                    const hasTime = !!reminder.time;
+                    if (!hasDate && !this.showCompletedTaskTimeNoDate) continue;
+                    if (hasDate && !hasTime && !this.showCompletedTaskTimeAllDay) continue;
+                    if (hasDate && hasTime && !this.showCompletedTaskTimeTimed) continue;
 
                     // 解析完成时间
                     const completedDate = new Date(completedTimeStr);
