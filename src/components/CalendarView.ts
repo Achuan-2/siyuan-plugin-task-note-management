@@ -1744,12 +1744,12 @@ export class CalendarView {
                     return false;
                 }
                 if (draggedEvent.extendedProps.isHabit) {
-                    if (draggedEvent.extendedProps.type !== 'habitReminderTime') {
+                    if (draggedEvent.extendedProps.type !== 'habitReminderTime' && draggedEvent.extendedProps.type !== 'habitCheckInTime') {
                         return false;
                     }
                     const dropDate = getLocalDateString(dropInfo.start);
                     const dropEndDate = dropInfo.end ? getLocalDateString(new Date(dropInfo.end.getTime() - 1000)) : dropDate;
-                    if (dropDate !== draggedEvent.extendedProps.date || dropEndDate !== draggedEvent.extendedProps.date || draggedEvent.extendedProps.completed) {
+                    if (dropDate !== draggedEvent.extendedProps.date || dropEndDate !== draggedEvent.extendedProps.date) {
                         return false;
                     }
                 }
@@ -2880,6 +2880,67 @@ export class CalendarView {
             showMessage(i18n("instanceTimeUpdated") || '提醒时间已更新');
         } catch (error) {
             console.error('更新习惯提醒时间失败:', error);
+            showMessage(i18n("operationFailed"));
+            info.revert();
+        }
+    }
+
+    private async updateHabitCheckInTimeEvent(info: any) {
+        try {
+            const habitData = await this.plugin.loadHabitData();
+            const habitId = info.event.extendedProps.habitId;
+            const targetDate = info.event.extendedProps.date;
+            const checkInIndex = info.event.extendedProps.checkInIndex;
+            const habit = habitData?.[habitId];
+            if (!habit || !targetDate || typeof checkInIndex !== 'number') {
+                throw new Error('习惯打卡数据不存在');
+            }
+
+            const checkIn = habit.checkIns?.[targetDate];
+            if (!checkIn) {
+                throw new Error('习惯打卡记录不存在');
+            }
+
+            // 获取打卡条目
+            const entries = Array.isArray(checkIn.entries) ? checkIn.entries : [];
+            if (!entries[checkInIndex]) {
+                throw new Error('习惯打卡条目索引不存在');
+            }
+
+            let newStartDate = info.event.start;
+            if (newStartDate) {
+                newStartDate = this.snapToMinutes(newStartDate, 5);
+            }
+            if (!newStartDate) {
+                throw new Error('习惯打卡时间缺少开始时间');
+            }
+
+            const { dateStr: newDateStr, timeStr: newTimeStr } = getLocalDateTime(newStartDate);
+            if (!newTimeStr) {
+                throw new Error('习惯打卡时间缺少时间');
+            }
+
+            // 更新打卡条目的 timestamp (格式: "YYYY-MM-DD HH:mm")
+            const newTimestamp = `${newDateStr} ${newTimeStr}`;
+            entries[checkInIndex] = {
+                ...entries[checkInIndex],
+                timestamp: newTimestamp
+            };
+
+            // 更新 checkIn 数据
+            checkIn.entries = entries;
+            checkIn.timestamp = entries[entries.length - 1]?.timestamp || checkIn.timestamp;
+
+            habit.updatedAt = getLocalDateTimeString(new Date());
+            habitData[habitId] = habit;
+            await this.plugin.saveHabitData(habitData);
+
+            await this.refreshEvents(true);
+            window.dispatchEvent(new CustomEvent('habitUpdated'));
+            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
+            showMessage(i18n("habitCheckInTimeUpdated") || '打卡时间已更新');
+        } catch (error) {
+            console.error('更新习惯打卡时间失败:', error);
             showMessage(i18n("operationFailed"));
             info.revert();
         }
@@ -5178,6 +5239,11 @@ export class CalendarView {
             return;
         }
 
+        if (info.event.extendedProps.type === 'habitCheckInTime') {
+            await this.updateHabitCheckInTimeEvent(info);
+            return;
+        }
+
         if (info.event.extendedProps.type === 'completedTaskTime') {
             await this.updateCompletedTaskTimeEvent(info);
             return;
@@ -5238,6 +5304,11 @@ export class CalendarView {
     private async handleEventResize(info) {
         if (info.event.extendedProps.type === 'habitReminderTime') {
             await this.updateHabitReminderTimeEvent(info);
+            return;
+        }
+
+        if (info.event.extendedProps.type === 'habitCheckInTime') {
+            await this.updateHabitCheckInTimeEvent(info);
             return;
         }
 
@@ -6953,8 +7024,8 @@ export class CalendarView {
                             borderColor: completed ? '#1b5e20' : '#2e7d32',
                             textColor: 'var(--b3-theme-on-background)',
                             className: `habit-calendar-event habit-check-in-time-event${completed ? ' completed' : ''}`,
-                            editable: false,
-                            startEditable: false,
+                            editable: true,
+                            startEditable: true,
                             durationEditable: false,
                             extendedProps: {
                                 type: 'habitCheckInTime',
@@ -6967,6 +7038,7 @@ export class CalendarView {
                                 checkedEmojis,
                                 checkInEmoji: entry.emoji,
                                 checkInTimestamp: entry.timestamp,
+                                checkInIndex: index,
                                 note: entryNote,
                                 target: habit.target || 1,
                                 frequency: habit.frequency,

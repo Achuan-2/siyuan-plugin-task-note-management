@@ -280,6 +280,7 @@
     "onlyThisInstance": "Only This Instance",
     "allInstances": "All Instances",
     "instanceTimeUpdated": "Instance time updated",
+    "habitCheckInTimeUpdated": "Check-in time updated",
     "updateInstanceFailed": "Failed to update instance",
     "toggleAllDayFailed": "Failed to toggle all day event",
     "instanceCompleted": "Instance completed",

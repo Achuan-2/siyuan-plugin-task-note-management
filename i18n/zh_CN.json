@@ -280,6 +280,7 @@
     "onlyThisInstance": "仅此实例",
     "allInstances": "所有实例",
     "instanceTimeUpdated": "实例时间已更新",
+    "habitCheckInTimeUpdated": "打卡时间已更新",
     "updateInstanceFailed": "更新实例失败",
     "toggleAllDayFailed": "切换全天事件失败",
     "instanceCompleted": "实例已完成",
