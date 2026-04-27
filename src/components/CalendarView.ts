@@ -6808,56 +6808,53 @@ export class CalendarView {
                     if (this.currentCompletionFilter === 'completed' && !completed) continue;
                     if (this.currentCompletionFilter === 'incomplete' && completed) continue;
 
-                    const isPastDate = compareDateStrings(dateStr, today) < 0;
-                    if (isPastDate) {
-                        const checkInTimeEntries = this.getHabitCheckInTimeEntriesOnDate(habit, dateStr);
-                        if (!checkInTimeEntries.length) continue;
+                    const checkInTimeEntries = this.getHabitCheckInTimeEntriesOnDate(habit, dateStr);
+                    checkInTimeEntries.forEach((entry, index) => {
+                        const startTime = new Date(`${dateStr}T${entry.time}:00`);
+                        if (Number.isNaN(startTime.getTime())) return;
 
-                        checkInTimeEntries.forEach((entry, index) => {
-                            const startTime = new Date(`${dateStr}T${entry.time}:00`);
-                            if (Number.isNaN(startTime.getTime())) return;
+                        const endTime = new Date(startTime.getTime() + 15 * 60 * 1000);
+                        const endDateStr = getLocalDateString(endTime);
+                        const endTimeStr = endTime.toTimeString().substring(0, 5);
+                        const entryNote = entry.note || habit.note || '';
+                        const checkInTitlePrefix = entry.emoji ? `${entry.emoji} ` : '';
 
-                            const endTime = new Date(startTime.getTime() + 15 * 60 * 1000);
-                            const endDateStr = getLocalDateString(endTime);
-                            const endTimeStr = endTime.toTimeString().substring(0, 5);
-                            const entryNote = entry.note || habit.note || '';
-
-                            events.push({
-                                id: `habit-${habit.id}-${dateStr}__checkin__${index}`,
-                                title: habit.title || i18n("unnamedTask"),
-                                start: `${dateStr}T${entry.time}:00`,
-                                end: `${endDateStr}T${endTimeStr}:00`,
-                                allDay: false,
-                                display: 'block',
-                                backgroundColor: completed ? 'rgba(46, 125, 50, 0.62)' : '#43a047',
-                                borderColor: completed ? '#1b5e20' : '#2e7d32',
-                                textColor: 'var(--b3-theme-on-background)',
-                                className: `habit-calendar-event habit-check-in-time-event${completed ? ' completed' : ''}`,
-                                editable: false,
-                                startEditable: false,
-                                durationEditable: false,
-                                extendedProps: {
-                                    type: 'habitCheckInTime',
-                                    isHabit: true,
-                                    habitId: habit.id,
-                                    icon: habit.icon,
-                                    color: habit.color,
-                                    date: dateStr,
-                                    completed,
-                                    checkedEmojis,
-                                    checkInEmoji: entry.emoji,
-                                    checkInTimestamp: entry.timestamp,
-                                    note: entryNote,
-                                    target: habit.target || 1,
-                                    frequency: habit.frequency,
-                                    habitOrder: habitOrderMap.get(habit.id) ?? Number.MAX_SAFE_INTEGER,
-                                    time: entry.time,
-                                    endTime: endTimeStr
-                                }
-                            });
+                        events.push({
+                            id: `habit-${habit.id}-${dateStr}__checkin__${index}`,
+                            title: `${checkInTitlePrefix}${habit.title || i18n("unnamedTask")}`,
+                            start: `${dateStr}T${entry.time}:00`,
+                            end: `${endDateStr}T${endTimeStr}:00`,
+                            allDay: false,
+                            display: 'block',
+                            backgroundColor: completed ? 'rgba(46, 125, 50, 0.62)' : '#43a047',
+                            borderColor: completed ? '#1b5e20' : '#2e7d32',
+                            textColor: 'var(--b3-theme-on-background)',
+                            className: `habit-calendar-event habit-check-in-time-event${completed ? ' completed' : ''}`,
+                            editable: false,
+                            startEditable: false,
+                            durationEditable: false,
+                            extendedProps: {
+                                type: 'habitCheckInTime',
+                                isHabit: true,
+                                habitId: habit.id,
+                                icon: habit.icon,
+                                color: habit.color,
+                                date: dateStr,
+                                completed,
+                                checkedEmojis,
+                                checkInEmoji: entry.emoji,
+                                checkInTimestamp: entry.timestamp,
+                                note: entryNote,
+                                target: habit.target || 1,
+                                frequency: habit.frequency,
+                                habitOrder: habitOrderMap.get(habit.id) ?? Number.MAX_SAFE_INTEGER,
+                                time: entry.time,
+                                endTime: endTimeStr
+                            }
                         });
-                        continue;
-                    }
+                    });
+
+                    if (compareDateStrings(dateStr, today) < 0) continue;
 
                     const reminderTimes = getHabitReminderTimesForDate(habit, dateStr);
                     if (!reminderTimes.length) continue;
@@ -6868,6 +6865,7 @@ export class CalendarView {
 
                         const startTime = new Date(`${dateStr}T${parsed.time}:00`);
                         if (Number.isNaN(startTime.getTime())) return;
+                        if (dateStr === today && startTime.getTime() < Date.now()) return;
 
                         let endTime = new Date(startTime.getTime() + 15 * 60 * 1000);
                         if (entry.endTime) {
