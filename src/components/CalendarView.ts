@@ -80,6 +80,7 @@ export class CalendarView {
     private lastClickTime: number = 0; // 添加双击检测
     private clickTimeout: number | null = null; // 添加单击延迟超时
     private refreshTimeout: number | null = null; // 添加刷新防抖超时
+    private readonly calendarViewInstanceId: string = `calendar-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     private currentCompletionFilter: string = 'all'; // 当前完成状态过滤
     private isDragging: boolean = false; // 标记是否正在拖动事件
     private allDayDragState: {
@@ -2258,8 +2259,8 @@ export class CalendarView {
             // 获取事件详细信息
             const detail = (e as CustomEvent).detail;
 
-            // 如果事件来源是日历本身，不进行刷新，避免循环刷新
-            if (detail && detail.source === 'calendar') {
+            // 仅忽略当前实例自己触发的刷新事件，允许其它日历实例（如侧栏/页签）互相同步
+            if (detail && detail.source === 'calendar' && detail.instanceId === this.calendarViewInstanceId) {
                 return;
             }
 
@@ -4415,10 +4416,12 @@ export class CalendarView {
                     // 取消移动端通知
                     await this.plugin.cancelMobileNotification(reminderId);
                     delete reminderData[reminderId];
-                    // 触发更新事件
-                    window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
                     // 保存数据到存储
                     await saveReminders(this.plugin, reminderData);
+                    // 保存成功后再通知，确保其它日历实例刷新时读取到最新数据
+                    window.dispatchEvent(new CustomEvent('reminderUpdated', {
+                        detail: { source: 'calendar', instanceId: this.calendarViewInstanceId }
+                    }));
 
                     // 后台更新块属性
                     if (blockId) {
