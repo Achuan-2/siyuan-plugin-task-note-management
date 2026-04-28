@@ -3146,7 +3146,7 @@ export default class ReminderPlugin extends Plugin {
         // 监听来自其他窗口的消息
         this.coordinatorChannel.onmessage = (event) => {
             const type = event.data?.type;
-            if (type === 'reminderUpdated' || type === 'habitUpdated') {
+            if (type === 'reminderUpdated' || type === 'habitUpdated' || type === 'calendarConfigUpdated') {
                 // 转发给当前窗口的其他组件，附带标记避免循环发送
                 window.dispatchEvent(new CustomEvent(type, { detail: { _fromSync: true } }));
                 // 刷新徽章
@@ -3169,10 +3169,12 @@ export default class ReminderPlugin extends Plugin {
 
         window.addEventListener('reminderUpdated', broadcastEvent as any);
         window.addEventListener('habitUpdated', broadcastEvent as any);
+        window.addEventListener('calendarConfigUpdated', broadcastEvent as any);
 
         this.addCleanup(() => {
             window.removeEventListener('reminderUpdated', broadcastEvent as any);
             window.removeEventListener('habitUpdated', broadcastEvent as any);
+            window.removeEventListener('calendarConfigUpdated', broadcastEvent as any);
         });
     }
 

@@ -19,7 +19,7 @@ import { PomodoroTimer } from "./PomodoroTimer";
 import { i18n } from "../pluginInstance";
 import { generateRepeatInstances, RepeatInstance, getDaysDifference, addDaysToDate, resolveRepeatReminderTimes } from "../utils/repeatUtils";
 import { getAllReminders, saveReminders, loadHolidays, loadSubscriptions } from "../utils/icsSubscription";
-import { CalendarConfigManager } from "../utils/calendarConfigManager";
+import { CalendarConfigManager, CALENDAR_CONFIG_UPDATED_EVENT } from "../utils/calendarConfigManager";
 import { showStatsDialog } from "./stats/ShowStatsDialog";
 import { PomodoroManager } from "../utils/pomodoroManager";
 import { getNextLunarMonthlyDate, getNextLunarYearlyDate, getSolarDateLunarString } from "../utils/lunarUtils";
@@ -74,6 +74,7 @@ export class CalendarView {
     private tooltip: HTMLElement | null = null; // 添加提示框元素
     private dropIndicator: HTMLElement | null = null; // 拖放放置指示器
     private externalReminderUpdatedHandler: ((e: Event) => void) | null = null;
+    private externalCalendarConfigUpdatedHandler: ((e: Event) => void) | null = null;
     private settingUpdateHandler: ((e: Event) => void) | null = null;
     private hideTooltipTimeout: number | null = null; // 添加提示框隐藏超时控制
     private tooltipShowTimeout: number | null = null; // 添加提示框显示延迟控制
@@ -2274,6 +2275,11 @@ export class CalendarView {
         };
         window.addEventListener('reminderSettingsUpdated', this.settingUpdateHandler);
 
+        this.externalCalendarConfigUpdatedHandler = async () => {
+            await this.updateSettings();
+        };
+        window.addEventListener(CALENDAR_CONFIG_UPDATED_EVENT, this.externalCalendarConfigUpdatedHandler);
+
         // 监听项目颜色更新事件
         window.addEventListener('projectColorUpdated', () => {
             this.colorCache.clear();
@@ -2679,6 +2685,9 @@ export class CalendarView {
             // 清理设置更新监听
             if (this.settingUpdateHandler) {
                 window.removeEventListener('reminderSettingsUpdated', this.settingUpdateHandler);
+            }
+            if (this.externalCalendarConfigUpdatedHandler) {
+                window.removeEventListener(CALENDAR_CONFIG_UPDATED_EVENT, this.externalCalendarConfigUpdatedHandler);
             }
         };
 
@@ -8924,6 +8933,10 @@ export class CalendarView {
         if (this.externalReminderUpdatedHandler) {
             window.removeEventListener('reminderUpdated', this.externalReminderUpdatedHandler);
             this.externalReminderUpdatedHandler = null;
+        }
+        if (this.externalCalendarConfigUpdatedHandler) {
+            window.removeEventListener(CALENDAR_CONFIG_UPDATED_EVENT, this.externalCalendarConfigUpdatedHandler);
+            this.externalCalendarConfigUpdatedHandler = null;
         }
         window.removeEventListener('projectColorUpdated', () => {
             this.colorCache.clear();

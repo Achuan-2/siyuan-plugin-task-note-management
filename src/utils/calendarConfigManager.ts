@@ -2,6 +2,7 @@ import { Plugin } from "siyuan";
 import { getFile, removeFile } from "../api";
 
 const CALENDAR_CONFIG_FILE = '/data/storage/petal/siyuan-plugin-task-note-management/calendar-config.json';
+export const CALENDAR_CONFIG_UPDATED_EVENT = 'calendarConfigUpdated';
 
 export interface CalendarConfig {
     colorBy: 'category' | 'priority' | 'project';
@@ -107,6 +108,9 @@ export class CalendarConfigManager {
             settings.calendarShowHabits = this.config.showHabits;
             settings.calendarMultiDaysCount = this.config.multiDaysCount;
             await (this.plugin as any).saveSettings(settings);
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent(CALENDAR_CONFIG_UPDATED_EVENT));
+            }
         } catch (error) {
             console.error('Failed to save calendar config:', error);
             throw error;
