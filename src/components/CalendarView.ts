@@ -1741,6 +1741,7 @@ export class CalendarView {
             eventClick: this.handleEventClick.bind(this),
             eventDragStart: (info) => {
                 this.isDragging = true;
+                this.forceHideTooltip();
                 this.startAllDayDragTracking(info);
             },
             eventDragStop: (info) => {
@@ -2728,6 +2729,7 @@ export class CalendarView {
 
     private handleEventMouseEnter(event: MouseEvent, calendarEvent: any) {
         if (this.isDragging) return;
+        const latestCalendarEvent = this.resolveLatestCalendarEvent(calendarEvent);
         // 当鼠标进入事件元素时，安排显示提示框
         // 如果已经有一个计划中的显示，则取消它
         if (this.tooltipShowTimeout) {
@@ -2740,7 +2742,7 @@ export class CalendarView {
         }
 
         this.tooltipShowTimeout = window.setTimeout(() => {
-            this.showEventTooltip(event, calendarEvent);
+            this.showEventTooltip(event, latestCalendarEvent);
         }, 500); // 500ms延迟显示
     }
 
@@ -7995,8 +7997,9 @@ export class CalendarView {
             this.tooltip.style.display = 'block';
             this.updateTooltipPosition(event);
 
-            // 异步获取详细信息
-            const tooltipContent = await this.buildTooltipContent(calendarEvent);
+            // 异步获取详细信息（使用当前日历中的最新事件对象，避免拖拽后读到旧引用）
+            const latestCalendarEvent = this.resolveLatestCalendarEvent(calendarEvent);
+            const tooltipContent = await this.buildTooltipContent(latestCalendarEvent);
 
             // 检查tooltip是否仍然存在（防止快速移动鼠标时的竞态条件）
             if (this.tooltip && this.tooltip.style.display !== 'none') {
@@ -8022,6 +8025,16 @@ export class CalendarView {
         } catch (error) {
             console.error('显示事件提示框失败:', error);
             this.hideEventTooltip();
+        }
+    }
+
+    private resolveLatestCalendarEvent(calendarEvent: any): any {
+        try {
+            const eventId = String(calendarEvent?.id || '');
+            if (!eventId || !this.calendar) return calendarEvent;
+            return this.calendar.getEventById(eventId) || calendarEvent;
+        } catch (error) {
+            return calendarEvent;
         }
     }
 
@@ -8221,6 +8234,7 @@ export class CalendarView {
 
     private async buildTooltipContent(calendarEvent: any): Promise<string> {
         const reminder = calendarEvent.extendedProps;
+        const realtimeDateTime = this.formatRealtimeEventDateTime(calendarEvent);
 
         // Special tooltip for Pomodoro events
         if (reminder.type === 'pomodoro') {
@@ -8334,25 +8348,34 @@ export class CalendarView {
                 `${reminder.icon || '🌱'} ${this.escapeHtml(title)}`,
                 `</div>`
             );
-            const dateText = reminder.date || '';
-            if (dateText) {
-                htmlParts.push(
-                    `<div style="color: var(--b3-theme-on-surface); margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">`,
-                    `<span style="opacity: 0.7;">📅</span>`,
-                    `<span>${this.escapeHtml(dateText)}</span>`,
-                    `</div>`
-                );
-            }
-            if (reminder.time) {
-                const timeText = reminder.endTime && reminder.endTime !== reminder.time
-                    ? `${reminder.time} - ${reminder.endTime}`
-                    : reminder.time;
+            if (realtimeDateTime) {
                 htmlParts.push(
                     `<div style="color: var(--b3-theme-on-surface); margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">`,
                     `<span style="opacity: 0.7;">⏰</span>`,
-                    `<span>${this.escapeHtml(timeText)}</span>`,
+                    `<span>${this.escapeHtml(realtimeDateTime)}</span>`,
                     `</div>`
                 );
+            } else {
+                const dateText = reminder.date || '';
+                if (dateText) {
+                    htmlParts.push(
+                        `<div style="color: var(--b3-theme-on-surface); margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">`,
+                        `<span style="opacity: 0.7;">📅</span>`,
+                        `<span>${this.escapeHtml(dateText)}</span>`,
+                        `</div>`
+                    );
+                }
+                if (reminder.time) {
+                    const timeText = reminder.endTime && reminder.endTime !== reminder.time
+                        ? `${reminder.time} - ${reminder.endTime}`
+                        : reminder.time;
+                    htmlParts.push(
+                        `<div style="color: var(--b3-theme-on-surface); margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">`,
+                        `<span style="opacity: 0.7;">⏰</span>`,
+                        `<span>${this.escapeHtml(timeText)}</span>`,
+                        `</div>`
+                    );
+                }
             }
             htmlParts.push(
                 `<div style="color: ${reminder.completed ? 'var(--b3-theme-success)' : 'var(--b3-theme-on-surface-light)'}; margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">`,
@@ -8449,7 +8472,7 @@ export class CalendarView {
             );
 
             // 3. 日期时间信息
-            const dateTimeInfo = this.formatEventDateTime(reminder);
+            const dateTimeInfo = this.formatEventDateTime(reminder, calendarEvent);
             if (dateTimeInfo) {
                 htmlParts.push(
                     `<div style="color: var(--b3-theme-on-surface); margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">`,
@@ -8651,8 +8674,68 @@ export class CalendarView {
     /**
      * 格式化事件日期时间信息
      */
-    private formatEventDateTime(reminder: any): string {
+    private formatRealtimeEventDateTime(calendarEvent: any): string {
+        if (!calendarEvent?.start || calendarEvent?.allDay) {
+            return '';
+        }
+
+        const start = calendarEvent.start instanceof Date ? calendarEvent.start : new Date(calendarEvent.start);
+        if (Number.isNaN(start.getTime())) {
+            return '';
+        }
+
+        let end: Date | null = null;
+        if (calendarEvent.end) {
+            const parsedEnd = calendarEvent.end instanceof Date ? calendarEvent.end : new Date(calendarEvent.end);
+            if (!Number.isNaN(parsedEnd.getTime())) {
+                end = parsedEnd;
+            }
+        }
+
+        const today = getLogicalDateString();
+        const tomorrowStr = getRelativeDateString(1);
+        const formatDate = (date: Date): string => {
+            const dateText = getLocalDateString(date);
+            if (dateText === today) return i18n("today");
+            if (dateText === tomorrowStr) return i18n("tomorrow");
+            return date.toLocaleDateString(getLocaleTag(), {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                weekday: 'short'
+            });
+        };
+        const formatTime = (date: Date): string => {
+            return date.toLocaleTimeString(getLocaleTag(), {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+        };
+
+        const startDateStr = formatDate(start);
+        const startTimeStr = formatTime(start);
+        if (!end) {
+            return `${startDateStr} ${startTimeStr}`;
+        }
+
+        const endDateStr = formatDate(end);
+        const endTimeStr = formatTime(end);
+        if (getLocalDateString(start) === getLocalDateString(end)) {
+            return `${startDateStr} ${startTimeStr} - ${endTimeStr}`;
+        }
+
+        return `${startDateStr} ${startTimeStr} → ${endDateStr} ${endTimeStr}`;
+    }
+
+    private formatEventDateTime(reminder: any, calendarEvent?: any): string {
         try {
+            // 拖拽/拉伸后 extendedProps 可能尚未刷新，优先展示当前日历事件上的实时时间段。
+            const realtimeDateTime = this.formatRealtimeEventDateTime(calendarEvent);
+            if (realtimeDateTime) {
+                return realtimeDateTime;
+            }
+
             const today = getLogicalDateString();
             const tomorrowStr = getRelativeDateString(1);
 
