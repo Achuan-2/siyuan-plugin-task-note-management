@@ -10067,7 +10067,7 @@ document.body.classList.remove('mini-mode');
         const style = this.getMiniWindowStyle();
         const defaults = {
             ring: { width: 50, height: 50 },
-            horizontal: { width: 140, height: 22 },
+            horizontal: { width: 150, height: 22 },
             minimal: { width: 130, height: 22 }
         };
         const fallback = defaults[style];
@@ -10088,7 +10088,7 @@ document.body.classList.remove('mini-mode');
             return { width: size, height: size };
         }
 
-        const minWidth = style === 'horizontal' ? 130 : 88;
+        const minWidth = style === 'horizontal' ? 150 : 88;
         const maxWidth = style === 'horizontal' ? 260 : 220;
         const minHeight = style === 'horizontal' ? 18 : 18;
         const maxHeight = style === 'horizontal' ? 40 : 50;
