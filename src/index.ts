@@ -13,6 +13,7 @@ import "./index.scss";
 
 import { QuickReminderDialog } from "./components/QuickReminderDialog";
 import { ReminderPanel } from "./components/ReminderPanel";
+import { MobileTaskShortcut } from "./components/render/MobileTaskShortcut";
 import { HabitPanel } from "./components/HabitPanel";
 import { BatchReminderDialog } from "./components/BatchReminderDialog";
 import { CalendarView } from "./components/CalendarView";
@@ -117,6 +118,7 @@ export const DEFAULT_SETTINGS = {
     enableProjectDock: true, // 侧边栏：项目管理
     enableHabitDock: true, // 侧边栏：习惯管理
     enableCalendarDock: true, // 侧边栏：日历视图
+    enableMobileTaskShortcut: true, // 手机端显示任务快捷按钮（不包含平板端）
     // 停靠栏徽章显示控制
     enableDockBadge: true, // 是否在停靠栏显示数字徽章
     // 单独控制每个侧栏是否显示徽章（优先级高于 enableDockBadge）
@@ -293,6 +295,7 @@ export default class ReminderPlugin extends Plugin {
     private projectPanel: ProjectPanel;
     private projectDockElement: HTMLElement;
     private taskNoteDOM: TaskNoteDOMManager;
+    private mobileTaskShortcut: MobileTaskShortcut | null = null;
 
     // ICS 云端同步相关
     // ICS 订阅同步相关
@@ -1410,6 +1413,7 @@ export default class ReminderPlugin extends Plugin {
                 this.toggleDockVisibility('reminder_dock', settings.enableReminderDock !== false);
                 this.toggleDockVisibility('habit_dock', settings.enableHabitDock !== false);
                 this.toggleDockVisibility('calendar_dock', settings.enableCalendarDock !== false);
+                await this.mobileTaskShortcut?.sync(settings);
                 // 同步刷新徽章（显示/隐藏数字）
                 this.updateBadges();
                 this.updateProjectBadges();
@@ -2106,6 +2110,21 @@ export default class ReminderPlugin extends Plugin {
             console.warn('初始化停靠栏可见性失败:', err);
         }
 
+        this.mobileTaskShortcut = new MobileTaskShortcut(this);
+        await this.mobileTaskShortcut.sync(settings);
+
+        const onMobileViewportChanged = () => {
+            void this.mobileTaskShortcut?.sync();
+        };
+        window.addEventListener('resize', onMobileViewportChanged);
+        window.addEventListener('orientationchange', onMobileViewportChanged);
+        this.addCleanup(() => {
+            window.removeEventListener('resize', onMobileViewportChanged);
+            window.removeEventListener('orientationchange', onMobileViewportChanged);
+            this.mobileTaskShortcut?.destroy();
+            this.mobileTaskShortcut = null;
+        });
+
         // 文档块标添加菜单
         const handleDocMenu = this.handleDocumentMenu.bind(this);
         this.eventBus.on('click-editortitleicon', handleDocMenu);
@@ -2238,9 +2257,11 @@ export default class ReminderPlugin extends Plugin {
             // 使用 ReminderTaskLogic 的统一逻辑计算今日任务数（包括今日和逾期）
             const { ReminderTaskLogic } = await import("./utils/reminderTaskLogic");
             const uncompletedCount = await ReminderTaskLogic.getTaskCountByTabs(this, ['today', 'overdue'], true);
+            this.mobileTaskShortcut?.setBadge(uncompletedCount);
             this.setDockBadge(uncompletedCount);
         } catch (error) {
             console.error('更新徽章失败:', error);
+            this.mobileTaskShortcut?.setBadge(0);
             this.setDockBadge(0);
         }
     }

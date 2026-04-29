@@ -95,7 +95,7 @@ div[data-subtype='t'][data-type='NodeList'] {
 /* 取消2.7.7 更新的待办列表完成样式 */
 .protyle-wysiwyg .li.protyle-task--done[data-task="/"]>div:not([data-subtype='t']) {
     text-decoration: none !important;
-    color: var(--b3-theme-on-background) !important;
+    // color: var(--b3-theme-on-background) !important;
     opacity: 1 !important;
 }
 

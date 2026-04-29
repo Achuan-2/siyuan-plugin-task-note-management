@@ -358,6 +358,13 @@
                     description: i18n('enableCalendarDockDesc'),
                 },
                 {
+                    key: 'enableMobileTaskShortcut',
+                    value: settings.enableMobileTaskShortcut,
+                    type: 'checkbox',
+                    title: i18n('enableMobileTaskShortcut'),
+                    description: i18n('enableMobileTaskShortcutDesc'),
+                },
+                {
                     key: 'enableDockBadge',
                     value: settings.enableDockBadge,
                     type: 'checkbox',

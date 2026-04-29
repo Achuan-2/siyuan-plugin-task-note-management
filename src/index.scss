@@ -1775,6 +1775,88 @@
     }
 }
 
+.mobile-task-shortcut {
+    position: fixed;
+    left: calc(16px + env(safe-area-inset-left));
+    bottom: calc(72px + env(safe-area-inset-bottom));
+    width: 52px;
+    height: 52px;
+    border: 1px solid color-mix(in srgb, var(--b3-theme-primary) 64%, transparent);
+    border-radius: 50%;
+    background: var(--b3-theme-primary);
+    color: var(--b3-theme-on-primary, #fff);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    z-index: 99;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+
+    &:active {
+        transform: scale(0.96);
+    }
+
+    &--dragging {
+        transform: scale(1.12);
+        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+        opacity: 0.9;
+        transition: none;
+    }
+}
+
+.mobile-task-shortcut__icon {
+    width: 24px;
+    height: 24px;
+    fill: currentColor;
+    pointer-events: none;
+}
+
+.mobile-task-shortcut__badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    box-sizing: border-box;
+    border-radius: 999px;
+    background: var(--b3-theme-error);
+    color: #fff;
+    border: 2px solid var(--b3-theme-background);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 18px;
+    pointer-events: none;
+}
+
+.mobile-task-shortcut-dialog {
+    .b3-dialog__content {
+        padding: 0;
+        overflow: hidden;
+    }
+
+    #mobileTaskShortcutPanelContainer {
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+    }
+
+    .reminder-panel {
+        height: 100%;
+        box-sizing: border-box;
+    }
+
+    .reminder-title {
+        display: none;
+    }
+}
+
 /* 停靠栏徽章样式 */
 .reminder-dock-badge {
     position: absolute !important;
