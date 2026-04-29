@@ -112,6 +112,7 @@ export const DEFAULT_SETTINGS = {
     defaultHeadingLevel: 3, // 新增：新建标题的默认层级（1-6），默认为3级标题
     defaultHeadingPosition: 'prepend', // 新增：新建标题的默认位置（'prepend' | 'append'），默认为最前
     enableOutlinePrefix: true, // 是否在大纲中为绑定标题添加任务状态前缀
+    enableTaskListStatusSync: true, // 任务列表状态与任务进行中/放弃状态联动
 
     // 控制侧边栏显示
     enableReminderDock: true, // 侧边栏：提醒（任务管理）

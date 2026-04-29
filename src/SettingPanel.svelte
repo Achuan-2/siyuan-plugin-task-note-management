@@ -16,7 +16,7 @@
         STATUSES_DATA_FILE,
     } from './index';
     import type { AudioFileItem } from './index';
-    import { lsNotebooks, pushErrMsg, pushMsg, removeFile, putFile } from './api';
+    import { lsNotebooks, pushErrMsg, pushMsg, removeFile, putFile, resetDoingAndAbandonedTaskListMarkers, restoreTaskListMarkers } from './api';
     import { Constants } from 'siyuan';
     import { exportIcsFile, uploadIcsToCloud } from './utils/icsUtils';
     import { importIcsFile } from './utils/icsImport';
@@ -694,6 +694,13 @@
                     type: 'checkbox',
                     title: i18n('enableOutlinePrefix'),
                     description: i18n('enableOutlinePrefixDesc'),
+                },
+                {
+                    key: 'enableTaskListStatusSync',
+                    value: settings.enableTaskListStatusSync,
+                    type: 'checkbox',
+                    title: i18n('enableTaskListStatusSync'),
+                    description: i18n('enableTaskListStatusSyncDesc'),
                 },
             ],
         },
@@ -1468,6 +1475,28 @@
                     await PomodoroManager.getInstance().updateSettings(pomodoroSettings);
                 } catch (error) {
                     console.error('更新番茄钟设置失败:', error);
+                }
+            })();
+        }
+
+        // 任务列表状态联动开关变更时，同步更新已有任务列表状态
+        if (key === 'enableTaskListStatusSync') {
+            (async () => {
+                try {
+                    let count: number;
+                    if (newValue) {
+                        count = await restoreTaskListMarkers();
+                        if (count > 0) {
+                            pushMsg(i18n('taskListStatusRestoreDone') || `已恢复 ${count} 个任务列表状态`);
+                        }
+                    } else {
+                        count = await resetDoingAndAbandonedTaskListMarkers();
+                        if (count > 0) {
+                            pushMsg(i18n('taskListStatusResetDone') || `已重置 ${count} 个任务列表状态`);
+                        }
+                    }
+                } catch (error) {
+                    console.error('同步任务列表状态失败:', error);
                 }
             })();
         }

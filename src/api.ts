@@ -942,7 +942,7 @@ function normalizeReminderKanbanStatus(status: any): string {
     return status.trim().toLowerCase();
 }
 
-function getTaskListMarkerByReminders(reminders: any[]): TaskListItemMarker {
+function getTaskListMarkerByReminders(reminders: any[], syncDoingAndAbandoned: boolean = true): TaskListItemMarker {
     if (!Array.isArray(reminders) || reminders.length === 0) {
         return " ";
     }
@@ -950,6 +950,8 @@ function getTaskListMarkerByReminders(reminders: any[]): TaskListItemMarker {
     if (reminders.every((reminder: any) => reminder?.completed)) {
         return "x";
     }
+
+    if (!syncDoingAndAbandoned) return " ";
 
     const incompleteReminders = reminders.filter((reminder: any) => reminder && !reminder.completed);
     if (incompleteReminders.some((reminder: any) => normalizeReminderKanbanStatus(reminder?.kanbanStatus) === "doing")) {
@@ -966,12 +968,12 @@ function getTaskListMarkerByReminders(reminders: any[]): TaskListItemMarker {
     return " ";
 }
 
-async function syncTaskListBlockCompletion(blockId: string, reminders: any[]): Promise<void> {
+async function syncTaskListBlockCompletion(blockId: string, reminders: any[], syncDoingAndAbandoned: boolean = true): Promise<void> {
     const isTaskList = await isTaskListLikeBlock(blockId);
     if (isTaskList) {
         await batchUpdateTaskListItemMarker([{
             id: blockId,
-            marker: getTaskListMarkerByReminders(reminders)
+            marker: getTaskListMarkerByReminders(reminders, syncDoingAndAbandoned)
         }]);
         return;
     }
@@ -985,12 +987,94 @@ async function syncTaskListBlockCompletion(blockId: string, reminders: any[]): P
             if (child.type === 'i') {
                 await batchUpdateTaskListItemMarker([{
                     id: child.id,
-                    marker: getTaskListMarkerByReminders(reminders)
+                    marker: getTaskListMarkerByReminders(reminders, syncDoingAndAbandoned)
                 }]);
             }
         }
     }
 }
+/**
+ * 批量恢复绑定任务的任务列表状态：根据提醒的 kanbanStatus 重新同步标记
+ */
+export async function restoreTaskListMarkers(): Promise<number> {
+    try {
+        const plugin = getPluginInstance();
+        const reminderData = await plugin.loadReminderData();
+
+        const rows = await sql(
+            `SELECT block_id FROM attributes WHERE name = 'custom-bind-reminders' AND value != '' Limit 99999`
+        );
+        if (!rows || rows.length === 0) return 0;
+
+        const blockIds = rows.map((r: any) => r.block_id);
+        const idList = blockIds.map((id: string) => `'${id}'`).join(',');
+        const taskBlocks = await sql(
+            `SELECT id FROM blocks WHERE id IN (${idList}) AND type = 'i' AND subtype = 't' Limit 99999`
+        );
+        if (!taskBlocks || taskBlocks.length === 0) return 0;
+
+        const allReminders = Object.values(reminderData) as any[];
+        const items: Array<{ id: string; marker: TaskListItemMarker }> = [];
+
+        for (const block of taskBlocks) {
+            const blockId = block.id;
+            const reminders = allReminders.filter((r: any) => r && r.blockId === blockId);
+            if (reminders.length === 0) continue;
+
+            const marker = getTaskListMarkerByReminders(reminders, true);
+            if (marker !== " ") {
+                items.push({ id: blockId, marker });
+            }
+        }
+
+        if (items.length > 0) {
+            await batchUpdateTaskListItemMarker(items);
+        }
+        return items.length;
+    } catch (err) {
+        console.warn('恢复任务列表状态失败:', err);
+        return 0;
+    }
+}
+
+/**
+ * 批量重置绑定任务的任务列表状态：将进行中(/)和放弃(-)的标记重置为空( )
+ */
+export async function resetDoingAndAbandonedTaskListMarkers(): Promise<number> {
+    try {
+        const rows = await sql(
+            `SELECT block_id FROM attributes WHERE name = 'custom-bind-reminders' AND value != '' Limit 99999`
+        );
+        if (!rows || rows.length === 0) return 0;
+
+        const blockIds = rows.map((r: any) => r.block_id);
+
+        // 批量查询哪些是任务列表项，并获取内容检查标记
+        const idList = blockIds.map((id: string) => `'${id}'`).join(',');
+        const taskBlocks = await sql(
+            `SELECT id, markdown FROM blocks WHERE id IN (${idList}) AND type = 'i' AND subtype = 't' Limit 99999`
+        );
+        if (!taskBlocks || taskBlocks.length === 0) return 0;
+
+        const items: Array<{ id: string; marker: TaskListItemMarker }> = [];
+        for (const block of taskBlocks) {
+            const markdown = block.markdown || '';
+            // 匹配 [/] 或 [-] 标记
+            if (markdown.includes('[/]') || markdown.includes('[-]')) {
+                items.push({ id: block.id, marker: " " });
+            }
+        }
+
+        if (items.length > 0) {
+            await batchUpdateTaskListItemMarker(items);
+        }
+        return items.length;
+    } catch (err) {
+        console.warn('重置任务列表进行中/放弃状态失败:', err);
+        return 0;
+    }
+}
+
 /**
  * 检查并更新块的提醒书签状态
  * @param blockId 块ID
@@ -1082,7 +1166,8 @@ export async function updateBindBlockAtrrs(blockId: string, plugin: any): Promis
 
         // 统一在 API 层同步任务列表块勾选状态，避免各面板重复实现
         try {
-            await syncTaskListBlockCompletion(blockId, blockReminders as any[]);
+            const syncDoingAndAbandoned = plugin.settings?.enableTaskListStatusSync !== false;
+            await syncTaskListBlockCompletion(blockId, blockReminders as any[], syncDoingAndAbandoned);
         } catch (syncErr) {
             console.warn('同步任务列表块勾选状态失败:', blockId, syncErr);
         }
