@@ -84,6 +84,7 @@ export class ReminderPanel {
     private showProjectKanbanStatus: boolean = true;
     // 项目看板状态缓存：projectId -> (statusId -> statusMeta)
     private projectKanbanStatusCache: Map<string, Map<string, KanbanStatus>> = new Map();
+    private defaultKanbanStatusCache: Map<string, KanbanStatus> = new Map();
 
     // 分页相关状态
     private currentPage: number = 1;
@@ -4448,12 +4449,14 @@ export class ReminderPanel {
 
     private getReminderKanbanStatusInfo(reminder: any): KanbanStatus | null {
         if (!reminder || typeof reminder !== 'object') return null;
-        const projectId = typeof reminder.projectId === 'string' ? reminder.projectId : '';
-        if (!projectId) return null;
-        const statusMap = this.projectKanbanStatusCache.get(projectId);
-        if (!statusMap) return null;
         const statusId = this.getReminderKanbanStatusId(reminder);
-        return statusMap.get(statusId) || null;
+        const projectId = typeof reminder.projectId === 'string' ? reminder.projectId : '';
+        if (projectId) {
+            const statusMap = this.projectKanbanStatusCache.get(projectId);
+            const projectStatus = statusMap?.get(statusId);
+            if (projectStatus) return projectStatus;
+        }
+        return this.defaultKanbanStatusCache.get(statusId) || null;
     }
 
     private getReminderKanbanStatusName(reminder: any): string | null {
@@ -4470,13 +4473,18 @@ export class ReminderPanel {
                 )
             );
 
+            const { ProjectManager } = await import('../utils/projectManager');
+            const projectManager = ProjectManager.getInstance(this.plugin);
+            this.defaultKanbanStatusCache = new Map(
+                projectManager.getDefaultKanbanStatuses()
+                    .map((status: KanbanStatus) => [status.id, status])
+            );
+
             if (projectIds.length === 0) {
                 this.projectKanbanStatusCache.clear();
                 return;
             }
 
-            const { ProjectManager } = await import('../utils/projectManager');
-            const projectManager = ProjectManager.getInstance(this.plugin);
             const nextCache: Map<string, Map<string, KanbanStatus>> = new Map();
 
             await Promise.all(projectIds.map(async projectId => {
@@ -4492,6 +4500,7 @@ export class ReminderPanel {
         } catch (error) {
             console.warn('[ReminderPanel] 刷新项目状态名称缓存失败', error);
             this.projectKanbanStatusCache.clear();
+            this.defaultKanbanStatusCache.clear();
         }
     }
 
@@ -4516,12 +4525,8 @@ export class ReminderPanel {
             }
 
             // 选择了具体看板状态（如“放弃”）时，使用严格匹配：
-            // 仅显示项目任务且状态名称命中选项，避免将无项目/无状态名/其他状态任务放行。
+            // 状态名称命中选项才放行；无项目任务回退到全局默认状态名称。
             if (isEffectivelyCompleted(reminder)) {
-                return false;
-            }
-
-            if (!reminder?.projectId) {
                 return false;
             }
 

@@ -253,6 +253,11 @@
     async function loadKanbanStatusNameOptions() {
         try {
             const statusNameSet = new Set<string>();
+            projectManager.getDefaultKanbanStatuses().forEach((status: any) => {
+                if (!status || status.id === 'completed') return;
+                const name = typeof status.name === 'string' ? status.name.trim() : '';
+                if (name) statusNameSet.add(name);
+            });
             await Promise.all(
                 projects.map(async (project: any) => {
                     if (!project?.id) return;
@@ -1219,9 +1224,9 @@
 
                 {#if selectedDateFilters.includes('yearly_date_range')}
                     <div class="b3-form__group">
-                        <label class="b3-form__label">
+                        <span class="b3-form__label">
                             {i18n('yearlyDateRangeConfig')}
-                        </label>
+                        </span>
                         <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                             <div style="display: flex; gap: 4px; align-items: center;">
                                 <input
