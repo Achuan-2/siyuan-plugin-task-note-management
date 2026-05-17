@@ -165,6 +165,10 @@ export const DEFAULT_SETTINGS = {
         isFixed: boolean;
         sort: number;
     }>,
+    // 项目看板全局显示设置。项目自身字段优先；新建项目会写入这些默认值。
+    projectKanbanShowCompletedSubtasks: true,
+    projectKanbanShowTaskCategories: true,
+    projectKanbanClipTitleToOneLine: false,
     // 项目面板筛选与排序
     projectPanelSort: 'priority',
     projectPanelSortOrder: 'desc',

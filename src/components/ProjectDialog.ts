@@ -329,6 +329,18 @@ export class ProjectDialog {
         return null;
     }
 
+    private async getProjectKanbanDisplayDefaults() {
+        const settings = typeof this.plugin?.loadSettings === 'function'
+            ? await this.plugin.loadSettings()
+            : this.plugin?.settings || {};
+
+        return {
+            showCompletedSubtasks: settings.projectKanbanShowCompletedSubtasks !== false,
+            showTaskCategories: settings.projectKanbanShowTaskCategories !== false,
+            clipTitleToOneLine: settings.projectKanbanClipTitleToOneLine === true,
+        };
+    }
+
     private async saveProject() {
         try {
             const titleEl = this.dialog.element.querySelector('#projectTitle') as HTMLInputElement;
@@ -359,6 +371,7 @@ export class ProjectDialog {
             const projectData = await this.plugin.loadProjectData();
             const projectId = this.blockId || `quick_${Date.now()}`;
             const existingProject = this.blockId ? projectData[this.blockId] : null;
+            const displayDefaults = existingProject ? {} : await this.getProjectKanbanDisplayDefaults();
 
             // 获取块ID输入框的值
             const blockInputEl = this.dialog.element.querySelector('#projectBlockInput') as HTMLInputElement;
@@ -367,6 +380,7 @@ export class ProjectDialog {
 
             const project = {
                 ...(existingProject || {}),
+                ...displayDefaults,
                 id: projectId,
                 blockId: inputBlockId || null,
                 title: title,

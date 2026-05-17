@@ -148,11 +148,16 @@ export class ProjectKanbanView {
 
     private lute: any;
     private showCompletedSubtasks: boolean = true; // 是否显示已完成的子任务
+    private showTaskCategories: boolean = true; // 是否显示任务分类
     private clipTitleToOneLine: boolean = false; // 是否将任务标题限制在一行显示
     private hideEmptyStatusBars: boolean = false; // 是否隐藏没有任务的状态栏/分组
     private hideNoDoingGroups: boolean = false; // 是否隐藏没有进行中任务的分组
     private hideNoTodayGroups: boolean = false; // 是否隐藏没有今日任务的分组
     private hasCustomGroups: boolean = false; // 当前项目是否存在未归档分组
+    private displayShowCompletedSubtasksCheckbox: HTMLInputElement | null = null;
+    private displayShowTaskCategoriesCheckbox: HTMLInputElement | null = null;
+    private displayClipTitleToOneLineCheckbox: HTMLInputElement | null = null;
+    private displayHideEmptyStatusBarsCheckbox: HTMLInputElement | null = null;
     private displayHideNoDoingGroupsCheckbox: HTMLInputElement | null = null;
     private displayHideNoTodayGroupsCheckbox: HTMLInputElement | null = null;
     private manageGroupsHideNoDoingCheckbox: HTMLInputElement | null = null;
@@ -366,6 +371,26 @@ export class ProjectKanbanView {
                 this[key] = null;
             }
         });
+    }
+
+    private syncDisplaySettingsCheckboxes(): void {
+        const checkboxRefs = [
+            ['displayShowCompletedSubtasksCheckbox', this.showCompletedSubtasks],
+            ['displayShowTaskCategoriesCheckbox', this.showTaskCategories],
+            ['displayClipTitleToOneLineCheckbox', this.clipTitleToOneLine],
+            ['displayHideEmptyStatusBarsCheckbox', this.hideEmptyStatusBars],
+        ] as const;
+
+        checkboxRefs.forEach(([key, checked]) => {
+            const checkbox = this[key];
+            if (checkbox && checkbox.isConnected) {
+                checkbox.checked = checked;
+            } else {
+                this[key] = null;
+            }
+        });
+
+        this.syncGroupVisibilityCheckboxes();
     }
 
     private async saveGroupVisibilitySettings(hideNoDoingGroups: boolean, hideNoTodayGroups: boolean): Promise<void> {
@@ -636,6 +661,20 @@ export class ProjectKanbanView {
             this.queueLoadTasks();
         });
 
+        // 全局/项目级显示设置变更后刷新当前看板配置
+        window.addEventListener('projectUpdated', async (e: CustomEvent) => {
+            const detail = e.detail || {};
+            const affectsCurrentProject = detail?.projectId === this.projectId;
+            const affectsAllProjectDisplaySettings = detail?.projectKanbanDisplaySettingsUpdated === true;
+            if (!affectsCurrentProject && !affectsAllProjectDisplaySettings) {
+                return;
+            }
+
+            await this.loadProject();
+            this.syncDisplaySettingsCheckboxes();
+            await this.queueLoadTasks();
+        });
+
         // 监听键盘事件，支持 Esc 退出多选模式
         document.addEventListener('keydown', (e: KeyboardEvent) => {
             if (e.key === 'Escape' && this.isMultiSelectMode) {
@@ -648,18 +687,26 @@ export class ProjectKanbanView {
 
     private async loadProject() {
         try {
+            const settings = typeof this.plugin?.loadSettings === 'function'
+                ? await this.plugin.loadSettings()
+                : this.plugin?.settings || {};
             const projectData = await this.plugin.loadProjectData();
             this.project = projectData[this.projectId];
             // 加载显示已完成子任务设置，默认为true
             if (this.project && typeof this.project.showCompletedSubtasks === 'boolean') {
                 this.showCompletedSubtasks = this.project.showCompletedSubtasks;
             } else {
-                this.showCompletedSubtasks = true;
+                this.showCompletedSubtasks = settings.projectKanbanShowCompletedSubtasks !== false;
+            }
+            if (this.project && typeof this.project.showTaskCategories === 'boolean') {
+                this.showTaskCategories = this.project.showTaskCategories;
+            } else {
+                this.showTaskCategories = settings.projectKanbanShowTaskCategories !== false;
             }
             if (this.project && typeof this.project.clipTitleToOneLine === 'boolean') {
                 this.clipTitleToOneLine = this.project.clipTitleToOneLine;
             } else {
-                this.clipTitleToOneLine = false;
+                this.clipTitleToOneLine = settings.projectKanbanClipTitleToOneLine === true;
             }
             if (this.project && typeof this.project.hideEmptyStatusBars === 'boolean') {
                 this.hideEmptyStatusBars = this.project.hideEmptyStatusBars;
@@ -4150,19 +4197,41 @@ export class ProjectKanbanView {
         };
 
         // 显示已完成子任务设置
-        displaySettingsDropdown.appendChild(createSwitchItem(i18n("showCompletedSubtasks") || "显示已完成的子任务", this.showCompletedSubtasks, async (checked) => {
+        const showCompletedSubtasksItem = createSwitchItem(i18n("showCompletedSubtasks") || "显示已完成的子任务", this.showCompletedSubtasks, async (checked) => {
             this.showCompletedSubtasks = checked;
             // 保存到项目数据
             const projectData = await this.plugin.loadProjectData() || {};
             if (projectData[this.projectId]) {
                 projectData[this.projectId].showCompletedSubtasks = checked;
                 await this.plugin.saveProjectData(projectData);
+                if (this.project) {
+                    this.project.showCompletedSubtasks = checked;
+                }
             }
             await this.queueLoadTasks();
-        }));
+        });
+        this.displayShowCompletedSubtasksCheckbox = showCompletedSubtasksItem.querySelector('input') as HTMLInputElement;
+        displaySettingsDropdown.appendChild(showCompletedSubtasksItem);
+
+        // 显示任务分类
+        const showTaskCategoriesItem = createSwitchItem(i18n("showTaskCategories") || "显示任务分类", this.showTaskCategories, async (checked) => {
+            this.showTaskCategories = checked;
+            // 保存到项目数据
+            const projectData = await this.plugin.loadProjectData() || {};
+            if (projectData[this.projectId]) {
+                projectData[this.projectId].showTaskCategories = checked;
+                await this.plugin.saveProjectData(projectData);
+                if (this.project) {
+                    this.project.showTaskCategories = checked;
+                }
+            }
+            await this.queueLoadTasks();
+        });
+        this.displayShowTaskCategoriesCheckbox = showTaskCategoriesItem.querySelector('input') as HTMLInputElement;
+        displaySettingsDropdown.appendChild(showTaskCategoriesItem);
 
         // 标题限制一行显示
-        displaySettingsDropdown.appendChild(createSwitchItem(i18n("clipTitleToOneLine") || "标题限制一行显示", this.clipTitleToOneLine, async (checked) => {
+        const clipTitleToOneLineItem = createSwitchItem(i18n("clipTitleToOneLine") || "标题限制一行显示", this.clipTitleToOneLine, async (checked) => {
             this.clipTitleToOneLine = checked;
             // 保存到项目数据
             const projectData = await this.plugin.loadProjectData() || {};
@@ -4174,10 +4243,12 @@ export class ProjectKanbanView {
                 }
             }
             await this.queueLoadTasks();
-        }));
+        });
+        this.displayClipTitleToOneLineCheckbox = clipTitleToOneLineItem.querySelector('input') as HTMLInputElement;
+        displaySettingsDropdown.appendChild(clipTitleToOneLineItem);
 
         // 隐藏没有任务的状态栏
-        displaySettingsDropdown.appendChild(createSwitchItem(i18n("hideEmptyStatusBars") || "隐藏没有任务的状态", this.hideEmptyStatusBars, async (checked) => {
+        const hideEmptyStatusBarsItem = createSwitchItem(i18n("hideEmptyStatusBars") || "隐藏没有任务的状态", this.hideEmptyStatusBars, async (checked) => {
             this.hideEmptyStatusBars = checked;
             // 保存到项目数据
             const projectData = await this.plugin.loadProjectData() || {};
@@ -4189,7 +4260,9 @@ export class ProjectKanbanView {
                 }
             }
             await this.queueLoadTasks();
-        }));
+        });
+        this.displayHideEmptyStatusBarsCheckbox = hideEmptyStatusBarsItem.querySelector('input') as HTMLInputElement;
+        displaySettingsDropdown.appendChild(hideEmptyStatusBarsItem);
 
         const shouldShowGroupVisibilitySettings = this.hasCustomGroups || this.hideNoDoingGroups || this.hideNoTodayGroups;
         if (shouldShowGroupVisibilitySettings) {
@@ -10841,7 +10914,7 @@ export class ProjectKanbanView {
         }
 
         // 分类（支持多分类）
-        if (task.categoryId) {
+        if (this.showTaskCategories && task.categoryId) {
             const categoryContainer = document.createElement('div');
             categoryContainer.className = 'kanban-task-categories';
             categoryContainer.style.cssText = `
