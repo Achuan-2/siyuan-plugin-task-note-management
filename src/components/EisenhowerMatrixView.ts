@@ -22,7 +22,7 @@ interface QuadrantTask {
     projectName?: string;
     groupName?: string;
     completed: boolean;
-    date: string;
+    date?: string;
     time?: string;
     endTime?: string;
     note?: string;
@@ -667,26 +667,46 @@ export class EisenhowerMatrixView {
     }
 
     private isTaskUrgent(reminder: any): boolean {
-        if (!reminder?.date) return false;
+        const dateForUrgency = reminder?.endDate || reminder?.date;
+        if (!dateForUrgency) return false;
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0); // 重置时间到当天开始
-
-        // 如果有结束日期，使用结束日期判断紧急性，否则使用开始日期
-        const taskDate = new Date(reminder.endDate || reminder.date);
-        taskDate.setHours(0, 0, 0, 0);
+        const today = getLogicalDateString();
+        const taskDate = this.getTaskLogicalDate(
+            dateForUrgency,
+            reminder?.endDate ? (reminder.endTime || reminder.time) : reminder?.time
+        );
 
         // 如果任务未完成且已过期，则认为是紧急的
-        if (!reminder.completed && taskDate < today) {
+        if (!reminder.completed && compareDateStrings(taskDate, today) < 0) {
             return true;
         }
 
-        const urgencyDate = new Date();
+        const urgencyDate = new Date(today + 'T00:00:00');
         urgencyDate.setDate(urgencyDate.getDate() + this.criteriaSettings.urgencyDays);
-        urgencyDate.setHours(23, 59, 59, 999); // 设置到当天结束
+        const urgencyDateStr = getLocalDateString(urgencyDate);
 
         // 根据设置的天数判断紧急性，如果任务日期在今天或紧急日期范围内
-        return taskDate >= today && taskDate <= urgencyDate;
+        return compareDateStrings(taskDate, today) >= 0 && compareDateStrings(taskDate, urgencyDateStr) <= 0;
+    }
+
+    private getTaskLogicalDate(dateStr?: string, timeStr?: string): string {
+        if (!dateStr) return '';
+        if (!timeStr) return dateStr;
+        try {
+            return getLogicalDateString(new Date(dateStr + 'T' + timeStr));
+        } catch (e) {
+            return dateStr;
+        }
+    }
+
+    private calculateTaskDaysDifference(targetLogicalDate: string, today: string = getLogicalDateString()): number {
+        const target = new Date(targetLogicalDate + 'T00:00:00');
+        const base = new Date(today + 'T00:00:00');
+        return Math.round((target.getTime() - base.getTime()) / (1000 * 60 * 60 * 24));
+    }
+
+    private createCountdownBadge(text: string, type: 'urgent' | 'warning' | 'normal'): string {
+        return `<span class="countdown-badge countdown-${type}">${text}</span>`;
     }
 
     private isValidQuadrant(quadrant: string): quadrant is QuadrantTask['quadrant'] {
@@ -730,16 +750,16 @@ export class EisenhowerMatrixView {
         }
 
         // 检查任务日期：今天或过去的任务视为进行中（但已完成的任务除外）
-        if (!task.completed && task.date) {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0); // 重置时间到当天开始
-
-            // 如果有结束日期，使用结束日期判断，否则使用开始日期
-            const taskDate = new Date(task.endDate || task.date);
-            taskDate.setHours(0, 0, 0, 0);
+        if (!task.completed && (task.date || task.endDate)) {
+            const today = getLogicalDateString();
+            const dateForStatus = task.endDate || task.date;
+            const taskDate = this.getTaskLogicalDate(
+                dateForStatus,
+                task.endDate ? (task.endTime || task.time) : task.time
+            );
 
             // 如果任务日期是今天或过去，则视为进行中
-            if (taskDate <= today) {
+            if (compareDateStrings(taskDate, today) <= 0) {
                 return true;
             }
         }
@@ -752,14 +772,15 @@ export class EisenhowerMatrixView {
             }
 
             // 检查父任务的日期：今天或过去的父任务也视为进行中
-            if (parentTask && !parentTask.completed && parentTask.date) {
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
+            if (parentTask && !parentTask.completed && (parentTask.date || parentTask.endDate)) {
+                const today = getLogicalDateString();
+                const parentDateForStatus = parentTask.endDate || parentTask.date;
+                const parentTaskDate = this.getTaskLogicalDate(
+                    parentDateForStatus,
+                    parentTask.endDate ? (parentTask.endTime || parentTask.time) : parentTask.time
+                );
 
-                const parentTaskDate = new Date(parentTask.endDate || parentTask.date);
-                parentTaskDate.setHours(0, 0, 0, 0);
-
-                if (parentTaskDate <= today) {
+                if (compareDateStrings(parentTaskDate, today) <= 0) {
                     return true;
                 }
             }
@@ -1276,7 +1297,8 @@ export class EisenhowerMatrixView {
 
         // 创建时间信息（单独一行）
         let dateDiv: HTMLElement | null = null;
-        if (task.date) {
+        const displayDate = task.date || task.endDate;
+        if (displayDate) {
             dateDiv = document.createElement('div');
             dateDiv.className = 'task-date-info';
             dateDiv.style.cssText = `
@@ -1302,26 +1324,11 @@ export class EisenhowerMatrixView {
 
             // 辅助函数：格式化日期显示
             const formatDateWithYear = (dateStr: string): string => {
-                const date = new Date(dateStr);
+                const date = new Date(dateStr + 'T00:00:00');
                 const year = date.getFullYear();
                 return year !== currentYear
                     ? date.toLocaleDateString(getLocaleTag(), { year: 'numeric', month: 'short', day: 'numeric' })
                     : date.toLocaleDateString(getLocaleTag(), { month: 'short', day: 'numeric' });
-            };
-
-            // 辅助函数：计算过期天数
-            const getExpiredDays = (targetDate: string): number => {
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                const taskDate = new Date(targetDate);
-                taskDate.setHours(0, 0, 0, 0);
-                const diffTime = today.getTime() - taskDate.getTime();
-                return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            };
-
-            // 辅助函数：创建过期徽章
-            const createExpiredBadge = (days: number): string => {
-                return `<span class="countdown-badge countdown-normal" style="background-color: rgba(231, 76, 60, 0.15); color: #e74c3c; border: 1px solid rgba(231, 76, 60, 0.3); font-size: 11px; padding: 2px 6px; border-radius: 10px; font-weight: 500; margin-left: 4px; display: inline-block;">已过期${days}天</span>`;
             };
 
             // 添加周期图标
@@ -1335,23 +1342,50 @@ export class EisenhowerMatrixView {
 
             // 日期显示逻辑
             let dateText = '';
-            if (task.endDate && task.endDate !== task.date) {
-                // 检查结束日期是否过期
-                if (task.endDate < getLogicalDateString()) {
-                    const daysDiff = getExpiredDays(task.endDate);
-                    const formattedEndDate = formatDateWithYear(task.endDate);
-                    dateText = `${formatDateWithYear(task.date)} ~ ${formattedEndDate} ${createExpiredBadge(daysDiff)}`;
+            const today = getLogicalDateString();
+            const logicalStart = task.date ? this.getTaskLogicalDate(task.date, task.time) : '';
+            const logicalEnd = task.endDate ? this.getTaskLogicalDate(task.endDate, task.endTime || task.time) : logicalStart;
+
+            if (!task.date && task.endDate) {
+                const endDays = this.calculateTaskDaysDifference(logicalEnd, today);
+                const endDateText = formatDateWithYear(task.endDate);
+                if (endDays < 0) {
+                    const overdueText = i18n('overdueDays', { days: String(Math.abs(endDays)) });
+                    dateText = `${endDateText} ${this.createCountdownBadge(overdueText, 'urgent')}`;
                 } else {
-                    dateText = `${formatDateWithYear(task.date)} ~ ${formatDateWithYear(task.endDate)}`;
+                    const remainingText = endDays === 0
+                        ? i18n('todayEnd')
+                        : i18n('endsInNDays', { days: String(endDays) });
+                    dateText = `${endDateText} ${this.createCountdownBadge(remainingText, 'normal')}`;
                 }
-            } else {
-                // 检查开始日期是否过期
-                if (task.date < getLogicalDateString()) {
-                    const daysDiff = getExpiredDays(task.date);
-                    const formattedDate = formatDateWithYear(task.date);
-                    dateText = `${formattedDate} ${createExpiredBadge(daysDiff)}`;
+            } else if (task.date && task.endDate) {
+                const isSpanningDays = task.endDate !== task.date;
+                const baseText = isSpanningDays
+                    ? `${formatDateWithYear(task.date)} ~ ${formatDateWithYear(task.endDate)}`
+                    : formatDateWithYear(task.date);
+                const startDays = this.calculateTaskDaysDifference(logicalStart, today);
+                const endDays = this.calculateTaskDaysDifference(logicalEnd, today);
+
+                if (endDays < 0) {
+                    const overdueText = i18n('overdueDays', { days: String(Math.abs(endDays)) });
+                    dateText = `${baseText} ${this.createCountdownBadge(overdueText, 'urgent')}`;
+                } else if (startDays > 0) {
+                    dateText = `${baseText} ${this.createCountdownBadge(i18n('startsInNDays', { days: String(startDays) }), 'warning')}`;
                 } else {
-                    dateText = formatDateWithYear(task.date);
+                    const remainingText = endDays === 0
+                        ? i18n('todayEnd')
+                        : i18n('endsInNDays', { days: String(endDays) });
+                    dateText = `${baseText} ${this.createCountdownBadge(remainingText, 'normal')}`;
+                }
+            } else if (task.date) {
+                const startDays = this.calculateTaskDaysDifference(logicalStart, today);
+                const startDateText = formatDateWithYear(task.date);
+                if (startDays < 0) {
+                    dateText = `${startDateText} ${this.createCountdownBadge(i18n('startedDays', { days: String(Math.abs(startDays)) }), 'normal')}`;
+                } else if (startDays > 0) {
+                    dateText = `${startDateText} ${this.createCountdownBadge(i18n('startsInNDays', { days: String(startDays) }), 'warning')}`;
+                } else {
+                    dateText = startDateText;
                 }
             }
 
@@ -1359,7 +1393,7 @@ export class EisenhowerMatrixView {
             if (task.extendedProps?.repeat?.enabled &&
                 (task.extendedProps.repeat.type === 'lunar-monthly' || task.extendedProps.repeat.type === 'lunar-yearly')) {
                 try {
-                    const lunarStr = getSolarDateLunarString(task.date);
+                    const lunarStr = getSolarDateLunarString(displayDate);
                     if (lunarStr) {
                         dateText = `${dateText} (${lunarStr})`;
                     }
@@ -1374,10 +1408,13 @@ export class EisenhowerMatrixView {
             dateDiv.appendChild(dateSpan);
 
             // Time
-            if (task.time) {
+            if (task.time || task.endTime) {
                 const timeSpan = document.createElement('span');
                 timeSpan.className = 'task-time';
-                timeSpan.textContent = `🕐 ${task.time}`;
+                const timeText = task.time && task.endTime
+                    ? `${task.time} - ${task.endTime}`
+                    : (task.time || task.endTime || '');
+                timeSpan.textContent = `🕐 ${timeText}`;
                 dateDiv.appendChild(timeSpan);
             }
         }
