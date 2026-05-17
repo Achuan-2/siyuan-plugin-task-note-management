@@ -652,9 +652,10 @@ function parseNaturalDateTimeInner(text: string): ParseResult {
  * 从标题自动识别日期时间
  */
 export function autoDetectDateTimeFromTitle(title: string, removeMode: 'none' | 'date' | 'all' = 'all'): ParseResult & { cleanTitle?: string } {
-    const parseResult = parseNaturalDateTime(title);
+    const rawParseResult = parseNaturalDateTime(title);
+    const parseResult = normalizeSingleDateAsDeadline(rawParseResult);
 
-    if (!parseResult.date || removeMode === 'none') {
+    if ((!parseResult.date && !parseResult.endDate) || removeMode === 'none') {
         return { ...parseResult, cleanTitle: title };
     }
 
@@ -691,6 +692,7 @@ export function autoDetectDateTimeFromTitle(title: string, removeMode: 'none' | 
 
     // 其它连接词
     const otherExpressions = [
+        /截止|到期|\b(?:deadline|until)\b/gi,
         /到|至|~|-/gi,
     ];
 
@@ -711,5 +713,24 @@ export function autoDetectDateTimeFromTitle(title: string, removeMode: 'none' | 
     return {
         ...parseResult,
         cleanTitle: cleanTitle
+    };
+}
+
+function normalizeSingleDateAsDeadline(result: ParseResult): ParseResult {
+    // 自动从标题识别到的单个日期/时间点按截止时间处理；范围表达式保留开始/结束。
+    if (!result.date || result.endDate || result.endTime) {
+        return result;
+    }
+
+    return {
+        ...result,
+        date: undefined,
+        time: undefined,
+        hasDate: false,
+        hasTime: false,
+        endDate: result.date,
+        endTime: result.time,
+        hasEndDate: result.hasDate,
+        hasEndTime: result.hasTime || !!result.time
     };
 }
