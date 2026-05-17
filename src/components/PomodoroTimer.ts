@@ -8230,6 +8230,19 @@ document.body.classList.remove('docked-mode');
         const workText = i18n('pomodoroWork') || '工作时间';
         const shortBreakText = i18n('pomodoroBreak') || '短时休息';
         const longBreakText = i18n('pomodoroLongBreak') || '长时休息';
+        const unnamedNoteText = i18n('unnamedNote') || '未命名笔记';
+        const openNoteText = i18n('openNote') || '打开笔记';
+        const escapeHtml = (value: string) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;'
+        }[char] || char));
+        const displayReminderTitle = reminderTitle || unnamedNoteText;
+        const safeReminderTitle = escapeHtml(displayReminderTitle);
+        const unnamedNoteTextJson = JSON.stringify(unnamedNoteText);
+        const openNoteTextJson = JSON.stringify(openNoteText);
 
         return `<!DOCTYPE html>
 <html>
@@ -8595,7 +8608,8 @@ document.body.classList.remove('docked-mode');
         }
         .mini-bar-center,
         .mini-bar-actions,
-        .mini-minimal-actions {
+        .mini-minimal-actions,
+        .mini-task-title {
             display: none;
         }
         body.mini-mode .custom-titlebar { display: none; }
@@ -8682,17 +8696,17 @@ document.body.classList.remove('docked-mode');
             border: none;
             box-shadow: 0 14px 32px rgba(15, 23, 42, 0.18);
             display: flex;
-            align-items: center;
-            padding: clamp(4px, 0.9vh, 7px) clamp(8px, 1.3vw, 12px);
+            align-items: flex-end;
+            padding: clamp(7px, calc(var(--mini-h) * 0.3), 10px) clamp(8px, 1.3vw, 12px) clamp(2px, 0.5vh, 4px);
             gap: clamp(6px, 1vw, 10px);
             position: relative;
         }
         body.mini-mode.mini-style-bar .mini-emoji-btn {
-            width: clamp(18px, calc(var(--mini-h) * 0.52), 32px);
-            height: clamp(18px, calc(var(--mini-h) * 0.52), 32px);
+            width: clamp(14px, calc(var(--mini-h) * 0.5), 30px);
+            height: clamp(14px, calc(var(--mini-h) * 0.5), 30px);
             border-radius: clamp(5px, calc(var(--mini-h) * 0.16), 10px);
             background: rgba(255, 255, 255, 0.48);
-            font-size: clamp(12px, calc(var(--mini-h) * 0.34), 18px);
+            font-size: clamp(10px, calc(var(--mini-h) * 0.34), 18px);
             flex-shrink: 0;
         }
         body.mini-mode.mini-style-bar .mini-bar-center {
@@ -8700,13 +8714,29 @@ document.body.classList.remove('docked-mode');
             min-width: 0;
             display: flex;
             flex-direction: column;
-            gap: clamp(3px, 0.5vh, 4px);
+            gap: clamp(2px, 0.4vh, 3px);
         }
         body.mini-mode.mini-style-bar .mini-bar-header {
             display: flex;
             align-items: center;
             gap: clamp(4px, calc(var(--mini-w) * 0.015), 10px);
             min-width: 0;
+        }
+        body.mini-mode.mini-style-bar .mini-task-title {
+            display: block;
+            position: absolute;
+            top: 2px;
+            left: clamp(8px, 1.3vw, 12px);
+            right: clamp(24px, calc(var(--mini-h) * 0.9), 32px);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: clamp(7px, calc(var(--mini-h) * 0.32), 10px);
+            font-weight: 600;
+            line-height: 1.1;
+            color: ${textColor};
+            opacity: 0.68;
+            pointer-events: none;
         }
         body.mini-mode.mini-style-bar .mini-time-label {
             flex: 0 0 auto;
@@ -8719,7 +8749,7 @@ document.body.classList.remove('docked-mode');
         }
         body.mini-mode.mini-style-bar .mini-progress-track {
             width: 100%;
-            height: clamp(3px, 0.5vh, 4px);
+            height: clamp(2px, 0.45vh, 4px);
         }
         body.mini-mode.mini-style-bar .mini-bar-actions {
             display: flex;
@@ -8729,8 +8759,8 @@ document.body.classList.remove('docked-mode');
             margin-left: 0;
         }
         body.mini-mode.mini-style-bar .mini-action-btn {
-            width: clamp(16px, calc(var(--mini-h) * 0.42), 24px);
-            height: clamp(16px, calc(var(--mini-h) * 0.42), 24px);
+            width: clamp(14px, calc(var(--mini-h) * 0.42), 24px);
+            height: clamp(14px, calc(var(--mini-h) * 0.42), 24px);
             border-radius: clamp(4px, calc(var(--mini-h) * 0.12), 8px);
             font-size: clamp(9px, calc(var(--mini-h) * 0.22), 13px);
         }
@@ -8885,7 +8915,7 @@ document.body.classList.remove('docked-mode');
             <div class="progress-bar-fill" id="dockedProgressBar"></div>
         </div>
         <div class="pomodoro-event-title" onclick="callMethod('openRelatedNote')">
-            ${reminderTitle}
+            ${safeReminderTitle}
         </div>
         <div class="pomodoro-main-container">
             <div class="progress-container">
@@ -8926,6 +8956,7 @@ document.body.classList.remove('docked-mode');
         <div class="mini-layout">
             <div class="mini-card">
                 <button class="mini-restore-btn" onclick="toggleMiniMode()" title="${i18n('restoreWindow') || '恢复窗口'}">↗</button>
+                <div class="mini-task-title" id="miniTaskTitle" title="${safeReminderTitle}">${safeReminderTitle}</div>
                 <button class="mini-emoji-btn" id="miniStatusTrigger" onclick="toggleMiniSwitchMenu(event)">${initialStatusIcon}</button>
                 <div class="mini-bar-center">
                     <div class="mini-bar-header">
@@ -9355,9 +9386,10 @@ document.body.classList.remove('docked-mode');
                 btn.style.display = showStop ? 'inline-flex' : 'none';
             });
 
+            const reminderTitleText = localState.reminderTitle || ${unnamedNoteTextJson};
             const miniCard = document.querySelector('.mini-card');
             if (miniCard) {
-                miniCard.title = statusText;
+                miniCard.title = reminderTitleText ? reminderTitleText + ' - ' + statusText : statusText;
             }
             
             const pomodoroCount = document.getElementById('pomodoroCount');
@@ -9371,12 +9403,17 @@ document.body.classList.remove('docked-mode');
                  const el = document.getElementById('weekFocusTime');
                  if (el) el.textContent = localState.weekFocusTime;
             }
-            if (localState.reminderTitle) {
-                 const el = document.querySelector('.pomodoro-event-title');
-                 if (el) {
-                     el.textContent = localState.reminderTitle;
-                     el.title = '${i18n('openNote') || '打开笔记'}' + ': ' + localState.reminderTitle;
+            const eventTitleEl = document.querySelector('.pomodoro-event-title');
+            if (eventTitleEl) {
+                 eventTitleEl.textContent = reminderTitleText;
+                 eventTitleEl.title = ${openNoteTextJson} + ': ' + reminderTitleText;
+            }
+            const miniTaskTitleEl = document.getElementById('miniTaskTitle');
+            if (miniTaskTitleEl) {
+                 if (miniTaskTitleEl.textContent !== reminderTitleText) {
+                     miniTaskTitleEl.textContent = reminderTitleText;
                  }
+                 miniTaskTitleEl.title = reminderTitleText;
             }
 
             const dailyGoalHours = settings.dailyFocusGoal || 0;
@@ -10067,7 +10104,7 @@ document.body.classList.remove('mini-mode');
         const style = this.getMiniWindowStyle();
         const defaults = {
             ring: { width: 50, height: 50 },
-            horizontal: { width: 150, height: 22 },
+            horizontal: { width: 150, height: 28 },
             minimal: { width: 130, height: 22 }
         };
         const fallback = defaults[style];
@@ -10090,8 +10127,8 @@ document.body.classList.remove('mini-mode');
 
         const minWidth = style === 'horizontal' ? 150 : 88;
         const maxWidth = style === 'horizontal' ? 260 : 220;
-        const minHeight = style === 'horizontal' ? 18 : 18;
-        const maxHeight = style === 'horizontal' ? 40 : 50;
+        const minHeight = style === 'horizontal' ? 24 : 18;
+        const maxHeight = style === 'horizontal' ? 44 : 50;
 
         const nextWidth = Number.isFinite(width) && width > 0
             ? Math.max(minWidth, Math.min(maxWidth, Math.round(width)))
