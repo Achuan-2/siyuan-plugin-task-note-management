@@ -6320,7 +6320,10 @@ export class ReminderPanel {
 
         const startLogical = this.getReminderLogicalDate(reminder.date || reminder.endDate, reminder.time || reminder.endTime);
         const endLogical = this.getReminderLogicalDate(reminder.endDate || reminder.date, reminder.endTime || reminder.time);
-        const isSpanningRealEvent = !!(reminder.date && reminder.endDate && reminder.endDate !== reminder.date);
+        const hasStartDate = !!reminder.date;
+        const hasEndDate = !!reminder.endDate;
+        const isOnlyEndDate = !hasStartDate && hasEndDate;
+        const isSpanningRealEvent = !!(hasStartDate && hasEndDate && reminder.endDate !== reminder.date);
 
         if (isSpanningRealEvent) {
             // 跨天事件：检查今天是否在事件范围内（使用逻辑日期）
@@ -6414,6 +6417,9 @@ export class ReminderPanel {
                     applyCountdownStyle('--b3-font-color4', '--b3-font-background4');
                     countdownEl.textContent = i18n("startInDays", { days: daysDiff.toString() });
                 }
+            } else if (isOnlyEndDate) {
+                applyCountdownStyle('--b3-font-color2', '--b3-font-background2');
+                countdownEl.textContent = i18n("endsInNDays", { days: daysDiff.toString() });
             } else {
                 applyCountdownStyle('--b3-font-color4', '--b3-font-background4');
                 countdownEl.textContent = i18n("startInDays", { days: daysDiff.toString() });
