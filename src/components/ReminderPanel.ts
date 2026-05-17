@@ -732,8 +732,11 @@ export class ReminderPanel {
             const endLogical = hasDate ? this.getReminderLogicalDate(r.endDate || r.date, r.endTime || r.time) : null;
 
             if (hasDate && startLogical && endLogical) {
-                const inRange = compareDateStrings(startLogical, today) <= 0 && compareDateStrings(today, endLogical) <= 0;
-                const isOverdue = compareDateStrings(endLogical, today) < 0;
+                const isOnlyStartDate = !!(r.date && !r.endDate);
+                const inRange = isOnlyStartDate
+                    ? compareDateStrings(startLogical, today) <= 0
+                    : compareDateStrings(startLogical, today) <= 0 && compareDateStrings(today, endLogical) <= 0;
+                const isOverdue = !!r.endDate && compareDateStrings(endLogical, today) < 0;
                 if (inRange || (includeOverdue && isOverdue)) {
                     if (this.canApplyTodayIgnore(r, today) && hasIgnoreMark) return false;
                     return true;
@@ -2747,14 +2750,9 @@ export class ReminderPanel {
     private createReminderElementOptimized(reminder: any, asyncDataCache: Map<string, any>, today: string, level: number = 0, allVisibleReminders: any[] = []): HTMLElement {
         // 改进过期判断逻辑
         let isOverdue = false;
-        if (!reminder.completed && reminder.date) {
-            const startLogical = this.getReminderLogicalDate(reminder.date, reminder.time);
-            const endLogical = this.getReminderLogicalDate(reminder.endDate || reminder.date, reminder.endTime || reminder.time);
-            if (reminder.endDate) {
-                isOverdue = compareDateStrings(endLogical, today) < 0;
-            } else {
-                isOverdue = compareDateStrings(startLogical, today) < 0;
-            }
+        if (!reminder.completed && reminder.endDate) {
+            const endLogical = this.getReminderLogicalDate(reminder.endDate, reminder.endTime || reminder.time);
+            isOverdue = compareDateStrings(endLogical, today) < 0;
         }
 
         const isSpanningDays = reminder.endDate && reminder.endDate !== reminder.date;
@@ -4193,9 +4191,8 @@ export class ReminderPanel {
         switch (targetTab) {
             case 'overdue':
                 return sourceReminders.filter(r => {
-                    const hasDate = r.date || r.endDate;
-                    if (!hasDate || isEffectivelyCompleted(r)) return false;
-                    const endLogical = this.getReminderLogicalDate(r.endDate || r.date, r.endTime || r.time);
+                    if (!r.endDate || isEffectivelyCompleted(r)) return false;
+                    const endLogical = this.getReminderLogicalDate(r.endDate, r.endTime || r.time);
                     return compareDateStrings(endLogical, today) < 0;
                 });
             case 'today':
@@ -4572,13 +4569,15 @@ export class ReminderPanel {
                         if (!hasDate) return false;
                         const todayStart = this.getReminderLogicalDate(r.date || r.endDate, r.time || r.endTime);
                         const todayEnd = this.getReminderLogicalDate(r.endDate || r.date, r.endTime || r.time);
+                        if (r.date && !r.endDate) {
+                            return compareDateStrings(todayStart, today) <= 0;
+                        }
                         return compareDateStrings(todayStart, today) <= 0 && compareDateStrings(today, todayEnd) <= 0;
                     }
                     case 'overdue': {
-                        const hasDate = r.date || r.endDate;
-                        if (!hasDate) return false;
+                        if (!r.endDate) return false;
                         if (isEffectivelyCompleted(r)) return false;
-                        const overdueEnd = this.getReminderLogicalDate(r.endDate || r.date, r.endTime || r.time);
+                        const overdueEnd = this.getReminderLogicalDate(r.endDate, r.endTime || r.time);
                         return compareDateStrings(overdueEnd, today) < 0;
                     }
                     case 'tomorrow': {
@@ -6317,12 +6316,14 @@ export class ReminderPanel {
         // 判断提醒的目标日期
         let targetDate: string;
         let isOverdueEvent = false;
+        let isStartedOnlyEvent = false;
 
         const startLogical = this.getReminderLogicalDate(reminder.date || reminder.endDate, reminder.time || reminder.endTime);
         const endLogical = this.getReminderLogicalDate(reminder.endDate || reminder.date, reminder.endTime || reminder.time);
         const hasStartDate = !!reminder.date;
         const hasEndDate = !!reminder.endDate;
         const isOnlyEndDate = !hasStartDate && hasEndDate;
+        const isOnlyStartDate = hasStartDate && !hasEndDate;
         const isSpanningRealEvent = !!(hasStartDate && hasEndDate && reminder.endDate !== reminder.date);
 
         if (isSpanningRealEvent) {
@@ -6350,10 +6351,14 @@ export class ReminderPanel {
                 // 未来日期，显示倒计时
                 targetDate = startLogical;
             } else if (compareDateStrings(startLogical, today) < 0) {
-                // 过去日期，显示过期天数（仅对未完成事件）
+                // 过去日期：仅开始日期显示已开始天数；截止/单日结束日期显示过期天数
                 if (!reminder.completed) {
                     targetDate = startLogical;
-                    isOverdueEvent = true;
+                    if (isOnlyStartDate) {
+                        isStartedOnlyEvent = true;
+                    } else {
+                        isOverdueEvent = true;
+                    }
                 } else {
                     return null;
                 }
@@ -6392,7 +6397,10 @@ export class ReminderPanel {
         };
 
         // 根据是否过期设置不同的样式和文本
-        if (isOverdueEvent || daysDiff < 0) {
+        if (isStartedOnlyEvent && daysDiff < 0) {
+            applyCountdownStyle('--b3-card-success-color', '--b3-card-success-background');
+            countdownEl.textContent = i18n("startedDays", { days: Math.abs(daysDiff).toString() });
+        } else if (isOverdueEvent || daysDiff < 0) {
             // 过期事件：红色样式
             applyCountdownStyle('--b3-font-color1', '--b3-font-background1');
 
@@ -9379,17 +9387,22 @@ export class ReminderPanel {
         // 检查日期筛选
         switch (this.currentTab) {
             case 'overdue':
-                if (!reminder.date || reminder.completed) return false;
-                return compareDateStrings(this.getReminderLogicalDate(reminder.endDate || reminder.date, reminder.endTime || reminder.time), today) < 0;
+                if (!reminder.endDate || reminder.completed) return false;
+                return compareDateStrings(this.getReminderLogicalDate(reminder.endDate, reminder.endTime || reminder.time), today) < 0;
             case 'today':
-                const startLogical_cur = this.getReminderLogicalDate(reminder.date, reminder.time);
+                const hasReminderDate = reminder.date || reminder.endDate;
+                const startLogical_cur = this.getReminderLogicalDate(reminder.date || reminder.endDate, reminder.time || reminder.endTime);
                 const endLogical_cur = this.getReminderLogicalDate(reminder.endDate || reminder.date, reminder.endTime || reminder.time);
                 const hasIgnoreMarkToday = this.hasTodayIgnoreMark(reminder, today);
 
                 // 常规今日任务（包含期内任务和逾期任务）
-                const isNormalToday = reminder.date && (
-                    (compareDateStrings(startLogical_cur, today) <= 0 && compareDateStrings(today, endLogical_cur) <= 0) ||
-                    compareDateStrings(endLogical_cur, today) < 0
+                const isNormalToday = hasReminderDate && (
+                    (reminder.date && !reminder.endDate
+                        ? compareDateStrings(startLogical_cur, today) <= 0
+                        : reminder.endDate
+                        ? (compareDateStrings(startLogical_cur, today) <= 0 && compareDateStrings(today, endLogical_cur) <= 0)
+                        : false) ||
+                    (reminder.endDate && compareDateStrings(endLogical_cur, today) < 0)
                 );
 
                 if (isNormalToday && !reminder.completed) {
@@ -9419,11 +9432,11 @@ export class ReminderPanel {
 
                 return false;
             case 'tomorrow':
-                if (reminder.completed || !reminder.date) return false;
-                return compareDateStrings(this.getReminderLogicalDate(reminder.date, reminder.time), tomorrow) <= 0 && compareDateStrings(tomorrow, this.getReminderLogicalDate(reminder.endDate || reminder.date, reminder.endTime || reminder.time)) <= 0;
+                if (reminder.completed || !(reminder.date || reminder.endDate)) return false;
+                return compareDateStrings(this.getReminderLogicalDate(reminder.date || reminder.endDate, reminder.time || reminder.endTime), tomorrow) <= 0 && compareDateStrings(tomorrow, this.getReminderLogicalDate(reminder.endDate || reminder.date, reminder.endTime || reminder.time)) <= 0;
             case 'future7':
-                if (reminder.completed || !reminder.date) return false;
-                return compareDateStrings(tomorrow, this.getReminderLogicalDate(reminder.date, reminder.time)) <= 0 && compareDateStrings(this.getReminderLogicalDate(reminder.date, reminder.time), future7Days) <= 0;
+                if (reminder.completed || !(reminder.date || reminder.endDate)) return false;
+                return compareDateStrings(tomorrow, this.getReminderLogicalDate(reminder.date || reminder.endDate, reminder.time || reminder.endTime)) <= 0 && compareDateStrings(this.getReminderLogicalDate(reminder.date || reminder.endDate, reminder.time || reminder.endTime), future7Days) <= 0;
             case 'completed':
                 return reminder.completed;
             case 'todayCompleted':
