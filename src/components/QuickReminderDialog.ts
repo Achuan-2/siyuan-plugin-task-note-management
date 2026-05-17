@@ -1184,6 +1184,8 @@ export class QuickReminderDialog {
             this.updatePomodorosDisplay();
             this.updateEditAllInstancesDisplay();
         }
+
+        this.updateStartEndSwapButtonState();
     }
 
     /**
@@ -1699,12 +1701,14 @@ export class QuickReminderDialog {
             titleInput.value = result.cleanTitle;
         }
 
-        // 设置日期
+        // 设置开始日期；只有截止日期时不要反填开始日期。
         if (result.date) {
             dateInput.value = result.date;
-        } else if (result.endDate) {
-            // 如果只有结束日期，通常是"截止"形式，将其作为起始日期以触发提醒
-            dateInput.value = result.endDate;
+        } else if (result.endDate && this.mode !== 'edit') {
+            dateInput.value = '';
+            if (timeInput) {
+                timeInput.value = '';
+            }
         }
 
         // 设置时间（独立输入框）
@@ -1719,6 +1723,8 @@ export class QuickReminderDialog {
         if (result.endTime && endTimeInput) {
             endTimeInput.value = result.endTime;
         }
+
+        this.updateStartEndSwapButtonState();
 
         // 触发日期变化事件以更新结束日期限制
         dateInput.dispatchEvent(new Event('change'));
@@ -1923,6 +1929,9 @@ export class QuickReminderDialog {
                                     <span style="font-size: 13px; color: var(--b3-theme-on-surface); white-space: nowrap; flex: 0 0 auto;">${i18n("durationLabel")}</span>
                                     <input type="number" id="quickDurationDays" min="1" step="1" class="b3-text-field" value="1" style="width: 100px; min-width: 80px;">
                                     <span style="font-size: 13px; color: var(--b3-theme-on-surface-light);">${i18n("daysUnit")}</span>
+                                    <button type="button" id="quickSwapStartEndTimeBtn" class="b3-button b3-button--outline ariaLabel" aria-label="交换开始和结束时间" title="交换开始和结束时间" style="display: none; align-items: center; justify-content: center; padding: 4px 8px; font-size: 14px; line-height: 1; flex: 0 0 auto;">
+                                        ⇵
+                                    </button>
                                 </div>
                                 <!-- 结束行: responsive, keep end time + clear button together -->
                                 <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
@@ -2576,6 +2585,7 @@ export class QuickReminderDialog {
                     durationInputInit.value = '1';
                 }
             }
+            this.updateStartEndSwapButtonState();
 
             // 设置默认值：优先使用 this.blockContent，其次使用 this.defaultTitle
             if (this.blockContent && titleInput) {
@@ -3559,6 +3569,67 @@ export class QuickReminderDialog {
         // 不再需要显示/隐藏预设容器
     }
 
+    private updateStartEndSwapButtonState(): void {
+        const swapBtn = this.dialog?.element?.querySelector('#quickSwapStartEndTimeBtn') as HTMLButtonElement | null;
+        if (!swapBtn) return;
+
+        const startDateInput = this.dialog.element.querySelector('#quickReminderDate') as HTMLInputElement | null;
+        const endDateInput = this.dialog.element.querySelector('#quickReminderEndDate') as HTMLInputElement | null;
+        const timeInput = this.dialog.element.querySelector('#quickReminderTime') as HTMLInputElement | null;
+        const endTimeInput = this.dialog.element.querySelector('#quickReminderEndTime') as HTMLInputElement | null;
+
+        const hasStart = !!(startDateInput?.value || timeInput?.value);
+        const hasEnd = !!(endDateInput?.value || endTimeInput?.value);
+        const canSwap = hasStart !== hasEnd;
+
+        swapBtn.style.display = canSwap ? 'inline-flex' : 'none';
+        swapBtn.disabled = !canSwap;
+    }
+
+    private swapStartEndDateTimeFields(): void {
+        const startDateInput = this.dialog?.element?.querySelector('#quickReminderDate') as HTMLInputElement | null;
+        const endDateInput = this.dialog?.element?.querySelector('#quickReminderEndDate') as HTMLInputElement | null;
+        const timeInput = this.dialog?.element?.querySelector('#quickReminderTime') as HTMLInputElement | null;
+        const endTimeInput = this.dialog?.element?.querySelector('#quickReminderEndTime') as HTMLInputElement | null;
+
+        const startDate = startDateInput?.value || '';
+        const startTime = timeInput?.value || '';
+        const endDate = endDateInput?.value || '';
+        const endTime = endTimeInput?.value || '';
+        const hasStart = !!(startDate || startTime);
+        const hasEnd = !!(endDate || endTime);
+
+        if (hasStart === hasEnd) return;
+
+        if (startDateInput) startDateInput.value = endDate;
+        if (timeInput) timeInput.value = endTime;
+        if (endDateInput) endDateInput.value = startDate;
+        if (endTimeInput) endTimeInput.value = startTime;
+
+        if (endDateInput) {
+            if (startDateInput?.value) {
+                endDateInput.min = startDateInput.value;
+            } else {
+                endDateInput.removeAttribute('min');
+            }
+        }
+
+        const durationInput = this.dialog?.element?.querySelector('#quickDurationDays') as HTMLInputElement | null;
+        if (durationInput) {
+            if (startDateInput?.value && endDateInput?.value) {
+                const dur = this.getDurationInclusive(startDateInput.value, endDateInput.value);
+                durationInput.value = String(dur > 0 ? dur : 1);
+            } else {
+                durationInput.value = '1';
+            }
+        }
+
+        this.updatePresetSelectState();
+        this.updateCustomReminderInputMode();
+        this.renderCustomTimeList();
+        this.updateStartEndSwapButtonState();
+    }
+
     private bindEvents() {
         const cancelBtn = this.dialog.element.querySelector('#quickCancelBtn') as HTMLButtonElement;
         const confirmBtn = this.dialog.element.querySelector('#quickConfirmBtn') as HTMLButtonElement;
@@ -3566,6 +3637,7 @@ export class QuickReminderDialog {
         const endDateInput = this.dialog.element.querySelector('#quickReminderEndDate') as HTMLInputElement;
         const timeInput = this.dialog.element.querySelector('#quickReminderTime') as HTMLInputElement;
         const endTimeInput = this.dialog.element.querySelector('#quickReminderEndTime') as HTMLInputElement;
+        const swapStartEndTimeBtn = this.dialog.element.querySelector('#quickSwapStartEndTimeBtn') as HTMLButtonElement;
         const prioritySelector = this.dialog.element.querySelector('#quickPrioritySelector') as HTMLElement;
         const categorySelector = this.dialog.element.querySelector('#quickCategorySelector') as HTMLElement;
         const repeatSettingsBtn = this.dialog.element.querySelector('#quickRepeatSettingsBtn') as HTMLButtonElement;
@@ -3643,6 +3715,11 @@ export class QuickReminderDialog {
             endDateInput.min = startDateInput.value;
         }
 
+        swapStartEndTimeBtn?.addEventListener('click', () => {
+            this.swapStartEndDateTimeFields();
+        });
+        this.updateStartEndSwapButtonState();
+
         // 只在编辑模式下，如果设置了开始但未设置结束，才使用持续天数来自动填充结束日期
         // 新建任务时不自动填充，除非用户手动修改了持续天数
         // 对于仅有固定时间的单次事件，不应自动添加 endDate，这里增加判断以避免误添加
@@ -3656,8 +3733,16 @@ export class QuickReminderDialog {
 
         // 当开始日期变化，更新结束日期的最小值与自动计算
         startDateInput?.addEventListener('change', () => {
-            if (!startDateInput || !startDateInput.value) return;
-            if (endDateInput) endDateInput.min = startDateInput.value;
+            if (!startDateInput) return;
+            if (endDateInput) {
+                if (startDateInput.value) {
+                    endDateInput.min = startDateInput.value;
+                } else {
+                    endDateInput.removeAttribute('min');
+                }
+            }
+            this.updateStartEndSwapButtonState();
+            if (!startDateInput.value) return;
 
             // 只有在用户手动修改了持续天数，或者编辑模式下结束日期已存在时，才自动填充/更新结束日期
             if (endDateInput && !endDateInput.value && durationInput && this.durationManuallyChanged) {
@@ -3731,6 +3816,7 @@ export class QuickReminderDialog {
 
         // 当结束日期变化，基于开始日期计算持续天数
         endDateInput?.addEventListener('change', () => {
+            this.updateStartEndSwapButtonState();
             if (!endDateInput) return;
             if (!startDateInput || !startDateInput.value) return;
             if (!endDateInput.value) {
@@ -4210,14 +4296,20 @@ export class QuickReminderDialog {
         startDateInput?.addEventListener('change', () => {
             const startDate = startDateInput.value;
             // 设置结束日期的最小值
-            endDateInput.min = startDate;
+            if (startDate) {
+                endDateInput.min = startDate;
+            } else {
+                endDateInput.removeAttribute('min');
+            }
             // 更新预设下拉状态
             this.updatePresetSelectState();
+            this.updateStartEndSwapButtonState();
         });
 
         // 结束日期验证
         endDateInput?.addEventListener('change', () => {
             // 移除立即验证逻辑，只在保存时验证
+            this.updateStartEndSwapButtonState();
         });
 
         // 时间输入框变化时更新预设下拉状态
@@ -4225,11 +4317,19 @@ export class QuickReminderDialog {
             this.updatePresetSelectState();
             this.updateCustomReminderInputMode();
             this.renderCustomTimeList();
+            this.updateStartEndSwapButtonState();
+        });
+        timeInput?.addEventListener('input', () => {
+            this.updateStartEndSwapButtonState();
         });
 
         // 结束时间输入框变化时更新预设下拉状态
         endTimeInput?.addEventListener('change', () => {
             // 结束时间不影响预设计算，只基于开始时间
+            this.updateStartEndSwapButtonState();
+        });
+        endTimeInput?.addEventListener('input', () => {
+            this.updateStartEndSwapButtonState();
         });
 
         // 清除开始日期按钮
@@ -4238,8 +4338,13 @@ export class QuickReminderDialog {
             const dateInput = this.dialog.element.querySelector('#quickReminderDate') as HTMLInputElement;
             if (dateInput) {
                 dateInput.value = '';
+                const endDateInput = this.dialog.element.querySelector('#quickReminderEndDate') as HTMLInputElement;
+                if (endDateInput) {
+                    endDateInput.removeAttribute('min');
+                }
                 // 更新预设下拉状态
                 this.updatePresetSelectState();
+                this.updateStartEndSwapButtonState();
             }
         });
 
@@ -4251,6 +4356,7 @@ export class QuickReminderDialog {
                 timeInput.value = '';
                 // 更新预设下拉状态
                 this.updatePresetSelectState();
+                this.updateStartEndSwapButtonState();
             }
         });
 
@@ -4260,6 +4366,7 @@ export class QuickReminderDialog {
             const endDateInput = this.dialog.element.querySelector('#quickReminderEndDate') as HTMLInputElement;
             if (endDateInput) {
                 endDateInput.value = '';
+                this.updateStartEndSwapButtonState();
             }
         });
 
@@ -4269,6 +4376,7 @@ export class QuickReminderDialog {
             const endTimeInput = this.dialog.element.querySelector('#quickReminderEndTime') as HTMLInputElement;
             if (endTimeInput) {
                 endTimeInput.value = '';
+                this.updateStartEndSwapButtonState();
             }
         });
 
