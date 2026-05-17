@@ -558,6 +558,33 @@
             name: '🗂️项目设置',
             items: [
                 {
+                    key: 'projectKanbanShowCompletedSubtasks',
+                    value: settings.projectKanbanShowCompletedSubtasks,
+                    type: 'checkbox',
+                    title: i18n('showCompletedSubtasks') || '显示已完成子任务',
+                    description:
+                        i18n('projectKanbanShowCompletedSubtasksDesc') ||
+                        '作为所有项目看板的默认值；修改后会同步到现有项目，新建项目也会沿用。单个项目可在看板显示设置中覆盖。',
+                },
+                {
+                    key: 'projectKanbanShowTaskCategories',
+                    value: settings.projectKanbanShowTaskCategories,
+                    type: 'checkbox',
+                    title: i18n('showTaskCategories') || '显示任务分类',
+                    description:
+                        i18n('projectKanbanShowTaskCategoriesDesc') ||
+                        '作为所有项目看板的默认值；修改后会同步到现有项目，新建项目也会沿用。单个项目可在看板显示设置中覆盖。',
+                },
+                {
+                    key: 'projectKanbanClipTitleToOneLine',
+                    value: settings.projectKanbanClipTitleToOneLine,
+                    type: 'checkbox',
+                    title: i18n('clipTitleToOneLine') || '标题限制一行显示',
+                    description:
+                        i18n('projectKanbanClipTitleToOneLineDesc') ||
+                        '作为所有项目看板的默认值；修改后会同步到现有项目，新建项目也会沿用。单个项目可在看板显示设置中覆盖。',
+                },
+                {
                     key: 'openGlobalProjectStatusDialog',
                     value: '',
                     type: 'button',
@@ -1368,6 +1395,50 @@
         value: any;
     }
 
+    const PROJECT_KANBAN_DISPLAY_SETTING_MAP: Record<string, string> = {
+        projectKanbanShowCompletedSubtasks: 'showCompletedSubtasks',
+        projectKanbanShowTaskCategories: 'showTaskCategories',
+        projectKanbanClipTitleToOneLine: 'clipTitleToOneLine',
+    };
+
+    function isProjectKanbanDisplaySettingKey(key: string): boolean {
+        return Object.prototype.hasOwnProperty.call(PROJECT_KANBAN_DISPLAY_SETTING_MAP, key);
+    }
+
+    async function applyProjectKanbanDisplaySettingsToAllProjects() {
+        try {
+            const projectData = await plugin.loadProjectData();
+            if (!projectData || typeof projectData !== 'object') return;
+
+            let changed = false;
+            Object.entries(projectData).forEach(([projectId, project]: [string, any]) => {
+                if (projectId.startsWith('_') || !project || typeof project !== 'object') return;
+
+                Object.entries(PROJECT_KANBAN_DISPLAY_SETTING_MAP).forEach(
+                    ([settingKey, projectKey]) => {
+                        const value = settings[settingKey] ?? (DEFAULT_SETTINGS as any)[settingKey];
+                        if (project[projectKey] !== value) {
+                            project[projectKey] = value;
+                            changed = true;
+                        }
+                    }
+                );
+            });
+
+            if (!changed) return;
+
+            await plugin.saveProjectData(projectData);
+            window.dispatchEvent(
+                new CustomEvent('projectUpdated', {
+                    detail: { projectKanbanDisplaySettingsUpdated: true },
+                })
+            );
+        } catch (error) {
+            console.error('同步项目看板显示设置失败:', error);
+            await pushErrMsg(i18n('applyProjectKanbanDisplaySettingsFailed') || '同步项目看板显示设置失败');
+        }
+    }
+
     function toSearchableText(value: unknown): string {
         if (value === null || value === undefined) return '';
         return String(value).toLowerCase();
@@ -1390,7 +1461,7 @@
         return candidates.some(text => text.includes(keyword));
     }
 
-    const onChanged = ({ detail }: CustomEvent<ChangeEvent>) => {
+    const onChanged = async ({ detail }: CustomEvent<ChangeEvent>) => {
         const { key, value } = detail;
         console.log(`Setting change: ${key} = ${value}`);
 
@@ -1501,7 +1572,10 @@
             })();
         }
 
-        saveSettings();
+        await saveSettings();
+        if (isProjectKanbanDisplaySettingKey(key)) {
+            await applyProjectKanbanDisplaySettingsToAllProjects();
+        }
         updateGroupItems();
     };
 

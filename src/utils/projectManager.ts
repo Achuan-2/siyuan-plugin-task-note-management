@@ -47,6 +47,10 @@ export interface Project {
     startDate?: string;
     createdTime?: string;
     categoryId?: string;
+    showCompletedSubtasks?: boolean;
+    showTaskCategories?: boolean;
+    clipTitleToOneLine?: boolean;
+    hideEmptyStatusBars?: boolean;
 }
 
 /**
