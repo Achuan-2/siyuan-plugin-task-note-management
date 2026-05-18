@@ -530,6 +530,8 @@ export class CalendarView {
         const slotMaxTime = this.calculateSlotMaxTime(todayStartTime);
 
         this.container.classList.add('reminder-calendar-view');
+        this.container.classList.toggle('reminder-calendar-view--dock', this.isDockMode);
+        this.container.classList.toggle('reminder-calendar-view--tab', !this.isDockMode);
 
         // 注入自定义样式，强制修正 FullCalendar 的顶部布局
         const style = document.createElement('style');
