@@ -195,8 +195,8 @@ export class MobileTaskShortcut {
         const dialog = new Dialog({
             title: "⏰任务笔记管理",
             content: '<div id="mobileTaskShortcutPanelContainer" style="height: 100%; width: 100%;"></div>',
-            width: "99%",
-            height: "100%",
+            width: "95%",
+            height: "90%",
             destroyCallback: () => {
                 if (this.panel) {
                     this.panel.destroy();
