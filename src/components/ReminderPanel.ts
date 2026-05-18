@@ -9828,7 +9828,10 @@ export class ReminderPanel {
                         this.loadReminders();
                     }
                 },
-                undefined, // timeRangeOptions
+                {
+                    isTimeRange: true,
+                    endDate: today
+                },
                 {
                     plugin: this.plugin, // 传入plugin实例
                     defaultSort: defaultSort

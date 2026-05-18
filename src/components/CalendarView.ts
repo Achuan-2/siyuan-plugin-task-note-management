@@ -6283,7 +6283,7 @@ export class CalendarView {
 
     private createQuickReminder(info) {
         // 双击日期，创建快速提醒
-        const clickedDate = info.dateStr;
+        const clickedDate = info.date ? getLocalDateString(info.date) : info.dateStr;
 
         // 获取点击的时间（如果是时间视图且不是all day区域）
         let clickedTime = null;
@@ -6308,7 +6308,10 @@ export class CalendarView {
         const quickDialog = new QuickReminderDialog(clickedDate, clickedTime, async () => {
             // 刷新日历事件
             await this.refreshEvents();
-        }, undefined, {
+        }, {
+            isTimeRange: true,
+            endDate: clickedDate
+        }, {
             defaultProjectId: (!this.currentProjectFilter.has('all') && !this.currentProjectFilter.has('none') && this.currentProjectFilter.size === 1) ? Array.from(this.currentProjectFilter)[0] : undefined,
             defaultCategoryId: (!this.currentCategoryFilter.has('all') && !this.currentCategoryFilter.has('none') && this.currentCategoryFilter.size === 1) ? Array.from(this.currentCategoryFilter)[0] : undefined,
             plugin: this.plugin // 传入plugin实例
@@ -6397,16 +6400,18 @@ export class CalendarView {
                 adjustedEndDate.setDate(adjustedEndDate.getDate() - 1);
                 const { dateStr } = getLocalDateTime(adjustedEndDate);
 
-                // 只有当结束日期不同于开始日期时才设置结束日期
-                if (dateStr !== startDateStr) {
-                    endDateStr = dateStr;
-                }
+                // 单日选择也显式填充结束日期，避免快速创建时只有开始日期。
+                endDateStr = dateStr;
             } else {
                 // 定时事件
                 const { dateStr: endDtStr, timeStr: endTmStr } = getLocalDateTime(endDate);
                 endDateStr = endDtStr;
                 endTimeStr = endTmStr;
             }
+        }
+
+        if (selectInfo.allDay && !endDateStr) {
+            endDateStr = startDateStr;
         }
 
         // 对于all day选择，不传递时间信息

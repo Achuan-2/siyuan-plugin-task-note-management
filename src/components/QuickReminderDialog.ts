@@ -6131,7 +6131,7 @@ export class QuickReminderDialog {
                         }
                     }
 
-                    if (endDate && endDate !== date) {
+                    if (endDate && (endDate !== date || this.isTimeRange)) {
                         reminder.endDate = endDate;
                     }
 
