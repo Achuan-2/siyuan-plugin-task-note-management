@@ -1717,6 +1717,7 @@
     "hideNoDoingGroups": "Hide groups with no tasks in progress",
     "hideNoTodayGroups": "Hide groups with no tasks due today",
     "noDate": "No Date",
+    "startOnlyDateTasks": "Start Date Only",
     "next7Days": "Next 7 Days",
     "future": "Future",
     "past7Days": "Past 7 Days",

@@ -13,6 +13,7 @@
     type DateFilterType =
         | 'all'
         | 'none'
+        | 'start_only'
         | 'yesterday'
         | 'today'
         | 'overdue'
@@ -336,7 +337,7 @@
                 id: 'builtin_today',
                 name: i18n('todayReminders') || '今日任务',
                 isBuiltIn: true,
-                dateFilters: [{ type: 'today' }, { type: 'overdue' }],
+                dateFilters: [{ type: 'today' }, { type: 'overdue' }, { type: 'start_only' }],
                 statusFilter: 'uncompleted',
                 projectFilters: ['all'],
                 categoryFilters: ['all'],
@@ -346,7 +347,7 @@
                 id: 'builtin_tomorrow',
                 name: i18n('tomorrowReminders') || '明日任务',
                 isBuiltIn: true,
-                dateFilters: [{ type: 'tomorrow' }],
+                dateFilters: [{ type: 'tomorrow' }, { type: 'start_only' }],
                 statusFilter: 'uncompleted',
                 projectFilters: ['all'],
                 categoryFilters: ['all'],
@@ -356,7 +357,7 @@
                 id: 'builtin_future7',
                 name: i18n('future7Reminders') || '未来七天',
                 isBuiltIn: true,
-                dateFilters: [{ type: 'next_7_days' }],
+                dateFilters: [{ type: 'next_7_days' }, { type: 'start_only' }],
                 statusFilter: 'uncompleted',
                 projectFilters: ['all'],
                 categoryFilters: ['all'],
@@ -366,7 +367,7 @@
                 id: 'builtin_thisWeek',
                 name: i18n('thisWeekReminders') || '本周任务',
                 isBuiltIn: true,
-                dateFilters: [{ type: 'this_week' }],
+                dateFilters: [{ type: 'this_week' }, { type: 'start_only' }],
                 statusFilter: 'uncompleted',
                 projectFilters: ['all'],
                 categoryFilters: ['all'],
@@ -376,7 +377,7 @@
                 id: 'builtin_futureAll',
                 name: i18n('futureReminders') || '未来任务',
                 isBuiltIn: true,
-                dateFilters: [{ type: 'future' }],
+                dateFilters: [{ type: 'future' }, { type: 'start_only' }],
                 statusFilter: 'uncompleted',
                 projectFilters: ['all'],
                 categoryFilters: ['all'],
@@ -1095,6 +1096,13 @@
                             on:click={() => toggleDateFilter('none')}
                         >
                             {i18n('noDate')}
+                        </div>
+                        <div
+                            class="filter-option"
+                            class:selected={selectedDateFilters.includes('start_only')}
+                            on:click={() => toggleDateFilter('start_only')}
+                        >
+                            {i18n('startOnlyDateTasks') || '只有开始日期'}
                         </div>
                         <div
                             class="filter-option"

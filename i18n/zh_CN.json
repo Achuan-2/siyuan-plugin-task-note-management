@@ -1717,6 +1717,7 @@
     "hideNoDoingGroups": "隐藏无进行中任务的分组",
     "hideNoTodayGroups": "隐藏无今日任务的分组",
     "noDate": "无日期",
+    "startOnlyDateTasks": "只有开始日期",
     "next7Days": "未来七天",
     "future": "未来",
     "past7Days": "过去七天",
