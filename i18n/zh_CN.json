@@ -95,7 +95,7 @@
     "noSpecificTime": "不设置具体时间",
     "endDate": "结束日期",
     "endDateOptional": "结束日期（可选）",
-    "spanningEventDesc": "设置跨天事件的结束日期，留空表示单日事件",
+    "spanningEventDesc": "设置跨天事件的结束日期，留空表示无明确结束日期",
     "noTimeDesc": "不设置时间则全天任务 ",
     "noTimeDescLeaveEmpty": "留空表示全天任务",
     "enterReminderTitle": "请输入事件标题",
