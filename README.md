@@ -30,6 +30,8 @@ AI知识库问答：https://zhida.zhihu.com/repositories/7611936317241043831
 
 **任务管理经验分享**
 
+- 任务管理方法介绍
+
   - [深入讲解「番茄工作法」：一天专注十小时还不累的秘密](https://mp.weixin.qq.com/s/SoZ0ccPc7kJTYfwBnB5IGw)
   - [《防弹笔记法》阅读笔记：应该如何收集和处理资料](https://zhuanlan.zhihu.com/p/1959665210475417795)
   - [《大脑减压的子弹笔记法》：任务管理需要有系统思维丨这是我2025年遇见的讲任务管理与知识管理最好的书](https://www.zhihu.com/question/20303660/answer/1918071241555843043)
