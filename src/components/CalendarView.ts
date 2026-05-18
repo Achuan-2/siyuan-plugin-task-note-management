@@ -1924,12 +1924,18 @@ export class CalendarView {
 
                     const hasStartDate = !!info.event.extendedProps?.date;
                     const hasEndDate = !!info.event.extendedProps?.endDate;
+                    const isTimeGridTimedEvent = info.view.type.startsWith('timeGrid') && !info.event.allDay;
 
                     if (hasStartDate || hasEndDate) {
-                        targetEl.style.borderLeft = hasStartDate ? `4px solid ${borderColor}` : 'none';
-                        targetEl.style.borderRight = hasEndDate ? `4px solid ${borderColor}` : 'none';
+                        if (isTimeGridTimedEvent) {
+                            targetEl.style.borderTop = hasStartDate ? `3px solid ${borderColor}` : 'none';
+                            targetEl.style.borderBottom = hasEndDate ? `3px solid ${borderColor}` : 'none';
+                        } else {
+                            targetEl.style.borderLeft = hasStartDate ? `3px solid ${borderColor}` : 'none';
+                            targetEl.style.borderRight = hasEndDate ? `3px solid ${borderColor}` : 'none';
+                        }
                     } else {
-                        targetEl.style.borderLeft = `4px solid ${borderColor}`;
+                        targetEl.style.borderLeft = `3px solid ${borderColor}`;
                     }
                     targetEl.style.borderRadius = '3px';
 
