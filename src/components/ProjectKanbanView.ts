@@ -2868,8 +2868,8 @@ export class ProjectKanbanView {
 
                     if (!task.completed) {
                         const countdownInfo = this.getTaskCountdownInfo(task);
-                        if (countdownInfo.type !== 'none' && countdownInfo.days >= 0) {
-                            const countdownClass = countdownInfo.type === 'start' ? 'countdown-start' : 'countdown-end';
+                        if (countdownInfo.type !== 'none') {
+                            const countdownClass = this.getCountdownBadgeClass(countdownInfo.type);
                             dateHtml += `<span class="countdown-badge ${countdownClass}">${countdownInfo.text}</span>`;
                         }
                     }
@@ -10722,8 +10722,8 @@ export class ProjectKanbanView {
             // 添加倒计时显示
             if (!task.completed) {
                 const countdownInfo = this.getTaskCountdownInfo(task);
-                if (countdownInfo.type !== 'none' && countdownInfo.days >= 0) {
-                    const countdownClass = countdownInfo.type === 'start' ? 'countdown-start' : 'countdown-end';
+                if (countdownInfo.type !== 'none') {
+                    const countdownClass = this.getCountdownBadgeClass(countdownInfo.type);
                     dateHtml += `<span class="countdown-badge ${countdownClass}">${countdownInfo.text}</span>`;
                 }
             }
@@ -11478,66 +11478,29 @@ export class ProjectKanbanView {
                 : date.toLocaleDateString(getLocaleTag(), { month: 'short', day: 'numeric' });
         };
 
-        // 辅助函数：计算过期天数
-        const getExpiredDays = (targetDate: string): number => {
-            return Math.ceil((new Date(today).getTime() - new Date(targetDate).getTime()) / (1000 * 60 * 60 * 24));
-        };
-
-        // 辅助函数：创建过期徽章（completed 为 true 时使用“X天前”的词语）
-        const createExpiredBadge = (days: number, completed: boolean = false): string => {
-            const text = completed ? i18n('daysAgo', { days: String(days) }) : i18n('overdueDays', { days: String(days) });
-            return `<span class="countdown-badge countdown-overdue">${text}</span>`;
+        const formatDateLabel = (dateStr: string, logicalDate: string): string => {
+            if (logicalDate === today) return i18n('today');
+            if (logicalDate === tomorrowStr) return i18n('tomorrow');
+            return formatDateWithYear(new Date(dateStr + 'T00:00:00'));
         };
 
         // 使用逻辑日期判断（考虑一天起始时间）
-        const logicalStart = this.getTaskLogicalDate(task.date, task.time);
+        const displayDate = task.date || task.endDate;
+        if (!displayDate) return "未设置日期";
+
+        const logicalStart = this.getTaskLogicalDate(task.date || task.endDate, task.date ? task.time : (task.endTime || task.time));
         const logicalEnd = this.getTaskLogicalDate(task.endDate || task.date, task.endTime || task.time);
 
-        // 如果只有截止时间，显示截止时间（基于逻辑结束日判断过期/今天/明天）
+        // 如果只有截止日期，按截止日期显示，不额外拼“截止”文案，徽章由 getTaskCountdownInfo 负责。
         if (!task.date && task.endDate) {
-            const endDate = new Date(task.endDate);
-
-            // 检查是否过期（使用逻辑结束日期）
-            if (compareDateStrings(logicalEnd, today) < 0) {
-                const daysDiff = getExpiredDays(task.endDate);
-                const dateStr = formatDateWithYear(endDate);
-                return `${dateStr} ${createExpiredBadge(daysDiff, !!task.completed)}`;
-            }
-
-            if (logicalEnd === today) {
-                return i18n('todayDeadline');
-            } else if (logicalEnd === tomorrowStr) {
-                return i18n('tomorrowDeadline');
-            } else {
-                const dateStr = formatDateWithYear(endDate);
-                return `${dateStr} ${i18n('countdownEnd')}`;
-            }
+            let endDateStr = formatDateLabel(task.endDate, logicalEnd);
+            const endTime = task.endTime || task.time;
+            if (endTime) endDateStr += ` ${endTime}`;
+            return endDateStr;
         }
 
         // 如果有开始时间，按逻辑日期显示
-        let dateStr = '';
-        if (logicalStart === today) {
-            dateStr = i18n('today');
-        } else if (logicalStart === tomorrowStr) {
-            dateStr = i18n('tomorrow');
-        } else {
-            const taskDate = new Date(task.date);
-
-            // 检查是否过期（使用逻辑起始日期）
-            if (compareDateStrings(logicalStart, today) < 0) {
-                const formattedDate = formatDateWithYear(taskDate);
-                // 如果任务有结束日期且和开始日期不同，避免在开始日期处显示过期徽章（只在结束日期处显示一次）
-                if (task.endDate && task.endDate !== task.date) {
-                    dateStr = formattedDate;
-                } else {
-                    const daysDiff = getExpiredDays(task.date);
-                    dateStr = `${formattedDate} ${createExpiredBadge(daysDiff, !!task.completed)} `;
-                }
-            } else {
-                // 如果不在今年，显示年份
-                dateStr = formatDateWithYear(taskDate);
-            }
-        }
+        let dateStr = formatDateLabel(task.date, logicalStart);
 
         // 如果是农历循环事件，添加农历日期显示
         if (task.repeat?.enabled && (task.repeat.type === 'lunar-monthly' || task.repeat.type === 'lunar-yearly')) {
@@ -11553,17 +11516,7 @@ export class ProjectKanbanView {
 
         let endDateStr = '';
         if (task.endDate && task.endDate !== task.date) {
-            const taskEndDate = new Date(task.endDate);
-
-            // 检查结束日期是否过期（使用逻辑结束日期）
-            if (compareDateStrings(logicalEnd, today) < 0) {
-                const daysDiff = getExpiredDays(task.endDate);
-                const formattedEndDate = formatDateWithYear(taskEndDate);
-                endDateStr = `${formattedEndDate} ${createExpiredBadge(daysDiff, !!task.completed)} `;
-            } else {
-                // 如果结束日期不在今年，显示年份
-                endDateStr = formatDateWithYear(taskEndDate);
-            }
+            endDateStr = formatDateLabel(task.endDate, logicalEnd);
         }
 
         if (task.time) {
@@ -11586,37 +11539,33 @@ export class ProjectKanbanView {
         return dateStr || "未设置日期";
     }
 
-    private getTaskCountdownInfo(task: any): { text: string; days: number; type: 'start' | 'end' | 'none' } {
+    private getTaskCountdownInfo(task: any): { text: string; days: number; type: 'start' | 'end' | 'started' | 'overdue' | 'none' } {
         // 使用逻辑日期计算天数差（考虑一天起始时间）
         const today = getLogicalDateString();
 
         const calcDays = (targetLogicalDate: string) => {
             const target = new Date(targetLogicalDate + 'T00:00:00');
             const base = new Date(today + 'T00:00:00');
-            return Math.ceil((target.getTime() - base.getTime()) / (1000 * 60 * 60 * 24));
+            return Math.round((target.getTime() - base.getTime()) / (1000 * 60 * 60 * 24));
         };
 
-        // 如果同时有开始日期和结束日期，则仅基于结束日期显示倒计时（避免同时显示开始和结束倒计时）
-        if (task.date && task.endDate) {
-            const logicalEnd = this.getTaskLogicalDate(task.endDate, task.endTime || task.time);
-            const endDays = calcDays(logicalEnd);
+        const isRecurring = !!(task?.isRepeatInstance || task?.repeat?.enabled);
+        const hasStartDate = !!task.date;
+        const hasEndDate = !!task.endDate;
+        const isOnlyEndDate = !hasStartDate && hasEndDate;
+        const isOnlyStartDate = hasStartDate && !hasEndDate;
+        const isSpanningRealEvent = !!(hasStartDate && hasEndDate && task.endDate !== task.date);
 
-            if (endDays >= 0) {
-                return {
-                    text: endDays === 0 ? i18n('todayEnd') : i18n('endsInNDays', { days: String(endDays) }),
-                    days: endDays,
-                    type: 'end'
-                };
-            }
-            return { text: '', days: endDays, type: 'none' };
+        if (!hasStartDate && !hasEndDate) {
+            return { text: '', days: 0, type: 'none' };
         }
 
-        // 如果只有开始日期
-        if (task.date) {
+        if (isSpanningRealEvent) {
             const logicalStart = this.getTaskLogicalDate(task.date, task.time);
+            const logicalEnd = this.getTaskLogicalDate(task.endDate, task.endTime || task.time);
             const startDays = calcDays(logicalStart);
+            const endDays = calcDays(logicalEnd);
 
-            // 如果还没开始
             if (startDays > 0) {
                 return {
                     text: i18n('startsInNDays', { days: String(startDays) }),
@@ -11625,36 +11574,117 @@ export class ProjectKanbanView {
                 };
             }
 
-            // 否则没有有效的开始倒计时，继续检查结束日期（如果存在）
-            if (task.endDate) {
-                const logicalEnd = this.getTaskLogicalDate(task.endDate, task.endTime || task.time);
-                const endDays = calcDays(logicalEnd);
-
-                if (endDays >= 0) {
-                    return {
-                        text: endDays === 0 ? i18n('todayEnd') : i18n('endsInNDays', { days: String(endDays) }),
-                        days: endDays,
-                        type: 'end'
-                    };
-                }
+            if (endDays < 0) {
+                return {
+                    text: i18n('overdueDays', { days: String(Math.abs(endDays)) }),
+                    days: endDays,
+                    type: 'overdue'
+                };
             }
+
+            return {
+                text: endDays === 0
+                    ? i18n('spanningDaysLeftPlural', { days: '0' })
+                    : endDays === 1
+                    ? i18n('spanningDaysLeftSingle')
+                    : i18n('spanningDaysLeftPlural', { days: String(endDays) }),
+                days: endDays,
+                type: 'end'
+            };
         }
 
-        // 只有结束日期的情况
-        if (task.endDate) {
+        if (isOnlyEndDate) {
             const logicalEnd = this.getTaskLogicalDate(task.endDate, task.endTime || task.time);
             const endDays = calcDays(logicalEnd);
 
-            if (endDays >= 0) {
+            if (endDays > 0) {
                 return {
-                    text: endDays === 0 ? i18n('todayEnd') : i18n('endsInNDays', { days: String(endDays) }),
+                    text: i18n('endsInNDays', { days: String(endDays) }),
                     days: endDays,
                     type: 'end'
+                };
+            }
+
+            if (endDays < 0) {
+                return {
+                    text: i18n('overdueDays', { days: String(Math.abs(endDays)) }),
+                    days: endDays,
+                    type: 'overdue'
+                };
+            }
+
+            return { text: '', days: 0, type: 'none' };
+        }
+
+        if (isOnlyStartDate) {
+            const logicalStart = this.getTaskLogicalDate(task.date, task.time);
+            const startDays = calcDays(logicalStart);
+
+            if (startDays > 0) {
+                return {
+                    text: i18n('startsInNDays', { days: String(startDays) }),
+                    days: startDays,
+                    type: 'start'
+                };
+            }
+
+            if (startDays < 0) {
+                return isRecurring
+                    ? {
+                        text: i18n('overdueDays', { days: String(Math.abs(startDays)) }),
+                        days: startDays,
+                        type: 'overdue'
+                    }
+                    : {
+                        text: i18n('startedDays', { days: String(Math.abs(startDays)) }),
+                        days: startDays,
+                        type: 'started'
+                    };
+            }
+
+            return { text: '', days: 0, type: 'none' };
+        }
+
+        // 同一天的开始和结束日期：未来显示开始倒计时，过去按结束日期过期。
+        if (task.date && task.endDate) {
+            const logicalStart = this.getTaskLogicalDate(task.date, task.time);
+            const logicalEnd = this.getTaskLogicalDate(task.endDate, task.endTime || task.time);
+            const startDays = calcDays(logicalStart);
+            const endDays = calcDays(logicalEnd);
+
+            if (startDays > 0) {
+                return {
+                    text: i18n('startsInNDays', { days: String(startDays) }),
+                    days: startDays,
+                    type: 'start'
+                };
+            }
+
+            if (endDays < 0) {
+                return {
+                    text: i18n('overdueDays', { days: String(Math.abs(endDays)) }),
+                    days: endDays,
+                    type: 'overdue'
                 };
             }
         }
 
         return { text: '', days: 0, type: 'none' };
+    }
+
+    private getCountdownBadgeClass(type: 'start' | 'end' | 'started' | 'overdue' | 'none'): string {
+        switch (type) {
+            case 'start':
+                return 'countdown-start';
+            case 'end':
+                return 'countdown-end';
+            case 'started':
+                return 'countdown-started';
+            case 'overdue':
+                return 'countdown-overdue';
+            default:
+                return '';
+        }
     }
 
     private addTaskDragEvents(element: HTMLElement, task: any) {
@@ -14871,6 +14901,12 @@ export class ProjectKanbanView {
                 color: var(--b3-font-color2);
                 background: var(--b3-font-background2);
                 border: 1px solid var(--b3-font-color2);
+            }
+
+            .countdown-started {
+                color: var(--b3-card-success-color);
+                background: var(--b3-card-success-background);
+                border: 1px solid var(--b3-card-success-color);
             }
 
             .countdown-overdue {

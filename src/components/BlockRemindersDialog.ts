@@ -5,6 +5,7 @@ import { getLocaleTag, getLogicalDateString, getRelativeDateString, compareDateS
 import { CategoryManager } from "../utils/categoryManager";
 import { ProjectManager } from "../utils/projectManager";
 import { i18n } from "../pluginInstance";
+import { getSolarDateLunarString } from "../utils/lunarUtils";
 
 /**
  * 块绑定任务查看对话框
@@ -216,16 +217,6 @@ export class BlockRemindersDialog {
         return dateStr;
     }
 
-    private getLogicalDayDifference(baseLogicalDate: string, targetLogicalDate: string): number {
-        try {
-            const base = new Date(`${baseLogicalDate}T00:00:00`);
-            const target = new Date(`${targetLogicalDate}T00:00:00`);
-            return Math.round((target.getTime() - base.getTime()) / (24 * 60 * 60 * 1000));
-        } catch (e) {
-            return compareDateStrings(targetLogicalDate, baseLogicalDate);
-        }
-    }
-
     private async createReminderItem(reminder: any, isCompleted: boolean): Promise<HTMLElement> {
         const item = document.createElement('div');
         item.className = 'reminder-item';
@@ -307,19 +298,28 @@ export class BlockRemindersDialog {
         timeContainer.style.flexWrap = 'wrap';
 
         // 重复图标
-        if (reminder.repeat?.enabled) {
+        if (reminder.repeat?.enabled || reminder.isRepeatInstance) {
             const repeatIcon = document.createElement('span');
             repeatIcon.textContent = '🔄';
-            repeatIcon.classList.add('ariaLabel'); repeatIcon.setAttribute('aria-label', i18n("repeatTask") || '重复任务');
+            repeatIcon.classList.add('ariaLabel');
+            repeatIcon.setAttribute('aria-label', reminder.repeat?.enabled ? (i18n("repeatTask") || '重复任务') : (i18n("repeatInstance") || '周期事件实例'));
             timeContainer.appendChild(repeatIcon);
         }
 
         // 时间信息
-        if (reminder.date) {
+        const displayDate = reminder.date || reminder.endDate;
+        const hasReminderTimes = Array.isArray(reminder.reminderTimes) && reminder.reminderTimes.length > 0;
+        const reminderTimesOnlyText = !displayDate && hasReminderTimes ? this.formatReminderTimes(reminder) : '';
+        if (displayDate || reminderTimesOnlyText) {
             const timeEl = document.createElement('div');
             timeEl.className = 'reminder-item__time';
-            const timeText = this.formatReminderTime(reminder.date, reminder.time, undefined, reminder.endDate, reminder.endTime);
-            timeEl.textContent = '🗓' + timeText;
+            if (displayDate) {
+                const displayTime = reminder.date ? reminder.time : (reminder.endTime || reminder.time);
+                const timeText = this.formatReminderTime(displayDate, displayTime, undefined, reminder.endDate, reminder.endTime, reminder);
+                timeEl.textContent = '🗓' + timeText;
+            } else {
+                timeEl.textContent = '⏰' + reminderTimesOnlyText;
+            }
             timeEl.style.fontSize = '12px';
             timeEl.style.color = 'var(--b3-theme-on-surface-light)';
             timeContainer.appendChild(timeEl);
@@ -659,133 +659,245 @@ export class BlockRemindersDialog {
         }
     }
 
-    private formatReminderTime(date: string, time?: string, today?: string, endDate?: string, endTime?: string): string {
+    private formatReminderTime(date: string, time?: string, today?: string, endDate?: string, endTime?: string, reminder?: any): string {
         if (!today) {
             today = getLogicalDateString();
         }
-        const tomorrow = getRelativeDateString(1);
-        const yesterday = getRelativeDateString(-1);
 
-        const getRelativeLabel = (calendarDate: string, logicalDate: string): string => {
-            if (logicalDate === today) return i18n("today") || "今天";
-            if (logicalDate === tomorrow) return i18n("tomorrow") || "明天";
-            if (logicalDate === yesterday) return i18n("yesterday") || "昨天";
+        const tomorrowStr = getRelativeDateString(1);
 
-            try {
-                const base = new Date(`${today}T00:00:00`);
-                const target = new Date(`${logicalDate}T00:00:00`);
-                const diffDays = Math.round((target.getTime() - base.getTime()) / (24 * 60 * 60 * 1000));
-                if (diffDays > 0 && diffDays <= 7) {
-                    const calendar = new Date(`${calendarDate}T00:00:00`);
-                    const weekdays = [
-                        i18n("sunday") || "周日",
-                        i18n("monday") || "周一",
-                        i18n("tuesday") || "周二",
-                        i18n("wednesday") || "周三",
-                        i18n("thursday") || "周四",
-                        i18n("friday") || "周五",
-                        i18n("saturday") || "周六"
-                    ];
-                    return weekdays[calendar.getDay()];
-                }
-            } catch (e) {
-                // ignore
-            }
-
-            return calendarDate;
-        };
-
+        // 使用逻辑日期（考虑一天起始时间）来判断“今天/明天/过去/未来”标签
         const logicalStart = this.getReminderLogicalDate(date, time);
-        const dateStr = getRelativeLabel(date, logicalStart);
-        const timeStr = time || '';
+        const logicalEnd = this.getReminderLogicalDate(endDate || date, endTime || time);
 
-        if (endDate && (endDate !== date || endTime)) {
-            const logicalEnd = this.getReminderLogicalDate(endDate, endTime || time);
-            const endDateStr = getRelativeLabel(endDate, logicalEnd);
-            const endTimeStr = endTime || '';
-
-            if (endDate === date) {
-                return `${dateStr} ${timeStr} - ${endTimeStr}`.trim();
-            }
-            return `${dateStr} ${timeStr} - ${endDateStr} ${endTimeStr}`.trim();
+        let dateStr = '';
+        if (logicalStart === today) {
+            dateStr = i18n("today");
+        } else if (logicalStart === tomorrowStr) {
+            dateStr = i18n("tomorrow");
+        } else {
+            const reminderDate = new Date(date + 'T00:00:00');
+            dateStr = reminderDate.toLocaleDateString(getLocaleTag(), {
+                month: 'short',
+                day: 'numeric'
+            });
         }
 
-        return `${dateStr} ${timeStr}`.trim();
+        // 如果是农历循环事件，添加农历日期显示
+        if (reminder?.repeat?.enabled && (reminder.repeat.type === 'lunar-monthly' || reminder.repeat.type === 'lunar-yearly')) {
+            try {
+                const lunarStr = getSolarDateLunarString(date);
+                if (lunarStr) {
+                    dateStr = `${dateStr} (${lunarStr})`;
+                }
+            } catch (error) {
+                console.error('Failed to format lunar date:', error);
+            }
+        }
+
+        let result = '';
+
+        // 处理跨天事件
+        if (endDate && endDate !== date) {
+            let endDateStr = '';
+            if (logicalEnd === today) {
+                endDateStr = i18n("today");
+            } else if (logicalEnd === tomorrowStr) {
+                endDateStr = i18n("tomorrow");
+            } else {
+                const endReminderDate = new Date(endDate + 'T00:00:00');
+                endDateStr = endReminderDate.toLocaleDateString(getLocaleTag(), {
+                    month: 'short',
+                    day: 'numeric'
+                });
+            }
+
+            const startTimeStr = time ? ` ${time}` : '';
+            const endTimeStr = endTime ? ` ${endTime}` : '';
+            result = `${dateStr}${startTimeStr} → ${endDateStr}${endTimeStr}`;
+        } else if (endTime && endTime !== time) {
+            const startTimeStr = time || '';
+            result = `${dateStr} ${startTimeStr} - ${endTime}`;
+        } else {
+            result = time ? `${dateStr} ${time}` : dateStr;
+        }
+
+        const reminderTimesText = this.formatReminderTimes(reminder, date, today);
+        if (reminderTimesText) {
+            result += ` ⏰${reminderTimesText}`;
+        }
+
+        return result;
+    }
+
+    private formatReminderTimes(reminder?: any, fallbackDate?: string, today: string = getLogicalDateString()): string {
+        try {
+            if (!reminder?.reminderTimes || !Array.isArray(reminder.reminderTimes) || reminder.reminderTimes.length === 0) {
+                return '';
+            }
+
+            return reminder.reminderTimes.map((rtItem: any) => {
+                if (!rtItem) return '';
+                const rt = typeof rtItem === 'string' ? rtItem : rtItem.time;
+                const note = typeof rtItem === 'string' ? '' : String(rtItem.note || '').trim();
+                if (!rt) return '';
+
+                const s = String(rt).trim();
+                let datePart: string | null = null;
+                let timePart: string | null = null;
+
+                if (s.includes('T')) {
+                    const parts = s.split('T');
+                    datePart = parts[0];
+                    timePart = parts[1] || null;
+                } else if (/^\d{4}-\d{2}-\d{2}\s+/.test(s)) {
+                    const parts = s.split(/\s+/);
+                    datePart = parts[0];
+                    timePart = parts.slice(1).join(' ') || null;
+                } else if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+                    datePart = s;
+                } else {
+                    timePart = s;
+                }
+
+                const targetDate = datePart || fallbackDate || reminder.date || reminder.endDate || today;
+                const logicalTarget = this.getReminderLogicalDate(targetDate, timePart || undefined);
+
+                if (compareDateStrings(logicalTarget, today) < 0) return '';
+
+                if (compareDateStrings(logicalTarget, today) === 0) {
+                    const displayTime = timePart ? timePart.substring(0, 5) : '';
+                    return note && displayTime ? `${displayTime}（${note}）` : (displayTime || note);
+                }
+
+                const d = new Date(targetDate + 'T00:00:00');
+                const ds = d.toLocaleDateString(getLocaleTag(), { month: 'short', day: 'numeric' });
+                const displayTime = `${ds}${timePart ? ' ' + timePart.substring(0, 5) : ''}`;
+                return note ? `${displayTime}（${note}）` : displayTime;
+            }).filter(Boolean).join(', ');
+        } catch (e) {
+            console.warn('格式化 reminderTimes 失败', e);
+            return '';
+        }
     }
 
     private createReminderCountdownElement(reminder: any): HTMLElement | null {
-        if (!reminder.date) return null;
-        const logicalToday = getLogicalDateString();
+        if (!reminder.date && !reminder.endDate) return null;
 
-        // 判断是否设置了结束日期（与开始日期不同）
-        const hasEndDate = reminder.endDate && reminder.endDate !== reminder.date;
+        const today = getLogicalDateString();
+        let targetDate: string;
+        let isOverdueEvent = false;
+        let isStartedOnlyEvent = false;
 
-        const logicalStart = this.getReminderLogicalDate(reminder.date, reminder.time);
-        const startDiffDays = this.getLogicalDayDifference(logicalToday, logicalStart);
+        const startLogical = this.getReminderLogicalDate(reminder.date || reminder.endDate, reminder.time || reminder.endTime);
+        const endLogical = this.getReminderLogicalDate(reminder.endDate || reminder.date, reminder.endTime || reminder.time);
+        const hasStartDate = !!reminder.date;
+        const hasEndDate = !!reminder.endDate;
+        const isOnlyEndDate = !hasStartDate && hasEndDate;
+        const isOnlyStartDate = hasStartDate && !hasEndDate;
+        const treatsOnlyStartAsDeadline = isOnlyStartDate && !!(reminder?.isRepeatInstance || reminder?.repeat?.enabled);
+        const isSpanningRealEvent = !!(hasStartDate && hasEndDate && reminder.endDate !== reminder.date);
 
-        let endDiffDays: number | null = null;
-        if (hasEndDate) {
-            const logicalEnd = this.getReminderLogicalDate(reminder.endDate, reminder.endTime || reminder.time);
-            endDiffDays = this.getLogicalDayDifference(logicalToday, logicalEnd);
-        }
+        if (isSpanningRealEvent) {
+            const isInRange = compareDateStrings(startLogical, today) <= 0 && compareDateStrings(today, endLogical) <= 0;
 
-        const countdownEl = document.createElement('span');
-        countdownEl.className = 'reminder-countdown';
-        countdownEl.style.cssText = 'font-size: 11px; color: var(--b3-theme-on-surface-light); background: rgba(0,0,0,0.05); padding: 2px 6px; border-radius: 10px;';
-
-        // 逻辑：
-        // 1. 开始日期在未来 -> 显示"X天后开始"
-        // 2. 开始日期已过去（或今天），有结束日期 -> 基于结束日期显示倒计时
-        // 3. 开始日期已过去，无结束日期 -> 显示逾期
-        
-        if (startDiffDays > 0) {
-            // 任务未开始
-            if (startDiffDays === 1) {
-                countdownEl.textContent = i18n("startsTomorrow") || '明天开始';
-            } else if (startDiffDays <= 7) {
-                countdownEl.textContent = (i18n("startsInNDays") || '${days}天后开始').replace("${days}", startDiffDays.toString());
+            if (isInRange) {
+                targetDate = endLogical;
+            } else if (compareDateStrings(startLogical, today) > 0) {
+                targetDate = startLogical;
             } else {
-                return null; // 不显示太远的倒计时
+                if (!reminder.completed) {
+                    targetDate = endLogical;
+                    isOverdueEvent = true;
+                } else {
+                    return null;
+                }
             }
         } else {
-            // 任务已开始（或今天开始）
-            if (endDiffDays !== null) {
-                // 有结束日期，基于结束日期计算
-                if (endDiffDays < 0) {
-                    const overdueDays = Math.abs(endDiffDays);
-                    countdownEl.textContent = (i18n("overdueNDays") || '逾期${days}天').replace("${days}", overdueDays.toString());
-                    countdownEl.style.background = 'var(--b3-card-error-background)';
-                    countdownEl.style.color = 'var(--b3-card-error-color)';
-                } else if (endDiffDays === 0) {
-                    countdownEl.textContent = i18n("dueToday") || '今天截止';
-                    countdownEl.style.background = 'var(--b3-card-warning-background)';
-                    countdownEl.style.color = 'var(--b3-card-warning-color)';
-                } else if (endDiffDays === 1) {
-                    countdownEl.textContent = i18n("tomorrowDeadline") || '明天截止';
-                } else if (endDiffDays <= 7) {
-                    countdownEl.textContent = i18n("deadlineInNDays")?.replace("${days}", endDiffDays.toString());
-                    countdownEl.style.background = 'var(--b3-font-background4)';
-                    countdownEl.style.color = 'var(--b3-font-color4)';
+            if (compareDateStrings(startLogical, today) > 0) {
+                targetDate = startLogical;
+            } else if (compareDateStrings(startLogical, today) < 0) {
+                if (!reminder.completed) {
+                    targetDate = startLogical;
+                    if (isOnlyStartDate && !treatsOnlyStartAsDeadline) {
+                        isStartedOnlyEvent = true;
+                    } else {
+                        isOverdueEvent = true;
+                    }
                 } else {
                     return null;
                 }
             } else {
-                // 无结束日期，基于开始日期判断是否逾期
-                if (startDiffDays < 0) {
-                    const overdueDays = Math.abs(startDiffDays);
-                    countdownEl.textContent = (i18n("overdueNDays") || '逾期${days}天').replace("${days}", overdueDays.toString());
-                    countdownEl.style.background = 'var(--b3-card-error-background)';
-                    countdownEl.style.color = 'var(--b3-card-error-color)';
+                return null;
+            }
+        }
+
+        const daysDiff = this.calculateReminderDaysDifference(targetDate, today);
+        const isTargetEndForSpanning = isSpanningRealEvent && targetDate === endLogical;
+        const isInRangeForSpanning = isSpanningRealEvent && compareDateStrings(startLogical, today) <= 0 && compareDateStrings(today, endLogical) <= 0;
+
+        if (daysDiff === 0 && !(isTargetEndForSpanning && isInRangeForSpanning)) {
+            return null;
+        }
+
+        const countdownEl = document.createElement('span');
+        countdownEl.className = 'reminder-countdown';
+
+        const applyCountdownStyle = (colorVar: string, backgroundVar: string) => {
+            countdownEl.style.cssText = `
+                color: var(${colorVar});
+                font-size: 12px;
+                font-weight: 500;
+                background: var(${backgroundVar});
+                border: 1px solid var(${colorVar});
+                border-radius: 4px;
+                padding: 2px 6px;
+                flex-shrink: 0;
+            `;
+        };
+
+        if (isStartedOnlyEvent && daysDiff < 0) {
+            applyCountdownStyle('--b3-card-success-color', '--b3-card-success-background');
+            countdownEl.textContent = i18n("startedDays", { days: Math.abs(daysDiff).toString() });
+        } else if (isOverdueEvent || daysDiff < 0) {
+            applyCountdownStyle('--b3-font-color1', '--b3-font-background1');
+
+            const overdueDays = Math.abs(daysDiff);
+            countdownEl.textContent = overdueDays === 1 ?
+                i18n("overdueBySingleDay") :
+                i18n("overdueByDays", { days: overdueDays.toString() });
+        } else {
+            applyCountdownStyle('--b3-font-color4', '--b3-font-background4');
+
+            if (isSpanningRealEvent) {
+                const isInRange = compareDateStrings(startLogical, today) <= 0 && compareDateStrings(today, endLogical) <= 0;
+
+                if (isInRange) {
+                    applyCountdownStyle('--b3-font-color2', '--b3-font-background2');
+                    countdownEl.textContent = daysDiff === 1 ?
+                        i18n("spanningDaysLeftSingle") :
+                        i18n("spanningDaysLeftPlural", { days: daysDiff.toString() });
                 } else {
-                    // startDiffDays === 0，今天开始且无结束日期
-                    countdownEl.textContent = i18n("dueToday") || '今天';
-                    countdownEl.style.background = 'var(--b3-card-warning-background)';
-                    countdownEl.style.color = 'var(--b3-card-warning-color)';
+                    applyCountdownStyle('--b3-font-color4', '--b3-font-background4');
+                    countdownEl.textContent = i18n("startInDays", { days: daysDiff.toString() });
                 }
+            } else if (isOnlyEndDate) {
+                applyCountdownStyle('--b3-font-color2', '--b3-font-background2');
+                countdownEl.textContent = i18n("endsInNDays", { days: daysDiff.toString() });
+            } else {
+                applyCountdownStyle('--b3-font-color4', '--b3-font-background4');
+                countdownEl.textContent = i18n("startInDays", { days: daysDiff.toString() });
             }
         }
 
         return countdownEl;
+    }
+
+    private calculateReminderDaysDifference(targetDate: string, today: string): number {
+        const target = new Date(targetDate + 'T00:00:00');
+        const todayDate = new Date(today + 'T00:00:00');
+        const diffTime = target.getTime() - todayDate.getTime();
+        return Math.round(diffTime / (1000 * 60 * 60 * 24));
     }
 
     private formatCompletedTime(completedTime: string): string {

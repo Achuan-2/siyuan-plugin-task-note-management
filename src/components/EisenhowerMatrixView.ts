@@ -1381,7 +1381,13 @@ export class EisenhowerMatrixView {
                 const startDays = this.calculateTaskDaysDifference(logicalStart, today);
                 const startDateText = formatDateWithYear(task.date);
                 if (startDays < 0) {
-                    dateText = `${startDateText} ${this.createCountdownBadge(i18n('startedDays', { days: String(Math.abs(startDays)) }), 'normal')}`;
+                    const treatsOnlyStartAsDeadline = !!(task.extendedProps?.repeat?.enabled || task.extendedProps?.isRepeatInstance || task.repeat?.enabled || task.isRepeatInstance);
+                    if (treatsOnlyStartAsDeadline) {
+                        const overdueText = i18n('overdueDays', { days: String(Math.abs(startDays)) });
+                        dateText = `${startDateText} ${this.createCountdownBadge(overdueText, 'urgent')}`;
+                    } else {
+                        dateText = `${startDateText} ${this.createCountdownBadge(i18n('startedDays', { days: String(Math.abs(startDays)) }), 'normal')}`;
+                    }
                 } else if (startDays > 0) {
                     dateText = `${startDateText} ${this.createCountdownBadge(i18n('startsInNDays', { days: String(startDays) }), 'warning')}`;
                 } else {
