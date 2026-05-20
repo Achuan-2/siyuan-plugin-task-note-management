@@ -4841,7 +4841,7 @@ export class PomodoroTimer {
         }
     }
 
-    private toggleTimer() {
+    private async toggleTimer() {
         // 确保在用户手势上下文中初始化音频
         if (!this.audioInitialized) {
             this.initializeAudioPlayback();
@@ -4851,12 +4851,12 @@ export class PomodoroTimer {
         const isBrowserWindow = !this.isTabMode && this.container && typeof (this.container as any).webContents !== 'undefined';
 
         if (!this.isRunning) {
-            this.startTimer();
+            await this.startTimer();
         } else {
             if (this.isPaused) {
-                this.resumeTimer();
+                await this.resumeTimer();
             } else {
-                this.pauseTimer();
+                await this.pauseTimer();
 
                 // 只在非 BrowserWindow 模式下直接操作 DOM
                 if (!isBrowserWindow) {
@@ -4890,9 +4890,6 @@ export class PomodoroTimer {
         this.isRunning = true;
         this.isPaused = false;
 
-        // 确保音频播放权限已被获取（特别是为了结束提示音），强制重新初始化以处理权限丢失
-        await this.initializeAudioPlayback(true);
-
         // 改进的时间继承逻辑
         if (this.startTime === 0) {
             // 新番茄钟或重置后的首次启动
@@ -4925,7 +4922,8 @@ export class PomodoroTimer {
             }
         }
 
-
+        // 确保音频播放权限已被获取（特别是为了结束提示音），强制重新初始化以处理权限丢失
+        await this.initializeAudioPlayback(true);
 
         // 播放对应的背景音
         if (this.isWorkPhase && this.workAudio) {
@@ -5059,6 +5057,21 @@ export class PomodoroTimer {
         const currentTime = Date.now();
         this.pausedTime = Math.floor((currentTime - this.startTime) / 1000);
 
+        // 同步更新当前显示时间为精确值，避免 interval 精度导致的偏差
+        if (this.isCountUp) {
+            if (this.isWorkPhase) {
+                this.timeElapsed = this.pausedTime;
+            } else {
+                const totalBreakTime = this.isLongBreak ?
+                    this.settings.longBreakDuration * 60 :
+                    this.settings.breakDuration * 60;
+                this.breakTimeLeft = Math.max(0, totalBreakTime - this.pausedTime);
+            }
+        } else {
+            this.timeLeft = Math.max(0, this.totalTime - this.pausedTime);
+            this.timeElapsed = this.pausedTime;
+        }
+
         // 停止随机微休息定时器
         this.stopRandomRestTimer();
 
@@ -5073,13 +5086,13 @@ export class PomodoroTimer {
     private async resumeTimer() {
         this.isPaused = false;
 
-        // 确保音频播放权限已被获取（特别是为了结束提示音），强制重新初始化以处理权限丢失
-        await this.initializeAudioPlayback(true);
-
         // 重新计算开始时间，保持已暂停的时间
         // 注意：startTime 应该是"如果从0开始计时应该在什么时候开始"
         // 所以是 现在 - pausedTime（已经过的秒数）
         this.startTime = Date.now() - (this.pausedTime * 1000);
+
+        // 确保音频播放权限已被获取（特别是为了结束提示音），强制重新初始化以处理权限丢失
+        await this.initializeAudioPlayback(true);
 
 
         // 恢复对应的背景音
@@ -6659,9 +6672,9 @@ export class PomodoroTimer {
 
     show() {
         // 如果番茄钟继承了运行状态，自动开始计时
-        setTimeout(() => {
+        setTimeout(async () => {
             if (this.isRunning && !this.isPaused) {
-                this.startTimer();
+                await this.startTimer();
             }
         }, 100);
     }
@@ -6833,9 +6846,9 @@ export class PomodoroTimer {
     /**
      * 外部恢复番茄钟（供其他组件调用）
      */
-    public resumeFromExternal() {
+    public async resumeFromExternal() {
         if (this.isRunning && this.isPaused) {
-            this.resumeTimer();
+            await this.resumeTimer();
         }
     }
 
