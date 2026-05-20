@@ -20,7 +20,7 @@ import { CalendarView } from "./components/CalendarView";
 import { EisenhowerMatrixView } from "./components/EisenhowerMatrixView";
 import { CategoryManager } from "./utils/categoryManager";
 import { readDir } from "./api";
-import { getLocalTimeString, getLocalDateString, getLocalDateTimeString, compareDateStrings, getLogicalDateString, setDayStartTime } from "./utils/dateUtils";
+import { getLocalTimeString, getLocalDateString, getLocalDateTimeString, compareDateStrings, getLogicalDateString, setDayStartTime, setSingleDateDefaultRole } from "./utils/dateUtils";
 import { i18n, setPluginInstance } from "./pluginInstance";
 import { SettingUtils } from "./libs/setting-utils";
 import { PomodoroRecordManager } from "./utils/pomodoroRecord";
@@ -106,6 +106,8 @@ export const DEFAULT_SETTINGS = {
     // 任务笔记设置
     autoDetectDateTime: false, // 新增：是否自动识别日期时间
     removeDateAfterDetection: 'all', // 从bool改为option：'none' | 'date' | 'all'
+    singleDateDefaultRole: 'deadline', // 单日期无明确开始/截止关键词时，默认识别为截止日期
+    quickReminderTitlePasteAutoDetect: true, // 任务编辑弹窗标题粘贴时默认自动识别日期时间
     newDocNotebook: '', // 新增：新建文档的笔记本ID
     newDocPath: '/{{now | date "2006/200601"}}/', // 新增：新建文档的路径模板，支持sprig语法
     groupDefaultHeadingLevel: 1, // 新增：新建标题分组的默认层级（1-6），默认为1级标题
@@ -1757,6 +1759,7 @@ export default class ReminderPlugin extends Plugin {
             settings.pomodoroDurationPresets = [...DEFAULT_SETTINGS.pomodoroDurationPresets];
         }
         setDayStartTime(settings.todayStartTime);
+        setSingleDateDefaultRole(settings.singleDateDefaultRole);
         this.settings = settings;
         return settings;
     }
@@ -5636,6 +5639,18 @@ export default class ReminderPlugin extends Plugin {
         if (settings.removeDateAfterDetection === true) return 'all';
         if (settings.removeDateAfterDetection === false) return 'none';
         return settings.removeDateAfterDetection || 'all';
+    }
+
+    // 获取单日期无关键词时默认识别目标
+    async getSingleDateDefaultRole(): Promise<'deadline' | 'start'> {
+        const settings = await this.loadSettings();
+        return settings.singleDateDefaultRole === 'start' ? 'start' : 'deadline';
+    }
+
+    // 获取任务编辑弹窗标题粘贴自动识别设置
+    async getQuickReminderTitlePasteAutoDetectEnabled(): Promise<boolean> {
+        const settings = await this.loadSettings();
+        return settings.quickReminderTitlePasteAutoDetect !== false;
     }
 
     private scheduleHabitPomodoroAutoSync() {

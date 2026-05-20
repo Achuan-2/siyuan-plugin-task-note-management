@@ -417,6 +417,30 @@
                     },
                 },
                 {
+                    key: 'singleDateDefaultRole',
+                    value: settings.singleDateDefaultRole || 'deadline',
+                    type: 'select',
+                    title: i18n('singleDateDefaultRole') || '无关键词的单日期默认识别为',
+                    description:
+                        i18n('singleDateDefaultRoleDesc') ||
+                        '标题只有一个日期且没有开始/截止关键词时，选择默认填入开始日期还是截止日期。',
+                    options: {
+                        deadline: i18n('singleDateDefaultRoleDeadline') || '截止日期',
+                        start: i18n('singleDateDefaultRoleStart') || '开始日期',
+                    },
+                },
+                {
+                    key: 'quickReminderTitlePasteAutoDetect',
+                    value: settings.quickReminderTitlePasteAutoDetect !== false,
+                    type: 'checkbox',
+                    title:
+                        i18n('quickReminderTitlePasteAutoDetect') ||
+                        '任务编辑弹窗标题粘贴自动识别',
+                    description:
+                        i18n('quickReminderTitlePasteAutoDetectDesc') ||
+                        '开启后，在任务编辑弹窗标题中粘贴文本时自动识别日期时间；仍可在弹窗内临时关闭。',
+                },
+                {
                     key: 'treatStartDateOnlyAsOverdue',
                     value: settings.treatStartDateOnlyAsOverdue,
                     type: 'checkbox',
@@ -1536,6 +1560,17 @@
                     await recordManager.regenerateRecordsByDate();
                 } catch (error) {
                     console.error('重新生成番茄钟记录失败:', error);
+                }
+            })();
+        }
+
+        if (key === 'singleDateDefaultRole' && oldValue !== newValue) {
+            (async () => {
+                try {
+                    const { setSingleDateDefaultRole } = await import('./utils/dateUtils');
+                    setSingleDateDefaultRole(newValue as string);
+                } catch (error) {
+                    console.error('更新单日期默认识别设置失败:', error);
                 }
             })();
         }

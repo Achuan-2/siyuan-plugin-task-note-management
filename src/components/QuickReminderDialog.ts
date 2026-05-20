@@ -1,6 +1,6 @@
 import { showMessage, Dialog, platformUtils, confirm } from "siyuan";
 import { getBlockByID, getBlockDOM, refreshSql, updateBindBlockAtrrs, updateBlock } from "../api";
-import { compareDateStrings, getLogicalDateString, autoDetectDateTimeFromTitle } from "../utils/dateUtils";
+import { compareDateStrings, getLogicalDateString, autoDetectDateTimeFromTitle, type SingleDateRole } from "../utils/dateUtils";
 import { CategoryManager } from "../utils/categoryManager";
 import { ProjectManager } from "../utils/projectManager";
 import { HabitGroupManager } from "../utils/habitGroupManager";
@@ -205,6 +205,8 @@ export class QuickReminderDialog {
     private habitGroupManager: HabitGroupManager;
     private pomodoroRecordManager: PomodoroRecordManager;
     private autoDetectDateTime?: boolean; // 是否自动识别日期时间（undefined 表示未指定，使用插件设置）
+    private titlePasteAutoDetect: boolean = true; // 标题粘贴时是否默认自动识别日期时间
+    private singleDateDefaultRole: SingleDateRole = 'deadline'; // 单日期无关键词时默认识别目标
     private defaultProjectId?: string;
     private showKanbanStatus?: 'todo' | 'term' | 'none' = 'term'; // 看板状态显示模式，默认为 'term'
     private defaultStatus?: 'short_term' | 'long_term' | 'doing' | 'todo'; // 默认任务状态
@@ -378,6 +380,10 @@ export class QuickReminderDialog {
         };
 
 
+    }
+
+    private detectDateTimeFromTitle(title: string, removeMode: 'none' | 'date' | 'all' = 'all') {
+        return autoDetectDateTimeFromTitle(title, removeMode, this.singleDateDefaultRole);
     }
 
 
@@ -1663,7 +1669,7 @@ export class QuickReminderDialog {
             }
 
             // 识别日期时间从输入框获取
-            const detection = autoDetectDateTimeFromTitle(text, 'none');
+            const detection = this.detectDateTimeFromTitle(text, 'none');
 
             // 获取待清理的标题（用户原有的标题）
             const targetTitle = titleInput.value.trim();
@@ -1671,7 +1677,7 @@ export class QuickReminderDialog {
 
             if (removeMode !== 'none' && targetTitle) {
                 // 如果是从输入框识别出的，我们也从原标题中尝试移除类似的表达式
-                const cleanupResult = autoDetectDateTimeFromTitle(targetTitle, removeMode);
+                const cleanupResult = this.detectDateTimeFromTitle(targetTitle, removeMode);
                 finalCleanTitle = cleanupResult.cleanTitle;
             }
 
@@ -1863,6 +1869,24 @@ export class QuickReminderDialog {
             }
         }
 
+        if (this.plugin && typeof this.plugin.getSingleDateDefaultRole === 'function') {
+            try {
+                this.singleDateDefaultRole = await this.plugin.getSingleDateDefaultRole();
+            } catch (err) {
+                console.warn('获取单日期默认识别设置失败，使用默认截止日期:', err);
+                this.singleDateDefaultRole = 'deadline';
+            }
+        }
+
+        if (this.plugin && typeof this.plugin.getQuickReminderTitlePasteAutoDetectEnabled === 'function') {
+            try {
+                this.titlePasteAutoDetect = await this.plugin.getQuickReminderTitlePasteAutoDetectEnabled();
+            } catch (err) {
+                console.warn('获取标题粘贴自动识别设置失败，使用默认开启:', err);
+                this.titlePasteAutoDetect = true;
+            }
+        }
+
         // 初始化自定义提醒时间
         if (this.reminder && this.reminder.reminderTimes) {
             this.customTimes = this.reminder.reminderTimes
@@ -1952,7 +1976,7 @@ export class QuickReminderDialog {
                         </div>
                         <div class="b3-form__group" style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
                             <label class="b3-checkbox" style="display: flex; align-items: center;">
-                                <input type="checkbox" class="b3-switch" id="quickPasteAutoDetect" ${this.autoDetectDateTime ? 'checked' : ''}>
+                                <input type="checkbox" class="b3-switch" id="quickPasteAutoDetect" ${this.titlePasteAutoDetect ? 'checked' : ''}>
                                 <span class="b3-checkbox__graphic"></span>
                                 <span class="b3-checkbox__label">${i18n("pasteAutoDetectDate")}</span>
                             </label>
@@ -2665,14 +2689,14 @@ export class QuickReminderDialog {
                 if (this.autoDetectDateTime) {
                     try {
                         // First parse date/time without altering title; cleanup is applied by global setting below.
-                        const detected = autoDetectDateTimeFromTitle(this.blockContent, 'none');
+                        const detected = this.detectDateTimeFromTitle(this.blockContent, 'none');
                         if (detected && (detected.date || detected.endDate)) {
                             this.applyNaturalLanguageResult(detected);
 
                             // 如果启用了识别后移除日期设置，更新标题
                             this.plugin.getRemoveDateAfterDetectionMode().then((mode: 'none' | 'date' | 'all') => {
                                 if (mode !== 'none') {
-                                    const detectedWithMode = autoDetectDateTimeFromTitle(this.blockContent, mode);
+                                    const detectedWithMode = this.detectDateTimeFromTitle(this.blockContent, mode);
                                     if (detectedWithMode.cleanTitle !== undefined) {
                                         titleInput.value = detectedWithMode.cleanTitle || titleInput.value;
                                         // 将光标移到开头，显示开头的字
@@ -4013,7 +4037,7 @@ export class QuickReminderDialog {
                     if (pasteAutoDetect && pasteAutoDetect.checked) {
                         // 使用粘贴的所有非空行进行识别，以便第二行或后续行中的自然语言也能被识别
                         const joined = meaningfulLines.join(' ');
-                        const detected = autoDetectDateTimeFromTitle(joined, 'none');
+                        const detected = this.detectDateTimeFromTitle(joined, 'none');
                         if (detected && (detected.date || detected.endDate)) {
                             // 粘贴识别时不要直接用“粘贴文本”的 cleanTitle 覆盖整个标题，
                             // 否则会丢失用户原有内容。标题清理统一基于当前完整标题处理。
@@ -4025,11 +4049,11 @@ export class QuickReminderDialog {
                             // 识别后移除日期
                             this.plugin.getRemoveDateAfterDetectionMode().then((mode: 'none' | 'date' | 'all') => {
                                 if (mode !== 'none') {
-                                    const detectedWithMode = autoDetectDateTimeFromTitle(joined, mode);
+                                    const detectedWithMode = this.detectDateTimeFromTitle(joined, mode);
                                     if (detectedWithMode.cleanTitle !== undefined) {
                                         // 重新获取当前标题并清理
                                         const currentTitle = titleInput.value;
-                                        const finalDetected = autoDetectDateTimeFromTitle(currentTitle, mode);
+                                        const finalDetected = this.detectDateTimeFromTitle(currentTitle, mode);
                                         if (finalDetected.cleanTitle !== undefined) {
                                             titleInput.value = finalDetected.cleanTitle || currentTitle;
                                             this.autoResizeTextarea(titleInput);

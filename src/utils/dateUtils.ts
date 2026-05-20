@@ -6,6 +6,7 @@ import { parseLunarDateText, getCurrentYearLunarToSolar, solarToLunar, lunarToSo
  * 解决时区问题，确保在东八区正确显示日期
  */
 let dayStartMinutes = 0;
+let defaultSingleDateRole: SingleDateRole = 'deadline';
 
 function formatDateString(date: Date): string {
     const year = date.getFullYear();
@@ -45,6 +46,10 @@ export function getDayStartAdjustedDate(date: Date): Date {
 
 export function setDayStartTime(value?: string | number): void {
     dayStartMinutes = parseTimeToMinutes(value);
+}
+
+export function setSingleDateDefaultRole(value?: string): void {
+    defaultSingleDateRole = toSingleDateRole(value);
 }
 
 export function getDayStartMinutes(): number {
@@ -307,6 +312,43 @@ export interface ParseResult {
     endTime?: string;
     hasEndTime?: boolean;
     hasEndDate?: boolean;
+}
+
+export type SingleDateRole = 'deadline' | 'start';
+
+const DATE_TOKEN_PATTERN_SOURCE =
+    '(?:今天|今日|明天|明日|后天|大后天|下?周[一二三四五六日天]|下?星期[一二三四五六日天]|下?礼拜[一二三四五六日天]|\\d{8}|\\d{4}\\s*[年\\-\\/\\.]\\s*\\d{1,2}\\s*[月\\-\\/\\.]\\s*\\d{1,2}\\s*[日号]?|\\d{1,2}\\s*(?:月|[\\-\\/.])\\s*\\d{1,2}\\s*[日号]?)';
+
+function toSingleDateRole(value?: string): SingleDateRole {
+    return value === 'start' ? 'start' : 'deadline';
+}
+
+function detectSingleDateRoleFromText(text: string): SingleDateRole | undefined {
+    const source = text.trim();
+    if (!source) return undefined;
+
+    const dateToken = DATE_TOKEN_PATTERN_SOURCE;
+    const startWords = '(?:开始|起始|开工|启动|生效|执行|起)';
+    const deadlineWords = '(?:截止|截至|到期|最晚|不晚于|ddl|deadline|due|until)';
+
+    const deadlinePatterns = [
+        new RegExp(`${deadlineWords}\\s*.{0,8}${dateToken}`, 'i'),
+        new RegExp(`${dateToken}\\s*(?:截止|截至|到期|前|之前|以前)`, 'i'),
+    ];
+    if (deadlinePatterns.some(pattern => pattern.test(source))) {
+        return 'deadline';
+    }
+
+    const startPatterns = [
+        new RegExp(`(?:从|自|由)\\s*.{0,8}${dateToken}\\s*(?:${startWords})?`, 'i'),
+        new RegExp(`${dateToken}\\s*${startWords}`, 'i'),
+        /\b(?:from|start(?:ing)?|begin(?:ning)?s?)\b/i,
+    ];
+    if (startPatterns.some(pattern => pattern.test(source))) {
+        return 'start';
+    }
+
+    return undefined;
 }
 
 /**
@@ -651,9 +693,16 @@ function parseNaturalDateTimeInner(text: string): ParseResult {
 /**
  * 从标题自动识别日期时间
  */
-export function autoDetectDateTimeFromTitle(title: string, removeMode: 'none' | 'date' | 'all' = 'all'): ParseResult & { cleanTitle?: string } {
+export function autoDetectDateTimeFromTitle(
+    title: string,
+    removeMode: 'none' | 'date' | 'all' = 'all',
+    singleDateDefaultRole: SingleDateRole = defaultSingleDateRole
+): ParseResult & { cleanTitle?: string } {
     const rawParseResult = parseNaturalDateTime(title);
-    const parseResult = normalizeSingleDateAsDeadline(rawParseResult);
+    const parseResult = normalizeSingleDateByRole(
+        rawParseResult,
+        detectSingleDateRoleFromText(title) || toSingleDateRole(singleDateDefaultRole)
+    );
 
     if ((!parseResult.date && !parseResult.endDate) || removeMode === 'none') {
         return { ...parseResult, cleanTitle: title };
@@ -671,8 +720,16 @@ export function autoDetectDateTimeFromTitle(title: string, removeMode: 'none' | 
         /[\d一二三四五六七八九十两零〇半]+\s*个?小时[后以]后/gi,
     ];
 
+    const dateTokenForCleanup = DATE_TOKEN_PATTERN_SOURCE;
+    const dateRoleExpressions = [
+        new RegExp(`(?:从|自|由)?\\s*${dateTokenForCleanup}\\s*(?:开始|起始|开工|启动|生效|执行|起)`, 'gi'),
+        new RegExp(`(?:最晚|不晚于|ddl|deadline|due|until)\\s*.{0,8}${dateTokenForCleanup}`, 'gi'),
+        new RegExp(`${dateTokenForCleanup}\\s*(?:截止|截至|到期|前|之前|以前)`, 'gi'),
+    ];
+
     // 日期相关的表达式
     const dateOnlyExpressions = [
+        ...dateRoleExpressions,
         /今天|今日/gi,
         /明天|明日/gi,
         /后天/gi,
@@ -692,7 +749,8 @@ export function autoDetectDateTimeFromTitle(title: string, removeMode: 'none' | 
 
     // 其它连接词
     const otherExpressions = [
-        /截止|到期|\b(?:deadline|until)\b/gi,
+        /开始|起始|开工|启动|生效|执行/gi,
+        /截止|截至|到期|最晚|不晚于|\b(?:ddl|deadline|due|until)\b/gi,
         /到|至|~|-/gi,
     ];
 
@@ -716,9 +774,13 @@ export function autoDetectDateTimeFromTitle(title: string, removeMode: 'none' | 
     };
 }
 
-function normalizeSingleDateAsDeadline(result: ParseResult): ParseResult {
-    // 自动从标题识别到的单个日期/时间点按截止时间处理；范围表达式保留开始/结束。
+function normalizeSingleDateByRole(result: ParseResult, role: SingleDateRole): ParseResult {
+    // 自动从标题识别到的单个日期/时间点按设置归属处理；范围表达式保留开始/结束。
     if (!result.date || result.endDate || result.endTime) {
+        return result;
+    }
+
+    if (role === 'start') {
         return result;
     }
 
