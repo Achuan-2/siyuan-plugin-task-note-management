@@ -455,7 +455,6 @@
             /* 短事件布局优化 (TimeGrid 15-30min) */
             .fc-timegrid-event-short .fc-event-main-frame {
                 flex-direction: row;
-                align-items: center;
                 gap: 4px;
                 padding: 1px 4px;
             }

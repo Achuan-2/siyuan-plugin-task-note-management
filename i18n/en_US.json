@@ -1,6 +1,7 @@
 {
     "viewChangelog": "View Changelog",
     "cancel": "Cancel",
+    "skip": "Skip",
 
     "changelogNotification": "Task Note Management Plugin: Update Notification",
     "noUpdateNotes": "No update notes",
@@ -603,6 +604,11 @@
     "pomodoroStopConfirmContent": "Detected you've focused for ${minutes} minutes. Save this session as a Pomodoro?",
     "pomodoroRecorded": "Pomodoro recorded",
     "pomodoroRecordFailed": "Failed to record Pomodoro",
+    "pomodoroCompletionNoteTitle": "Record Pomodoro Note",
+    "pomodoroNote": "Pomodoro Note",
+    "pomodoroNoteSaved": "Pomodoro note saved",
+    "pomodoroNoteSaveFailed": "Failed to save Pomodoro note",
+    "pomodoroRecordNotFound": "Pomodoro record not found",
     "openedInNewWindow": "Opened in new window",
     "openWindowFailed": "Failed to open window",
     "pomodoroWindowUpdated": "Pomodoro timer updated in standalone window",

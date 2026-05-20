@@ -24,7 +24,7 @@ import { showStatsDialog } from "./stats/ShowStatsDialog";
 import { PomodoroManager } from "../utils/pomodoroManager";
 import { getNextLunarMonthlyDate, getNextLunarYearlyDate, getSolarDateLunarString } from "../utils/lunarUtils";
 import { BlockBindingDialog } from "./BlockBindingDialog";
-import { PomodoroRecordManager } from "../utils/pomodoroRecord";
+import { PomodoroRecordManager, type PomodoroSession } from "../utils/pomodoroRecord";
 import { Solar } from 'lunar-typescript';
 import { VipManager } from "../utils/vip";
 import { createPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
@@ -3267,6 +3267,14 @@ export class CalendarView {
             const relatedEventId = calendarEvent.extendedProps.eventId || "";
             const isHabitPomodoro = typeof relatedEventId === 'string' && relatedEventId.startsWith('habit');
             menu.addItem({
+                iconHTML: "✏️",
+                label: i18n("editPomodoro") || "编辑番茄钟",
+                click: () => {
+                    this.editPomodoroRecordFromCalendar(calendarEvent);
+                }
+            });
+
+            menu.addItem({
                 iconHTML: "📝",
                 label: isHabitPomodoro ? (i18n("viewPomodoroHabit") || "查看所属习惯") : i18n("viewPomodoroTask"),
                 click: async () => {
@@ -3352,18 +3360,39 @@ export class CalendarView {
                 });
             }
 
+
             menu.addItem({
                 iconHTML: "🗑️",
                 label: i18n("deletePomodoroRecord"),
                 click: async () => {
-                    confirm(i18n("deletePomodoroRecord"), i18n("confirmDelete"), async () => {
-                        const pomodoroManager = this.pomodoroRecordManager;
-                        // session id format in prompt: pomodoro-ID
-                        const sessionId = calendarEvent.id.replace('pomodoro-', '');
-                        await pomodoroManager.deleteSession(sessionId);
-                        await this.refreshEvents();
-                        window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
-                    });
+                    const session = this.getPomodoroSessionFromCalendarEvent(calendarEvent);
+                    const sessionTitle = String(
+                        session?.eventTitle
+                        || calendarEvent.extendedProps.eventTitle
+                        || calendarEvent.title
+                        || i18n("unnamedTask")
+                    ).replace(/^🍅\s*/, '');
+                    const sessionDuration = Math.max(0, Math.round(Number(session?.duration ?? calendarEvent.extendedProps.duration) || 0));
+                    const durationText = sessionDuration > 0
+                        ? `<p style="color: var(--b3-theme-on-surface-light); font-size: 12px; margin: 8px 0 0;">${i18n("duration") || "持续时长"}：${sessionDuration} ${i18n("minutes") || "分钟"}</p>`
+                        : "";
+
+                    confirm(
+                        "⚠️ " + (i18n("deletePomodoroRecord") || "删除番茄钟记录"),
+                        `<div style="padding: 16px;">
+                            <p>${i18n("confirmDeletePomodoro") || "确定要删除这个番茄钟记录吗？"}</p>
+                            <p style="font-weight: 600; margin: 8px 0 0;">${i18n("pomodoroTimer") || "番茄钟"}：${this.escapeHtml(sessionTitle)}</p>
+                            ${durationText}
+                        </div>`,
+                        async (dialog) => {
+                            dialog?.destroy?.();
+                            const pomodoroManager = this.pomodoroRecordManager;
+                            // session id format in prompt: pomodoro-ID
+                            const sessionId = calendarEvent.id.replace('pomodoro-', '');
+                            await pomodoroManager.deleteSession(sessionId);
+                            await this.refreshEvents();
+                            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
+                        });
                 }
             });
 
@@ -3765,6 +3794,209 @@ export class CalendarView {
         menu.open({
             x: event.clientX,
             y: event.clientY
+        });
+    }
+
+    private getPomodoroSessionFromCalendarEvent(calendarEvent: any): PomodoroSession | null {
+        const session = calendarEvent?.extendedProps?.originalSession;
+        if (session && session.id) {
+            return session as PomodoroSession;
+        }
+
+        const sessionId = String(calendarEvent?.id || '').replace(/^pomodoro-/, '');
+        if (!sessionId) return null;
+
+        const records = (this.pomodoroRecordManager as any)?.records || {};
+        for (const date in records) {
+            const found = records[date]?.sessions?.find((item: PomodoroSession) => item.id === sessionId);
+            if (found) return found;
+        }
+
+        return null;
+    }
+
+    private formatDateTimeLocalInputValue(date: Date): string {
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}T${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+    }
+
+    private async updatePomodoroRecordTimeEvent(info: any, isResize: boolean) {
+        try {
+            if (info.event.allDay) {
+                throw new Error('番茄钟记录不支持拖到全天区域');
+            }
+
+            const session = this.getPomodoroSessionFromCalendarEvent(info.event);
+            if (!session) {
+                throw new Error('番茄钟记录不存在');
+            }
+
+            let nextStartTime = info.event.start ? new Date(info.event.start) : null;
+            if (!nextStartTime || Number.isNaN(nextStartTime.getTime())) {
+                throw new Error('缺少番茄钟开始时间');
+            }
+            nextStartTime = this.snapToMinutes(nextStartTime, 5);
+
+            let nextEndTime = info.event.end ? new Date(info.event.end) : null;
+            if (nextEndTime && !Number.isNaN(nextEndTime.getTime())) {
+                nextEndTime = this.snapToMinutes(nextEndTime, 5);
+            } else {
+                const fallbackDuration = Math.max(1, Math.round(Number(session.duration) || 1));
+                nextEndTime = new Date(nextStartTime.getTime() + fallbackDuration * 60000);
+            }
+
+            if (nextEndTime.getTime() <= nextStartTime.getTime()) {
+                const fallbackDuration = Math.max(1, Math.round(Number(session.duration) || 1));
+                nextEndTime = new Date(nextStartTime.getTime() + fallbackDuration * 60000);
+            }
+
+            const duration = Math.max(1, Math.round((nextEndTime.getTime() - nextStartTime.getTime()) / 60000));
+            const plannedDuration = session.isCountUp
+                ? Math.max(1, Math.round(Number(session.plannedDuration) || duration))
+                : duration;
+            const updatedSession: PomodoroSession = {
+                ...session,
+                startTime: nextStartTime.toISOString(),
+                endTime: nextEndTime.toISOString(),
+                duration,
+                plannedDuration,
+                inProgress: false
+            };
+
+            if (updatedSession.type === 'work' && updatedSession.isCountUp) {
+                const base = Math.max(1, Math.round(Number(updatedSession.plannedDuration) || 25));
+                updatedSession.count = Math.max(1, Math.round(duration / base));
+            }
+
+            const success = await this.pomodoroRecordManager.updateSession(updatedSession);
+            if (!success) {
+                throw new Error('保存番茄钟记录失败');
+            }
+
+            info.event.setStart(nextStartTime);
+            info.event.setEnd(nextEndTime);
+            info.event.setExtendedProp('duration', duration);
+            info.event.setExtendedProp('originalSession', updatedSession);
+
+            showMessage(i18n("pomodoroUpdated") || (isResize ? "番茄钟时长已更新" : "番茄钟时间已更新"));
+            this.refreshEvents();
+            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
+        } catch (error) {
+            console.error(isResize ? '调整番茄钟时长失败:' : '更新番茄钟时间失败:', error);
+            showMessage(i18n("operationFailed"));
+            info.revert?.();
+        }
+    }
+
+    private editPomodoroRecordFromCalendar(calendarEvent: any) {
+        const session = this.getPomodoroSessionFromCalendarEvent(calendarEvent);
+        if (!session) {
+            showMessage(i18n("pomodoroRecordNotFound") || "未找到番茄钟记录", 3000, "error");
+            return;
+        }
+
+        const startTime = new Date(session.startTime);
+        const elapsedMinutes = Math.max(1, Math.round((Date.now() - startTime.getTime()) / 60000));
+        const initialDuration = session.inProgress && session.duration <= 0 ? elapsedMinutes : Math.max(1, Math.round(Number(session.duration) || 1));
+
+        const editDialog = new Dialog({
+            title: "✏️ " + (i18n("editPomodoro") || "编辑番茄钟"),
+            content: `
+                <div class="edit-pomodoro-dialog" style="padding: 16px;">
+                    <div class="b3-form__group">
+                        <label class="b3-form__label">${i18n("sessionType") || "会话类型"}</label>
+                        <select id="calendarEditSessionType" class="b3-select" style="width: 100%;">
+                            <option value="work">🍅 工作番茄</option>
+                            <option value="shortBreak">☕ 短休息</option>
+                            <option value="longBreak">🌴 长休息</option>
+                        </select>
+                    </div>
+                    <div class="b3-form__group">
+                        <label class="b3-form__label">${i18n("startTime") || "开始时间"}</label>
+                        <input type="datetime-local" id="calendarEditSessionStartTime" class="b3-text-field" style="width: 100%;" required>
+                    </div>
+                    <div class="b3-form__group">
+                        <label class="b3-form__label">${i18n("duration") || "持续时长"} (${i18n("minutes") || "分钟"})</label>
+                        <input type="number" id="calendarEditSessionDuration" class="b3-text-field" min="1" style="width: 100%;" required>
+                    </div>
+                    <div class="b3-form__group">
+                        <label class="b3-form__label">${i18n("pomodoroNote") || "番茄备注"}</label>
+                        <textarea id="calendarEditSessionNote" class="b3-text-field" rows="3" style="width: 100%; resize: vertical;" placeholder="这次专注完成了什么？">${this.escapeHtml(session.note || "")}</textarea>
+                    </div>
+                    <div class="b3-dialog__action">
+                        <button class="b3-button b3-button--cancel">${i18n("cancel")}</button>
+                        <button class="b3-button b3-button--primary" id="calendarConfirmEditPomodoro">${i18n("save")}</button>
+                    </div>
+                </div>
+            `,
+            width: "400px"
+        });
+
+        const typeSelect = editDialog.element.querySelector("#calendarEditSessionType") as HTMLSelectElement;
+        const startTimeInput = editDialog.element.querySelector("#calendarEditSessionStartTime") as HTMLInputElement;
+        const durationInput = editDialog.element.querySelector("#calendarEditSessionDuration") as HTMLInputElement;
+        const noteInput = editDialog.element.querySelector("#calendarEditSessionNote") as HTMLTextAreaElement;
+
+        typeSelect.value = session.type;
+        startTimeInput.value = this.formatDateTimeLocalInputValue(startTime);
+        durationInput.value = String(initialDuration);
+
+        editDialog.element.querySelector(".b3-button--cancel")?.addEventListener("click", () => {
+            editDialog.destroy();
+        });
+
+        editDialog.element.querySelector("#calendarConfirmEditPomodoro")?.addEventListener("click", async () => {
+            const type = typeSelect.value as 'work' | 'shortBreak' | 'longBreak';
+            const startTimeStr = startTimeInput.value;
+            const duration = Math.max(1, Math.round(Number(durationInput.value) || 0));
+            const note = noteInput.value.trim();
+
+            if (!startTimeStr || !duration) {
+                showMessage(i18n("pleaseEnterValidInfo") || "请输入有效信息", 3000, "error");
+                return;
+            }
+
+            try {
+                const nextStartTime = new Date(startTimeStr);
+                if (Number.isNaN(nextStartTime.getTime())) {
+                    showMessage(i18n("pleaseEnterValidInfo") || "请输入有效信息", 3000, "error");
+                    return;
+                }
+
+                const nextEndTime = new Date(nextStartTime.getTime() + duration * 60000);
+                const nextPlannedDuration = session.isCountUp
+                    ? Math.max(1, Math.round(Number(session.plannedDuration) || duration))
+                    : duration;
+                const updatedSession: PomodoroSession = {
+                    ...session,
+                    type,
+                    startTime: nextStartTime.toISOString(),
+                    endTime: nextEndTime.toISOString(),
+                    duration,
+                    plannedDuration: nextPlannedDuration,
+                    completed: true,
+                    inProgress: false,
+                    note
+                };
+
+                if (updatedSession.type === 'work' && updatedSession.isCountUp) {
+                    const base = Math.max(1, Math.round(Number(updatedSession.plannedDuration) || 25));
+                    updatedSession.count = Math.max(1, Math.round(duration / base));
+                }
+
+                const success = await this.pomodoroRecordManager.updateSession(updatedSession);
+                if (!success) {
+                    showMessage("❌ " + (i18n("editPomodoroFailed") || "修改番茄钟失败"), 3000, "error");
+                    return;
+                }
+
+                showMessage("✅ " + (i18n("editPomodoroSuccess") || "修改番茄钟成功"), 3000, "info");
+                editDialog.destroy();
+                await this.refreshEvents();
+                window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
+            } catch (error) {
+                console.error("修改番茄钟失败:", error);
+                showMessage("❌ " + (i18n("editPomodoroFailed") || "修改番茄钟失败"), 3000, "error");
+            }
         });
     }
 
@@ -4533,19 +4765,83 @@ export class CalendarView {
         if (props.type === 'pomodoro') {
             const mainFrame = document.createElement('div');
             mainFrame.className = 'fc-event-main-frame';
-            mainFrame.style.padding = '2px 4px';
+            mainFrame.style.cssText = `
+                padding: 2px 4px;
+                height: 100%;
+                box-sizing: border-box;
+                display: flex;
+                flex-direction: column;
+                min-height: 0;
+                overflow: hidden;
+            `;
+
+            const titleEl = document.createElement('div');
+            titleEl.className = 'fc-event-title';
+            titleEl.style.cssText = `
+                flex: 0 0 auto;
+                min-height: 1.2em;
+                line-height: 1.2;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: clip;
+                font-weight: 600;
+            `;
+            titleEl.textContent = event.title;
+            mainFrame.appendChild(titleEl);
 
             if (timeText) {
                 const timeEl = document.createElement('div');
                 timeEl.className = 'fc-event-time';
+                timeEl.style.cssText = `
+                    flex: 0 0 auto;
+                    line-height: 1.2;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: clip;
+                `;
                 timeEl.textContent = timeText;
                 mainFrame.appendChild(timeEl);
             }
 
-            const titleEl = document.createElement('div');
-            titleEl.className = 'fc-event-title';
-            titleEl.textContent = event.title;
-            mainFrame.appendChild(titleEl);
+            const durationMinutes = Math.max(0, Math.round(Number(props.duration) || 0));
+            if (durationMinutes > 0) {
+                const durationEl = document.createElement('div');
+                durationEl.className = 'pomodoro-event-duration';
+                durationEl.style.cssText = `
+                    flex: 0 0 auto;
+                    font-size: 0.85em;
+                    opacity: 0.85;
+                    margin-top: 2px;
+                    line-height: 1.2;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: clip;
+                `;
+                durationEl.textContent = `⏱ ${durationMinutes} ${i18n("minutes") || "分钟"}`;
+                mainFrame.appendChild(durationEl);
+            }
+
+            const note = String(props.note || '').trim();
+            if (note) {
+                const noteEl = document.createElement('div');
+                noteEl.className = 'reminder-event-note';
+                noteEl.style.cssText = `
+                    flex: 1 1 auto;
+                    min-height: 0;
+                    margin-top: 2px;
+                    overflow: hidden;
+                    display: -webkit-box;
+                    -webkit-line-clamp: 2;
+                    -webkit-box-orient: vertical;
+                    line-height: 1.2;
+                    font-size: 0.85em;
+                `;
+                noteEl.innerHTML = this.lute ? this.lute.Md2HTML(note) : this.escapeHtml(note);
+                noteEl.querySelectorAll('p, ul, ol, blockquote').forEach((el: HTMLElement) => {
+                    el.style.margin = '0';
+                });
+                mainFrame.appendChild(noteEl);
+            }
 
             return { domNodes: [mainFrame] };
         }
@@ -5310,6 +5606,11 @@ export class CalendarView {
             await this.allDayReorderPromise;
         }
 
+        if (info.event.extendedProps.type === 'pomodoro') {
+            await this.updatePomodoroRecordTimeEvent(info, false);
+            return;
+        }
+
         if (info.event.extendedProps.type === 'habitReminderTime') {
             await this.updateHabitReminderTimeEvent(info);
             return;
@@ -5378,6 +5679,11 @@ export class CalendarView {
     }
 
     private async handleEventResize(info) {
+        if (info.event.extendedProps.type === 'pomodoro') {
+            await this.updatePomodoroRecordTimeEvent(info, true);
+            return;
+        }
+
         if (info.event.extendedProps.type === 'habitReminderTime') {
             await this.updateHabitReminderTimeEvent(info);
             return;
@@ -6981,15 +7287,16 @@ export class CalendarView {
                             borderColor: 'transparent', // Match border to background
                             textColor: 'var(--b3-theme-on-background)',
                             className: 'pomodoro-event',
-                            editable: false,
-                            startEditable: false,
-                            durationEditable: false,
+                            editable: true,
+                            startEditable: true,
+                            durationEditable: true,
                             allDay: false,
                             extendedProps: {
                                 type: 'pomodoro',
                                 eventId: session.eventId, // Associated Task ID
                                 eventTitle: session.eventTitle,
                                 duration: session.duration,
+                                note: session.note || '',
                                 parentId: session.eventId, // Map associated task ID to parentId for easy access
                                 originalSession: session
                             }
@@ -8393,6 +8700,16 @@ export class CalendarView {
                     `<div style="color: var(--b3-theme-on-surface); margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">`,
                     `<span style="opacity: 0.7;">🕐</span>`,
                     `<span>${startTime} - ${endTime} (${reminder.duration}m)</span>`,
+                    `</div>`
+                );
+            }
+
+            const note = String(reminder.note || '').trim();
+            if (note) {
+                htmlParts.push(
+                    `<div style="color: var(--b3-theme-on-surface-light); margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--b3-theme-border); font-size: 12px;">`,
+                    `<div style="margin-bottom: 4px; opacity: 0.7;">${i18n("pomodoroNote") || "番茄备注"}:</div>`,
+                    `<div>${this.lute ? this.lute.Md2HTML(note) : this.escapeHtml(note)}</div>`,
                     `</div>`
                 );
             }

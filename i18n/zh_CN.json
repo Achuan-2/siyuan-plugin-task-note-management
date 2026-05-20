@@ -1,6 +1,7 @@
 {
     "viewChangelog": "查看更新日志",
     "cancel": "取消",
+    "skip": "跳过",
 
     "changelogNotification": "任务笔记管理插件：版本更新提醒",
     "noUpdateNotes": "无更新内容",
@@ -603,6 +604,11 @@
     "pomodoroStopConfirmContent": "检测到你已专注 ${minutes} 分钟，是否将此次专注记录为番茄？",
     "pomodoroRecorded": "已记录此次专注",
     "pomodoroRecordFailed": "记录专注失败",
+    "pomodoroCompletionNoteTitle": "记录番茄备注",
+    "pomodoroNote": "番茄备注",
+    "pomodoroNoteSaved": "已保存番茄备注",
+    "pomodoroNoteSaveFailed": "番茄备注保存失败",
+    "pomodoroRecordNotFound": "未找到番茄钟记录",
     "openedInNewWindow": "已在新窗口中打开",
     "openWindowFailed": "打开窗口失败",
     "pomodoroWindowUpdated": "已更新独立窗口中的番茄钟",
@@ -1730,7 +1736,7 @@
     "renderProjectFilterFailed": "渲染项目筛选器失败",
     "renderCategoryFilterFailed": "渲染分类筛选器失败",
     "viewPomodoroTask": "查看所属任务",
-    "deletePomodoroRecord": "删除记录",
+    "deletePomodoroRecord": "删除番茄钟记录",
     "date": "日期",
     "clearSelection": "清除选择",
     "allDates": "全部日期",

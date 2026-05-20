@@ -5628,10 +5628,10 @@ export class PomodoroTimer {
         eventId: string,
         eventTitle: string,
         originalDuration: number
-    ): Promise<void> {
+    ): Promise<PomodoroSession | null> {
         const recordedMinutes = Math.max(1, Math.round(Number(minutes) || 0));
         try {
-            await this.finishActiveWorkSession(
+            const interruptedSession = await this.finishActiveWorkSession(
                 recordedMinutes,
                 eventId,
                 eventTitle,
@@ -5643,9 +5643,12 @@ export class PomodoroTimer {
             this.updateStatsDisplay();
             window.dispatchEvent(new CustomEvent('reminderUpdated'));
             showMessage(i18n('pomodoroRecorded') || '已记录此次专注', 2000);
+            this.openPomodoroCompletionNotePopup(interruptedSession);
+            return interruptedSession;
         } catch (err) {
             console.error('记录番茄专注失败:', err);
             showMessage(i18n('pomodoroRecordFailed') || '记录失败', 3000);
+            return null;
         }
     }
 
