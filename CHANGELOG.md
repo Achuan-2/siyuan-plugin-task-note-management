@@ -1,12 +1,16 @@
-
 ## v6.8.10 / 20260521
-- 🎨 番茄钟支持备注
+
+- 🎨 番茄钟支持备注 [#299](https://github.com/Achuan-2/siyuan-plugin-task-note-management/issues/299)
+
+  <img alt="1779295135006" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/1779295135006-20260521003859-n1kcfou.png" style="width: 410px;" />
+
+  <img alt="image" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/image-20260521003908-598yf01.png" style="width: 409px;" />
 - 🎨 日历视图支持显示番茄钟备注、支持编辑番茄钟数据
+
+  <img alt="PixPin_2026-05-21_00-41-25" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2026-05-21_00-41-25-20260521004129-sn4nfqf.png" />
 - 🎨 番茄钟：正计时暂停优化
 - 🎨 番茄钟优化保存：记录番茄钟开始时间，如果意外终止方便补录 [#301](https://github.com/Achuan-2/siyuan-plugin-task-note-management/issues/301)
-## v6.8.9 / 20260520
-- 🎨 项目看板：子任务设置放弃，则不显示在父子任务列表
-- 🎨 右键块菜单创建任务，如果块的父标题或文档绑定了未完成任务，则创建任务自动为其子任务
+
 
 ## v6.8.8 / 20260520
 - 🎨 任务提醒支持跳过周末和节假日
