@@ -9454,6 +9454,8 @@ export class ProjectKanbanView {
             content.appendChild(taskEl);
 
             let children = childTasks.filter(t => t.parentId === task.id);
+            // 过滤掉放弃状态的子任务
+            children = children.filter(t => !this.isAbandonedStatus(t.kanbanStatus));
             // 如果不显示已完成的子任务，则过滤掉已完成的子任务
             if (!this.showCompletedSubtasks) {
                 children = children.filter(t => !t.completed);
@@ -10021,6 +10023,8 @@ export class ProjectKanbanView {
             content.appendChild(taskEl);
 
             let children = childTasks.filter(t => t.parentId === task.id);
+            // 过滤掉放弃状态的子任务
+            children = children.filter(t => !this.isAbandonedStatus(t.kanbanStatus));
             // 如果不显示已完成的子任务，则过滤掉已完成的子任务
             if (!this.showCompletedSubtasks) {
                 children = children.filter(t => !t.completed);
