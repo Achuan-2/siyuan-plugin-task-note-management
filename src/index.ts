@@ -3250,6 +3250,36 @@ export default class ReminderPlugin extends Plugin {
         this.addCleanup(() => clearTimeout(initCheckTimer));
     }
 
+    private isRecurringReminder(reminder: any): boolean {
+        return !!(reminder?.isRepeatInstance || reminder?.repeat?.enabled);
+    }
+
+    private shouldTreatOnlyStartDateAsDeadline(reminder: any): boolean {
+        return !!(reminder?.date && !reminder?.endDate && this.isRecurringReminder(reminder));
+    }
+
+    private isReminderActiveForDailyNotification(reminder: any, today: string): boolean {
+        const startDate = reminder?.date || reminder?.endDate;
+        if (!startDate || !today) return false;
+
+        if (reminder.endDate) {
+            return (compareDateStrings(startDate, today) <= 0 &&
+                compareDateStrings(today, reminder.endDate) <= 0) ||
+                compareDateStrings(reminder.endDate, today) < 0;
+        }
+
+        return compareDateStrings(startDate, today) <= 0;
+    }
+
+    private isReminderOverdueForDailyNotification(reminder: any, today: string): boolean {
+        if (!reminder || !today) return false;
+        if (reminder.endDate) {
+            return compareDateStrings(reminder.endDate, today) < 0;
+        }
+        return this.shouldTreatOnlyStartDateAsDeadline(reminder) &&
+            compareDateStrings(reminder.date, today) < 0;
+    }
+
     private async checkReminders() {
         try {
             const { generateRepeatInstances } = await import("./utils/repeatUtils");
@@ -3425,15 +3455,7 @@ export default class ReminderPlugin extends Plugin {
                     return false;
                 }
 
-                if (reminder.endDate) {
-                    // 跨天事件：只要今天在事件的时间范围内就显示，或者事件已过期但结束日期在今天之前
-                    return (compareDateStrings(reminder.date, today) <= 0 &&
-                        compareDateStrings(today, reminder.endDate) <= 0) ||
-                        compareDateStrings(reminder.endDate, today) < 0;
-                } else {
-                    // 单日事件：今天或过期的都显示在今日
-                    return reminder.date === today || compareDateStrings(reminder.date, today) < 0;
-                }
+                return this.isReminderActiveForDailyNotification(reminder, today);
             });
 
             // 收集需要提醒的今日事项
@@ -3470,9 +3492,7 @@ export default class ReminderPlugin extends Plugin {
                     date: reminder.date,
                     endDate: reminder.endDate,
                     isAllDay: isAllDay,
-                    isOverdue: reminder.endDate ?
-                        compareDateStrings(reminder.endDate, today) < 0 :
-                        compareDateStrings(reminder.date, today) < 0,
+                    isOverdue: this.isReminderOverdueForDailyNotification(reminder, today),
                     ...categoryInfo
                 };
 
