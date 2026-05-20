@@ -29,6 +29,7 @@ type PomodoroSession = {
     completed: boolean;
     isCountUp?: boolean;
     count?: number;
+    inProgress?: boolean;
 };
 
 // 注册 ECharts 组件
@@ -433,6 +434,10 @@ class PomodoroStatsView {
         const date = new Date(session.startTime);
         const dateStr = date.toLocaleDateString(getLocaleTag());
         const timeStr = date.toLocaleTimeString(getLocaleTag(), { hour: '2-digit', minute: '2-digit' });
+        const durationText = session.inProgress ? "待补录" : `${session.duration}${i18n("minutes")}`;
+        const statusText = session.inProgress
+            ? '<span class="record-incomplete">待补录</span>'
+            : (session.completed ? '<span class="record-completed">✅</span>' : '<span class="record-incomplete">⏸</span>');
 
         return `
             <div class="record-item ${session.type}">
@@ -444,11 +449,12 @@ class PomodoroStatsView {
                     <div class="record-meta">
                         <span class="record-date">${dateStr}</span>
                         <span class="record-time">${timeStr}</span>
-                        <span class="record-duration">${session.duration}${i18n("minutes")}</span>
-                        ${session.completed ? '<span class="record-completed">✅</span>' : '<span class="record-incomplete">⏸</span>'}
+                        <span class="record-duration">${durationText}</span>
+                        ${statusText}
                     </div>
                 </div>
                 <div class="record-actions">
+                    <button class="edit-btn ariaLabel" data-session-id="${session.id}" aria-label="${i18n("edit")}">✏️</button>
                     <button class="delete-btn ariaLabel" data-session-id="${session.id}" aria-label="${i18n("delete")}">🗑️</button>
                 </div>
             </div>
@@ -1597,6 +1603,124 @@ class PomodoroStatsView {
         return colors[index % colors.length];
     }
 
+    private findSessionById(sessionId: string): PomodoroSession | null {
+        const allRecords = (this.recordManager as any).records || {};
+        for (const date in allRecords) {
+            const session = allRecords[date]?.sessions?.find((item: PomodoroSession) => item.id === sessionId);
+            if (session) {
+                return session;
+            }
+        }
+        return null;
+    }
+
+    private formatDateTimeLocal(date: Date): string {
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}T${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+    }
+
+    private async handleEditSession(sessionId: string) {
+        const session = this.findSessionById(sessionId);
+        if (!session) {
+            showMessage(i18n("editPomodoroFailed") || "修改番茄钟失败", 3000, "error");
+            return;
+        }
+
+        const startTime = new Date(session.startTime);
+        const elapsedMinutes = Math.max(1, Math.round((Date.now() - startTime.getTime()) / 60000));
+        const initialDuration = session.inProgress && session.duration <= 0 ? elapsedMinutes : session.duration;
+
+        const editDialog = new Dialog({
+            title: "✏️ " + (i18n("editPomodoro") || "编辑番茄钟"),
+            content: `
+                <div class="edit-pomodoro-dialog" style="padding: 16px;">
+                    <div class="b3-form__group">
+                        <label class="b3-form__label">${i18n("sessionType") || "会话类型"}</label>
+                        <select id="editStatsSessionType" class="b3-select" style="width: 100%;">
+                            <option value="work">🍅 工作番茄</option>
+                            <option value="shortBreak">☕ 短休息</option>
+                            <option value="longBreak">🌴 长休息</option>
+                        </select>
+                    </div>
+                    <div class="b3-form__group">
+                        <label class="b3-form__label">${i18n("startTime") || "开始时间"}</label>
+                        <input type="datetime-local" id="editStatsSessionStartTime" class="b3-text-field" style="width: 100%;" required>
+                    </div>
+                    <div class="b3-form__group">
+                        <label class="b3-form__label">${i18n("duration") || "持续时长"} (${i18n("minutes") || "分钟"})</label>
+                        <input type="number" id="editStatsSessionDuration" class="b3-text-field" min="1" style="width: 100%;" required>
+                    </div>
+                    <div class="b3-dialog__action">
+                        <button class="b3-button b3-button--cancel">${i18n("cancel")}</button>
+                        <button class="b3-button b3-button--primary" id="confirmEditStatsPomodoro">${i18n("save")}</button>
+                    </div>
+                </div>
+            `,
+            width: "400px"
+        });
+
+        const typeSelect = editDialog.element.querySelector("#editStatsSessionType") as HTMLSelectElement;
+        const startTimeInput = editDialog.element.querySelector("#editStatsSessionStartTime") as HTMLInputElement;
+        const durationInput = editDialog.element.querySelector("#editStatsSessionDuration") as HTMLInputElement;
+
+        typeSelect.value = session.type;
+        startTimeInput.value = this.formatDateTimeLocal(startTime);
+        durationInput.value = String(initialDuration);
+
+        editDialog.element.querySelector(".b3-button--cancel")?.addEventListener("click", () => {
+            editDialog.destroy();
+        });
+
+        editDialog.element.querySelector("#confirmEditStatsPomodoro")?.addEventListener("click", async () => {
+            const type = typeSelect.value as 'work' | 'shortBreak' | 'longBreak';
+            const nextStartTime = new Date(startTimeInput.value);
+            const duration = parseInt(durationInput.value, 10);
+
+            if (!startTimeInput.value || Number.isNaN(nextStartTime.getTime()) || !duration || duration <= 0) {
+                showMessage(i18n("pleaseEnterValidInfo") || "请输入有效信息", 3000, "error");
+                return;
+            }
+
+            const plannedDuration = session.isCountUp
+                ? Math.max(1, Math.round(Number(session.plannedDuration) || duration))
+                : duration;
+            const nextSession: PomodoroSession = {
+                ...session,
+                type,
+                startTime: nextStartTime.toISOString(),
+                endTime: new Date(nextStartTime.getTime() + duration * 60000).toISOString(),
+                duration,
+                plannedDuration,
+                completed: true,
+                isCountUp: type === 'work' ? !!session.isCountUp : false,
+                inProgress: false
+            };
+
+            if (nextSession.type === 'work') {
+                nextSession.count = nextSession.isCountUp
+                    ? Math.max(1, Math.round(duration / Math.max(1, plannedDuration)))
+                    : (typeof session.count === 'number' && session.count > 0 ? session.count : 1);
+            } else {
+                delete nextSession.count;
+                delete nextSession.isCountUp;
+            }
+
+            try {
+                const success = await this.recordManager.updateSession(nextSession);
+                if (success) {
+                    await this.recordManager.refreshData();
+                    editDialog.destroy();
+                    this.updateContent();
+                    showMessage(i18n("editPomodoroSuccess") || "修改番茄钟成功");
+                } else {
+                    showMessage(i18n("editPomodoroFailed") || "修改番茄钟失败", 3000, "error");
+                }
+            } catch (error) {
+                console.error('修改会话失败:', error);
+                showMessage(i18n("editPomodoroFailed") || "修改番茄钟失败", 3000, "error");
+            }
+        });
+    }
+
     private handleClick(event: Event) {
         const target = event.target as HTMLElement;
 
@@ -1643,8 +1767,17 @@ class PomodoroStatsView {
             this.handleNavigation(action);
         }
 
-        if (target.classList.contains('delete-btn')) {
-            const sessionId = target.dataset.sessionId;
+        const editBtn = target.closest('.edit-btn') as HTMLElement;
+        if (editBtn) {
+            const sessionId = editBtn.dataset.sessionId;
+            if (sessionId) {
+                this.handleEditSession(sessionId);
+            }
+        }
+
+        const deleteBtn = target.closest('.delete-btn') as HTMLElement;
+        if (deleteBtn) {
+            const sessionId = deleteBtn.dataset.sessionId;
             if (sessionId) {
                 this.handleDeleteSession(sessionId);
             }

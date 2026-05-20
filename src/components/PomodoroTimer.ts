@@ -71,6 +71,9 @@ export class PomodoroTimer {
     private isExpanded: boolean = true;
     private isMinimized: boolean = false;
     private startTime: number = 0; // 记录开始时间
+    private phaseStartTime: number = 0; // 当前阶段真实开始时间（不随暂停恢复而重算）
+    private activeWorkSessionId: string | null = null; // 开始专注时预创建的记录ID
+    private activeWorkSessionStartTime: number = 0; // 当前专注记录的真实开始时间
     private pausedTime: number = 0; // 记录暂停时累计的时间
 
 
@@ -288,6 +291,20 @@ export class PomodoroTimer {
         this.isRunning = inheritState.isRunning && !inheritState.isPaused;
         this.isPaused = false;
 
+        if (isTaskInheritance) {
+            this.phaseStartTime = Date.now();
+            this.activeWorkSessionId = null;
+            this.activeWorkSessionStartTime = this.phaseStartTime;
+        } else {
+            this.phaseStartTime = inheritState.phaseStartTime || inheritState.startTime || this.startTime || 0;
+            this.activeWorkSessionId = inheritState.activeWorkSessionId || null;
+            this.activeWorkSessionStartTime = inheritState.activeWorkSessionStartTime || this.phaseStartTime || 0;
+        }
+
+        if (this.isRunning && this.isWorkPhase && !this.activeWorkSessionId) {
+            void this.ensureActiveWorkSessionStarted(this.activeWorkSessionStartTime || this.phaseStartTime || Date.now());
+        }
+
         // 保存继承的窗口位置信息（稍后在窗口创建后应用）
         if (inheritState.windowBounds) {
             this.inheritedWindowBounds = inheritState.windowBounds;
@@ -369,6 +386,9 @@ export class PomodoroTimer {
             blockId: this.reminder.blockId,
             currentPhaseOriginalDuration: this.currentPhaseOriginalDuration,
             startTime: this.startTime,
+            phaseStartTime: this.phaseStartTime,
+            activeWorkSessionId: this.activeWorkSessionId,
+            activeWorkSessionStartTime: this.activeWorkSessionStartTime,
             lastPomodoroTriggerTime: this.lastPomodoroTriggerTime,
             randomRestCount: this.randomRestCount,
             randomRestEnabled: this.randomRestEnabled,
@@ -380,6 +400,85 @@ export class PomodoroTimer {
             normalWindowBounds: this.normalWindowBounds, // 新增：保存的正常窗口位置
             randomRestNextTriggerTime: this.randomRestNextTriggerTime // 新增：记录下次随机休息时间
         };
+    }
+
+    private resetPhaseTracking() {
+        this.phaseStartTime = 0;
+        this.activeWorkSessionId = null;
+        this.activeWorkSessionStartTime = 0;
+    }
+
+    private getWorkSessionStartDate(): Date | undefined {
+        const startTimestamp = this.activeWorkSessionStartTime || this.phaseStartTime || this.startTime;
+        return startTimestamp > 0 ? new Date(startTimestamp) : undefined;
+    }
+
+    private async ensureActiveWorkSessionStarted(startTimestamp?: number) {
+        if (!this.isWorkPhase || this.activeWorkSessionId) {
+            return;
+        }
+
+        const sessionStartTime = startTimestamp || this.phaseStartTime || Date.now();
+        this.phaseStartTime = this.phaseStartTime || sessionStartTime;
+        this.activeWorkSessionStartTime = sessionStartTime;
+
+        try {
+            this.activeWorkSessionId = await this.recordManager.startWorkSession(
+                this.reminder.id,
+                this.reminder.title || (i18n('pomodoroFocusDefault') || '番茄专注'),
+                this.currentPhaseOriginalDuration || this.settings.workDuration || 25,
+                this.isCountUp,
+                new Date(sessionStartTime)
+            );
+        } catch (error) {
+            console.error('[PomodoroTimer] 创建进行中番茄记录失败:', error);
+            this.activeWorkSessionId = null;
+        }
+    }
+
+    private async finishActiveWorkSession(
+        minutes: number,
+        eventId: string,
+        eventTitle: string,
+        originalDuration: number,
+        completed: boolean,
+        isCountUp: boolean,
+        endTime: Date = new Date()
+    ) {
+        const startTime = this.getWorkSessionStartDate();
+        const activeSessionId = this.activeWorkSessionId;
+
+        if (activeSessionId) {
+            await this.recordManager.finishWorkSession(
+                activeSessionId,
+                minutes,
+                eventId,
+                eventTitle,
+                originalDuration,
+                completed,
+                isCountUp,
+                {
+                    startTime,
+                    endTime
+                }
+            );
+        } else {
+            await this.recordManager.recordWorkSession(
+                minutes,
+                eventId,
+                eventTitle,
+                originalDuration,
+                completed,
+                isCountUp,
+                {
+                    startTime,
+                    endTime
+                }
+            );
+        }
+
+        this.activeWorkSessionId = null;
+        this.activeWorkSessionStartTime = 0;
     }
 
     /**
@@ -4922,6 +5021,14 @@ export class PomodoroTimer {
             }
         }
 
+        this.phaseStartTime = this.phaseStartTime || this.startTime || Date.now();
+        if (this.isWorkPhase) {
+            await this.ensureActiveWorkSessionStarted(this.phaseStartTime);
+        } else {
+            this.activeWorkSessionId = null;
+            this.activeWorkSessionStartTime = 0;
+        }
+
         // 确保音频播放权限已被获取（特别是为了结束提示音），强制重新初始化以处理权限丢失
         await this.initializeAudioPlayback(true);
 
@@ -5033,6 +5140,7 @@ export class PomodoroTimer {
         this.isPaused = false;
         this.startTime = 0;
         this.pausedTime = 0;
+        this.phaseStartTime = 0;
 
         if (this.timer) {
             clearInterval(this.timer);
@@ -5142,6 +5250,7 @@ export class PomodoroTimer {
         this.isPaused = false;
         this.pausedTime = 0; // 重置暂停时间
         this.startTime = 0; // 重置开始时间
+        this.resetPhaseTracking();
         this.lastPomodoroTriggerTime = -1; // 重置上次触发时间
 
         // 设置当前阶段的原始时长
@@ -5181,6 +5290,7 @@ export class PomodoroTimer {
         this.isPaused = false;
         this.pausedTime = 0; // 重置暂停时间
         this.startTime = 0; // 重置开始时间
+        this.resetPhaseTracking();
         this.lastPomodoroTriggerTime = -1; // 重置上次触发时间
 
         // 设置当前阶段的原始时长
@@ -5219,6 +5329,7 @@ export class PomodoroTimer {
         this.isPaused = false;
         this.pausedTime = 0; // 重置暂停时间
         this.startTime = 0; // 重置开始时间
+        this.resetPhaseTracking();
         this.lastPomodoroTriggerTime = -1; // 重置上次触发时间
 
         // 设置当前阶段的原始时长
@@ -5245,7 +5356,7 @@ export class PomodoroTimer {
     ): Promise<void> {
         const recordedMinutes = Math.max(1, Math.round(Number(minutes) || 0));
         try {
-            await this.recordManager.recordWorkSession(
+            await this.finishActiveWorkSession(
                 recordedMinutes,
                 eventId,
                 eventTitle,
@@ -5283,6 +5394,10 @@ export class PomodoroTimer {
                         String(i18n('pomodoroStopConfirmContent', { minutes: minutes.toString() }) || `检测到你已专注 ${minutes} 分钟，是否将此次专注记录为番茄？`),
                         async () => {
                             await this.recordInterruptedWorkSession(minutes, eventId, eventTitle, this.currentPhaseOriginalDuration);
+                        },
+                        () => {
+                            this.activeWorkSessionId = null;
+                            this.activeWorkSessionStartTime = 0;
                         }
                     );
                 } else {
@@ -5292,9 +5407,16 @@ export class PomodoroTimer {
                         String(i18n('pomodoroStopConfirmContent', { minutes: minutes.toString() }) || `检测到你已专注 ${minutes} 分钟，是否将此次专注记录为番茄？`),
                         async () => {
                             await this.recordInterruptedWorkSession(minutes, eventId, eventTitle, this.currentPhaseOriginalDuration);
+                        },
+                        () => {
+                            this.activeWorkSessionId = null;
+                            this.activeWorkSessionStartTime = 0;
                         }
                     );
                 }
+            } else {
+                this.activeWorkSessionId = null;
+                this.activeWorkSessionStartTime = 0;
             }
         }
 
@@ -5306,6 +5428,7 @@ export class PomodoroTimer {
         this.breakTimeLeft = 0;
         this.pausedTime = 0; // 重置暂停时间
         this.startTime = 0; // 重置开始时间
+        this.phaseStartTime = 0;
         // 注释掉清空番茄计数的代码，保持总计数
         // this.completedPomodoros = 0;
 
@@ -5617,7 +5740,7 @@ export class PomodoroTimer {
                 // 计算实际完成的时间（分钟）
                 const actualDuration = Math.round(this.totalTime / 60);
 
-                await this.recordManager.recordWorkSession(
+                await this.finishActiveWorkSession(
                     actualDuration,
                     eventId,
                     eventTitle,
@@ -5625,6 +5748,7 @@ export class PomodoroTimer {
                     true,
                     false
                 );
+                this.phaseStartTime = 0;
             } else {
                 // 正计时模式完成番茄后也要停止随机微休息
                 this.stopRandomRestTimer();
@@ -5698,8 +5822,13 @@ export class PomodoroTimer {
                 eventTitle,
                 this.currentPhaseOriginalDuration,
                 this.isLongBreak,
-                true
+                true,
+                {
+                    startTime: this.phaseStartTime > 0 ? new Date(this.phaseStartTime) : undefined,
+                    endTime: new Date()
+                }
             );
+            this.phaseStartTime = 0;
 
             // 检查是否启用自动模式并进入下一阶段
             if (this.autoMode) {
@@ -5806,7 +5935,7 @@ export class PomodoroTimer {
                 // 在倒计时模式下，实际完成时间 = totalTime（设定的总时间）
                 const actualDuration = Math.round(this.totalTime / 60);
 
-                await this.recordManager.recordWorkSession(
+                await this.finishActiveWorkSession(
                     actualDuration,
                     eventId,
                     eventTitle,
@@ -5814,6 +5943,7 @@ export class PomodoroTimer {
                     true,
                     false
                 );
+                this.phaseStartTime = 0;
 
                 // 更新番茄数量计数
                 this.completedPomodoros++;
@@ -5905,8 +6035,13 @@ export class PomodoroTimer {
                     eventTitle,
                     this.currentPhaseOriginalDuration,
                     this.isLongBreak,
-                    true
+                    true,
+                    {
+                        startTime: this.phaseStartTime > 0 ? new Date(this.phaseStartTime) : undefined,
+                        endTime: new Date()
+                    }
                 );
+                this.phaseStartTime = 0;
 
                 const breakType = this.isLongBreak ? (i18n('pomodoroLongBreak') || '长时休息') : (i18n('pomodoroBreak') || '短时休息');
 
@@ -6038,7 +6173,11 @@ export class PomodoroTimer {
         }
 
         // 开始计时
-        this.startTime = Date.now();
+        const phaseStart = Date.now();
+        this.startTime = phaseStart;
+        this.phaseStartTime = phaseStart;
+        this.activeWorkSessionId = null;
+        this.activeWorkSessionStartTime = 0;
         this.timer = window.setInterval(() => {
             this.reconcileTimerState();
         }, 500);
@@ -6102,7 +6241,10 @@ export class PomodoroTimer {
         }
 
         // 开始计时
-        this.startTime = Date.now();
+        const phaseStart = Date.now();
+        this.startTime = phaseStart;
+        this.phaseStartTime = phaseStart;
+        await this.ensureActiveWorkSessionStarted(phaseStart);
         this.timer = window.setInterval(() => {
             this.reconcileTimerState();
         }, 500);
@@ -6884,7 +7026,10 @@ export class PomodoroTimer {
                     timeElapsed: this.timeElapsed,
                     timeLeft: this.timeLeft,
                     breakTimeLeft: this.breakTimeLeft,
-                    pausedTime: this.pausedTime
+                    pausedTime: this.pausedTime,
+                    phaseStartTime: this.phaseStartTime,
+                    activeWorkSessionId: this.activeWorkSessionId,
+                    activeWorkSessionStartTime: this.activeWorkSessionStartTime
                 };
             }
         }
@@ -7404,16 +7549,46 @@ export class PomodoroTimer {
         const minutes = elapsedSecs / 60;
         const originalDuration = state ? state.currentPhaseOriginalDuration : this.currentPhaseOriginalDuration;
         const targetBlockId = (state && typeof state.blockId === "string" ? state.blockId : "") || this.reminder?.blockId;
+        const activeSessionId = state ? state.activeWorkSessionId : this.activeWorkSessionId;
+        const startTimestamp = state
+            ? (state.activeWorkSessionStartTime || state.phaseStartTime || state.startTime)
+            : (this.activeWorkSessionStartTime || this.phaseStartTime || this.startTime);
+        const startTime = startTimestamp > 0 ? new Date(startTimestamp) : undefined;
+        const isCountUpMode = state ? state.isCountUp : this.isCountUp;
 
         try {
-            await this.recordManager.recordWorkSession(
-                minutes,
-                eventId,
-                eventTitle,
-                originalDuration || 25,
-                false, // 标记为未完成（中途切换或手动停止）
-                state ? state.isCountUp : this.isCountUp
-            );
+            if (activeSessionId) {
+                await this.recordManager.finishWorkSession(
+                    activeSessionId,
+                    minutes,
+                    eventId,
+                    eventTitle,
+                    originalDuration || 25,
+                    false, // 标记为未完成（中途切换或手动停止）
+                    isCountUpMode,
+                    {
+                        startTime,
+                        endTime: new Date()
+                    }
+                );
+            } else {
+                await this.recordManager.recordWorkSession(
+                    minutes,
+                    eventId,
+                    eventTitle,
+                    originalDuration || 25,
+                    false, // 标记为未完成（中途切换或手动停止）
+                    isCountUpMode,
+                    {
+                        startTime,
+                        endTime: new Date()
+                    }
+                );
+            }
+            if (!state) {
+                this.activeWorkSessionId = null;
+                this.activeWorkSessionStartTime = 0;
+            }
             const blockAttrsChanged = await this.updateBlockPomodoroAttrsByBlockId(targetBlockId, minutes);
             if (blockAttrsChanged) {
                 window.dispatchEvent(new CustomEvent('reminderUpdated'));
@@ -7881,6 +8056,9 @@ document.body.classList.remove('docked-mode');
 
                 timer.completedPomodoros = recoveredState.completedPomodoros || 0;
                 timer.startTime = recoveredState.startTime || Date.now();
+                timer.phaseStartTime = recoveredState.phaseStartTime || recoveredState.startTime || timer.startTime || 0;
+                timer.activeWorkSessionId = recoveredState.activeWorkSessionId || null;
+                timer.activeWorkSessionStartTime = recoveredState.activeWorkSessionStartTime || timer.phaseStartTime || 0;
                 timer.pausedTime = recoveredState.pausedTime || 0;
                 timer.currentPhaseOriginalDuration = recoveredState.currentPhaseOriginalDuration || settings.workDuration;
 
@@ -7897,6 +8075,9 @@ document.body.classList.remove('docked-mode');
 
                 // Resume logic loop if needed
                 if (timer.isRunning && !timer.isPaused) {
+                    if (timer.isWorkPhase && !timer.activeWorkSessionId) {
+                        void timer.ensureActiveWorkSessionStarted(timer.activeWorkSessionStartTime || timer.phaseStartTime || Date.now());
+                    }
                     timer.startTickLoop();
                     // FIX: 恢复随机微休息定时器（如果启用且在工作阶段）
                     if (timer.randomRestEnabled && timer.isWorkPhase) {
@@ -7995,6 +8176,9 @@ document.body.classList.remove('docked-mode');
                         this.totalTime = recoveredState.totalTime;
                         this.completedPomodoros = recoveredState.completedPomodoros || 0;
                         this.startTime = recoveredState.startTime || 0;
+                        this.phaseStartTime = recoveredState.phaseStartTime || recoveredState.startTime || this.startTime || 0;
+                        this.activeWorkSessionId = recoveredState.activeWorkSessionId || null;
+                        this.activeWorkSessionStartTime = recoveredState.activeWorkSessionStartTime || this.phaseStartTime || 0;
                         this.pausedTime = recoveredState.pausedTime || 0;
                         this.currentPhaseOriginalDuration = recoveredState.currentPhaseOriginalDuration || this.settings.workDuration;
 
@@ -8010,6 +8194,10 @@ document.body.classList.remove('docked-mode');
                         }
                         if (recoveredState.blockId) {
                             this.reminder.blockId = recoveredState.blockId;
+                        }
+
+                        if (this.isRunning && this.isWorkPhase && !this.activeWorkSessionId) {
+                            void this.ensureActiveWorkSessionStarted(this.activeWorkSessionStartTime || this.phaseStartTime || Date.now());
                         }
                     }
                 } catch (e) {

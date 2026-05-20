@@ -344,7 +344,11 @@ export class PomodoroSessionsDialog {
         });
 
         const typeIcon = this.getTypeIcon(session.type);
-        const statusBadge = '<span style="background: #4caf50; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px;">✓ 完成</span>';
+        const statusBadge = session.inProgress
+            ? '<span style="background: var(--b3-theme-warning); color: var(--b3-theme-on-background); padding: 2px 6px; border-radius: 3px; font-size: 11px;">待补录</span>'
+            : (session.completed
+                ? '<span style="background: #4caf50; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px;">✓ 完成</span>'
+                : '<span style="background: var(--b3-theme-error); color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px;">未完成</span>');
 
         let extraBadges = '';
         if (session.type === 'work') {
@@ -383,7 +387,7 @@ export class PomodoroSessionsDialog {
                     <div style="font-size: 12px; color: var(--b3-theme-on-surface-light); display: flex; gap: 12px;">
                         <span>📅 ${dateStr}</span>
                         <span>🕐 ${startTimeStr} - ${endTimeStr}</span>
-                        <span>⏱️ ${session.duration} 分钟</span>
+                        <span>⏱️ ${session.inProgress ? "待补录" : `${session.duration} 分钟`}</span>
                     </div>
                 </div>
                 <div style="display: flex; gap: 4px;">
@@ -671,6 +675,7 @@ export class PomodoroSessionsDialog {
                     </div>
                     <div class="b3-form__group">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; margin-top: 8px;">
+                            <label id="timePointLabel" class="b3-form__label" style="margin: 0;">${i18n("endTime") || "结束时间"}</label>
                             <select id="timeMode" class="b3-select" style="font-size: 12px; padding: 2px 24px 2px 8px; height: 24px; min-width: 80px;">
                                 <option value="end">${i18n("endTime") || "结束时间"}</option>
                                 <option value="start">${i18n("startTime") || "开始时间"}</option>
@@ -806,7 +811,8 @@ export class PomodoroSessionsDialog {
                     plannedDuration,
                     completed,
                     isCountUp,
-                    count
+                    count,
+                    inProgress: false
                 };
 
                 // 手动添加到记录中
@@ -904,7 +910,8 @@ export class PomodoroSessionsDialog {
         const startTime = new Date(session.startTime);
         startTimeInput.value = `${startTime.getFullYear()}-${String(startTime.getMonth() + 1).padStart(2, '0')}-${String(startTime.getDate()).padStart(2, '0')}T${String(startTime.getHours()).padStart(2, '0')}:${String(startTime.getMinutes()).padStart(2, '0')}`;
 
-        durationInput.value = session.duration.toString();
+        const elapsedMinutes = Math.max(1, Math.round((Date.now() - startTime.getTime()) / 60000));
+        durationInput.value = String(session.inProgress && session.duration <= 0 ? elapsedMinutes : session.duration);
 
         // 取消按钮
         editDialog.element.querySelector(".b3-button--cancel")?.addEventListener("click", () => {
@@ -934,6 +941,9 @@ export class PomodoroSessionsDialog {
                 const startTime = new Date(startTimeStr);
                 const endTime = new Date(startTime.getTime() + duration * 60000);
 
+                const nextPlannedDuration = session.isCountUp
+                    ? Math.max(1, Math.round(Number(session.plannedDuration) || duration))
+                    : duration;
                 const newSession: PomodoroSession = {
                     id: session.id, // 保持原ID
                     type,
@@ -942,10 +952,11 @@ export class PomodoroSessionsDialog {
                     startTime: startTime.toISOString(),
                     endTime: endTime.toISOString(),
                     duration,
-                    plannedDuration: duration,
+                    plannedDuration: nextPlannedDuration,
                     completed,
                     isCountUp: session.isCountUp, // 保留原有的计时属性
-                    count: session.count // 保留原有的番茄数计数
+                    count: session.count, // 保留原有的番茄数计数
+                    inProgress: false
                 };
 
                 // 如果修改了时长且是正计时/工作番茄，可能需要重新计算count

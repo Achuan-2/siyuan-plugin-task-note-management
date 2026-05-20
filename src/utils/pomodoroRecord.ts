@@ -13,6 +13,7 @@ export interface PomodoroSession {
     completed: boolean; // 是否完成（未中途停止）
     isCountUp?: boolean; // 是否为正计时模式
     count?: number; // 完成的番茄钟数量（正计时模式下根据时长计算）
+    inProgress?: boolean; // 是否为开始计时时预创建、等待结束或补录的记录
 }
 
 export interface PomodoroRecord {
@@ -23,12 +24,21 @@ export interface PomodoroRecord {
     sessions: PomodoroSession[]; // 详细的会话记录
 }
 
+type SessionTimeInput = string | number | Date;
+
+interface RecordSessionOptions {
+    startTime?: SessionTimeInput;
+    endTime?: SessionTimeInput;
+    sessionId?: string;
+}
+
 export class PomodoroRecordManager {
     private static instance: PomodoroRecordManager;
     private records: { [date: string]: PomodoroRecord } = {};
     private eventStats: { [eventId: string]: { count: number, duration: number } } = {};
     private isLoading: boolean = false;
     private isSaving: boolean = false;
+    private pendingSaveDates: Set<string> = new Set();
     private isInitialized: boolean = false;
     private plugin: any;
 
@@ -53,6 +63,87 @@ export class PomodoroRecordManager {
 
     private generateSessionId(): string {
         return Date.now().toString(36) + Math.random().toString(36).substr(2);
+    }
+
+    private normalizeSessionDate(input?: SessionTimeInput): Date | null {
+        if (input === undefined || input === null) return null;
+
+        const date = input instanceof Date ? new Date(input.getTime()) : new Date(input);
+        if (Number.isNaN(date.getTime())) {
+            return null;
+        }
+        return date;
+    }
+
+    private roundSessionMinutes(minutes: number): number {
+        let roundedMinutes = Math.round(Number(minutes) || 0);
+        if (roundedMinutes === 0 && minutes > 0) {
+            roundedMinutes = 1;
+        }
+        return Math.max(0, roundedMinutes);
+    }
+
+    private calculateWorkSessionCount(workMinutes: number, plannedDuration: number, completed: boolean, isCountUp: boolean): number {
+        const calculated = Math.round(workMinutes / Math.max(1, plannedDuration));
+
+        if (workMinutes <= 0) {
+            return 0;
+        }
+
+        if (isCountUp) {
+            // 正计时模式：按时长计算数量，至少为1
+            return Math.max(1, calculated);
+        }
+
+        if (completed) {
+            // 倒计时完成：按时长计算（通常为1，但如果是自定义长番茄可能更多）
+            return Math.max(1, calculated);
+        }
+
+        // 倒计时中断：认为是一个番茄
+        return 1;
+    }
+
+    private recalculateRecordTotals(date: string) {
+        const record = this.records[date];
+        if (!record) return;
+
+        if (!record.sessions) {
+            record.sessions = [];
+        }
+
+        record.date = date;
+        record.workSessions = 0;
+        record.totalWorkTime = 0;
+        record.totalBreakTime = 0;
+
+        record.sessions.forEach(session => {
+            if (session.inProgress) return;
+
+            if (session.type === 'work') {
+                record.workSessions += this.calculateSessionCount(session);
+                record.totalWorkTime += Math.max(0, Math.round(Number(session.duration) || 0));
+            } else {
+                record.totalBreakTime += Math.max(0, Math.round(Number(session.duration) || 0));
+            }
+        });
+    }
+
+    private findSessionLocation(sessionId: string): { date: string; index: number; session: PomodoroSession } | null {
+        for (const date in this.records) {
+            const record = this.records[date];
+            if (!record || !record.sessions) continue;
+
+            const index = record.sessions.findIndex(session => session.id === sessionId);
+            if (index !== -1) {
+                return {
+                    date,
+                    index,
+                    session: record.sessions[index]
+                };
+            }
+        }
+        return null;
     }
 
     private async loadRecords(force: boolean = false) {
@@ -93,7 +184,7 @@ export class PomodoroRecordManager {
                 record.sessions = [];
             }
             record.sessions.forEach(session => {
-                if (session.type === 'work' && session.eventId) {
+                if (!session.inProgress && session.type === 'work' && session.eventId) {
                     this.updateStatsIndex(session.eventId, this.calculateSessionCount(session), session.duration);
                 }
             });
@@ -119,21 +210,27 @@ export class PomodoroRecordManager {
     }
 
     private async saveRecords(dates?: string[]) {
+        const requestedDates = dates && dates.length > 0 ? dates : Object.keys(this.records);
+        requestedDates.forEach(date => this.pendingSaveDates.add(date));
+
         if (this.isSaving) {
-            console.log('正在保存中，跳过本次保存请求');
             return;
         }
 
         this.isSaving = true;
 
         try {
-            const keysToSync = dates && dates.length > 0 ? dates : Object.keys(this.records);
-            for (const date of keysToSync) {
-                const record = this.records[date];
-                if (record) {
-                    await this.plugin.saveData(`pomodoroRecords/${date}.json`, record);
-                    if (this.plugin.pomodoroRecordsCache) {
-                        this.plugin.pomodoroRecordsCache[date] = record;
+            while (this.pendingSaveDates.size > 0) {
+                const keysToSync = Array.from(this.pendingSaveDates);
+                this.pendingSaveDates.clear();
+
+                for (const date of keysToSync) {
+                    const record = this.records[date];
+                    if (record) {
+                        await this.plugin.saveData(`pomodoroRecords/${date}.json`, record);
+                        if (this.plugin.pomodoroRecordsCache) {
+                            this.plugin.pomodoroRecordsCache[date] = record;
+                        }
                     }
                 }
             }
@@ -164,49 +261,38 @@ export class PomodoroRecordManager {
         }
     }
 
-    async recordWorkSession(workMinutes: number, eventId: string = '', eventTitle: string = '番茄专注', plannedDuration: number = 25, completed: boolean = true, isCountUp: boolean = false) {
+    async recordWorkSession(
+        workMinutes: number,
+        eventId: string = '',
+        eventTitle: string = '番茄专注',
+        plannedDuration: number = 25,
+        completed: boolean = true,
+        isCountUp: boolean = false,
+        options: RecordSessionOptions = {}
+    ) {
         // 确保已初始化
         if (!this.isInitialized) {
             await this.initialize();
         }
 
-        const today = this.getToday();
-        this.ensureTodayRecord(today);
+        const roundedWorkMinutes = this.roundSessionMinutes(workMinutes);
+        const endTime = this.normalizeSessionDate(options.endTime) || new Date();
+        const startTime = this.normalizeSessionDate(options.startTime) || new Date(endTime.getTime() - roundedWorkMinutes * 60000);
+        const logicalDate = getLogicalDateString(startTime);
+        this.ensureTodayRecord(logicalDate);
 
         // console.log('记录工作会话前:', JSON.stringify(this.records[today]));
 
-        let count = 0;
-
-        const calculated = Math.round(workMinutes / Math.max(1, plannedDuration));
-
-        // 将工作时长取整为分钟，避免保存小数分钟（例如 3.4833）
-        let roundedWorkMinutes = Math.round(workMinutes);
-        if (roundedWorkMinutes === 0 && workMinutes > 0) {
-            // 对于小于1分钟但大于0的时长，向上取整为1分钟以保留最小颗粒度
-            roundedWorkMinutes = 1;
-        }
-
-        if (isCountUp) {
-            // 正计时模式：都认为是完整番茄，按时长计算数量，至少为1
-            count = Math.max(1, calculated);
-        } else {
-            if (completed) {
-                // 倒计时完成：按时长计算（通常为1，但如果是自定义长番茄可能更多）
-                count = Math.max(1, calculated);
-            } else {
-                // 倒计时中断：认为是一个番茄
-                count = 1;
-            }
-        }
+        const count = this.calculateWorkSessionCount(roundedWorkMinutes, plannedDuration, completed, isCountUp);
 
         // 创建详细的会话记录
         const session: PomodoroSession = {
-            id: this.generateSessionId(),
+            id: options.sessionId || this.generateSessionId(),
             type: 'work',
             eventId,
             eventTitle,
-            startTime: new Date(Date.now() - roundedWorkMinutes * 60000).toISOString(),
-            endTime: new Date().toISOString(),
+            startTime: startTime.toISOString(),
+            endTime: endTime.toISOString(),
             duration: roundedWorkMinutes,
             plannedDuration,
             completed,
@@ -215,60 +301,217 @@ export class PomodoroRecordManager {
         };
 
         // 添加到会话记录
-        this.records[today].sessions.push(session);
+        this.records[logicalDate].sessions.push(session);
 
         // 更新统计数据
-        this.records[today].workSessions += count;
+        this.records[logicalDate].workSessions += count;
 
-        this.records[today].totalWorkTime += roundedWorkMinutes;
+        this.records[logicalDate].totalWorkTime += roundedWorkMinutes;
 
         // 更新索引，使用取整后的分钟数
         this.updateStatsIndex(eventId, count, roundedWorkMinutes);
 
         // console.log('记录工作会话后:', JSON.stringify(this.records[today]));
 
-        await this.saveRecords([today]);
+        await this.saveRecords([logicalDate]);
     }
 
-    async recordBreakSession(breakMinutes: number, eventId: string = '', _eventTitle: string = '休息时间', plannedDuration: number = 5, isLongBreak: boolean = false, completed: boolean = true) {
+    async recordBreakSession(
+        breakMinutes: number,
+        eventId: string = '',
+        _eventTitle: string = '休息时间',
+        plannedDuration: number = 5,
+        isLongBreak: boolean = false,
+        completed: boolean = true,
+        options: RecordSessionOptions = {}
+    ) {
         // 确保已初始化
         if (!this.isInitialized) {
             await this.initialize();
         }
 
-        const today = this.getToday();
-        this.ensureTodayRecord(today);
+        // 将休息时长取整为分钟，避免保存小数分钟
+        const roundedBreakMinutes = this.roundSessionMinutes(breakMinutes);
+        const endTime = this.normalizeSessionDate(options.endTime) || new Date();
+        const startTime = this.normalizeSessionDate(options.startTime) || new Date(endTime.getTime() - roundedBreakMinutes * 60000);
+        const logicalDate = getLogicalDateString(startTime);
+        this.ensureTodayRecord(logicalDate);
 
         // console.log('记录休息会话前:', JSON.stringify(this.records[today]));
 
         // 创建详细的会话记录
-        // 将休息时长取整为分钟，避免保存小数分钟
-        let roundedBreakMinutes = Math.round(breakMinutes);
-        if (roundedBreakMinutes === 0 && breakMinutes > 0) {
-            roundedBreakMinutes = 1;
-        }
-
         const session: PomodoroSession = {
-            id: this.generateSessionId(),
+            id: options.sessionId || this.generateSessionId(),
             type: isLongBreak ? 'longBreak' : 'shortBreak',
             eventId,
             eventTitle: isLongBreak ? '长时休息' : '短时休息',
-            startTime: new Date(Date.now() - roundedBreakMinutes * 60000).toISOString(),
-            endTime: new Date().toISOString(),
+            startTime: startTime.toISOString(),
+            endTime: endTime.toISOString(),
             duration: roundedBreakMinutes,
             plannedDuration,
             completed
         };
 
         // 添加到会话记录
-        this.records[today].sessions.push(session);
+        this.records[logicalDate].sessions.push(session);
 
         // 更新统计数据
-        this.records[today].totalBreakTime += roundedBreakMinutes;
+        this.records[logicalDate].totalBreakTime += roundedBreakMinutes;
 
         // console.log('记录休息会话后:', JSON.stringify(this.records[today]));
 
-        await this.saveRecords([today]);
+        await this.saveRecords([logicalDate]);
+    }
+
+    async startWorkSession(
+        eventId: string = '',
+        eventTitle: string = '番茄专注',
+        plannedDuration: number = 25,
+        isCountUp: boolean = false,
+        startTimeInput?: SessionTimeInput
+    ): Promise<string> {
+        if (!this.isInitialized) {
+            await this.initialize();
+        }
+
+        const startTime = this.normalizeSessionDate(startTimeInput) || new Date();
+        const logicalDate = getLogicalDateString(startTime);
+        this.ensureTodayRecord(logicalDate);
+
+        const session: PomodoroSession = {
+            id: this.generateSessionId(),
+            type: 'work',
+            eventId,
+            eventTitle,
+            startTime: startTime.toISOString(),
+            endTime: startTime.toISOString(),
+            duration: 0,
+            plannedDuration,
+            completed: false,
+            isCountUp: isCountUp || false,
+            count: 0,
+            inProgress: true
+        };
+
+        this.records[logicalDate].sessions.push(session);
+        await this.saveRecords([logicalDate]);
+        return session.id;
+    }
+
+    async finishWorkSession(
+        sessionId: string,
+        workMinutes: number,
+        eventId: string = '',
+        eventTitle: string = '番茄专注',
+        plannedDuration: number = 25,
+        completed: boolean = true,
+        isCountUp: boolean = false,
+        options: RecordSessionOptions = {}
+    ): Promise<PomodoroSession | null> {
+        if (!this.isInitialized) {
+            await this.initialize();
+        }
+
+        const location = sessionId ? this.findSessionLocation(sessionId) : null;
+        if (!location) {
+            await this.recordWorkSession(workMinutes, eventId, eventTitle, plannedDuration, completed, isCountUp, options);
+            return null;
+        }
+
+        const roundedWorkMinutes = this.roundSessionMinutes(workMinutes);
+        const startTime = this.normalizeSessionDate(options.startTime)
+            || this.normalizeSessionDate(location.session.startTime)
+            || new Date();
+        const endTime = this.normalizeSessionDate(options.endTime)
+            || new Date(startTime.getTime() + roundedWorkMinutes * 60000);
+        const count = this.calculateWorkSessionCount(roundedWorkMinutes, plannedDuration, completed, isCountUp);
+
+        const updatedSession: PomodoroSession = {
+            ...location.session,
+            type: 'work',
+            eventId,
+            eventTitle,
+            startTime: startTime.toISOString(),
+            endTime: endTime.toISOString(),
+            duration: roundedWorkMinutes,
+            plannedDuration,
+            completed,
+            isCountUp: isCountUp || false,
+            count,
+            inProgress: false
+        };
+
+        await this.updateSession(updatedSession);
+        return updatedSession;
+    }
+
+    async updateSession(session: PomodoroSession): Promise<boolean> {
+        if (!this.isInitialized) {
+            await this.initialize();
+        }
+
+        if (!session || !session.id) {
+            return false;
+        }
+
+        const startTime = this.normalizeSessionDate(session.startTime);
+        const endTime = this.normalizeSessionDate(session.endTime);
+        if (!startTime || !endTime) {
+            return false;
+        }
+
+        const normalizedSession: PomodoroSession = {
+            ...session,
+            startTime: startTime.toISOString(),
+            endTime: endTime.toISOString(),
+            duration: this.roundSessionMinutes(session.duration),
+            plannedDuration: Math.max(1, Math.round(Number(session.plannedDuration) || 1)),
+            completed: session.inProgress ? false : session.completed !== false,
+            isCountUp: session.type === 'work' ? !!session.isCountUp : false,
+            inProgress: !!session.inProgress
+        };
+
+        if (normalizedSession.type === 'work') {
+            if (normalizedSession.inProgress) {
+                normalizedSession.count = 0;
+            } else if (normalizedSession.isCountUp) {
+                normalizedSession.count = this.calculateWorkSessionCount(
+                    normalizedSession.duration,
+                    normalizedSession.plannedDuration,
+                    normalizedSession.completed,
+                    true
+                );
+            } else if (typeof normalizedSession.count !== 'number' || normalizedSession.count <= 0) {
+                normalizedSession.count = this.calculateWorkSessionCount(
+                    normalizedSession.duration,
+                    normalizedSession.plannedDuration,
+                    normalizedSession.completed,
+                    false
+                );
+            }
+        } else {
+            delete normalizedSession.count;
+            delete normalizedSession.isCountUp;
+        }
+
+        const location = this.findSessionLocation(normalizedSession.id);
+        const datesToSave = new Set<string>();
+        if (location) {
+            this.records[location.date].sessions.splice(location.index, 1);
+            this.recalculateRecordTotals(location.date);
+            datesToSave.add(location.date);
+        }
+
+        const logicalDate = getLogicalDateString(startTime);
+        this.ensureTodayRecord(logicalDate);
+        this.records[logicalDate].sessions.push(normalizedSession);
+        this.records[logicalDate].sessions.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+        this.recalculateRecordTotals(logicalDate);
+        datesToSave.add(logicalDate);
+
+        this.buildStatsIndex();
+        await this.saveRecords(Array.from(datesToSave));
+        return true;
     }
 
     getTodayFocusTime(): number {
@@ -595,6 +838,11 @@ export class PomodoroRecordManager {
      * @param session 番茄钟会话
      */
     public calculateSessionCount(session: PomodoroSession): number {
+        // 进行中记录只是为了保存开始时间，等待结束或手动补录前不计入统计
+        if (session.inProgress) {
+            return 0;
+        }
+
         // 对于正计时番茄，直接使用记录的count，不进行额外计算
         if (session.isCountUp && typeof session.count === 'number') {
             return session.count;
