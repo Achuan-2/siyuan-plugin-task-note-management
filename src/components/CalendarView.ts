@@ -5654,12 +5654,18 @@ export class CalendarView {
                         newReminder.endDate = endDateStr;
                     } else if (keepSingleDayEndDate) {
                         newReminder.endDate = endDateStr;
+                    } else if (isResize) {
+                        // resize操作保留endDate
+                        newReminder.endDate = endDateStr;
                     }
                 } else {
                     const { dateStr: endDateStr, timeStr: endTimeStr } = getLocalDateTime(newEnd);
                     if (endDateStr !== newReminder.date) {
                         newReminder.endDate = endDateStr;
                     } else if (keepSingleDayEndDate) {
+                        newReminder.endDate = endDateStr;
+                    } else if (isResize) {
+                        // resize操作保留endDate
                         newReminder.endDate = endDateStr;
                     } else {
                         delete newReminder.endDate;
@@ -5785,6 +5791,9 @@ export class CalendarView {
                         instanceModification.endDate = endDateStr;
                     } else if (keepSingleDayEndDate) {
                         instanceModification.endDate = endDateStr;
+                    } else if (isResize) {
+                        // resize操作显式设置endDate，覆盖原始事件的跨天endDate
+                        instanceModification.endDate = startDateStr;
                     }
                 } else {
                     // 定时事件
@@ -5802,6 +5811,12 @@ export class CalendarView {
                         }
                     } else if (keepSingleDayEndDate) {
                         instanceModification.endDate = endDateStr;
+                        if (endTimeStr) {
+                            instanceModification.endTime = endTimeStr;
+                        }
+                    } else if (isResize) {
+                        // resize操作显式设置endDate，覆盖原始事件的跨天endDate
+                        instanceModification.endDate = startDateStr;
                         if (endTimeStr) {
                             instanceModification.endTime = endTimeStr;
                         }
@@ -5879,6 +5894,9 @@ export class CalendarView {
                             reminderData[reminderId].endDate = endDateStr;
                         } else if (keepSingleDayEndDate) {
                             reminderData[reminderId].endDate = endDateStr;
+                        } else if (isResize) {
+                            // resize操作保留endDate，用户只是调整结束边界
+                            reminderData[reminderId].endDate = endDateStr;
                         } else {
                             delete reminderData[reminderId].endDate;
                         }
@@ -5909,8 +5927,16 @@ export class CalendarView {
                             } else {
                                 delete reminderData[reminderId].endTime;
                             }
+                        } else if (isResize) {
+                            // resize操作保留endDate，用户只是调整结束边界
+                            reminderData[reminderId].endDate = endDateStr;
+                            if (endTimeStr) {
+                                reminderData[reminderId].endTime = endTimeStr;
+                            } else {
+                                delete reminderData[reminderId].endTime;
+                            }
                         } else {
-                            // 同一天的定时事件
+                            // 同一天的定时事件（拖放操作）
                             delete reminderData[reminderId].endDate;
                             if (endTimeStr) {
                                 reminderData[reminderId].endTime = endTimeStr;
