@@ -18,6 +18,8 @@ export interface ReminderItem {
     kanbanStatus?: string;  // 任务类型：长期、短期或进行中
     url?: string;        // 网页链接，可选
     treatStartDateAsDeadline?: boolean; // 只有开始日期且无截止日期时，是否按过期任务处理
+    reminderSkipWeekends?: boolean; // 是否跳过周末提醒；未设置时跟随全局设置
+    reminderSkipHolidays?: boolean; // 是否跳过节假日提醒；未设置时跟随全局设置
 }
 
 export interface ReminderData {

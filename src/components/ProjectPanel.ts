@@ -1220,8 +1220,10 @@ export class ProjectPanel {
             const { ProjectManager } = await import("../utils/projectManager");
             const projectManager = ProjectManager.getInstance(this.plugin);
             const statuses = await projectManager.getProjectKanbanStatuses(projectId);
+            const settings = await this.plugin?.loadSettings?.() || this.plugin?.settings || {};
+            const holidayData = await this.plugin?.loadHolidayData?.() || {};
 
-            const result = ProjectKanbanView.countTopLevelTasksByStatus(projectId, reminderData, statuses);
+            const result = ProjectKanbanView.countTopLevelTasksByStatus(projectId, reminderData, statuses, settings, holidayData);
             const countsMap = result.counts || {};
             const completedCount = result.completed || (countsMap['completed'] || 0);
 
@@ -1298,7 +1300,9 @@ export class ProjectPanel {
         try {
             const projectManager = ProjectManager.getInstance(this.plugin);
             const statuses = await projectManager.getProjectKanbanStatuses(projectId);
-            const result = ProjectKanbanView.countTopLevelTasksByStatus(projectId, reminderData, statuses);
+            const settings = await this.plugin?.loadSettings?.() || this.plugin?.settings || {};
+            const holidayData = await this.plugin?.loadHolidayData?.() || {};
+            const result = ProjectKanbanView.countTopLevelTasksByStatus(projectId, reminderData, statuses, settings, holidayData);
 
             // Map dynamic status counts to the legacy four labels for display
             const countsMap = result.counts || {};
@@ -1332,7 +1336,9 @@ export class ProjectPanel {
         } catch (error) {
             console.error('countTopLevelKanbanStatus error:', error);
             // Fallback to legacy call if something fails
-            const legacy = ProjectKanbanView.countTopLevelTasksByStatus(projectId, reminderData);
+            const settings = await this.plugin?.loadSettings?.() || this.plugin?.settings || {};
+            const holidayData = await this.plugin?.loadHolidayData?.() || {};
+            const legacy = ProjectKanbanView.countTopLevelTasksByStatus(projectId, reminderData, undefined, settings, holidayData);
             // legacy may return { counts, completed } or old shape; handle both
             if ((legacy as any).counts) {
                 const c = (legacy as any).counts;

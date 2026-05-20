@@ -14,6 +14,7 @@ import { getSolarDateLunarString } from "../utils/lunarUtils";
 import { generateRepeatInstances, getRepeatDescription, generateSubtreeInstances } from "../utils/repeatUtils";
 import { createPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
 import { shouldTreatStartDateOnlyAsOverdue } from "../utils/startDateOverdue";
+import { shouldSkipReminderOnDate, type HolidayData } from "../utils/reminderSkipDate";
 interface QuadrantTask {
     id: string;
     title: string;
@@ -85,6 +86,8 @@ export class EisenhowerMatrixView {
     // 全局番茄钟管理器
     private pomodoroManager = PomodoroManager.getInstance();
     private lute: any;
+    private reminderSkipSettings: any = {};
+    private reminderSkipHolidayData: HolidayData = {};
 
     constructor(container: HTMLElement, plugin: any) {
         this.container = container;
@@ -242,10 +245,41 @@ export class EisenhowerMatrixView {
         return quadrantEl;
     }
 
+    private async refreshReminderSkipDateContext(): Promise<void> {
+        try {
+            this.reminderSkipSettings = typeof this.plugin?.loadSettings === 'function'
+                ? await this.plugin.loadSettings()
+                : this.plugin?.settings || {};
+        } catch (error) {
+            console.warn('EisenhowerMatrixView: 加载跳过提醒设置失败', error);
+            this.reminderSkipSettings = this.plugin?.settings || {};
+        }
+
+        try {
+            this.reminderSkipHolidayData = await this.plugin?.loadHolidayData?.() || {};
+        } catch (error) {
+            console.warn('EisenhowerMatrixView: 加载节假日数据失败', error);
+            this.reminderSkipHolidayData = {};
+        }
+    }
+
+    private shouldDisplayRepeatInstance(instance: any, fallbackReminder?: any): boolean {
+        const reminder = fallbackReminder
+            ? { ...fallbackReminder, ...instance, repeat: fallbackReminder.repeat }
+            : instance;
+        return !shouldSkipReminderOnDate(
+            reminder,
+            instance?.date,
+            this.reminderSkipSettings || this.plugin?.settings,
+            this.reminderSkipHolidayData
+        );
+    }
+
     private async loadTasks(force: boolean = false) {
         try {
             // 项目状态、名称等可能在其他视图中更新，这里先刷新项目缓存
             await this.projectManager.loadProjects();
+            await this.refreshReminderSkipDateContext();
             const reminderData = await getAllReminders(this.plugin, undefined, force, 'matrix');
             const today = getLogicalDateString();
             this.allTasks = [];
@@ -5451,7 +5485,8 @@ export class EisenhowerMatrixView {
 
             // 生成实例，使用足够大的 maxInstances 以确保生成所有实例
             const maxInstances = monthsToAdd * 50; // 根据范围动态调整
-            repeatInstances = generateRepeatInstances(reminder, startDate, endDate, maxInstances);
+            repeatInstances = generateRepeatInstances(reminder, startDate, endDate, maxInstances)
+                .filter(instance => this.shouldDisplayRepeatInstance(instance, reminder));
 
             // 检查是否有未完成的未来实例（关键修复：不仅要是未来的，还要是未完成的）
             hasUncompletedFutureInstance = repeatInstances.some(instance => {

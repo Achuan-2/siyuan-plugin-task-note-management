@@ -2,6 +2,7 @@ import { getAllReminders } from "./icsSubscription";
 import { getLogicalDateString, compareDateStrings, getLocalDateString, getLocalDateTimeString } from "./dateUtils";
 import { generateRepeatInstances } from "./repeatUtils";
 import { isOpenEndedStartDateTask, shouldTreatStartDateOnlyAsOverdue } from "./startDateOverdue";
+import { shouldSkipReminderOnDate, type HolidayData } from "./reminderSkipDate";
 
 export class ReminderTaskLogic {
     /**
@@ -10,15 +11,16 @@ export class ReminderTaskLogic {
     public static async getTaskCountByTabs(plugin: any, tabNames: string[], excludeDesserts: boolean = false): Promise<number> {
         const today = getLogicalDateString();
         const settings = await plugin.loadSettings?.();
+        const holidayData = await plugin.loadHolidayData?.() || {};
         const reminderData = await getAllReminders(plugin, undefined, false, 'sidebar');
-        const allReminders = this.generateAllRemindersWithInstances(reminderData, today);
+        const allReminders = this.generateAllRemindersWithInstances(reminderData, today, settings, holidayData);
 
         const reminderMap = new Map<string, any>();
         allReminders.forEach(r => reminderMap.set(r.id, r));
 
         const matchedIds = new Set<string>();
         tabNames.forEach(tab => {
-            const filtered = this.filterRemindersByTab(allReminders, today, tab, excludeDesserts, settings);
+            const filtered = this.filterRemindersByTab(allReminders, today, tab, excludeDesserts, settings, holidayData);
             filtered.forEach(r => matchedIds.add(r.id));
         });
 
@@ -40,7 +42,7 @@ export class ReminderTaskLogic {
         return count;
     }
 
-    public static generateAllRemindersWithInstances(reminderData: any, today: string): any[] {
+    public static generateAllRemindersWithInstances(reminderData: any, today: string, settings?: any, holidayData: HolidayData = {}): any[] {
         const reminders = (Object.values(reminderData) as any[]).filter((reminder: any) => {
             const shouldInclude = reminder && typeof reminder === 'object' && reminder.id &&
                 (reminder.date || reminder.parentId || this.hasChildren(reminder.id, reminderData) || reminder.completed || (!reminder.date && !reminder.parentId));
@@ -60,7 +62,7 @@ export class ReminderTaskLogic {
                 const isLunarRepeat = reminder.repeat?.enabled &&
                     (reminder.repeat.type === 'lunar-monthly' || reminder.repeat.type === 'lunar-yearly');
 
-                const repeatInstances = this.generateInstancesWithFutureGuarantee(reminder, today, isLunarRepeat);
+                const repeatInstances = this.generateInstancesWithFutureGuarantee(reminder, today, isLunarRepeat, settings, holidayData);
                 const completedInstances = reminder.repeat.completedInstances || [];
                 const instanceModifications = reminder.repeat?.instanceModifications || {};
 
@@ -122,7 +124,7 @@ export class ReminderTaskLogic {
         return allReminders;
     }
 
-    public static filterRemindersByTab(reminders: any[], today: string, targetTab: string, excludeDesserts: boolean = false, settings?: any): any[] {
+    public static filterRemindersByTab(reminders: any[], today: string, targetTab: string, excludeDesserts: boolean = false, settings?: any, holidayData: HolidayData = {}): any[] {
         const reminderMap = new Map<string, any>();
         reminders.forEach(r => reminderMap.set(r.id, r));
         const sourceReminders = reminders.filter(r => !this.isReminderInAbandonedKanbanStatus(r));
@@ -156,6 +158,7 @@ export class ReminderTaskLogic {
                 return sourceReminders.filter(r => {
                     const isCompleted = isEffectivelyCompleted(r);
                     if (isCompleted) return false;
+                    if (!this.canReminderShowOnDate(r, today, settings, holidayData)) return false;
                     const hasIgnoreMark = this.hasTodayIgnoreMark(r, today);
 
                     const hasDate = r.date || r.endDate;
@@ -223,7 +226,11 @@ export class ReminderTaskLogic {
         return this.getReminderKanbanStatusId(reminder) === 'abandoned';
     }
 
-    private static generateInstancesWithFutureGuarantee(reminder: any, today: string, isLunarRepeat: boolean): any[] {
+    private static canReminderShowOnDate(reminder: any, targetDate: string, settings?: any, holidayData: HolidayData = {}): boolean {
+        return !shouldSkipReminderOnDate(reminder, targetDate, settings, holidayData);
+    }
+
+    private static generateInstancesWithFutureGuarantee(reminder: any, today: string, isLunarRepeat: boolean, settings?: any, holidayData: HolidayData = {}): any[] {
         let monthsToAdd = 2;
         if (isLunarRepeat) monthsToAdd = 14;
         else if (reminder.repeat.type === 'yearly') monthsToAdd = 14;
@@ -246,7 +253,13 @@ export class ReminderTaskLogic {
             const startDate = getLocalDateString(monthStart);
             const endDate = getLocalDateString(monthEnd);
             const maxInstances = monthsToAdd * 50;
-            repeatInstances = generateRepeatInstances(reminder, startDate, endDate, maxInstances);
+            repeatInstances = generateRepeatInstances(reminder, startDate, endDate, maxInstances)
+                .filter(instance => this.canReminderShowOnDate(
+                    instance,
+                    this.getReminderLogicalDate(instance.date, instance.time) || instance.date,
+                    settings,
+                    holidayData
+                ));
 
             hasUncompletedFutureInstance = repeatInstances.some(instance => {
                 const instanceIdStr = (instance as any).instanceId || `${reminder.id}_${instance.date}`;

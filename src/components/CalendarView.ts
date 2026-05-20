@@ -33,6 +33,7 @@ import { HabitStatsDialog } from "./stats/HabitStatsDialog";
 import { HabitDayDialog } from "./HabitDayDialog";
 import { getHabitProgressOnDate, getHabitReminderTimes, getHabitReminderTimesForDate, shouldCheckInOnDate as shouldCheckInOnDateUtil, isHabitActiveOnDate } from "../utils/habitUtils";
 import { HabitGroupManager } from "../utils/habitGroupManager";
+import { shouldSkipReminderOnDate, type HolidayData } from "../utils/reminderSkipDate";
 export class CalendarView {
     private container: HTMLElement;
     private calendar: Calendar;
@@ -71,6 +72,7 @@ export class CalendarView {
     private completedTaskTimeUseTaskColor: boolean = false; // 完成任务时间是否使用任务上色方式
     private pomodoroToggleBtn: HTMLElement | null = null; // Pomodoro toggle button
     private holidays: { [date: string]: { title: string, type: 'holiday' | 'workday' } } = {}; // 节假日数据
+    private reminderSkipSettings: any = {};
     private colorBy: 'category' | 'priority' | 'project' = 'priority'; // 按分类或优先级上色
     private tooltip: HTMLElement | null = null; // 添加提示框元素
     private dropIndicator: HTMLElement | null = null; // 拖放放置指示器
@@ -150,6 +152,7 @@ export class CalendarView {
 
     private async updateSettings() {
         const settings = await this.plugin.loadSettings();
+        this.reminderSkipSettings = settings || {};
         this.showCategoryAndProject = settings.calendarShowCategoryAndProject !== false;
         this.showTasks = this.calendarConfigManager.getShowTasks();
         this.showHabits = this.calendarConfigManager.getShowHabits();
@@ -249,6 +252,19 @@ export class CalendarView {
             this.calendar.updateSize();
         }
         this.checkVip();
+    }
+
+    private shouldDisplayRepeatInstance(instance: any, fallbackReminder?: any): boolean {
+        const reminder = fallbackReminder
+            ? { ...fallbackReminder, ...instance, repeat: fallbackReminder.repeat }
+            : instance;
+        const targetDate = instance?.date;
+        return !shouldSkipReminderOnDate(
+            reminder,
+            targetDate,
+            this.reminderSkipSettings || this.plugin?.settings,
+            this.holidays as HolidayData
+        );
     }
 
     constructor(container: HTMLElement, plugin: any, data?: { projectFilter?: string, isDockMode?: boolean, showHabitsOnly?: boolean }) {
@@ -495,6 +511,7 @@ export class CalendarView {
         // 从配置中读取colorBy和viewMode设置
         this.colorBy = this.calendarConfigManager.getColorBy();
         const settings = await this.plugin.loadSettings();
+        this.reminderSkipSettings = settings || {};
         this.showCategoryAndProject = settings.calendarShowCategoryAndProject !== false;
         this.showTasks = this.calendarConfigManager.getShowTasks();
         this.showHabits = this.calendarConfigManager.getShowHabits();
@@ -6606,6 +6623,17 @@ export class CalendarView {
 
     private async getEvents(force: boolean = false) {
         try {
+            try {
+                this.reminderSkipSettings = await this.plugin.loadSettings() || {};
+            } catch (error) {
+                this.reminderSkipSettings = this.plugin?.settings || {};
+            }
+            try {
+                this.holidays = await loadHolidays(this.plugin);
+            } catch (error) {
+                this.holidays = {};
+            }
+
             // 加载订阅日历排序
             const subscriptionData = await loadSubscriptions(this.plugin);
             this.subscriptionOrderMap.clear();
@@ -6719,7 +6747,8 @@ export class CalendarView {
                     this.addReminderTimeEventsToList(events, reminder, reminder.id, false);
                 } else if (this.showRepeatTasks) {
                     // Generate repeat event instances
-                    let repeatInstances = generateRepeatInstances(reminder, startDate, endDate);
+                    let repeatInstances = generateRepeatInstances(reminder, startDate, endDate)
+                        .filter(instance => this.shouldDisplayRepeatInstance(instance, reminder));
 
                     const completedInstances = reminder.repeat?.completedInstances || [];
                     const instanceModifications = reminder.repeat?.instanceModifications || {};
@@ -6846,8 +6875,14 @@ export class CalendarView {
                                 kanbanStatus: mod.kanbanStatus !== undefined ? mod.kanbanStatus : reminder.kanbanStatus,
                                 tagIds: mod.tagIds !== undefined ? mod.tagIds : reminder.tagIds,
                                 milestoneId: mod.milestoneId !== undefined ? mod.milestoneId : reminder.milestoneId,
+                                reminderSkipWeekends: mod.reminderSkipWeekends !== undefined ? mod.reminderSkipWeekends : (reminder.reminderSkipWeekends !== undefined ? reminder.reminderSkipWeekends : reminder.repeat?.reminderSkipWeekends),
+                                reminderSkipHolidays: mod.reminderSkipHolidays !== undefined ? mod.reminderSkipHolidays : (reminder.reminderSkipHolidays !== undefined ? reminder.reminderSkipHolidays : reminder.repeat?.reminderSkipHolidays),
                                 sort: (mod && typeof mod.sort === 'number') ? mod.sort : (reminder.sort || 0)
                             };
+
+                            if (!this.shouldDisplayRepeatInstance(instanceReminder, reminder)) {
+                                continue;
+                            }
 
                             const isInstanceAbandoned = this.isAbandonedReminder(instanceReminder);
                             // 规则同上：原始放弃仅显示已完成实例；原始未放弃时放弃实例不显示

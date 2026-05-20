@@ -58,6 +58,7 @@ import {
 } from "./utils/linkedHabitPomodoro";
 import { ChangelogUtils } from "./utils/changelogNotify";
 import { createPomodoroStartSubmenu as createSharedPomodoroStartSubmenu } from "./utils/pomodoroPresets";
+import { shouldSkipReminderOnDate, type HolidayData } from "./utils/reminderSkipDate";
 
 
 export const SETTINGS_FILE = "reminder-settings.json";
@@ -233,6 +234,8 @@ export const DEFAULT_SETTINGS = {
     pomodoroDockPosition: 'right', // 新增：番茄钟吸附位置 'right' | 'left' | 'top'
     pomodoroMiniWindowStyle: 'horizontal', // mini窗口样式 'ring' | 'horizontal' | 'minimal'
     reminderSystemNotification: true, // 新增：事件到期提醒系统弹窗
+    reminderSkipWeekends: false, // 任务提醒是否跳过周末
+    reminderSkipHolidays: false, // 任务提醒是否跳过节假日
     showInternalNotification: false, // 新增：是否显示内部通知框
     dailyNotificationTime: '08:00', // 新增：每日通知时间，默认08:00
     dailyNotificationEnabled: false, // 新增：是否启用每日统一通知
@@ -3272,6 +3275,23 @@ export default class ReminderPlugin extends Plugin {
         return compareDateStrings(startDate, today) <= 0;
     }
 
+    private getReminderSkipHolidayDataSnapshot(): HolidayData {
+        return (this.holidayDataCache && typeof this.holidayDataCache === 'object') ? this.holidayDataCache : {};
+    }
+
+    private async loadReminderSkipHolidayData(): Promise<HolidayData> {
+        try {
+            return await this.loadHolidayData();
+        } catch (error) {
+            console.warn('加载节假日数据失败，跳过节假日提醒判断将降级:', error);
+            return {};
+        }
+    }
+
+    private canReminderNotifyOnDate(reminder: any, date: string, holidayData: HolidayData = this.getReminderSkipHolidayDataSnapshot()): boolean {
+        return !shouldSkipReminderOnDate(reminder, date, this.settings, holidayData);
+    }
+
     private isReminderOverdueForDailyNotification(reminder: any, today: string): boolean {
         if (!reminder || !today) return false;
         if (reminder.endDate) {
@@ -3296,6 +3316,7 @@ export default class ReminderPlugin extends Plugin {
             }
 
             const today = getLogicalDateString();
+            const holidayDataForReminderSkip = await this.loadReminderSkipHolidayData();
 
             // 检查日期变更
             if (this.currentLogicalDate && today !== this.currentLogicalDate) {
@@ -3335,7 +3356,7 @@ export default class ReminderPlugin extends Plugin {
             } catch (err) {
                 console.warn('加载订阅任务失败，跳过订阅提醒检查:', err);
             }
-            await this.checkTimeReminders(reminderDataForTimeCheck, getLocalDateString(), currentTime);
+            await this.checkTimeReminders(reminderDataForTimeCheck, getLocalDateString(), currentTime, holidayDataForReminderSkip);
 
             // 检查习惯提醒（当有习惯在今日设置了 reminderTime 时，也应触发提醒）
             try {
@@ -3449,6 +3470,7 @@ export default class ReminderPlugin extends Plugin {
             // 筛选今日提醒 - 进行分类和排序
             const todayReminders = allReminders.filter((reminder: any) => {
                 if (reminder.completed) return false;
+                if (!this.canReminderNotifyOnDate(reminder, today, holidayDataForReminderSkip)) return false;
 
                 // 如果是跨天事件并且已经标记了今日已完成，则不加入今日提醒
                 // 对非重复事件直接检查 dailyCompletions；重复实例在生成时已处理并设置 completed
@@ -3599,7 +3621,7 @@ export default class ReminderPlugin extends Plugin {
     }
 
     // 检查单个时间提醒
-    private async checkTimeReminders(reminderData: any, today: string, currentTime: string) {
+    private async checkTimeReminders(reminderData: any, today: string, currentTime: string, holidayData: HolidayData = this.getReminderSkipHolidayDataSnapshot()) {
         try {
 
             const { generateRepeatInstances } = await import("./utils/repeatUtils");
@@ -3611,6 +3633,7 @@ export default class ReminderPlugin extends Plugin {
 
                 // 跳过已完成或没有时间的提醒
                 if (reminderObj.completed) continue;
+                if (!this.canReminderNotifyOnDate(reminderObj, today, holidayData)) continue;
 
                 // 处理普通提醒
                 if (!reminderObj.repeat?.enabled) {
@@ -3727,6 +3750,9 @@ export default class ReminderPlugin extends Plugin {
                             : instance.date;
                         // 重复实例已完成（含每日完成标记）时，不应再触发时间提醒
                         if (instance.completed || (originalInstanceDate && reminderObj.dailyCompletions?.[originalInstanceDate])) {
+                            continue;
+                        }
+                        if (!this.canReminderNotifyOnDate(instance, today, holidayData)) {
                             continue;
                         }
 
@@ -5206,6 +5232,7 @@ export default class ReminderPlugin extends Plugin {
     private calculateAllNotificationTimes(reminder: any, daysLimit: number = 0): Date[] {
         const now = new Date();
         const today = getLogicalDateString();
+        const holidayData = this.getReminderSkipHolidayDataSnapshot();
 
         // 计算限制日期
         const limitDate = daysLimit > 0 ? new Date(now.getTime() + daysLimit * 24 * 60 * 60 * 1000) : null;
@@ -5240,6 +5267,7 @@ export default class ReminderPlugin extends Plugin {
                     const parsed = this.extractDateAndTime(timeStr);
                     if (!parsed.time) continue;
                     const datePart = parsed.date || instance.date;
+                    if (!this.canReminderNotifyOnDate(instance, datePart, holidayData)) continue;
                     const dateTime = new Date(`${datePart}T${parsed.time}`);
                     if (isNaN(dateTime.getTime())) continue;
                     if (limitDate && dateTime.getTime() > limitDate.getTime()) continue;
@@ -5293,6 +5321,7 @@ export default class ReminderPlugin extends Plugin {
 
             // 构建完整的日期时间
             const datePart = parsed.date || reminderDate;
+            if (!this.canReminderNotifyOnDate(reminder, datePart, holidayData)) continue;
             const dateTime = new Date(`${datePart}T${parsed.time}`);
 
             // 检查日期是否在任务范围内

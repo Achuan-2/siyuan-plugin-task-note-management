@@ -24,6 +24,7 @@ import { createPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
 import { SortMenuDialog } from "./SortMenuDialog";
 import { SortCriterion, getSortCriterionName } from "../utils/sortConfig";
 import { shouldTreatStartDateOnlyAsOverdue } from "../utils/startDateOverdue";
+import { shouldSkipReminderOnDate, type HolidayData } from "../utils/reminderSkipDate";
 
 interface KanbanSortConfigProjectData {
     sortRule?: string;
@@ -165,6 +166,8 @@ export class ProjectKanbanView {
     private manageGroupsHideNoTodayCheckbox: HTMLInputElement | null = null;
     private customGroupTabsMode: boolean = false; // 自定义分组看板是否使用页签显示
     private activeCustomGroupTabId: string | null = null; // 当前选中的分组页签
+    private reminderSkipSettings: any = {};
+    private reminderSkipHolidayData: HolidayData = {};
 
     constructor(container: HTMLElement, plugin: any, projectId: string) {
         this.container = container;
@@ -203,6 +206,37 @@ export class ProjectKanbanView {
     // 实例包装，保持现有实例调用不变
     private getTaskLogicalDate(date?: string, time?: string): string {
         return (this.constructor as typeof ProjectKanbanView).getTaskLogicalDate(date, time);
+    }
+
+    private async refreshReminderSkipDateContext(): Promise<void> {
+        try {
+            this.reminderSkipSettings = typeof this.plugin?.loadSettings === 'function'
+                ? await this.plugin.loadSettings()
+                : this.plugin?.settings || {};
+        } catch (error) {
+            console.warn('[Kanban] 加载跳过提醒设置失败:', error);
+            this.reminderSkipSettings = this.plugin?.settings || {};
+        }
+
+        try {
+            this.reminderSkipHolidayData = await this.plugin?.loadHolidayData?.() || {};
+        } catch (error) {
+            console.warn('[Kanban] 加载节假日数据失败:', error);
+            this.reminderSkipHolidayData = {};
+        }
+    }
+
+    private shouldDisplayRepeatInstance(instance: any, fallbackReminder?: any): boolean {
+        const reminder = fallbackReminder
+            ? { ...fallbackReminder, ...instance, repeat: fallbackReminder.repeat }
+            : instance;
+        const targetDate = this.getTaskLogicalDate(instance?.date, instance?.time) || instance?.date;
+        return !shouldSkipReminderOnDate(
+            reminder,
+            targetDate,
+            this.reminderSkipSettings || this.plugin?.settings,
+            this.reminderSkipHolidayData
+        );
     }
 
     /**
@@ -691,6 +725,7 @@ export class ProjectKanbanView {
             const settings = typeof this.plugin?.loadSettings === 'function'
                 ? await this.plugin.loadSettings()
                 : this.plugin?.settings || {};
+            this.reminderSkipSettings = settings || {};
             const projectData = await this.plugin.loadProjectData();
             this.project = projectData[this.projectId];
             // 加载显示已完成子任务设置，默认为true
@@ -5855,6 +5890,7 @@ export class ProjectKanbanView {
         try {
             // 保存当前滚动状态，避免界面刷新时丢失滚动位置
             this.captureScrollState();
+            await this.refreshReminderSkipDateContext();
 
             // 构造里程碑映射
             await this.buildMilestoneMap();
@@ -6824,7 +6860,13 @@ export class ProjectKanbanView {
      * 静态方法：计算给定项目的顶级任务在 kanbanStatus 上的数量（只计顶级，即没有 parentId）
      * 使用与 getTaskStatus 相同的逻辑，包括日期自动归档到进行中的逻辑
      */
-    public static countTopLevelTasksByStatus(projectId: string, reminderData: any, kanbanStatuses?: Array<{ id: string; name?: string }>): { counts: Record<string, number>; completed: number } {
+    public static countTopLevelTasksByStatus(
+        projectId: string,
+        reminderData: any,
+        kanbanStatuses?: Array<{ id: string; name?: string }>,
+        settings?: any,
+        holidayData: HolidayData = {}
+    ): { counts: Record<string, number>; completed: number } {
         const allReminders = reminderData && typeof reminderData === 'object' ? Object.values(reminderData) : [];
         const today = getLogicalDateString();
 
@@ -6874,7 +6916,13 @@ export class ProjectKanbanView {
 
                 let repeatInstances: any[] = [];
                 try {
-                    repeatInstances = generateRepeatInstances(r, rangeStart, rangeEnd);
+                    repeatInstances = generateRepeatInstances(r, rangeStart, rangeEnd)
+                        .filter((instance: any) => !shouldSkipReminderOnDate(
+                            { ...r, ...instance, repeat: r.repeat },
+                            this.getTaskLogicalDate(instance.date, instance.time) || instance.date,
+                            settings,
+                            holidayData
+                        ));
                 } catch (e) {
                     console.error('生成重复实例失败', e);
                     repeatInstances = [];
@@ -17354,7 +17402,8 @@ export class ProjectKanbanView {
 
             // 生成实例，使用足够大的 maxInstances 以确保生成所有实例
             const maxInstances = monthsToAdd * 50; // 根据范围动态调整
-            repeatInstances = generateRepeatInstances(reminder, startDate, endDate, maxInstances);
+            repeatInstances = generateRepeatInstances(reminder, startDate, endDate, maxInstances)
+                .filter(instance => this.shouldDisplayRepeatInstance(instance, reminder));
 
             // 检查是否有未完成的未来实例（关键修复：不仅要是未来的，还要是未完成的）
             hasUncompletedFutureInstance = repeatInstances.some(instance => {

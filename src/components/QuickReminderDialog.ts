@@ -28,6 +28,15 @@ import {
     getStartDateOnlyOverdueOverrideValue,
     shouldTreatStartDateOnlyAsOverdue,
 } from "../utils/startDateOverdue";
+import {
+    getReminderSkipHolidaysEffective,
+    getReminderSkipHolidaysOverrideValue,
+    getReminderSkipWeekendsEffective,
+    getReminderSkipWeekendsOverrideValue,
+    shouldShowReminderSkipHolidaysControl,
+    shouldShowReminderSkipWeekendsControl,
+    type HolidayData,
+} from "../utils/reminderSkipDate";
 
 type CustomReminderTimeItem = {
     time: string;
@@ -242,6 +251,7 @@ export class QuickReminderDialog {
     private skipSave: boolean = false; // 是否跳过保存到数据库（用于临时子任务创建）
     private dateOnly: boolean = false; // 是否只显示日期相关设置（用于快速编辑日期）
     private eventSource?: string; // 事件来源标识（用于避免同源视图重复刷新）
+    private reminderSkipHolidayData: HolidayData = {};
 
 
     constructor(
@@ -846,6 +856,183 @@ export class QuickReminderDialog {
         }
     }
 
+    private getReminderSkipWeekendsEffectiveValue(reminder: any = this.reminder): boolean {
+        return getReminderSkipWeekendsEffective(reminder, this.plugin?.settings);
+    }
+
+    private getReminderSkipHolidaysEffectiveValue(reminder: any = this.reminder): boolean {
+        return getReminderSkipHolidaysEffective(reminder, this.plugin?.settings);
+    }
+
+    private getReminderForSkipDateControls(): any {
+        return {
+            ...(this.reminder || {}),
+            repeat: this.repeatConfig?.enabled ? this.repeatConfig : undefined,
+        };
+    }
+
+    private getRepeatReminderSkipWeekendsValue(config: RepeatConfig = this.repeatConfig): boolean {
+        if (typeof config?.reminderSkipWeekends === 'boolean') {
+            return config.reminderSkipWeekends;
+        }
+        return getReminderSkipWeekendsEffective(
+            { ...(this.reminder || {}), repeat: config?.enabled ? config : undefined },
+            this.plugin?.settings
+        );
+    }
+
+    private getRepeatReminderSkipHolidaysValue(config: RepeatConfig = this.repeatConfig): boolean {
+        if (typeof config?.reminderSkipHolidays === 'boolean') {
+            return config.reminderSkipHolidays;
+        }
+        return getReminderSkipHolidaysEffective(
+            { ...(this.reminder || {}), repeat: config?.enabled ? config : undefined },
+            this.plugin?.settings
+        );
+    }
+
+    private createRepeatConfigForSettingsDialog(): RepeatConfig {
+        const config = { ...this.repeatConfig };
+        if (typeof config.reminderSkipWeekends !== 'boolean') {
+            config.reminderSkipWeekends = this.getRepeatReminderSkipWeekendsValue(config);
+        }
+        if (typeof config.reminderSkipHolidays !== 'boolean') {
+            config.reminderSkipHolidays = this.getRepeatReminderSkipHolidaysValue(config);
+        }
+        return config;
+    }
+
+    private normalizeRepeatSkipDateConfig(config: RepeatConfig): RepeatConfig {
+        const normalized = { ...config };
+        if (!normalized.enabled) {
+            delete normalized.reminderSkipWeekends;
+            delete normalized.reminderSkipHolidays;
+            return normalized;
+        }
+
+        const weekendsValue = typeof normalized.reminderSkipWeekends === 'boolean'
+            ? normalized.reminderSkipWeekends
+            : this.getRepeatReminderSkipWeekendsValue(normalized);
+        const weekendsOverride = getReminderSkipWeekendsOverrideValue(weekendsValue, this.plugin?.settings);
+        if (weekendsOverride === undefined) {
+            delete normalized.reminderSkipWeekends;
+        } else {
+            normalized.reminderSkipWeekends = weekendsOverride;
+        }
+
+        const holidaysValue = typeof normalized.reminderSkipHolidays === 'boolean'
+            ? normalized.reminderSkipHolidays
+            : this.getRepeatReminderSkipHolidaysValue(normalized);
+        const holidaysOverride = getReminderSkipHolidaysOverrideValue(holidaysValue, this.plugin?.settings);
+        if (holidaysOverride === undefined) {
+            delete normalized.reminderSkipHolidays;
+        } else {
+            normalized.reminderSkipHolidays = holidaysOverride;
+        }
+
+        return normalized;
+    }
+
+    private applyRepeatReminderSkipDateOverrides(target: any): void {
+        const normalized = this.normalizeRepeatSkipDateConfig(this.repeatConfig);
+        this.repeatConfig = normalized;
+
+        const applyKey = (key: 'reminderSkipWeekends' | 'reminderSkipHolidays') => {
+            const value = normalized[key];
+            if (value === undefined) {
+                delete target[key];
+                if (target.repeat) {
+                    delete target.repeat[key];
+                }
+            } else {
+                target[key] = value;
+                if (target.repeat) {
+                    target.repeat[key] = value;
+                }
+            }
+        };
+
+        applyKey('reminderSkipWeekends');
+        applyKey('reminderSkipHolidays');
+    }
+
+    private updateReminderSkipDateControls(): void {
+        const row = this.dialog?.element?.querySelector('#quickReminderSkipDateRow') as HTMLElement | null;
+        const weekendsInput = this.dialog?.element?.querySelector('#quickReminderSkipWeekends') as HTMLInputElement | null;
+        const holidaysInput = this.dialog?.element?.querySelector('#quickReminderSkipHolidays') as HTMLInputElement | null;
+        const dateInput = this.dialog?.element?.querySelector('#quickReminderDate') as HTMLInputElement | null;
+        const endDateInput = this.dialog?.element?.querySelector('#quickReminderEndDate') as HTMLInputElement | null;
+        if (!row || !weekendsInput || !holidaysInput) return;
+
+        const controlReminder = this.getReminderForSkipDateControls();
+        const startDateVisible = !dateInput || dateInput.style.display !== 'none';
+        const startDate = startDateVisible ? dateInput?.value : undefined;
+        const endDate = startDateVisible ? endDateInput?.value : undefined;
+        const isRepeatTask = this.repeatConfig?.enabled === true;
+        const showWeekends = !isRepeatTask && shouldShowReminderSkipWeekendsControl(controlReminder, startDate, endDate);
+        const showHolidays = !isRepeatTask && shouldShowReminderSkipHolidaysControl(controlReminder, startDate, endDate, this.reminderSkipHolidayData);
+
+        const weekendsLabel = weekendsInput.closest('label') as HTMLElement | null;
+        const holidaysLabel = holidaysInput.closest('label') as HTMLElement | null;
+        if (weekendsLabel) weekendsLabel.style.display = showWeekends ? 'flex' : 'none';
+        if (holidaysLabel) holidaysLabel.style.display = showHolidays ? 'flex' : 'none';
+        weekendsInput.disabled = !showWeekends;
+        holidaysInput.disabled = !showHolidays;
+
+        const shouldShowRow = showWeekends || showHolidays;
+        row.hidden = !shouldShowRow;
+        row.style.display = shouldShowRow ? 'flex' : 'none';
+        if (!showWeekends) {
+            weekendsInput.checked = this.getReminderSkipWeekendsEffectiveValue(controlReminder);
+        }
+        if (!showHolidays) {
+            holidaysInput.checked = this.getReminderSkipHolidaysEffectiveValue(controlReminder);
+        }
+    }
+
+    private applyReminderSkipDateOverrides(target: any): void {
+        if (this.repeatConfig?.enabled) {
+            if (this.isInstanceEdit && !target?.repeat) {
+                delete target.reminderSkipWeekends;
+                delete target.reminderSkipHolidays;
+                return;
+            }
+            this.applyRepeatReminderSkipDateOverrides(target);
+            return;
+        }
+
+        const weekendsCheckbox = this.dialog?.element?.querySelector('#quickReminderSkipWeekends') as HTMLInputElement | null;
+        const holidaysCheckbox = this.dialog?.element?.querySelector('#quickReminderSkipHolidays') as HTMLInputElement | null;
+        const row = this.dialog?.element?.querySelector('#quickReminderSkipDateRow') as HTMLElement | null;
+        const isCheckboxActive = (checkbox: HTMLInputElement | null): checkbox is HTMLInputElement => {
+            if (!checkbox || checkbox.disabled || row?.hidden) return false;
+            const label = checkbox.closest('label') as HTMLElement | null;
+            return !label?.hidden && label?.style.display !== 'none';
+        };
+
+        if (isCheckboxActive(weekendsCheckbox)) {
+            const override = getReminderSkipWeekendsOverrideValue(weekendsCheckbox.checked, this.plugin?.settings);
+            if (override === undefined) {
+                delete target.reminderSkipWeekends;
+            } else {
+                target.reminderSkipWeekends = override;
+            }
+        } else {
+            delete target.reminderSkipWeekends;
+        }
+
+        if (isCheckboxActive(holidaysCheckbox)) {
+            const override = getReminderSkipHolidaysOverrideValue(holidaysCheckbox.checked, this.plugin?.settings);
+            if (override === undefined) {
+                delete target.reminderSkipHolidays;
+            } else {
+                target.reminderSkipHolidays = override;
+            }
+        } else {
+            delete target.reminderSkipHolidays;
+        }
+    }
+
     // 填充编辑表单数据
     private async populateEditForm() {
         if (!this.reminder) return;
@@ -1080,7 +1267,19 @@ export class QuickReminderDialog {
         if (startDateOnlyOverdueInput) {
             startDateOnlyOverdueInput.checked = this.getStartDateOnlyOverdueEffectiveValue(this.reminder);
             this.updateStartDateOnlyOverdueControl();
+            this.updateReminderSkipDateControls();
         }
+
+        const skipWeekendsInput = this.dialog.element.querySelector('#quickReminderSkipWeekends') as HTMLInputElement;
+        if (skipWeekendsInput) {
+            skipWeekendsInput.checked = this.getReminderSkipWeekendsEffectiveValue(this.reminder);
+        }
+
+        const skipHolidaysInput = this.dialog.element.querySelector('#quickReminderSkipHolidays') as HTMLInputElement;
+        if (skipHolidaysInput) {
+            skipHolidaysInput.checked = this.getReminderSkipHolidaysEffectiveValue(this.reminder);
+        }
+        this.updateReminderSkipDateControls();
 
         // 填充持续天数（如果有起止日期则计算）
         const durationInput = this.dialog.element.querySelector('#quickDurationDays') as HTMLInputElement;
@@ -1789,6 +1988,7 @@ export class QuickReminderDialog {
 
         this.updateStartEndSwapButtonState();
         this.updateStartDateOnlyOverdueControl();
+        this.updateReminderSkipDateControls();
 
         // 触发日期变化事件以更新结束日期限制
         dateInput.dispatchEvent(new Event('change'));
@@ -1885,6 +2085,13 @@ export class QuickReminderDialog {
                 console.warn('获取标题粘贴自动识别设置失败，使用默认开启:', err);
                 this.titlePasteAutoDetect = true;
             }
+        }
+
+        try {
+            this.reminderSkipHolidayData = await this.plugin?.loadHolidayData?.() || {};
+        } catch (err) {
+            console.warn('加载节假日数据失败，任务提醒跳过节假日设置将隐藏:', err);
+            this.reminderSkipHolidayData = {};
         }
 
         // 初始化自定义提醒时间
@@ -2036,6 +2243,18 @@ export class QuickReminderDialog {
                                         <input type="checkbox" class="b3-switch" id="quickStartDateOnlyOverdue" ${this.getStartDateOnlyOverdueEffectiveValue() ? 'checked' : ''}>
                                         <span class="b3-checkbox__graphic"></span>
                                         <span class="b3-checkbox__label" style="font-size: 13px;">${i18n('treatStartDateOnlyAsOverdueTask') || '开始日期过时后识别为过期任务'}</span>
+                                    </label>
+                                </div>
+                                <div id="quickReminderSkipDateRow" style="display: flex; gap: 16px; flex-wrap: wrap;">
+                                    <label class="b3-checkbox" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                        <input type="checkbox" class="b3-switch" id="quickReminderSkipWeekends" ${this.getReminderSkipWeekendsEffectiveValue() ? 'checked' : ''}>
+                                        <span class="b3-checkbox__graphic"></span>
+                                        <span class="b3-checkbox__label" style="font-size: 13px;">${i18n('reminderSkipWeekendsTask') || '任务提醒跳过周末'}</span>
+                                    </label>
+                                    <label class="b3-checkbox" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                        <input type="checkbox" class="b3-switch" id="quickReminderSkipHolidays" ${this.getReminderSkipHolidaysEffectiveValue() ? 'checked' : ''}>
+                                        <span class="b3-checkbox__graphic"></span>
+                                        <span class="b3-checkbox__label" style="font-size: 13px;">${i18n('reminderSkipHolidaysTask') || '任务提醒跳过节假日'}</span>
                                     </label>
                                 </div>
                             </div>
@@ -2676,6 +2895,7 @@ export class QuickReminderDialog {
             }
             this.updateStartEndSwapButtonState();
             this.updateStartDateOnlyOverdueControl();
+            this.updateReminderSkipDateControls();
 
             // 设置默认值：优先使用 this.blockContent，其次使用 this.defaultTitle
             if (this.blockContent && titleInput) {
@@ -3808,9 +4028,11 @@ export class QuickReminderDialog {
         swapStartEndTimeBtn?.addEventListener('click', () => {
             this.swapStartEndDateTimeFields();
             this.updateStartDateOnlyOverdueControl();
+            this.updateReminderSkipDateControls();
         });
         this.updateStartEndSwapButtonState();
         this.updateStartDateOnlyOverdueControl();
+        this.updateReminderSkipDateControls();
 
         // 只在编辑模式下，如果设置了开始但未设置结束，才使用持续天数来自动填充结束日期
         // 新建任务时不自动填充，除非用户手动修改了持续天数
@@ -3821,6 +4043,7 @@ export class QuickReminderDialog {
                 const days = parseInt(durationInput.value || '1') || 1;
                 endDateInput.value = this.addDaysToDate(startDateInput.value, days - 1);
                 this.updateStartDateOnlyOverdueControl();
+                this.updateReminderSkipDateControls();
             }
         }
 
@@ -3836,6 +4059,7 @@ export class QuickReminderDialog {
             }
             this.updateStartEndSwapButtonState();
             this.updateStartDateOnlyOverdueControl();
+            this.updateReminderSkipDateControls();
             if (!startDateInput.value) return;
 
             // 只有在用户手动修改了持续天数，或者编辑模式下结束日期已存在时，才自动填充/更新结束日期
@@ -3843,6 +4067,7 @@ export class QuickReminderDialog {
                 const days = parseInt(durationInput.value || '1') || 1;
                 endDateInput.value = this.addDaysToDate(startDateInput.value, days - 1);
                 this.updateStartDateOnlyOverdueControl();
+                this.updateReminderSkipDateControls();
                 endDateInput.dispatchEvent(new Event('change'));
             } else if (endDateInput && endDateInput.value && durationInput) {
                 // 如果结束日期已存在，重新计算持续天数
@@ -3880,9 +4105,11 @@ export class QuickReminderDialog {
 
         startDateInput?.addEventListener('input', () => {
             this.updateStartDateOnlyOverdueControl();
+            this.updateReminderSkipDateControls();
         });
         endDateInput?.addEventListener('input', () => {
             this.updateStartDateOnlyOverdueControl();
+            this.updateReminderSkipDateControls();
         });
 
         const normalizeEstimatedPomodoroDuration = () => {
@@ -3920,6 +4147,7 @@ export class QuickReminderDialog {
         endDateInput?.addEventListener('change', () => {
             this.updateStartEndSwapButtonState();
             this.updateStartDateOnlyOverdueControl();
+            this.updateReminderSkipDateControls();
             if (!endDateInput) return;
             if (!startDateInput || !startDateInput.value) return;
             if (!endDateInput.value) {
@@ -4408,6 +4636,7 @@ export class QuickReminderDialog {
             this.updatePresetSelectState();
             this.updateStartEndSwapButtonState();
             this.updateStartDateOnlyOverdueControl();
+            this.updateReminderSkipDateControls();
         });
 
         // 结束日期验证
@@ -4415,6 +4644,7 @@ export class QuickReminderDialog {
             // 移除立即验证逻辑，只在保存时验证
             this.updateStartEndSwapButtonState();
             this.updateStartDateOnlyOverdueControl();
+            this.updateReminderSkipDateControls();
         });
 
         // 时间输入框变化时更新预设下拉状态
@@ -4451,6 +4681,7 @@ export class QuickReminderDialog {
                 this.updatePresetSelectState();
                 this.updateStartEndSwapButtonState();
                 this.updateStartDateOnlyOverdueControl();
+                this.updateReminderSkipDateControls();
             }
         });
 
@@ -4474,6 +4705,7 @@ export class QuickReminderDialog {
                 endDateInput.value = '';
                 this.updateStartEndSwapButtonState();
                 this.updateStartDateOnlyOverdueControl();
+                this.updateReminderSkipDateControls();
             }
         });
 
@@ -4695,13 +4927,15 @@ export class QuickReminderDialog {
             this.repeatConfig.lunarMonth = undefined;
         }
 
-        const repeatDialog = new RepeatSettingsDialog(this.repeatConfig, (config: RepeatConfig) => {
-            this.repeatConfig = config;
+        const dialogRepeatConfig = this.createRepeatConfigForSettingsDialog();
+        const repeatDialog = new RepeatSettingsDialog(dialogRepeatConfig, (config: RepeatConfig) => {
+            this.repeatConfig = this.normalizeRepeatSkipDateConfig(config);
             this.updateRepeatDescription();
             const { date, endDate } = this.getCurrentReminderDateRange();
             this.customTimes = this.customTimes.map((item) => this.normalizeCustomTimeItem(item, date, endDate));
             this.updateCustomReminderInputMode();
             this.renderCustomTimeList();
+            this.updateReminderSkipDateControls();
         }, startDate);
         repeatDialog.show();
     }
@@ -5690,6 +5924,7 @@ export class QuickReminderDialog {
                 hideInCalendar: hideInCalendar
             };
             this.applyStartDateOnlyOverdueOverride(reminderData, date, endDate);
+            this.applyReminderSkipDateOverrides(reminderData);
 
             // 如果有绑定块，尝试获取并设置 docId
             if (reminderData.blockId) {
@@ -5776,6 +6011,7 @@ export class QuickReminderDialog {
             optimisticReminder.availableStartDate = availableStartDate;
             optimisticReminder.hideInCalendar = hideInCalendar;
             this.applyStartDateOnlyOverdueOverride(optimisticReminder, date, endDate);
+            this.applyReminderSkipDateOverrides(optimisticReminder);
 
             // 同步 docId 用于 UI 显示
             optimisticReminder.docId = optimisticDocId !== null ? optimisticDocId : (this.reminder?.docId || undefined);
@@ -5819,6 +6055,7 @@ export class QuickReminderDialog {
                 customProgress: customProgress
             };
             this.applyStartDateOnlyOverdueOverride(optimisticReminder, date, endDate);
+            this.applyReminderSkipDateOverrides(optimisticReminder);
 
             if (typeof this.defaultSort === 'number') optimisticReminder.sort = this.defaultSort;
         }
@@ -5884,6 +6121,7 @@ export class QuickReminderDialog {
                             pinned: pinned
                         };
                         this.applyStartDateOnlyOverdueOverride(instanceModification, date, endDate);
+                        this.applyReminderSkipDateOverrides(instanceModification);
 
                         // 调用实例修改保存方法
                         await this.saveInstanceModification({
@@ -5972,6 +6210,7 @@ export class QuickReminderDialog {
                         reminder.hideInCalendar = hideInCalendar;
                         reminder.pinned = pinned;
                         this.applyStartDateOnlyOverdueOverride(reminder, date, endDate);
+                        this.applyReminderSkipDateOverrides(reminder);
 
                         // 设置或删除 documentId
                         if (inputId) {
@@ -6205,6 +6444,7 @@ export class QuickReminderDialog {
                         customProgress: customProgress
                     };
                     this.applyStartDateOnlyOverdueOverride(reminder, date, endDate);
+                    this.applyReminderSkipDateOverrides(reminder);
 
                     // 添加默认排序值
                     if (typeof this.defaultSort === 'number') {
@@ -6452,6 +6692,8 @@ export class QuickReminderDialog {
                 estimatedPomodoroDuration: instanceData.estimatedPomodoroDuration,
                 customProgress: instanceData.customProgress,
                 treatStartDateAsDeadline: instanceData.treatStartDateAsDeadline,
+                reminderSkipWeekends: instanceData.reminderSkipWeekends,
+                reminderSkipHolidays: instanceData.reminderSkipHolidays,
                 pinned: instanceData.pinned,
                 modifiedAt: new Date().toISOString().split('T')[0]
             };

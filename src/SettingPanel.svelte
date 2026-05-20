@@ -449,6 +449,24 @@
                         i18n('treatStartDateOnlyAsOverdueDesc') ||
                         '开启后，只有开始日期且无截止日期的未完成任务，在当前日期超过开始日期时显示为过期；关闭后显示为已开始天数。',
                 },
+                {
+                    key: 'reminderSkipWeekends',
+                    value: settings.reminderSkipWeekends,
+                    type: 'checkbox',
+                    title: i18n('reminderSkipWeekends') || '任务提醒跳过周末',
+                    description:
+                        i18n('reminderSkipWeekendsDesc') ||
+                        '仅对重复任务，以及同时横跨工作日和周末的跨天任务生效；单个任务可在任务编辑弹窗单独覆盖。',
+                },
+                {
+                    key: 'reminderSkipHolidays',
+                    value: settings.reminderSkipHolidays,
+                    type: 'checkbox',
+                    title: i18n('reminderSkipHolidays') || '任务提醒跳过节假日',
+                    description:
+                        i18n('reminderSkipHolidaysDesc') ||
+                        '仅对重复任务，以及同时横跨节假日和非节假日的跨天任务生效；单个任务可在任务编辑弹窗单独覆盖。',
+                },
             ],
         },
         {
