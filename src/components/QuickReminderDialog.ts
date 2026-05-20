@@ -2174,6 +2174,9 @@ export class QuickReminderDialog {
                                 <button type="button" id="quickViewParentBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("viewParentTask")}" style="display: none;">
                                     <svg class="b3-button__icon"><use xlink:href="#iconEye"></use></svg>
                                 </button>
+                                <button type="button" id="quickRemoveParentBtn" class="b3-button b3-button--cancel ariaLabel" aria-label="${i18n("removeParentTask") || '取消父子任务关联'}" style="display: none;">
+                                    <svg class="b3-button__icon"><use xlink:href="#iconTrashcan"></use></svg>
+                                </button>
                             </div>
                             <div class="b3-form__desc" style="font-size: 11px; color: var(--b3-theme-on-surface-light);">
                                 ${i18n("parentTaskIdLabel")}<span id="quickParentTaskId" style="font-family: monospace;">-</span>
@@ -2964,6 +2967,11 @@ export class QuickReminderDialog {
             // 初始化子任务按钮显示（新建模式也显示；dateOnly 模式跳过，避免重新显示子任务）
             if (!this.dateOnly) {
                 await this.updateSubtasksDisplay();
+            }
+
+            // 初始化父任务显示（新建模式下如果有defaultParentId也显示）
+            if (this.defaultParentId && !this.dateOnly) {
+                await this.updateParentTaskDisplay();
             }
 
             // 自动聚焦标题输入框
@@ -4879,6 +4887,15 @@ export class QuickReminderDialog {
         const viewParentBtn = this.dialog.element.querySelector('#quickViewParentBtn') as HTMLButtonElement;
         viewParentBtn?.addEventListener('click', async () => {
             await this.viewParentTask();
+        });
+
+        const removeParentBtn = this.dialog.element.querySelector('#quickRemoveParentBtn') as HTMLButtonElement;
+        removeParentBtn?.addEventListener('click', () => {
+            this.defaultParentId = undefined;
+            if (this.reminder) {
+                this.reminder.parentId = undefined;
+            }
+            this.updateParentTaskDisplay();
         });
 
         // 完成时间相关按钮事件
@@ -6880,8 +6897,9 @@ export class QuickReminderDialog {
         const parentTaskDisplay = this.dialog.element.querySelector('#quickParentTaskDisplay') as HTMLInputElement;
         const parentTaskIdSpan = this.dialog.element.querySelector('#quickParentTaskId') as HTMLSpanElement;
         const viewParentBtn = this.dialog.element.querySelector('#quickViewParentBtn') as HTMLButtonElement;
+        const removeParentBtn = this.dialog.element.querySelector('#quickRemoveParentBtn') as HTMLButtonElement;
 
-        if (!parentTaskGroup || !parentTaskDisplay || !parentTaskIdSpan || !viewParentBtn) {
+        if (!parentTaskGroup || !parentTaskDisplay || !parentTaskIdSpan || !viewParentBtn || !removeParentBtn) {
             return;
         }
 
@@ -6936,18 +6954,21 @@ export class QuickReminderDialog {
                 parentTaskDisplay.value = displayTitle;
                 parentTaskDisplay.classList.add('ariaLabel'); parentTaskDisplay.setAttribute('aria-label', instanceDate ? `父任务实例: ${displayTitle}` : `父任务: ${displayTitle}`);
 
-                // 显示查看按钮
+                // 显示查看按钮和删除按钮
                 viewParentBtn.style.display = '';
+                removeParentBtn.style.display = '';
             } else {
                 // 父任务不存在
                 parentTaskDisplay.value = '(父任务不存在)';
                 parentTaskDisplay.classList.add('ariaLabel'); parentTaskDisplay.setAttribute('aria-label', '父任务已被删除或不存在');
                 viewParentBtn.style.display = 'none';
+                removeParentBtn.style.display = 'none';
             }
         } catch (error) {
             console.error('加载父任务信息失败:', error);
             parentTaskDisplay.value = '(加载失败)';
             viewParentBtn.style.display = 'none';
+            removeParentBtn.style.display = 'none';
         }
     }
 

@@ -2660,6 +2660,54 @@ export default class ReminderPlugin extends Plugin {
         return { projectId: undefined, groupId: undefined, milestoneId: undefined, categoryId: undefined };
     }
 
+    /**
+     * 获取块的父任务ID（优先第一级父标题的未完成任务，其次文档根块的未完成任务）
+     * @param blockId 块ID
+     * @returns 父任务ID，如果没有则返回undefined
+     */
+    private async getParentTaskId(blockId: string): Promise<string | undefined> {
+        const { sql, getBlockByID } = await import("./api");
+        try {
+            const block = await getBlockByID(blockId);
+            if (!block) return undefined;
+
+            const reminderData = await this.loadReminderData();
+
+            // 1. 优先查找第一级父标题的未完成任务
+            const rows = await sql(`
+                WITH RECURSIVE ancestors(id, parent_id, type, subtype) AS (
+                    SELECT id, parent_id, type, subtype FROM blocks WHERE id = (
+                        SELECT parent_id FROM blocks WHERE id = '${blockId}'
+                    )
+                    UNION ALL
+                    SELECT b.id, b.parent_id, b.type, b.subtype 
+                    FROM blocks b 
+                    JOIN ancestors a ON b.id = a.parent_id
+                )
+                SELECT id FROM ancestors WHERE type = 'h' LIMIT 1;
+            `);
+            if (rows && rows.length > 0) {
+                const headingId = rows[0].id;
+                const parentReminder = Object.values(reminderData).find((r: any) => r.blockId === headingId && !r.completed);
+                if (parentReminder) {
+                    return (parentReminder as any).id;
+                }
+            }
+
+            // 2. 如果父标题没有未完成任务，查找文档根块的未完成任务
+            const rootId = block.root_id;
+            if (rootId) {
+                const docReminder = Object.values(reminderData).find((r: any) => r.blockId === rootId && !r.completed);
+                if (docReminder) {
+                    return (docReminder as any).id;
+                }
+            }
+        } catch (err) {
+            console.warn('获取父任务失败:', err);
+        }
+        return undefined;
+    }
+
     private handleDocumentTreeMenu({ detail }) {
         const elements = detail.elements;
         if (!elements || !elements.length) {
@@ -3126,6 +3174,12 @@ export default class ReminderPlugin extends Plugin {
         if (blockIds.length === 1) {
             // 单个块时使用普通对话框，应用自动检测设置
             const autoDetect = await this.getAutoDetectDateTimeEnabled();
+            let parentTaskId: string | undefined;
+            try {
+                parentTaskId = await this.getParentTaskId(blockIds[0]);
+            } catch (e) {
+                // ignore
+            }
             try {
                 const { projectId, groupId, milestoneId, categoryId } = await this.getInheritedProjectAndGroup(blockIds[0]);
                 const dialog = new QuickReminderDialog(undefined, undefined, undefined, undefined, {
@@ -3135,6 +3189,7 @@ export default class ReminderPlugin extends Plugin {
                     defaultCustomGroupId: groupId,
                     defaultMilestoneId: milestoneId,
                     defaultCategoryId: categoryId,
+                    defaultParentId: parentTaskId,
                     mode: 'block',
                     plugin: this
                 });
@@ -3143,6 +3198,7 @@ export default class ReminderPlugin extends Plugin {
                 const dialog = new QuickReminderDialog(undefined, undefined, undefined, undefined, {
                     blockId: blockIds[0],
                     autoDetectDateTime: autoDetect,
+                    defaultParentId: parentTaskId,
                     mode: 'block',
                     plugin: this
                 });
