@@ -4557,12 +4557,7 @@ export class ReminderPanel {
         const effectiveDateFilters = dateFilters.filter(df => df.type !== 'start_only');
 
         if (effectiveDateFilters.some(df => df.type === 'all')) {
-            return reminders.filter(r => {
-                if (this.isOpenEndedStartDateTask(r) && !isEffectivelyCompleted(r)) {
-                    return includesStartOnlyFilter;
-                }
-                return true;
-            }); // 全部日期，但“只有开始日期”的未完成任务需要显式勾选
+            return reminders;
         }
 
         const tomorrow = getRelativeDateString(1);
