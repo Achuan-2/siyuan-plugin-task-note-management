@@ -23,6 +23,7 @@ import { getFrontend, getBackend } from "siyuan";
 import { createPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
 import { SortMenuDialog } from "./SortMenuDialog";
 import { SortCriterion, getSortCriterionName } from "../utils/sortConfig";
+import { shouldTreatStartDateOnlyAsOverdue } from "../utils/startDateOverdue";
 
 interface KanbanSortConfigProjectData {
     sortRule?: string;
@@ -11549,7 +11550,6 @@ export class ProjectKanbanView {
             return Math.round((target.getTime() - base.getTime()) / (1000 * 60 * 60 * 24));
         };
 
-        const isRecurring = !!(task?.isRepeatInstance || task?.repeat?.enabled);
         const hasStartDate = !!task.date;
         const hasEndDate = !!task.endDate;
         const isOnlyEndDate = !hasStartDate && hasEndDate;
@@ -11629,7 +11629,7 @@ export class ProjectKanbanView {
             }
 
             if (startDays < 0) {
-                return isRecurring
+                return shouldTreatStartDateOnlyAsOverdue(task, this.plugin?.settings)
                     ? {
                         text: i18n('overdueDays', { days: String(Math.abs(startDays)) }),
                         days: startDays,
@@ -17203,6 +17203,7 @@ export class ProjectKanbanView {
                 kanbanStatus: instanceMod?.kanbanStatus !== undefined ? instanceMod.kanbanStatus : originalReminder.kanbanStatus,
                 reminderTimes: instanceMod?.reminderTimes !== undefined ? instanceMod.reminderTimes : originalReminder.reminderTimes,
                 estimatedPomodoroDuration: instanceMod?.estimatedPomodoroDuration !== undefined ? instanceMod.estimatedPomodoroDuration : originalReminder.estimatedPomodoroDuration,
+                treatStartDateAsDeadline: instanceMod?.treatStartDateAsDeadline !== undefined ? instanceMod.treatStartDateAsDeadline : originalReminder.treatStartDateAsDeadline,
                 isInstance: true,
                 originalId: task.originalId,
                 instanceDate: originalInstanceDate  // 使用原始生成日期而非当前显示日期

@@ -28,6 +28,7 @@ export interface RepeatInstance {
     kanbanStatus?: string;
     tagIds?: string[];
     milestoneId?: string;
+    treatStartDateAsDeadline?: boolean;
     sort?: number;
 }
 
@@ -301,6 +302,7 @@ export function generateRepeatInstances(
                         kanbanStatus: modification?.kanbanStatus !== undefined ? modification.kanbanStatus : reminder.kanbanStatus,
                         tagIds: modification?.tagIds !== undefined ? modification.tagIds : reminder.tagIds,
                         milestoneId: modification?.milestoneId !== undefined ? modification.milestoneId : reminder.milestoneId,
+                        treatStartDateAsDeadline: modification?.treatStartDateAsDeadline !== undefined ? modification.treatStartDateAsDeadline : reminder.treatStartDateAsDeadline,
                         sort: (modification && typeof modification.sort === 'number') ? modification.sort : (reminder.sort || 0)
                     };
 
@@ -681,6 +683,7 @@ export function generateSubtreeInstances(
             kanbanStatus: instanceMod?.kanbanStatus !== undefined ? instanceMod.kanbanStatus : child.kanbanStatus,
             milestoneId: instanceMod?.milestoneId !== undefined ? instanceMod.milestoneId : child.milestoneId,
             tagIds: instanceMod?.tagIds !== undefined ? instanceMod.tagIds : child.tagIds,
+            treatStartDateAsDeadline: instanceMod?.treatStartDateAsDeadline !== undefined ? instanceMod.treatStartDateAsDeadline : child.treatStartDateAsDeadline,
             reminderTimes: resolveRepeatReminderTimes(
                 instanceMod?.reminderTimes !== undefined ? instanceMod.reminderTimes : child.reminderTimes,
                 instanceDate,

@@ -40,6 +40,7 @@ import { initIcsSync, initIcsSubscriptionSync, handleIcsSyncSettingsChange, clea
 import { TaskNoteDOMManager } from "./utils/taskNoteDOM";
 import { addDaysToDate, generateRepeatInstances, getDaysDifference, getRelativeReminderWindow } from "./utils/repeatUtils";
 import { getDockItemSelector, setDockBadgeByType as applyDockBadgeByType } from "./utils/addDockBadge";
+import { shouldTreatStartDateOnlyAsOverdue } from "./utils/startDateOverdue";
 import {
     Habit,
     HabitEmojiConfig,
@@ -126,6 +127,7 @@ export const DEFAULT_SETTINGS = {
     enableReminderDockBadge: true,
     enableProjectDockBadge: true,
     enableHabitDockBadge: true,
+    treatStartDateOnlyAsOverdue: true, // 只有开始日期且无截止日期的任务，开始日期已过时是否视为过期
 
     // 日历配置
     calendarShowCategoryAndProject: false, // 是否显示分类图标和项目信息
@@ -3250,12 +3252,8 @@ export default class ReminderPlugin extends Plugin {
         this.addCleanup(() => clearTimeout(initCheckTimer));
     }
 
-    private isRecurringReminder(reminder: any): boolean {
-        return !!(reminder?.isRepeatInstance || reminder?.repeat?.enabled);
-    }
-
     private shouldTreatOnlyStartDateAsDeadline(reminder: any): boolean {
-        return !!(reminder?.date && !reminder?.endDate && this.isRecurringReminder(reminder));
+        return shouldTreatStartDateOnlyAsOverdue(reminder, this.settings);
     }
 
     private isReminderActiveForDailyNotification(reminder: any, today: string): boolean {

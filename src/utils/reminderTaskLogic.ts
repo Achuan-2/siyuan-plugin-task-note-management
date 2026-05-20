@@ -1,6 +1,7 @@
 import { getAllReminders } from "./icsSubscription";
 import { getLogicalDateString, compareDateStrings, getLocalDateString, getLocalDateTimeString } from "./dateUtils";
 import { generateRepeatInstances } from "./repeatUtils";
+import { isOpenEndedStartDateTask, shouldTreatStartDateOnlyAsOverdue } from "./startDateOverdue";
 
 export class ReminderTaskLogic {
     /**
@@ -8,6 +9,7 @@ export class ReminderTaskLogic {
      */
     public static async getTaskCountByTabs(plugin: any, tabNames: string[], excludeDesserts: boolean = false): Promise<number> {
         const today = getLogicalDateString();
+        const settings = await plugin.loadSettings?.();
         const reminderData = await getAllReminders(plugin, undefined, false, 'sidebar');
         const allReminders = this.generateAllRemindersWithInstances(reminderData, today);
 
@@ -16,7 +18,7 @@ export class ReminderTaskLogic {
 
         const matchedIds = new Set<string>();
         tabNames.forEach(tab => {
-            const filtered = this.filterRemindersByTab(allReminders, today, tab, excludeDesserts);
+            const filtered = this.filterRemindersByTab(allReminders, today, tab, excludeDesserts, settings);
             filtered.forEach(r => matchedIds.add(r.id));
         });
 
@@ -120,7 +122,7 @@ export class ReminderTaskLogic {
         return allReminders;
     }
 
-    public static filterRemindersByTab(reminders: any[], today: string, targetTab: string, excludeDesserts: boolean = false): any[] {
+    public static filterRemindersByTab(reminders: any[], today: string, targetTab: string, excludeDesserts: boolean = false, settings?: any): any[] {
         const reminderMap = new Map<string, any>();
         reminders.forEach(r => reminderMap.set(r.id, r));
         const sourceReminders = reminders.filter(r => !this.isReminderInAbandonedKanbanStatus(r));
@@ -134,13 +136,19 @@ export class ReminderTaskLogic {
                     return this.isSpanningEventTodayCompleted(reminder, reminderMap, today);
                 }
             }
+            if (isOpenEndedStartDateTask(reminder, settings)) {
+                const startLogical = this.getReminderLogicalDate(reminder.date, reminder.time);
+                if (startLogical && compareDateStrings(startLogical, today) <= 0) {
+                    return this.hasDailyCompletionMark(reminder, today);
+                }
+            }
             return false;
         };
 
         switch (targetTab) {
             case 'overdue':
                 return sourceReminders.filter(r => {
-                    if (!r.date || isEffectivelyCompleted(r)) return false;
+                    if ((!r.endDate && !shouldTreatStartDateOnlyAsOverdue(r, settings)) || isEffectivelyCompleted(r)) return false;
                     const endLogical = this.getReminderLogicalDate(r.endDate || r.date, r.endTime || r.time);
                     return compareDateStrings(endLogical, today) < 0;
                 });
@@ -155,10 +163,14 @@ export class ReminderTaskLogic {
                     const endLogical = hasDate ? this.getReminderLogicalDate(r.endDate || r.date, r.endTime || r.time) : null;
 
                     if (hasDate && startLogical && endLogical) {
-                        const inRange = compareDateStrings(startLogical, today) <= 0 && compareDateStrings(today, endLogical) <= 0;
-                        const isOverdue = compareDateStrings(endLogical, today) < 0;
+                        const treatsOnlyStartAsDeadline = shouldTreatStartDateOnlyAsOverdue(r, settings);
+                        const isOpenEndedStartDate = isOpenEndedStartDateTask(r, settings);
+                        const inRange = isOpenEndedStartDate
+                            ? compareDateStrings(startLogical, today) <= 0
+                            : compareDateStrings(startLogical, today) <= 0 && compareDateStrings(today, endLogical) <= 0;
+                        const isOverdue = (!!r.endDate || treatsOnlyStartAsDeadline) && compareDateStrings(endLogical, today) < 0;
                         if (inRange || isOverdue) {
-                            if (this.canApplyTodayIgnore(r, today) && hasIgnoreMark) return false;
+                            if (this.canApplyTodayIgnore(r, today, settings) && hasIgnoreMark) return false;
                             return true;
                         }
                     }
@@ -354,7 +366,7 @@ export class ReminderTaskLogic {
         return ignoredList.includes(targetDate);
     }
 
-    private static canApplyTodayIgnore(reminder: any, targetDate: string): boolean {
+    private static canApplyTodayIgnore(reminder: any, targetDate: string, settings?: any): boolean {
         if (!reminder || reminder.completed) return false;
 
         const isSpanningDays = reminder.endDate && reminder.endDate !== reminder.date;
@@ -362,6 +374,13 @@ export class ReminderTaskLogic {
             const startLogical = this.getReminderLogicalDate(reminder.date || reminder.endDate, reminder.time || reminder.endTime);
             const endLogical = this.getReminderLogicalDate(reminder.endDate || reminder.date, reminder.endTime || reminder.time);
             if (startLogical && endLogical && compareDateStrings(startLogical, targetDate) <= 0 && compareDateStrings(targetDate, endLogical) <= 0) {
+                return true;
+            }
+        }
+
+        if (isOpenEndedStartDateTask(reminder, settings)) {
+            const startLogical = this.getReminderLogicalDate(reminder.date, reminder.time);
+            if (startLogical && compareDateStrings(startLogical, targetDate) <= 0) {
                 return true;
             }
         }

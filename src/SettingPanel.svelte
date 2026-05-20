@@ -395,6 +395,39 @@
             ],
         },
         {
+            name: i18n('taskSettings') || '📋任务设置',
+            items: [
+                {
+                    key: 'autoDetectDateTime',
+                    value: settings.autoDetectDateTime,
+                    type: 'checkbox',
+                    title: i18n('autoDetectDateTime'),
+                    description: i18n('autoDetectDateTimeDesc'),
+                },
+                {
+                    key: 'removeDateAfterDetection',
+                    value: settings.removeDateAfterDetection || 'all',
+                    type: 'select',
+                    title: i18n('removeDateAfterDetection'),
+                    description: i18n('removeDateAfterDetectionDesc'),
+                    options: {
+                        none: i18n('removeNone') || '不去除',
+                        date: i18n('removeDateOnly') || '仅去除日期',
+                        all: i18n('removeDateAndTime') || '去除日期和时间',
+                    },
+                },
+                {
+                    key: 'treatStartDateOnlyAsOverdue',
+                    value: settings.treatStartDateOnlyAsOverdue,
+                    type: 'checkbox',
+                    title: i18n('treatStartDateOnlyAsOverdue') || '只有开始日期任务默认视为过期',
+                    description:
+                        i18n('treatStartDateOnlyAsOverdueDesc') ||
+                        '开启后，只有开始日期且无截止日期的未完成任务，在当前日期超过开始日期时显示为过期；关闭后显示为已开始天数。',
+                },
+            ],
+        },
+        {
             name: i18n('notificationReminder'),
             items: [
                 {
@@ -619,25 +652,6 @@
         {
             name: '✅' + i18n('taskNoteSettings'),
             items: [
-                {
-                    key: 'autoDetectDateTime',
-                    value: settings.autoDetectDateTime,
-                    type: 'checkbox',
-                    title: i18n('autoDetectDateTime'),
-                    description: i18n('autoDetectDateTimeDesc'),
-                },
-                {
-                    key: 'removeDateAfterDetection',
-                    value: settings.removeDateAfterDetection || 'all',
-                    type: 'select',
-                    title: i18n('removeDateAfterDetection'),
-                    description: i18n('removeDateAfterDetectionDesc'),
-                    options: {
-                        none: i18n('removeNone') || '不去除',
-                        date: i18n('removeDateOnly') || '仅去除日期',
-                        all: i18n('removeDateAndTime') || '去除日期和时间',
-                    },
-                },
                 {
                     key: 'newDocNotebook',
                     value: settings.newDocNotebook,

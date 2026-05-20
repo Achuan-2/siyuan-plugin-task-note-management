@@ -23,6 +23,11 @@ import { listener, listenerCtx } from "@milkdown/kit/plugin/listener";
 import { replaceAll, $view } from "@milkdown/utils";
 import { listItemSchema, imageSchema } from "@milkdown/kit/preset/commonmark";
 import { getHabitGoalType } from "../utils/habitUtils";
+import {
+    getGlobalStartDateOnlyOverdue,
+    getStartDateOnlyOverdueOverrideValue,
+    shouldTreatStartDateOnlyAsOverdue,
+} from "../utils/startDateOverdue";
 
 type CustomReminderTimeItem = {
     time: string;
@@ -789,6 +794,52 @@ export class QuickReminderDialog {
         return this.normalizeCustomProgressValue(numberInput?.value) ?? 0;
     }
 
+    private getStartDateOnlyOverdueEffectiveValue(reminder: any = this.reminder): boolean {
+        if (typeof reminder?.treatStartDateAsDeadline === 'boolean') {
+            return reminder.treatStartDateAsDeadline;
+        }
+        if (!reminder || !reminder.date || reminder.endDate) {
+            return getGlobalStartDateOnlyOverdue(this.plugin?.settings);
+        }
+        return shouldTreatStartDateOnlyAsOverdue(reminder || {}, this.plugin?.settings);
+    }
+
+    private updateStartDateOnlyOverdueControl(): void {
+        const row = this.dialog?.element?.querySelector('#quickStartDateOnlyOverdueRow') as HTMLElement | null;
+        const checkbox = this.dialog?.element?.querySelector('#quickStartDateOnlyOverdue') as HTMLInputElement | null;
+        const dateInput = this.dialog?.element?.querySelector('#quickReminderDate') as HTMLInputElement | null;
+        const endDateInput = this.dialog?.element?.querySelector('#quickReminderEndDate') as HTMLInputElement | null;
+        if (!row || !checkbox) return;
+
+        // 只有“有开始日期、无结束日期”的任务才显示该任务级过期判断开关。
+        const hasStartDate = !!dateInput?.value;
+        const hasEndDate = !!(endDateInput?.value || endDateInput?.valueAsDate);
+        const hasOnlyStartDate = hasStartDate && !hasEndDate;
+        const startDateVisible = !dateInput || dateInput.style.display !== 'none';
+        const shouldShow = hasOnlyStartDate && startDateVisible;
+        row.hidden = !shouldShow;
+        row.style.display = shouldShow ? 'block' : 'none';
+        if (!shouldShow) {
+            checkbox.checked = getGlobalStartDateOnlyOverdue(this.plugin?.settings);
+        }
+    }
+
+    private getStartDateOnlyOverdueOverride(date?: string, endDate?: string): boolean | undefined {
+        if (!date || endDate) return undefined;
+        const checkbox = this.dialog?.element?.querySelector('#quickStartDateOnlyOverdue') as HTMLInputElement | null;
+        if (!checkbox) return undefined;
+        return getStartDateOnlyOverdueOverrideValue(checkbox.checked, this.plugin?.settings);
+    }
+
+    private applyStartDateOnlyOverdueOverride(target: any, date?: string, endDate?: string): void {
+        const override = this.getStartDateOnlyOverdueOverride(date, endDate);
+        if (override === undefined) {
+            delete target.treatStartDateAsDeadline;
+        } else {
+            target.treatStartDateAsDeadline = override;
+        }
+    }
+
     // 填充编辑表单数据
     private async populateEditForm() {
         if (!this.reminder) return;
@@ -1017,6 +1068,12 @@ export class QuickReminderDialog {
         }
         if (this.reminder.endTime && endTimeInput) {
             endTimeInput.value = this.reminder.endTime;
+        }
+
+        const startDateOnlyOverdueInput = this.dialog.element.querySelector('#quickStartDateOnlyOverdue') as HTMLInputElement;
+        if (startDateOnlyOverdueInput) {
+            startDateOnlyOverdueInput.checked = this.getStartDateOnlyOverdueEffectiveValue(this.reminder);
+            this.updateStartDateOnlyOverdueControl();
         }
 
         // 填充持续天数（如果有起止日期则计算）
@@ -1725,6 +1782,7 @@ export class QuickReminderDialog {
         }
 
         this.updateStartEndSwapButtonState();
+        this.updateStartDateOnlyOverdueControl();
 
         // 触发日期变化事件以更新结束日期限制
         dateInput.dispatchEvent(new Event('change'));
@@ -1948,6 +2006,13 @@ export class QuickReminderDialog {
                                             <svg class="b3-button__icon" style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
                                         </button>
                                     </div>
+                                </div>
+                                <div id="quickStartDateOnlyOverdueRow" style="display: none;">
+                                    <label class="b3-checkbox" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                        <input type="checkbox" class="b3-switch" id="quickStartDateOnlyOverdue" ${this.getStartDateOnlyOverdueEffectiveValue() ? 'checked' : ''}>
+                                        <span class="b3-checkbox__graphic"></span>
+                                        <span class="b3-checkbox__label" style="font-size: 13px;">${i18n('treatStartDateOnlyAsOverdueTask') || '开始日期过时后识别为过期任务'}</span>
+                                    </label>
                                 </div>
                             </div>
                         </div>
@@ -2586,6 +2651,7 @@ export class QuickReminderDialog {
                 }
             }
             this.updateStartEndSwapButtonState();
+            this.updateStartDateOnlyOverdueControl();
 
             // 设置默认值：优先使用 this.blockContent，其次使用 this.defaultTitle
             if (this.blockContent && titleInput) {
@@ -3717,8 +3783,10 @@ export class QuickReminderDialog {
 
         swapStartEndTimeBtn?.addEventListener('click', () => {
             this.swapStartEndDateTimeFields();
+            this.updateStartDateOnlyOverdueControl();
         });
         this.updateStartEndSwapButtonState();
+        this.updateStartDateOnlyOverdueControl();
 
         // 只在编辑模式下，如果设置了开始但未设置结束，才使用持续天数来自动填充结束日期
         // 新建任务时不自动填充，除非用户手动修改了持续天数
@@ -3728,6 +3796,7 @@ export class QuickReminderDialog {
             if (shouldAutoFill) {
                 const days = parseInt(durationInput.value || '1') || 1;
                 endDateInput.value = this.addDaysToDate(startDateInput.value, days - 1);
+                this.updateStartDateOnlyOverdueControl();
             }
         }
 
@@ -3742,12 +3811,14 @@ export class QuickReminderDialog {
                 }
             }
             this.updateStartEndSwapButtonState();
+            this.updateStartDateOnlyOverdueControl();
             if (!startDateInput.value) return;
 
             // 只有在用户手动修改了持续天数，或者编辑模式下结束日期已存在时，才自动填充/更新结束日期
             if (endDateInput && !endDateInput.value && durationInput && this.durationManuallyChanged) {
                 const days = parseInt(durationInput.value || '1') || 1;
                 endDateInput.value = this.addDaysToDate(startDateInput.value, days - 1);
+                this.updateStartDateOnlyOverdueControl();
                 endDateInput.dispatchEvent(new Event('change'));
             } else if (endDateInput && endDateInput.value && durationInput) {
                 // 如果结束日期已存在，重新计算持续天数
@@ -3781,6 +3852,13 @@ export class QuickReminderDialog {
         // 有些浏览器的步进按钮触发 keydown(ArrowUp/Down)，延迟执行以读取最新值
         durationInput?.addEventListener('keydown', (e) => {
             if (e.key === 'ArrowUp' || e.key === 'ArrowDown') setTimeout(normalizeDuration, 0);
+        });
+
+        startDateInput?.addEventListener('input', () => {
+            this.updateStartDateOnlyOverdueControl();
+        });
+        endDateInput?.addEventListener('input', () => {
+            this.updateStartDateOnlyOverdueControl();
         });
 
         const normalizeEstimatedPomodoroDuration = () => {
@@ -3817,6 +3895,7 @@ export class QuickReminderDialog {
         // 当结束日期变化，基于开始日期计算持续天数
         endDateInput?.addEventListener('change', () => {
             this.updateStartEndSwapButtonState();
+            this.updateStartDateOnlyOverdueControl();
             if (!endDateInput) return;
             if (!startDateInput || !startDateInput.value) return;
             if (!endDateInput.value) {
@@ -4304,12 +4383,14 @@ export class QuickReminderDialog {
             // 更新预设下拉状态
             this.updatePresetSelectState();
             this.updateStartEndSwapButtonState();
+            this.updateStartDateOnlyOverdueControl();
         });
 
         // 结束日期验证
         endDateInput?.addEventListener('change', () => {
             // 移除立即验证逻辑，只在保存时验证
             this.updateStartEndSwapButtonState();
+            this.updateStartDateOnlyOverdueControl();
         });
 
         // 时间输入框变化时更新预设下拉状态
@@ -4345,6 +4426,7 @@ export class QuickReminderDialog {
                 // 更新预设下拉状态
                 this.updatePresetSelectState();
                 this.updateStartEndSwapButtonState();
+                this.updateStartDateOnlyOverdueControl();
             }
         });
 
@@ -4367,6 +4449,7 @@ export class QuickReminderDialog {
             if (endDateInput) {
                 endDateInput.value = '';
                 this.updateStartEndSwapButtonState();
+                this.updateStartDateOnlyOverdueControl();
             }
         });
 
@@ -5582,6 +5665,7 @@ export class QuickReminderDialog {
                 availableStartDate: availableStartDate,
                 hideInCalendar: hideInCalendar
             };
+            this.applyStartDateOnlyOverdueOverride(reminderData, date, endDate);
 
             // 如果有绑定块，尝试获取并设置 docId
             if (reminderData.blockId) {
@@ -5667,6 +5751,7 @@ export class QuickReminderDialog {
             optimisticReminder.isAvailableToday = isAvailableToday;
             optimisticReminder.availableStartDate = availableStartDate;
             optimisticReminder.hideInCalendar = hideInCalendar;
+            this.applyStartDateOnlyOverdueOverride(optimisticReminder, date, endDate);
 
             // 同步 docId 用于 UI 显示
             optimisticReminder.docId = optimisticDocId !== null ? optimisticDocId : (this.reminder?.docId || undefined);
@@ -5709,6 +5794,7 @@ export class QuickReminderDialog {
                 estimatedPomodoroDuration: estimatedPomodoroDuration,
                 customProgress: customProgress
             };
+            this.applyStartDateOnlyOverdueOverride(optimisticReminder, date, endDate);
 
             if (typeof this.defaultSort === 'number') optimisticReminder.sort = this.defaultSort;
         }
@@ -5773,6 +5859,7 @@ export class QuickReminderDialog {
                             customProgress: customProgress,
                             pinned: pinned
                         };
+                        this.applyStartDateOnlyOverdueOverride(instanceModification, date, endDate);
 
                         // 调用实例修改保存方法
                         await this.saveInstanceModification({
@@ -5860,6 +5947,7 @@ export class QuickReminderDialog {
                         reminder.availableStartDate = availableStartDate;
                         reminder.hideInCalendar = hideInCalendar;
                         reminder.pinned = pinned;
+                        this.applyStartDateOnlyOverdueOverride(reminder, date, endDate);
 
                         // 设置或删除 documentId
                         if (inputId) {
@@ -6092,6 +6180,7 @@ export class QuickReminderDialog {
                         estimatedPomodoroDuration: estimatedPomodoroDuration,
                         customProgress: customProgress
                     };
+                    this.applyStartDateOnlyOverdueOverride(reminder, date, endDate);
 
                     // 添加默认排序值
                     if (typeof this.defaultSort === 'number') {
@@ -6338,6 +6427,7 @@ export class QuickReminderDialog {
                 reminderTimes: instanceData.reminderTimes,
                 estimatedPomodoroDuration: instanceData.estimatedPomodoroDuration,
                 customProgress: instanceData.customProgress,
+                treatStartDateAsDeadline: instanceData.treatStartDateAsDeadline,
                 pinned: instanceData.pinned,
                 modifiedAt: new Date().toISOString().split('T')[0]
             };

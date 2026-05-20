@@ -13,6 +13,7 @@ import { getLocalDateTimeString, getLocalDateString, compareDateStrings, getLogi
 import { getSolarDateLunarString } from "../utils/lunarUtils";
 import { generateRepeatInstances, getRepeatDescription, generateSubtreeInstances } from "../utils/repeatUtils";
 import { createPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
+import { shouldTreatStartDateOnlyAsOverdue } from "../utils/startDateOverdue";
 interface QuadrantTask {
     id: string;
     title: string;
@@ -42,6 +43,7 @@ interface QuadrantTask {
     isSubscribed?: boolean; // 是否为订阅任务
     customProgress?: number | string; // 自定义进度（0-100）
     pinned?: boolean; // 是否置顶
+    treatStartDateAsDeadline?: boolean;
 }
 
 interface Quadrant {
@@ -671,13 +673,15 @@ export class EisenhowerMatrixView {
         if (!dateForUrgency) return false;
 
         const today = getLogicalDateString();
+        const isOnlyStartDate = !!(reminder?.date && !reminder?.endDate);
+        const treatOnlyStartAsOverdue = shouldTreatStartDateOnlyAsOverdue(reminder, this.plugin?.settings);
         const taskDate = this.getTaskLogicalDate(
             dateForUrgency,
             reminder?.endDate ? (reminder.endTime || reminder.time) : reminder?.time
         );
 
         // 如果任务未完成且已过期，则认为是紧急的
-        if (!reminder.completed && compareDateStrings(taskDate, today) < 0) {
+        if (!reminder.completed && compareDateStrings(taskDate, today) < 0 && (!isOnlyStartDate || treatOnlyStartAsOverdue)) {
             return true;
         }
 
@@ -1381,7 +1385,10 @@ export class EisenhowerMatrixView {
                 const startDays = this.calculateTaskDaysDifference(logicalStart, today);
                 const startDateText = formatDateWithYear(task.date);
                 if (startDays < 0) {
-                    const treatsOnlyStartAsDeadline = !!(task.extendedProps?.repeat?.enabled || task.extendedProps?.isRepeatInstance || task.repeat?.enabled || task.isRepeatInstance);
+                    const treatsOnlyStartAsDeadline = shouldTreatStartDateOnlyAsOverdue(
+                        { ...task.extendedProps, ...task },
+                        this.plugin?.settings
+                    );
                     if (treatsOnlyStartAsDeadline) {
                         const overdueText = i18n('overdueDays', { days: String(Math.abs(startDays)) });
                         dateText = `${startDateText} ${this.createCountdownBadge(overdueText, 'urgent')}`;
@@ -5317,6 +5324,7 @@ export class EisenhowerMatrixView {
                 endTime: task.endTime,
                 note: instanceMod?.note !== undefined ? instanceMod.note : (originalReminder.note || ''),
                 priority: instanceMod?.priority !== undefined ? instanceMod.priority : (originalReminder.priority || 'none'),
+                treatStartDateAsDeadline: instanceMod?.treatStartDateAsDeadline !== undefined ? instanceMod.treatStartDateAsDeadline : originalReminder.treatStartDateAsDeadline,
                 isInstance: true,
                 originalId: task.originalId,
                 instanceDate: originalInstanceDate  // 使用原始生成日期而非当前显示日期

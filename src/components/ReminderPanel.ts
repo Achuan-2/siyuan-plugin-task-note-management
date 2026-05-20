@@ -22,6 +22,7 @@ import { PasteTaskDialog } from "./PasteTaskDialog";
 import { createPomodoroStartSubmenu as createSharedPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
 import { buildProjectCategoryOrderMap, buildProjectStatusOrderMap, compareProjectsByPanelSort, normalizeProjectPanelSortCriteria } from "./ProjectPanel";
 import type { KanbanStatus } from "../utils/projectManager";
+import { isOpenEndedStartDateTask, shouldTreatStartDateOnlyAsOverdue } from "../utils/startDateOverdue";
 
 interface ReminderPanelFilterSortConfig {
     sortMode?: 'global' | 'custom';
@@ -88,7 +89,7 @@ export class ReminderPanel {
 
     // 分页相关状态
     private currentPage: number = 1;
-    private itemsPerPage: number = 30;
+    private itemsPerPage: number = 50;
     private isPaginationEnabled: boolean = true; // 是否启用分页
     private totalPages: number = 1;
     private totalItems: number = 0;
@@ -4891,16 +4892,12 @@ export class ReminderPanel {
         return dateStr;
     }
 
-    private isRecurringReminder(reminder: any): boolean {
-        return !!(reminder?.isRepeatInstance || reminder?.repeat?.enabled);
-    }
-
     private shouldTreatOnlyStartDateAsDeadline(reminder: any): boolean {
-        return !!(reminder?.date && !reminder?.endDate && this.isRecurringReminder(reminder));
+        return shouldTreatStartDateOnlyAsOverdue(reminder, this.plugin?.settings);
     }
 
     private isOpenEndedStartDateTask(reminder: any): boolean {
-        return !!(reminder?.date && !reminder?.endDate && !this.shouldTreatOnlyStartDateAsDeadline(reminder));
+        return isOpenEndedStartDateTask(reminder, this.plugin?.settings);
     }
 
     private isReminderActiveOnDate(reminder: any, targetDate: string): boolean {
@@ -6386,7 +6383,7 @@ export class ReminderPanel {
         const hasEndDate = !!reminder.endDate;
         const isOnlyEndDate = !hasStartDate && hasEndDate;
         const isOnlyStartDate = hasStartDate && !hasEndDate;
-        const treatsOnlyStartAsDeadline = isOnlyStartDate && this.isRecurringReminder(reminder);
+        const treatsOnlyStartAsDeadline = isOnlyStartDate && this.shouldTreatOnlyStartDateAsDeadline(reminder);
         const isSpanningRealEvent = !!(hasStartDate && hasEndDate && reminder.endDate !== reminder.date);
 
         if (isSpanningRealEvent) {
@@ -9248,6 +9245,7 @@ export class ReminderPanel {
                         reminderTimes: instanceMod?.reminderTimes !== undefined ? instanceMod.reminderTimes : originalReminder.reminderTimes,
                         customReminderPreset: instanceMod?.customReminderPreset !== undefined ? instanceMod.customReminderPreset : originalReminder.customReminderPreset,
                         estimatedPomodoroDuration: instanceMod?.estimatedPomodoroDuration !== undefined ? instanceMod.estimatedPomodoroDuration : originalReminder.estimatedPomodoroDuration,
+                        treatStartDateAsDeadline: instanceMod?.treatStartDateAsDeadline !== undefined ? instanceMod.treatStartDateAsDeadline : originalReminder.treatStartDateAsDeadline,
                         isInstance: true,
                         originalId: reminder.originalId,
                         instanceDate: originalInstanceDate
