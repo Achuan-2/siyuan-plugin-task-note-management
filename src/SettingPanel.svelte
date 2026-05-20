@@ -420,7 +420,7 @@
                     key: 'singleDateDefaultRole',
                     value: settings.singleDateDefaultRole || 'deadline',
                     type: 'select',
-                    title: i18n('singleDateDefaultRole') || '无关键词的单日期默认识别为',
+                    title: i18n('singleDateDefaultRole') || '单日期默认识别为',
                     description:
                         i18n('singleDateDefaultRoleDesc') ||
                         '标题只有一个日期且没有开始/截止关键词时，选择默认填入开始日期还是截止日期。',
