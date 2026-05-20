@@ -854,6 +854,15 @@
                     description: i18n('pomodoroEndPopupWindowDesc'),
                 },
                 {
+                    key: 'pomodoroCompletionNotePopup',
+                    value: settings.pomodoroCompletionNotePopup,
+                    type: 'checkbox',
+                    title: i18n('pomodoroCompletionNotePopup') || '番茄钟完成后记录备注',
+                    description:
+                        i18n('pomodoroCompletionNotePopupDesc') ||
+                        '专注完成并保存记录后弹出备注窗口',
+                },
+                {
                     key: 'pomodoroDockPosition',
                     value: settings.pomodoroDockPosition,
                     type: 'select',

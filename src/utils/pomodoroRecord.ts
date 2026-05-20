@@ -14,6 +14,7 @@ export interface PomodoroSession {
     isCountUp?: boolean; // 是否为正计时模式
     count?: number; // 完成的番茄钟数量（正计时模式下根据时长计算）
     inProgress?: boolean; // 是否为开始计时时预创建、等待结束或补录的记录
+    note?: string; // 备注
 }
 
 export interface PomodoroRecord {
@@ -30,6 +31,7 @@ interface RecordSessionOptions {
     startTime?: SessionTimeInput;
     endTime?: SessionTimeInput;
     sessionId?: string;
+    note?: string;
 }
 
 export class PomodoroRecordManager {
@@ -81,6 +83,10 @@ export class PomodoroRecordManager {
             roundedMinutes = 1;
         }
         return Math.max(0, roundedMinutes);
+    }
+
+    private normalizeSessionNote(note: any): string {
+        return typeof note === 'string' ? note.trim() : '';
     }
 
     private calculateWorkSessionCount(workMinutes: number, plannedDuration: number, completed: boolean, isCountUp: boolean): number {
@@ -297,7 +303,8 @@ export class PomodoroRecordManager {
             plannedDuration,
             completed,
             isCountUp: isCountUp || false,
-            count
+            count,
+            note: this.normalizeSessionNote(options.note)
         };
 
         // 添加到会话记录
@@ -314,6 +321,7 @@ export class PomodoroRecordManager {
         // console.log('记录工作会话后:', JSON.stringify(this.records[today]));
 
         await this.saveRecords([logicalDate]);
+        return session;
     }
 
     async recordBreakSession(
@@ -349,7 +357,8 @@ export class PomodoroRecordManager {
             endTime: endTime.toISOString(),
             duration: roundedBreakMinutes,
             plannedDuration,
-            completed
+            completed,
+            note: this.normalizeSessionNote(options.note)
         };
 
         // 添加到会话记录
@@ -390,7 +399,8 @@ export class PomodoroRecordManager {
             completed: false,
             isCountUp: isCountUp || false,
             count: 0,
-            inProgress: true
+            inProgress: true,
+            note: ''
         };
 
         this.records[logicalDate].sessions.push(session);
@@ -414,8 +424,7 @@ export class PomodoroRecordManager {
 
         const location = sessionId ? this.findSessionLocation(sessionId) : null;
         if (!location) {
-            await this.recordWorkSession(workMinutes, eventId, eventTitle, plannedDuration, completed, isCountUp, options);
-            return null;
+            return await this.recordWorkSession(workMinutes, eventId, eventTitle, plannedDuration, completed, isCountUp, options);
         }
 
         const roundedWorkMinutes = this.roundSessionMinutes(workMinutes);
@@ -438,7 +447,8 @@ export class PomodoroRecordManager {
             completed,
             isCountUp: isCountUp || false,
             count,
-            inProgress: false
+            inProgress: false,
+            note: this.normalizeSessionNote(options.note ?? location.session.note)
         };
 
         await this.updateSession(updatedSession);
@@ -468,7 +478,8 @@ export class PomodoroRecordManager {
             plannedDuration: Math.max(1, Math.round(Number(session.plannedDuration) || 1)),
             completed: session.inProgress ? false : session.completed !== false,
             isCountUp: session.type === 'work' ? !!session.isCountUp : false,
-            inProgress: !!session.inProgress
+            inProgress: !!session.inProgress,
+            note: this.normalizeSessionNote(session.note)
         };
 
         if (normalizedSession.type === 'work') {
@@ -511,6 +522,21 @@ export class PomodoroRecordManager {
 
         this.buildStatsIndex();
         await this.saveRecords(Array.from(datesToSave));
+        return true;
+    }
+
+    async updateSessionNote(sessionId: string, note: string): Promise<boolean> {
+        if (!this.isInitialized) {
+            await this.initialize();
+        }
+
+        const location = this.findSessionLocation(sessionId);
+        if (!location) {
+            return false;
+        }
+
+        location.session.note = this.normalizeSessionNote(note);
+        await this.saveRecords([location.date]);
         return true;
     }
 

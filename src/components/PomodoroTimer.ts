@@ -1,5 +1,5 @@
 import { showMessage, confirm, getFrontend, getBackend, Dialog } from "siyuan";
-import { PomodoroRecordManager } from "../utils/pomodoroRecord";
+import { PomodoroRecordManager, type PomodoroSession } from "../utils/pomodoroRecord";
 import { getBlockByID, getBlockAttrs, setBlockAttrs, openBlock, sendNotification, cancelNotification } from "../api";
 import { i18n } from "../pluginInstance";
 import { resolveAudioPath } from "../utils/audioUtils";
@@ -444,12 +444,13 @@ export class PomodoroTimer {
         completed: boolean,
         isCountUp: boolean,
         endTime: Date = new Date()
-    ) {
+    ): Promise<PomodoroSession | null> {
         const startTime = this.getWorkSessionStartDate();
         const activeSessionId = this.activeWorkSessionId;
+        let session: PomodoroSession | null = null;
 
         if (activeSessionId) {
-            await this.recordManager.finishWorkSession(
+            session = await this.recordManager.finishWorkSession(
                 activeSessionId,
                 minutes,
                 eventId,
@@ -463,7 +464,7 @@ export class PomodoroTimer {
                 }
             );
         } else {
-            await this.recordManager.recordWorkSession(
+            session = await this.recordManager.recordWorkSession(
                 minutes,
                 eventId,
                 eventTitle,
@@ -479,6 +480,7 @@ export class PomodoroTimer {
 
         this.activeWorkSessionId = null;
         this.activeWorkSessionStartTime = 0;
+        return session;
     }
 
     /**
@@ -644,6 +646,15 @@ export class PomodoroTimer {
             return `#${(r << 16 | g << 8 | b).toString(16).padStart(6, '0')}`;
         }
         return color;
+    }
+
+    private escapeHtml(value: any): string {
+        return String(value ?? "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
     }
 
     /**
@@ -1154,6 +1165,270 @@ export class PomodoroTimer {
                 // ignore
             }
             this.pomodoroEndWindow = null;
+        }
+    }
+
+    private async savePomodoroSessionNote(sessionId: string, note: string, showToast: boolean = true) {
+        try {
+            const success = await this.recordManager.updateSessionNote(sessionId, note);
+            if (success) {
+                window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                if (showToast) {
+                    showMessage(i18n('pomodoroNoteSaved') || '已保存番茄备注', 2000);
+                }
+            } else if (showToast) {
+                showMessage(i18n('pomodoroNoteSaveFailed') || '番茄备注保存失败', 3000, 'error');
+            }
+        } catch (error) {
+            console.error('[PomodoroTimer] 保存番茄备注失败:', error);
+            if (showToast) {
+                showMessage(i18n('pomodoroNoteSaveFailed') || '番茄备注保存失败', 3000, 'error');
+            }
+        }
+    }
+
+    private openPomodoroCompletionNotePopup(session?: PomodoroSession | null) {
+        if (!session || !session.id || !this.settings?.pomodoroCompletionNotePopup) {
+            return;
+        }
+
+        if (this.openPomodoroCompletionNoteBrowserWindow(session)) {
+            return;
+        }
+
+        this.openPomodoroCompletionNoteDialog(session);
+    }
+
+    private openPomodoroCompletionNoteDialog(session: PomodoroSession) {
+        const title = i18n('pomodoroCompletionNoteTitle') || '记录番茄备注';
+        const taskTitle = session.eventTitle || this.reminder?.title || (i18n('pomodoroFocusDefault') || '番茄专注');
+
+        try {
+            const dialog = new Dialog({
+                title: `🍅 ${title}`,
+                content: `
+                    <div class="pomodoro-note-dialog" style="padding: 16px;">
+                        <div style="font-weight: 600; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${this.escapeHtml(taskTitle)}">
+                            ${this.escapeHtml(taskTitle)}
+                        </div>
+                        <textarea id="pomodoroCompletionNote" class="b3-text-field" rows="6" style="width: 100%; resize: vertical;" placeholder="这次专注完成了什么？">${this.escapeHtml(session.note || '')}</textarea>
+                        <div class="b3-dialog__action">
+                            <button class="b3-button b3-button--cancel" id="skipPomodoroNote">${i18n('skip') || '跳过'}</button>
+                            <button class="b3-button b3-button--primary" id="savePomodoroNote">${i18n('save') || '保存'}</button>
+                        </div>
+                    </div>
+                `,
+                width: "420px"
+            });
+
+            dialog.element.querySelector("#skipPomodoroNote")?.addEventListener("click", () => {
+                dialog.destroy();
+            });
+            dialog.element.querySelector("#savePomodoroNote")?.addEventListener("click", async () => {
+                const noteInput = dialog.element.querySelector("#pomodoroCompletionNote") as HTMLTextAreaElement;
+                await this.savePomodoroSessionNote(session.id, noteInput?.value || "");
+                dialog.destroy();
+            });
+        } catch (error) {
+            console.error('[PomodoroTimer] 打开番茄备注内部弹窗失败:', error);
+        }
+    }
+
+    private openPomodoroCompletionNoteBrowserWindow(session: PomodoroSession): boolean {
+        try {
+            let electron: any;
+            try {
+                electron = (window as any).require?.('electron');
+            } catch (error) {
+                return false;
+            }
+
+            let remote = electron?.remote;
+            if (!remote) {
+                try {
+                    remote = (window as any).require?.('@electron/remote');
+                } catch (error) {
+                    return false;
+                }
+            }
+
+            const BrowserWindowConstructor = remote?.BrowserWindow;
+            const ipcMain = remote?.ipcMain;
+            const screen = remote?.screen || electron?.screen;
+            if (!BrowserWindowConstructor || !ipcMain || !screen) {
+                return false;
+            }
+
+            const primaryDisplay = screen.getPrimaryDisplay();
+            const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
+            const winWidth = 560;
+            const winHeight = 420;
+            const x = Math.floor((screenWidth - winWidth) / 2);
+            const y = Math.floor((screenHeight - winHeight) / 2);
+
+            const noteWindow = new BrowserWindowConstructor({
+                width: winWidth,
+                height: winHeight,
+                x,
+                y,
+                frame: true,
+                alwaysOnTop: true,
+                resizable: true,
+                movable: true,
+                skipTaskbar: false,
+                hasShadow: true,
+                transparent: false,
+                parent: null,
+                fullscreenable: false,
+                webPreferences: {
+                    nodeIntegration: true,
+                    contextIsolation: false,
+                    webSecurity: false
+                },
+                title: i18n('pomodoroCompletionNoteTitle') || '记录番茄备注',
+                show: false,
+                backgroundColor: this.getCssVariable('--b3-theme-background')
+            });
+
+            noteWindow.setMenu(null);
+
+            const channel = `pomodoro-completion-note-${session.id}-${Date.now()}`;
+            const bgColor = this.getCssVariable('--b3-theme-background') || '#ffffff';
+            const textColor = this.getCssVariable('--b3-theme-on-background') || '#222222';
+            const surfaceColor = this.getCssVariable('--b3-theme-surface') || '#f6f6f6';
+            const borderColor = this.getCssVariable('--b3-theme-border') || '#d0d0d0';
+            const primaryColor = this.getCssVariable('--b3-theme-primary') || '#357edd';
+            const { fontFamily, fontFaceCss } = this.getPomodoroBrowserWindowFontConfig();
+            const title = i18n('pomodoroCompletionNoteTitle') || '记录番茄备注';
+            const taskTitle = session.eventTitle || this.reminder?.title || (i18n('pomodoroFocusDefault') || '番茄专注');
+
+            const htmlContent = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <style>
+                        ${fontFaceCss}
+                        body {
+                            margin: 0;
+                            padding: 22px;
+                            box-sizing: border-box;
+                            background: ${bgColor};
+                            color: ${textColor};
+                            font-family: ${fontFamily};
+                        }
+                        .title {
+                            font-size: 20px;
+                            font-weight: 700;
+                            margin-bottom: 10px;
+                        }
+                        .task {
+                            font-size: 14px;
+                            color: ${textColor};
+                            opacity: 0.78;
+                            margin-bottom: 14px;
+                            white-space: nowrap;
+                            overflow: hidden;
+                            text-overflow: ellipsis;
+                        }
+                        textarea {
+                            width: 100%;
+                            height: 210px;
+                            box-sizing: border-box;
+                            resize: vertical;
+                            border: 1px solid ${borderColor};
+                            border-radius: 6px;
+                            padding: 10px;
+                            background: ${surfaceColor};
+                            color: ${textColor};
+                            font-family: ${fontFamily};
+                            font-size: 14px;
+                            line-height: 1.5;
+                            outline: none;
+                        }
+                        .actions {
+                            display: flex;
+                            justify-content: flex-end;
+                            gap: 10px;
+                            margin-top: 16px;
+                        }
+                        button {
+                            border: 0;
+                            border-radius: 4px;
+                            padding: 8px 18px;
+                            font-family: ${fontFamily};
+                            font-size: 14px;
+                            cursor: pointer;
+                        }
+                        .skip {
+                            background: ${surfaceColor};
+                            color: ${textColor};
+                            border: 1px solid ${borderColor};
+                        }
+                        .save {
+                            background: ${primaryColor};
+                            color: #fff;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="title">🍅 ${this.escapeHtml(title)}</div>
+                    <div class="task" title="${this.escapeHtml(taskTitle)}">${this.escapeHtml(taskTitle)}</div>
+                    <textarea id="note" autofocus placeholder="这次专注完成了什么？">${this.escapeHtml(session.note || '')}</textarea>
+                    <div class="actions">
+                        <button class="skip" onclick="skipNote()">${i18n('skip') || '跳过'}</button>
+                        <button class="save" onclick="saveNote()">${i18n('save') || '保存'}</button>
+                    </div>
+                    <script>
+                        const { ipcRenderer } = require('electron');
+                        const channel = ${JSON.stringify(channel)};
+                        function saveNote() {
+                            const note = document.getElementById('note').value || '';
+                            ipcRenderer.send(channel, { note });
+                        }
+                        function skipNote() {
+                            ipcRenderer.send(channel, { cancelled: true });
+                        }
+                        document.addEventListener('keydown', (event) => {
+                            if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                                saveNote();
+                            }
+                            if (event.key === 'Escape') {
+                                skipNote();
+                            }
+                        });
+                    </script>
+                </body>
+                </html>
+            `;
+
+            const handleResult = async (_event: any, payload: any) => {
+                ipcMain.removeListener(channel, handleResult);
+                try {
+                    if (!payload?.cancelled) {
+                        await this.savePomodoroSessionNote(session.id, payload?.note || "");
+                    }
+                } finally {
+                    if (noteWindow && !noteWindow.isDestroyed()) {
+                        noteWindow.destroy();
+                    }
+                }
+            };
+
+            ipcMain.on(channel, handleResult);
+            noteWindow.on('closed', () => {
+                ipcMain.removeListener(channel, handleResult);
+            });
+            noteWindow.once('ready-to-show', () => {
+                noteWindow.show();
+                noteWindow.focus();
+                noteWindow.setAlwaysOnTop(true, "screen-saver");
+            });
+            noteWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(htmlContent));
+            return true;
+        } catch (error) {
+            console.error('[PomodoroTimer] 打开番茄备注全局弹窗失败:', error);
+            return false;
         }
     }
 
@@ -5740,7 +6015,7 @@ export class PomodoroTimer {
                 // 计算实际完成的时间（分钟）
                 const actualDuration = Math.round(this.totalTime / 60);
 
-                await this.finishActiveWorkSession(
+                const completedSession = await this.finishActiveWorkSession(
                     actualDuration,
                     eventId,
                     eventTitle,
@@ -5748,6 +6023,7 @@ export class PomodoroTimer {
                     true,
                     false
                 );
+                this.openPomodoroCompletionNotePopup(completedSession);
                 this.phaseStartTime = 0;
             } else {
                 // 正计时模式完成番茄后也要停止随机微休息
@@ -5935,7 +6211,7 @@ export class PomodoroTimer {
                 // 在倒计时模式下，实际完成时间 = totalTime（设定的总时间）
                 const actualDuration = Math.round(this.totalTime / 60);
 
-                await this.finishActiveWorkSession(
+                const completedSession = await this.finishActiveWorkSession(
                     actualDuration,
                     eventId,
                     eventTitle,
@@ -5943,6 +6219,7 @@ export class PomodoroTimer {
                     true,
                     false
                 );
+                this.openPomodoroCompletionNotePopup(completedSession);
                 this.phaseStartTime = 0;
 
                 // 更新番茄数量计数

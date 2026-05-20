@@ -349,6 +349,10 @@ export class PomodoroSessionsDialog {
             : (session.completed
                 ? '<span style="background: #4caf50; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px;">✓ 完成</span>'
                 : '<span style="background: var(--b3-theme-error); color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px;">未完成</span>');
+        const note = String(session.note || "").trim();
+        const noteHtml = note
+            ? `<div style="font-size: 12px; color: var(--b3-theme-on-surface); background: var(--b3-theme-background-light); padding: 6px 8px; border-radius: 4px; margin-top: 4px; white-space: pre-wrap; word-break: break-word;">${this.escapeHtml(note)}</div>`
+            : "";
 
         let extraBadges = '';
         if (session.type === 'work') {
@@ -389,6 +393,7 @@ export class PomodoroSessionsDialog {
                         <span>🕐 ${startTimeStr} - ${endTimeStr}</span>
                         <span>⏱️ ${session.inProgress ? "待补录" : `${session.duration} 分钟`}</span>
                     </div>
+                    ${noteHtml}
                 </div>
                 <div style="display: flex; gap: 4px;">
                     <button class="b3-button b3-button--outline edit-pomodoro-btn ariaLabel" aria-label="${i18n("edit")}" style="padding: 4px 8px;">
@@ -422,6 +427,15 @@ export class PomodoroSessionsDialog {
         const hours = Math.floor(minutes / 60);
         const mins = minutes % 60;
         return mins > 0 ? `${hours}小时${mins}分` : `${hours}小时`;
+    }
+
+    private escapeHtml(value: any): string {
+        return String(value ?? "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
     }
 
     private bindEvents() {
@@ -694,6 +708,10 @@ export class PomodoroSessionsDialog {
                             <span class="b3-checkbox__label">${i18n("isCountUp") || "正计时 (自动计算番茄数)"}</span>
                         </label>
                     </div>
+                    <div class="b3-form__group">
+                        <label class="b3-form__label">${i18n("note") || "备注"}</label>
+                        <textarea id="sessionNote" class="b3-text-field" rows="3" style="width: 100%; resize: vertical;" placeholder="这次专注完成了什么？"></textarea>
+                    </div>
                     <div class="b3-dialog__action">
                         <button class="b3-button b3-button--cancel">${i18n("cancel")}</button>
                         <button class="b3-button b3-button--primary" id="confirmAddPomodoro">${i18n("save")}</button>
@@ -768,6 +786,7 @@ export class PomodoroSessionsDialog {
             const duration = parseInt((addDialog.element.querySelector("#sessionDuration") as HTMLInputElement).value);
             const completed = true; // 强制为已完成
             const isCountUp = (addDialog.element.querySelector("#sessionIsCountUp") as HTMLInputElement).checked;
+            const note = (addDialog.element.querySelector("#sessionNote") as HTMLTextAreaElement).value.trim();
 
             if (!timePointStr || !duration || duration <= 0) {
                 showMessage(i18n("pleaseEnterValidInfo") || "请输入有效信息", 3000, "error");
@@ -812,7 +831,8 @@ export class PomodoroSessionsDialog {
                     completed,
                     isCountUp,
                     count,
-                    inProgress: false
+                    inProgress: false,
+                    note
                 };
 
                 // 手动添加到记录中
@@ -891,6 +911,10 @@ export class PomodoroSessionsDialog {
                         <label class="b3-form__label">${i18n("duration") || "持续时长"} (${i18n("minutes") || "分钟"})</label>
                         <input type="number" id="editSessionDuration" class="b3-text-field" min="1" style="width: 100%;" required>
                     </div>
+                    <div class="b3-form__group">
+                        <label class="b3-form__label">${i18n("note") || "备注"}</label>
+                        <textarea id="editSessionNote" class="b3-text-field" rows="3" style="width: 100%; resize: vertical;" placeholder="这次专注完成了什么？">${this.escapeHtml(session.note || "")}</textarea>
+                    </div>
                     <div class="b3-dialog__action">
                         <button class="b3-button b3-button--cancel">${i18n("cancel")}</button>
                         <button class="b3-button b3-button--primary" id="confirmEditPomodoro">${i18n("save")}</button>
@@ -904,6 +928,7 @@ export class PomodoroSessionsDialog {
         const typeSelect = editDialog.element.querySelector("#editSessionType") as HTMLSelectElement;
         const startTimeInput = editDialog.element.querySelector("#editSessionStartTime") as HTMLInputElement;
         const durationInput = editDialog.element.querySelector("#editSessionDuration") as HTMLInputElement;
+        const noteInput = editDialog.element.querySelector("#editSessionNote") as HTMLTextAreaElement;
 
         typeSelect.value = session.type;
 
@@ -924,6 +949,7 @@ export class PomodoroSessionsDialog {
             const startTimeStr = startTimeInput.value;
             const duration = parseInt(durationInput.value);
             const completed = true; // 强制为已完成
+            const note = noteInput.value.trim();
 
             if (!startTimeStr || !duration || duration <= 0) {
                 showMessage(i18n("pleaseEnterValidInfo") || "请输入有效信息", 3000, "error");
@@ -956,7 +982,8 @@ export class PomodoroSessionsDialog {
                     completed,
                     isCountUp: session.isCountUp, // 保留原有的计时属性
                     count: session.count, // 保留原有的番茄数计数
-                    inProgress: false
+                    inProgress: false,
+                    note
                 };
 
                 // 如果修改了时长且是正计时/工作番茄，可能需要重新计算count

@@ -30,6 +30,7 @@ type PomodoroSession = {
     isCountUp?: boolean;
     count?: number;
     inProgress?: boolean;
+    note?: string;
 };
 
 // 注册 ECharts 组件
@@ -438,6 +439,10 @@ class PomodoroStatsView {
         const statusText = session.inProgress
             ? '<span class="record-incomplete">待补录</span>'
             : (session.completed ? '<span class="record-completed">✅</span>' : '<span class="record-incomplete">⏸</span>');
+        const note = String(session.note || "").trim();
+        const noteHtml = note
+            ? `<div class="record-note" style="margin-top: 6px; padding: 6px 8px; background: var(--b3-theme-background-light); border-radius: 4px; color: var(--b3-theme-on-surface); white-space: pre-wrap; word-break: break-word;">${this.escapeHtml(note)}</div>`
+            : "";
 
         return `
             <div class="record-item ${session.type}">
@@ -452,6 +457,7 @@ class PomodoroStatsView {
                         <span class="record-duration">${durationText}</span>
                         ${statusText}
                     </div>
+                    ${noteHtml}
                 </div>
                 <div class="record-actions">
                     <button class="edit-btn ariaLabel" data-session-id="${session.id}" aria-label="${i18n("edit")}">✏️</button>
@@ -1618,6 +1624,15 @@ class PomodoroStatsView {
         return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}T${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
     }
 
+    private escapeHtml(value: any): string {
+        return String(value ?? "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+    }
+
     private async handleEditSession(sessionId: string) {
         const session = this.findSessionById(sessionId);
         if (!session) {
@@ -1649,6 +1664,10 @@ class PomodoroStatsView {
                         <label class="b3-form__label">${i18n("duration") || "持续时长"} (${i18n("minutes") || "分钟"})</label>
                         <input type="number" id="editStatsSessionDuration" class="b3-text-field" min="1" style="width: 100%;" required>
                     </div>
+                    <div class="b3-form__group">
+                        <label class="b3-form__label">${i18n("note") || "备注"}</label>
+                        <textarea id="editStatsSessionNote" class="b3-text-field" rows="3" style="width: 100%; resize: vertical;" placeholder="这次专注完成了什么？">${this.escapeHtml(session.note || "")}</textarea>
+                    </div>
                     <div class="b3-dialog__action">
                         <button class="b3-button b3-button--cancel">${i18n("cancel")}</button>
                         <button class="b3-button b3-button--primary" id="confirmEditStatsPomodoro">${i18n("save")}</button>
@@ -1661,6 +1680,7 @@ class PomodoroStatsView {
         const typeSelect = editDialog.element.querySelector("#editStatsSessionType") as HTMLSelectElement;
         const startTimeInput = editDialog.element.querySelector("#editStatsSessionStartTime") as HTMLInputElement;
         const durationInput = editDialog.element.querySelector("#editStatsSessionDuration") as HTMLInputElement;
+        const noteInput = editDialog.element.querySelector("#editStatsSessionNote") as HTMLTextAreaElement;
 
         typeSelect.value = session.type;
         startTimeInput.value = this.formatDateTimeLocal(startTime);
@@ -1674,6 +1694,7 @@ class PomodoroStatsView {
             const type = typeSelect.value as 'work' | 'shortBreak' | 'longBreak';
             const nextStartTime = new Date(startTimeInput.value);
             const duration = parseInt(durationInput.value, 10);
+            const note = noteInput.value.trim();
 
             if (!startTimeInput.value || Number.isNaN(nextStartTime.getTime()) || !duration || duration <= 0) {
                 showMessage(i18n("pleaseEnterValidInfo") || "请输入有效信息", 3000, "error");
@@ -1692,7 +1713,8 @@ class PomodoroStatsView {
                 plannedDuration,
                 completed: true,
                 isCountUp: type === 'work' ? !!session.isCountUp : false,
-                inProgress: false
+                inProgress: false,
+                note
             };
 
             if (nextSession.type === 'work') {
