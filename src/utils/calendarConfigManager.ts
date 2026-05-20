@@ -29,6 +29,7 @@ export interface CalendarConfig {
     completedTaskTimeUseTaskColor: boolean; // 完成任务时间使用任务上色方式
     showTasks: boolean; // 是否显示任务
     showHabits: boolean; // 是否显示习惯
+    showReminderTime: boolean; // 是否显示任务提醒时间
     multiDaysCount: number; // 多天视图显示的天数，默认为3天
 }
 
@@ -64,6 +65,7 @@ export class CalendarConfigManager {
             completedTaskTimeUseTaskColor: false, // 默认不使用任务上色方式
             showTasks: true, // 默认显示任务
             showHabits: true, // 默认显示习惯
+            showReminderTime: true, // 默认显示任务提醒时间
             multiDaysCount: 3 // 默认显示3天
         };
     }
@@ -106,6 +108,7 @@ export class CalendarConfigManager {
             settings.calendarCompletedTaskTimeUseTaskColor = this.config.completedTaskTimeUseTaskColor;
             settings.calendarShowTasks = this.config.showTasks;
             settings.calendarShowHabits = this.config.showHabits;
+            settings.calendarShowReminderTime = this.config.showReminderTime;
             settings.calendarMultiDaysCount = this.config.multiDaysCount;
             await (this.plugin as any).saveSettings(settings);
             if (typeof window !== 'undefined') {
@@ -172,6 +175,7 @@ export class CalendarConfigManager {
                 completedTaskTimeUseTaskColor: settings.calendarCompletedTaskTimeUseTaskColor === true, // 默认为 false
                 showTasks: settings.calendarShowTasks !== false, // 默认为 true
                 showHabits: settings.calendarShowHabits !== false, // 默认为 true
+                showReminderTime: settings.calendarShowReminderTime !== false, // 默认为 true
                 multiDaysCount: settings.calendarMultiDaysCount !== undefined ? settings.calendarMultiDaysCount : 3 // 默认为3天
             };
         } catch (error) {
@@ -201,6 +205,7 @@ export class CalendarConfigManager {
                 completedTaskTimeUseTaskColor: false,
                 showTasks: true,
                 showHabits: true,
+                showReminderTime: true,
                 multiDaysCount: 3
             };
             try {
@@ -435,6 +440,15 @@ export class CalendarConfigManager {
 
     public getShowHabits(): boolean {
         return this.config.showHabits !== false;
+    }
+
+    public async setShowReminderTime(show: boolean) {
+        this.config.showReminderTime = show;
+        await this.saveConfig();
+    }
+
+    public getShowReminderTime(): boolean {
+        return this.config.showReminderTime !== false;
     }
 
     public getConfig(): CalendarConfig {
