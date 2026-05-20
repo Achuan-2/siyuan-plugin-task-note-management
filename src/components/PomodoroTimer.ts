@@ -6876,6 +6876,17 @@ export class PomodoroTimer {
                 await this.recordPartialWorkSession();
             }
             await this.pauseTimer();
+            // 暂停后，用当前实例的精确时间更新 inheritState，
+            // 避免 applyInheritedState 用旧状态覆盖 pauseTimer 计算出的精确值
+            if (inheritState) {
+                inheritState = {
+                    ...inheritState,
+                    timeElapsed: this.timeElapsed,
+                    timeLeft: this.timeLeft,
+                    breakTimeLeft: this.breakTimeLeft,
+                    pausedTime: this.pausedTime
+                };
+            }
         }
 
         // 停止所有音频
