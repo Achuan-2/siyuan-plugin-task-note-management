@@ -639,7 +639,7 @@
     "removeDateOnly": "仅去除日期",
     "removeDateAndTime": "去除日期和时间",
     "pasteAutoDetectDate": "粘贴自动识别日期",
-    "singleDateDefaultRole": "无关键词的单日期默认识别为",
+    "singleDateDefaultRole": "单日期默认识别为",
     "singleDateDefaultRoleDesc": "标题只有一个日期且没有开始/截止关键词时，选择默认填入开始日期还是结束日期。",
     "singleDateDefaultRoleDeadline": "结束日期",
     "singleDateDefaultRoleStart": "开始日期",
