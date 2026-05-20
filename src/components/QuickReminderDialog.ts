@@ -962,6 +962,7 @@ export class QuickReminderDialog {
         const holidaysInput = this.dialog?.element?.querySelector('#quickReminderSkipHolidays') as HTMLInputElement | null;
         const dateInput = this.dialog?.element?.querySelector('#quickReminderDate') as HTMLInputElement | null;
         const endDateInput = this.dialog?.element?.querySelector('#quickReminderEndDate') as HTMLInputElement | null;
+        const startDateOnlyOverdueCheckbox = this.dialog?.element?.querySelector('#quickStartDateOnlyOverdue') as HTMLInputElement | null;
         if (!row || !weekendsInput || !holidaysInput) return;
 
         const controlReminder = this.getReminderForSkipDateControls();
@@ -969,8 +970,14 @@ export class QuickReminderDialog {
         const startDate = startDateVisible ? dateInput?.value : undefined;
         const endDate = startDateVisible ? endDateInput?.value : undefined;
         const isRepeatTask = this.repeatConfig?.enabled === true;
-        const showWeekends = !isRepeatTask && shouldShowReminderSkipWeekendsControl(controlReminder, startDate, endDate);
-        const showHolidays = !isRepeatTask && shouldShowReminderSkipHolidaysControl(controlReminder, startDate, endDate, this.reminderSkipHolidayData);
+
+        // 只有开始日期、没有结束日期，且未勾选"开始日期过时后识别为过期任务"时，也显示周末/节假日跳过选项
+        const hasOnlyStartDate = !!startDate && !endDate;
+        const treatStartDateAsDeadline = startDateOnlyOverdueCheckbox?.checked ?? false;
+        const showSkipForStartDateOnly = hasOnlyStartDate && !treatStartDateAsDeadline;
+
+        const showWeekends = !isRepeatTask && (showSkipForStartDateOnly || shouldShowReminderSkipWeekendsControl(controlReminder, startDate, endDate));
+        const showHolidays = !isRepeatTask && (showSkipForStartDateOnly || shouldShowReminderSkipHolidaysControl(controlReminder, startDate, endDate, this.reminderSkipHolidayData));
 
         const weekendsLabel = weekendsInput.closest('label') as HTMLElement | null;
         const holidaysLabel = holidaysInput.closest('label') as HTMLElement | null;
@@ -4109,6 +4116,11 @@ export class QuickReminderDialog {
         });
         endDateInput?.addEventListener('input', () => {
             this.updateStartDateOnlyOverdueControl();
+            this.updateReminderSkipDateControls();
+        });
+
+        const startDateOnlyOverdueCheckbox = this.dialog.element.querySelector('#quickStartDateOnlyOverdue') as HTMLInputElement;
+        startDateOnlyOverdueCheckbox?.addEventListener('change', () => {
             this.updateReminderSkipDateControls();
         });
 
