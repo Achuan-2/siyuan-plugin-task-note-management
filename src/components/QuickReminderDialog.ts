@@ -243,6 +243,7 @@ export class QuickReminderDialog {
     private instanceDate?: string;
     private defaultSort?: number;
     private hideProjectSelector: boolean = false;
+    private allowedProjectIds?: string[];
     private existingReminders: any[] = [];
     private selectedCategoryIds: string[] = [];
     private isMultiSelectCategory: boolean = false; // 分类是否多选
@@ -275,6 +276,7 @@ export class QuickReminderDialog {
             defaultCustomReminderTime?: string;
             plugin?: any;
             hideProjectSelector?: boolean;
+            allowedProjectIds?: string[];
             defaultQuadrant?: string;
             defaultTitle?: string;
             defaultNote?: string;
@@ -312,6 +314,12 @@ export class QuickReminderDialog {
             this.defaultCustomReminderTime = options.defaultCustomReminderTime;
             this.plugin = options.plugin;
             this.hideProjectSelector = options.hideProjectSelector;
+            this.allowedProjectIds = Array.isArray(options.allowedProjectIds)
+                ? Array.from(new Set(options.allowedProjectIds.filter(Boolean)))
+                : undefined;
+            if (this.allowedProjectIds?.length && (!this.defaultProjectId || !this.allowedProjectIds.includes(this.defaultProjectId))) {
+                this.defaultProjectId = this.allowedProjectIds[0];
+            }
             this.defaultQuadrant = options.defaultQuadrant;
             this.defaultTitle = options.defaultTitle;
             this.defaultNote = options.defaultNote;
@@ -5284,17 +5292,23 @@ export class QuickReminderDialog {
         try {
             await this.projectManager.initialize();
             const groupedProjects = this.projectManager.getProjectsGroupedByStatus();
+            const allowedProjectIdSet = this.allowedProjectIds?.length
+                ? new Set(this.allowedProjectIds)
+                : null;
 
             // 生成内容
             let html = '';
 
             // 无项目选项
-            html += `<div class="b3-menu__item" data-value="" data-label="${i18n('noProject')}"><span class="b3-menu__label">${i18n('noProject')}</span></div>`;
+            if (!allowedProjectIdSet) {
+                html += `<div class="b3-menu__item" data-value="" data-label="${i18n('noProject')}"><span class="b3-menu__label">${i18n('noProject')}</span></div>`;
+            }
 
             // 按状态分组添加项目
             Object.keys(groupedProjects).forEach(statusKey => {
                 const projects = groupedProjects[statusKey] || [];
                 const nonArchivedProjects = projects.filter(project => {
+                    if (allowedProjectIdSet && !allowedProjectIdSet.has(project.id)) return false;
                     const projectStatus = this.projectManager.getProjectById(project.id)?.status || 'doing';
                     return projectStatus !== 'archived';
                 });
@@ -5420,6 +5434,14 @@ export class QuickReminderDialog {
                     searchInput.value = item.getAttribute('data-label') || '';
                 }
                 await this.onProjectChange(this.defaultProjectId);
+            } else if (allowedProjectIdSet) {
+                const firstItem = dropdown.querySelector('.b3-menu__item[data-value]') as HTMLElement | null;
+                const firstProjectId = firstItem?.getAttribute('data-value') || '';
+                if (firstProjectId) {
+                    hiddenInput.value = firstProjectId;
+                    searchInput.value = firstItem?.getAttribute('data-label') || '';
+                    await this.onProjectChange(firstProjectId);
+                }
             }
 
         } catch (error) {

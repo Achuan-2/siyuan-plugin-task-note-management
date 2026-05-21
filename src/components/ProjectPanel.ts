@@ -16,7 +16,7 @@ import { GlobalProjectStatusDialog } from "./GlobalProjectStatusDialog";
 import { ProjectKanbanView } from "./ProjectKanbanView";
 import { BlockBindingDialog } from "./BlockBindingDialog";
 import { i18n } from "../pluginInstance";
-import { getAllReminders } from "../utils/icsSubscription";
+import { getAllReminders, saveReminders } from "../utils/icsSubscription";
 import { SortMenuDialog } from "./SortMenuDialog";
 import { SortCriterion, getSortCriterionName } from "../utils/sortConfig";
 import { generateRandomColor } from "../utils/uiUtils";
@@ -1058,6 +1058,8 @@ export class ProjectPanel {
         if (!this.isDragDisabledBySortMode()) {
             this.addDragFunctionality(projectEl, project);
         }
+        // 支持接收来自项目看板的任务拖入（修改任务所属项目）
+        this.addTaskDropTarget(projectEl, project);
 
         // 添加右键菜单支持
         projectEl.addEventListener('contextmenu', (e) => {
@@ -2702,6 +2704,37 @@ export class ProjectPanel {
         }
     }
 
+    private collectFolderNodeProjects(node: ProjectFolderTreeNode): any[] {
+        const projects = [...node.projects];
+        node.children.forEach(child => {
+            projects.push(...this.collectFolderNodeProjects(child));
+        });
+        return projects;
+    }
+
+    private openFolderKanban(node: ProjectFolderTreeNode) {
+        const projects = this.collectFolderNodeProjects(node)
+            .filter(project => project?.id);
+        if (projects.length === 0) {
+            showMessage(i18n("noProject") || "暂无项目");
+            return;
+        }
+
+        const folder = node.folder;
+        const title = `${folder.icon || '📂'} ${folder.name}`;
+        try {
+            this.plugin.openProjectKanbanTab(`folder:${folder.id}`, title, {
+                folderId: folder.id,
+                aggregateProjectIds: projects.map(project => project.id),
+                aggregateTitle: title,
+                hideMoreButton: true
+            });
+        } catch (error) {
+            console.error('打开项目文件夹看板失败:', error);
+            showMessage("打开项目看板失败");
+        }
+    }
+
     private createQuickProject() {
         const dialog = new ProjectDialog(undefined, this.plugin);
         dialog.show();
@@ -3285,13 +3318,17 @@ export class ProjectPanel {
         });
 
         headerEl.addEventListener('click', async (e) => {
-            if (!hasChildren) return;
             if ((e.target as HTMLElement).closest('.project-folder-more-btn')) return;
             const chevronRect = chevronEl.getBoundingClientRect();
             if (e.clientX <= chevronRect.right + 4) {
                 e.stopPropagation();
                 await toggleFolderCollapsed();
+                return;
             }
+
+            e.preventDefault();
+            e.stopPropagation();
+            this.openFolderKanban(node);
         });
 
         groupEl.appendChild(headerEl);
@@ -3544,6 +3581,8 @@ export class ProjectPanel {
         if (!this.isDragDisabledBySortMode()) {
             this.addDragFunctionality(projectEl, project);
         }
+        // 支持接收来自项目看板的任务拖入（修改任务所属项目）
+        this.addTaskDropTarget(projectEl, project);
 
         projectEl.addEventListener('contextmenu', (e) => {
             e.preventDefault();
@@ -3956,5 +3995,103 @@ export class ProjectPanel {
             return { emoji, text };
         }
         return { emoji: '', text: title };
+    }
+
+    /**
+     * 为项目卡片/列表项添加「接收任务拖入」功能。
+     * 当用户从项目看板把任务拖到此项目元素上时，将任务的 projectId 改为该项目。
+     */
+    private addTaskDropTarget(projectEl: HTMLElement, project: any) {
+        const TASK_MOVE_TYPE = 'application/vnd.siyuan.kanban-task-move';
+
+        const isTaskDrag = (e: DragEvent) =>
+            e.dataTransfer?.types.includes(TASK_MOVE_TYPE) ?? false;
+
+        projectEl.addEventListener('dragover', (e: DragEvent) => {
+            // 仅当拖入的是来自看板的任务时才处理（排除项目自身拖拽）
+            if (!isTaskDrag(e) || this.isDragging) return;
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+            projectEl.classList.add('project-item--task-drop-active');
+        });
+
+        projectEl.addEventListener('dragleave', (e: DragEvent) => {
+            if (!isTaskDrag(e)) return;
+            // 只有真正离开元素时才移除高亮（子元素触发的 dragleave 忽略）
+            if (!projectEl.contains(e.relatedTarget as Node)) {
+                projectEl.classList.remove('project-item--task-drop-active');
+            }
+        });
+
+        projectEl.addEventListener('drop', async (e: DragEvent) => {
+            if (!isTaskDrag(e) || this.isDragging) return;
+            e.preventDefault();
+            e.stopPropagation();
+            projectEl.classList.remove('project-item--task-drop-active');
+
+            const raw = e.dataTransfer?.getData(TASK_MOVE_TYPE);
+            if (!raw) return;
+
+            let taskIds: string[] = [];
+            try {
+                taskIds = JSON.parse(raw);
+            } catch {
+                return;
+            }
+            if (!taskIds.length) return;
+
+            await this.dropTasksOnProject(taskIds, project);
+        });
+    }
+
+    /**
+     * 将给定的任务 ID 列表的所属项目改为 targetProject，并保存。
+     */
+    private async dropTasksOnProject(taskIds: string[], targetProject: any) {
+        if (!taskIds.length || !targetProject?.id) return;
+
+        try {
+            const reminderData = await getAllReminders(this.plugin, undefined, false);
+            if (!reminderData) {
+                showMessage(i18n('operationFailed') || '操作失败');
+                return;
+            }
+
+            let updatedCount = 0;
+            for (const taskId of taskIds) {
+                const task = reminderData[taskId];
+                if (!task) continue;
+                if (task.projectId === targetProject.id) continue;
+                task.projectId = targetProject.id;
+                // 跨项目时清除分组（分组 ID 在新项目中无意义）
+                if (task.customGroupId !== undefined) {
+                    delete task.customGroupId;
+                }
+                updatedCount++;
+            }
+
+            if (updatedCount === 0) {
+                showMessage(i18n('taskAlreadyInProject') || '任务已在该项目中');
+                return;
+            }
+
+            await saveReminders(this.plugin, reminderData);
+
+            // 通知看板和面板刷新
+            window.dispatchEvent(new CustomEvent('reminderUpdated', {
+                detail: { source: 'projectPanel' }
+            }));
+
+            const projectTitle = targetProject.title || targetProject.name || targetProject.id;
+            showMessage(
+                (i18n('taskMovedToProject') || '已将 ${count} 个任务移至「${project}」')
+                    .replace('${count}', String(updatedCount))
+                    .replace('${project}', projectTitle)
+            );
+        } catch (error) {
+            console.error('拖拽任务改项目失败:', error);
+            showMessage(i18n('operationFailed') || '操作失败');
+        }
     }
 }

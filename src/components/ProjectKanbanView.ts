@@ -32,11 +32,37 @@ interface KanbanSortConfigProjectData {
     sortCriteria?: SortCriterion[];
 }
 
+interface ProjectKanbanViewOptions {
+    aggregateProjectIds?: string[];
+    aggregateTitle?: string;
+    folderId?: string;
+    hideMoreButton?: boolean;
+}
+
+interface AggregateProjectContext {
+    project: any;
+    activeGroups: any[];
+    activeGroupIds: Set<string>;
+}
+
+interface AggregateGroupTarget {
+    projectId: string;
+    customGroupId: string | null;
+}
+
 export class ProjectKanbanView {
     private container: HTMLElement;
     private plugin: any;
     private projectId: string;
     private project: any;
+    private viewOptions: ProjectKanbanViewOptions;
+    private isAggregateView: boolean = false;
+    private aggregateProjectIds: string[] = [];
+    private aggregateProjectIdSet: Set<string> = new Set();
+    private aggregateProjectContext: Map<string, AggregateProjectContext> = new Map();
+    private aggregateGroupTargetMap: Map<string, AggregateGroupTarget> = new Map();
+    private aggregateTitle: string = '';
+    private hideTopMoreButton: boolean = false;
     private categoryManager: CategoryManager;
     private projectManager: ProjectManager;
     private currentSort: string = 'priority';
@@ -169,11 +195,19 @@ export class ProjectKanbanView {
     private reminderSkipSettings: any = {};
     private reminderSkipHolidayData: HolidayData = {};
 
-    constructor(container: HTMLElement, plugin: any, projectId: string) {
+    constructor(container: HTMLElement, plugin: any, projectId: string, options: ProjectKanbanViewOptions = {}) {
         this.container = container;
         this.plugin = plugin;
         this.pomodoroRecordManager = PomodoroRecordManager.getInstance(this.plugin); // Initialization
         this.projectId = projectId;
+        this.viewOptions = options;
+        this.aggregateProjectIds = Array.isArray(options.aggregateProjectIds)
+            ? Array.from(new Set(options.aggregateProjectIds.filter(Boolean)))
+            : [];
+        this.isAggregateView = !!options.folderId || this.aggregateProjectIds.length > 0;
+        this.aggregateProjectIdSet = new Set(this.aggregateProjectIds);
+        this.aggregateTitle = options.aggregateTitle || '';
+        this.hideTopMoreButton = options.hideMoreButton === true || this.isAggregateView;
         this.categoryManager = CategoryManager.getInstance(this.plugin);
         this.projectManager = ProjectManager.getInstance(this.plugin);
 
@@ -206,6 +240,204 @@ export class ProjectKanbanView {
     // 实例包装，保持现有实例调用不变
     private getTaskLogicalDate(date?: string, time?: string): string {
         return (this.constructor as typeof ProjectKanbanView).getTaskLogicalDate(date, time);
+    }
+
+    private isProjectInCurrentView(projectId?: string | null): boolean {
+        if (!projectId) return false;
+        return this.isAggregateView ? this.aggregateProjectIdSet.has(projectId) : projectId === this.projectId;
+    }
+
+    private getDefaultProjectIdForCreate(): string {
+        return this.isAggregateView ? (this.aggregateProjectIds[0] || '') : this.projectId;
+    }
+
+    private getAggregateProjectName(projectId: string): string {
+        const project = this.aggregateProjectContext.get(projectId)?.project || this.projectManager.getProjectById(projectId);
+        return project?.title || project?.name || projectId;
+    }
+
+    private getAggregateSafeId(value: string): string {
+        return String(value || 'empty').replace(/[^a-zA-Z0-9_-]/g, '_');
+    }
+
+    private getAggregateGroupId(projectId: string, groupId?: string | null): string {
+        const normalizedGroupId = groupId || 'ungrouped';
+        return `agg_${this.getAggregateSafeId(projectId)}_${this.getAggregateSafeId(normalizedGroupId)}`;
+    }
+
+    private getTaskRealProjectId(task: any): string | undefined {
+        return this.isAggregateView ? (task?.__realProjectId || task?.projectId) : task?.projectId;
+    }
+
+    private getTaskRealCustomGroupId(task: any): string | null {
+        if (!task) return null;
+        const raw = this.isAggregateView && Object.prototype.hasOwnProperty.call(task, '__realCustomGroupId')
+            ? task.__realCustomGroupId
+            : task.customGroupId;
+        return raw === undefined || raw === '' || raw === 'ungrouped' ? null : raw;
+    }
+
+    private resolveAggregateGroupTarget(groupId?: string | null): AggregateGroupTarget | null {
+        if (!this.isAggregateView || !groupId) return null;
+        return this.aggregateGroupTargetMap.get(groupId) || null;
+    }
+
+    private refreshAggregateProjectContext(projectData: any): void {
+        if (!this.isAggregateView) return;
+
+        this.aggregateProjectContext.clear();
+        this.aggregateGroupTargetMap.clear();
+        this.aggregateProjectIds = this.aggregateProjectIds.filter(projectId => projectData?.[projectId]);
+        this.aggregateProjectIdSet = new Set(this.aggregateProjectIds);
+
+        this.aggregateProjectIds.forEach(projectId => {
+            const project = projectData?.[projectId];
+            if (!project) return;
+
+            const activeGroups = Array.isArray(project.customGroups)
+                ? project.customGroups.filter((group: any) => !group?.archived)
+                : [];
+            const activeGroupIds = new Set(activeGroups.map((group: any) => group.id).filter(Boolean));
+            this.aggregateProjectContext.set(projectId, {
+                project,
+                activeGroups,
+                activeGroupIds
+            });
+        });
+    }
+
+    private createAggregateGroup(projectId: string, sourceGroup?: any | null): any {
+        const context = this.aggregateProjectContext.get(projectId);
+        const project = context?.project;
+        const projectName = this.getAggregateProjectName(projectId);
+        const hasRealGroups = !!context && context.activeGroups.length > 0;
+        const realGroupId = sourceGroup?.id || null;
+        const id = this.getAggregateGroupId(projectId, realGroupId);
+        const name = realGroupId
+            ? `${projectName}/${sourceGroup.name || realGroupId}`
+            : (hasRealGroups ? `${projectName}/${i18n('ungrouped') || '未分组'}` : projectName);
+
+        this.aggregateGroupTargetMap.set(id, {
+            projectId,
+            customGroupId: realGroupId
+        });
+
+        return {
+            ...(sourceGroup || {}),
+            id,
+            name,
+            color: sourceGroup?.color || project?.color || this.projectManager.getProjectColor(projectId),
+            icon: sourceGroup?.icon || project?.icon || '📋',
+            sort: sourceGroup?.sort ?? (hasRealGroups ? Number.MAX_SAFE_INTEGER : 0),
+            milestones: sourceGroup?.milestones || project?.milestones || [],
+            __realProjectId: projectId,
+            __realCustomGroupId: realGroupId
+        };
+    }
+
+    private getAggregateTaskGroupId(task: any): string | undefined {
+        if (!this.isAggregateView) return task?.customGroupId;
+        const projectId = this.getTaskRealProjectId(task);
+        if (!projectId || !this.aggregateProjectIdSet.has(projectId)) return undefined;
+
+        const context = this.aggregateProjectContext.get(projectId);
+        const realGroupId = this.getTaskRealCustomGroupId(task);
+        if (context?.activeGroups.length && realGroupId && context.activeGroupIds.has(realGroupId)) {
+            return this.getAggregateGroupId(projectId, realGroupId);
+        }
+
+        return this.getAggregateGroupId(projectId, null);
+    }
+
+    private toViewTask(task: any): any {
+        if (!this.isAggregateView || !task) return task;
+
+        const viewTask = {
+            ...task,
+            __realProjectId: task.projectId,
+            __realCustomGroupId: task.customGroupId
+        };
+        const viewGroupId = this.getAggregateTaskGroupId(viewTask);
+        if (viewGroupId) {
+            viewTask.customGroupId = viewGroupId;
+        } else {
+            delete viewTask.customGroupId;
+        }
+        return viewTask;
+    }
+
+    private async getProjectCustomGroupsForView(): Promise<any[]> {
+        if (!this.isAggregateView) {
+            return this.projectManager.getProjectCustomGroups(this.projectId);
+        }
+
+        const groups: any[] = [];
+        this.aggregateGroupTargetMap.clear();
+
+        this.aggregateProjectIds.forEach(projectId => {
+            const context = this.aggregateProjectContext.get(projectId);
+            if (!context) return;
+
+            if (context.activeGroups.length === 0) {
+                groups.push(this.createAggregateGroup(projectId, null));
+                return;
+            }
+
+            context.activeGroups
+                .sort((a: any, b: any) => (a.sort || 0) - (b.sort || 0))
+                .forEach((group: any) => groups.push(this.createAggregateGroup(projectId, group)));
+
+            const hasUngroupedTasks = this.tasks.some(task => {
+                if (this.getTaskRealProjectId(task) !== projectId) return false;
+                const realGroupId = this.getTaskRealCustomGroupId(task);
+                return !realGroupId || !context.activeGroupIds.has(realGroupId);
+            });
+
+            if (hasUngroupedTasks) {
+                groups.push(this.createAggregateGroup(projectId, null));
+            }
+        });
+
+        return groups;
+    }
+
+    private isTaskInCurrentView(task: any): boolean {
+        return this.isProjectInCurrentView(this.getTaskRealProjectId(task));
+    }
+
+    private buildStatusDropUpdates(status: string, task?: any): { kanbanStatus: string, projectId?: string } {
+        const updates: { kanbanStatus: string, projectId?: string } = { kanbanStatus: status };
+        if (this.isAggregateView) {
+            const projectId = this.getTaskRealProjectId(task) || this.getDefaultProjectIdForCreate();
+            if (projectId) updates.projectId = projectId;
+        } else {
+            updates.projectId = this.projectId;
+        }
+        return updates;
+    }
+
+    private resolveCreateDefaults(defaultCustomGroupId?: string | null, parentTask?: any): { projectId: string; customGroupId?: string | null } {
+        if (parentTask) {
+            return {
+                projectId: this.getTaskRealProjectId(parentTask) || this.getDefaultProjectIdForCreate(),
+                customGroupId: this.getTaskRealCustomGroupId(parentTask)
+            };
+        }
+
+        if (this.isAggregateView) {
+            const groupTarget = this.resolveAggregateGroupTarget(defaultCustomGroupId);
+            if (groupTarget) {
+                return {
+                    projectId: groupTarget.projectId,
+                    customGroupId: groupTarget.customGroupId
+                };
+            }
+        }
+
+        return {
+            projectId: this.getDefaultProjectIdForCreate(),
+            customGroupId: defaultCustomGroupId
+        };
     }
 
     private async refreshReminderSkipDateContext(): Promise<void> {
@@ -432,6 +664,15 @@ export class ProjectKanbanView {
         this.hideNoDoingGroups = hideNoDoingGroups;
         this.hideNoTodayGroups = hideNoTodayGroups;
 
+        if (this.isAggregateView) {
+            if (this.project) {
+                this.project.hideNoDoingGroups = hideNoDoingGroups;
+                this.project.hideNoTodayGroups = hideNoTodayGroups;
+            }
+            this.syncGroupVisibilityCheckboxes();
+            return;
+        }
+
         const projectData = await this.plugin.loadProjectData() || {};
         if (projectData[this.projectId]) {
             projectData[this.projectId].hideNoDoingGroups = hideNoDoingGroups;
@@ -450,7 +691,7 @@ export class ProjectKanbanView {
     private async getCustomGroupById(groupId: string | null): Promise<any | null> {
         if (!groupId) return null;
         try {
-            const groups = await this.projectManager.getProjectCustomGroups(this.projectId);
+            const groups = await this.getProjectCustomGroupsForView();
             return groups.find((group: any) => group.id === groupId) || null;
         } catch (error) {
             console.warn('[Kanban] 获取分组失败:', error);
@@ -482,9 +723,12 @@ export class ProjectKanbanView {
     }
 
     private async buildCustomGroupDropUpdates(task: any, targetGroupId: string | null): Promise<{ customGroupId: string | null, projectId: string, kanbanStatus?: string }> {
+        const groupTarget = this.resolveAggregateGroupTarget(targetGroupId);
         const updates: { customGroupId: string | null, projectId: string, kanbanStatus?: string } = {
-            customGroupId: targetGroupId,
-            projectId: this.projectId
+            customGroupId: this.isAggregateView ? (groupTarget?.customGroupId ?? null) : targetGroupId,
+            projectId: this.isAggregateView
+                ? (groupTarget?.projectId || this.getTaskRealProjectId(task) || this.getDefaultProjectIdForCreate())
+                : this.projectId
         };
         const fallbackStatus = await this.getFallbackStatusForGroupDrop(task, targetGroupId);
         if (fallbackStatus) {
@@ -684,7 +928,7 @@ export class ProjectKanbanView {
             const newProjectId = detail?.newProjectId;
             const hasProjectHints = projectId !== undefined || oldProjectId !== undefined || newProjectId !== undefined;
             if (hasProjectHints) {
-                const affectsCurrentProject = [projectId, oldProjectId, newProjectId].some(pid => pid === this.projectId);
+                const affectsCurrentProject = [projectId, oldProjectId, newProjectId].some(pid => this.isProjectInCurrentView(pid));
                 if (!affectsCurrentProject) {
                     return;
                 }
@@ -699,7 +943,7 @@ export class ProjectKanbanView {
         // 全局/项目级显示设置变更后刷新当前看板配置
         window.addEventListener('projectUpdated', async (e: CustomEvent) => {
             const detail = e.detail || {};
-            const affectsCurrentProject = detail?.projectId === this.projectId;
+            const affectsCurrentProject = this.isProjectInCurrentView(detail?.projectId);
             const affectsAllProjectDisplaySettings = detail?.projectKanbanDisplaySettingsUpdated === true;
             if (!affectsCurrentProject && !affectsAllProjectDisplaySettings) {
                 return;
@@ -731,7 +975,21 @@ export class ProjectKanbanView {
                 : this.plugin?.settings || {};
             this.reminderSkipSettings = settings || {};
             const projectData = await this.plugin.loadProjectData();
-            this.project = projectData[this.projectId];
+            if (this.isAggregateView) {
+                this.refreshAggregateProjectContext(projectData || {});
+                const firstProject = this.aggregateProjectIds.length > 0
+                    ? projectData?.[this.aggregateProjectIds[0]]
+                    : null;
+                this.project = {
+                    ...(firstProject || {}),
+                    id: this.projectId,
+                    name: this.aggregateTitle || this.viewOptions.folderId || i18n('projectKanban') || '项目看板',
+                    title: this.aggregateTitle || this.viewOptions.folderId || i18n('projectKanban') || '项目看板',
+                    categoryId: firstProject?.categoryId
+                };
+            } else {
+                this.project = projectData[this.projectId];
+            }
             // 加载显示已完成子任务设置，默认为true
             if (this.project && typeof this.project.showCompletedSubtasks === 'boolean') {
                 this.showCompletedSubtasks = this.project.showCompletedSubtasks;
@@ -763,10 +1021,10 @@ export class ProjectKanbanView {
             } else {
                 this.hideNoTodayGroups = false;
             }
-            const customGroups = await this.projectManager.getProjectCustomGroups(this.projectId);
+            const customGroups = await this.getProjectCustomGroupsForView();
             this.hasCustomGroups = customGroups.some((group: any) => !group.archived);
-            this.customGroupTabsMode = !!this.project?.customGroupTabsMode;
-            this.activeCustomGroupTabId = typeof this.project?.activeCustomGroupTabId === 'string'
+            this.customGroupTabsMode = this.isAggregateView ? false : !!this.project?.customGroupTabsMode;
+            this.activeCustomGroupTabId = !this.isAggregateView && typeof this.project?.activeCustomGroupTabId === 'string'
                 ? this.project.activeCustomGroupTabId
                 : null;
             if (!this.project) {
@@ -782,6 +1040,28 @@ export class ProjectKanbanView {
         try {
             // 使用项目管理器的方法来获取看板模式
             const projectManager = this.projectManager;
+            if (this.isAggregateView) {
+                const firstProjectId = this.getDefaultProjectIdForCreate();
+                this.kanbanMode = firstProjectId
+                    ? await projectManager.getProjectKanbanMode(firstProjectId)
+                    : 'status';
+
+                const statusMap = new Map<string, import('../utils/projectManager').KanbanStatus>();
+                for (const projectId of this.aggregateProjectIds) {
+                    const statuses = await projectManager.getProjectKanbanStatuses(projectId);
+                    statuses.forEach(status => {
+                        if (!statusMap.has(status.id)) {
+                            statusMap.set(status.id, { ...status });
+                        }
+                    });
+                }
+                this.kanbanStatuses = Array.from(statusMap.values()).sort((a, b) => (a.sort || 0) - (b.sort || 0));
+                if (this.kanbanStatuses.length === 0) {
+                    this.kanbanStatuses = this.projectManager.getDefaultKanbanStatuses();
+                }
+                return;
+            }
+
             this.kanbanMode = await projectManager.getProjectKanbanMode(this.projectId);
             // 同时加载看板状态配置
             this.kanbanStatuses = await projectManager.getProjectKanbanStatuses(this.projectId);
@@ -798,7 +1078,9 @@ export class ProjectKanbanView {
             this.kanbanMode = newMode;
 
             // 使用项目管理器保存看板模式
-            await this.projectManager.setProjectKanbanMode(this.projectId, newMode);
+            if (!this.isAggregateView) {
+                await this.projectManager.setProjectKanbanMode(this.projectId, newMode);
+            }
 
             // 更新下拉选择框选中状态
             this.updateModeSelect();
@@ -3174,21 +3456,25 @@ export class ProjectKanbanView {
         this.milestoneMap.clear();
         try {
             const projectManager = this.projectManager;
-            const projectGroups = await projectManager.getProjectCustomGroups(this.projectId);
             const projectData = await this.plugin.loadProjectData() || {};
-            const project = projectData[this.projectId];
+            const projectIds = this.isAggregateView ? this.aggregateProjectIds : [this.projectId];
 
-            // 1. 默认里程碑
-            (project?.milestones || []).forEach((ms: any) => {
-                this.milestoneMap.set(ms.id, { name: ms.name, icon: ms.icon, blockId: ms.blockId, startTime: ms.startTime, endTime: ms.endTime, archived: ms.archived });
-            });
+            for (const projectId of projectIds) {
+                const projectGroups = await projectManager.getProjectCustomGroups(projectId);
+                const project = projectData[projectId];
 
-            // 2. 分组里程碑
-            projectGroups.forEach((group: any) => {
-                (group.milestones || []).forEach((ms: any) => {
+                // 1. 默认里程碑
+                (project?.milestones || []).forEach((ms: any) => {
                     this.milestoneMap.set(ms.id, { name: ms.name, icon: ms.icon, blockId: ms.blockId, startTime: ms.startTime, endTime: ms.endTime, archived: ms.archived });
                 });
-            });
+
+                // 2. 分组里程碑
+                projectGroups.forEach((group: any) => {
+                    (group.milestones || []).forEach((ms: any) => {
+                        this.milestoneMap.set(ms.id, { name: ms.name, icon: ms.icon, blockId: ms.blockId, startTime: ms.startTime, endTime: ms.endTime, archived: ms.archived });
+                    });
+                });
+            }
         } catch (error) {
             console.error(i18n('buildMilestoneMapFailed'), error);
         }
@@ -3691,8 +3977,7 @@ export class ProjectKanbanView {
 
     private async deleteGroup(groupId: string, _groupItem: HTMLElement, container: HTMLElement) {
         // 获取分组信息用于显示名称
-        const projectManager = this.projectManager;
-        const projectGroups = await projectManager.getProjectCustomGroups(this.projectId);
+        const projectGroups = await this.getProjectCustomGroupsForView();
         const groupToDelete = projectGroups.find((g: any) => g.id === groupId);
 
         if (!groupToDelete) {
@@ -4359,7 +4644,9 @@ export class ProjectKanbanView {
                 });
             }
         });
-        controlsGroup.appendChild(moreBtn);
+        if (!this.hideTopMoreButton) {
+            controlsGroup.appendChild(moreBtn);
+        }
 
         // 多选模式按钮
         const multiSelectBtn = document.createElement('button');
@@ -4452,13 +4739,12 @@ export class ProjectKanbanView {
 
     private async showMilestoneFilterMenu(event: MouseEvent, targetGroupId: string) {
         try {
-            const projectManager = this.projectManager;
-            const projectGroups = await projectManager.getProjectCustomGroups(this.projectId);
+            const projectGroups = await this.getProjectCustomGroupsForView();
             const projectData = await this.plugin.loadProjectData() || {};
-            const project = projectData[this.projectId];
+            const projectIds = this.isAggregateView ? this.aggregateProjectIds : [this.projectId];
 
             // 确定要显示的里程碑集合 (包含所有里程碑，包括已归档的，以便筛选历史任务)
-            const defaultMilestones = (project?.milestones || []);
+            const defaultMilestones = projectIds.flatMap(projectId => projectData[projectId]?.milestones || []);
             let milestonesToShow: { title: string, milestones: any[], groupId: string }[] = [];
 
             // [新增] 使用在 loadTasks 中预先统计好的带里程碑的任务 ID 和所属分组
@@ -5100,7 +5386,14 @@ export class ProjectKanbanView {
                 e.stopPropagation();
                 try {
                     const taskIds = JSON.parse(multiData);
-                    await this.batchUpdateTasks(taskIds, { kanbanStatus: status, projectId: this.projectId });
+                    if (this.isAggregateView) {
+                        for (const taskId of taskIds) {
+                            const task = this.tasks.find(item => item.id === taskId);
+                            await this.batchUpdateTasks([taskId], this.buildStatusDropUpdates(status, task));
+                        }
+                    } else {
+                        await this.batchUpdateTasks(taskIds, this.buildStatusDropUpdates(status));
+                    }
                 } catch (err) { console.error(err); }
                 return;
             }
@@ -5109,7 +5402,7 @@ export class ProjectKanbanView {
                 e.preventDefault();
                 e.stopPropagation();
                 // 使用 batchUpdateTasks 处理单个任务拖拽，确保可以自动解除父子关系并同步项目
-                await this.batchUpdateTasks([this.draggedTask.id], { kanbanStatus: status, projectId: this.projectId });
+                await this.batchUpdateTasks([this.draggedTask.id], this.buildStatusDropUpdates(status, this.draggedTask));
             } else {
                 let externalTaskId = '';
                 const reminderPayload = e.dataTransfer?.getData('application/x-reminder');
@@ -5127,7 +5420,12 @@ export class ProjectKanbanView {
                     console.log('[Kanban] External Drop on Status:', { externalTaskId, status, projectId: this.projectId });
                     e.preventDefault();
                     e.stopPropagation();
-                    await this.batchUpdateTasks([externalTaskId], { kanbanStatus: status, projectId: this.projectId });
+                    let externalTask = this.tasks.find(task => task.id === externalTaskId);
+                    if (!externalTask) {
+                        const reminderData = await this.getReminders();
+                        externalTask = this.findOrCreateUiTask(externalTaskId, reminderData);
+                    }
+                    await this.batchUpdateTasks([externalTaskId], this.buildStatusDropUpdates(status, externalTask));
                 }
             }
         });
@@ -5192,7 +5490,9 @@ export class ProjectKanbanView {
                 e.stopPropagation();
                 try {
                     const taskIds = JSON.parse(multiData);
-                    await this.batchUpdateTasks(taskIds, { customGroupId: groupId, projectId: this.projectId });
+                    const task = taskIds.length > 0 ? this.tasks.find(item => item.id === taskIds[0]) : undefined;
+                    const updates = await this.buildCustomGroupDropUpdates(task, groupId);
+                    await this.batchUpdateTasks(taskIds, updates);
                 } catch (err) { console.error(err); }
                 return;
             }
@@ -5324,7 +5624,12 @@ export class ProjectKanbanView {
                 e.stopPropagation();
                 try {
                     const taskIds = JSON.parse(multiData);
-                    await this.batchUpdateTasks(taskIds, { kanbanStatus: targetStatus, customGroupId: targetGroupId, projectId: this.projectId });
+                    const task = taskIds.length > 0 ? this.tasks.find(item => item.id === taskIds[0]) : undefined;
+                    const updates = targetGroupId !== undefined
+                        ? await this.buildCustomGroupDropUpdates(task, targetGroupId)
+                        : this.buildStatusDropUpdates(targetStatus, task);
+                    updates.kanbanStatus = targetStatus;
+                    await this.batchUpdateTasks(taskIds, updates);
                 } catch (err) { console.error(err); }
                 return;
             }
@@ -5332,7 +5637,11 @@ export class ProjectKanbanView {
             if (this.isDragging && this.draggedTask) {
                 e.preventDefault();
                 e.stopPropagation();
-                await this.batchUpdateTasks([this.draggedTask.id], { kanbanStatus: targetStatus, customGroupId: targetGroupId, projectId: this.projectId });
+                const updates = targetGroupId !== undefined
+                    ? await this.buildCustomGroupDropUpdates(this.draggedTask, targetGroupId)
+                    : this.buildStatusDropUpdates(targetStatus, this.draggedTask);
+                updates.kanbanStatus = targetStatus;
+                await this.batchUpdateTasks([this.draggedTask.id], updates);
             } else {
                 let externalTaskId = '';
                 const reminderPayload = e.dataTransfer?.getData('application/x-reminder');
@@ -5350,7 +5659,16 @@ export class ProjectKanbanView {
                     console.log('[Kanban] External Drop on SubGroup:', { externalTaskId, targetStatus, targetGroupId, projectId: this.projectId });
                     e.preventDefault();
                     e.stopPropagation();
-                    await this.batchUpdateTasks([externalTaskId], { kanbanStatus: targetStatus, customGroupId: targetGroupId, projectId: this.projectId });
+                    let externalTask = this.tasks.find(task => task.id === externalTaskId);
+                    if (!externalTask) {
+                        const reminderData = await this.getReminders();
+                        externalTask = this.findOrCreateUiTask(externalTaskId, reminderData);
+                    }
+                    const updates = targetGroupId !== undefined
+                        ? await this.buildCustomGroupDropUpdates(externalTask, targetGroupId)
+                        : this.buildStatusDropUpdates(targetStatus, externalTask);
+                    updates.kanbanStatus = targetStatus;
+                    await this.batchUpdateTasks([externalTaskId], updates);
                 }
             }
         });
@@ -5605,20 +5923,22 @@ export class ProjectKanbanView {
      */
     private async filterArchivedGroupTasks(tasks: any[]): Promise<any[]> {
         try {
-            // 获取当前项目的分组信息
-            const groups = await this.projectManager.getProjectCustomGroups(this.projectId);
+            const archivedGroupIdsByProject = new Map<string, Set<string>>();
+            const projectIds = this.isAggregateView ? this.aggregateProjectIds : [this.projectId];
 
-            // 构建已归档分组的ID集合
-            const archivedGroupIds = new Set<string>();
-            groups.forEach((g: any) => {
-                if (g.archived) {
-                    archivedGroupIds.add(g.id);
-                }
-            });
+            for (const projectId of projectIds) {
+                const groups = await this.projectManager.getProjectCustomGroups(projectId);
+                archivedGroupIdsByProject.set(
+                    projectId,
+                    new Set(groups.filter((g: any) => g.archived).map((g: any) => g.id))
+                );
+            }
 
             // 过滤：如果任务属于已归档分组且未完成，则过滤掉
             return tasks.filter(t => {
-                if (t.customGroupId && archivedGroupIds.has(t.customGroupId) && !t.completed) {
+                const projectId = t?.projectId;
+                const archivedGroupIds = projectId ? archivedGroupIdsByProject.get(projectId) : undefined;
+                if (t.customGroupId && archivedGroupIds?.has(t.customGroupId) && !t.completed) {
                     return false;
                 }
                 return true;
@@ -5651,7 +5971,7 @@ export class ProjectKanbanView {
                 console.warn("加载习惯数据失败:", error);
                 habitData = {};
             }
-            let projectTasks = Object.values(reminderData).filter((reminder: any) => reminder && reminder.projectId === this.projectId);
+            let projectTasks = Object.values(reminderData).filter((reminder: any) => reminder && this.isProjectInCurrentView(reminder.projectId));
 
             // 过滤已归档分组的未完成任务
             projectTasks = await this.filterArchivedGroupTasks(projectTasks);
@@ -5966,7 +6286,7 @@ export class ProjectKanbanView {
                     totalRepeatingFocusTime = this.pomodoroRecordManager.getRepeatingEventTotalFocusTime(reminder.originalId);
                 }
 
-                return {
+                return this.toViewTask({
                     ...reminder,
                     status: status,
                     pomodoroCount: pomodoroCount,
@@ -5974,7 +6294,7 @@ export class ProjectKanbanView {
                     linkedHabit: reminder.linkedHabitId ? (habitData?.[reminder.linkedHabitId] || null) : null,
                     totalRepeatingPomodoroCount,
                     totalRepeatingFocusTime
-                };
+                });
             }));
 
             // [NEW] 搜索过滤逻辑
@@ -6927,9 +7247,10 @@ export class ProjectKanbanView {
     private async loadKanbanSortConfig() {
         try {
             const projectData = await this.plugin.loadProjectData() || {};
-            const project = (projectData[this.projectId] || {}) as KanbanSortConfigProjectData;
-            const legacySortRule = project.sortRule || await this.projectManager.getProjectSortRule(this.projectId) || 'priority';
-            const legacySortOrder = project.sortOrder || await this.projectManager.getProjectSortOrder(this.projectId) || 'desc';
+            const sortProjectId = this.isAggregateView ? this.getDefaultProjectIdForCreate() : this.projectId;
+            const project = (projectData[sortProjectId] || {}) as KanbanSortConfigProjectData;
+            const legacySortRule = project.sortRule || await this.projectManager.getProjectSortRule(sortProjectId) || 'priority';
+            const legacySortOrder = project.sortOrder || await this.projectManager.getProjectSortOrder(sortProjectId) || 'desc';
             const criteria = this.normalizeKanbanSortCriteria(
                 project.sortCriteria && Array.isArray(project.sortCriteria) && project.sortCriteria.length > 0
                     ? project.sortCriteria
@@ -6951,6 +7272,9 @@ export class ProjectKanbanView {
         this.syncLegacySortStateFromCriteria();
 
         try {
+            if (this.isAggregateView) {
+                return;
+            }
             const projectData = await this.plugin.loadProjectData() || {};
             const project = (projectData[this.projectId] || {}) as KanbanSortConfigProjectData;
             const primary = normalized[0] || { method: 'priority', order: 'desc' as const };
@@ -7370,13 +7694,22 @@ export class ProjectKanbanView {
 
     private async renderCustomGroupKanban() {
         // 使用项目管理器获取自定义分组
-        const projectManager = this.projectManager;
-        const projectGroups = await projectManager.getProjectCustomGroups(this.projectId);
+        const projectGroups = await this.getProjectCustomGroupsForView();
 
-        // 过滤掉已归档的分组，并按 sort 字段排序
+        // 过滤掉已归档的分组，并排序
+        // 聚合看板：先按项目在 aggregateProjectIds 中的顺序排（确保同一项目的分组聚在一起），再按分组自身 sort 排
+        // 普通看板：直接按 sort 排
         const activeGroups = projectGroups
             .filter((g: any) => !g.archived)
-            .sort((a: any, b: any) => (a.sort || 0) - (b.sort || 0));
+            .sort((a: any, b: any) => {
+                if (this.isAggregateView) {
+                    const aProjectIdx = this.aggregateProjectIds.indexOf(a.__realProjectId);
+                    const bProjectIdx = this.aggregateProjectIds.indexOf(b.__realProjectId);
+                    if (aProjectIdx !== bProjectIdx) return aProjectIdx - bProjectIdx;
+                }
+                return (a.sort || 0) - (b.sort || 0);
+            });
+
 
         if (activeGroups.length === 0) {
             // 如果没有自定义分组，显示提示
@@ -8118,13 +8451,7 @@ export class ProjectKanbanView {
     }
 
     private async ensureStatusColumnsExist(kanbanContainer: HTMLElement) {
-        // 1. 加载项目数据和里程碑
-        const projectData = await this.plugin.loadProjectData() || {};
-        const project = projectData[this.projectId];
-        const defaultMilestones = (project?.milestones || []).filter((m: any) => !m.archived);
-        const projectGroups = await this.projectManager.getProjectCustomGroups(this.projectId);
-
-        // 2. 检查并创建必要的状态列 - 使用kanbanStatuses中定义的状态
+        // 检查并创建必要的状态列 - 使用kanbanStatuses中定义的状态
         this.kanbanStatuses.forEach(status => {
             let column = kanbanContainer.querySelector(`.kanban-column-${status.id}`) as HTMLElement;
             if (!column) {
@@ -8298,9 +8625,7 @@ export class ProjectKanbanView {
 
     private async hasProjectCustomGroups(): Promise<boolean> {
         try {
-            const { ProjectManager } = await import('../utils/projectManager');
-            const projectManager = ProjectManager.getInstance(this.plugin);
-            const projectGroups = await projectManager.getProjectCustomGroups(this.projectId);
+            const projectGroups = await this.getProjectCustomGroupsForView();
             // 只计算未归档的分组
             return projectGroups.some((g: any) => !g.archived);
         } catch (error) {
@@ -8352,8 +8677,7 @@ export class ProjectKanbanView {
 
     private async renderTasksGroupedByCustomGroupInStableContainer(groupsContainer: HTMLElement, tasks: any[], status: string): Promise<any[]> {
         // 获取项目自定义分组
-        const projectManager = this.projectManager;
-        const projectGroups = await projectManager.getProjectCustomGroups(this.projectId);
+        const projectGroups = await this.getProjectCustomGroupsForView();
         // 过滤掉已归档的分组，并按 sort 字段排序
         const allActiveGroups = projectGroups
             .filter((g: any) => !g.archived)
@@ -8491,8 +8815,7 @@ export class ProjectKanbanView {
             }
         }
 
-        const projectManager = this.projectManager;
-        const projectGroups = await projectManager.getProjectCustomGroups(this.projectId);
+        const projectGroups = await this.getProjectCustomGroupsForView();
         // 过滤掉已归档的分组
         const activeGroups = projectGroups.filter((g: any) => !g.archived);
 
@@ -9240,7 +9563,13 @@ export class ProjectKanbanView {
             if (!taskId) return;
 
             const updates: any = {};
-            updates.projectId = this.projectId; // Ensure project is updated when dragging from sidebar
+            const task = this.tasks.find(item => item.id === taskId);
+            if (this.isAggregateView) {
+                const groupTarget = this.resolveAggregateGroupTarget(groupId);
+                updates.projectId = groupTarget?.projectId || this.getTaskRealProjectId(task) || this.getDefaultProjectIdForCreate();
+            } else {
+                updates.projectId = this.projectId; // Ensure project is updated when dragging from sidebar
+            }
 
             if (type === 'finished') {
                 updates.completed = true;
@@ -9256,7 +9585,10 @@ export class ProjectKanbanView {
             }
 
             if (groupId !== null) {
-                updates.customGroupId = groupId === 'ungrouped' ? '' : groupId;
+                const groupTarget = this.resolveAggregateGroupTarget(groupId);
+                updates.customGroupId = this.isAggregateView
+                    ? (groupTarget?.customGroupId ?? null)
+                    : (groupId === 'ungrouped' ? null : groupId);
             }
 
             // Handle multi-select
@@ -10428,6 +10760,15 @@ export class ProjectKanbanView {
                     this.toggleTaskSelection(task.id, !isChecked);
                 }
             },
+            onTitleClick: (task: any, e: MouseEvent) => {
+                // 点击有绑定块的任务标题时打开对应块
+                const blockId = task.blockId || task.docId;
+                if (blockId) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.openBlockTab(blockId);
+                }
+            },
             setupDragAndDrop: (taskEl: HTMLElement, task: any) => {
                 if (!this.plugin.isInMobileApp) {
                     taskEl.draggable = true;
@@ -11006,6 +11347,16 @@ export class ProjectKanbanView {
                     e.dataTransfer.setData('application/x-reminder', JSON.stringify(payload));
                     // 兼容性：也设置纯文本为 id
                     e.dataTransfer.setData('text/plain', task.id);
+                } catch (err) {
+                    // ignore
+                }
+
+                // 标识「任务拖拽改项目」操作，供项目侧栏（ProjectPanel）接收
+                try {
+                    const moveIds = (this.isMultiSelectMode && this.selectedTaskIds.has(task.id))
+                        ? Array.from(this.selectedTaskIds)
+                        : [task.id];
+                    e.dataTransfer.setData('application/vnd.siyuan.kanban-task-move', JSON.stringify(moveIds));
                 } catch (err) {
                     // ignore
                 }
@@ -12862,11 +13213,12 @@ export class ProjectKanbanView {
             const targetSort = this.getTaskSortValue(targetTask);
             const targetParentId = targetTask.parentId || null;
             const targetStatus = this.getTaskStatus(targetTask);
-            const targetGroupId = targetTask.customGroupId || 'ungrouped';
+            const targetProjectId = this.isAggregateView ? this.getTaskRealProjectId(targetTask) : this.projectId;
+            const targetGroupId = (this.isAggregateView ? this.getTaskRealCustomGroupId(targetTask) : targetTask.customGroupId) || 'ungrouped';
             const targetPriority = targetTask.priority || 'none';
 
             const siblings = Object.values(reminderData).filter((item: any) => {
-                if (!item || item.projectId !== this.projectId) return false;
+                if (!item || item.projectId !== targetProjectId) return false;
                 if ((item.parentId || null) !== targetParentId) return false;
 
                 if (targetParentId) {
@@ -12991,6 +13343,7 @@ export class ProjectKanbanView {
         // Calculate max sort value to place new task at the end
         const maxSort = this.tasks.reduce((max, task) => Math.max(max, task.sort || 0), 0);
         const defaultSort = Number.isFinite(defaultSortOverride as number) ? (defaultSortOverride as number) : (maxSort + 10000);
+        const createDefaults = this.resolveCreateDefaults(defaultCustomGroupId, parentTask);
 
         const quickDialog = new QuickReminderDialog(
             undefined, // 项目看板创建任务默认不设置日期
@@ -13007,6 +13360,15 @@ export class ProjectKanbanView {
                             this.dispatchReminderUpdate(true);
                             return;
                         }
+
+                        if (!this.isTaskInCurrentView(savedTask)) {
+                            this.tasks = this.tasks.filter(t => t.id !== savedTask.id);
+                            this.renderKanban();
+                            this.dispatchReminderUpdate(true);
+                            return;
+                        }
+
+                        const savedTaskForView = this.toViewTask(savedTask);
 
                         // 1. 更新本地缓存
                         if (this.reminderData) {
@@ -13030,9 +13392,9 @@ export class ProjectKanbanView {
                         }
 
                         if (existingIndex >= 0) {
-                            this.tasks[existingIndex] = savedTask;
+                            this.tasks[existingIndex] = savedTaskForView;
                         } else {
-                            this.tasks.push(savedTask);
+                            this.tasks.push(savedTaskForView);
                         }
 
                         // 立即排序，确保乐观更新时顺序正确
@@ -13051,12 +13413,12 @@ export class ProjectKanbanView {
                         }
 
                         // 2. 优先只插入单张任务卡片，避免整列重绘导致滚动抖动
-                        const inserted = this.insertCreatedTaskCard(savedTask);
+                        const inserted = this.insertCreatedTaskCard(savedTaskForView);
                         if (!inserted) {
                             // 回退：无法局部插入时再做整列增量渲染
                             this.captureScrollState();
                             if (this.kanbanMode === 'custom') {
-                                const group = this.project?.customGroups?.find((g: any) => g.id === savedTask.customGroupId);
+                                const group = (await this.getProjectCustomGroupsForView()).find((g: any) => g.id === savedTaskForView.customGroupId);
                                 if (group) {
                                     const groupTasks = this.tasks.filter(t => t.customGroupId === group.id);
                                     this.renderCustomGroupColumn(group, groupTasks);
@@ -13065,7 +13427,7 @@ export class ProjectKanbanView {
                                     this.renderUngroupedColumn(ungroupedTasks);
                                 }
                             } else {
-                                const status = this.getTaskStatus(savedTask);
+                                const status = this.getTaskStatus(savedTaskForView);
                                 // 过滤出该状态列的所有任务
                                 // 使用 getTaskStatus 确保逻辑一致（处理完成状态、日期自动归档、忽略自定义分组ID对列的影响）
                                 const tasksInColumn = this.tasks.filter(t => this.getTaskStatus(t) === status);
@@ -13078,7 +13440,7 @@ export class ProjectKanbanView {
 
                         // 相邻插入场景下，强制将新任务临时定位到目标任务前/后，确保立即可见
                         if (adjacentContext?.targetTaskId) {
-                            const placed = this.tryPlaceCreatedTaskAdjacent(savedTask.id, adjacentContext.targetTaskId, adjacentContext.insertBefore);
+                            const placed = this.tryPlaceCreatedTaskAdjacent(savedTaskForView.id, adjacentContext.targetTaskId, adjacentContext.insertBefore);
                             if (!placed) {
                                 // 兜底重绘，避免由于容器变化导致新卡片不可见
                                 await this.queueLoadTasks();
@@ -13096,16 +13458,17 @@ export class ProjectKanbanView {
             },
             undefined, // 无时间段选项
             {
-                defaultProjectId: this.projectId, // 默认项目ID
+                defaultProjectId: createDefaults.projectId, // 默认项目ID
                 defaultParentId: parentTask?.id, // 传递父任务ID
                 defaultCategoryId: parentTask?.categoryId || this.project.categoryId, // 如果是子任务，继承父任务分类；否则使用项目分类
                 defaultPriority: parentTask?.priority ?? defaultPriorityOverride, // 如果是子任务，继承父任务优先级；否则可使用外部传入优先级
                 defaultTitle: parentTask ? '' : undefined, // 子任务不预填标题
                 // 传入默认 custom group id（可能为 undefined 或 null）
-                defaultCustomGroupId: parentTask?.customGroupId ?? defaultCustomGroupId,
+                defaultCustomGroupId: createDefaults.customGroupId,
                 // 传入默认里程碑 id（优先使用父任务的里程碑）
                 defaultMilestoneId: parentTask?.milestoneId ?? defaultMilestoneId,
-                hideProjectSelector: true, // 隐藏项目选择器
+                hideProjectSelector: !this.isAggregateView, // 聚合看板需要允许选择项目
+                allowedProjectIds: this.isAggregateView ? this.aggregateProjectIds : undefined, // 聚合看板只显示包含的项目
                 showKanbanStatus: 'term', // 显示任务类型选择
                 // 使用父任务的状态优先；否则使用传入的 defaultStatus 或上一次选择的 status
                 defaultStatus: parentTask ? this.getTaskStatus(parentTask) : (defaultStatus || this.lastSelectedStatus),
@@ -13166,6 +13529,13 @@ export class ProjectKanbanView {
                 }
                 // 使用原始事件对象而不是实例对象
                 taskToEdit = originalReminder;
+            } else if (this.isAggregateView) {
+                const reminderData = await this.getReminders();
+                taskToEdit = reminderData[task.id] || {
+                    ...task,
+                    projectId: this.getTaskRealProjectId(task),
+                    customGroupId: this.getTaskRealCustomGroupId(task) || undefined
+                };
             }
 
             // 优化：乐观更新 + 立即渲染 + 后台数据刷新
@@ -13190,11 +13560,12 @@ export class ProjectKanbanView {
                     if (taskIndex >= 0) {
                         // 保留原有的 status、pomodoroCount、focusTime 等衍生字段
                         const oldTask = this.tasks[taskIndex];
-                        if (savedTask.projectId !== this.projectId) {
+                        if (!this.isTaskInCurrentView(savedTask)) {
                             this.tasks.splice(taskIndex, 1);
                         } else {
+                            const savedTaskForView = this.toViewTask(savedTask);
                             this.tasks[taskIndex] = {
-                                ...savedTask,
+                                ...savedTaskForView,
                                 status: oldTask.status || this.getTaskStatus(savedTask),
                                 pomodoroCount: oldTask.pomodoroCount || 0,
                                 focusTime: oldTask.focusTime || 0,
@@ -13204,9 +13575,10 @@ export class ProjectKanbanView {
                         }
                     } else {
                         // 理论上编辑任务不应该走到这里，但以防万一
-                        if (savedTask.projectId === this.projectId) {
+                        if (this.isTaskInCurrentView(savedTask)) {
+                            const savedTaskForView = this.toViewTask(savedTask);
                             this.tasks.push({
-                                ...savedTask,
+                                ...savedTaskForView,
                                 status: this.getTaskStatus(savedTask),
                                 pomodoroCount: 0,
                                 focusTime: 0
@@ -13215,7 +13587,7 @@ export class ProjectKanbanView {
                     }
 
                     if (this.reminderData) {
-                        if (savedTask.projectId === this.projectId) {
+                        if (this.isTaskInCurrentView(savedTask)) {
                             this.reminderData[savedTask.id] = {
                                 ...(this.reminderData[savedTask.id] || {}),
                                 ...savedTask
@@ -13239,7 +13611,9 @@ export class ProjectKanbanView {
                 plugin: this.plugin,
                 eventSource: this.kanbanInstanceId,
                 defaultProjectId: taskToEdit.projectId,
-                defaultCustomGroupId: taskToEdit.customGroupId
+                defaultCustomGroupId: taskToEdit.customGroupId,
+                hideProjectSelector: false,
+                allowedProjectIds: this.isAggregateView ? this.aggregateProjectIds : undefined // 聚合看板只显示包含的项目
             });
             editDialog.show();
         } catch (error) {
@@ -13249,6 +13623,7 @@ export class ProjectKanbanView {
     }
 
     private async showPasteTaskDialog(parentTask?: any, customGroupId?: string, defaultStatus?: string, showSelectors: boolean = false) {
+        const createDefaults = this.resolveCreateDefaults(customGroupId, parentTask);
         // 如果需要显示选择器，获取项目配置
         let projectGroups: any[] = [];
         let projectMilestones: any[] = [];
@@ -13256,8 +13631,8 @@ export class ProjectKanbanView {
 
         if (showSelectors && !parentTask) {
             try {
-                projectGroups = await this.projectManager.getProjectCustomGroups(this.projectId);
-                projectMilestones = await this.projectManager.getProjectMilestones(this.projectId);
+                projectGroups = await this.projectManager.getProjectCustomGroups(createDefaults.projectId);
+                projectMilestones = await this.projectManager.getProjectMilestones(createDefaults.projectId);
             } catch (error) {
                 console.error('获取项目配置失败:', error);
             }
@@ -13269,8 +13644,8 @@ export class ProjectKanbanView {
         const dialog = new PasteTaskDialog({
             plugin: this.plugin,
             parentTask,
-            projectId: this.projectId,
-            customGroupId,
+            projectId: createDefaults.projectId,
+            customGroupId: createDefaults.customGroupId || undefined,
             defaultStatus: effectiveDefaultStatus,
             showStatusSelector: showSelectors && !parentTask, // 只在非子任务且显示选择器时显示
             showGroupSelector: showSelectors && !parentTask,  // 只在非子任务且显示选择器时显示
@@ -15544,6 +15919,7 @@ export class ProjectKanbanView {
             const targetOriginalId = isTargetInstance ? targetTask.originalId : targetTask.id;
             // 使用原始日期（从 ID 中提取），因为 date 可能已被修改
             const targetInstanceDate = isTargetInstance ? targetTask.id.split('_').pop() : null;
+            const targetProjectIdForReorder = this.isAggregateView ? this.getTaskRealProjectId(targetTask) : this.projectId;
 
             // 收集该状态下所有任务；重复实例拖动排序统一落到原始任务
             const items: Array<{
@@ -15560,7 +15936,7 @@ export class ProjectKanbanView {
 
             // 收集普通任务（属于当前项目、匹配目标状态/分组/优先级）
             Object.values(reminderData).forEach((task: any) => {
-                if (!task || task.projectId !== this.projectId) return;
+                if (!task || task.projectId !== targetProjectIdForReorder) return;
                 if (task.parentId) return; // 只收集顶层任务
                 if (task.repeat?.enabled) return; // 跳过重复任务模板，只收集实例
 
@@ -15590,6 +15966,7 @@ export class ProjectKanbanView {
             // 收集重复实例，但排序条目只保留到原始任务粒度
             Object.values(reminderData).forEach((task: any) => {
                 if (!task || !task.repeat?.enabled || !task.repeat?.instanceModifications) return;
+                if (task.projectId !== targetProjectIdForReorder) return;
 
                 Object.entries(task.repeat.instanceModifications).forEach(([date, mod]: [string, any]) => {
                     if (!mod) return;
@@ -16227,9 +16604,13 @@ export class ProjectKanbanView {
                 draggedTaskInDb.priority = newPriority;
             }
 
+            const targetProjectId = this.isAggregateView
+                ? (targetTaskInDb.projectId || draggedTaskInDb.projectId || this.getDefaultProjectIdForCreate())
+                : this.projectId;
+
             // --- Update Project (New) ---
-            if (draggedTaskInDb.projectId !== this.projectId) {
-                draggedTaskInDb.projectId = this.projectId;
+            if (targetProjectId && draggedTaskInDb.projectId !== targetProjectId) {
+                draggedTaskInDb.projectId = targetProjectId;
             }
 
             // --- Clear parentId if moving to top level ---
@@ -16293,8 +16674,8 @@ export class ProjectKanbanView {
                     }
                     // 同步项目 (新增)
                     // 同步项目 (新增)
-                    if (desc.projectId !== this.projectId) {
-                        desc.projectId = this.projectId;
+                    if (targetProjectId && desc.projectId !== targetProjectId) {
+                        desc.projectId = targetProjectId;
                     }
 
                     // 同步优先级
@@ -16306,7 +16687,7 @@ export class ProjectKanbanView {
             // --- Reorder source list ---
             if (oldStatus !== newStatus || oldPriority !== newPriority) {
                 sourceList = Object.values(reminderData)
-                    .filter((r: any) => r && r.projectId === this.projectId && !r.parentId && this.getTaskStatus(r) === oldStatus && (r.priority || 'none') === oldPriority && r.id !== draggedId)
+                    .filter((r: any) => r && r.projectId === targetProjectId && !r.parentId && this.getTaskStatus(r) === oldStatus && (r.priority || 'none') === oldPriority && r.id !== draggedId)
                     .sort((a: any, b: any) => (a.sort || 0) - (b.sort || 0));
 
                 sourceList.forEach((task: any, index: number) => {
@@ -16321,7 +16702,7 @@ export class ProjectKanbanView {
 
             // --- Reorder target list ---
             const targetList = Object.values(reminderData)
-                .filter((r: any) => r && r.projectId === this.projectId && !r.parentId && this.getTaskStatus(r) === newStatus && (r.priority || 'none') === newPriority && r.id !== draggedId)
+                .filter((r: any) => r && r.projectId === targetProjectId && !r.parentId && this.getTaskStatus(r) === newStatus && (r.priority || 'none') === newPriority && r.id !== draggedId)
                 .sort((a: any, b: any) => (a.sort || 0) - (b.sort || 0));
 
             const targetIndex = targetList.findIndex((t: any) => t.id === targetId);
@@ -16470,7 +16851,8 @@ export class ProjectKanbanView {
                     reminder: instanceData,
                     plugin: this.plugin,
                     eventSource: this.kanbanInstanceId,
-                    isInstanceEdit: true
+                    isInstanceEdit: true,
+                    allowedProjectIds: this.isAggregateView ? this.aggregateProjectIds : undefined // 聚合看板只显示包含的项目
                 }
             );
             editDialog.show();
@@ -16990,6 +17372,18 @@ export class ProjectKanbanView {
     private async addItemByBlockId(blockId: string, status: string, customGroupId: string | null = null, sort?: number, priority: string = 'none') {
         if (!blockId) return;
         try {
+            const groupTarget = this.resolveAggregateGroupTarget(customGroupId);
+            const targetProjectId = this.isAggregateView
+                ? (groupTarget?.projectId || this.getDefaultProjectIdForCreate())
+                : this.projectId;
+            const targetCustomGroupId = this.isAggregateView
+                ? (groupTarget?.customGroupId ?? null)
+                : customGroupId;
+            if (!targetProjectId) {
+                showMessage(i18n('projectNotExist') || '项目不存在', 3000, 'error');
+                return;
+            }
+
             await refreshSql();
             const block = await getBlockByID(blockId);
             if (!block) {
@@ -17001,13 +17395,13 @@ export class ProjectKanbanView {
             const reminderData = await this.plugin.loadReminderData();
 
             // Check if already bound
-            const existingReminder = Object.values(reminderData).find((r: any) => r && r.blockId === blockId && r.projectId === this.projectId);
+            const existingReminder = Object.values(reminderData).find((r: any) => r && r.blockId === blockId && r.projectId === targetProjectId);
             if (existingReminder) {
                 // If exists in same project, just update its status and group
                 const updates: any = {
                     kanbanStatus: status,
-                    customGroupId: customGroupId,
-                    projectId: this.projectId
+                    customGroupId: targetCustomGroupId,
+                    projectId: targetProjectId
                 };
                 if (sort !== undefined) updates.sort = sort;
                 if (priority !== 'none') updates.priority = priority;
@@ -17027,10 +17421,10 @@ export class ProjectKanbanView {
                 title: title.trim(),
                 blockId: blockId,
                 docId: block.root_id || (block.type === 'd' ? block.id : null),
-                projectId: this.projectId,
-                categoryId: this.project?.categoryId || undefined,
+                projectId: targetProjectId,
+                categoryId: (this.aggregateProjectContext.get(targetProjectId)?.project || this.project)?.categoryId || undefined,
                 kanbanStatus: status,
-                customGroupId: customGroupId,
+                customGroupId: targetCustomGroupId,
                 priority: priority,
                 createdAt: new Date().toISOString(),
                 createdTime: new Date().toISOString(),
@@ -17049,9 +17443,9 @@ export class ProjectKanbanView {
             }
 
             await updateBindBlockAtrrs(blockId, this.plugin);
-            await addBlockProjectId(blockId, this.projectId);
+            await addBlockProjectId(blockId, targetProjectId);
 
-            this.tasks.push(newReminder);
+            this.tasks.push(this.toViewTask(newReminder));
             // Don't full sort here, we handle bulk refresh later or queueLoadTasks will do it
         } catch (error) {
             console.error('addItemByBlockId failed:', error);
@@ -17064,7 +17458,7 @@ export class ProjectKanbanView {
         window.dispatchEvent(new CustomEvent('reminderUpdated', {
             detail: {
                 source: skipSelfUpdate ? this.kanbanInstanceId : null,
-                projectId: this.projectId
+                projectId: this.isAggregateView ? undefined : this.projectId
             }
         }));
     }
@@ -17646,6 +18040,9 @@ export class ProjectKanbanView {
             const newStatus = this.getTaskStatus(targetTaskInDb);
             const targetGroup = targetTaskInDb.customGroupId === undefined ? null : targetTaskInDb.customGroupId;
             const targetPriority = targetTaskInDb.priority || 'none';
+            const targetProjectId = this.isAggregateView
+                ? (targetTaskInDb.projectId || this.getTaskRealProjectId(targetTask) || this.getDefaultProjectIdForCreate())
+                : this.projectId;
 
             // Filter out tasks that are not found
             const validTaskIds = taskIds.filter(id => reminderData[id]);
@@ -17722,7 +18119,7 @@ export class ProjectKanbanView {
             }
             // Current Target List (based on target context)
             const targetList = Object.values(reminderData)
-                .filter((r: any) => r && r.projectId === this.projectId && !r.parentId)
+                .filter((r: any) => r && r.projectId === targetProjectId && !r.parentId)
                 .filter((r: any) => {
                     const rGroup = (r.customGroupId === undefined) ? null : r.customGroupId;
                     const rStatus = this.getTaskStatus(r);
@@ -17786,6 +18183,11 @@ export class ProjectKanbanView {
                     } else {
                         task.customGroupId = targetGroup;
                     }
+                    itemChanged = true;
+                }
+
+                if (targetProjectId && task.projectId !== targetProjectId) {
+                    task.projectId = targetProjectId;
                     itemChanged = true;
                 }
 
@@ -17863,10 +18265,20 @@ export class ProjectKanbanView {
             let reminderData = await this.getReminders();
 
             for (const task of tasks) {
+                const taskForSave = { ...task };
+                if (this.isAggregateView) {
+                    const realProjectId = this.getTaskRealProjectId(taskForSave);
+                    const realGroupId = this.getTaskRealCustomGroupId(taskForSave);
+                    if (realProjectId) taskForSave.projectId = realProjectId;
+                    if (realGroupId) taskForSave.customGroupId = realGroupId;
+                    else delete taskForSave.customGroupId;
+                    delete taskForSave.__realProjectId;
+                    delete taskForSave.__realCustomGroupId;
+                }
                 reminderData[task.id] = {
                     ...reminderData[task.id],
-                    ...task,
-                    projectId: this.projectId,
+                    ...taskForSave,
+                    projectId: taskForSave.projectId || this.projectId,
                     updatedAt: new Date().toISOString()
                 };
             }
@@ -18396,7 +18808,9 @@ export class ProjectKanbanView {
                     }
 
                     if (changed) {
-                        reminder.projectId = this.projectId;
+                        if (!this.isAggregateView) {
+                            reminder.projectId = this.projectId;
+                        }
                         reminder.updatedAt = new Date().toISOString();
                         successCount++;
                     }

@@ -77,6 +77,15 @@
     border-left: 3px solid var(--b3-theme-on-surface);
 }
 
+// 任务拖入高亮：从看板拖任务到此项目时激活
+.project-item--task-drop-active {
+    border: 2px dashed var(--b3-theme-primary) !important;
+    background: color-mix(in srgb, var(--b3-theme-primary), transparent 88%) !important;
+    transform: scale(1.01) !important;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--b3-theme-primary), transparent 70%) !important;
+    transition: all 0.15s ease !important;
+}
+
 
 .project-item__content {
     display: flex;

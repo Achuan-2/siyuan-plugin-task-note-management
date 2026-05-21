@@ -2086,7 +2086,7 @@ export default class ReminderPlugin extends Plugin {
                     return;
                 }
 
-                const projectKanbanView = new ProjectKanbanView(tab.element, this, projectId);
+                const projectKanbanView = new ProjectKanbanView(tab.element, this, projectId, tab.data || {});
                 // 保存实例引用用于清理
                 this.tabViews.set(tab.id, projectKanbanView);
             }) as any
@@ -4620,7 +4620,7 @@ export default class ReminderPlugin extends Plugin {
     }
 
     // 打开项目看板标签页
-    openProjectKanbanTab(projectId: string, projectTitle: string) {
+    openProjectKanbanTab(projectId: string, projectTitle: string, options: any = {}) {
         const isMobile = getFrontend().endsWith('mobile');
 
         if (isMobile) {
@@ -4645,7 +4645,7 @@ export default class ReminderPlugin extends Plugin {
             // 在Dialog中创建项目看板
             const kanbanContainer = dialog.element.querySelector('#mobileProjectKanbanContainer') as HTMLElement;
             if (kanbanContainer) {
-                const projectKanbanView = new ProjectKanbanView(kanbanContainer, this, projectId);
+                const projectKanbanView = new ProjectKanbanView(kanbanContainer, this, projectId, options || {});
                 // 保存实例引用用于清理
                 (kanbanContainer as any)._projectKanbanView = projectKanbanView;
             }
@@ -4659,7 +4659,8 @@ export default class ReminderPlugin extends Plugin {
                     id: this.name + PROJECT_KANBAN_TAB_TYPE,
                     data: {
                         projectId: projectId,
-                        projectTitle: projectTitle
+                        projectTitle: projectTitle,
+                        ...options
                     }
                 }
             });
