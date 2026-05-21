@@ -3611,9 +3611,10 @@ export class ProjectPanel {
         const infoEl = document.createElement('div');
         infoEl.className = 'project-item__info';
         infoEl.style.cssText = `
-            display: flex;
-            align-items: center;
-            gap: 6px;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 4px !important;
             width: 100%;
         `;
 
@@ -3680,6 +3681,155 @@ export class ProjectPanel {
         }
 
         infoEl.appendChild(titleEl);
+
+        // 创建元数据容器，展示日期、优先级、分类和状态
+        const metaEl = document.createElement('div');
+        metaEl.className = 'project-item__meta';
+        metaEl.style.cssText = `
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-top: 2px;
+            width: 100%;
+        `;
+
+        // 1. 起始和截止日期
+        let dateText = '';
+        if (project.startDate && project.endDate) {
+            dateText = `🗓${project.startDate}-${project.endDate}`;
+        } else if (project.startDate) {
+            dateText = `🗓${project.startDate}`;
+        } else if (project.endDate) {
+            dateText = `🗓截止:${project.endDate}`;
+        }
+
+        if (dateText) {
+            const dateEl = document.createElement('span');
+            dateEl.className = 'project-list-meta-date';
+            dateEl.textContent = dateText;
+            dateEl.style.cssText = `
+                color: var(--b3-theme-on-surface);
+                opacity: 0.7;
+                white-space: nowrap;
+                font-size: 11px;
+                display: inline-flex;
+                align-items: center;
+            `;
+            metaEl.appendChild(dateEl);
+        }
+
+        // 2. 优先级 (卡片一样的徽章)
+        if (priority !== 'none') {
+            const priorityNames = {
+                'high': i18n("highPriority") || '高',
+                'medium': i18n("mediumPriority") || '中',
+                'low': i18n("lowPriority") || '低'
+            };
+            const priorityBadge = document.createElement('span');
+            priorityBadge.className = `project-priority-label ${priority}`;
+            priorityBadge.style.cssText = `
+                display: inline-flex;
+                align-items: center;
+                gap: 2px;
+                padding: 1px 4px;
+                border-radius: 3px;
+                font-size: 10px;
+                font-weight: 500;
+                margin-left: 0;
+            `;
+            priorityBadge.innerHTML = `<div class="priority-dot ${priority}"></div>${priorityNames[priority]}`;
+            metaEl.appendChild(priorityBadge);
+        }
+
+        // 3. 分类
+        if (project.categoryId) {
+            const categoryIds = project.categoryId.split(',').filter((id: string) => id.trim());
+            categoryIds.forEach((id: string) => {
+                const category = this.categoryManager.getCategoryById(id);
+                if (category) {
+                    const categoryEl = document.createElement('span');
+                    categoryEl.className = 'project-category-tag';
+                    categoryEl.style.cssText = `
+                        display: inline-flex;
+                        align-items: center;
+                        gap: 2px;
+                        padding: 1px 4px;
+                        background-color: ${category.color};
+                        border: 1px solid ${category.color}40;
+                        border-radius: 3px;
+                        font-size: 10px;
+                        color: #fff;
+                        white-space: nowrap;
+                    `;
+                    if (category.icon) {
+                        const iconSpan = document.createElement('span');
+                        iconSpan.textContent = category.icon;
+                        iconSpan.style.cssText = `font-size: 10px; line-height: 1;`;
+                        categoryEl.appendChild(iconSpan);
+                    }
+                    const nameSpan = document.createElement('span');
+                    nameSpan.textContent = category.name;
+                    nameSpan.style.cssText = `font-size: 10px; font-weight: 500;`;
+                    categoryEl.appendChild(nameSpan);
+                    metaEl.appendChild(categoryEl);
+                }
+            });
+        }
+
+        // 4. 项目状态
+        const statusInfo = this.statusManager.getStatusById(status);
+        if (statusInfo) {
+            const statusEl = document.createElement('span');
+            statusEl.className = `project-status-tag project-status-${status}`;
+            
+            let bg = 'rgba(128, 128, 128, 0.1)';
+            let border = 'rgba(128, 128, 128, 0.2)';
+            let color = 'var(--b3-theme-on-surface)';
+            if (status === 'active') {
+                bg = 'color-mix(in srgb, var(--b3-theme-primary), transparent 90%)';
+                border = 'color-mix(in srgb, var(--b3-theme-primary), transparent 70%)';
+                color = 'var(--b3-theme-primary)';
+            } else if (status === 'someday') {
+                bg = 'color-mix(in srgb, var(--b3-theme-warning), transparent 90%)';
+                border = 'color-mix(in srgb, var(--b3-theme-warning), transparent 70%)';
+                color = 'var(--b3-theme-warning)';
+            } else if (status === 'archived') {
+                bg = 'var(--b3-theme-surface-lighter)';
+                border = 'var(--b3-border-color)';
+                color = 'var(--b3-theme-on-surface)';
+            } else {
+                bg = 'color-mix(in srgb, var(--b3-theme-info), transparent 90%)';
+                border = 'color-mix(in srgb, var(--b3-theme-info), transparent 70%)';
+                color = 'var(--b3-theme-info)';
+            }
+            
+            statusEl.style.cssText = `
+                display: inline-flex;
+                align-items: center;
+                gap: 2px;
+                padding: 1px 4px;
+                background-color: ${bg};
+                border: 1px solid ${border};
+                border-radius: 3px;
+                font-size: 10px;
+                color: ${color};
+                white-space: nowrap;
+            `;
+            if (statusInfo.icon) {
+                const iconSpan = document.createElement('span');
+                iconSpan.textContent = statusInfo.icon;
+                iconSpan.style.cssText = `font-size: 10px; line-height: 1;`;
+                statusEl.appendChild(iconSpan);
+            }
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = statusInfo.name;
+            nameSpan.style.cssText = `font-size: 10px; font-weight: 500;`;
+            statusEl.appendChild(nameSpan);
+            metaEl.appendChild(statusEl);
+        }
+
+        infoEl.appendChild(metaEl);
         contentEl.appendChild(infoEl);
         projectEl.appendChild(contentEl);
 
