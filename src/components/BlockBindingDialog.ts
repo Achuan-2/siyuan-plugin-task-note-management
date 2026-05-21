@@ -55,6 +55,14 @@ export class BlockBindingDialog {
         });
     }
 
+    private getNotebookList(): any[] {
+        return Array.isArray(this.notebooks?.notebooks) ? this.notebooks.notebooks : [];
+    }
+
+    private getFirstNotebookId(): string | undefined {
+        return this.getNotebookList()[0]?.id;
+    }
+
     /**
      * 显示对话框
      */
@@ -396,12 +404,12 @@ export class BlockBindingDialog {
             // 从设置中读取默认笔记本和路径
             try {
                 const settings = await this.plugin.loadSettings();
-                const defaultNotebook = settings.newDocNotebook;
+                const defaultNotebook = settings.newDocNotebook || this.getFirstNotebookId();
                 const pathTemplate = settings.newDocPath || '/';
                 // 构造初始化的保存路径：笔记本名 + 模板路径（保留模板原样，渲染留到保存时）
                 let initialFullPath = pathTemplate || '/';
                 if (defaultNotebook) {
-                    const nb = this.notebooks.notebooks.find((n: any) => n.id === defaultNotebook);
+                    const nb = this.getNotebookList().find((n: any) => n.id === defaultNotebook);
                     if (nb) {
                         // 确保 initialFullPath 以 '/' 开头
                         if (!initialFullPath.startsWith('/')) initialFullPath = '/' + initialFullPath;
@@ -1131,6 +1139,18 @@ export class BlockBindingDialog {
         if (!parentPath.startsWith('/')) parentPath = '/' + parentPath;
 
         const { createDocWithMd, renderSprig, lsNotebooks } = await import("../api");
+        let notebookList = this.getNotebookList();
+        if (notebookList.length === 0) {
+            try {
+                this.notebooks = await lsNotebooks();
+                notebookList = this.getNotebookList();
+            } catch (err) {
+                console.warn('加载笔记本列表失败，无法使用默认笔记本:', err);
+            }
+        }
+        if (!notebookId && notebookList.length > 0) {
+            notebookId = notebookList[0].id;
+        }
 
         // 使用 renderSprig 渲染最终路径（模板 + 标题），renderSprig 接受一个模板字符串
         const toRenderFull = parentPath.endsWith('/') ? parentPath + title : parentPath + '/' + title;
@@ -1153,11 +1173,10 @@ export class BlockBindingDialog {
             const parts = finalRendered.split('/').filter(Boolean);
             if (parts.length > 0) {
                 try {
-                    const nbRes = await lsNotebooks();
-                    const nb = (nbRes && nbRes.notebooks || []).find((n: any) => n.name === parts[0] || n.id === parts[0]);
+                    const nb = notebookList.find((n: any) => n.name === parts[0] || n.id === parts[0]);
                     if (nb) {
                         // 如果匹配到笔记本名，则以此为目标笔记本
-                        targetNotebookId = targetNotebookId || nb.id;
+                        targetNotebookId = nb.id;
                         relativePath = parts.length > 1 ? '/' + parts.slice(1).join('/') : '/';
                     } else {
                         // 如果没有匹配到笔记本名，且没有预设的目标笔记本，抛出错误
@@ -1174,13 +1193,9 @@ export class BlockBindingDialog {
             }
         }
 
-        if (!targetNotebookId) {
-            throw new Error(i18n("cannotDetermineTargetNotebookSearch") || '无法确定目标笔记本，请在路径中包含笔记本名或在设置中指定默认笔记本，或通过路径搜索选择目标文档');
-        }
-
         // 如果仍然没有目标笔记本，自动选择第一个可用的笔记本
-        if (!targetNotebookId && this.notebooks.notebooks && this.notebooks.notebooks.length > 0) {
-            targetNotebookId = this.notebooks.notebooks[0].id;
+        if (!targetNotebookId && notebookList.length > 0) {
+            targetNotebookId = notebookList[0].id;
         }
 
         if (!targetNotebookId) {

@@ -1762,6 +1762,7 @@
                 const parsed = parseInt(settings.weekStartDay, 10);
                 settings.weekStartDay = isNaN(parsed) ? DEFAULT_SETTINGS.weekStartDay : parsed;
             }
+            await ensureDefaultNotebookSelected(true);
             updateGroupItems();
         };
         window.addEventListener('reminderSettingsUpdated', settingsUpdateHandler);
@@ -1789,6 +1790,16 @@
         }
     }
 
+    async function ensureDefaultNotebookSelected(persist = false) {
+        const firstNotebookId = notebooks[0]?.id;
+        if (!settings.newDocNotebook && firstNotebookId) {
+            settings = { ...settings, newDocNotebook: firstNotebookId };
+            if (persist) {
+                await saveSettings(false);
+            }
+        }
+    }
+
     async function runload() {
         const loadedSettings = await plugin.loadSettings(true);
         settings = { ...loadedSettings };
@@ -1799,6 +1810,7 @@
         }
         // 确保 audioFileLists 存在
         if (!settings.audioFileLists) settings.audioFileLists = {};
+        await ensureDefaultNotebookSelected(true);
         updateGroupItems();
         console.debug('加载配置文件完成');
     }
