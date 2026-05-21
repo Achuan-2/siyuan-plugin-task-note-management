@@ -1,4 +1,4 @@
-﻿import { showMessage, confirm, Menu, Dialog, getAllModels, platformUtils } from "siyuan";
+import { showMessage, confirm, Menu, Dialog, getAllModels, platformUtils } from "siyuan";
 import { getLastStatsMode } from "./stats/statsMode";
 import { showStatsDialog } from "./stats/ShowStatsDialog";
 
@@ -19,6 +19,8 @@ import { i18n } from "../pluginInstance";
 import { getAllReminders } from "../utils/icsSubscription";
 import { SortMenuDialog } from "./SortMenuDialog";
 import { SortCriterion, getSortCriterionName } from "../utils/sortConfig";
+import { generateRandomColor } from "../utils/uiUtils";
+
 
 const PROJECT_PANEL_SORT_METHODS = new Set(['category', 'priority', 'time', 'created', 'title']);
 
@@ -695,14 +697,24 @@ export class ProjectPanel {
                         project.status = 'active';
                         dataChanged = true;
                     }
+                    if (!project.color) {
+                        project.color = generateRandomColor();
+                        dataChanged = true;
+                    }
                     return true;
                 }
                 return false;
             });
 
-            // 如果有数据迁移，保存更新
+            // 如果有数据迁移或新生成颜色，保存更新并同步缓存与事件
             if (dataChanged) {
                 await this.plugin.saveProjectData(projectData);
+                try {
+                    await ProjectManager.getInstance(this.plugin).loadProjects();
+                    window.dispatchEvent(new CustomEvent('projectColorUpdated'));
+                } catch (syncErr) {
+                    console.error('Failed to sync project manager or dispatch color update event:', syncErr);
+                }
             }
 
             // 应用分类过滤
@@ -975,17 +987,37 @@ export class ProjectPanel {
         // 标题
         const titleEl = document.createElement('span');
         titleEl.className = 'project-item__title';
-        titleEl.textContent = project.title || i18n("unnamedNote") || '未命名项目';
+
+        const dotEl = document.createElement('span');
+        dotEl.className = 'project-item__color-dot';
+        dotEl.style.cssText = `
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: ${project.color || '#cccccc'};
+            flex-shrink: 0;
+            display: inline-block;
+            text-decoration: none !important;
+        `;
+        titleEl.appendChild(dotEl);
+
+        const textEl = document.createElement('span');
+        textEl.textContent = project.title || i18n("unnamedNote") || '未命名项目';
+        titleEl.appendChild(textEl);
 
         if (project.blockId) {
             titleEl.setAttribute('data-type', 'a');
             titleEl.setAttribute('data-href', `siyuan://blocks/${project.blockId}`);
             titleEl.style.cssText = `
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
                 cursor: pointer;
                 color: var(--b3-protyle-inline-blockref-color);
-                text-decoration: underline;
                 font-weight: 500;
+                text-decoration: none;
             `;
+            textEl.style.textDecoration = 'underline';
             titleEl.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -993,6 +1025,9 @@ export class ProjectPanel {
             });
         } else {
             titleEl.style.cssText = `
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
                 font-weight: 500;
             `;
         }

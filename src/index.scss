@@ -2238,8 +2238,7 @@
 // 无分类选项特殊样式
 .category-option[data-category=""] {
     background: var(--b3-theme-on-surface);
-    color: var(--b3-theme-on-surface-light);
-    border-style: dashed;
+    color: #fff;
     border-width: 2px;
 }
 
