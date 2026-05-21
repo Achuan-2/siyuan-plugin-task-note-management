@@ -16393,14 +16393,42 @@ export class ProjectKanbanView {
             // 如果当前为自定义分组看板模式，且目标任务所在分组与被拖拽任务不同，
             // 则将被拖拽任务移动到目标任务的分组（上下放置时也应修改分组）并在该分组内重新排序
             if (this.kanbanMode === 'custom') {
-                // ... (existing code for custom mode) ... 
+                // --- 解析被拖拽任务的真实分组信息 ---
+                // 普通看板：直接读 DB 中的 customGroupId
+                // 聚合看板：DB 中存真实 groupId，但 task.customGroupId 是虚拟 ID，
+                //           需通过 __realCustomGroupId / __realProjectId 获取真实值
+                const draggedRealProjectId = this.isAggregateView
+                    ? (this.getTaskRealProjectId(draggedTask) || this.getTaskRealProjectId(draggedTaskInDb))
+                    : this.projectId;
                 const draggedGroup = draggedTaskInDb.customGroupId === undefined ? null : draggedTaskInDb.customGroupId;
 
-                // CRITICAL FIX: Use the customGroupId from the targetTask parameter (which was extracted from DOM)
-                // instead of from the database, because the DOM reflects the actual drop location
-                const actualTargetGroup = targetTask.customGroupId === undefined ? null : targetTask.customGroupId;
+                // --- 解析目标任务的真实分组信息 ---
+                // targetTask.customGroupId 在聚合看板中是虚拟 ID（agg_xxx_yyy），
+                // 必须通过 aggregateGroupTargetMap 解析回真实的 { projectId, customGroupId }
+                let actualTargetGroup: string | null;
+                let actualTargetProjectId: string;
+                if (this.isAggregateView) {
+                    const virtualGroupId = targetTask.customGroupId;
+                    const resolved = this.resolveAggregateGroupTarget(virtualGroupId);
+                    if (resolved) {
+                        actualTargetProjectId = resolved.projectId;
+                        actualTargetGroup = resolved.customGroupId;  // 真实的原始 customGroupId（或 null）
+                    } else {
+                        // 无法解析时回退到真实字段
+                        actualTargetProjectId = this.getTaskRealProjectId(targetTask) || draggedRealProjectId;
+                        actualTargetGroup = this.getTaskRealCustomGroupId(targetTask);
+                    }
+                } else {
+                    actualTargetProjectId = this.projectId;
+                    actualTargetGroup = targetTask.customGroupId === undefined ? null : targetTask.customGroupId;
+                }
 
-                // 1. Update Group if different
+                // 1. Update projectId if different (聚合看板跨项目拖拽)
+                if (this.isAggregateView && draggedRealProjectId !== actualTargetProjectId) {
+                    reminderData[draggedId].projectId = actualTargetProjectId;
+                }
+
+                // 2. Update Group if different
                 if (draggedGroup !== actualTargetGroup) {
                     if (actualTargetGroup === null) {
                         delete reminderData[draggedId].customGroupId;
@@ -16438,15 +16466,21 @@ export class ProjectKanbanView {
                     draggedTaskInDb.priority = newPriority;
                 }
 
+                // 注意：sourceList 和 targetList 都从 reminderData（DB 数据）中过滤，
+                // reminderData 中的任务是原始数据，直接用 r.projectId 和 r.customGroupId 比对真实值。
+                const matchesProjectAndGroupInDb = (r: any, projectId: string, groupId: string | null): boolean => {
+                    if (r.projectId !== projectId) return false;
+                    const rGroup = (r.customGroupId === undefined) ? null : r.customGroupId;
+                    return rGroup === groupId;
+                };
+
                 let sourceList: any[] = [];
                 // Source list cleanup - filter by BOTH group AND status
-                if (draggedGroup !== actualTargetGroup || oldStatus !== newStatus || oldPriority !== newPriority) {
+                if (draggedGroup !== actualTargetGroup || oldStatus !== newStatus || oldPriority !== newPriority
+                    || (this.isAggregateView && draggedRealProjectId !== actualTargetProjectId)) {
                     sourceList = Object.values(reminderData)
-                        .filter((r: any) => r && r.projectId === this.projectId && !r.parentId)
-                        .filter((r: any) => {
-                            const rGroup = (r.customGroupId === undefined) ? null : r.customGroupId;
-                            return rGroup === draggedGroup;
-                        })
+                        .filter((r: any) => r && !r.parentId)
+                        .filter((r: any) => matchesProjectAndGroupInDb(r, draggedRealProjectId, draggedGroup))
                         .filter((r: any) => {
                             // Filter by status as well
                             const rStatus = this.getTaskStatus(r);
@@ -16466,12 +16500,11 @@ export class ProjectKanbanView {
                 }
 
                 // Target list update - filter by BOTH group AND status
+                // 注意：被拖拽任务的 projectId/customGroupId 已在上面更新到 reminderData 中，
+                // 所以这里 filter 时它已经属于目标分组，需排除后再插入
                 const targetList = Object.values(reminderData)
-                    .filter((r: any) => r && r.projectId === this.projectId && !r.parentId)
-                    .filter((r: any) => {
-                        const rGroup = (r.customGroupId === undefined) ? null : r.customGroupId;
-                        return rGroup === actualTargetGroup;  // Use actualTargetGroup here too!
-                    })
+                    .filter((r: any) => r && !r.parentId)
+                    .filter((r: any) => matchesProjectAndGroupInDb(r, actualTargetProjectId, actualTargetGroup))
                     .filter((r: any) => {
                         // Filter by status as well (using the NEW status after update)
                         const rStatus = this.getTaskStatus(r);
@@ -16496,6 +16529,10 @@ export class ProjectKanbanView {
                             if (desc.customGroupId !== actualTargetGroup) {
                                 desc.customGroupId = actualTargetGroup;
                             }
+                        }
+                        // 同步项目 ID（聚合看板跨项目时）
+                        if (this.isAggregateView && desc.projectId !== actualTargetProjectId) {
+                            desc.projectId = actualTargetProjectId;
                         }
                         // 同步状态
                         if (newStatus === 'completed') {
@@ -16528,6 +16565,7 @@ export class ProjectKanbanView {
                 targetList.splice(insertIndex, 0, reminderData[draggedId]);
 
                 targetList.forEach((task: any, index: number) => {
+
                     reminderData[task.id].sort = index * 10;
                 });
 
