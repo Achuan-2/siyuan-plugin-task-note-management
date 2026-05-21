@@ -12124,6 +12124,19 @@ export class ProjectKanbanView {
                 delete optimisticTask.completedTime;
             }
 
+            // 乐观更新所有子任务
+            const childIds = completed ? this.getAllDescendantIds(task.id, this.tasks) : [];
+            if (completed) {
+                childIds.forEach(childId => {
+                    const localChild = this.tasks.find(t => t.id === childId);
+                    if (localChild) {
+                        localChild.completed = true;
+                        this.syncCustomProgressOnCompletion(localChild, true);
+                        localChild.completedTime = optimisticTask.completedTime;
+                    }
+                });
+            }
+
             // 子任务在父任务树内完成时，应重绘当前父子树，而不是把子任务移动到“已完成”列。
             const refreshedParentTree = optimisticTask.parentId && this.isTaskRenderedInParentTree(optimisticTask.id)
                 ? this.refreshTaskTreeAround(optimisticTask.id)
@@ -12135,6 +12148,16 @@ export class ProjectKanbanView {
                     completedTime: optimisticTask.completedTime,
                     __deferStatusMoveMs: completed ? 300 : 0
                 });
+                // 同时更新所有子任务的 DOM，避免界面显示不同步
+                if (completed && childIds.length > 0) {
+                    childIds.forEach(childId => {
+                        this.updateTaskElementDOM(childId, {
+                            completed: true,
+                            completedTime: optimisticTask.completedTime,
+                            __deferStatusMoveMs: 300
+                        });
+                    });
+                }
             }
         }
 
@@ -12156,10 +12179,11 @@ export class ProjectKanbanView {
                         }
 
                         const completedTaskIds: string[] = [];
+                        let childIds: string[] = [];
                         if (completed) {
                             reminderData[task.id].completedTime = getLocalDateTimeString(new Date());
                             // 父任务完成时，自动完成所有子任务
-                            const childIds = await this.completeAllChildTasks(task.id, reminderData, affectedBlockIds);
+                            childIds = await this.completeAllChildTasks(task.id, reminderData, affectedBlockIds);
                             completedTaskIds.push(task.id, ...childIds);
                             childIds.forEach(childId => {
                                 const localChild = this.tasks.find(t => t.id === childId);
@@ -12201,8 +12225,9 @@ export class ProjectKanbanView {
                         // 广播更新事件
                         this.dispatchReminderUpdate(true);
                         // 标记完成后不再触发整页 queueLoadTasks 刷新，避免滚动条跳动
+                        // 但如果是父任务完成（有子任务被级联完成），必须刷新以保持子任务DOM和层级结构一致
                         // 取消完成时仍保留兜底刷新，确保状态回退一致
-                        if (!completed) {
+                        if (!completed || (completed && childIds.length > 0)) {
                             this.queueLoadTasks();
                         }
                     }
