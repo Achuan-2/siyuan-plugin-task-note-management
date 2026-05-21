@@ -670,20 +670,41 @@
     }
 
     .project-item--list {
-        background: transparent;
-        background-image: var(--project-tree-guides, none);
-        background-position: var(--project-tree-guide-positions, 0 0);
-        background-size: var(--project-tree-guide-sizes, auto);
-        background-repeat: no-repeat;
+        background: transparent !important;
+        background-image: var(--project-tree-guides, none) !important;
+        background-position: var(--project-tree-guide-positions, 0 0) !important;
+        background-size: var(--project-tree-guide-sizes, auto) !important;
+        background-repeat: no-repeat !important;
         border-color: transparent !important;
-        margin-bottom: 0 !important;
+        margin-bottom: 4px !important;
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+        padding-right: 0 !important;
+        transition: none !important;
 
         &:hover {
-            background: var(--b3-theme-surface-lighter);
-            background-image: var(--project-tree-guides, none);
-            background-position: var(--project-tree-guide-positions, 0 0);
-            background-size: var(--project-tree-guide-sizes, auto);
-            background-repeat: no-repeat;
+            background-color: transparent !important;
+            background-image: var(--project-tree-guides, none) !important;
+            border-color: transparent !important;
+            transition: none !important;
+        }
+
+        .project-item__content {
+            border: 1px solid var(--b3-theme-surface-lighter) !important;
+            border-radius: 4px;
+            padding: 6px 12px;
+            width: 100%;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            background-color: var(--b3-theme-surface);
+            transition: none !important;
+        }
+
+        &:hover .project-item__content {
+            background-color: var(--b3-list-hover) !important;
+            border-color: var(--b3-theme-primary-light) !important;
+            transition: none !important;
         }
     }
 }
@@ -700,12 +721,14 @@
     animation: none !important;
     position: relative;
     border: 1px solid var(--b3-theme-surface-lighter) !important;
+    transition: none !important;
 
     &:hover {
         transform: none !important;
         box-shadow: none !important;
         background-color: var(--b3-list-hover) !important;
         border-color: var(--b3-theme-primary-light) !important;
+        transition: none !important;
     }
 
     .project-item__content {
