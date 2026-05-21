@@ -1793,6 +1793,7 @@
     "selectFilterToEdit": "Select a filter to edit or create a new one",
     "allPriorities": "All Priorities",
     "finished": "Finished",
+    "enterBatchSelect": "Enter Batch Selection",
     "exitBatchSelect": "Exit Batch Selection",
     "setGroup": "Set Group",
     "deadline": "Deadline",

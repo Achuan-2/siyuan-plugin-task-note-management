@@ -2836,24 +2836,40 @@ export class ReminderPanel {
             },
             onCardClick: (r: any, e: MouseEvent) => {
                 const rEl = this.remindersContainer.querySelector(`[data-reminder-id="${r.id}"]`) as HTMLElement;
-                if (e.ctrlKey || e.metaKey) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (!this.isMultiSelectMode) {
-                        this.isMultiSelectMode = true;
-                    }
-                    this.togglePanelReminderSelection(r.id, rEl);
-                    this.lastClickedReminderId = r.id;
-                } else if (e.shiftKey && this.isMultiSelectMode && this.lastClickedReminderId) {
+                if (e.shiftKey && this.isMultiSelectMode && this.lastClickedReminderId) {
                     e.preventDefault();
                     e.stopPropagation();
                     this.selectRangeInPanel(this.lastClickedReminderId, r.id);
+                } else if (this.isMultiSelectMode || e.ctrlKey || e.metaKey) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (!this.isMultiSelectMode) {
+                        this.enterPanelMultiSelectMode();
+                    }
+                    this.togglePanelReminderSelection(r.id, rEl);
+                    this.lastClickedReminderId = r.id;
                 }
             },
-            onTitleClick: (r: any, _e: Event) => {
+            onTitleClick: (r: any, e: MouseEvent) => {
+                if (this.isMultiSelectMode) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const rEl = this.remindersContainer.querySelector(`[data-reminder-id="${r.id}"]`) as HTMLElement;
+                    this.togglePanelReminderSelection(r.id, rEl);
+                    this.lastClickedReminderId = r.id;
+                    return;
+                }
                 this.openBlockTab(r.blockId || r.docId);
             },
-            onDocumentTitleClick: (_r: any, docId: string, _e: MouseEvent) => {
+            onDocumentTitleClick: (r: any, docId: string, e: MouseEvent) => {
+                if (this.isMultiSelectMode) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const rEl = this.remindersContainer.querySelector(`[data-reminder-id="${r.id}"]`) as HTMLElement;
+                    this.togglePanelReminderSelection(r.id, rEl);
+                    this.lastClickedReminderId = r.id;
+                    return;
+                }
                 this.openBlockTab(docId);
             },
             onNoteClick: (r: any, e: Event) => {
@@ -9483,6 +9499,21 @@ export class ReminderPanel {
                 ]
             });
 
+            // 多选模式
+            menu.addItem({
+                icon: this.isMultiSelectMode ? 'iconClose' : 'iconCheck',
+                label: this.isMultiSelectMode
+                    ? (i18n('exitBatchSelect') || '退出多选')
+                    : (i18n('enterBatchSelect') || '进入多选'),
+                click: () => {
+                    if (this.isMultiSelectMode) {
+                        this.exitPanelMultiSelectMode();
+                    } else {
+                        this.enterPanelMultiSelectMode();
+                    }
+                }
+            });
+
             // 添加粘贴新建任务
             menu.addItem({
                 icon: 'iconPaste',
@@ -10190,6 +10221,13 @@ export class ReminderPanel {
     }
 
     // ===================== 侧栏多选模式 =====================
+
+    private enterPanelMultiSelectMode(): void {
+        if (this.isMultiSelectMode) return;
+        this.isMultiSelectMode = true;
+        this.lastClickedReminderId = null;
+        showMessage(i18n('batchSelectModeOn') || '已进入多选模式');
+    }
 
     private togglePanelReminderSelection(reminderId: string, el: HTMLElement): void {
         if (this.selectedReminderIds.has(reminderId)) {

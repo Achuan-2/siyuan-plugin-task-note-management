@@ -1792,6 +1792,7 @@
     "selectFilterToEdit": "选择一个过滤器进行编辑，或创建新的过滤器",
     "allPriorities": "全部优先级",
     "finished": "已完成",
+    "enterBatchSelect": "进入多选",
     "exitBatchSelect": "退出多选",
     "setGroup": "设置分组",
     "deadline": "截止",
