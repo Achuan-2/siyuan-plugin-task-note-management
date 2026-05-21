@@ -1,4 +1,4 @@
-﻿import { getFile, putFile, openBlock, getBlockByID, removeFile } from "../api";
+import { getFile, putFile, openBlock, getBlockByID, removeFile } from "../api";
 import { getAllReminders, saveReminders } from "../utils/icsSubscription";
 import { ProjectManager } from "../utils/projectManager";
 import { CategoryManager } from "../utils/categoryManager";
@@ -1216,17 +1216,41 @@ export class EisenhowerMatrixView {
         });
         taskEl.appendChild(moreBtn);
 
-        // 创建复选框容器
-        const checkboxContainer = document.createElement('div');
-        checkboxContainer.className = 'task-checkbox';
+        // 折叠按钮和复选框容器
+        const leftControls = document.createElement('div');
+        leftControls.className = 'reminder-item__left-controls';
+
+        // 复选框
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
+        checkbox.className = 'reminder-task-checkbox';
         checkbox.checked = task.completed;
         if (task.isSubscribed) {
             checkbox.disabled = true;
             checkbox.classList.add('ariaLabel'); checkbox.setAttribute('aria-label', i18n("subscribedTaskReadonly"));
         }
-        checkboxContainer.appendChild(checkbox);
+        leftControls.appendChild(checkbox);
+
+        // 折叠按钮（仅对有子任务的父任务显示）
+        const childTasks = this.allTasks.filter(t => t.parentId === task.id);
+        if (childTasks.length > 0) {
+            const collapseBtn = document.createElement('button');
+            collapseBtn.className = 'b3-button b3-button--text collapse-btn';
+            const isCollapsed = this.collapsedTasks.has(task.id);
+            collapseBtn.innerHTML = isCollapsed ? '<svg><use xlink:href="#iconRight"></use></svg>' : '<svg><use xlink:href="#iconDown"></use></svg>';
+            collapseBtn.classList.add('ariaLabel'); collapseBtn.setAttribute('aria-label', isCollapsed ? '展开子任务' : '折叠子任务');
+            collapseBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.toggleTaskCollapse(task.id);
+            });
+            leftControls.appendChild(collapseBtn);
+        } else {
+            // 占位符以对齐
+            const spacer = document.createElement('div');
+            spacer.className = 'collapse-spacer';
+            leftControls.appendChild(spacer);
+        }
 
         // 创建任务信息容器
         const taskInfo = document.createElement('div');
@@ -1238,34 +1262,6 @@ export class EisenhowerMatrixView {
             subBadge.innerHTML = `<svg style="width: 12px; height: 12px; margin-right: 4px; vertical-align: middle;"><use xlink:href="#iconCloud"></use></svg>`;
             subBadge.classList.add('ariaLabel'); subBadge.setAttribute('aria-label', i18n("icsSubscribedTask"));
             taskInfo.appendChild(subBadge);
-        }
-
-        // 创建控制按钮容器（仅保留折叠按钮）
-        const taskControlContainer = document.createElement('div');
-        taskControlContainer.className = 'task-control-container';
-        taskControlContainer.style.cssText = `
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-            gap: 2px;
-        `;
-
-        // 折叠按钮（仅对有子任务的父任务显示）
-        const childTasks = this.allTasks.filter(t => t.parentId === task.id);
-        if (childTasks.length > 0) {
-            const collapseBtn = document.createElement('button');
-            collapseBtn.className = 'task-collapse-btn b3-button b3-button--outline';
-            const isCollapsed = this.collapsedTasks.has(task.id);
-            collapseBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#${isCollapsed ? 'iconRight' : 'iconDown'}"></use></svg>`;
-            collapseBtn.classList.add('ariaLabel'); collapseBtn.setAttribute('aria-label', isCollapsed ? '展开子任务' : '折叠子任务');
-            collapseBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                this.toggleTaskCollapse(task.id);
-            });
-            taskControlContainer.appendChild(collapseBtn);
         }
 
         // 创建任务标题
@@ -1657,18 +1653,17 @@ export class EisenhowerMatrixView {
         }
         taskInfo.appendChild(taskMeta);
 
-        // 使用flex布局包含控制按钮、复选框和任务信息
+        // 使用flex布局包含左侧控制和任务信息
         const taskInnerContent = document.createElement('div');
         taskInnerContent.className = 'task-inner-content';
         taskInnerContent.style.cssText = `
             display: flex;
             align-items: flex-start;
-            gap: 8px;
+            gap: 2px;
             width: 100%;
         `;
 
-        taskInnerContent.appendChild(taskControlContainer);
-        taskInnerContent.appendChild(checkboxContainer);
+        taskInnerContent.appendChild(leftControls);
         taskInnerContent.appendChild(taskInfo);
 
         taskContent.appendChild(taskInnerContent);
@@ -2868,9 +2863,7 @@ export class EisenhowerMatrixView {
                 height: 14px;
             }
 
-            .task-checkbox {
-                margin-top: 2px;
-            }
+
 
             .task-info {
                 flex: 1;
@@ -3020,39 +3013,7 @@ export class EisenhowerMatrixView {
             
             
 
-            .task-collapse-btn {
-                width: 14px;
-                height: 14px;
-                min-width: 14px;
-                padding: 0;
-                color: var(--b3-theme-on-surface);
-                opacity: 0.7;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                border: 1px solid var(--b3-theme-border);
-                border-radius: 2px;
-                background: var(--b3-theme-background);
-                margin-bottom: 2px;
-            }
-            .task-collapse-btn:hover {
-                opacity: 1;
-                color: var(--b3-theme-primary);
-                background: var(--b3-theme-surface-lighter);
-                border-color: var(--b3-theme-primary);
-            }
-            .task-collapse-btn .b3-button__icon {
-                margin: 0;
-            }
-            .task-collapse-btn svg {
-                height: 8px;
-                width: 8px;
-            }
-            
-            .task-control-container {
-                align-self: flex-start;
-                margin-top: 2px;
-            }
+
             
             /* 优先级标签样式 - 参考项目看板 */
             .task-priority-label {
@@ -3124,6 +3085,7 @@ export class EisenhowerMatrixView {
                 cursor: grab;
                 transition: all 0.2s ease;
                 position: relative;
+                padding: 8px;
             }
 
             .quick_item.dragging {
