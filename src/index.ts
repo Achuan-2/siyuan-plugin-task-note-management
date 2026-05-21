@@ -117,6 +117,8 @@ export const DEFAULT_SETTINGS = {
     defaultHeadingPosition: 'prepend', // 新增：新建标题的默认位置（'prepend' | 'append'），默认为最前
     enableOutlinePrefix: true, // 是否在大纲中为绑定标题添加任务状态前缀
     enableTaskListStatusSync: false, // 任务列表状态与任务进行中/放弃状态联动
+    taskPriorityDisplayStyle: 'background', // 任务卡片优先级显示样式：background | checkboxBorder
+    showTaskCardDocumentTitle: true, // 任务卡片是否显示绑定块所属文档标题
 
     // 控制侧边栏显示
     enableReminderDock: true, // 侧边栏：提醒（任务管理）

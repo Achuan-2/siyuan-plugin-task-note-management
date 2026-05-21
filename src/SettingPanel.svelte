@@ -16,7 +16,15 @@
         STATUSES_DATA_FILE,
     } from './index';
     import type { AudioFileItem } from './index';
-    import { lsNotebooks, pushErrMsg, pushMsg, removeFile, putFile, resetDoingAndAbandonedTaskListMarkers, restoreTaskListMarkers } from './api';
+    import {
+        lsNotebooks,
+        pushErrMsg,
+        pushMsg,
+        removeFile,
+        putFile,
+        resetDoingAndAbandonedTaskListMarkers,
+        restoreTaskListMarkers,
+    } from './api';
     import { exportIcsFile, uploadIcsToCloud } from './utils/icsUtils';
     import { importIcsFile } from './utils/icsImport';
     import { syncHolidays } from './utils/icsSubscription';
@@ -434,8 +442,7 @@
                     value: settings.quickReminderTitlePasteAutoDetect !== false,
                     type: 'checkbox',
                     title:
-                        i18n('quickReminderTitlePasteAutoDetect') ||
-                        '任务编辑弹窗标题粘贴自动识别',
+                        i18n('quickReminderTitlePasteAutoDetect') || '任务编辑弹窗标题粘贴自动识别',
                     description:
                         i18n('quickReminderTitlePasteAutoDetectDesc') ||
                         '开启后，在任务编辑弹窗标题中粘贴文本时自动识别日期时间；仍可在弹窗内临时关闭',
@@ -448,6 +455,29 @@
                     description:
                         i18n('treatStartDateOnlyAsOverdueDesc') ||
                         '开启后，只有开始日期且无截止日期的未完成任务，在当前日期超过开始日期时显示为过期；关闭后显示为已开始天数。',
+                },
+                {
+                    key: 'taskPriorityDisplayStyle',
+                    value: settings.taskPriorityDisplayStyle || 'background',
+                    type: 'select',
+                    title: i18n('taskPriorityDisplayStyle') || '任务卡片优先级显示样式',
+                    description:
+                        i18n('taskPriorityDisplayStyleDesc') ||
+                        '选择优先级颜色显示在任务卡片背景上，或仅显示在任务复选框边框上。',
+                    options: {
+                        background: i18n('taskPriorityDisplayStyleBackground') || '背景色显示',
+                        checkboxBorder:
+                            i18n('taskPriorityDisplayStyleCheckboxBorder') || '复选框边框颜色显示',
+                    },
+                },
+                {
+                    key: 'showTaskCardDocumentTitle',
+                    value: settings.showTaskCardDocumentTitle !== false,
+                    type: 'checkbox',
+                    title: i18n('showTaskCardDocumentTitle') || '任务卡片显示文档标题',
+                    description:
+                        i18n('showTaskCardDocumentTitleDesc') ||
+                        '开启后，绑定到非文档块的任务卡片会显示该块所属文档标题。',
                 },
                 {
                     key: 'reminderSkipWeekendMode',
@@ -1525,7 +1555,9 @@
             );
         } catch (error) {
             console.error('同步项目看板显示设置失败:', error);
-            await pushErrMsg(i18n('applyProjectKanbanDisplaySettingsFailed') || '同步项目看板显示设置失败');
+            await pushErrMsg(
+                i18n('applyProjectKanbanDisplaySettingsFailed') || '同步项目看板显示设置失败'
+            );
         }
     }
 
@@ -1699,12 +1731,17 @@
                     if (newValue) {
                         count = await restoreTaskListMarkers();
                         if (count > 0) {
-                            pushMsg(i18n('taskListStatusRestoreDone') || `已恢复 ${count} 个任务列表状态`);
+                            pushMsg(
+                                i18n('taskListStatusRestoreDone') ||
+                                    `已恢复 ${count} 个任务列表状态`
+                            );
                         }
                     } else {
                         count = await resetDoingAndAbandonedTaskListMarkers();
                         if (count > 0) {
-                            pushMsg(i18n('taskListStatusResetDone') || `已重置 ${count} 个任务列表状态`);
+                            pushMsg(
+                                i18n('taskListStatusResetDone') || `已重置 ${count} 个任务列表状态`
+                            );
                         }
                     }
                 } catch (error) {

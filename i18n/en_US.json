@@ -1115,6 +1115,8 @@
     "enableProjectDockBadgeDesc": "Show or hide the numeric badge counter on the Project sidebar icon",
     "enableHabitDockBadge": "Show Habit Badge",
     "enableHabitDockBadgeDesc": "Show or hide the numeric badge counter on the Habit sidebar icon",
+    "showTaskCardDocumentTitle": "Show Document Title on Task Cards",
+    "showTaskCardDocumentTitleDesc": "When enabled, task cards bound to non-document blocks show the title of the containing document",
     "treatStartDateOnlyAsOverdue": "Treat start-date-only tasks as overdue by default",
     "treatStartDateOnlyAsOverdueDesc": "When enabled, incomplete tasks with a start date but no end date are shown as overdue after the start date passes. When disabled, they show elapsed started days.",
     "treatStartDateOnlyAsOverdueTask": "Treat passed start date as overdue",

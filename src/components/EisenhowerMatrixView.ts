@@ -9,6 +9,7 @@ import { PomodoroManager } from "../utils/pomodoroManager";
 import { colorWithOpacity } from "../utils/uiUtils";
 import { showMessage, confirm, Menu, Dialog, platformUtils, getBackend, getFrontend } from "siyuan";
 import { i18n } from "../pluginInstance";
+import { TaskRenderer } from "./render/TaskRenderer";
 import { getLocalDateTimeString, getLocalDateString, compareDateStrings, getLogicalDateString, getLocaleTag } from "../utils/dateUtils";
 import { getSolarDateLunarString } from "../utils/lunarUtils";
 import { generateRepeatInstances, getRepeatDescription, generateSubtreeInstances } from "../utils/repeatUtils";
@@ -66,6 +67,7 @@ export class EisenhowerMatrixView {
     private statusFilter: Set<string> = new Set();
     private reminderUpdatedHandler: (event?: CustomEvent) => void;
     private projectUpdatedHandler: (event?: CustomEvent) => void;
+    private settingsUpdatedHandler: (event?: CustomEvent) => void;
     private projectFilter: Set<string> = new Set();
     // 唯一标识，用于区分事件来源，避免响应自己触发的事件
     private viewId: string;
@@ -107,6 +109,9 @@ export class EisenhowerMatrixView {
             if (event && event.detail && event.detail.source === this.viewId) {
                 return; // 跳过自己触发的事件
             }
+            this.refresh(false);
+        };
+        this.settingsUpdatedHandler = () => {
             this.refresh(false);
         };
         try {
@@ -1150,679 +1155,171 @@ export class EisenhowerMatrixView {
     }
 
     private createTaskElement(task: QuadrantTask, level: number = 0): HTMLElement {
-        const taskEl = document.createElement('div');
-        taskEl.className = `quick_item ${task.completed ? 'completed' : ''}`;
-        if (level > 0) {
-            taskEl.classList.add('child-task');
-            taskEl.style.marginLeft = `${level * 20}px`;
-        }
-        taskEl.setAttribute('data-task-id', task.id);
-        taskEl.setAttribute('draggable', this.isMobileClient ? 'false' : 'true'); // 移动端禁用拖拽
-        taskEl.setAttribute('data-project-id', task.projectId || 'no-project');
-        taskEl.setAttribute('data-priority', task.priority || 'none');
-
-        // 添加优先级样式类（参考项目看板）
-        if (task.priority && task.priority !== 'none') {
-            taskEl.classList.add(`task-priority-${task.priority}`);
-        }
-
-        // 设置任务颜色（根据优先级）- 参考项目看板的样式
-        let backgroundColor = '';
-        let borderColor = '';
-        switch (task.priority) {
-            case 'high':
-                backgroundColor = colorWithOpacity('var(--b3-card-error-background)', 0.5);
-                borderColor = 'var(--b3-card-error-color)';
-                break;
-            case 'medium':
-                backgroundColor = colorWithOpacity('var(--b3-card-warning-background)', 0.5);
-                borderColor = 'var(--b3-card-warning-color)';
-                break;
-            case 'low':
-                backgroundColor = colorWithOpacity('var(--b3-card-info-background)', 0.7);
-                borderColor = 'var(--b3-card-info-color)';
-                break;
-            default:
-                borderColor = 'var(--b3-theme-background-light)';
-        }
-
-        // 设置任务元素的背景色和边框
-        taskEl.style.backgroundColor = backgroundColor;
-        taskEl.style.border = `1.5px solid ${borderColor}`;
-        taskEl.style.position = 'relative';
-
-        // 创建任务内容容器
-        const taskContent = document.createElement('div');
-        taskContent.className = 'task-content';
-        taskContent.style.paddingRight = '30px';
-
-        const moreBtn = document.createElement('button');
-        moreBtn.type = 'button';
-        moreBtn.className = `b3-button b3-button--text task-more-button${this.isMobileClient ? ' task-more-button--mobile' : ''}`;
-        moreBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconMore"></use></svg>';
-        moreBtn.classList.add('ariaLabel');
-        moreBtn.setAttribute('aria-label', i18n('more'));
-        moreBtn.addEventListener('pointerdown', (e) => {
-            e.stopPropagation();
-        });
-        moreBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const rect = moreBtn.getBoundingClientRect();
-            this.showTaskContextMenu(task, {
-                clientX: rect.right,
-                clientY: rect.bottom + 4
-            });
-        });
-        taskEl.appendChild(moreBtn);
-
-        // 折叠按钮和复选框容器
-        const leftControls = document.createElement('div');
-        leftControls.className = 'reminder-item__left-controls';
-
-        // 复选框
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.className = 'reminder-task-checkbox';
-        checkbox.checked = task.completed;
-        if (task.isSubscribed) {
-            checkbox.disabled = true;
-            checkbox.classList.add('ariaLabel'); checkbox.setAttribute('aria-label', i18n("subscribedTaskReadonly"));
-        }
-        leftControls.appendChild(checkbox);
-
-        // 折叠按钮（仅对有子任务的父任务显示）
-        const childTasks = this.allTasks.filter(t => t.parentId === task.id);
-        if (childTasks.length > 0) {
-            const collapseBtn = document.createElement('button');
-            collapseBtn.className = 'b3-button b3-button--text collapse-btn';
-            const isCollapsed = this.collapsedTasks.has(task.id);
-            collapseBtn.innerHTML = isCollapsed ? '<svg><use xlink:href="#iconRight"></use></svg>' : '<svg><use xlink:href="#iconDown"></use></svg>';
-            collapseBtn.classList.add('ariaLabel'); collapseBtn.setAttribute('aria-label', isCollapsed ? '展开子任务' : '折叠子任务');
-            collapseBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                this.toggleTaskCollapse(task.id);
-            });
-            leftControls.appendChild(collapseBtn);
-        } else {
-            // 占位符以对齐
-            const spacer = document.createElement('div');
-            spacer.className = 'collapse-spacer';
-            leftControls.appendChild(spacer);
-        }
-
-        // 创建任务信息容器
-        const taskInfo = document.createElement('div');
-        taskInfo.className = 'task-info';
-
-        // 订阅任务标识
-        if (task.isSubscribed) {
-            const subBadge = document.createElement('span');
-            subBadge.innerHTML = `<svg style="width: 12px; height: 12px; margin-right: 4px; vertical-align: middle;"><use xlink:href="#iconCloud"></use></svg>`;
-            subBadge.classList.add('ariaLabel'); subBadge.setAttribute('aria-label', i18n("icsSubscribedTask"));
-            taskInfo.appendChild(subBadge);
-        }
-
-        // 创建任务标题
-        const taskTitle = document.createElement('div');
-        taskTitle.className = 'task-title';
-
-        // 如果任务有绑定块，设置为链接样式
-        if (task.blockId) {
-            taskTitle.setAttribute('data-type', 'a');
-            taskTitle.setAttribute('data-href', `siyuan://blocks/${task.blockId}`);
-            taskTitle.style.cssText += `
-                cursor: pointer;
-                color: var(--b3-protyle-inline-blockref-color);
-                text-decoration: underline;
-                font-weight: 500;
-            `;
-            taskTitle.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                this.openTaskBlock(task.blockId!);
-            });
-        }
-
-        taskTitle.textContent = task.title;
-        taskTitle.classList.add('ariaLabel'); taskTitle.setAttribute('aria-label', task.blockId ? `点击打开绑定块: ${task.title}` : task.title);
-
-        // 如果任务置顶，添加置顶图标
-        if (task.pinned) {
-            const pinIcon = document.createElement('span');
-            pinIcon.textContent = '📌 ';
-            taskTitle.prepend(pinIcon);
-        }
-
-        // 如果有子任务，添加数量指示器
-        if (childTasks.length > 0) {
-            const childCountSpan = document.createElement('span');
-            childCountSpan.className = 'child-task-count';
-            childCountSpan.textContent = ` (${childTasks.length})`;
-            childCountSpan.style.cssText = `
-                color: var(--b3-theme-on-surface-light);
-                font-size: 12px;
-                margin-left: 4px;
-            `;
-            taskTitle.appendChild(childCountSpan);
-        }
-
-        // 创建项目/分组信息（单独一行）
-        let projectDiv: HTMLElement | null = null;
-        if (task.projectName) {
-            projectDiv = document.createElement('div');
-            projectDiv.className = 'task-project-info';
-            let projectText = task.projectName;
-            if (task.groupName) {
-                projectText += ` / ${task.groupName}`;
+        const context = {
+            plugin: this.plugin,
+            today: getLogicalDateString(),
+            collapsedTasks: this.collapsedTasks,
+            selectedTaskIds: new Set<string>(),
+            isMultiSelectMode: false,
+            showCompletedSubtasks: false,
+            clipTitleToOneLine: false,
+            showProjectKanbanStatus: false,
+            showProjectBadge: true,
+            allTasks: this.allTasks,
+            categoryManager: this.categoryManager,
+            milestoneMap: this.milestoneMap,
+            lute: this.lute,
+            projectCache: undefined,
+            currentTab: '',
+            isMobileClient: this.isMobileClient,
+            
+            // Custom methods
+            isReminderPinned: (t: any) => !!t.pinned,
+            formatReminderTime: (d: string, t: string, tod: string, ed?: string, et?: string, rem?: any) => {
+                return TaskRenderer.formatReminderTime(d, t, tod, ed, et, rem);
             }
-            projectDiv.textContent = `📂 ${projectText}`;
-            projectDiv.style.cssText = `
-                 font-size: 11px;
-                 color: var(--b3-theme-on-surface-light);
-                 margin-top: 4px;
-                 display: flex;
-                 align-items: center;
-                 gap: 4px;
-                 opacity: 0.8;
-             `;
-        }
+        };
 
-        // 创建时间信息（单独一行）
-        let dateDiv: HTMLElement | null = null;
-        const displayDate = task.date || task.endDate;
-        if (displayDate) {
-            dateDiv = document.createElement('div');
-            dateDiv.className = 'task-date-info';
-            dateDiv.style.cssText = `
-                 margin-top: 4px;
-                 font-size: 11px;
-                 display: flex;
-                 align-items: center;
-                 flex-wrap: wrap;
-                 gap: 6px;
-                 color: var(--b3-theme-on-surface-light);
-            `;
-
-            const dateSpan = document.createElement('span');
-            dateSpan.className = 'task-date';
-            dateSpan.style.cssText = `
-                display: inline-flex;
-                align-items: center;
-                gap: 4px;
-            `;
-
-            // 获取当前年份
-            const currentYear = new Date().getFullYear();
-
-            // 辅助函数：格式化日期显示
-            const formatDateWithYear = (dateStr: string): string => {
-                const date = new Date(dateStr + 'T00:00:00');
-                const year = date.getFullYear();
-                return year !== currentYear
-                    ? date.toLocaleDateString(getLocaleTag(), { year: 'numeric', month: 'short', day: 'numeric' })
-                    : date.toLocaleDateString(getLocaleTag(), { month: 'short', day: 'numeric' });
-            };
-
-            // 添加周期图标
-            if (task.extendedProps?.repeat?.enabled || task.extendedProps?.isRepeatInstance) {
-                const repeatIcon = document.createElement('span');
-                repeatIcon.textContent = '🔄';
-                repeatIcon.classList.add('ariaLabel'); repeatIcon.setAttribute('aria-label', task.extendedProps?.repeat?.enabled ? getRepeatDescription(task.extendedProps.repeat) : '周期事件实例');
-                repeatIcon.style.cssText = 'cursor: help;';
-                dateSpan.appendChild(repeatIcon);
-            }
-
-            // 日期显示逻辑
-            let dateText = '';
-            const today = getLogicalDateString();
-            const logicalStart = task.date ? this.getTaskLogicalDate(task.date, task.time) : '';
-            const logicalEnd = task.endDate ? this.getTaskLogicalDate(task.endDate, task.endTime || task.time) : logicalStart;
-
-            if (!task.date && task.endDate) {
-                const endDays = this.calculateTaskDaysDifference(logicalEnd, today);
-                const endDateText = formatDateWithYear(task.endDate);
-                if (endDays < 0) {
-                    const overdueText = i18n('overdueDays', { days: String(Math.abs(endDays)) });
-                    dateText = `${endDateText} ${this.createCountdownBadge(overdueText, 'urgent')}`;
-                } else {
-                    const remainingText = endDays === 0
-                        ? i18n('todayEnd')
-                        : i18n('endsInNDays', { days: String(endDays) });
-                    dateText = `${endDateText} ${this.createCountdownBadge(remainingText, 'normal')}`;
-                }
-            } else if (task.date && task.endDate) {
-                const isSpanningDays = task.endDate !== task.date;
-                const baseText = isSpanningDays
-                    ? `${formatDateWithYear(task.date)} ~ ${formatDateWithYear(task.endDate)}`
-                    : formatDateWithYear(task.date);
-                const startDays = this.calculateTaskDaysDifference(logicalStart, today);
-                const endDays = this.calculateTaskDaysDifference(logicalEnd, today);
-
-                if (endDays < 0) {
-                    const overdueText = i18n('overdueDays', { days: String(Math.abs(endDays)) });
-                    dateText = `${baseText} ${this.createCountdownBadge(overdueText, 'urgent')}`;
-                } else if (startDays > 0) {
-                    dateText = `${baseText} ${this.createCountdownBadge(i18n('startsInNDays', { days: String(startDays) }), 'warning')}`;
-                } else {
-                    const remainingText = endDays === 0
-                        ? i18n('todayEnd')
-                        : i18n('endsInNDays', { days: String(endDays) });
-                    dateText = `${baseText} ${this.createCountdownBadge(remainingText, 'normal')}`;
-                }
-            } else if (task.date) {
-                const startDays = this.calculateTaskDaysDifference(logicalStart, today);
-                const startDateText = formatDateWithYear(task.date);
-                if (startDays < 0) {
-                    const treatsOnlyStartAsDeadline = shouldTreatStartDateOnlyAsOverdue(
-                        { ...task.extendedProps, ...task },
-                        this.plugin?.settings
-                    );
-                    if (treatsOnlyStartAsDeadline) {
-                        const overdueText = i18n('overdueDays', { days: String(Math.abs(startDays)) });
-                        dateText = `${startDateText} ${this.createCountdownBadge(overdueText, 'urgent')}`;
-                    } else {
-                        dateText = `${startDateText} ${this.createCountdownBadge(i18n('startedDays', { days: String(Math.abs(startDays)) }), 'normal')}`;
-                    }
-                } else if (startDays > 0) {
-                    dateText = `${startDateText} ${this.createCountdownBadge(i18n('startsInNDays', { days: String(startDays) }), 'warning')}`;
-                } else {
-                    dateText = startDateText;
-                }
-            }
-
-            // 农历显示
-            if (task.extendedProps?.repeat?.enabled &&
-                (task.extendedProps.repeat.type === 'lunar-monthly' || task.extendedProps.repeat.type === 'lunar-yearly')) {
-                try {
-                    const lunarStr = getSolarDateLunarString(displayDate);
-                    if (lunarStr) {
-                        dateText = `${dateText} (${lunarStr})`;
-                    }
-                } catch (error) {
-                    console.error('Failed to format lunar date:', error);
-                }
-            }
-
-            const dateTextSpan = document.createElement('span');
-            dateTextSpan.innerHTML = `📅 ${dateText}`;
-            dateSpan.appendChild(dateTextSpan);
-            dateDiv.appendChild(dateSpan);
-
-            // Time
-            if (task.time || task.endTime) {
-                const timeSpan = document.createElement('span');
-                timeSpan.className = 'task-time';
-                const timeText = task.time && task.endTime
-                    ? `${task.time} - ${task.endTime}`
-                    : (task.time || task.endTime || '');
-                timeSpan.textContent = `🕐 ${timeText}`;
-                dateDiv.appendChild(timeSpan);
-            }
-        }
-
-        // 创建任务元数据
-        const taskMeta = document.createElement('div');
-        taskMeta.className = 'task-meta';
-
-        // 显示优先级标签（参考项目看板样式）
-        if (task.priority && task.priority !== 'none') {
-            const priorityEl = document.createElement('span');
-            priorityEl.className = `task-priority-label priority-label-${task.priority}`;
-
-            const priorityNames: Record<string, string> = {
-                'high': '高优先级',
-                'medium': '中优先级',
-                'low': '低优先级'
-            };
-
-            priorityEl.innerHTML = `<span class="priority-dot ${task.priority}"></span><span>${priorityNames[task.priority]}</span>`;
-            taskMeta.appendChild(priorityEl);
-        }
-
-        // 显示看板状态（仅当任务未完成且不是子任务时显示）
-        if (!task.completed && level === 0) {
-            const kanbanStatus = task.extendedProps?.kanbanStatus || 'short_term';
-
-            // 根据kanbanStatus确定状态配置
-            const statusConfig: { [key: string]: { icon: string; label: string; color: string } } = {
-                'doing': { icon: '⏳', label: '进行中', color: '#f39c12' },
-                'short_term': { icon: '📋', label: '短期', color: '#3498db' },
-                'long_term': { icon: '🤔', label: '长期', color: '#9b59b6' }
-            };
-            const statusInfo = statusConfig[kanbanStatus] || { icon: '📋', label: '短期', color: '#3498db' };
-
-            const statusSpan = document.createElement('span');
-            statusSpan.className = 'task-kanban-status';
-            statusSpan.textContent = `${statusInfo.icon} ${statusInfo.label}`;
-            statusSpan.style.cssText = `
-                display: inline-flex;
-                align-items: center;
-                gap: 2px;
-                padding: 2px 6px;
-                border-radius: 4px;
-                font-size: 11px;
-                font-weight: 500;
-                background-color: ${statusInfo.color}20;
-                color: ${statusInfo.color};
-                border: 1px solid ${statusInfo.color}40;
-            `;
-            taskMeta.appendChild(statusSpan);
-        }
-
-
-
-        // 如果任务已完成，显示完成时间（从 extendedProps.completedTime 中读取）
-        if (task.completed) {
-            const completedTimeStr = task.extendedProps?.completedTime || '';
-            if (completedTimeStr) {
-                const completedSpan = document.createElement('span');
-                completedSpan.className = 'task-completed-time';
-                completedSpan.textContent = `✅ ${this.formatCompletedTime(completedTimeStr)}`;
-                completedSpan.classList.add('ariaLabel'); completedSpan.setAttribute('aria-label', this.formatCompletedTime(completedTimeStr));
-                taskMeta.appendChild(completedSpan);
-            }
-        }
-
-        // 番茄钟数量 + 总专注时长
-        if ((task.pomodoroCount && task.pomodoroCount > 0) || (typeof task.focusTime === 'number' && task.focusTime > 0)) {
-            const pomodoroSpan = document.createElement('span');
-            pomodoroSpan.className = 'task-pomodoro-count';
-            const focusMinutes = task.focusTime || 0;
-            const formatMinutesToString = (minutes: number) => {
-                const hours = Math.floor(minutes / 60);
-                const mins = Math.floor(minutes % 60);
-                return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
-            };
-            const focusText = focusMinutes > 0 ? ` ⏱ ${formatMinutesToString(focusMinutes)}` : '';
-            pomodoroSpan.textContent = `🍅 ${task.pomodoroCount || 0}${focusText}`;
-            pomodoroSpan.style.cssText = `
-                display: inline-flex;
-                align-items: center;
-                gap: 2px;
-                padding: 1px 4px;
-                border-radius: 3px;
-                font-size: 11px;
-                background-color: rgba(255, 99, 71, 0.1);
-                color: #ff6347;
-            `;
-            taskMeta.appendChild(pomodoroSpan);
-        }
-
-        // 组装元素
-        taskInfo.appendChild(taskTitle);
-
-        if (projectDiv) {
-            taskInfo.appendChild(projectDiv);
-        }
-
-        if (dateDiv) {
-            taskInfo.appendChild(dateDiv);
-        }
-        // 备注 (调整位置到标题后)
-        if (task.note) {
-            const noteDiv = document.createElement('div');
-            noteDiv.className = 'task-note';
-
-            // 渲染 HTML
-            if (this.lute) {
-                noteDiv.innerHTML = this.lute.Md2HTML(task.note);
-                // 移除 p 标签的外边距以保持紧凑
-                const pTags = noteDiv.querySelectorAll('p');
-                pTags.forEach(p => {
-                    p.style.margin = '0';
-                    p.style.lineHeight = 'inherit';
+        const callbacks = {
+            onCheckboxClick: (t: any, checked: boolean, e: Event) => {
+                this.toggleTaskCompletion(t, checked);
+            },
+            onCollapseClick: (t: any, collapsed: boolean, e: MouseEvent) => {
+                this.toggleTaskCollapse(t.id);
+            },
+            onMoreClick: (t: any, element: HTMLElement, e: MouseEvent) => {
+                const rect = element.getBoundingClientRect();
+                this.showTaskContextMenu(t, {
+                    clientX: rect.right,
+                    clientY: rect.bottom + 4
                 });
-                // 处理列表样式
-                const listTags = noteDiv.querySelectorAll('ul, ol');
-                listTags.forEach(list => {
-                    (list as HTMLElement).style.margin = '0';
-                    (list as HTMLElement).style.paddingLeft = '20px';
-                });
-
-                const quoteTags = noteDiv.querySelectorAll('blockquote');
-                quoteTags.forEach(quote => {
-                    (quote as HTMLElement).style.margin = '0';
-                    (quote as HTMLElement).style.paddingLeft = '10px';
-                    (quote as HTMLElement).style.borderLeft = '2px solid var(--b3-theme-on-surface-light)';
-                    (quote as HTMLElement).style.opacity = '0.8';
-                });
-                // 处理私有图片路径渲染
-                const imgTags = noteDiv.querySelectorAll('img');
-                imgTags.forEach(img => {
-                    const src = img.getAttribute('src');
-                    if (src && src.startsWith('/data/storage/petal/siyuan-plugin-task-note-management/assets/')) {
-                        import('../api').then(({ getFileBlob }) => {
-                            getFileBlob(src).then(blob => {
-                                if (blob) {
-                                    img.src = URL.createObjectURL(blob);
-                                }
-                            });
-                        });
-                    }
-                });
-            } else {
-                noteDiv.textContent = task.note;
-            }
-
-            noteDiv.style.cssText = `
-                font-size: 12px;
-                color: var(--b3-theme-on-surface);
-                opacity: 0.8;
-                margin-top: 4px;
-                line-height: 1.5;
-                max-height: 3em;
-                overflow: hidden;
-                display: -webkit-box;
-                -webkit-line-clamp: 2;
-                -webkit-box-orient: vertical;
-                word-break: break-all;
-                cursor: pointer;
-                border-radius: 4px;
-                padding: 0 4px;
-                transition: background-color 0.2s;
-            `;
-
-
-
-            // 点击编辑
-            noteDiv.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-
+            },
+            onCardClick: (t: any, e: MouseEvent) => {
+                const target = e.target as HTMLElement;
+                if (target.tagName !== 'INPUT' && !t.blockId) {
+                    this.handleTaskClick(t);
+                }
+            },
+            onTitleClick: (t: any, e: Event) => {
+                this.openTaskBlock(t.blockId!);
+            },
+            onNoteClick: (t: any, e: Event) => {
                 new QuickReminderDialog(
                     undefined, undefined, undefined, undefined,
                     {
                         plugin: this.plugin,
                         mode: 'note',
-                        reminder: task,
+                        reminder: t,
                         onSaved: async (_) => {
-                            // 刷新
-                            // EisenhowerMatrixView 似乎没有直接的 loadReminders，而是 loadTasks
-                            // 并且有 reminderUpdatedHandler
                             window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.viewId } }));
-                            await this.loadTasks(); // 重新加载任务
-                            this.renderMatrix(); // 重新渲染
+                            await this.loadTasks();
+                            this.renderMatrix();
                         }
                     }
                 ).show();
-            });
-
-            taskInfo.appendChild(noteDiv);
-        }
-        taskInfo.appendChild(taskMeta);
-
-        // 使用flex布局包含左侧控制和任务信息
-        const taskInnerContent = document.createElement('div');
-        taskInnerContent.className = 'task-inner-content';
-        taskInnerContent.style.cssText = `
-            display: flex;
-            align-items: flex-start;
-            gap: 2px;
-            width: 100%;
-        `;
-
-        taskInnerContent.appendChild(leftControls);
-        taskInnerContent.appendChild(taskInfo);
-
-        taskContent.appendChild(taskInnerContent);
-        taskEl.appendChild(taskContent);
-
-        // 进度条：优先使用自定义进度；未设置时按子任务完成比例显示
-        const progressInfo = this.getTaskProgressInfo(task);
-        if (progressInfo.shouldShow) {
-            const progressContainer = document.createElement('div');
-            progressContainer.className = 'task-progress-container';
-            // ensure the progress bar fills vertically and the percent text sits to the right
-            progressContainer.style.cssText = `display:flex; align-items:stretch; gap:8px; justify-content:space-between;`;
-
-            const progressWrap = document.createElement('div');
-            // make sure the wrapper enforces the desired height so the inner bar can expand
-            progressWrap.style.cssText = `flex:1; min-width:0;  display:flex; align-items:center;`;
-
-            const progressBar = document.createElement('div');
-            progressBar.className = 'task-progress';
-            const percent = progressInfo.percent;
-            progressBar.style.width = `${percent}%`;
-            progressBar.setAttribute('data-progress', String(percent));
-            // ensure bar takes full height of wrapper
-            progressBar.style.cssText = `height:8px; width:${percent}%; display:block; border-radius:6px; background:linear-gradient(90deg, #2ecc71, #27ae60); transition:width 300ms ease-in-out;`;
-
-            progressWrap.appendChild(progressBar);
-
-            const percentText = document.createElement('span');
-            percentText.className = 'task-progress-percent';
-            percentText.textContent = `${percent}%`;
-            percentText.classList.add('ariaLabel'); percentText.setAttribute('aria-label', `${percent}% 完成`);
-
-            progressContainer.appendChild(progressWrap);
-            progressContainer.appendChild(percentText);
-            taskEl.appendChild(progressContainer);
-        }
-
-        // 添加事件监听
-        taskEl.addEventListener('click', (e) => {
-            const target = e.target as HTMLElement;
-            if (target.tagName !== 'INPUT' && !task.blockId) {
-                this.handleTaskClick(task);
-            }
-        });
-
-        taskEl.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            this.showTaskContextMenu(task, {
-                clientX: (e as MouseEvent).clientX,
-                clientY: (e as MouseEvent).clientY
-            });
-        });
-
-        checkbox.addEventListener('change', (e) => {
-            this.toggleTaskCompletion(task, (e.target as HTMLInputElement).checked);
-        });
-
-        // 任务元素拖拽事件 - 移动端禁用，避免长按冲突
-        if (!this.isMobileClient) {
-            taskEl.addEventListener('dragstart', (e) => {
-                e.stopPropagation();
-                e.dataTransfer!.setData('text/plain', task.id);
-                e.dataTransfer!.setData('task/project-id', task.projectId || 'no-project');
-                e.dataTransfer!.setData('task/priority', task.priority || 'none');
-                taskEl.classList.add('dragging');
-                taskEl.style.cursor = 'grabbing';
-                this.isDragging = true;
-                this.draggedTaskId = task.id;
-            });
-
-            taskEl.addEventListener('dragend', (e) => {
-                e.stopPropagation();
-                taskEl.classList.remove('dragging');
-                taskEl.style.cursor = 'pointer';
-                this.hideDropIndicators();
-                this.isDragging = false;
-                this.draggedTaskId = null;
-            });
-
-            // 添加拖放排序支持 - 支持跨优先级排序
-            taskEl.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-
-                // 检查是否有拖拽操作进行中
-                if (!this.isDragging || !this.draggedTaskId) {
-                    return;
+            },
+            onProjectClick: (t: any, e: Event) => {
+                if (t.projectId) {
+                    this.openProjectKanban(t.projectId);
                 }
+            },
+            setupDragAndDrop: (taskEl: HTMLElement, t: any) => {
+                // 任务元素拖拽事件 - 移动端禁用，避免长按冲突
+                if (!this.isMobileClient) {
+                    taskEl.addEventListener('dragstart', (e) => {
+                        e.stopPropagation();
+                        e.dataTransfer!.setData('text/plain', t.id);
+                        e.dataTransfer!.setData('task/project-id', t.projectId || 'no-project');
+                        e.dataTransfer!.setData('task/priority', t.priority || 'none');
+                        taskEl.classList.add('dragging');
+                        taskEl.style.cursor = 'grabbing';
+                        this.isDragging = true;
+                        this.draggedTaskId = t.id;
+                    });
 
-                // 使用内部状态而不是依赖 dataTransfer
-                const draggedTaskId = this.draggedTaskId;
+                    taskEl.addEventListener('dragend', (e) => {
+                        e.stopPropagation();
+                        taskEl.classList.remove('dragging');
+                        taskEl.style.cursor = 'pointer';
+                        this.hideDropIndicators();
+                        this.isDragging = false;
+                        this.draggedTaskId = null;
+                    });
 
-                if (draggedTaskId && draggedTaskId !== task.id) {
-                    // 找到被拖拽的任务
-                    const draggedTask = this.filteredTasks.find(t => t.id === draggedTaskId);
-                    if (!draggedTask) {
-                        return;
-                    }
+                    // 添加拖放排序支持 - 支持跨优先级排序
+                    taskEl.addEventListener('dragover', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
 
-                    const draggedProjectId = draggedTask.projectId || 'no-project';
-                    const draggedPriority = draggedTask.priority || 'none';
-                    const currentProjectId = task.projectId || 'no-project';
-                    const currentPriority = task.priority || 'none';
+                        if (!this.isDragging || !this.draggedTaskId) {
+                            return;
+                        }
 
-                    // 只允许在同一项目内排序（支持跨优先级）
-                    if (draggedProjectId === currentProjectId) {
-                        this.showDropIndicator(taskEl, e);
-                        taskEl.classList.add('drag-over');
+                        const draggedTaskId = this.draggedTaskId;
 
-                        // 跨优先级拖拽时添加视觉提示
-                        if (draggedPriority !== currentPriority) {
-                            taskEl.classList.add(`priority-drop-${currentPriority}`);
-                            // 添加提示文字
-                            const indicator = taskEl.querySelector('.drop-indicator');
-                            if (indicator) {
-                                (indicator as HTMLElement).style.backgroundColor = this.getPriorityColor(currentPriority);
+                        if (draggedTaskId && draggedTaskId !== t.id) {
+                            const draggedTask = this.filteredTasks.find(item => item.id === draggedTaskId);
+                            if (!draggedTask) {
+                                return;
+                            }
+
+                            const draggedProjectId = draggedTask.projectId || 'no-project';
+                            const draggedPriority = draggedTask.priority || 'none';
+                            const currentProjectId = t.projectId || 'no-project';
+                            const currentPriority = t.priority || 'none';
+
+                            if (draggedProjectId === currentProjectId) {
+                                this.showDropIndicator(taskEl, e);
+                                taskEl.classList.add('drag-over');
+
+                                if (draggedPriority !== currentPriority) {
+                                    taskEl.classList.add(`priority-drop-${currentPriority}`);
+                                    const indicator = taskEl.querySelector('.drop-indicator');
+                                    if (indicator) {
+                                        (indicator as HTMLElement).style.backgroundColor = this.getPriorityColor(currentPriority);
+                                    }
+                                }
                             }
                         }
-                    }
-                }
-            });
+                    });
 
-            taskEl.addEventListener('dragleave', (e) => {
-                e.stopPropagation();
-                this.hideDropIndicators();
-                taskEl.classList.remove('drag-over', 'priority-drop-high', 'priority-drop-medium', 'priority-drop-low', 'priority-drop-none');
-            });
+                    taskEl.addEventListener('dragleave', (e) => {
+                        e.stopPropagation();
+                        this.hideDropIndicators();
+                        taskEl.classList.remove('drag-over', 'priority-drop-high', 'priority-drop-medium', 'priority-drop-low', 'priority-drop-none');
+                    });
 
-            taskEl.addEventListener('drop', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
+                    taskEl.addEventListener('drop', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
 
-                if (!this.isDragging || !this.draggedTaskId) {
-                    this.hideDropIndicators();
-                    taskEl.classList.remove('drag-over');
-                    return;
-                }
-
-                const draggedTaskId = this.draggedTaskId;
-
-                if (draggedTaskId && draggedTaskId !== task.id) {
-                    // 找到被拖拽的任务
-                    const draggedTask = this.filteredTasks.find(t => t.id === draggedTaskId);
-                    if (draggedTask) {
-                        const draggedProjectId = draggedTask.projectId || 'no-project';
-                        const currentProjectId = task.projectId || 'no-project';
-
-                        // 只允许在同一项目内排序（支持跨优先级）
-                        if (draggedProjectId === currentProjectId) {
-                            this.handleTaskReorder(draggedTaskId, task.id, e);
+                        if (!this.isDragging || !this.draggedTaskId) {
+                            this.hideDropIndicators();
+                            taskEl.classList.remove('drag-over');
+                            return;
                         }
-                    }
-                }
-                this.hideDropIndicators();
-                taskEl.classList.remove('drag-over', 'priority-drop-high', 'priority-drop-medium', 'priority-drop-low', 'priority-drop-none');
-            });
-        }
 
-        return taskEl;
+                        const draggedTaskId = this.draggedTaskId;
+
+                        if (draggedTaskId && draggedTaskId !== t.id) {
+                            const draggedTask = this.filteredTasks.find(item => item.id === draggedTaskId);
+                            if (draggedTask) {
+                                const draggedProjectId = draggedTask.projectId || 'no-project';
+                                const currentProjectId = t.projectId || 'no-project';
+
+                                if (draggedProjectId === currentProjectId) {
+                                    this.handleTaskReorder(draggedTaskId, t.id, e);
+                                }
+                            }
+                        }
+                        this.hideDropIndicators();
+                        taskEl.classList.remove('drag-over', 'priority-drop-high', 'priority-drop-medium', 'priority-drop-low', 'priority-drop-none');
+                    });
+                }
+            }
+        };
+
+        return TaskRenderer.render(task, context, callbacks, level, this.allTasks);
     }
 
     /**
@@ -1929,6 +1426,7 @@ export class EisenhowerMatrixView {
         window.addEventListener('reminderUpdated', this.reminderUpdatedHandler);
         // 监听项目更新事件（例如项目状态切换）
         window.addEventListener('projectUpdated', this.projectUpdatedHandler as EventListener);
+        window.addEventListener('reminderSettingsUpdated', this.settingsUpdatedHandler as EventListener);
     }
 
     private async moveTaskToQuadrant(taskId: string, newQuadrant: QuadrantTask['quadrant']) {
@@ -3108,7 +2606,6 @@ export class EisenhowerMatrixView {
                 margin-bottom: 8px;
                 padding: 6px 10px;
                 border-radius: 6px;
-                background: var(--b3-theme-surface-lighter);
                 border: 1.5px solid var(--b3-theme-border);
                 gap: 6px;
                 transition: all 0.2s ease;
@@ -5505,6 +5002,7 @@ export class EisenhowerMatrixView {
         // 清理事件监听器
         window.removeEventListener('reminderUpdated', this.reminderUpdatedHandler);
         window.removeEventListener('projectUpdated', this.projectUpdatedHandler as EventListener);
+        window.removeEventListener('reminderSettingsUpdated', this.settingsUpdatedHandler as EventListener);
 
         // 清理样式
         const style = document.querySelector('#eisenhower-matrix-styles');

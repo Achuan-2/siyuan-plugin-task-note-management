@@ -1501,7 +1501,8 @@
     justify-content: flex-start;
     gap: 10px;
     flex-shrink: 0;
-    margin-right: 6px;
+    margin-right: 0px; // 减小 gap，让复选框与任务内容更近
+    padding-left: 6px; // 增加左内边距，让复选框离边框有一点距离
     min-width: 16px;
     padding-top: 2px; // 轻微向下调整，更好对齐标题
     cursor: default; // 覆盖父元素的 grab 光标
@@ -1514,7 +1515,7 @@
         -webkit-appearance: none;
         appearance: none;
         margin: 0;
-        margin-top: 3px;
+        margin-top: 0px;
         font: inherit;
         color: var(--b3-theme-on-surface);
         width: 1.15em;
