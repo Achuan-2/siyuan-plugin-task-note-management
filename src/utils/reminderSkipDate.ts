@@ -1,24 +1,63 @@
 export type HolidayData = Record<string, { title?: string; type?: 'holiday' | 'workday' } | string>;
 
+export type ReminderSkipWeekendMode = 'none' | 'saturdaySunday' | 'saturday' | 'sunday';
+
+export const REMINDER_SKIP_WEEKEND_MODE_KEY = 'reminderSkipWeekendMode';
 export const REMINDER_SKIP_WEEKENDS_KEY = 'reminderSkipWeekends';
 export const REMINDER_SKIP_HOLIDAYS_KEY = 'reminderSkipHolidays';
 
+export function normalizeReminderSkipWeekendMode(value: any): ReminderSkipWeekendMode | undefined {
+    if (value === true) return 'saturdaySunday';
+    if (value === false) return 'none';
+    if (typeof value !== 'string') return undefined;
+
+    switch (value) {
+        case 'none':
+        case 'saturdaySunday':
+        case 'saturday':
+        case 'sunday':
+            return value;
+        case 'both':
+        case 'weekend':
+        case 'weekends':
+            return 'saturdaySunday';
+        default:
+            return undefined;
+    }
+}
+
+function getStoredReminderSkipWeekendMode(source?: any): ReminderSkipWeekendMode | undefined {
+    const explicitMode = normalizeReminderSkipWeekendMode(source?.[REMINDER_SKIP_WEEKEND_MODE_KEY]);
+    if (explicitMode !== undefined) return explicitMode;
+    return normalizeReminderSkipWeekendMode(source?.[REMINDER_SKIP_WEEKENDS_KEY]);
+}
+
+export function getGlobalReminderSkipWeekendMode(settings?: any): ReminderSkipWeekendMode {
+    return getStoredReminderSkipWeekendMode(settings) || 'none';
+}
+
 export function getGlobalReminderSkipWeekends(settings?: any): boolean {
-    return settings?.[REMINDER_SKIP_WEEKENDS_KEY] === true;
+    return getGlobalReminderSkipWeekendMode(settings) !== 'none';
 }
 
 export function getGlobalReminderSkipHolidays(settings?: any): boolean {
     return settings?.[REMINDER_SKIP_HOLIDAYS_KEY] === true;
 }
 
+export function getReminderSkipWeekendModeEffective(reminder?: any, settings?: any): ReminderSkipWeekendMode {
+    const reminderMode = getStoredReminderSkipWeekendMode(reminder);
+    if (reminderMode !== undefined) {
+        return reminderMode;
+    }
+    const repeatMode = getStoredReminderSkipWeekendMode(reminder?.repeat);
+    if (repeatMode !== undefined) {
+        return repeatMode;
+    }
+    return getGlobalReminderSkipWeekendMode(settings);
+}
+
 export function getReminderSkipWeekendsEffective(reminder?: any, settings?: any): boolean {
-    if (typeof reminder?.[REMINDER_SKIP_WEEKENDS_KEY] === 'boolean') {
-        return reminder[REMINDER_SKIP_WEEKENDS_KEY];
-    }
-    if (typeof reminder?.repeat?.[REMINDER_SKIP_WEEKENDS_KEY] === 'boolean') {
-        return reminder.repeat[REMINDER_SKIP_WEEKENDS_KEY];
-    }
-    return getGlobalReminderSkipWeekends(settings);
+    return getReminderSkipWeekendModeEffective(reminder, settings) !== 'none';
 }
 
 export function getReminderSkipHolidaysEffective(reminder?: any, settings?: any): boolean {
@@ -29,6 +68,15 @@ export function getReminderSkipHolidaysEffective(reminder?: any, settings?: any)
         return reminder.repeat[REMINDER_SKIP_HOLIDAYS_KEY];
     }
     return getGlobalReminderSkipHolidays(settings);
+}
+
+export function getReminderSkipWeekendModeOverrideValue(
+    mode: ReminderSkipWeekendMode | string | boolean | undefined,
+    settings?: any
+): ReminderSkipWeekendMode | undefined {
+    const normalizedMode = normalizeReminderSkipWeekendMode(mode) || 'none';
+    const globalValue = getGlobalReminderSkipWeekendMode(settings);
+    return normalizedMode === globalValue ? undefined : normalizedMode;
 }
 
 export function getReminderSkipWeekendsOverrideValue(checked: boolean, settings?: any): boolean | undefined {
@@ -47,6 +95,17 @@ export function isWeekendDate(dateStr?: string): boolean {
     if (isNaN(date.getTime())) return false;
     const day = date.getDay();
     return day === 0 || day === 6;
+}
+
+export function isWeekendSkippedDate(dateStr: string | undefined, mode: ReminderSkipWeekendMode): boolean {
+    if (!dateStr || mode === 'none') return false;
+    const date = new Date(`${dateStr}T00:00:00`);
+    if (isNaN(date.getTime())) return false;
+    const day = date.getDay();
+    if (mode === 'saturdaySunday') return day === 0 || day === 6;
+    if (mode === 'saturday') return day === 6;
+    if (mode === 'sunday') return day === 0;
+    return false;
 }
 
 export function isHolidayDate(dateStr: string | undefined, holidayData?: HolidayData): boolean {
@@ -102,13 +161,29 @@ function rangeHasSkippedAndAllowedDate(
     return false;
 }
 
+function rangeHasMatchingDate(
+    startDate: string | undefined,
+    endDate: string | undefined,
+    predicate: (date: string) => boolean
+): boolean {
+    if (!hasValidDateRange(startDate, endDate)) return false;
+
+    let cursor = startDate!;
+    while (cursor <= endDate!) {
+        if (predicate(cursor)) return true;
+        cursor = addDaysToDate(cursor, 1);
+    }
+
+    return false;
+}
+
 export function shouldShowReminderSkipWeekendsControl(
     reminder: any,
     startDate?: string,
     endDate?: string
 ): boolean {
     if (isRepeatReminder(reminder)) return true;
-    return rangeHasSkippedAndAllowedDate(startDate, endDate, isWeekendDate);
+    return rangeHasMatchingDate(startDate, endDate, isWeekendDate);
 }
 
 export function shouldShowReminderSkipHolidaysControl(
@@ -129,15 +204,19 @@ export function shouldSkipReminderOnDate(
 ): boolean {
     if (!dateStr) return false;
     const isRepeat = isRepeatReminder(reminder);
+    const weekendMode = getReminderSkipWeekendModeEffective(reminder, settings);
     const canApplyWeekendSkip = isRepeat ||
-        rangeHasSkippedAndAllowedDate(reminder?.date, reminder?.endDate, isWeekendDate);
+        rangeHasSkippedAndAllowedDate(
+            reminder?.date,
+            reminder?.endDate,
+            date => isWeekendSkippedDate(date, weekendMode)
+        );
     const canApplyHolidaySkip = isRepeat ||
         rangeHasSkippedAndAllowedDate(reminder?.date, reminder?.endDate, date => isHolidayDate(date, holidayData));
 
     if (
         canApplyWeekendSkip &&
-        getReminderSkipWeekendsEffective(reminder, settings) &&
-        isWeekendDate(dateStr)
+        isWeekendSkippedDate(dateStr, weekendMode)
     ) {
         return true;
     }

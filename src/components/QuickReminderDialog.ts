@@ -31,11 +31,13 @@ import {
 import {
     getReminderSkipHolidaysEffective,
     getReminderSkipHolidaysOverrideValue,
-    getReminderSkipWeekendsEffective,
-    getReminderSkipWeekendsOverrideValue,
+    getReminderSkipWeekendModeEffective,
+    getReminderSkipWeekendModeOverrideValue,
+    normalizeReminderSkipWeekendMode,
     shouldShowReminderSkipHolidaysControl,
     shouldShowReminderSkipWeekendsControl,
     type HolidayData,
+    type ReminderSkipWeekendMode,
 } from "../utils/reminderSkipDate";
 
 type CustomReminderTimeItem = {
@@ -856,12 +858,25 @@ export class QuickReminderDialog {
         }
     }
 
-    private getReminderSkipWeekendsEffectiveValue(reminder: any = this.reminder): boolean {
-        return getReminderSkipWeekendsEffective(reminder, this.plugin?.settings);
+    private getReminderSkipWeekendModeEffectiveValue(reminder: any = this.reminder): ReminderSkipWeekendMode {
+        return getReminderSkipWeekendModeEffective(reminder, this.plugin?.settings);
     }
 
     private getReminderSkipHolidaysEffectiveValue(reminder: any = this.reminder): boolean {
         return getReminderSkipHolidaysEffective(reminder, this.plugin?.settings);
+    }
+
+    private createReminderSkipWeekendModeOptions(selectedMode: ReminderSkipWeekendMode = this.getReminderSkipWeekendModeEffectiveValue()): string {
+        const options: Array<{ value: ReminderSkipWeekendMode; label: string }> = [
+            { value: 'saturdaySunday', label: i18n('reminderSkipWeekendSaturdaySunday') || '跳过周六和周日' },
+            { value: 'saturday', label: i18n('reminderSkipWeekendSaturday') || '仅跳过周六' },
+            { value: 'sunday', label: i18n('reminderSkipWeekendSunday') || '仅跳过周日' },
+            { value: 'none', label: i18n('reminderSkipWeekendNone') || '不跳过' },
+        ];
+
+        return options.map(option => `
+            <option value="${option.value}" ${option.value === selectedMode ? 'selected' : ''}>${option.label}</option>
+        `).join('');
     }
 
     private getReminderForSkipDateControls(): any {
@@ -871,11 +886,13 @@ export class QuickReminderDialog {
         };
     }
 
-    private getRepeatReminderSkipWeekendsValue(config: RepeatConfig = this.repeatConfig): boolean {
-        if (typeof config?.reminderSkipWeekends === 'boolean') {
-            return config.reminderSkipWeekends;
+    private getRepeatReminderSkipWeekendModeValue(config: RepeatConfig = this.repeatConfig): ReminderSkipWeekendMode {
+        const explicitMode = normalizeReminderSkipWeekendMode(config?.reminderSkipWeekendMode) ||
+            normalizeReminderSkipWeekendMode(config?.reminderSkipWeekends);
+        if (explicitMode !== undefined) {
+            return explicitMode;
         }
-        return getReminderSkipWeekendsEffective(
+        return getReminderSkipWeekendModeEffective(
             { ...(this.reminder || {}), repeat: config?.enabled ? config : undefined },
             this.plugin?.settings
         );
@@ -893,9 +910,8 @@ export class QuickReminderDialog {
 
     private createRepeatConfigForSettingsDialog(): RepeatConfig {
         const config = { ...this.repeatConfig };
-        if (typeof config.reminderSkipWeekends !== 'boolean') {
-            config.reminderSkipWeekends = this.getRepeatReminderSkipWeekendsValue(config);
-        }
+        config.reminderSkipWeekendMode = this.getRepeatReminderSkipWeekendModeValue(config);
+        delete config.reminderSkipWeekends;
         if (typeof config.reminderSkipHolidays !== 'boolean') {
             config.reminderSkipHolidays = this.getRepeatReminderSkipHolidaysValue(config);
         }
@@ -905,19 +921,22 @@ export class QuickReminderDialog {
     private normalizeRepeatSkipDateConfig(config: RepeatConfig): RepeatConfig {
         const normalized = { ...config };
         if (!normalized.enabled) {
+            delete normalized.reminderSkipWeekendMode;
             delete normalized.reminderSkipWeekends;
             delete normalized.reminderSkipHolidays;
             return normalized;
         }
 
-        const weekendsValue = typeof normalized.reminderSkipWeekends === 'boolean'
-            ? normalized.reminderSkipWeekends
-            : this.getRepeatReminderSkipWeekendsValue(normalized);
-        const weekendsOverride = getReminderSkipWeekendsOverrideValue(weekendsValue, this.plugin?.settings);
+        const weekendMode = normalizeReminderSkipWeekendMode(normalized.reminderSkipWeekendMode) ||
+            normalizeReminderSkipWeekendMode(normalized.reminderSkipWeekends) ||
+            this.getRepeatReminderSkipWeekendModeValue(normalized);
+        const weekendsOverride = getReminderSkipWeekendModeOverrideValue(weekendMode, this.plugin?.settings);
+        delete normalized.reminderSkipWeekends;
         if (weekendsOverride === undefined) {
+            delete normalized.reminderSkipWeekendMode;
             delete normalized.reminderSkipWeekends;
         } else {
-            normalized.reminderSkipWeekends = weekendsOverride;
+            normalized.reminderSkipWeekendMode = weekendsOverride;
         }
 
         const holidaysValue = typeof normalized.reminderSkipHolidays === 'boolean'
@@ -937,33 +956,44 @@ export class QuickReminderDialog {
         const normalized = this.normalizeRepeatSkipDateConfig(this.repeatConfig);
         this.repeatConfig = normalized;
 
-        const applyKey = (key: 'reminderSkipWeekends' | 'reminderSkipHolidays') => {
-            const value = normalized[key];
-            if (value === undefined) {
-                delete target[key];
-                if (target.repeat) {
-                    delete target.repeat[key];
-                }
-            } else {
-                target[key] = value;
-                if (target.repeat) {
-                    target.repeat[key] = value;
-                }
+        delete target.reminderSkipWeekends;
+        if (target.repeat) {
+            delete target.repeat.reminderSkipWeekends;
+        }
+        if (normalized.reminderSkipWeekendMode === undefined) {
+            delete target.reminderSkipWeekendMode;
+            if (target.repeat) {
+                delete target.repeat.reminderSkipWeekendMode;
             }
-        };
+        } else {
+            target.reminderSkipWeekendMode = normalized.reminderSkipWeekendMode;
+            if (target.repeat) {
+                target.repeat.reminderSkipWeekendMode = normalized.reminderSkipWeekendMode;
+            }
+        }
 
-        applyKey('reminderSkipWeekends');
-        applyKey('reminderSkipHolidays');
+        const holidaysValue = normalized.reminderSkipHolidays;
+        if (holidaysValue === undefined) {
+            delete target.reminderSkipHolidays;
+            if (target.repeat) {
+                delete target.repeat.reminderSkipHolidays;
+            }
+        } else {
+            target.reminderSkipHolidays = holidaysValue;
+            if (target.repeat) {
+                target.repeat.reminderSkipHolidays = holidaysValue;
+            }
+        }
     }
 
     private updateReminderSkipDateControls(): void {
         const row = this.dialog?.element?.querySelector('#quickReminderSkipDateRow') as HTMLElement | null;
-        const weekendsInput = this.dialog?.element?.querySelector('#quickReminderSkipWeekends') as HTMLInputElement | null;
+        const weekendModeSelect = this.dialog?.element?.querySelector('#quickReminderSkipWeekendMode') as HTMLSelectElement | null;
         const holidaysInput = this.dialog?.element?.querySelector('#quickReminderSkipHolidays') as HTMLInputElement | null;
         const dateInput = this.dialog?.element?.querySelector('#quickReminderDate') as HTMLInputElement | null;
         const endDateInput = this.dialog?.element?.querySelector('#quickReminderEndDate') as HTMLInputElement | null;
         const startDateOnlyOverdueCheckbox = this.dialog?.element?.querySelector('#quickStartDateOnlyOverdue') as HTMLInputElement | null;
-        if (!row || !weekendsInput || !holidaysInput) return;
+        if (!row || !weekendModeSelect || !holidaysInput) return;
 
         const controlReminder = this.getReminderForSkipDateControls();
         const startDateVisible = !dateInput || dateInput.style.display !== 'none';
@@ -979,18 +1009,18 @@ export class QuickReminderDialog {
         const showWeekends = !isRepeatTask && (showSkipForStartDateOnly || shouldShowReminderSkipWeekendsControl(controlReminder, startDate, endDate));
         const showHolidays = !isRepeatTask && (showSkipForStartDateOnly || shouldShowReminderSkipHolidaysControl(controlReminder, startDate, endDate, this.reminderSkipHolidayData));
 
-        const weekendsLabel = weekendsInput.closest('label') as HTMLElement | null;
+        const weekendsLabel = weekendModeSelect.closest('label') as HTMLElement | null;
         const holidaysLabel = holidaysInput.closest('label') as HTMLElement | null;
         if (weekendsLabel) weekendsLabel.style.display = showWeekends ? 'flex' : 'none';
         if (holidaysLabel) holidaysLabel.style.display = showHolidays ? 'flex' : 'none';
-        weekendsInput.disabled = !showWeekends;
+        weekendModeSelect.disabled = !showWeekends;
         holidaysInput.disabled = !showHolidays;
 
         const shouldShowRow = showWeekends || showHolidays;
         row.hidden = !shouldShowRow;
         row.style.display = shouldShowRow ? 'flex' : 'none';
         if (!showWeekends) {
-            weekendsInput.checked = this.getReminderSkipWeekendsEffectiveValue(controlReminder);
+            weekendModeSelect.value = this.getReminderSkipWeekendModeEffectiveValue(controlReminder);
         }
         if (!showHolidays) {
             holidaysInput.checked = this.getReminderSkipHolidaysEffectiveValue(controlReminder);
@@ -1000,6 +1030,7 @@ export class QuickReminderDialog {
     private applyReminderSkipDateOverrides(target: any): void {
         if (this.repeatConfig?.enabled) {
             if (this.isInstanceEdit && !target?.repeat) {
+                delete target.reminderSkipWeekendMode;
                 delete target.reminderSkipWeekends;
                 delete target.reminderSkipHolidays;
                 return;
@@ -1008,27 +1039,32 @@ export class QuickReminderDialog {
             return;
         }
 
-        const weekendsCheckbox = this.dialog?.element?.querySelector('#quickReminderSkipWeekends') as HTMLInputElement | null;
+        const weekendModeSelect = this.dialog?.element?.querySelector('#quickReminderSkipWeekendMode') as HTMLSelectElement | null;
         const holidaysCheckbox = this.dialog?.element?.querySelector('#quickReminderSkipHolidays') as HTMLInputElement | null;
         const row = this.dialog?.element?.querySelector('#quickReminderSkipDateRow') as HTMLElement | null;
-        const isCheckboxActive = (checkbox: HTMLInputElement | null): checkbox is HTMLInputElement => {
-            if (!checkbox || checkbox.disabled || row?.hidden) return false;
-            const label = checkbox.closest('label') as HTMLElement | null;
+        const isControlActive = (control: HTMLInputElement | HTMLSelectElement | null): control is HTMLInputElement | HTMLSelectElement => {
+            if (!control || control.disabled || row?.hidden) return false;
+            const label = control.closest('label') as HTMLElement | null;
             return !label?.hidden && label?.style.display !== 'none';
         };
 
-        if (isCheckboxActive(weekendsCheckbox)) {
-            const override = getReminderSkipWeekendsOverrideValue(weekendsCheckbox.checked, this.plugin?.settings);
+        delete target.reminderSkipWeekends;
+        if (target.repeat) {
+            delete target.repeat.reminderSkipWeekendMode;
+            delete target.repeat.reminderSkipWeekends;
+        }
+        if (isControlActive(weekendModeSelect)) {
+            const override = getReminderSkipWeekendModeOverrideValue(weekendModeSelect.value, this.plugin?.settings);
             if (override === undefined) {
-                delete target.reminderSkipWeekends;
+                delete target.reminderSkipWeekendMode;
             } else {
-                target.reminderSkipWeekends = override;
+                target.reminderSkipWeekendMode = override;
             }
         } else {
-            delete target.reminderSkipWeekends;
+            delete target.reminderSkipWeekendMode;
         }
 
-        if (isCheckboxActive(holidaysCheckbox)) {
+        if (isControlActive(holidaysCheckbox)) {
             const override = getReminderSkipHolidaysOverrideValue(holidaysCheckbox.checked, this.plugin?.settings);
             if (override === undefined) {
                 delete target.reminderSkipHolidays;
@@ -1037,6 +1073,9 @@ export class QuickReminderDialog {
             }
         } else {
             delete target.reminderSkipHolidays;
+        }
+        if (target.repeat) {
+            delete target.repeat.reminderSkipHolidays;
         }
     }
 
@@ -1277,9 +1316,9 @@ export class QuickReminderDialog {
             this.updateReminderSkipDateControls();
         }
 
-        const skipWeekendsInput = this.dialog.element.querySelector('#quickReminderSkipWeekends') as HTMLInputElement;
-        if (skipWeekendsInput) {
-            skipWeekendsInput.checked = this.getReminderSkipWeekendsEffectiveValue(this.reminder);
+        const skipWeekendModeSelect = this.dialog.element.querySelector('#quickReminderSkipWeekendMode') as HTMLSelectElement;
+        if (skipWeekendModeSelect) {
+            skipWeekendModeSelect.value = this.getReminderSkipWeekendModeEffectiveValue(this.reminder);
         }
 
         const skipHolidaysInput = this.dialog.element.querySelector('#quickReminderSkipHolidays') as HTMLInputElement;
@@ -2256,10 +2295,11 @@ export class QuickReminderDialog {
                                     </label>
                                 </div>
                                 <div id="quickReminderSkipDateRow" style="display: flex; gap: 16px; flex-wrap: wrap;">
-                                    <label class="b3-checkbox" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                        <input type="checkbox" class="b3-switch" id="quickReminderSkipWeekends" ${this.getReminderSkipWeekendsEffectiveValue() ? 'checked' : ''}>
-                                        <span class="b3-checkbox__graphic"></span>
+                                    <label style="display: flex; align-items: center; gap: 8px;">
                                         <span class="b3-checkbox__label" style="font-size: 13px;">${i18n('reminderSkipWeekendsTask') || '任务提醒跳过周末'}</span>
+                                        <select id="quickReminderSkipWeekendMode" class="b3-select" style="min-width: 138px;">
+                                            ${this.createReminderSkipWeekendModeOptions()}
+                                        </select>
                                     </label>
                                     <label class="b3-checkbox" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                                         <input type="checkbox" class="b3-switch" id="quickReminderSkipHolidays" ${this.getReminderSkipHolidaysEffectiveValue() ? 'checked' : ''}>
@@ -6721,7 +6761,7 @@ export class QuickReminderDialog {
                 estimatedPomodoroDuration: instanceData.estimatedPomodoroDuration,
                 customProgress: instanceData.customProgress,
                 treatStartDateAsDeadline: instanceData.treatStartDateAsDeadline,
-                reminderSkipWeekends: instanceData.reminderSkipWeekends,
+                reminderSkipWeekendMode: instanceData.reminderSkipWeekendMode,
                 reminderSkipHolidays: instanceData.reminderSkipHolidays,
                 pinned: instanceData.pinned,
                 modifiedAt: new Date().toISOString().split('T')[0]

@@ -1,4 +1,5 @@
 import { setBlockAttrs } from "../api";
+import { normalizeReminderSkipWeekendMode } from "./reminderSkipDate";
 
 interface AudioFileItemLike {
     path: string;
@@ -164,6 +165,10 @@ export async function performDataMigration(plugin: MigrationPlugin): Promise<voi
             console.log("removeDateAfterDetection 迁移完成");
         }
 
+        if (!settings.datatransfer?.reminderSkipWeekendModeTransfer) {
+            await migrateReminderSkipWeekendMode(plugin, settings);
+        }
+
         // 检查是否需要迁移音频文件列表
         if (!settings.datatransfer?.audioFileTransfer) {
             console.log("开始迁移音频文件列表...");
@@ -221,6 +226,79 @@ export async function performDataMigration(plugin: MigrationPlugin): Promise<voi
         }
     } catch (error) {
         console.error("数据迁移失败:", error);
+    }
+}
+
+function migrateReminderSkipWeekendFields(target: any): boolean {
+    if (!target || typeof target !== "object") return false;
+
+    let changed = false;
+    const currentMode = normalizeReminderSkipWeekendMode(target.reminderSkipWeekendMode);
+    const legacyMode = normalizeReminderSkipWeekendMode(target.reminderSkipWeekends);
+
+    if (currentMode !== undefined) {
+        if (target.reminderSkipWeekendMode !== currentMode) {
+            target.reminderSkipWeekendMode = currentMode;
+            changed = true;
+        }
+    } else if (legacyMode !== undefined) {
+        target.reminderSkipWeekendMode = legacyMode;
+        changed = true;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(target, "reminderSkipWeekends")) {
+        delete target.reminderSkipWeekends;
+        changed = true;
+    }
+
+    return changed;
+}
+
+async function migrateReminderSkipWeekendMode(plugin: MigrationPlugin, settings: any): Promise<void> {
+    try {
+        console.log("开始迁移 reminderSkipWeekends 到 reminderSkipWeekendMode...");
+
+        let changedCount = 0;
+        if (migrateReminderSkipWeekendFields(settings)) {
+            changedCount++;
+        }
+
+        const reminderData = await plugin.loadReminderData(true);
+        if (reminderData && typeof reminderData === "object") {
+            for (const reminder of Object.values(reminderData) as any[]) {
+                if (!reminder || typeof reminder !== "object") continue;
+
+                if (migrateReminderSkipWeekendFields(reminder)) {
+                    changedCount++;
+                }
+
+                if (reminder.repeat && typeof reminder.repeat === "object") {
+                    if (migrateReminderSkipWeekendFields(reminder.repeat)) {
+                        changedCount++;
+                    }
+
+                    const modifications = reminder.repeat.instanceModifications;
+                    if (modifications && typeof modifications === "object") {
+                        for (const modification of Object.values(modifications) as any[]) {
+                            if (migrateReminderSkipWeekendFields(modification)) {
+                                changedCount++;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (changedCount > 0) {
+                await plugin.saveReminderData(reminderData);
+            }
+        }
+
+        settings.datatransfer = settings.datatransfer || {};
+        settings.datatransfer.reminderSkipWeekendModeTransfer = true;
+        await plugin.saveSettings(settings);
+        console.log(`reminderSkipWeekends 迁移完成，更新 ${changedCount} 处`);
+    } catch (error) {
+        console.error("reminderSkipWeekends 迁移失败:", error);
     }
 }
 

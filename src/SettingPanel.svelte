@@ -23,6 +23,7 @@
     import { syncHolidays } from './utils/icsSubscription';
     import { PomodoroManager } from './utils/pomodoroManager';
     import { resolveAudioPath } from './utils/audioUtils';
+    import { getGlobalReminderSkipWeekendMode } from './utils/reminderSkipDate';
     import VipPanel from './components/VipPanel.svelte';
     import SubscriptionPanel from './components/icsSubscriptionPanel.svelte';
     import HelpPanel from './components/HelpPanel.svelte';
@@ -438,7 +439,7 @@
                         '任务编辑弹窗标题粘贴自动识别',
                     description:
                         i18n('quickReminderTitlePasteAutoDetectDesc') ||
-                        '开启后，在任务编辑弹窗标题中粘贴文本时自动识别日期时间；仍可在弹窗内临时关闭。',
+                        '开启后，在任务编辑弹窗标题中粘贴文本时自动识别日期时间；仍可在弹窗内临时关闭',
                 },
                 {
                     key: 'treatStartDateOnlyAsOverdue',
@@ -450,13 +451,20 @@
                         '开启后，只有开始日期且无截止日期的未完成任务，在当前日期超过开始日期时显示为过期；关闭后显示为已开始天数。',
                 },
                 {
-                    key: 'reminderSkipWeekends',
-                    value: settings.reminderSkipWeekends,
-                    type: 'checkbox',
+                    key: 'reminderSkipWeekendMode',
+                    value: getGlobalReminderSkipWeekendMode(settings),
+                    type: 'select',
                     title: i18n('reminderSkipWeekends') || '任务提醒跳过周末',
                     description:
                         i18n('reminderSkipWeekendsDesc') ||
-                        '仅对重复任务，以及同时横跨工作日和周末的跨天任务生效；单个任务可在任务编辑弹窗单独覆盖。',
+                        '可选择跳过周六周日、仅周六、仅周日或不跳过；单个任务可在任务编辑弹窗单独覆盖。',
+                    options: {
+                        saturdaySunday:
+                            i18n('reminderSkipWeekendSaturdaySunday') || '跳过周六和周日',
+                        saturday: i18n('reminderSkipWeekendSaturday') || '仅跳过周六',
+                        sunday: i18n('reminderSkipWeekendSunday') || '仅跳过周日',
+                        none: i18n('reminderSkipWeekendNone') || '不跳过',
+                    },
                 },
                 {
                     key: 'reminderSkipHolidays',

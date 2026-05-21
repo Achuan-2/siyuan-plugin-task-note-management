@@ -2,6 +2,7 @@ import { Dialog, showMessage } from "siyuan";
 import { i18n } from "../pluginInstance";
 import { solarToLunar } from "../utils/lunarUtils";
 import { getLogicalDateString } from "../utils/dateUtils";
+import { normalizeReminderSkipWeekendMode, type ReminderSkipWeekendMode } from "../utils/reminderSkipDate";
 
 export interface RepeatConfig {
     enabled: boolean;
@@ -16,7 +17,8 @@ export interface RepeatConfig {
     endCount?: number; // 重复次数限制
     endType: 'never' | 'date' | 'count'; // 结束类型
     ebbinghausPattern?: number[]; // 艾宾浩斯重复模式（天数间隔）
-    reminderSkipWeekends?: boolean; // 重复任务提醒是否跳过周末；未设置时跟随全局设置
+    reminderSkipWeekendMode?: ReminderSkipWeekendMode; // 重复任务提醒跳过周末模式；未设置时跟随全局设置
+    reminderSkipWeekends?: boolean; // 旧字段：重复任务提醒是否跳过周末；未设置时跟随全局设置
     reminderSkipHolidays?: boolean; // 重复任务提醒是否跳过节假日；未设置时跟随全局设置
     excludeDates?: string[]; // 排除的日期列表
     instanceModifications?: {
@@ -31,6 +33,7 @@ export interface RepeatConfig {
             url?: string;
             note?: string; // 实例级别的备注
             priority?: string;
+            reminderSkipWeekendMode?: ReminderSkipWeekendMode;
             reminderSkipWeekends?: boolean;
             reminderSkipHolidays?: boolean;
             modifiedAt?: string;
@@ -91,6 +94,26 @@ export class RepeatSettingsDialog {
         this.updateUI();
     }
 
+    private getCurrentSkipWeekendMode(): ReminderSkipWeekendMode {
+        return normalizeReminderSkipWeekendMode(this.repeatConfig.reminderSkipWeekendMode) ||
+            normalizeReminderSkipWeekendMode(this.repeatConfig.reminderSkipWeekends) ||
+            'none';
+    }
+
+    private createSkipWeekendModeOptions(): string {
+        const selectedMode = this.getCurrentSkipWeekendMode();
+        const options: Array<{ value: ReminderSkipWeekendMode; label: string }> = [
+            { value: 'saturdaySunday', label: i18n('reminderSkipWeekendSaturdaySunday') || '跳过周六和周日' },
+            { value: 'saturday', label: i18n('reminderSkipWeekendSaturday') || '仅跳过周六' },
+            { value: 'sunday', label: i18n('reminderSkipWeekendSunday') || '仅跳过周日' },
+            { value: 'none', label: i18n('reminderSkipWeekendNone') || '不跳过' },
+        ];
+
+        return options.map(option => `
+            <option value="${option.value}" ${option.value === selectedMode ? 'selected' : ''}>${option.label}</option>
+        `).join('');
+    }
+
     private createDialogContent(): string {
         return `
             <div class="repeat-settings-dialog">
@@ -130,11 +153,12 @@ export class RepeatSettingsDialog {
 
                         <div id="repeatReminderSkipOptions" class="b3-form__group">
                             <label class="b3-form__label">${i18n('reminderSkipDateOptions') || '提醒跳过'}</label>
-                            <div style="display: flex; gap: 16px; flex-wrap: wrap;">
-                                <label class="b3-checkbox" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                    <input type="checkbox" class="b3-switch" id="repeatReminderSkipWeekends" ${this.repeatConfig.reminderSkipWeekends === true ? 'checked' : ''}>
-                                    <span class="b3-checkbox__graphic"></span>
-                                    <span class="b3-checkbox__label">跳过周末</span>
+                            <div style="display: flex; gap: 16px; flex-wrap: wrap; align-items: center;">
+                                <label style="display: flex; align-items: center; gap: 8px;">
+                                    <span style="font-size: 13px;">${i18n('reminderSkipWeekendsTask') || '任务提醒跳过周末'}</span>
+                                    <select id="repeatReminderSkipWeekendMode" class="b3-select" style="min-width: 138px;">
+                                        ${this.createSkipWeekendModeOptions()}
+                                    </select>
                                 </label>
                                 <label class="b3-checkbox" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                                     <input type="checkbox" class="b3-switch" id="repeatReminderSkipHolidays" ${this.repeatConfig.reminderSkipHolidays === true ? 'checked' : ''}>
@@ -494,11 +518,12 @@ export class RepeatSettingsDialog {
             const intervalInput = this.dialog.element.querySelector('#repeatInterval') as HTMLInputElement;
             const endDateInput = this.dialog.element.querySelector('#endDate') as HTMLInputElement;
             const endCountInput = this.dialog.element.querySelector('#endCount') as HTMLInputElement;
-            const skipWeekendsInput = this.dialog.element.querySelector('#repeatReminderSkipWeekends') as HTMLInputElement;
+            const skipWeekendModeSelect = this.dialog.element.querySelector('#repeatReminderSkipWeekendMode') as HTMLSelectElement;
             const skipHolidaysInput = this.dialog.element.querySelector('#repeatReminderSkipHolidays') as HTMLInputElement;
 
             this.repeatConfig.interval = parseInt(intervalInput.value) || 1;
-            this.repeatConfig.reminderSkipWeekends = skipWeekendsInput?.checked === true;
+            this.repeatConfig.reminderSkipWeekendMode = normalizeReminderSkipWeekendMode(skipWeekendModeSelect?.value) || 'none';
+            delete this.repeatConfig.reminderSkipWeekends;
             this.repeatConfig.reminderSkipHolidays = skipHolidaysInput?.checked === true;
 
             if (this.repeatConfig.type === 'weekly') {
@@ -581,6 +606,7 @@ export class RepeatSettingsDialog {
                 this.repeatConfig.endCount = parseInt(endCountInput.value) || 10;
             }
         } else {
+            delete this.repeatConfig.reminderSkipWeekendMode;
             delete this.repeatConfig.reminderSkipWeekends;
             delete this.repeatConfig.reminderSkipHolidays;
         }

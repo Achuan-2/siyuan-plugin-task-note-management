@@ -2,6 +2,7 @@ import { RepeatConfig } from '../components/RepeatSettingsDialog';
 import { compareDateStrings, getLocalDateTimeString } from './dateUtils';
 import { i18n } from '../pluginInstance';
 import { solarToLunar } from './lunarUtils';
+import { normalizeReminderSkipWeekendMode, type ReminderSkipWeekendMode } from './reminderSkipDate';
 
 export interface RepeatInstance {
     title?: string; // 实例标题（可选，覆盖原始标题）
@@ -29,6 +30,7 @@ export interface RepeatInstance {
     tagIds?: string[];
     milestoneId?: string;
     treatStartDateAsDeadline?: boolean;
+    reminderSkipWeekendMode?: ReminderSkipWeekendMode;
     reminderSkipWeekends?: boolean;
     reminderSkipHolidays?: boolean;
     sort?: number;
@@ -40,6 +42,15 @@ export interface ReminderTimeConfig {
     note?: string;
     dayOffset?: number;
     dayIndex?: number;
+}
+
+function resolveReminderSkipWeekendMode(...sources: any[]): ReminderSkipWeekendMode | undefined {
+    for (const source of sources) {
+        const mode = normalizeReminderSkipWeekendMode(source?.reminderSkipWeekendMode) ||
+            normalizeReminderSkipWeekendMode(source?.reminderSkipWeekends);
+        if (mode !== undefined) return mode;
+    }
+    return undefined;
 }
 
 /**
@@ -305,7 +316,7 @@ export function generateRepeatInstances(
                         tagIds: modification?.tagIds !== undefined ? modification.tagIds : reminder.tagIds,
                         milestoneId: modification?.milestoneId !== undefined ? modification.milestoneId : reminder.milestoneId,
                         treatStartDateAsDeadline: modification?.treatStartDateAsDeadline !== undefined ? modification.treatStartDateAsDeadline : reminder.treatStartDateAsDeadline,
-                        reminderSkipWeekends: modification?.reminderSkipWeekends !== undefined ? modification.reminderSkipWeekends : (reminder.reminderSkipWeekends !== undefined ? reminder.reminderSkipWeekends : repeatConfig.reminderSkipWeekends),
+                        reminderSkipWeekendMode: resolveReminderSkipWeekendMode(modification, reminder, repeatConfig),
                         reminderSkipHolidays: modification?.reminderSkipHolidays !== undefined ? modification.reminderSkipHolidays : (reminder.reminderSkipHolidays !== undefined ? reminder.reminderSkipHolidays : repeatConfig.reminderSkipHolidays),
                         sort: (modification && typeof modification.sort === 'number') ? modification.sort : (reminder.sort || 0)
                     };
@@ -688,7 +699,7 @@ export function generateSubtreeInstances(
             milestoneId: instanceMod?.milestoneId !== undefined ? instanceMod.milestoneId : child.milestoneId,
             tagIds: instanceMod?.tagIds !== undefined ? instanceMod.tagIds : child.tagIds,
             treatStartDateAsDeadline: instanceMod?.treatStartDateAsDeadline !== undefined ? instanceMod.treatStartDateAsDeadline : child.treatStartDateAsDeadline,
-            reminderSkipWeekends: instanceMod?.reminderSkipWeekends !== undefined ? instanceMod.reminderSkipWeekends : (child.reminderSkipWeekends !== undefined ? child.reminderSkipWeekends : child.repeat?.reminderSkipWeekends),
+            reminderSkipWeekendMode: resolveReminderSkipWeekendMode(instanceMod, child, child.repeat),
             reminderSkipHolidays: instanceMod?.reminderSkipHolidays !== undefined ? instanceMod.reminderSkipHolidays : (child.reminderSkipHolidays !== undefined ? child.reminderSkipHolidays : child.repeat?.reminderSkipHolidays),
             reminderTimes: resolveRepeatReminderTimes(
                 instanceMod?.reminderTimes !== undefined ? instanceMod.reminderTimes : child.reminderTimes,

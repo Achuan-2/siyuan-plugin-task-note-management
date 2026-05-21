@@ -58,7 +58,7 @@ import {
 } from "./utils/linkedHabitPomodoro";
 import { ChangelogUtils } from "./utils/changelogNotify";
 import { createPomodoroStartSubmenu as createSharedPomodoroStartSubmenu } from "./utils/pomodoroPresets";
-import { shouldSkipReminderOnDate, type HolidayData } from "./utils/reminderSkipDate";
+import { normalizeReminderSkipWeekendMode, shouldSkipReminderOnDate, type HolidayData } from "./utils/reminderSkipDate";
 
 
 export const SETTINGS_FILE = "reminder-settings.json";
@@ -235,7 +235,7 @@ export const DEFAULT_SETTINGS = {
     pomodoroDockPosition: 'right', // 新增：番茄钟吸附位置 'right' | 'left' | 'top'
     pomodoroMiniWindowStyle: 'horizontal', // mini窗口样式 'ring' | 'horizontal' | 'minimal'
     reminderSystemNotification: true, // 新增：事件到期提醒系统弹窗
-    reminderSkipWeekends: false, // 任务提醒是否跳过周末
+    reminderSkipWeekendMode: 'none', // 任务提醒跳过周末模式：none | saturdaySunday | saturday | sunday
     reminderSkipHolidays: false, // 任务提醒是否跳过节假日
     showInternalNotification: false, // 新增：是否显示内部通知框
     dailyNotificationTime: '08:00', // 新增：每日通知时间，默认08:00
@@ -290,6 +290,7 @@ export const DEFAULT_SETTINGS = {
         audioFileTransfer: false, // 是否已迁移音频文件列表
         habitCheckinTransfer: false,
         pomodoroRecordTransfer: false,
+        reminderSkipWeekendModeTransfer: false, // 是否已迁移 reminderSkipWeekends -> reminderSkipWeekendMode
     },
 };
 
@@ -1695,6 +1696,7 @@ export default class ReminderPlugin extends Plugin {
                 audioFileTransfer: true,
                 habitCheckinTransfer: true,
                 pomodoroRecordTransfer: true,
+                reminderSkipWeekendModeTransfer: true,
             }
             : { ...DEFAULT_SETTINGS.datatransfer };
 
@@ -1708,6 +1710,12 @@ export default class ReminderPlugin extends Plugin {
             },
         };
 
+        const rawWeekendMode = Object.prototype.hasOwnProperty.call(data, 'reminderSkipWeekendMode')
+            ? normalizeReminderSkipWeekendMode(data.reminderSkipWeekendMode)
+            : undefined;
+        settings.reminderSkipWeekendMode = rawWeekendMode ||
+            normalizeReminderSkipWeekendMode(data.reminderSkipWeekends) ||
+            'none';
 
         // 验证 VIP 状态 (从独立文件加载)
         await this.loadVipData();

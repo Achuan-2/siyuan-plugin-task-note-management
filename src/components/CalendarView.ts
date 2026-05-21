@@ -33,7 +33,7 @@ import { HabitStatsDialog } from "./stats/HabitStatsDialog";
 import { HabitDayDialog } from "./HabitDayDialog";
 import { getHabitProgressOnDate, getHabitReminderTimes, getHabitReminderTimesForDate, shouldCheckInOnDate as shouldCheckInOnDateUtil, isHabitActiveOnDate } from "../utils/habitUtils";
 import { HabitGroupManager } from "../utils/habitGroupManager";
-import { shouldSkipReminderOnDate, type HolidayData } from "../utils/reminderSkipDate";
+import { normalizeReminderSkipWeekendMode, shouldSkipReminderOnDate, type HolidayData } from "../utils/reminderSkipDate";
 export class CalendarView {
     private container: HTMLElement;
     private calendar: Calendar;
@@ -7181,7 +7181,12 @@ export class CalendarView {
                                 kanbanStatus: mod.kanbanStatus !== undefined ? mod.kanbanStatus : reminder.kanbanStatus,
                                 tagIds: mod.tagIds !== undefined ? mod.tagIds : reminder.tagIds,
                                 milestoneId: mod.milestoneId !== undefined ? mod.milestoneId : reminder.milestoneId,
-                                reminderSkipWeekends: mod.reminderSkipWeekends !== undefined ? mod.reminderSkipWeekends : (reminder.reminderSkipWeekends !== undefined ? reminder.reminderSkipWeekends : reminder.repeat?.reminderSkipWeekends),
+                                reminderSkipWeekendMode: normalizeReminderSkipWeekendMode(mod.reminderSkipWeekendMode) ||
+                                    normalizeReminderSkipWeekendMode(mod.reminderSkipWeekends) ||
+                                    normalizeReminderSkipWeekendMode(reminder.reminderSkipWeekendMode) ||
+                                    normalizeReminderSkipWeekendMode(reminder.reminderSkipWeekends) ||
+                                    normalizeReminderSkipWeekendMode(reminder.repeat?.reminderSkipWeekendMode) ||
+                                    normalizeReminderSkipWeekendMode(reminder.repeat?.reminderSkipWeekends),
                                 reminderSkipHolidays: mod.reminderSkipHolidays !== undefined ? mod.reminderSkipHolidays : (reminder.reminderSkipHolidays !== undefined ? reminder.reminderSkipHolidays : reminder.repeat?.reminderSkipHolidays),
                                 sort: (mod && typeof mod.sort === 'number') ? mod.sort : (reminder.sort || 0)
                             };
