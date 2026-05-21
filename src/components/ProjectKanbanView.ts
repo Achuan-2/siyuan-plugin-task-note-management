@@ -10743,6 +10743,7 @@ export class ProjectKanbanView {
                     if (!this.selectedTaskIds.has(task.id)) {
                         this.toggleTaskSelection(task.id, true);
                     }
+                    this.lastClickedTaskId = task.id;
                     await this.showBatchContextMenu(e);
                     return;
                 }
@@ -10753,14 +10754,23 @@ export class ProjectKanbanView {
                 await this.showTaskContextMenu(e, task);
             },
             onCardClick: (task: any, e: MouseEvent) => {
-                if (this.isMultiSelectMode) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const isChecked = this.selectedTaskIds.has(task.id);
-                    this.toggleTaskSelection(task.id, !isChecked);
+                if (this.handleMultiSelectTaskClick(task, e)) {
+                    return;
+                }
+
+                if (this.handleQuickMultiSelectClick(task, e)) {
+                    return;
                 }
             },
             onTitleClick: (task: any, e: MouseEvent) => {
+                if (this.handleMultiSelectTaskClick(task, e)) {
+                    return;
+                }
+
+                if (this.handleQuickMultiSelectClick(task, e)) {
+                    return;
+                }
+
                 // 点击有绑定块的任务标题时打开对应块
                 const blockId = task.blockId || task.docId;
                 if (blockId) {
@@ -13406,6 +13416,15 @@ export class ProjectKanbanView {
                         // 立即排序，确保乐观更新时顺序正确
                         this.sortTasks();
 
+                        // 页签模式的渲染闭包只包含当次渲染生成的分组数据；新建任务后直接重绘页签容器，
+                        // 避免非当前页签分组走局部回退渲染时被插到外层看板容器造成错位。
+                        if (this.kanbanMode === 'custom' && this.customGroupTabsMode) {
+                            this.captureScrollState();
+                            await this.renderKanban();
+                            this.dispatchReminderUpdate(true);
+                            return;
+                        }
+
                         if (savedTaskParentId) {
                             if (!hadSiblingBefore) {
                                 this.collapsedTasks.delete(savedTaskParentId);
@@ -14914,12 +14933,14 @@ export class ProjectKanbanView {
             }
 
             /* 选中状态的任务卡片 */
-            .kanban-task-selected {
+            .kanban-task-selected,
+            .kanban-task.reminder-item--selected {
                 box-shadow: 0 0 0 2px var(--b3-theme-primary) !important;
                 border-color: var(--b3-theme-primary) !important;
             }
 
-            .kanban-task-selected:hover {
+            .kanban-task-selected:hover,
+            .kanban-task.reminder-item--selected:hover {
                 box-shadow: 0 0 0 3px var(--b3-theme-primary), 0 4px 12px rgba(0, 0, 0, 0.15) !important;
             }
 
@@ -18351,7 +18372,18 @@ export class ProjectKanbanView {
             this.lastClickedTaskId = null;
         }
 
-        // 更新多选按钮状态
+        this.updateMultiSelectButtonState();
+
+        // 重新渲染看板以显示/隐藏多选复选框
+        this.renderKanban();
+
+        // 无论是否选中任务，只要开启多选模式就显示工具栏
+        this.updateBatchToolbar();
+
+        showMessage(this.isMultiSelectMode ? (i18n('batchSelectModeOn') || '已进入批量选择模式') : (i18n('batchSelectModeOff') || '已退出批量选择模式'));
+    }
+
+    private updateMultiSelectButtonState(): void {
         const multiSelectBtn = this.container.querySelector('#multiSelectBtn') as HTMLButtonElement;
         if (multiSelectBtn) {
             if (this.isMultiSelectMode) {
@@ -18364,14 +18396,108 @@ export class ProjectKanbanView {
                 multiSelectBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconCheck"></use></svg> ${i18n('batchSelect') || '批量选择'}`;
             }
         }
+    }
 
-        // 重新渲染看板以显示/隐藏多选复选框
+    private enterMultiSelectModeFromTask(taskId: string): void {
+        this.isMultiSelectMode = true;
+        this.selectedTaskIds.clear();
+        this.selectedTaskIds.add(taskId);
+        this.lastClickedTaskId = taskId;
+        this.updateMultiSelectButtonState();
         this.renderKanban();
-
-        // 无论是否选中任务，只要开启多选模式就显示工具栏
         this.updateBatchToolbar();
+        showMessage(i18n('batchSelectModeOn') || '已进入批量选择模式');
+    }
 
-        showMessage(this.isMultiSelectMode ? (i18n('batchSelectModeOn') || '已进入批量选择模式') : (i18n('batchSelectModeOff') || '已退出批量选择模式'));
+    private handleQuickMultiSelectClick(task: any, event: MouseEvent): boolean {
+        if (!task?.id || (!event.ctrlKey && !event.metaKey)) return false;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (!this.isMultiSelectMode) {
+            this.enterMultiSelectModeFromTask(task.id);
+            return true;
+        }
+
+        this.lastClickedTaskId = task.id;
+        this.toggleTaskSelection(task.id, !this.selectedTaskIds.has(task.id));
+        return true;
+    }
+
+    private handleMultiSelectTaskClick(task: any, event: MouseEvent): boolean {
+        if (!task?.id || !this.isMultiSelectMode) return false;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (event.shiftKey) {
+            const anchorTaskId = this.lastClickedTaskId || Array.from(this.selectedTaskIds).pop() || null;
+            if (anchorTaskId && this.selectTaskRange(anchorTaskId, task.id)) {
+                this.lastClickedTaskId = task.id;
+                return true;
+            }
+        }
+
+        this.lastClickedTaskId = task.id;
+        this.toggleTaskSelection(task.id, !this.selectedTaskIds.has(task.id));
+        return true;
+    }
+
+    private getVisibleTaskIdsInDomOrder(): string[] {
+        const ids: string[] = [];
+        const seen = new Set<string>();
+        this.container.querySelectorAll('.kanban-task[data-task-id]').forEach((el) => {
+            const taskId = (el as HTMLElement).dataset.taskId;
+            if (taskId && !seen.has(taskId)) {
+                seen.add(taskId);
+                ids.push(taskId);
+            }
+        });
+        return ids;
+    }
+
+    private selectTaskRange(anchorTaskId: string, targetTaskId: string): boolean {
+        const visibleTaskIds = this.getVisibleTaskIdsInDomOrder();
+        const anchorIndex = visibleTaskIds.indexOf(anchorTaskId);
+        const targetIndex = visibleTaskIds.indexOf(targetTaskId);
+        if (anchorIndex === -1 || targetIndex === -1) return false;
+
+        const start = Math.min(anchorIndex, targetIndex);
+        const end = Math.max(anchorIndex, targetIndex);
+        for (let i = start; i <= end; i++) {
+            this.selectedTaskIds.add(visibleTaskIds[i]);
+        }
+
+        this.syncVisibleTaskSelectionStyles();
+        this.updateBatchToolbar();
+        return true;
+    }
+
+    private getTaskElementsById(taskId: string): HTMLElement[] {
+        return Array.from(this.container.querySelectorAll('.kanban-task[data-task-id]'))
+            .filter((el): el is HTMLElement => (el as HTMLElement).dataset.taskId === taskId);
+    }
+
+    private applyTaskSelectionElementState(taskEl: HTMLElement, selected: boolean): void {
+        if (selected) {
+            taskEl.classList.add('kanban-task-selected', 'reminder-item--selected');
+            taskEl.style.boxShadow = '0 0 0 2px var(--b3-theme-primary)';
+        } else {
+            taskEl.classList.remove('kanban-task-selected', 'reminder-item--selected');
+            taskEl.style.boxShadow = '';
+        }
+
+        const checkbox = taskEl.querySelector('.kanban-task-multiselect-checkbox') as HTMLInputElement;
+        if (checkbox) checkbox.checked = selected;
+    }
+
+    private syncVisibleTaskSelectionStyles(): void {
+        this.container.querySelectorAll('.kanban-task[data-task-id]').forEach((el) => {
+            const taskEl = el as HTMLElement;
+            const taskId = taskEl.dataset.taskId;
+            this.applyTaskSelectionElementState(taskEl, !!taskId && this.selectedTaskIds.has(taskId));
+        });
     }
 
     /**
@@ -18385,20 +18511,9 @@ export class ProjectKanbanView {
         }
 
         // 更新任务卡片样式
-        const taskEl = this.container.querySelector(`.kanban-task[data-task-id="${taskId}"]`) as HTMLElement;
-        if (taskEl) {
-            if (selected) {
-                taskEl.classList.add('kanban-task-selected');
-                taskEl.style.boxShadow = '0 0 0 2px var(--b3-theme-primary)';
-                const checkbox = taskEl.querySelector('.kanban-task-multiselect-checkbox') as HTMLInputElement;
-                if (checkbox) checkbox.checked = true;
-            } else {
-                taskEl.classList.remove('kanban-task-selected');
-                taskEl.style.boxShadow = '';
-                const checkbox = taskEl.querySelector('.kanban-task-multiselect-checkbox') as HTMLInputElement;
-                if (checkbox) checkbox.checked = false;
-            }
-        }
+        this.getTaskElementsById(taskId).forEach(taskEl => {
+            this.applyTaskSelectionElementState(taskEl, selected);
+        });
 
         // 更新批量工具栏
         this.updateBatchToolbar();
