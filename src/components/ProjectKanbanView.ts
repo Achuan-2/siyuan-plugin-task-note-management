@@ -10769,6 +10769,12 @@ export class ProjectKanbanView {
                     this.openBlockTab(blockId);
                 }
             },
+            onMilestoneClick: (task: any) => {
+                const milestoneInfo = task.milestoneId ? this.milestoneMap.get(task.milestoneId) : null;
+                if (milestoneInfo?.blockId) {
+                    openBlock(milestoneInfo.blockId);
+                }
+            },
             setupDragAndDrop: (taskEl: HTMLElement, task: any) => {
                 if (!this.plugin.isInMobileApp) {
                     taskEl.draggable = true;
