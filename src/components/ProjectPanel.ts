@@ -685,6 +685,15 @@ export class ProjectPanel {
                 return;
             }
 
+            // 获取当前有效状态列表，若未初始化则进行初始化
+            let statuses = StatusManager.getInstance(this.plugin).getStatuses();
+            if (!statuses || statuses.length === 0) {
+                await StatusManager.getInstance(this.plugin).initialize();
+                statuses = StatusManager.getInstance(this.plugin).getStatuses();
+            }
+            const statusIds = new Set(statuses.map((s: any) => s.id));
+            const defaultStatusId = statuses.length > 0 ? statuses[0].id : 'active';
+
             // 迁移旧数据：将 archived 字段转换为 status 字段
             let dataChanged = false;
             const projects = Object.values(projectData).filter((project: any) => {
@@ -697,6 +706,13 @@ export class ProjectPanel {
                         project.status = 'active';
                         dataChanged = true;
                     }
+
+                    // 检查状态是否有效，如果无效（被删除了），自动设置为第一个状态
+                    if (project.status && !statusIds.has(project.status)) {
+                        project.status = defaultStatusId;
+                        dataChanged = true;
+                    }
+
                     if (!project.color) {
                         project.color = generateRandomColor();
                         dataChanged = true;

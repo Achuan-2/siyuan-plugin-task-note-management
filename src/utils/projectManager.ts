@@ -147,8 +147,38 @@ export class ProjectManager {
         try {
             const projectData = await this.plugin.loadProjectData() || {};
             if (projectData && typeof projectData === 'object') {
+                let statuses = this.statusManager.getStatuses();
+                if (!statuses || statuses.length === 0) {
+                    await this.statusManager.initialize();
+                    statuses = this.statusManager.getStatuses();
+                }
+                const statusIds = new Set(statuses.map((s: any) => s.id));
+                const defaultStatusId = statuses.length > 0 ? statuses[0].id : 'active';
 
+                let dataChanged = false;
                 const projectEntries = Object.entries(projectData).filter(([key]) => !key.startsWith('_'));
+
+                projectEntries.forEach(([id, project]: [string, any]) => {
+                    if (project && typeof project === 'object') {
+                        if (!project.status && project.hasOwnProperty('archived')) {
+                            project.status = project.archived ? 'archived' : 'active';
+                            dataChanged = true;
+                        } else if (!project.status) {
+                            project.status = 'active';
+                            dataChanged = true;
+                        }
+
+                        if (project.status && !statusIds.has(project.status)) {
+                            project.status = defaultStatusId;
+                            dataChanged = true;
+                        }
+                    }
+                });
+
+                if (dataChanged) {
+                    await this.plugin.saveProjectData(projectData);
+                }
+
                 this.projects = projectEntries
                     .map(([id, project]: [string, any]) => ({
                         id: id,
