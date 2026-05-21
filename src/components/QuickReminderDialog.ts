@@ -5757,7 +5757,17 @@ export class QuickReminderDialog {
 
     private showCreateDocumentDialog() {
         const titleInput = this.dialog.element.querySelector('#quickReminderTitle') as HTMLTextAreaElement;
+        const projectSelector = this.dialog.element.querySelector('#quickProjectSelector') as HTMLInputElement;
+        const customGroupSelector = this.dialog.element.querySelector('#quickCustomGroupSelector') as HTMLInputElement;
+        const milestoneSelector = this.dialog.element.querySelector('#quickMilestoneSelector') as HTMLInputElement;
         const currentTitle = titleInput?.value?.trim() || '';
+        const currentProjectId = projectSelector?.value || this.defaultProjectId || this.reminder?.projectId;
+        const currentCustomGroupId = customGroupSelector
+            ? (customGroupSelector.value || null)
+            : (this.defaultCustomGroupId ?? this.reminder?.customGroupId ?? null);
+        const currentMilestoneId = milestoneSelector
+            ? (milestoneSelector.value || null)
+            : (this.defaultMilestoneId ?? this.reminder?.milestoneId ?? null);
 
         const blockBindingDialog = new BlockBindingDialog(this.plugin, async (blockId: string) => {
             const blockInput = this.dialog.element.querySelector('#quickBlockInput') as HTMLInputElement;
@@ -5771,8 +5781,9 @@ export class QuickReminderDialog {
         }, {
             defaultTab: 'heading',
             defaultParentId: this.defaultParentId || this.reminder?.parentId,
-            defaultProjectId: this.defaultProjectId || this.reminder?.projectId,
-            defaultCustomGroupId: this.defaultCustomGroupId || this.reminder?.customGroupId,
+            defaultProjectId: currentProjectId,
+            defaultCustomGroupId: currentCustomGroupId,
+            defaultMilestoneId: currentMilestoneId,
             reminder: this.reminder,
             defaultTitle: currentTitle
         });

@@ -13,6 +13,7 @@ export class BlockBindingDialog {
     private defaultParentId?: string;
     private defaultProjectId?: string;
     private defaultCustomGroupId?: string | null;
+    private defaultMilestoneId?: string | null;
     private reminder?: any;
     private selectedPathNotebookId?: string;
     private notebooks: any;
@@ -29,6 +30,7 @@ export class BlockBindingDialog {
             defaultParentId?: string;
             defaultProjectId?: string;
             defaultCustomGroupId?: string | null;
+            defaultMilestoneId?: string | null;
             reminder?: any;
             defaultTitle?: string;
             forMilestone?: boolean;
@@ -42,6 +44,7 @@ export class BlockBindingDialog {
         this.defaultParentId = options?.defaultParentId;
         this.defaultProjectId = options?.defaultProjectId;
         this.defaultCustomGroupId = options?.defaultCustomGroupId;
+        this.defaultMilestoneId = options?.defaultMilestoneId;
         this.reminder = options?.reminder;
         this.defaultTitle = options?.defaultTitle;
         this.forMilestone = options?.forMilestone || false;
@@ -626,15 +629,7 @@ export class BlockBindingDialog {
         // 加载默认设置
         try {
             const settings = await this.plugin.loadSettings();
-            // 根据场景选择默认层级：分组 > 里程碑 > 普通
-            let defaultLevel: number;
-            if (this.forGroup) {
-                defaultLevel = settings.groupDefaultHeadingLevel || 2;
-            } else if (this.forMilestone) {
-                defaultLevel = settings.milestoneDefaultHeadingLevel || 2;
-            } else {
-                defaultLevel = settings.defaultHeadingLevel || 3;
-            }
+            const defaultLevel = this.getDefaultHeadingLevel(settings);
             const defaultPosition = settings.defaultHeadingPosition || 'append';
 
             const levelSelect = this.dialog.element.querySelector('#headingLevelSelect') as HTMLSelectElement;
@@ -739,7 +734,9 @@ export class BlockBindingDialog {
             let autoFillBlockId: string | null = null;
 
             // 0. 优先检查里程碑绑定
-            const milestoneId = this.reminder?.milestoneId || this.reminder?.milestone;
+            const milestoneId = this.defaultMilestoneId !== undefined
+                ? this.defaultMilestoneId
+                : (this.reminder?.milestoneId || this.reminder?.milestone);
             if (milestoneId && this.defaultProjectId) {
                 try {
                     const { ProjectManager } = await import('../utils/projectManager');
@@ -750,7 +747,7 @@ export class BlockBindingDialog {
                         const { getBlockByID } = await import("../api");
                         const block = await getBlockByID(autoFillBlockId);
                         if (block) {
-                            this.adjustHeadingLevel(block, levelSelect);
+                            await this.adjustHeadingLevel(block, levelSelect);
                         }
                     }
                 } catch (err) {
@@ -766,7 +763,7 @@ export class BlockBindingDialog {
                     autoFillBlockId = parentReminder.blockId;
                     const parentBlock = await getBlockByID(parentReminder.blockId);
                     if (parentBlock) {
-                        this.adjustHeadingLevel(parentBlock, levelSelect);
+                        await this.adjustHeadingLevel(parentBlock, levelSelect);
                     }
                 }
             }
@@ -799,7 +796,7 @@ export class BlockBindingDialog {
                     const { getBlockByID } = await import("../api");
                     const block = await getBlockByID(autoFillBlockId);
                     if (block) {
-                        this.adjustHeadingLevel(block, levelSelect);
+                        await this.adjustHeadingLevel(block, levelSelect);
                     }
                 }
             }
@@ -979,15 +976,7 @@ export class BlockBindingDialog {
     private async adjustHeadingLevel(parentBlock: any, levelSelect: HTMLSelectElement) {
         try {
             const settings = await this.plugin.loadSettings();
-            // 根据场景选择默认层级：分组 > 里程碑 > 普通
-            let defaultLevel: number;
-            if (this.forGroup) {
-                defaultLevel = settings.groupDefaultHeadingLevel || 2;
-            } else if (this.forMilestone) {
-                defaultLevel = settings.milestoneDefaultHeadingLevel || 2;
-            } else {
-                defaultLevel = settings.defaultHeadingLevel || 3;
-            }
+            const defaultLevel = this.getDefaultHeadingLevel(settings);
 
             // 默认使用设置层级；只有父标题层级与默认层级一致时，才自动下钻一级
             let targetLevel = defaultLevel;
@@ -1002,6 +991,20 @@ export class BlockBindingDialog {
         } catch (error) {
             console.error('调整标题层级失败:', error);
         }
+    }
+
+    private getDefaultHeadingLevel(settings: any): number {
+        const fallbackLevel = this.forGroup ? 2 : (this.forMilestone ? 2 : 3);
+        const rawLevel = this.forGroup
+            ? settings?.groupDefaultHeadingLevel
+            : (this.forMilestone ? settings?.milestoneDefaultHeadingLevel : settings?.defaultHeadingLevel);
+        const level = Number(rawLevel ?? fallbackLevel);
+
+        if (!Number.isFinite(level)) {
+            return fallbackLevel;
+        }
+
+        return Math.max(1, Math.min(6, Math.trunc(level)));
     }
 
     /**
@@ -1255,7 +1258,7 @@ export class BlockBindingDialog {
         parentBlock: any,
         subContent?: string
     ): Promise<string> {
-        const { prependBlock, appendBlock, insertBlock, getHeadingChildrenDOM } = await import("../api");
+        const { prependBlock, appendBlock, insertBlock, getHeadingChildrenDOM, getChildBlocks } = await import("../api");
 
         const hashes = '#'.repeat(level);
 
@@ -1299,47 +1302,48 @@ export class BlockBindingDialog {
         let response: any;
 
         if (parentBlock.type === 'h') {
-            if (position === 'prepend') {
-                try {
-                    const domHtml = await getHeadingChildrenDOM(parentId);
+            let insertPreviousID = parentId;
+            try {
+                const domHtml = await getHeadingChildrenDOM(parentId);
+                const childBlocks = typeof domHtml === 'string' ? this.getTopLevelHeadingBlocks(domHtml) : [];
+                const contentBlocks = childBlocks.filter(block => block.id !== parentId);
 
-                    if (domHtml && typeof domHtml === 'string') {
-                        const parser = new DOMParser();
-                        const doc = parser.parseFromString(domHtml, 'text/html');
-                        const childBlocks = doc.querySelectorAll('[data-node-id]');
-
-                        let insertPreviousID = parentId;
-                        let lastConsecutiveNonHeadingId = parentId;
-                        let hasFoundHeading = false;
-
-                        childBlocks.forEach((block: Element) => {
-                            const blockId = block.getAttribute('data-node-id');
-                            const blockType = block.getAttribute('data-type');
-
-                            if (blockId === parentId) return;
-
-                            if (!hasFoundHeading) {
-                                if (blockType === 'NodeHeading') {
-                                    hasFoundHeading = true;
-                                    insertPreviousID = lastConsecutiveNonHeadingId;
-                                } else {
-                                    lastConsecutiveNonHeadingId = blockId;
-                                }
-                            }
-                        });
-
-                        if (!hasFoundHeading) {
-                            insertPreviousID = lastConsecutiveNonHeadingId;
+                if (position === 'prepend') {
+                    for (const block of contentBlocks) {
+                        if (block.type === 'NodeHeading') {
+                            break;
                         }
+                        insertPreviousID = block.id;
+                    }
+                } else if (contentBlocks.length > 0) {
+                    insertPreviousID = contentBlocks[contentBlocks.length - 1].id;
+                }
+            } catch (e) {
+                console.warn('获取标题子块失败:', e);
+            }
 
-                        response = await insertBlock('markdown', markdownContent, undefined, insertPreviousID);
-                    } else {
-                        response = await insertBlock('markdown', markdownContent, undefined, parentId);
+            response = await insertBlock('markdown', markdownContent, undefined, insertPreviousID);
+        } else if (parentBlock.type === 'd') {
+            if (position === 'prepend') {
+                let insertPreviousID: string | null = null;
+                try {
+                    const childBlocks = await getChildBlocks(parentId);
+                    if (Array.isArray(childBlocks)) {
+                        for (const block of childBlocks) {
+                            if (block.type === 'h') {
+                                break;
+                            }
+                            insertPreviousID = block.id;
+                        }
                     }
                 } catch (e) {
-                    console.warn('获取标题子块失败:', e);
-                    response = await insertBlock('markdown', markdownContent, undefined, parentId);
+                    console.warn('获取文档子块失败:', e);
                 }
+
+                // 有开头正文时，插到最后一个开头正文块之后；如果文档没有标题，这个锚点就是文档末尾。
+                response = insertPreviousID
+                    ? await insertBlock('markdown', markdownContent, undefined, insertPreviousID)
+                    : await prependBlock('markdown', markdownContent, parentId);
             } else {
                 response = await appendBlock('markdown', markdownContent, parentId);
             }
@@ -1356,5 +1360,29 @@ export class BlockBindingDialog {
         }
 
         throw new Error(i18n("createHeadingFailed") || '创建标题失败：无法获取新建块ID');
+    }
+
+    private getTopLevelHeadingBlocks(domHtml: string): Array<{ id: string; type: string | null }> {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(domHtml, 'text/html');
+        const blocks = Array.from(doc.querySelectorAll('[data-node-id]'));
+
+        // 标题范围里会包含列表项等嵌套块，插入锚点只能使用顶层块，避免新标题落入列表。
+        return blocks
+            .filter((block) => {
+                let parent = block.parentElement;
+                while (parent && parent !== doc.body) {
+                    if (parent.hasAttribute('data-node-id')) {
+                        return false;
+                    }
+                    parent = parent.parentElement;
+                }
+                return true;
+            })
+            .map((block) => ({
+                id: block.getAttribute('data-node-id') || '',
+                type: block.getAttribute('data-type')
+            }))
+            .filter(block => !!block.id);
     }
 }
