@@ -4924,38 +4924,15 @@ export class CalendarView {
         // 如果有绑定块，将内容包裹在 span 中并添加虚线边框
         if (props.blockId && !props.isSubscribed && !props.isHabit) {
             const textSpan = document.createElement('span');
-            const textColor = (event && event.textColor) ? event.textColor : '#fff';
             textSpan.innerHTML = event.title;
             textSpan.style.display = 'inline-block';
             textSpan.style.boxSizing = 'border-box';
             textSpan.style.paddingBottom = '2px';
             textSpan.style.borderBottom = `2px dashed currentColor `;
             textSpan.style.cursor = 'pointer';
+            textSpan.setAttribute('data-type', 'a');
+            textSpan.setAttribute('data-href', `siyuan://blocks/${props.blockId}`);
             textSpan.classList.add('ariaLabel'); textSpan.setAttribute('aria-label', '已绑定块');
-
-            let hoverTimeout: number | null = null;
-
-            // 添加悬浮事件显示块引弹窗（延迟500ms）
-            textSpan.addEventListener('mouseenter', () => {
-                if (this.isDragging) return;
-                hoverTimeout = window.setTimeout(() => {
-                    const rect = textSpan.getBoundingClientRect();
-                    this.plugin.addFloatLayer({
-                        refDefs: [{ refID: props.blockId, defIDs: [] }],
-                        x: rect.left,
-                        y: rect.top - 70,
-                        isBacklink: false
-                    });
-                }, 500);
-            });
-
-            // 鼠标离开时清除延迟
-            textSpan.addEventListener('mouseleave', () => {
-                if (hoverTimeout !== null) {
-                    window.clearTimeout(hoverTimeout);
-                    hoverTimeout = null;
-                }
-            });
 
             titleEl.appendChild(textSpan);
         } else {

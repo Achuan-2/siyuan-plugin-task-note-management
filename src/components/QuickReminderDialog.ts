@@ -1809,45 +1809,12 @@ export class QuickReminderDialog {
                     syncTitleContainer.style.display = this.blockContent ? 'block' : 'none';
                 }
                 content.innerHTML = `
-                    <span style="font-weight: 500; margin-bottom: 4px; cursor: pointer; color: var(--b3-protyle-inline-blockref-color); border-bottom: 1px dashed var(--b3-protyle-inline-blockref-color); padding-bottom: 2px; max-width: 100%; word-wrap: break-word; overflow-wrap: break-word;" id="quickBlockPreviewHover">${(block.content || '无内容').length > 50 ? (block.content || '无内容').substring(0, 50) + '...' : (block.content || '无内容')}</span>
+                    <span style="font-weight: 500; margin-bottom: 4px; cursor: pointer; color: var(--b3-protyle-inline-blockref-color); border-bottom: 1px dashed var(--b3-protyle-inline-blockref-color); padding-bottom: 2px; max-width: 100%; word-wrap: break-word; overflow-wrap: break-word;" id="quickBlockPreviewHover" data-type="a" data-href="siyuan://blocks/${block.id}">${(block.content || '无内容').length > 50 ? (block.content || '无内容').substring(0, 50) + '...' : (block.content || '无内容')}</span>
                     <div style="font-size: 12px; color: var(--b3-theme-on-surface-light);">
                         类型: ${block.type} | ID: ${block.id}
                     </div>
                 `;
                 preview.style.display = 'block';
-
-                // 绑定悬浮预览事件
-                const hoverDiv = content.querySelector('#quickBlockPreviewHover') as HTMLElement;
-                if (hoverDiv && this.plugin && this.plugin.addFloatLayer) {
-                    let hoverTimeout: number | null = null;
-
-                    hoverDiv.addEventListener('mouseenter', (event) => {
-                        // 清除之前的定时器
-                        if (hoverTimeout) {
-                            clearTimeout(hoverTimeout);
-                        }
-
-                        // 设置500ms延迟后显示预览
-                        hoverTimeout = window.setTimeout(() => {
-                            const rect = hoverDiv.getBoundingClientRect();
-                            this.plugin.addFloatLayer({
-                                refDefs: [{ refID: blockId, defIDs: [] }],
-                                x: rect.left,
-                                y: rect.top - 70,
-                                isBacklink: false
-                            });
-                            hoverTimeout = null;
-                        }, 500);
-                    });
-
-                    hoverDiv.addEventListener('mouseleave', () => {
-                        // 清除定时器，取消预览显示
-                        if (hoverTimeout) {
-                            clearTimeout(hoverTimeout);
-                            hoverTimeout = null;
-                        }
-                    });
-                }
             } else {
                 content.innerHTML = `<div style="color: var(--b3-theme-error);">${i18n("blockNotExist") || '块不存在'}</div>`;
                 preview.style.display = 'block';
