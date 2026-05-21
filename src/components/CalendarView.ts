@@ -1948,7 +1948,7 @@ export class CalendarView {
                     targetEl.style.border = 'none';
                     // Adjust opacity based on theme mode
                     const themeMode = document.querySelector('html')?.getAttribute('data-theme-mode');
-                    const opacity = themeMode === 'dark' ? '0.3' : '0.15';
+                    const opacity = themeMode === 'dark' ? '0.3' : '0.25';
                     targetEl.style.backgroundColor = colorWithOpacity(bgColor, parseFloat(opacity));
 
                     const hasStartDate = !!info.event.extendedProps?.date;
@@ -6984,10 +6984,10 @@ export class CalendarView {
                 // For repeat tasks, we allow them to pass the initial filter because their instances have different completion statuses.
                 // Actual filtering will be performed when generating instances.
                 // 当显示完成时间功能开启时，已完成任务仍然需要在原始日期位置显示，
-                // 以便与完成时间事件独立共存。
+                // 以便与完成时间事件独立共存。但如果只显示未完成任务，则不保留已完成任务。
                 if (!reminder.repeat?.enabled && !this.passesCompletionFilter(reminder)) {
                     // 如果开启了显示完成时间，已完成的任务仍然保留在事件列表中
-                    if (!(this.showCompletedTaskTime && reminder.completed)) {
+                    if (this.currentCompletionFilter === 'incomplete' || !(this.showCompletedTaskTime && reminder.completed)) {
                         return false;
                     }
                 }
@@ -7081,9 +7081,9 @@ export class CalendarView {
                         }
 
                         // Apply completion filter to instances
-                        // 当显示完成时间功能开启时，已完成实例仍保留显示
+                        // 当显示完成时间功能开启时，已完成实例仍保留显示（除非只显示未完成任务）
                         if (!this.passesCompletionFilter(instanceReminder)) {
-                            if (!(this.showCompletedTaskTime && isInstanceCompleted)) {
+                            if (this.currentCompletionFilter === 'incomplete' || !(this.showCompletedTaskTime && isInstanceCompleted)) {
                                 continue;
                             }
                         }
@@ -7183,9 +7183,9 @@ export class CalendarView {
                             }
 
                             // Apply completion filter to modified instances
-                            // 当显示完成时间功能开启时，已完成实例仍保留显示
+                            // 当显示完成时间功能开启时，已完成实例仍保留显示（除非只显示未完成任务）
                             if (!this.passesCompletionFilter(instanceReminder)) {
-                                if (!(this.showCompletedTaskTime && isInstanceCompleted)) {
+                                if (this.currentCompletionFilter === 'incomplete' || !(this.showCompletedTaskTime && isInstanceCompleted)) {
                                     continue;
                                 }
                             }
@@ -7288,7 +7288,7 @@ export class CalendarView {
             }
 
             // Add completed task times if enabled and in Day/Week view
-            if (this.showTasks && this.showCompletedTaskTime && this.calendar && this.calendar.view) {
+            if (this.showTasks && this.showCompletedTaskTime && this.currentCompletionFilter !== 'incomplete' && this.calendar && this.calendar.view) {
                 const viewType = this.calendar.view.type;
                 if (viewType === 'timeGridDay' || viewType === 'timeGridWeek' || viewType === 'timeGridMultiDays' || viewType === 'dayGridDay') {
                     //  || viewType === 'dayGridWeek' || viewType === 'dayGridMultiDays 周看板暂时不显示完成时间避免卡死
