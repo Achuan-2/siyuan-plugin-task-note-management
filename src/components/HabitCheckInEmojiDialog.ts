@@ -1,4 +1,4 @@
-﻿import { Dialog, openEmoji, showMessage, confirm } from "siyuan";
+import { Dialog, openEmoji, showMessage, confirm } from "siyuan";
 import { Habit, HabitCheckInEmoji } from "./HabitPanel";
 import { i18n } from "../pluginInstance";
 
@@ -566,6 +566,11 @@ export class HabitCheckInEmojiDialog {
                 y: rect.bottom
             },
             selectedCB: (emojiCode: string) => {
+                if (!emojiCode) {
+                    this.emojis[index].emoji = "";
+                    target.textContent = "";
+                    return;
+                }
                 const codePoints = emojiCode.split(/[-\s]+/).map(cp => parseInt(cp, 16));
                 const emoji = String.fromCodePoint(...codePoints);
                 this.emojis[index].emoji = emoji;

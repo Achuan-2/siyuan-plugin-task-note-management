@@ -1286,6 +1286,15 @@ export class HabitEditDialog {
                 y: rect.bottom
             },
             selectedCB: (emojiCode: string) => {
+                if (!emojiCode) {
+                    target.textContent = "🌱";
+                    const form = target.closest('form');
+                    const iconInput = form?.querySelector('input[name="icon"]') as HTMLInputElement | null;
+                    if (iconInput) {
+                        iconInput.value = "🌱";
+                    }
+                    return;
+                }
                 const codePoints = emojiCode.split(/[-\s]+/).map(cp => parseInt(cp, 16));
                 const selectedEmoji = String.fromCodePoint(...codePoints);
                 target.textContent = selectedEmoji;

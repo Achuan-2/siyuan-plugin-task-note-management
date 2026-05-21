@@ -1,4 +1,5 @@
-import { Dialog, showMessage } from "siyuan";
+import { Dialog, showMessage, openEmoji } from "siyuan";
+import { ProjectFolderManager } from "../utils/projectFolderManager";
 import { getBlockByID } from "../api";
 import { getLogicalDateString } from "../utils/dateUtils";
 import { CategoryManager } from "../utils/categoryManager";
@@ -6,20 +7,26 @@ import { StatusManager } from "../utils/statusManager";
 import { BlockBindingDialog } from "./BlockBindingDialog";
 import { i18n } from "../pluginInstance";
 import { generateRandomColor } from "../utils/uiUtils";
+import { CategoryManageDialog } from "./CategoryManageDialog";
+import { StatusManageDialog } from "./ProjectStatusManageDialog";
+import { ProjectFolderManageDialog } from "./ProjectFolderManageDialog";
 
 export class ProjectDialog {
     private dialog: Dialog;
+    private selectedEmoji: string = '';
     private blockId: string;
     private selectedCategoryIds: string[] = [];
     private categoryManager: CategoryManager;
     private statusManager: StatusManager;
     private plugin?: any;
+    private preselectedFolderId?: string;
 
-    constructor(blockId?: string, plugin?: any) {
+    constructor(blockId?: string, plugin?: any, preselectedFolderId?: string) {
         this.blockId = blockId;
         this.plugin = plugin;
         this.categoryManager = CategoryManager.getInstance(this.plugin);
         this.statusManager = StatusManager.getInstance(this.plugin);
+        this.preselectedFolderId = preselectedFolderId;
     }
 
     async show() {
@@ -41,11 +48,20 @@ export class ProjectDialog {
                 blockContent = block.content;
             }
 
+            // 加载文件夹数据
+            const folderManager = ProjectFolderManager.getInstance(this.plugin);
+            await folderManager.loadFolders();
+
+            const titleToParse = existingProject?.title || blockContent || '';
+            const parsed = this.parseTitle(titleToParse);
+            this.selectedEmoji = parsed.emoji;
+            const displayTitleText = parsed.text;
+
             this.dialog = new Dialog({
                 title: existingProject ? (i18n("edit") + i18n("project")) : (this.blockId ? (i18n("setAsProjectNote") || "设置为项目笔记") : (i18n("createProject") || "创建项目")),
-                content: this.generateDialogHTML(existingProject?.title || blockContent, existingProject),
+                content: this.generateDialogHTML(displayTitleText, existingProject),
                 width: "500px",
-                height: "630px"
+                height: "680px"
             });
 
             this.bindEvents();
@@ -63,12 +79,27 @@ export class ProjectDialog {
             `<option value="${status.id}" ${existingProject?.status === status.id ? 'selected' : ''}>${status.icon ? status.icon + ' ' : ''}${status.name}</option>`
         ).join('');
 
+        const folderManager = ProjectFolderManager.getInstance(this.plugin);
+        const folders = folderManager.getFolders();
+        const currentFolderId = existingProject ? (existingProject.folderId || '') : (this.preselectedFolderId || '');
+        const folderOptions = [
+            `<option value="" ${currentFolderId === '' ? 'selected' : ''}>${i18n("noFolder") || "无文件夹"}</option>`,
+            ...folders.map(folder =>
+                `<option value="${folder.id}" ${currentFolderId === folder.id ? 'selected' : ''}>${folder.icon || '📂'} ${folder.name}</option>`
+            )
+        ].join('');
+
         return `
             <div class="project-dialog">
                 <div class="b3-dialog__content">
                     <div class="form-group">
                         <label>${i18n("projectTitle") || "项目标题"}:</label>
-                        <input type="text" id="projectTitle" class="b3-text-field" style="width: 100%;" value="${existingProject?.title || title}" placeholder="${i18n("pleaseEnterProjectTitle") || "输入项目标题"}">
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <button type="button" id="projectEmojiBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("selectEmoji") || "选择/清除表情"}" title="${i18n("emojiTooltip") || "左键选择表情，右键清除"}" style="width: 40px; height: 32px; padding: 0; font-size: 18px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                ${this.selectedEmoji || ''}
+                            </button>
+                            <input type="text" id="projectTitle" class="b3-text-field" style="flex: 1;" value="${title}" placeholder="${i18n("pleaseEnterProjectTitle") || "输入项目标题"}">
+                        </div>
                     </div>
                     
                     <div class="form-group">
@@ -91,10 +122,27 @@ export class ProjectDialog {
                     </div>
                     
                     <div class="form-group">
+                        <label>${i18n("projectFolder") || "项目文件夹"}:</label>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <select id="projectFolder" class="b3-select" style="flex: 1;">
+                                ${folderOptions}
+                            </select>
+                            <button type="button" id="projectFolderSettingsBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("settings") || "设置"}" title="${i18n("settings") || "设置"}" style="padding: 0 8px; height: 32px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                <svg style="width: 16px; height: 16px;"><use xlink:href="#iconSettings"></use></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
                         <label>${i18n("projectStatus") || "项目状态"}:</label>
-                        <select id="projectStatus" class="b3-select">
-                            ${statusOptions}
-                        </select>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <select id="projectStatus" class="b3-select" style="flex: 1;">
+                                ${statusOptions}
+                            </select>
+                            <button type="button" id="projectStatusSettingsBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("settings") || "设置"}" title="${i18n("settings") || "设置"}" style="padding: 0 8px; height: 32px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                <svg style="width: 16px; height: 16px;"><use xlink:href="#iconSettings"></use></svg>
+                            </button>
+                        </div>
                     </div>
                     
                     <div class="form-group">
@@ -108,7 +156,12 @@ export class ProjectDialog {
                     </div>
                     
                     <div class="form-group">
-                        <label>${i18n("category") || "分类"}:</label>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                            <label style="margin-bottom: 0;">${i18n("category") || "分类"}:</label>
+                            <button type="button" id="projectCategorySettingsBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("settings") || "设置"}" title="${i18n("settings") || "设置"}" style="padding: 0 8px; height: 24px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                <svg style="width: 14px; height: 14px;"><use xlink:href="#iconSettings"></use></svg>
+                            </button>
+                        </div>
                         <div id="category-selector" class="category-selector" style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px;">
                             <!-- 分类选择器将在这里渲染 -->
                         </div>
@@ -177,6 +230,39 @@ export class ProjectDialog {
         const bindBlockBtn = this.dialog.element.querySelector('#projectBindBlockBtn') as HTMLButtonElement;
         const blockInput = this.dialog.element.querySelector('#projectBlockInput') as HTMLInputElement;
 
+        const emojiBtn = this.dialog.element.querySelector('#projectEmojiBtn') as HTMLButtonElement;
+        emojiBtn?.addEventListener('click', (event: MouseEvent) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const rect = emojiBtn.getBoundingClientRect();
+            openEmoji({
+                hideDynamicIcon: true,
+                hideCustomIcon: true,
+                position: {
+                    x: rect.left,
+                    y: rect.bottom
+                },
+                selectedCB: (emojiCode: string) => {
+                    if (!emojiCode) {
+                        this.selectedEmoji = '';
+                        emojiBtn.textContent = '';
+                        return;
+                    }
+                    const codePoints = emojiCode.split(/[-\s]+/).map(cp => parseInt(cp, 16));
+                    const emoji = String.fromCodePoint(...codePoints);
+                    this.selectedEmoji = emoji;
+                    emojiBtn.textContent = emoji;
+                }
+            });
+        });
+
+        emojiBtn?.addEventListener('contextmenu', (event: MouseEvent) => {
+            event.preventDefault();
+            event.stopPropagation();
+            this.selectedEmoji = '';
+            emojiBtn.textContent = '';
+        });
+
         saveBtn?.addEventListener('click', () => {
             this.saveProject();
         });
@@ -229,6 +315,84 @@ export class ProjectDialog {
         randomColorBtn?.addEventListener('click', () => {
             if (colorInput) colorInput.value = generateRandomColor();
         });
+
+        // 文件夹设置按钮
+        const folderSettingsBtn = this.dialog.element.querySelector('#projectFolderSettingsBtn') as HTMLButtonElement;
+        folderSettingsBtn?.addEventListener('click', () => {
+            const folderDialog = new ProjectFolderManageDialog(this.plugin, () => {
+                this.refreshFolders();
+                window.dispatchEvent(new CustomEvent('projectUpdated'));
+            });
+            folderDialog.show();
+        });
+
+        // 状态设置按钮
+        const statusSettingsBtn = this.dialog.element.querySelector('#projectStatusSettingsBtn') as HTMLButtonElement;
+        statusSettingsBtn?.addEventListener('click', () => {
+            const statusDialog = new StatusManageDialog(this.plugin, () => {
+                this.refreshStatuses();
+                window.dispatchEvent(new CustomEvent('projectUpdated'));
+            });
+            statusDialog.show();
+        });
+
+        // 分类设置按钮
+        const categorySettingsBtn = this.dialog.element.querySelector('#projectCategorySettingsBtn') as HTMLButtonElement;
+        categorySettingsBtn?.addEventListener('click', () => {
+            const categoryDialog = new CategoryManageDialog(this.plugin, () => {
+                this.refreshCategories();
+                window.dispatchEvent(new CustomEvent('projectUpdated'));
+            });
+            categoryDialog.show();
+        });
+    }
+
+    private async refreshFolders() {
+        try {
+            const folderManager = ProjectFolderManager.getInstance(this.plugin);
+            const folders = await folderManager.loadFolders();
+            const folderEl = this.dialog.element.querySelector('#projectFolder') as HTMLSelectElement;
+            if (folderEl) {
+                const currentSelectedValue = folderEl.value;
+                const folderOptions = [
+                    `<option value="" ${currentSelectedValue === '' ? 'selected' : ''}>${i18n("noFolder") || "无文件夹"}</option>`,
+                    ...folders.map(folder =>
+                        `<option value="${folder.id}" ${currentSelectedValue === folder.id ? 'selected' : ''}>${folder.icon || '📂'} ${folder.name}</option>`
+                    )
+                ].join('');
+                folderEl.innerHTML = folderOptions;
+            }
+        } catch (error) {
+            console.error('刷新文件夹失败:', error);
+        }
+    }
+
+    private async refreshStatuses() {
+        try {
+            const statuses = await this.statusManager.loadStatuses();
+            const statusEl = this.dialog.element.querySelector('#projectStatus') as HTMLSelectElement;
+            if (statusEl) {
+                const currentSelectedValue = statusEl.value;
+                const statusOptions = statuses.map(status =>
+                    `<option value="${status.id}" ${currentSelectedValue === status.id ? 'selected' : ''}>${status.icon ? status.icon + ' ' : ''}${status.name}</option>`
+                ).join('');
+                statusEl.innerHTML = statusOptions;
+            }
+        } catch (error) {
+            console.error('刷新状态失败:', error);
+        }
+    }
+
+    private async refreshCategories() {
+        try {
+            const categories = await this.categoryManager.loadCategories();
+            const categoryIds = categories.map(c => c.id);
+            // 过滤掉已被删除的分类ID
+            this.selectedCategoryIds = this.selectedCategoryIds.filter(id => categoryIds.includes(id));
+            this.renderCategorySelector();
+        } catch (error) {
+            console.error('刷新分类失败:', error);
+        }
     }
 
     private renderCategorySelector() {
@@ -351,12 +515,14 @@ export class ProjectDialog {
             const startDateEl = this.dialog.element.querySelector('#projectStartDate') as HTMLInputElement;
             const endDateEl = this.dialog.element.querySelector('#projectEndDate') as HTMLInputElement;
 
-            const title = titleEl.value.trim();
-            if (!title) {
+            const titleText = titleEl.value.trim();
+            if (!titleText) {
                 showMessage(i18n("pleaseEnterProjectTitle"));
                 titleEl.focus();
                 return;
             }
+            const emoji = this.selectedEmoji || '';
+            const title = emoji ? `${emoji} ${titleText}` : titleText;
 
             const startDate = startDateEl.value;
             const endDate = endDateEl.value;
@@ -378,11 +544,15 @@ export class ProjectDialog {
             const rawBlockVal = blockInputEl?.value?.trim() || '';
             const inputBlockId = rawBlockVal ? (this.extractBlockId(rawBlockVal) || rawBlockVal) : null;
 
+            const folderEl = this.dialog.element.querySelector('#projectFolder') as HTMLSelectElement;
+            const folderId = folderEl?.value || '';
+
             const project = {
                 ...(existingProject || {}),
                 ...displayDefaults,
                 id: projectId,
                 blockId: inputBlockId || null,
+                folderId: folderId || '',
                 title: title,
                 note: noteEl.value.trim(),
                 status: statusEl.value,
@@ -416,5 +586,20 @@ export class ProjectDialog {
             console.error('保存项目失败:', error);
             showMessage(i18n("saveReminderFailed") || "保存项目失败");
         }
+    }
+
+    private parseTitle(title: string): { emoji: string; text: string } {
+        if (!title) return { emoji: '', text: '' };
+        const emojiRegex = /^([\u{1F1E6}-\u{1F1FF}]{2}|(?:\p{Extended_Pictographic}|\p{Emoji_Presentation})(?:\uFE0F|[\u{1F3FB}-\u{1F3FF}]|\u200D\p{Extended_Pictographic})*)/u;
+        const match = title.match(emojiRegex);
+        if (match) {
+            const emoji = match[0];
+            let text = title.slice(emoji.length);
+            if (text.startsWith(' ')) {
+                text = text.slice(1);
+            }
+            return { emoji, text };
+        }
+        return { emoji: '', text: title };
     }
 }

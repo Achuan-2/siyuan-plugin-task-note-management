@@ -42,7 +42,6 @@
 }
 
 .project-item {
-    background: var(--b3-theme-surface);
     border: 1px solid var(--b3-theme-surface-lighter);
     border-radius: 6px;
     margin-bottom: 8px;
@@ -503,5 +502,180 @@
 
     .dialog-buttons .b3-button:hover {
         transform: none;
+    }
+}
+
+// 文件夹和清单模式样式
+.project-folder-group {
+    margin-bottom: 8px;
+    background: var(--b3-theme-background-hover);
+    background: color-mix(in srgb, var(--b3-theme-background-hover), transparent 90%);
+    border-radius: 6px;
+    border: 1px solid var(--b3-theme-surface-lighter);
+    overflow: hidden;
+    transition: all 0.2s ease;
+
+    &.collapsed {
+        .project-folder-children {
+            display: none;
+        }
+    }
+}
+
+.project-folder-header {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    cursor: default;
+    background-color: var(--b3-theme-surface);
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+    border-bottom: 1px solid transparent;
+
+    &:hover {
+        background-color: var(--b3-theme-surface-lighter);
+        
+        .project-folder-more-btn {
+            opacity: 1;
+        }
+    }
+
+    &.drag-over {
+        background-color: color-mix(in srgb, var(--b3-theme-primary), transparent 90%) !important;
+        border: 1px dashed var(--b3-theme-primary) !important;
+    }
+}
+
+.project-folder-chevron {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--b3-theme-on-surface);
+    opacity: 0.6;
+    margin-right: 4px;
+    cursor: pointer;
+    
+    svg {
+        fill: currentColor;
+        transition: transform 0.2s ease;
+    }
+}
+
+.project-folder-icon {
+    font-size: 14px;
+    margin-right: 6px;
+}
+
+.project-folder-name {
+    font-weight: 500;
+    color: var(--b3-theme-on-background);
+    font-size: 13px;
+}
+
+.project-folder-count {
+    font-size: 11px;
+    color: var(--b3-theme-on-surface);
+    opacity: 0.6;
+    margin-left: 6px;
+}
+
+.project-folder-more-btn {
+    opacity: 0.2;
+    transition: opacity 0.2s ease;
+    padding: 2px !important;
+    min-height: auto !important;
+    
+    &:hover {
+        opacity: 1;
+        background-color: var(--b3-theme-background-hover) !important;
+    }
+    
+    svg {
+        fill: var(--b3-theme-on-surface);
+    }
+}
+
+.project-folder-children {
+    padding: 2px 0 2px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.project-folder-empty {
+    padding: 6px 12px;
+    color: var(--b3-theme-on-surface);
+    opacity: 0.5;
+    font-size: 12px;
+    font-style: italic;
+}
+
+// 清单项目样式项
+.project-item--list {
+    display: flex;
+    align-items: center;
+    padding: 6px 12px !important;
+    margin-bottom: 4px !important;
+    border-radius: 4px !important;
+    min-height: 32px;
+    box-shadow: none !important;
+    animation: none !important;
+    position: relative;
+    border: 1px solid var(--b3-theme-surface-lighter) !important;
+
+    &:hover {
+        transform: none !important;
+        box-shadow: none !important;
+        border-color: var(--b3-theme-primary-light) !important;
+    }
+
+    .project-item__content {
+        width: 100%;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 0;
+    }
+
+    .project-item__info {
+        display: flex;
+        align-items: center;
+        width: 100%;
+        margin-top: 0 !important;
+    }
+
+    .project-item__title {
+        font-size: 13px;
+        margin-bottom: 0 !important;
+        line-height: 1.4;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .project-item__color-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+        flex-shrink: 0;
+    }
+}
+
+// 下拉框样式微调
+.project-view-mode-select {
+    cursor: pointer;
+    border: 1px solid var(--b3-theme-surface-lighter);
+    border-radius: 4px;
+    background-color: var(--b3-theme-surface);
+    color: var(--b3-theme-on-surface);
+    padding: 2px 25px 2px 8px !important;
+    outline: none;
+    font-size: 12px;
+    height: 24px;
+    transition: all 0.2s ease;
+
+    &:hover, &:focus {
+        border-color: var(--b3-theme-primary-light);
+        background-color: var(--b3-theme-surface-lighter);
     }
 }

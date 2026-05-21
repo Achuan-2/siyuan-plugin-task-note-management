@@ -1,4 +1,4 @@
-import { showMessage, confirm, Menu, Dialog, getAllModels, platformUtils } from "siyuan";
+import { showMessage, confirm, Menu, Dialog, getAllModels, platformUtils, openEmoji } from "siyuan";
 import { getLastStatsMode } from "./stats/statsMode";
 import { showStatsDialog } from "./stats/ShowStatsDialog";
 
@@ -20,6 +20,8 @@ import { getAllReminders } from "../utils/icsSubscription";
 import { SortMenuDialog } from "./SortMenuDialog";
 import { SortCriterion, getSortCriterionName } from "../utils/sortConfig";
 import { generateRandomColor } from "../utils/uiUtils";
+import { ProjectFolderManager } from "../utils/projectFolderManager";
+import { ProjectFolderManageDialog } from "./ProjectFolderManageDialog";
 
 
 const PROJECT_PANEL_SORT_METHODS = new Set(['category', 'priority', 'time', 'created', 'title']);
@@ -226,11 +228,15 @@ export class ProjectPanel {
     private isDragging: boolean = false;
     private draggedElement: HTMLElement | null = null;
     private draggedProject: any = null;
+    private isDraggingFolder: boolean = false;
+    private draggedFolderElement: HTMLElement | null = null;
+    private draggedFolder: any = null;
     private currentProjectsCache: any[] = [];
     // 保存每个状态分组的折叠状态（key = statusId, value = boolean; true=collapsed）
     private groupCollapsedState: Record<string, boolean> = {};
     // 缓存提醒数据，避免为每个项目重复读取
     private reminderDataCache: any = null;
+    private currentViewMode: 'card' | 'list' = 'card';
 
     constructor(container: HTMLElement, plugin?: any) {
         this.container = container;
@@ -277,6 +283,8 @@ export class ProjectPanel {
         await this.categoryManager.initialize();
         await this.statusManager.initialize();
         await this.restorePanelSettings();
+        const folderManager = ProjectFolderManager.getInstance(this.plugin);
+        await folderManager.initialize();
         this.initUI();
         this.loadProjects();
 
@@ -313,8 +321,37 @@ export class ProjectPanel {
         const titleSpan = document.createElement('span');
         titleSpan.textContent = i18n("projectManagement") || "项目管理";
 
+        // 添加切换视图下拉框
+        const viewModeSelect = document.createElement('select');
+        viewModeSelect.className = 'b3-select project-view-mode-select';
+        viewModeSelect.style.marginLeft = '8px';
+        viewModeSelect.style.padding = '2px 4px';
+        viewModeSelect.style.height = '22px';
+        viewModeSelect.style.fontSize = '12px';
+        viewModeSelect.style.width = 'auto';
+
+        const cardOption = document.createElement('option');
+        cardOption.value = 'card';
+        cardOption.textContent = i18n("cardViewMode") || "卡片列表";
+        cardOption.selected = this.currentViewMode === 'card';
+
+        const listOption = document.createElement('option');
+        listOption.value = 'list';
+        listOption.textContent = i18n("listViewMode") || "清单列表";
+        listOption.selected = this.currentViewMode === 'list';
+
+        viewModeSelect.appendChild(cardOption);
+        viewModeSelect.appendChild(listOption);
+
+        viewModeSelect.addEventListener('change', async () => {
+            this.currentViewMode = viewModeSelect.value as 'card' | 'list';
+            await this.savePanelSettings();
+            await this.loadProjects();
+        });
+
         titleContainer.appendChild(iconSpan);
         titleContainer.appendChild(titleSpan);
+        titleContainer.appendChild(viewModeSelect);
 
         // 添加右侧按钮容器
         const actionContainer = document.createElement('div');
@@ -520,6 +557,23 @@ export class ProjectPanel {
         this.projectsContainer = document.createElement('div');
         this.projectsContainer.className = 'project-list';
         this.container.appendChild(this.projectsContainer);
+
+        this.projectsContainer.addEventListener('dragover', (e) => {
+            if (this.currentViewMode === 'list' && this.isDragging) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+            }
+        });
+
+        this.projectsContainer.addEventListener('drop', async (e) => {
+            if (this.currentViewMode === 'list' && this.isDragging && this.draggedProject) {
+                const target = e.target as HTMLElement;
+                if (!target.closest('.project-folder-group') && !target.closest('.project-item')) {
+                    e.preventDefault();
+                    await this.moveProjectToFolder(this.draggedProject.id, '');
+                }
+            }
+        });
 
         // 渲染分类过滤器
         this.updateCategoryFilterButtonText();
@@ -744,7 +798,9 @@ export class ProjectPanel {
             // 分类项目
             let displayProjects = [];
             if (this.currentTab === 'all') {
-                displayProjects = filteredProjects;
+                // 默认全部项目不显示已归档项目
+                const archivedStatusIds = new Set(statuses.filter((s: any) => s.isArchived).map((s: any) => s.id));
+                displayProjects = filteredProjects.filter((project: any) => !archivedStatusIds.has(project.status));
             } else {
                 displayProjects = filteredProjects.filter((project: any) => project.status === this.currentTab);
             }
@@ -855,6 +911,11 @@ export class ProjectPanel {
         // 缓存当前项目列表
         this.currentProjectsCache = [...projects];
 
+        if (this.currentViewMode === 'list') {
+            this.renderProjectsAsChecklist(projects);
+            return;
+        }
+
         // 如果 currentTab 为 'all'，则按状态分组并排除 archived
         if (this.currentTab === 'all') {
             // 按状态分组
@@ -862,7 +923,8 @@ export class ProjectPanel {
             projects.forEach(p => {
                 const st = p.status || 'active';
                 // 跳过归档状态
-                if (st === 'archived') return;
+                const statusInfo = this.statusManager.getStatusById(st);
+                if (statusInfo?.isArchived) return;
                 if (!groups[st]) groups[st] = [];
                 groups[st].push(p);
             });
@@ -905,6 +967,10 @@ export class ProjectPanel {
     }
 
     private createProjectElement(project: any): HTMLElement {
+        if (this.currentViewMode === 'list') {
+            return this.createProjectListElement(project);
+        }
+
         const today = getLogicalDateString();
         const isOverdue = project.endDate && compareDateStrings(project.endDate, today) < 0;
         const priority = project.priority || 'none';
@@ -1004,6 +1070,9 @@ export class ProjectPanel {
         const titleEl = document.createElement('span');
         titleEl.className = 'project-item__title';
 
+        const parsed = this.parseTitle(project.title);
+        const displayTitle = parsed.text || i18n("unnamedNote") || '未命名项目';
+
         const dotEl = document.createElement('span');
         dotEl.className = 'project-item__color-dot';
         dotEl.style.cssText = `
@@ -1017,8 +1086,21 @@ export class ProjectPanel {
         `;
         titleEl.appendChild(dotEl);
 
+        if (parsed.emoji) {
+            const emojiEl = document.createElement('span');
+            emojiEl.className = 'project-item__emoji-icon';
+            emojiEl.textContent = parsed.emoji;
+            emojiEl.style.cssText = `
+                font-size: 14px;
+                flex-shrink: 0;
+                display: inline-block;
+                text-decoration: none !important;
+            `;
+            titleEl.appendChild(emojiEl);
+        }
+
         const textEl = document.createElement('span');
-        textEl.textContent = project.title || i18n("unnamedNote") || '未命名项目';
+        textEl.textContent = displayTitle;
         titleEl.appendChild(textEl);
 
         if (project.blockId) {
@@ -1482,6 +1564,7 @@ export class ProjectPanel {
         projectEl.style.cursor = 'grab';
 
         projectEl.addEventListener('dragstart', (e) => {
+            e.stopPropagation();
             const target = e.target as HTMLElement | null;
             if (target?.closest('.project-item__more-button')) {
                 e.preventDefault();
@@ -1976,6 +2059,43 @@ export class ProjectPanel {
             iconHTML: "🏷️",
             label: i18n("setCategory") || "设置分类",
             submenu: createCategoryMenuItems()
+        });
+
+        // 设置项目文件夹子菜单
+        const createFolderMenuItems = () => {
+            const folderManager = ProjectFolderManager.getInstance(this.plugin);
+            const folders = folderManager.getFolders();
+            const currentFolderId = project.folderId || '';
+
+            const menuItems = [];
+
+            menuItems.push({
+                iconHTML: "❌",
+                label: i18n("noFolder") || "无文件夹",
+                current: currentFolderId === '',
+                click: () => {
+                    this.moveProjectToFolder(project.id, '');
+                }
+            });
+
+            folders.forEach(folder => {
+                menuItems.push({
+                    iconHTML: "📁",
+                    label: folder.name,
+                    current: currentFolderId === folder.id,
+                    click: () => {
+                        this.moveProjectToFolder(project.id, folder.id);
+                    }
+                });
+            });
+
+            return menuItems;
+        };
+
+        menu.addItem({
+            iconHTML: "📁",
+            label: i18n("setFolder") || "设置文件夹",
+            submenu: createFolderMenuItems()
         });
 
         // 设置状态子菜单
@@ -2591,6 +2711,15 @@ export class ProjectPanel {
                 }
             });
 
+            // 添加项目文件夹管理
+            menu.addItem({
+                icon: 'iconFolder',
+                label: i18n("manageFolders") || "管理项目文件夹",
+                click: () => {
+                    this.showFolderManageDialog();
+                }
+            });
+
             // 添加状态管理
             menu.addItem({
                 icon: 'iconSettings',
@@ -2826,6 +2955,7 @@ export class ProjectPanel {
             this.syncLegacySortStateFromCriteria();
             this.showOnlyWithDoingTasks = settings.projectPanelShowOnlyDoing || false;
             this.selectedCategories = settings.projectPanelSelectedCategories || [];
+            this.currentViewMode = settings.projectPanelViewMode || 'card';
         } catch (error) {
             console.error('恢复项目面板设置失败:', error);
         }
@@ -2841,6 +2971,7 @@ export class ProjectPanel {
             settings.projectPanelSortOrder = primary.order;
             settings.projectPanelShowOnlyDoing = this.showOnlyWithDoingTasks;
             settings.projectPanelSelectedCategories = this.selectedCategories;
+            settings.projectPanelViewMode = this.currentViewMode;
             await this.plugin.saveSettings(settings);
         } catch (error) {
             console.error('保存项目面板设置失败:', error);
@@ -2886,5 +3017,716 @@ export class ProjectPanel {
         `;
 
         return html;
+    }
+
+    private renderProjectsAsChecklist(projects: any[]) {
+        this.projectsContainer.innerHTML = '';
+        const folderManager = ProjectFolderManager.getInstance(this.plugin);
+        const folders = folderManager.getFolders();
+
+        const folderProjectsMap: Record<string, any[]> = {};
+        const rootProjects: any[] = [];
+
+        projects.forEach(p => {
+            const folderId = p.folderId || '';
+            if (folderId && folders.some(f => f.id === folderId)) {
+                if (!folderProjectsMap[folderId]) folderProjectsMap[folderId] = [];
+                folderProjectsMap[folderId].push(p);
+            } else {
+                rootProjects.push(p);
+            }
+        });
+
+        folders.forEach(folder => {
+            const folderProjects = folderProjectsMap[folder.id] || [];
+            if (this.currentSearchQuery && folderProjects.length === 0) {
+                return;
+            }
+            const folderGroupEl = this.createFolderGroupElement(folder, folderProjects);
+            this.projectsContainer.appendChild(folderGroupEl);
+        });
+
+        rootProjects.forEach(project => {
+            const projectEl = this.createProjectElement(project);
+            this.projectsContainer.appendChild(projectEl);
+        });
+    }
+
+    private createFolderGroupElement(folder: any, folderProjects: any[]): HTMLElement {
+        const groupEl = document.createElement('div');
+        groupEl.className = 'project-folder-group';
+        if (folder.collapsed) {
+            groupEl.classList.add('collapsed');
+        }
+        groupEl.dataset.folderId = folder.id;
+
+        const headerEl = document.createElement('div');
+        headerEl.className = 'project-folder-header';
+        headerEl.style.cssText = `
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            cursor: default;
+            border-radius: 4px;
+            user-select: none;
+            transition: background-color 0.2s ease;
+        `;
+
+        const chevronEl = document.createElement('span');
+        chevronEl.className = 'project-folder-chevron';
+        chevronEl.style.cursor = 'pointer';
+        chevronEl.innerHTML = folder.collapsed 
+            ? '<svg style="width:12px;height:12px;margin-right:6px;transform:rotate(-90deg);transition:transform 0.2s;"><use xlink:href="#iconDown"></use></svg>'
+            : '<svg style="width:12px;height:12px;margin-right:6px;transition:transform 0.2s;"><use xlink:href="#iconDown"></use></svg>';
+
+        const iconEl = document.createElement('span');
+        iconEl.className = 'project-folder-icon';
+        iconEl.textContent = folder.icon || '📂';
+        iconEl.style.marginRight = '6px';
+
+        const nameEl = document.createElement('span');
+        nameEl.className = 'project-folder-name';
+        nameEl.textContent = folder.name;
+        nameEl.style.flex = '1';
+
+        const countEl = document.createElement('span');
+        countEl.className = 'project-folder-count';
+        countEl.textContent = `(${folderProjects.length})`;
+        countEl.style.cssText = 'font-size:12px;opacity:0.6;margin-right:8px;';
+
+        const moreBtn = document.createElement('button');
+        moreBtn.className = 'b3-button b3-button--text project-folder-more-btn';
+        moreBtn.innerHTML = '<svg style="width:14px;height:14px;"><use xlink:href="#iconMore"></use></svg>';
+        moreBtn.style.padding = '2px 4px';
+        moreBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.showFolderContextMenu(e, folder);
+        });
+
+        headerEl.appendChild(chevronEl);
+        headerEl.appendChild(iconEl);
+        headerEl.appendChild(nameEl);
+        headerEl.appendChild(countEl);
+        headerEl.appendChild(moreBtn);
+
+        chevronEl.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const isCollapsed = !folder.collapsed;
+            folder.collapsed = isCollapsed;
+            const folderManager = ProjectFolderManager.getInstance(this.plugin);
+            await folderManager.updateFolder(folder.id, { collapsed: isCollapsed });
+
+            if (isCollapsed) {
+                groupEl.classList.add('collapsed');
+                chevronEl.querySelector('svg').style.transform = 'rotate(-90deg)';
+                childrenEl.style.display = 'none';
+            } else {
+                groupEl.classList.remove('collapsed');
+                chevronEl.querySelector('svg').style.transform = 'rotate(0deg)';
+                childrenEl.style.display = 'block';
+            }
+        });
+
+        const childrenEl = document.createElement('div');
+        childrenEl.className = 'project-folder-children';
+        childrenEl.style.cssText = `
+            margin-top: 4px;
+            display: ${folder.collapsed ? 'none' : 'block'};
+        `;
+
+        if (folderProjects.length === 0) {
+            const emptyEl = document.createElement('div');
+            emptyEl.className = 'project-folder-empty';
+            emptyEl.textContent = i18n("noProjects") || '暂无项目';
+            emptyEl.style.cssText = 'padding:8px 12px;opacity:0.5;font-size:12px;';
+            childrenEl.appendChild(emptyEl);
+        } else {
+            folderProjects.forEach(project => {
+                const projectEl = this.createProjectElement(project);
+                childrenEl.appendChild(projectEl);
+            });
+        }
+
+        groupEl.appendChild(headerEl);
+        groupEl.appendChild(childrenEl);
+
+        this.bindFolderDragEvents(groupEl, headerEl, folder);
+
+        return groupEl;
+    }
+
+    private bindFolderDragEvents(groupEl: HTMLElement, headerEl: HTMLElement, folder: any) {
+        if (!this.plugin?.isInMobileApp) {
+            headerEl.draggable = true;
+            headerEl.style.cursor = 'grab';
+
+            headerEl.addEventListener('dragstart', (e) => {
+                const target = e.target as HTMLElement;
+                if (target.closest('.project-folder-more-btn') || target.closest('.project-folder-chevron')) {
+                    e.preventDefault();
+                    return;
+                }
+
+                this.isDraggingFolder = true;
+                this.draggedFolderElement = groupEl;
+                this.draggedFolder = folder;
+                groupEl.style.opacity = '0.5';
+                headerEl.style.cursor = 'grabbing';
+
+                if (e.dataTransfer) {
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', folder.id);
+                }
+            });
+
+            headerEl.addEventListener('dragend', () => {
+                this.isDraggingFolder = false;
+                this.draggedFolderElement = null;
+                this.draggedFolder = null;
+                groupEl.style.opacity = '';
+                headerEl.style.cursor = 'grab';
+                this.hideDropIndicator();
+            });
+
+            groupEl.addEventListener('dragover', (e) => {
+                if (this.isDraggingFolder && this.draggedFolderElement !== groupEl) {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    this.showDropIndicator(groupEl, e);
+                }
+            });
+
+            groupEl.addEventListener('dragleave', () => {
+                if (this.isDraggingFolder) {
+                    this.hideDropIndicator();
+                }
+            });
+
+            groupEl.addEventListener('drop', async (e) => {
+                if (this.isDraggingFolder && this.draggedFolderElement !== groupEl) {
+                    e.preventDefault();
+                    this.hideDropIndicator();
+                    await this.handleFolderDrop(this.draggedFolder, folder, e);
+                }
+            });
+        }
+
+        const handleDragOver = (e: DragEvent) => {
+            if (this.isDragging && this.draggedProject) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                headerEl.classList.add('drag-over');
+            }
+        };
+
+        const handleDragLeave = () => {
+            headerEl.classList.remove('drag-over');
+        };
+
+        const handleDrop = async (e: DragEvent) => {
+            if (this.isDragging && this.draggedProject) {
+                e.preventDefault();
+                headerEl.classList.remove('drag-over');
+                await this.moveProjectToFolder(this.draggedProject.id, folder.id);
+            }
+        };
+
+        headerEl.addEventListener('dragover', handleDragOver);
+        headerEl.addEventListener('dragleave', handleDragLeave);
+        headerEl.addEventListener('drop', handleDrop);
+
+        const childrenEl = groupEl.querySelector('.project-folder-children') as HTMLElement;
+        if (childrenEl) {
+            childrenEl.addEventListener('dragover', handleDragOver);
+            childrenEl.addEventListener('dragleave', handleDragLeave);
+            childrenEl.addEventListener('drop', handleDrop);
+        }
+    }
+
+    private async moveProjectToFolder(projectId: string, folderId: string) {
+        try {
+            const projectData = await this.plugin.loadProjectData();
+            if (projectData[projectId]) {
+                if (projectData[projectId].folderId === folderId) return;
+
+                projectData[projectId].folderId = folderId;
+                projectData[projectId].updatedTime = new Date().toISOString();
+                await this.plugin.saveProjectData(projectData);
+                
+                window.dispatchEvent(new CustomEvent('projectUpdated', {
+                    detail: { projectId, project: projectData[projectId] }
+                }));
+                showMessage(i18n("reminderSaved") || "项目保存成功");
+            }
+        } catch (error) {
+            console.error('移动项目到文件夹失败:', error);
+            showMessage(i18n("saveReminderFailed") || "保存项目失败");
+        }
+    }
+
+    private async handleFolderDrop(draggedFolder: any, targetFolder: any, event: DragEvent) {
+        try {
+            const dropTarget = (event.currentTarget as HTMLElement) || (event.target as HTMLElement);
+            const rect = dropTarget.getBoundingClientRect();
+            const midpoint = rect.top + rect.height / 2;
+            const insertBefore = event.clientY < midpoint;
+
+            await this.reorderFolders(draggedFolder, targetFolder, insertBefore);
+
+            showMessage(i18n("reminderSaved") || "排序已更新");
+            this.loadProjects(); // 重新加载以应用新排序并渲染
+        } catch (error) {
+            console.error('处理文件夹拖放失败:', error);
+            showMessage(i18n("saveReminderFailed") || "排序更新失败");
+        }
+    }
+
+    private async reorderFolders(draggedFolder: any, targetFolder: any, insertBefore: boolean) {
+        try {
+            const folderManager = ProjectFolderManager.getInstance(this.plugin);
+            const folders = folderManager.getFolders();
+
+            const draggedIndex = folders.findIndex(f => f.id === draggedFolder.id);
+            if (draggedIndex === -1) return;
+
+            const [draggedItem] = folders.splice(draggedIndex, 1);
+
+            const targetIndex = folders.findIndex(f => f.id === targetFolder.id);
+            if (targetIndex === -1) return;
+
+            const insertIndex = insertBefore ? targetIndex : targetIndex + 1;
+            folders.splice(insertIndex, 0, draggedItem);
+
+            await folderManager.reorderFolders(folders);
+        } catch (error) {
+            console.error('重新排序文件夹失败:', error);
+            throw error;
+        }
+    }
+
+    private createProjectListElement(project: any): HTMLElement {
+        const today = getLogicalDateString();
+        const isOverdue = project.endDate && compareDateStrings(project.endDate, today) < 0;
+        const priority = project.priority || 'none';
+        const status = project.status || 'active';
+
+        const projectEl = document.createElement('div');
+        projectEl.className = `project-item project-item--list ${isOverdue ? 'project-item--overdue' : ''} project-item--${status}`;
+
+        projectEl.dataset.projectId = project.id;
+        projectEl.dataset.priority = priority;
+
+        const itemMoreBtn = document.createElement('button');
+        itemMoreBtn.type = 'button';
+        itemMoreBtn.className = 'b3-button b3-button--text project-item__more-button';
+        itemMoreBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconMore"></use></svg>';
+        const shouldAlwaysShowMoreButton = !!this.plugin?.isInMobileApp;
+        itemMoreBtn.style.cssText = `
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            padding: 0;
+            border-radius: 4px;
+            opacity: ${shouldAlwaysShowMoreButton ? '1' : '0'};
+            pointer-events: ${shouldAlwaysShowMoreButton ? 'auto' : 'none'};
+            transition: opacity 0.2s ease;
+            z-index: 10;
+        `;
+        itemMoreBtn.classList.add('ariaLabel');
+        itemMoreBtn.setAttribute('aria-label', i18n("more") || "更多");
+        itemMoreBtn.draggable = false;
+
+        const setMoreButtonVisible = (visible: boolean) => {
+            if (shouldAlwaysShowMoreButton) return;
+            itemMoreBtn.style.opacity = visible ? '1' : '0';
+            itemMoreBtn.style.pointerEvents = visible ? 'auto' : 'none';
+        };
+
+        if (!shouldAlwaysShowMoreButton) {
+            projectEl.addEventListener('mouseenter', () => setMoreButtonVisible(true));
+            projectEl.addEventListener('mouseleave', () => setMoreButtonVisible(false));
+            itemMoreBtn.addEventListener('focus', () => setMoreButtonVisible(true));
+            itemMoreBtn.addEventListener('blur', () => setMoreButtonVisible(false));
+        }
+
+        itemMoreBtn.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
+        });
+        itemMoreBtn.addEventListener('dragstart', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        });
+        itemMoreBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const rect = itemMoreBtn.getBoundingClientRect();
+            this.showProjectContextMenu({
+                clientX: rect.right,
+                clientY: rect.bottom + 4
+            }, project);
+        });
+        projectEl.appendChild(itemMoreBtn);
+
+        if (!this.isDragDisabledBySortMode()) {
+            this.addDragFunctionality(projectEl, project);
+        }
+
+        projectEl.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            this.showProjectContextMenu(e, project);
+        });
+
+        projectEl.addEventListener('click', (e) => {
+            if ((e.target as HTMLElement).closest('.project-item__more-button')) return;
+            e.preventDefault();
+            e.stopPropagation();
+            this.openProjectKanban(project);
+        });
+
+        const contentEl = document.createElement('div');
+        contentEl.className = 'project-item__content';
+
+        const infoEl = document.createElement('div');
+        infoEl.className = 'project-item__info';
+        infoEl.style.cssText = `
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            width: 100%;
+        `;
+
+        const parsed = this.parseTitle(project.title);
+        const displayTitle = parsed.text || i18n("unnamedNote") || '未命名项目';
+
+        const dotEl = document.createElement('span');
+        dotEl.className = 'project-item__color-dot';
+        dotEl.style.cssText = `
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: ${project.color || '#cccccc'};
+            flex-shrink: 0;
+            display: inline-block;
+        `;
+
+        const textEl = document.createElement('span');
+        textEl.textContent = displayTitle;
+
+        const titleEl = document.createElement('span');
+        titleEl.className = 'project-item__title';
+        titleEl.appendChild(dotEl);
+
+        if (parsed.emoji) {
+            const emojiEl = document.createElement('span');
+            emojiEl.className = 'project-item__emoji-icon';
+            emojiEl.textContent = parsed.emoji;
+            emojiEl.style.cssText = `
+                font-size: 14px;
+                flex-shrink: 0;
+                display: inline-block;
+            `;
+            titleEl.appendChild(emojiEl);
+        }
+
+        titleEl.appendChild(textEl);
+
+        if (project.blockId) {
+            titleEl.setAttribute('data-type', 'a');
+            titleEl.setAttribute('data-href', `siyuan://blocks/${project.blockId}`);
+            titleEl.style.cssText = `
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                cursor: pointer;
+                color: var(--b3-protyle-inline-blockref-color);
+                font-weight: 500;
+                text-decoration: none;
+            `;
+            textEl.style.textDecoration = 'underline';
+            titleEl.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.openProject(project.blockId);
+            });
+        } else {
+            titleEl.style.cssText = `
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                font-weight: 500;
+            `;
+        }
+
+        infoEl.appendChild(titleEl);
+        contentEl.appendChild(infoEl);
+        projectEl.appendChild(contentEl);
+
+        return projectEl;
+    }
+
+    private showFolderContextMenu(event: MouseEvent | { clientX: number, clientY: number }, folder: any) {
+        const menu = new Menu("folderContextMenu");
+
+        menu.addItem({
+            icon: "iconAdd",
+            label: i18n("createProject") || "新建项目",
+            click: () => this.createProjectInFolder(folder)
+        });
+
+        menu.addItem({
+            icon: "iconEdit",
+            label: i18n("editFolder") || "修改文件夹",
+            click: () => this.showEditFolderDialog(folder)
+        });
+
+        menu.addSeparator();
+
+        menu.addItem({
+            icon: "iconTrashcan",
+            label: i18n("deleteFolder") || "删除文件夹",
+            click: () => this.showDeleteFolderDialog(folder)
+        });
+
+        menu.open({
+            x: event.clientX,
+            y: event.clientY
+        });
+    }
+
+    private createProjectInFolder(folder: any) {
+        const dialog = new ProjectDialog(undefined, this.plugin, folder.id);
+        dialog.show();
+    }
+
+    private showEditFolderDialog(folder: any) {
+        const editDialog = new Dialog({
+            title: i18n("editFolder") || "修改文件夹",
+            content: `
+                <div class="folder-edit-dialog">
+                    <div class="b3-dialog__content">
+                        <div class="b3-form__group">
+                            <label class="b3-form__label">${i18n("folderName") || "文件夹名称"}</label>
+                            <input type="text" id="folderNameInput" class="b3-text-field" value="${folder.name || ''}" placeholder="${i18n("pleaseEnterFolderName") || "请输入文件夹名称"}">
+                        </div>
+                        <div class="b3-form__group">
+                            <label class="b3-form__label">${i18n("folderIcon") || "文件夹图标"}</label>
+                            <div id="folderIconDisplay" class="folder-icon-display">${folder.icon || '📂'}</div>
+                        </div>
+                    </div>
+                    <div class="b3-dialog__action">
+                        <button class="b3-button b3-button--cancel" id="editCancelBtn">${i18n("cancel") || "取消"}</button>
+                        <button class="b3-button b3-button--primary" id="editConfirmBtn">${i18n("save") || "保存"}</button>
+                    </div>
+                    <style>
+                        .folder-edit-dialog {
+                            display: flex;
+                            flex-direction: column;
+                        }
+                        .folder-icon-display {
+                            width: 40px;
+                            height: 40px;
+                            border-radius: 50%;
+                            background: var(--b3-theme-surface-lighter);
+                            border: 2px solid var(--b3-theme-primary-lighter);
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            font-size: 20px;
+                            cursor: pointer;
+                            transition: all 0.2s;
+                            user-select: none;
+                        }
+                        .folder-icon-display:hover {
+                            transform: scale(1.1);
+                            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+                        }
+                    </style>
+                </div>
+            `,
+            width: "400px"
+        });
+
+        const nameInput = editDialog.element.querySelector('#folderNameInput') as HTMLInputElement;
+        nameInput.focus();
+
+        const iconDisplay = editDialog.element.querySelector('#folderIconDisplay') as HTMLElement;
+        const cancelBtn = editDialog.element.querySelector('#editCancelBtn') as HTMLButtonElement;
+        const confirmBtn = editDialog.element.querySelector('#editConfirmBtn') as HTMLButtonElement;
+
+        iconDisplay?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.openBuiltInEmojiPicker(iconDisplay);
+        });
+
+        cancelBtn?.addEventListener('click', () => editDialog.destroy());
+
+        confirmBtn?.addEventListener('click', async () => {
+            const name = nameInput.value.trim();
+            const icon = iconDisplay.textContent || '📂';
+            if (!name) {
+                showMessage(i18n("folderNameEmpty") || "文件夹名称不能为空");
+                return;
+            }
+
+            try {
+                const folderManager = ProjectFolderManager.getInstance(this.plugin);
+                await folderManager.updateFolder(folder.id, { name, icon });
+                showMessage(i18n("folderUpdated") || "文件夹已更新");
+                editDialog.destroy();
+                window.dispatchEvent(new CustomEvent('projectUpdated'));
+            } catch (error) {
+                console.error('保存文件夹失败:', error);
+                showMessage(i18n("saveFolderFailed") || "保存文件夹失败");
+            }
+        });
+    }
+
+    private async showDeleteFolderDialog(folder: any) {
+        await confirm(
+            i18n("deleteFolder") || "删除文件夹",
+            (i18n("confirmDeleteFolder") || `确认删除文件夹 "${folder.name}" 吗？注意：此操作不会删除项目，项目将被移出文件夹。`).replace('${name}', folder.name),
+            async () => {
+                try {
+                    const folderManager = ProjectFolderManager.getInstance(this.plugin);
+                    await folderManager.deleteFolder(folder.id);
+                    showMessage(i18n("folderDeleted") || "文件夹已删除");
+                    window.dispatchEvent(new CustomEvent('projectUpdated'));
+                } catch (error) {
+                    console.error('删除文件夹失败', error);
+                    showMessage(i18n("deleteFolderFailed") || "删除文件夹失败");
+                }
+            }
+        );
+    }
+
+    private showQuickAddFolderDialog() {
+        const editDialog = new Dialog({
+            title: i18n("addFolder") || "新建文件夹",
+            content: `
+                <div class="folder-edit-dialog">
+                    <div class="b3-dialog__content">
+                        <div class="b3-form__group">
+                            <label class="b3-form__label">${i18n("folderName") || "文件夹名称"}</label>
+                            <input type="text" id="folderNameInput" class="b3-text-field" placeholder="${i18n("pleaseEnterFolderName") || "请输入文件夹名称"}">
+                        </div>
+                        <div class="b3-form__group">
+                            <label class="b3-form__label">${i18n("folderIcon") || "文件夹图标"}</label>
+                            <div id="folderIconDisplay" class="folder-icon-display">📂</div>
+                        </div>
+                    </div>
+                    <div class="b3-dialog__action">
+                        <button class="b3-button b3-button--cancel" id="editCancelBtn">${i18n("cancel") || "取消"}</button>
+                        <button class="b3-button b3-button--primary" id="editConfirmBtn">${i18n("save") || "保存"}</button>
+                    </div>
+                    <style>
+                        .folder-edit-dialog {
+                            display: flex;
+                            flex-direction: column;
+                        }
+                        .folder-icon-display {
+                            width: 40px;
+                            height: 40px;
+                            border-radius: 50%;
+                            background: var(--b3-theme-surface-lighter);
+                            border: 2px solid var(--b3-theme-primary-lighter);
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            font-size: 20px;
+                            cursor: pointer;
+                            transition: all 0.2s;
+                            user-select: none;
+                        }
+                        .folder-icon-display:hover {
+                            transform: scale(1.1);
+                            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+                        }
+                    </style>
+                </div>
+            `,
+            width: "400px"
+        });
+
+        const nameInput = editDialog.element.querySelector('#folderNameInput') as HTMLInputElement;
+        nameInput.focus();
+
+        const iconDisplay = editDialog.element.querySelector('#folderIconDisplay') as HTMLElement;
+        const cancelBtn = editDialog.element.querySelector('#editCancelBtn') as HTMLButtonElement;
+        const confirmBtn = editDialog.element.querySelector('#editConfirmBtn') as HTMLButtonElement;
+
+        iconDisplay?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.openBuiltInEmojiPicker(iconDisplay);
+        });
+
+        cancelBtn?.addEventListener('click', () => editDialog.destroy());
+
+        confirmBtn?.addEventListener('click', async () => {
+            const name = nameInput.value.trim();
+            const icon = iconDisplay.textContent || '📂';
+            if (!name) {
+                showMessage(i18n("folderNameEmpty") || "文件夹名称不能为空");
+                return;
+            }
+
+            try {
+                const folderManager = ProjectFolderManager.getInstance(this.plugin);
+                await folderManager.addFolder(name, icon);
+                showMessage(i18n("folderAdded") || "文件夹已创建");
+                editDialog.destroy();
+                window.dispatchEvent(new CustomEvent('projectUpdated'));
+            } catch (error) {
+                console.error('保存文件夹失败:', error);
+                showMessage(i18n("saveFolderFailed") || "保存文件夹失败");
+            }
+        });
+    }
+
+    private showFolderManageDialog() {
+        const dialog = new ProjectFolderManageDialog(this.plugin, () => {
+            window.dispatchEvent(new CustomEvent('projectUpdated'));
+        });
+        dialog.show();
+    }
+
+    private openBuiltInEmojiPicker(target: HTMLElement) {
+        const rect = target.getBoundingClientRect();
+        openEmoji({
+            hideDynamicIcon: true,
+            hideCustomIcon: true,
+            position: {
+                x: rect.left,
+                y: rect.bottom
+            },
+            selectedCB: (emojiCode: string) => {
+                if (!emojiCode) {
+                    target.textContent = "";
+                    return;
+                }
+                const codePoints = emojiCode.split(/[-\s]+/).map(cp => parseInt(cp, 16));
+                target.textContent = String.fromCodePoint(...codePoints);
+            }
+        });
+    }
+
+    private parseTitle(title: string): { emoji: string; text: string } {
+        if (!title) return { emoji: '', text: '' };
+        const emojiRegex = /^([\u{1F1E6}-\u{1F1FF}]{2}|(?:\p{Extended_Pictographic}|\p{Emoji_Presentation})(?:\uFE0F|[\u{1F3FB}-\u{1F3FF}]|\u200D\p{Extended_Pictographic})*)/u;
+        const match = title.match(emojiRegex);
+        if (match) {
+            const emoji = match[0];
+            let text = title.slice(emoji.length);
+            if (text.startsWith(' ')) {
+                text = text.slice(1);
+            }
+            return { emoji, text };
+        }
+        return { emoji: '', text: title };
     }
 }

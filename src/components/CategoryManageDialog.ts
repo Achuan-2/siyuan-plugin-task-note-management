@@ -1,4 +1,4 @@
-﻿import { Dialog, showMessage, confirm, openEmoji } from "siyuan";
+import { Dialog, showMessage, confirm, openEmoji } from "siyuan";
 import { CategoryManager, Category } from "../utils/categoryManager";
 import { i18n } from "../pluginInstance";
 export class CategoryManageDialog {
@@ -656,6 +656,11 @@ export class CategoryManageDialog {
                 y: rect.bottom
             },
             selectedCB: (emojiCode: string) => {
+                if (!emojiCode) {
+                    target.textContent = "";
+                    previewIcon.textContent = "";
+                    return;
+                }
                 const codePoints = emojiCode.split(/[-\s]+/).map(cp => parseInt(cp, 16));
                 const selectedEmoji = String.fromCodePoint(...codePoints);
                 target.textContent = selectedEmoji;

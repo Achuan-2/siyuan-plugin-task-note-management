@@ -2890,6 +2890,10 @@ export class ProjectKanbanView {
                 selectedCB: (emojiCode: string) => {
                     // 将十六进制字符串转换为 Emoji 字符
                     // 处理可能包含多个码点的情况（如国旗、肤色修饰符等，格式如 "1f1fa-1f1f8"）
+                    if (!emojiCode) {
+                        iconInput.value = '';
+                        return;
+                    }
                     const codePoints = emojiCode.split(/[-\s]+/).map(cp => parseInt(cp, 16));
                     iconInput.value = String.fromCodePoint(...codePoints);
                 }

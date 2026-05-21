@@ -51,6 +51,7 @@ export interface Project {
     showTaskCategories?: boolean;
     clipTitleToOneLine?: boolean;
     hideEmptyStatusBars?: boolean;
+    folderId?: string;
 }
 
 /**
@@ -190,7 +191,8 @@ export class ProjectManager {
                         sort: project.sort || 0,
                         startDate: project.startDate,
                         createdTime: project.createdTime,
-                        categoryId: project.categoryId
+                        categoryId: project.categoryId,
+                        folderId: project.folderId
                     }));
 
                 // 从项目中提取颜色到 projectColors

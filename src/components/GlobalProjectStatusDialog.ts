@@ -596,6 +596,10 @@ export class GlobalProjectStatusDialog {
                 y: rect.bottom,
             },
             selectedCB: (emojiCode: string) => {
+                if (!emojiCode) {
+                    target.textContent = "";
+                    return;
+                }
                 const codePoints = emojiCode.split(/[-\s]+/).map(cp => parseInt(cp, 16));
                 target.textContent = String.fromCodePoint(...codePoints);
             },
