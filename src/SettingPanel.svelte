@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import { Dialog } from 'siyuan';
+    import { Constants, Dialog, confirm } from 'siyuan';
     import Form from '@/libs/components/Form';
     import { i18n } from './pluginInstance';
     import {
@@ -17,7 +17,6 @@
     } from './index';
     import type { AudioFileItem } from './index';
     import { lsNotebooks, pushErrMsg, pushMsg, removeFile, putFile, resetDoingAndAbandonedTaskListMarkers, restoreTaskListMarkers } from './api';
-    import { Constants } from 'siyuan';
     import { exportIcsFile, uploadIcsToCloud } from './utils/icsUtils';
     import { importIcsFile } from './utils/icsImport';
     import { syncHolidays } from './utils/icsSubscription';
@@ -1334,6 +1333,19 @@
                     },
                 },
                 {
+                    key: 'restoreDefaultSettings',
+                    value: '',
+                    type: 'button',
+                    title: i18n('restoreDefaultSettings') || '恢复默认设置',
+                    description:
+                        i18n('restoreDefaultSettingsDesc') ||
+                        '将插件设置恢复为默认值，不会删除任务、项目、习惯等数据。',
+                    button: {
+                        label: i18n('restoreDefaultValue') || '恢复默认值',
+                        callback: restoreDefaultSettings,
+                    },
+                },
+                {
                     key: 'deletePluginData',
                     value: '',
                     type: 'button',
@@ -1342,38 +1354,43 @@
                     button: {
                         label: i18n('deleteData'),
                         callback: async () => {
-                            const confirmed = confirm(i18n('confirmDeletePluginData'));
-                            if (confirmed) {
-                                const dataDir =
-                                    '/data/storage/petal/siyuan-plugin-task-note-management/';
-                                const files = [
-                                    SETTINGS_FILE,
-                                    PROJECT_DATA_FILE,
-                                    CATEGORIES_DATA_FILE,
-                                    REMINDER_DATA_FILE,
-                                    HABIT_DATA_FILE,
-                                    NOTIFY_DATA_FILE,
-                                    POMODORO_RECORD_DATA_FILE,
-                                    HABIT_GROUP_DATA_FILE,
-                                    STATUSES_DATA_FILE,
-                                ];
-                                let successCount = 0;
-                                for (const file of files) {
-                                    try {
-                                        await removeFile(dataDir + file);
-                                        successCount++;
-                                    } catch (e) {
-                                        console.error('删除文件失败:', file, e);
+                            await confirm(
+                                i18n('deletePluginData') || '删除插件数据',
+                                i18n('confirmDeletePluginData') ||
+                                    '确定要删除所有插件数据吗？此操作不可逆！',
+                                async () => {
+                                    const dataDir =
+                                        '/data/storage/petal/siyuan-plugin-task-note-management/';
+                                    const files = [
+                                        SETTINGS_FILE,
+                                        PROJECT_DATA_FILE,
+                                        CATEGORIES_DATA_FILE,
+                                        REMINDER_DATA_FILE,
+                                        HABIT_DATA_FILE,
+                                        NOTIFY_DATA_FILE,
+                                        POMODORO_RECORD_DATA_FILE,
+                                        HABIT_GROUP_DATA_FILE,
+                                        STATUSES_DATA_FILE,
+                                    ];
+                                    let successCount = 0;
+                                    for (const file of files) {
+                                        try {
+                                            await removeFile(dataDir + file);
+                                            successCount++;
+                                        } catch (e) {
+                                            console.error('删除文件失败:', file, e);
+                                        }
                                     }
-                                }
-                                pushErrMsg(
-                                    i18n('dataDeletedCount').replace(
-                                        '${count}',
-                                        String(successCount)
-                                    )
-                                );
-                                window.dispatchEvent(new CustomEvent('reminderUpdated'));
-                            }
+                                    pushErrMsg(
+                                        i18n('dataDeletedCount').replace(
+                                            '${count}',
+                                            String(successCount)
+                                        )
+                                    );
+                                    window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                                },
+                                async () => {}
+                            );
                         },
                     },
                 },
@@ -1532,6 +1549,46 @@
         }
 
         return candidates.some(text => text.includes(keyword));
+    }
+
+    function cloneDefaultSettings() {
+        return JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+    }
+
+    async function restoreDefaultSettings() {
+        await confirm(
+            i18n('restoreDefaultSettings') || '恢复默认设置',
+            i18n('confirmRestoreDefaultSettings') ||
+                '确定要将插件设置恢复为默认值吗？任务、项目、习惯等数据不会删除。',
+            async () => {
+                const currentDatatransfer = settings.datatransfer || {};
+                const defaultSettings = cloneDefaultSettings();
+                settings = {
+                    ...defaultSettings,
+                    datatransfer: {
+                        ...defaultSettings.datatransfer,
+                        ...currentDatatransfer,
+                    },
+                };
+
+                await saveSettings();
+
+                try {
+                    const { setDayStartTime, setSingleDateDefaultRole } = await import(
+                        './utils/dateUtils'
+                    );
+                    setDayStartTime(settings.todayStartTime);
+                    setSingleDateDefaultRole(settings.singleDateDefaultRole);
+                } catch (error) {
+                    console.error('应用默认日期设置失败:', error);
+                }
+
+                await applyProjectKanbanDisplaySettingsToAllProjects();
+                updateGroupItems();
+                await pushMsg(i18n('defaultSettingsRestored') || '设置已恢复默认值');
+            },
+            async () => {}
+        );
     }
 
     const onChanged = async ({ detail }: CustomEvent<ChangeEvent>) => {
