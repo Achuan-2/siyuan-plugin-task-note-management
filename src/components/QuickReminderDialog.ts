@@ -3351,9 +3351,12 @@ export class QuickReminderDialog {
         };
     }
 
+    private getRepeatBaseDate(date?: string, endDate?: string): string | undefined {
+        return date || endDate || undefined;
+    }
+
     private isRepeatCustomReminderMode(date?: string, endDate?: string): boolean {
-        void endDate;
-        return !!this.repeatConfig?.enabled && !!date;
+        return !!this.repeatConfig?.enabled && !!this.getRepeatBaseDate(date, endDate);
     }
 
     private getRepeatCustomReminderDurationDays(date?: string, endDate?: string): number {
@@ -3388,14 +3391,15 @@ export class QuickReminderDialog {
         endDate?: string
     ): CustomReminderTimeItem {
         const normalized: CustomReminderTimeItem = typeof item === 'string' ? { time: item, note: '' } : { ...item };
+        const baseDate = this.getRepeatBaseDate(date, endDate);
 
-        if (!this.isRepeatCustomReminderMode(date, endDate) || !date) {
+        if (!this.isRepeatCustomReminderMode(date, endDate) || !baseDate) {
             // 对于非重复任务，保持完整的日期时间；若仅有时间则自动补全日期
-            if (normalized.time && !normalized.time.includes('T') && date) {
-                normalized.time = `${date}T${normalized.time}`;
+            if (normalized.time && !normalized.time.includes('T') && baseDate) {
+                normalized.time = `${baseDate}T${normalized.time}`;
             }
-            if (normalized.endTime && !normalized.endTime.includes('T') && date) {
-                normalized.endTime = `${date}T${normalized.endTime}`;
+            if (normalized.endTime && !normalized.endTime.includes('T') && baseDate) {
+                normalized.endTime = `${baseDate}T${normalized.endTime}`;
             }
             return normalized;
         }
@@ -3413,7 +3417,7 @@ export class QuickReminderDialog {
                 delete normalized.dayIndex;
             } else if (typeof normalized.dayIndex !== 'number') {
                 if (parsedDate) {
-                    const diff = getDaysDifference(date, parsedDate);
+                    const diff = getDaysDifference(baseDate, parsedDate);
                     if (diff < 0) {
                         normalized.dayOffset = diff;
                         delete normalized.dayIndex;
@@ -3432,7 +3436,7 @@ export class QuickReminderDialog {
         } else {
             if (typeof normalized.dayOffset !== 'number') {
                 if (parsedDate) {
-                    const diff = getDaysDifference(date, parsedDate);
+                    const diff = getDaysDifference(baseDate, parsedDate);
                     normalized.dayOffset = diff >= 0 ? diff + 1 : diff;
                 } else {
                     normalized.dayOffset = 1;
@@ -4954,13 +4958,14 @@ export class QuickReminderDialog {
     }
 
     private showRepeatSettingsDialog() {
-        // 获取当前设置的开始日期
+        // 获取当前设置的重复基准日期；仅设置结束日期时，用结束日期作为基准。
         const startDateInput = this.dialog.element.querySelector('#quickReminderDate') as HTMLInputElement;
-        let startDate = startDateInput?.value;
+        const endDateInput = this.dialog.element.querySelector('#quickReminderEndDate') as HTMLInputElement;
+        let startDate = this.getRepeatBaseDate(startDateInput?.value, endDateInput?.value);
 
-        // 如果没有设置开始日期，使用初始日期或今天的日期
+        // 如果没有设置开始/结束日期，使用初始日期。
         if (!startDate) {
-            startDate = this.initialDate;
+            startDate = this.getRepeatBaseDate(this.initialDate, this.initialEndDate);
         }
 
         // 如果是农历重复类型，需要重新计算农历日期
@@ -5938,11 +5943,21 @@ export class QuickReminderDialog {
             }
         }
 
+        // 重复任务需要一个系列基准日。若用户只设置了结束日期，则把结束日期作为首个实例日期保存。
+        if (this.repeatConfig && this.repeatConfig.enabled && !date && endDate) {
+            date = endDate;
+            if (!time && endTime) {
+                time = endTime;
+                endTime = undefined;
+            }
+            endDate = '';
+        }
+
         if (!this.validateCustomReminderTimes(date, endDate)) {
             return;
         }
 
-        // 如果启用了重复设置，则必须提供起始日期（重复任务需要基准日期）
+        // 如果启用了重复设置，则必须提供基准日期（开始日期或仅设置的结束日期）
         if (this.repeatConfig && this.repeatConfig.enabled && !date) {
             showMessage(i18n('pleaseSetStartDateForRepeat'));
             return;
