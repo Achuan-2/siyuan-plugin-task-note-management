@@ -53,6 +53,8 @@
 
     type SortMode = 'global' | 'custom';
 
+    const FILTER_SETTINGS_FILE = 'filter-settings.json';
+
     let filters: FilterConfig[] = [];
     let selectedFilter: FilterConfig | null = null;
     let isEditing = false;
@@ -457,7 +459,7 @@
     }
 
     async function loadFilters() {
-        const settings = await plugin.loadData('settings.json');
+        const settings = await plugin.loadData(FILTER_SETTINGS_FILE);
         const customFilters = settings?.customFilters || [];
         const filterOrder = settings?.filterOrder || [];
         hiddenBuiltInFilters = settings?.hiddenBuiltInFilters || [];
@@ -500,12 +502,12 @@
     }
 
     async function saveFilters(appliedFilter: FilterConfig | null = null) {
-        const settings = (await plugin.loadData('settings.json')) || {};
+        const settings = (await plugin.loadData(FILTER_SETTINGS_FILE)) || {};
         const customFilters = filters.filter(f => !f.isBuiltIn);
         settings.customFilters = customFilters;
         settings.filterOrder = filters.map(f => f.id);
         settings.hiddenBuiltInFilters = hiddenBuiltInFilters;
-        await plugin.saveData('settings.json', settings);
+        await plugin.saveData(FILTER_SETTINGS_FILE, settings);
         // 通知父组件更新filterSelect
         onFilterApplied(appliedFilter);
     }

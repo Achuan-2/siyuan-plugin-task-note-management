@@ -35,6 +35,8 @@ interface ReminderPanelFilterSortConfig {
     sortCriteria?: SortCriterion[];
 }
 
+const FILTER_SETTINGS_FILE = 'filter-settings.json';
+
 export class ReminderPanel {
     private container: HTMLElement;
     private remindersContainer: HTMLElement;
@@ -1362,7 +1364,7 @@ export class ReminderPanel {
     private async updateFilterSelect(preferredValue?: string) {
         if (!this.filterSelect) return;
 
-        const settings = await this.plugin.loadData('settings.json');
+        const settings = await this.plugin.loadData(FILTER_SETTINGS_FILE);
         const customFilters = settings?.customFilters || [];
         const filterOrder = settings?.filterOrder || [];
         const hiddenBuiltInFilters: string[] = settings?.hiddenBuiltInFilters || [];
@@ -4465,7 +4467,7 @@ export class ReminderPanel {
      */
     private async loadCustomFilters() {
         try {
-            const settings = await this.plugin.loadData('settings.json');
+            const settings = await this.plugin.loadData(FILTER_SETTINGS_FILE);
             const customFilters = settings?.customFilters || [];
             this.customFilterCache.clear();
             customFilters.forEach((filter: any) => {

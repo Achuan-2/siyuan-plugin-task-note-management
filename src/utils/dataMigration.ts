@@ -22,6 +22,8 @@ import { readDir } from "../api";
 
 const HABIT_DATA_FILE = "habit.json";
 const HABIT_CHECKIN_DIR = "habitCheckin";
+const LEGACY_FILTER_SETTINGS_FILE = "settings.json";
+const FILTER_SETTINGS_FILE = "filter-settings.json";
 
 /**
  * 执行数据迁移
@@ -29,6 +31,10 @@ const HABIT_CHECKIN_DIR = "habitCheckin";
 export async function performDataMigration(plugin: MigrationPlugin): Promise<void> {
     try {
         const settings = await plugin.loadSettings();
+
+        if (!settings.datatransfer?.filterSettingsFileTransfer) {
+            await migrateFilterSettingsFile(plugin, settings);
+        }
 
         // 检查是否需要迁移绑定块属性
         if (!settings.datatransfer?.bindblockAddAttr) {
@@ -226,6 +232,39 @@ export async function performDataMigration(plugin: MigrationPlugin): Promise<voi
         }
     } catch (error) {
         console.error("数据迁移失败:", error);
+    }
+}
+
+async function migrateFilterSettingsFile(plugin: MigrationPlugin, settings: any): Promise<void> {
+    try {
+        console.log("开始迁移筛选器配置文件 settings.json -> filter-settings.json...");
+
+        const legacySettings = await plugin.loadData(LEGACY_FILTER_SETTINGS_FILE);
+        if (legacySettings && typeof legacySettings === "object" && !Array.isArray(legacySettings)) {
+            const currentSettings = await plugin.loadData(FILTER_SETTINGS_FILE);
+            const nextSettings =
+                currentSettings && typeof currentSettings === "object" && !Array.isArray(currentSettings)
+                    ? { ...legacySettings, ...currentSettings }
+                    : legacySettings;
+
+            await plugin.saveData(FILTER_SETTINGS_FILE, nextSettings);
+
+            try {
+                await plugin.removeData(LEGACY_FILTER_SETTINGS_FILE);
+            } catch (error) {
+                console.warn(`删除旧筛选器配置文件 ${LEGACY_FILTER_SETTINGS_FILE} 失败:`, error);
+            }
+
+            console.log("筛选器配置文件迁移完成");
+        } else {
+            console.log("未发现旧筛选器配置文件，跳过迁移");
+        }
+
+        settings.datatransfer = settings.datatransfer || {};
+        settings.datatransfer.filterSettingsFileTransfer = true;
+        await plugin.saveSettings(settings);
+    } catch (error) {
+        console.error("筛选器配置文件迁移失败:", error);
     }
 }
 

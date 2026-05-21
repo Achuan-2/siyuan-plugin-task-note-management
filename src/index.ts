@@ -291,6 +291,7 @@ export const DEFAULT_SETTINGS = {
         habitCheckinTransfer: false,
         pomodoroRecordTransfer: false,
         reminderSkipWeekendModeTransfer: false, // 是否已迁移 reminderSkipWeekends -> reminderSkipWeekendMode
+        filterSettingsFileTransfer: false, // 是否已迁移筛选器配置文件 settings.json -> filter-settings.json
     },
 };
 
@@ -1697,6 +1698,7 @@ export default class ReminderPlugin extends Plugin {
                 habitCheckinTransfer: true,
                 pomodoroRecordTransfer: true,
                 reminderSkipWeekendModeTransfer: true,
+                filterSettingsFileTransfer: true,
             }
             : { ...DEFAULT_SETTINGS.datatransfer };
 
