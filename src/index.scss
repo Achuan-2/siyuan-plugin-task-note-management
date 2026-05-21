@@ -1725,9 +1725,7 @@
     // 按钮区域固定在底部
     .b3-dialog__action {
         flex-shrink: 0;
-        padding: 16px 20px;
         border-top: 1px solid var(--b3-theme-surface-lighter);
-        background: var(--b3-theme-surface);
         display: flex;
         justify-content: flex-end;
         gap: 8px;

@@ -271,10 +271,6 @@
     background: var(--b3-theme-info);
 }
 
-// 项目设置对话框样式
-.project-dialog {
-    padding: 16px;
-}
 
 .project-form {
     margin-bottom: 16px;
@@ -607,6 +603,80 @@
     opacity: 0.5;
     font-size: 12px;
     font-style: italic;
+}
+
+.project-document-tree {
+    padding: 6px;
+
+    .project-folder-group {
+        margin-bottom: 0;
+        background: transparent;
+        border: none;
+        border-radius: 0;
+        overflow: visible;
+    }
+
+    .project-folder-header {
+        background: transparent;
+        background-image: var(--project-tree-guides, none);
+        background-position: var(--project-tree-guide-positions, 0 0);
+        background-size: var(--project-tree-guide-sizes, auto);
+        background-repeat: no-repeat;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        min-height: 30px;
+
+        &:hover {
+            background-color: var(--b3-theme-surface-lighter);
+        }
+
+        &.drag-over-top {
+            border-top-color: var(--b3-theme-primary);
+        }
+
+        &.drag-over-bottom {
+            border-bottom-color: var(--b3-theme-primary);
+        }
+
+        &.drag-over-inside {
+            background: color-mix(in srgb, var(--b3-theme-primary), transparent 88%);
+            border-color: var(--b3-theme-primary);
+        }
+    }
+
+    .project-folder-chevron--empty {
+        display: none;
+    }
+
+    .project-folder-children {
+        padding: 0;
+        gap: 0;
+    }
+
+    .project-folder-empty {
+        background-image: var(--project-tree-guides, none);
+        background-position: var(--project-tree-guide-positions, 0 0);
+        background-size: var(--project-tree-guide-sizes, auto);
+        background-repeat: no-repeat;
+    }
+
+    .project-item--list {
+        background: transparent;
+        background-image: var(--project-tree-guides, none);
+        background-position: var(--project-tree-guide-positions, 0 0);
+        background-size: var(--project-tree-guide-sizes, auto);
+        background-repeat: no-repeat;
+        border-color: transparent !important;
+        margin-bottom: 0 !important;
+
+        &:hover {
+            background: var(--b3-theme-surface-lighter);
+            background-image: var(--project-tree-guides, none);
+            background-position: var(--project-tree-guide-positions, 0 0);
+            background-size: var(--project-tree-guide-sizes, auto);
+            background-repeat: no-repeat;
+        }
+    }
 }
 
 // 清单项目样式项

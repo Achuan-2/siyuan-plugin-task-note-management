@@ -1,5 +1,5 @@
 import { Dialog, showMessage, openEmoji } from "siyuan";
-import { ProjectFolderManager } from "../utils/projectFolderManager";
+import { ProjectFolderManager, ProjectFolder } from "../utils/projectFolderManager";
 import { getBlockByID } from "../api";
 import { getLogicalDateString } from "../utils/dateUtils";
 import { CategoryManager } from "../utils/categoryManager";
@@ -82,12 +82,7 @@ export class ProjectDialog {
         const folderManager = ProjectFolderManager.getInstance(this.plugin);
         const folders = folderManager.getFolders();
         const currentFolderId = existingProject ? (existingProject.folderId || '') : (this.preselectedFolderId || '');
-        const folderOptions = [
-            `<option value="" ${currentFolderId === '' ? 'selected' : ''}>${i18n("noFolder") || "无文件夹"}</option>`,
-            ...folders.map(folder =>
-                `<option value="${folder.id}" ${currentFolderId === folder.id ? 'selected' : ''}>${folder.icon || '📂'} ${folder.name}</option>`
-            )
-        ].join('');
+        const folderOptions = this.createFolderOptions(folders, currentFolderId);
 
         return `
             <div class="project-dialog">
@@ -193,9 +188,6 @@ export class ProjectDialog {
             </div>
             
             <style>
-                .project-dialog {
-                    padding: 16px;
-                }
                 
                 .project-form {
                     margin-bottom: 16px;
@@ -354,17 +346,49 @@ export class ProjectDialog {
             const folderEl = this.dialog.element.querySelector('#projectFolder') as HTMLSelectElement;
             if (folderEl) {
                 const currentSelectedValue = folderEl.value;
-                const folderOptions = [
-                    `<option value="" ${currentSelectedValue === '' ? 'selected' : ''}>${i18n("noFolder") || "无文件夹"}</option>`,
-                    ...folders.map(folder =>
-                        `<option value="${folder.id}" ${currentSelectedValue === folder.id ? 'selected' : ''}>${folder.icon || '📂'} ${folder.name}</option>`
-                    )
-                ].join('');
+                const folderOptions = this.createFolderOptions(folders, currentSelectedValue);
                 folderEl.innerHTML = folderOptions;
             }
         } catch (error) {
             console.error('刷新文件夹失败:', error);
         }
+    }
+
+    private createFolderOptions(folders: ProjectFolder[], selectedFolderId: string): string {
+        return [
+            `<option value="" ${selectedFolderId === '' ? 'selected' : ''}>${i18n("noFolder") || "无文件夹"}</option>`,
+            ...folders.map(folder => {
+                const depth = this.getFolderDepth(folder, folders);
+                const prefix = '&nbsp;'.repeat(depth * 4) + (depth > 0 ? '└ ' : '');
+                return `<option value="${folder.id}" ${selectedFolderId === folder.id ? 'selected' : ''}>${prefix}${folder.icon || '📂'} ${this.escapeHTML(folder.name)}</option>`;
+            })
+        ].join('');
+    }
+
+    private getFolderDepth(folder: ProjectFolder, folders: ProjectFolder[]): number {
+        let depth = 0;
+        let parentId = folder.parentId || '';
+        const folderMap = new Map(folders.map(item => [item.id, item]));
+        const visited = new Set<string>();
+
+        while (parentId && !visited.has(parentId)) {
+            visited.add(parentId);
+            const parent = folderMap.get(parentId);
+            if (!parent) break;
+            depth += 1;
+            parentId = parent.parentId || '';
+        }
+
+        return depth;
+    }
+
+    private escapeHTML(value: string): string {
+        return String(value || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
 
     private async refreshStatuses() {
