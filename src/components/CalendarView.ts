@@ -4784,7 +4784,6 @@ export class CalendarView {
                 white-space: nowrap;
                 overflow: hidden;
                 text-overflow: clip;
-                font-weight: 600;
             `;
             titleEl.textContent = event.title;
             mainFrame.appendChild(titleEl);
