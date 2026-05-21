@@ -2230,9 +2230,13 @@ export class ReminderPanel {
 
             // 3. 实现父/子驱动逻辑
             const idsToRender = new Set<string>();
+            const directlyMatchingIds = new Set<string>();
 
             // 添加所有直接匹配的提醒
-            directlyMatchingReminders.forEach(r => idsToRender.add(r.id));
+            directlyMatchingReminders.forEach(r => {
+                idsToRender.add(r.id);
+                directlyMatchingIds.add(r.id);
+            });
 
             // 父任务驱动: 如果父任务匹配，其所有后代都应显示
             for (const parent of directlyMatchingReminders) {
@@ -2249,21 +2253,23 @@ export class ReminderPanel {
                 });
             }
 
-            // 子任务驱动: 如果子任务匹配，其所有祖先都应显示
-            // 但是对于已完成的视图（completed / todayCompleted），仅当祖先也已完成时才显示祖先（父任务未完成时只展示子任务）
+            // 子任务驱动: 如果子任务匹配，且其祖先也直接符合过滤条件，才显示祖先（即不再无条件显示不符合过滤条件的父任务）
+            // 如果父任务不符合过滤条件，将只显示子任务，后续在渲染时在子任务顶部添加父任务层级路径
             const isCompletedView = this.currentTab === 'completed' || this.currentTab === 'todayCompleted';
             for (const child of directlyMatchingReminders) {
                 const ancestors = this.getAllAncestorIds(child.id, reminderMap);
                 ancestors.forEach(ancestorId => {
-                    if (!isCompletedView) {
-                        idsToRender.add(ancestorId);
-                    } else {
-                        const anc = reminderMap.get(ancestorId);
-                        // 仅当祖先被标记为完成或其跨天事件在今日被标记为已完成时添加
-                        if (anc) {
-                            const ancCompleted = !!anc.completed || this.hasDailyCompletionMark(anc, today);
-                            if (ancCompleted) {
-                                idsToRender.add(ancestorId);
+                    if (directlyMatchingIds.has(ancestorId)) {
+                        if (!isCompletedView) {
+                            idsToRender.add(ancestorId);
+                        } else {
+                            const anc = reminderMap.get(ancestorId);
+                            // 仅当祖先被标记为完成或其跨天事件在今日被标记为已完成时添加
+                            if (anc) {
+                                const ancCompleted = !!anc.completed || this.hasDailyCompletionMark(anc, today);
+                                if (ancCompleted) {
+                                    idsToRender.add(ancestorId);
+                                }
                             }
                         }
                     }
@@ -3050,6 +3056,39 @@ export class ReminderPanel {
 
         if (reminder.docId && reminder.blockId !== reminder.docId) {
             this.addDocumentTitle(titleContainer, reminder.docId);
+        }
+
+        // 新增：父任务层级路径（当父任务不符合当前视图筛选而被隐藏时，如：父任务不是当天任务，而子任务是当天任务）
+        const isParentHidden = reminder.parentId && !allVisibleReminders.some(r => r.id === reminder.parentId);
+        if (isParentHidden) {
+            const ancestors: string[] = [];
+            let currentParentId = reminder.parentId;
+            while (currentParentId) {
+                const parent = this.allRemindersMap.get(currentParentId);
+                if (parent) {
+                    ancestors.unshift(parent.title || i18n("unnamedNote"));
+                    currentParentId = parent.parentId;
+                } else {
+                    break;
+                }
+            }
+            if (ancestors.length > 0) {
+                const parentHierarchyEl = document.createElement('div');
+                parentHierarchyEl.className = 'reminder-item__parent-hierarchy';
+                parentHierarchyEl.style.cssText = `
+                    font-size: 10px;
+                    color: var(--b3-theme-on-surface-light);
+                    margin-bottom: 2px;
+                    opacity: 0.8;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    cursor: default;
+                `;
+                parentHierarchyEl.textContent = ancestors.join(' > ');
+                parentHierarchyEl.title = ancestors.join(' > ');
+                titleContainer.appendChild(parentHierarchyEl);
+            }
         }
 
         const titleRow = document.createElement('div');
