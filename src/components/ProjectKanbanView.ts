@@ -3522,7 +3522,7 @@ export class ProjectKanbanView {
                     justify-content: space-between;
                     padding: 12px 16px;
                     margin-bottom: 8px;
-                    background: var(--b3-theme-background);
+                    background: var(--b3-theme-surface-lighter);
                     border: 1px solid var(--b3-theme-border);
                     border-radius: 8px;
                     transition: background-color 0.2s ease;
