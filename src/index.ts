@@ -5296,6 +5296,33 @@ export default class ReminderPlugin extends Plugin {
         return allTimes.length > 0 ? allTimes[0] : null;
     }
 
+    private getRepeatNotificationScanDays(reminder: any, daysLimit: number): number {
+        const baseDays = daysLimit > 0 ? daysLimit : 400;
+        const repeat = reminder?.repeat;
+        if (!repeat?.enabled) return baseDays;
+
+        const interval = Math.max(1, Math.floor(Number(repeat.interval) || 1));
+        switch (repeat.type) {
+            case 'weekly':
+                return Math.max(baseDays, interval * 14 + 7);
+            case 'custom':
+                if (Array.isArray(repeat.months) && repeat.months.length > 0) return Math.max(baseDays, 800);
+                if (Array.isArray(repeat.monthDays) && repeat.monthDays.length > 0) return Math.max(baseDays, 93);
+                if (Array.isArray(repeat.weekDays) && repeat.weekDays.length > 0) return Math.max(baseDays, 21);
+                return Math.max(baseDays, 32);
+            case 'monthly':
+            case 'lunar-monthly':
+                return Math.max(baseDays, interval * 62 + 31);
+            case 'yearly':
+            case 'lunar-yearly':
+                return Math.max(baseDays, 800);
+            case 'ebbinghaus':
+                return Math.max(baseDays, 45);
+            default:
+                return Math.max(baseDays, 32);
+        }
+    }
+
     /**
      * 计算所有未来的通知时间
      * @param reminder 提醒对象
@@ -5312,13 +5339,15 @@ export default class ReminderPlugin extends Plugin {
 
         if (reminder?.repeat?.enabled && reminder?.date) {
             const repeatWindow = getRelativeReminderWindow(reminder.reminderTimes, reminder.date, reminder.endDate);
-            const scanDays = daysLimit > 0 ? daysLimit : 400;
+            const scanDays = this.getRepeatNotificationScanDays(reminder, daysLimit);
             const scanEndDate = addDaysToDate(today, scanDays);
             const instanceStartDate = addDaysToDate(today, -repeatWindow.lookBackDays);
             const instanceEndDate = addDaysToDate(scanEndDate, repeatWindow.lookAheadDays);
             const rangeDays = Math.max(getDaysDifference(instanceStartDate, instanceEndDate) + 1, 1);
             const instances = generateRepeatInstances(reminder, instanceStartDate, instanceEndDate, Math.max(rangeDays * 2, 500));
             const futureTimes: Date[] = [];
+            const minRepeatInstanceDates = daysLimit > 0 ? 2 : 0;
+            const includedRepeatInstanceKeys = new Set<string>();
 
             for (const instance of instances) {
                 if (instance.completed) continue;
@@ -5336,6 +5365,7 @@ export default class ReminderPlugin extends Plugin {
                     }
                 }
 
+                const instanceFutureTimes: Date[] = [];
                 for (const timeStr of instanceTimes) {
                     const parsed = this.extractDateAndTime(timeStr);
                     if (!parsed.time) continue;
@@ -5343,12 +5373,27 @@ export default class ReminderPlugin extends Plugin {
                     if (!this.canReminderNotifyOnDate(instance, datePart, holidayData)) continue;
                     const dateTime = new Date(`${datePart}T${parsed.time}`);
                     if (isNaN(dateTime.getTime())) continue;
-                    if (limitDate && dateTime.getTime() > limitDate.getTime()) continue;
 
                     const diff = dateTime.getTime() - now.getTime();
                     if (diff > -60000) {
-                        futureTimes.push(dateTime);
+                        instanceFutureTimes.push(dateTime);
                     }
+                }
+
+                if (instanceFutureTimes.length === 0) continue;
+
+                instanceFutureTimes.sort((a, b) => a.getTime() - b.getTime());
+                const instanceKey = instance.instanceId || `${instance.originalId || reminder.id}_${instance.date}`;
+                const withinLimitTimes = limitDate
+                    ? instanceFutureTimes.filter((dateTime) => dateTime.getTime() <= limitDate.getTime())
+                    : instanceFutureTimes;
+
+                if (withinLimitTimes.length > 0) {
+                    futureTimes.push(...withinLimitTimes);
+                    includedRepeatInstanceKeys.add(instanceKey);
+                } else if (includedRepeatInstanceKeys.size < minRepeatInstanceDates) {
+                    futureTimes.push(...instanceFutureTimes);
+                    includedRepeatInstanceKeys.add(instanceKey);
                 }
             }
 
