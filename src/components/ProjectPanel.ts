@@ -479,6 +479,7 @@ export class ProjectPanel {
         this.renderStatusFilter();
         this.filterSelect.addEventListener('change', () => {
             this.currentTab = this.filterSelect.value;
+            this.savePanelSettings();
             this.loadProjects();
         });
         controls.appendChild(this.filterSelect);
@@ -594,8 +595,12 @@ export class ProjectPanel {
 
         try {
             const statuses = this.statusManager.getStatuses();
+            const hasCurrentTab = this.currentTab === 'all' || statuses.some(status => status.id === this.currentTab);
+            if (!hasCurrentTab) {
+                this.currentTab = 'all';
+            }
 
-            this.filterSelect.innerHTML = `<option value="all">${i18n("allProjects") || "全部项目"}</option>`;
+            this.filterSelect.innerHTML = `<option value="all" ${this.currentTab === 'all' ? 'selected' : ''}>${i18n("allProjects") || "全部项目"}</option>`;
 
             statuses.forEach(status => {
                 const optionEl = document.createElement('option');
@@ -3033,6 +3038,9 @@ export class ProjectPanel {
     private async restorePanelSettings() {
         try {
             const settings = await this.plugin.loadSettings();
+            const savedStatusFilter = typeof settings.projectPanelStatusFilter === 'string' ? settings.projectPanelStatusFilter : 'all';
+            const statusIds = new Set(this.statusManager.getStatuses().map((status: any) => status.id));
+            this.currentTab = savedStatusFilter === 'all' || statusIds.has(savedStatusFilter) ? savedStatusFilter : 'all';
             const savedCriteria = this.normalizeSortCriteria(
                 settings.projectPanelSortCriteria && Array.isArray(settings.projectPanelSortCriteria) && settings.projectPanelSortCriteria.length > 0
                     ? settings.projectPanelSortCriteria
@@ -3058,6 +3066,7 @@ export class ProjectPanel {
             settings.projectPanelSortOrder = primary.order;
             settings.projectPanelShowOnlyDoing = this.showOnlyWithDoingTasks;
             settings.projectPanelSelectedCategories = this.selectedCategories;
+            settings.projectPanelStatusFilter = this.currentTab;
             settings.projectPanelViewMode = this.currentViewMode;
             await this.plugin.saveSettings(settings);
         } catch (error) {

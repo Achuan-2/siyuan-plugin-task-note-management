@@ -181,6 +181,7 @@ export const DEFAULT_SETTINGS = {
     projectPanelSortOrder: 'desc',
     projectPanelShowOnlyDoing: false,
     projectPanelSelectedCategories: [] as string[],
+    projectPanelStatusFilter: 'all',
     reminderPanelSelectedCategories: [] as string[],
     reminderPanelShowProjectKanbanStatus: true,
     // 习惯面板筛选与排序
