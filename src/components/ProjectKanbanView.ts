@@ -26,6 +26,7 @@ import { SortCriterion, getSortCriterionName } from "../utils/sortConfig";
 import { shouldTreatStartDateOnlyAsOverdue } from "../utils/startDateOverdue";
 import { shouldSkipReminderOnDate, type HolidayData } from "../utils/reminderSkipDate";
 import { TaskRenderer } from "./render/TaskRenderer";
+import { ProjectFolderManager, FolderKanbanSettings } from "../utils/projectFolderManager";
 interface KanbanSortConfigProjectData {
     sortRule?: string;
     sortOrder?: 'asc' | 'desc';
@@ -160,6 +161,7 @@ export class ProjectKanbanView {
     private isFilterActive: boolean = false;
     private selectedDateFilters: Set<string> = new Set();
     private filterButton: HTMLButtonElement;
+    private filterDropdownMenu: HTMLElement | null = null;
     // 上一次点击的任务ID（用于Shift多选范围）
     private lastClickedTaskId: string | null = null;
     private milestoneMap: Map<string, any> = new Map();
@@ -669,6 +671,7 @@ export class ProjectKanbanView {
                 this.project.hideNoDoingGroups = hideNoDoingGroups;
                 this.project.hideNoTodayGroups = hideNoTodayGroups;
             }
+            await this.saveFolderKanbanSetting({ hideNoDoingGroups, hideNoTodayGroups });
             this.syncGroupVisibilityCheckboxes();
             return;
         }
@@ -980,12 +983,21 @@ export class ProjectKanbanView {
                 const firstProject = this.aggregateProjectIds.length > 0
                     ? projectData?.[this.aggregateProjectIds[0]]
                     : null;
+                // 从文件夹加载持久化的看板设置
+                let folderKanbanSettings: FolderKanbanSettings | undefined;
+                if (this.viewOptions.folderId) {
+                    const folderManager = ProjectFolderManager.getInstance(this.plugin);
+                    const folder = folderManager.getFolderById(this.viewOptions.folderId);
+                    folderKanbanSettings = folder?.kanbanSettings;
+                }
                 this.project = {
                     ...(firstProject || {}),
                     id: this.projectId,
                     name: this.aggregateTitle || this.viewOptions.folderId || i18n('projectKanban') || '项目看板',
                     title: this.aggregateTitle || this.viewOptions.folderId || i18n('projectKanban') || '项目看板',
-                    categoryId: firstProject?.categoryId
+                    categoryId: firstProject?.categoryId,
+                    // 文件夹看板设置覆盖项目设置
+                    ...(folderKanbanSettings || {})
                 };
             } else {
                 this.project = projectData[this.projectId];
@@ -1023,8 +1035,8 @@ export class ProjectKanbanView {
             }
             const customGroups = await this.getProjectCustomGroupsForView();
             this.hasCustomGroups = customGroups.some((group: any) => !group.archived);
-            this.customGroupTabsMode = this.isAggregateView ? false : !!this.project?.customGroupTabsMode;
-            this.activeCustomGroupTabId = !this.isAggregateView && typeof this.project?.activeCustomGroupTabId === 'string'
+            this.customGroupTabsMode = !!this.project?.customGroupTabsMode;
+            this.activeCustomGroupTabId = typeof this.project?.activeCustomGroupTabId === 'string'
                 ? this.project.activeCustomGroupTabId
                 : null;
             if (!this.project) {
@@ -1041,10 +1053,16 @@ export class ProjectKanbanView {
             // 使用项目管理器的方法来获取看板模式
             const projectManager = this.projectManager;
             if (this.isAggregateView) {
+                // 优先从文件夹设置加载看板模式
+                let folderKanbanMode: 'status' | 'custom' | 'list' | undefined;
+                if (this.viewOptions.folderId) {
+                    const folderManager = ProjectFolderManager.getInstance(this.plugin);
+                    const folder = folderManager.getFolderById(this.viewOptions.folderId);
+                    folderKanbanMode = folder?.kanbanSettings?.kanbanMode;
+                }
                 const firstProjectId = this.getDefaultProjectIdForCreate();
-                this.kanbanMode = firstProjectId
-                    ? await projectManager.getProjectKanbanMode(firstProjectId)
-                    : 'status';
+                this.kanbanMode = folderKanbanMode
+                    || (firstProjectId ? await projectManager.getProjectKanbanMode(firstProjectId) : 'status');
 
                 const statusMap = new Map<string, import('../utils/projectManager').KanbanStatus>();
                 for (const projectId of this.aggregateProjectIds) {
@@ -1080,6 +1098,8 @@ export class ProjectKanbanView {
             // 使用项目管理器保存看板模式
             if (!this.isAggregateView) {
                 await this.projectManager.setProjectKanbanMode(this.projectId, newMode);
+            } else {
+                await this.saveFolderKanbanSetting({ kanbanMode: newMode });
             }
 
             // 更新下拉选择框选中状态
@@ -4276,6 +4296,8 @@ export class ProjectKanbanView {
                 if (this.project) {
                     this.project.showCompletedSubtasks = checked;
                 }
+            } else if (this.isAggregateView) {
+                await this.saveFolderKanbanSetting({ showCompletedSubtasks: checked });
             }
             await this.queueLoadTasks();
         });
@@ -4293,6 +4315,8 @@ export class ProjectKanbanView {
                 if (this.project) {
                     this.project.showTaskCategories = checked;
                 }
+            } else if (this.isAggregateView) {
+                await this.saveFolderKanbanSetting({ showTaskCategories: checked });
             }
             await this.queueLoadTasks();
         });
@@ -4310,6 +4334,8 @@ export class ProjectKanbanView {
                 if (this.project) {
                     this.project.clipTitleToOneLine = checked;
                 }
+            } else if (this.isAggregateView) {
+                await this.saveFolderKanbanSetting({ clipTitleToOneLine: checked });
             }
             await this.queueLoadTasks();
         });
@@ -4327,6 +4353,8 @@ export class ProjectKanbanView {
                 if (this.project) {
                     this.project.hideEmptyStatusBars = checked;
                 }
+            } else if (this.isAggregateView) {
+                await this.saveFolderKanbanSetting({ hideEmptyStatusBars: checked });
             }
             await this.queueLoadTasks();
         });
@@ -4371,6 +4399,8 @@ export class ProjectKanbanView {
                         delete this.project.activeCustomGroupTabId;
                     }
                 }
+            } else if (this.isAggregateView) {
+                await this.saveFolderKanbanSetting({ customGroupTabsMode: checked });
             }
             // 切换分组页签显示模式时强制重建看板，避免旧的页签 DOM 残留
             const kanbanContainer = this.container.querySelector('.project-kanban-container') as HTMLElement;
@@ -7258,8 +7288,41 @@ export class ProjectKanbanView {
         return this.getActiveSortCriteria()?.[0]?.method === 'priority';
     }
 
+    private async saveFolderKanbanSetting(partial: Partial<FolderKanbanSettings>): Promise<void> {
+        const folderId = this.viewOptions?.folderId;
+        if (!folderId) return;
+        try {
+            const folderManager = ProjectFolderManager.getInstance(this.plugin);
+            const folder = folderManager.getFolderById(folderId);
+            if (!folder) return;
+            const merged: FolderKanbanSettings = { ...(folder.kanbanSettings || {}), ...partial };
+            await folderManager.updateFolder(folderId, { kanbanSettings: merged });
+        } catch (error) {
+            console.warn('保存文件夹看板设置失败:', error);
+        }
+    }
+
     private async loadKanbanSortConfig() {
         try {
+            // 优先从文件夹设置加载排序配置
+            if (this.isAggregateView && this.viewOptions.folderId) {
+                const folderManager = ProjectFolderManager.getInstance(this.plugin);
+                const folder = folderManager.getFolderById(this.viewOptions.folderId);
+                const folderSortCriteria = folder?.kanbanSettings?.sortCriteria;
+                if (folderSortCriteria && Array.isArray(folderSortCriteria) && folderSortCriteria.length > 0) {
+                    const criteria = this.normalizeKanbanSortCriteria(folderSortCriteria);
+                    this.currentSortCriteria = criteria;
+                    this.syncLegacySortStateFromCriteria();
+                    // 同步加载 doneSort 设置
+                    if (folder?.kanbanSettings?.doneSort) {
+                        this.doneSort = folder.kanbanSettings.doneSort;
+                    }
+                    if (folder?.kanbanSettings?.doneSortOrder) {
+                        this.doneSortOrder = folder.kanbanSettings.doneSortOrder;
+                    }
+                    return;
+                }
+            }
             const projectData = await this.plugin.loadProjectData() || {};
             const sortProjectId = this.isAggregateView ? this.getDefaultProjectIdForCreate() : this.projectId;
             const project = (projectData[sortProjectId] || {}) as KanbanSortConfigProjectData;
@@ -7287,6 +7350,7 @@ export class ProjectKanbanView {
 
         try {
             if (this.isAggregateView) {
+                await this.saveFolderKanbanSetting({ sortCriteria: normalized });
                 return;
             }
             const projectData = await this.plugin.loadProjectData() || {};
@@ -12844,6 +12908,13 @@ export class ProjectKanbanView {
 
 
     private async showFilterMenu(event: MouseEvent) {
+        // 如果菜单已打开，则关闭它（切换行为）
+        if (this.filterDropdownMenu) {
+            this.filterDropdownMenu.remove();
+            this.filterDropdownMenu = null;
+            return;
+        }
+
         // 获取项目标签
         const tags = await this.projectManager.getProjectTags(this.projectId);
         const allTagIds = tags.map(t => t.id);
@@ -13143,6 +13214,7 @@ export class ProjectKanbanView {
 
         // 添加到 body 并计算自适应位置
         document.body.appendChild(menu);
+        this.filterDropdownMenu = menu;
 
         // 计算自适应位置，防止超出屏幕
         const menuWidth = menu.offsetWidth;
@@ -13168,6 +13240,7 @@ export class ProjectKanbanView {
         const closeHandler = (e: MouseEvent) => {
             if (!menu.contains(e.target as Node) && !this.filterButton.contains(e.target as Node)) {
                 menu.remove();
+                this.filterDropdownMenu = null;
                 document.removeEventListener('click', closeHandler);
             }
         };
@@ -13228,6 +13301,10 @@ export class ProjectKanbanView {
 
                     this.updateDoneSortButtonTitle();
                     this.renderKanban();
+                    // 持久化已完成列排序设置
+                    if (this.isAggregateView) {
+                        this.saveFolderKanbanSetting({ doneSort: sortKey, doneSortOrder: sortOrder });
+                    }
                 }
             });
         };

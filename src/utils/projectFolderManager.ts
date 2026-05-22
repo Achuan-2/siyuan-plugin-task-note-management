@@ -1,3 +1,17 @@
+export interface FolderKanbanSettings {
+    sortCriteria?: { method: string; order: 'asc' | 'desc' }[];
+    kanbanMode?: 'status' | 'custom' | 'list';
+    doneSort?: string;
+    doneSortOrder?: 'asc' | 'desc';
+    showCompletedSubtasks?: boolean;
+    showTaskCategories?: boolean;
+    clipTitleToOneLine?: boolean;
+    hideEmptyStatusBars?: boolean;
+    hideNoDoingGroups?: boolean;
+    hideNoTodayGroups?: boolean;
+    customGroupTabsMode?: boolean;
+}
+
 export interface ProjectFolder {
     id: string;
     name: string;
@@ -5,6 +19,7 @@ export interface ProjectFolder {
     collapsed?: boolean;
     icon?: string;
     parentId?: string;
+    kanbanSettings?: FolderKanbanSettings;
 }
 
 export class ProjectFolderManager {

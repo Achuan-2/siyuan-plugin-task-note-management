@@ -3281,6 +3281,17 @@ export class ProjectPanel {
         countEl.textContent = `(${node.totalProjectCount})`;
         countEl.style.cssText = 'font-size:12px;opacity:0.6;margin-right:8px;';
 
+        const openKanbanBtn = document.createElement('button');
+        openKanbanBtn.className = 'b3-button b3-button--text project-folder-open-kanban-btn';
+        openKanbanBtn.innerHTML = '<svg style="width:14px;height:14px;"><use xlink:href="#iconOpenWindow"></use></svg>';
+        openKanbanBtn.style.padding = '2px 4px';
+        openKanbanBtn.classList.add('ariaLabel');
+        openKanbanBtn.setAttribute('aria-label', i18n("openFolderKanban") || "打开看板");
+        openKanbanBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.openFolderKanban(node);
+        });
+
         const moreBtn = document.createElement('button');
         moreBtn.className = 'b3-button b3-button--text project-folder-more-btn';
         moreBtn.innerHTML = '<svg style="width:14px;height:14px;"><use xlink:href="#iconMore"></use></svg>';
@@ -3294,6 +3305,7 @@ export class ProjectPanel {
         headerEl.appendChild(iconEl);
         headerEl.appendChild(nameEl);
         headerEl.appendChild(countEl);
+        headerEl.appendChild(openKanbanBtn);
         headerEl.appendChild(moreBtn);
 
         const childrenEl = document.createElement('div');
