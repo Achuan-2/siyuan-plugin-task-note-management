@@ -81,20 +81,19 @@
             excludeArchived: true,
             includeNoProject: true,
             selectedId: settings.unassignedTasksProjectId,
-            onSelect: async (projectId: string, projectName: string) => {
-                console.log(`Selected default project: ${projectId} - ${projectName}`);
+            onSelect: (projectId: string) => {
                 settings.unassignedTasksProjectId = projectId;
                 settings = settings;
-                
-                await onChanged({
+                closeDropdown();
+
+                // Fire-and-forget: save in background without blocking DOM update
+                onChanged({
                     detail: {
                         group: '🗂️项目设置',
                         key: 'unassignedTasksProjectId',
                         value: projectId
                     }
                 } as any);
-
-                closeDropdown();
             }
         });
         popup.initialize().then(() => {
@@ -2622,7 +2621,7 @@
                                                 class="b3-text-field"
                                                 style="cursor: pointer; width: 100%; box-sizing: border-box; padding-right: 28px;"
                                                 readonly
-                                                value={getProjectNameById(item.value)}
+                                                value={getProjectNameById(settings.unassignedTasksProjectId)}
                                                 placeholder={i18n('pleaseSelectProject') || '请选择项目'}
                                                 on:click={(e) => toggleDropdown(e, item.key)}
                                             />
