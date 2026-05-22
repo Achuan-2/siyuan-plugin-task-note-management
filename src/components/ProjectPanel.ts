@@ -341,12 +341,12 @@ export class ProjectPanel {
 
         const cardOption = document.createElement('option');
         cardOption.value = 'card';
-        cardOption.textContent = i18n("cardViewMode") || "卡片列表";
+        cardOption.textContent = i18n("statusViewMode") || "状态视图";
         cardOption.selected = this.currentViewMode === 'card';
 
         const listOption = document.createElement('option');
         listOption.value = 'list';
-        listOption.textContent = i18n("listViewMode") || "清单列表";
+        listOption.textContent = i18n("folderViewMode") || "文件夹视图";
         listOption.selected = this.currentViewMode === 'list';
 
         viewModeSelect.appendChild(cardOption);
@@ -1956,16 +1956,16 @@ export class ProjectPanel {
     private showProjectContextMenu(event: { clientX: number; clientY: number }, project: any) {
         const menu = new Menu("projectContextMenu");
 
+        // 打开项目看板（统一放在第一个）
+        menu.addItem({
+            icon: "iconProject",
+            label: i18n("openProjectKanban") || "打开项目看板",
+            click: () => this.openProjectKanban(project)
+        });
+
+        menu.addSeparator();
+
         if (project.blockId) {
-            // 打开项目看板
-            menu.addItem({
-                icon: "iconProject",
-                label: i18n("openProjectKanban") || "打开项目看板",
-                click: () => this.openProjectKanban(project)
-            });
-
-            menu.addSeparator();
-
             // 复制块引用
             menu.addItem({
                 iconHTML: "📋",
@@ -1995,14 +1995,6 @@ export class ProjectPanel {
                     }
                 ]
             });
-            menu.addSeparator();
-            // 打开项目看板
-            menu.addItem({
-                iconHTML: "📋",
-                label: "打开项目看板",
-                click: () => this.openProjectKanban(project)
-            });
-
         }
 
         // 编辑项目
@@ -2225,13 +2217,13 @@ export class ProjectPanel {
                 <div class="merge-project-dialog">
                     <div class="b3-dialog__content" style="display:flex; flex-direction:column; gap:8px;">
                         <label>目标项目</label>
-                        <select id="mergeTargetSelect" style="width:100%; padding:6px;"></select>
+                        <select id="mergeTargetSelect" style="width:100%; padding:6px;" class="b3-select"></select>
 
                         <label>目标分组（可选，选择“新建分组”可输入新名称）</label>
-                        <select id="mergeGroupSelect" style="width:100%; padding:6px;"></select>
+                        <select id="mergeGroupSelect" style="width:100%; padding:6px;" class="b3-select"></select>
                         <input id="mergeNewGroupInput" type="text" placeholder="新分组名称" style="display:none; padding:6px;" />
 
-                        <label style="display:flex; align-items:center; gap:8px;"><input id="mergeDeleteSource" type="checkbox" /> ${i18n("deleteSourceProjectAfterMerge") || '合并后删除源项目'}</label>
+                        <label style="display:flex; align-items:center; gap:8px;"><input id="mergeDeleteSource" type="checkbox" class="b3-switch"/> ${i18n("deleteSourceProjectAfterMerge") || '合并后删除源项目'}</label>
                     </div>
                     <div class="b3-dialog__action">
                         <button class="b3-button b3-button--cancel" id="mergeCancel">${i18n("cancel") || '取消'}</button>
