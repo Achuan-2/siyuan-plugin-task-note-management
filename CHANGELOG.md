@@ -1,3 +1,41 @@
+## v6.9.0 / 20260523
+
+- 🎨 任务优先级样式优化：支持设置优先级是用背景色还是复选框边框表示
+
+  <img alt="PixPin_2026-05-22_12-37-29" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2026-05-22_12-37-29-20260522123734-k4oi8cv.png" style="width: 547px;" />
+- 🎨 任务侧栏：如果父任务不是当天任务，子任务设置为当天任务，只显示子任务
+
+  <img alt="PixPin_2026-05-21_16-38-57" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2026-05-21_16-38-57-20260521163858-opzeb63.png" />
+- 🎨 任务侧栏：更多菜单添加进入多选和退出多选选项
+- 🎨 任务编辑弹窗：改造为多Tab样式，包含当前任务Tab、子任务Tab，方便查看子任务
+
+  <img alt="PixPin_2026-05-22_16-26-45" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2026-05-22_16-26-45-20260522162645-lx0ahmh.png" style="width: 346px;" />
+- 🎨 粘贴新建子任务：支持保存内容为模板，快捷调用模板来创建子任务
+
+  <img alt="PixPin_2026-05-22_23-13-58" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2026-05-22_23-13-58-20260522231402-3oonwi8.png" style="width: 201px;" />
+- 🎨 项目侧栏：美化样式。项目名前添加圆点，圆点颜色为项目颜色
+- 🎨 项目侧栏：支持文件夹视图。支持多级文件夹管理项目，文件夹支持打开项目看板同时查看多个项目
+
+  <img alt="PixPin_2026-05-21_23-22-13" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2026-05-21_23-22-13-20260521232216-jkkn7xo.png" style="width: 286px;" />
+
+  <img alt="PixPin_2026-05-21_21-25-38" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2026-05-21_21-25-38-20260521212556-b4x9bqg.png" />
+- 🎨 任务编辑、日历视图等选择项目时支持按状态/文件夹显示
+
+  <img alt="PixPin_2026-05-22_12-03-55" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2026-05-22_12-03-55-20260522120358-a3mja6k.png" />
+- 🎨 插件自带默认项目“收集箱”，无项目的任务自动归属于收集箱
+
+  <img alt="PixPin_2026-05-22_16-46-42" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2026-05-22_16-46-42-20260522164657-oh2rdko.png" />
+- 🎨 项目看板：标签选择菜单美化
+
+  <img alt="PixPin_2026-05-21_16-13-35" src="https://assets.b3logfile.com/siyuan/1610205759005/assets/PixPin_2026-05-21_16-13-35-20260521161339-dtm9i5g.png" />
+- 🎨 项目看板：分组看板只筛选一个里程碑时，新建任务，默认添加该里程碑
+- 🎨 插件设置：如果没有设置新建文档的笔记本，默认选择第一个笔记本
+- ♻️ 任务渲染统一：任务侧栏、四象限面板、项目看板、块绑定任务弹窗、文档任务管理弹窗
+- 🐛 番茄钟静音再开启会把之前没播放的声音播放
+- 🐛 块显示番茄钟数据统计错误
+
+
+
 ## v6.8.11 / 20260521
 - 🎨 任务提醒跳过周末：支持跳过周六周日、周六、周日、不跳过四种状态
 - 🎨 插件设置支持恢复默认值
