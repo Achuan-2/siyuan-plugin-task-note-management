@@ -2179,5 +2179,10 @@
     "keepGroup": "保持原分组",
     "createNewGroup": "新建分组...",
     "selectEmoji": "选择/清除表情",
-    "emojiTooltip": "左键选择表情，右键清除"
+    "emojiTooltip": "左键选择表情，右键清除",
+    "createNewGroupByProjectName": "以项目名新建分组",
+    "default": "默认",
+    "visibleStatusesForGroupHint": "未勾选的状态将在该分组里隐藏",
+    "openFolderKanban": "打开文件夹看板",
+    "mergeSuccess": "合并成功"
 }

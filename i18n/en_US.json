@@ -2179,5 +2179,10 @@
     "keepGroup": "Keep original group",
     "createNewGroup": "Create new group...",
     "selectEmoji": "Select/Clear emoji",
-    "emojiTooltip": "Left-click to select emoji, right-click to clear"
+    "emojiTooltip": "Left-click to select emoji, right-click to clear",
+    "createNewGroupByProjectName": "Create a new group with the project's name",
+    "default": "Default",
+    "visibleStatusesForGroupHint": "Unchecked statuses will be hidden in this group",
+    "openFolderKanban": "Open Folder Kanban",
+    "mergeSuccess": "Merged successfully"
 }
