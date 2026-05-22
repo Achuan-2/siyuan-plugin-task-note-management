@@ -1,7 +1,7 @@
 import { Dialog, showMessage } from "siyuan";
 import { i18n } from "../pluginInstance";
 import { autoDetectDateTimeFromTitle, getLocalDateTimeString } from "../utils/dateUtils";
-import { getBlockByID, updateBindBlockAtrrs, addBlockProjectId } from "../api";
+import { getBlockByID, updateBindBlockAtrrs, addBlockProjectId, putFile, getFile, readDir, removeFile } from "../api";
 import { getAllReminders, saveReminders } from "../utils/icsSubscription";
 import LoadingDialog from './LoadingDialog.svelte';
 import { Editor, rootCtx, defaultValueCtx, editorViewCtx, editorViewOptionsCtx } from "@milkdown/kit/core";
@@ -11,7 +11,7 @@ import { history } from "@milkdown/kit/plugin/history";
 import { cursor } from "@milkdown/kit/plugin/cursor";
 import { clipboard } from "@milkdown/kit/plugin/clipboard";
 import { listener, listenerCtx } from "@milkdown/kit/plugin/listener";
-import { $view } from "@milkdown/utils";
+import { $view, replaceAll } from "@milkdown/utils";
 import { listItemSchema } from "@milkdown/kit/preset/commonmark";
 import { Plugin } from "@milkdown/prose/state";
 import { prosePluginsCtx, parserCtx } from "@milkdown/kit/core";
@@ -252,7 +252,11 @@ export class PasteTaskDialog {
                     </div>
                 </div>
                 <div class="b3-dialog__action">
+                    <button class="b3-button b3-button--outline" id="templatesBtn">${i18n("templates") || "模板库"}</button>
+                    <div class="fn__space"></div>
+                    <button class="b3-button b3-button--outline" id="saveTemplateBtn" style="margin-right: auto;">${i18n("saveAsTemplate") || "存为模板"}</button>
                     <button class="b3-button b3-button--cancel" id="cancelBtn">${i18n("cancel") || "取消"}</button>
+                    <div class="fn__space"></div>
                     <button class="b3-button b3-button--primary" id="createBtn">${isSubtask ? (i18n("createSubtasks") || "创建子任务") : (i18n("createTasks") || "创建任务")}</button>
                 </div>
             `,
@@ -265,6 +269,8 @@ export class PasteTaskDialog {
         });
 
         const taskListContainer = dialog.element.querySelector('#taskList') as HTMLElement;
+        const templatesBtn = dialog.element.querySelector('#templatesBtn') as HTMLButtonElement;
+        const saveTemplateBtn = dialog.element.querySelector('#saveTemplateBtn') as HTMLButtonElement;
         const cancelBtn = dialog.element.querySelector('#cancelBtn') as HTMLButtonElement;
         const createBtn = dialog.element.querySelector('#createBtn') as HTMLButtonElement;
         const autoDetectCheckbox = dialog.element.querySelector('#autoDetectDate') as HTMLInputElement;
@@ -530,6 +536,295 @@ export class PasteTaskDialog {
         }, 100);
 
         cancelBtn.addEventListener('click', () => dialog.destroy());
+
+        saveTemplateBtn.addEventListener('click', () => {
+            const fileContent = this.taskListContent.trim();
+            if (!fileContent) {
+                showMessage(i18n("contentNotEmpty") || "列表内容不能为空");
+                return;
+            }
+
+            const saveDialog = new Dialog({
+                title: i18n("saveAsTemplate") || "存为模板",
+                content: `
+                    <div class="b3-dialog__content" style="padding: 16px;">
+                        <div style="margin-bottom: 12px;">
+                            <label style="display: block; margin-bottom: 8px; font-size: 14px; color: var(--b3-theme-on-surface);">${i18n("templateName") || "模板名称"}</label>
+                            <input id="templateNameInput" class="b3-text-field" style="width: 100%;" placeholder="${i18n("enterTemplateName") || "请输入模板名称..."}" spellcheck="false" value="">
+                        </div>
+                    </div>
+                    <div class="b3-dialog__action">
+                        <button class="b3-button b3-button--cancel" id="cancelSaveBtn">${i18n("cancel") || "取消"}</button>
+                        <div class="fn__space"></div>
+                        <button class="b3-button b3-button--primary" id="confirmSaveBtn">${i18n("save") || "保存"}</button>
+                    </div>
+                `,
+                width: "350px"
+            });
+
+            const nameInput = saveDialog.element.querySelector('#templateNameInput') as HTMLInputElement;
+            const cancelSaveBtn = saveDialog.element.querySelector('#cancelSaveBtn') as HTMLButtonElement;
+            const confirmSaveBtn = saveDialog.element.querySelector('#confirmSaveBtn') as HTMLButtonElement;
+
+            nameInput.focus();
+
+            nameInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    confirmSaveBtn.click();
+                }
+            });
+
+            cancelSaveBtn.onclick = () => saveDialog.destroy();
+
+            confirmSaveBtn.onclick = async () => {
+                const name = nameInput.value.trim();
+                if (!name) {
+                    showMessage(i18n("enterTemplateName") || "请输入模板名称...");
+                    return;
+                }
+                const sanitizedName = name.replace(/[\\\/:\*\?"<>\|]/g, '_');
+                const path = `/data/storage/petal/siyuan-plugin-task-note-management/templates/${sanitizedName}.md`;
+                try {
+                    const blob = new Blob([fileContent], { type: 'text/markdown' });
+                    await putFile(path, false, blob);
+                    showMessage(i18n("operationSuccessful") || "操作成功");
+                    saveDialog.destroy();
+                } catch (e) {
+                    console.error("Failed to save template", e);
+                    showMessage(i18n("saveFailed") || "保存失败");
+                }
+            };
+        });
+
+        templatesBtn.addEventListener('click', async () => {
+            let dirData: any[] = [];
+            try {
+                const res = await readDir('/data/storage/petal/siyuan-plugin-task-note-management/templates');
+                if (Array.isArray(res)) {
+                    dirData = res;
+                }
+            } catch (e) {
+                console.warn("Failed to read templates directory", e);
+            }
+
+            const files = dirData.filter(item => !item.isDir && item.name.endsWith('.md'));
+            
+            const templates = await Promise.all(
+                files.map(async file => {
+                    const path = `/data/storage/petal/siyuan-plugin-task-note-management/templates/${file.name}`;
+                    try {
+                        const content = await getFile(path);
+                        return {
+                            name: file.name.substring(0, file.name.length - 3), // strip .md
+                            fileName: file.name,
+                            path: path,
+                            content: typeof content === 'string' ? content : ''
+                        };
+                    } catch (e) {
+                        console.error(`Failed to read template ${file.name}`, e);
+                        return null;
+                    }
+                })
+            );
+            const validTemplates = templates.filter(t => t !== null) as Array<{ name: string; fileName: string; path: string; content: string }>;
+
+            const templatesDialog = new Dialog({
+                title: i18n("templates") || "模板库",
+                content: `
+                    <style>
+                    .template-card {
+                        background: var(--b3-theme-surface);
+                        border: 1px solid var(--b3-theme-surface-lighter);
+                        border-radius: 8px;
+                        padding: 12px;
+                        display: flex;
+                        flex-direction: column;
+                        gap: 8px;
+                        min-height: 100px;
+                        transition: all 0.2s ease-in-out;
+                        position: relative;
+                        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+                    }
+                    .template-card:hover {
+                        border-color: var(--b3-theme-primary);
+                        transform: translateY(-2px);
+                        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+                    }
+                    .template-card-title {
+                        font-weight: 600;
+                        font-size: 14px;
+                        color: var(--b3-theme-on-surface);
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        white-space: nowrap;
+                        padding-right: 24px;
+                    }
+                    .template-card-preview {
+                        font-size: 12px;
+                        color: var(--b3-theme-on-surface);
+                        opacity: 0.6;
+                        display: -webkit-box;
+                        -webkit-line-clamp: 3;
+                        -webkit-box-orient: vertical;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        flex-grow: 1;
+                        word-break: break-all;
+                        white-space: pre-wrap;
+                    }
+                    .template-card-actions {
+                        display: flex;
+                        justify-content: flex-end;
+                        align-items: center;
+                        gap: 8px;
+                        margin-top: 8px;
+                    }
+                    .template-delete-btn {
+                        position: absolute;
+                        top: 8px;
+                        right: 8px;
+                        cursor: pointer;
+                        color: var(--b3-theme-on-surface);
+                        opacity: 0.4;
+                        transition: opacity 0.2s;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        width: 24px;
+                        height: 24px;
+                        border-radius: 4px;
+                    }
+                    .template-delete-btn:hover {
+                        opacity: 1;
+                        color: var(--b3-theme-error, #f44336);
+                        background: var(--b3-theme-surface-lighter);
+                    }
+                    </style>
+                    <div class="b3-dialog__content" style="padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+                        <input id="templateSearchInput" class="b3-text-field" style="width: 100%;" placeholder="${i18n("searchTemplatesPlaceholder") || "搜索模板名称或内容..."}" spellcheck="false">
+                        <div id="templateGrid" style="
+                            display: grid;
+                            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+                            gap: 12px;
+                            max-height: 350px;
+                            overflow-y: auto;
+                            padding: 4px;
+                        "></div>
+                    </div>
+                `,
+                width: "550px"
+            });
+
+            const searchInput = templatesDialog.element.querySelector('#templateSearchInput') as HTMLInputElement;
+            const templateGrid = templatesDialog.element.querySelector('#templateGrid') as HTMLElement;
+
+            searchInput.focus();
+
+            const renderCards = (filterText: string = '') => {
+                const query = filterText.toLowerCase().trim();
+                const filtered = validTemplates.filter(t => 
+                    t.name.toLowerCase().includes(query) || 
+                    t.content.toLowerCase().includes(query)
+                );
+
+                if (filtered.length === 0) {
+                    templateGrid.innerHTML = `
+                        <div style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 150px; opacity: 0.5;">
+                            <svg style="width: 48px; height: 48px; margin-bottom: 8px; fill: var(--b3-theme-on-surface);"><use xlink:href="#iconFolder"></use></svg>
+                            <div style="font-size: 13px; text-align: center; max-width: 300px; padding: 0 16px;">
+                                ${i18n("noTemplatesFound") || "暂无模板，可以在编辑框输入文字后点击‘存为模板’来创建"}
+                            </div>
+                        </div>
+                    `;
+                    return;
+                }
+
+                templateGrid.innerHTML = filtered.map(t => {
+                    const escapedPreview = t.content
+                        .replace(/&/g, "&amp;")
+                        .replace(/</g, "&lt;")
+                        .replace(/>/g, "&gt;")
+                        .replace(/"/g, "&quot;")
+                        .replace(/'/g, "&#039;");
+
+                    return `
+                        <div class="template-card" data-name="${t.name}">
+                            <div class="template-delete-btn ariaLabel" aria-label="${i18n("delete") || "删除"}" data-name="${t.name}">
+                                <svg style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
+                            </div>
+                            <div class="template-card-title">${t.name}</div>
+                            <div class="template-card-preview">${escapedPreview || '-'}</div>
+                            <div class="template-card-actions">
+                                <button class="b3-button b3-button--text b3-button--small use-template-btn" data-name="${t.name}" style="padding: 4px 12px; font-size: 12px;">
+                                    ${i18n("use") || "使用"}
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                templateGrid.querySelectorAll('.use-template-btn').forEach((btn: any) => {
+                    btn.onclick = (e: MouseEvent) => {
+                        e.stopPropagation();
+                        const tName = btn.getAttribute('data-name');
+                        const targetTemplate = validTemplates.find(t => t.name === tName);
+                        if (targetTemplate && this.editor) {
+                            this.editor.action(replaceAll(targetTemplate.content));
+                            templatesDialog.destroy();
+                        }
+                    };
+                });
+
+                templateGrid.querySelectorAll('.template-delete-btn').forEach((btn: any) => {
+                    btn.onclick = async (e: MouseEvent) => {
+                        e.stopPropagation();
+                        const tName = btn.getAttribute('data-name');
+                        const targetTemplate = validTemplates.find(t => t.name === tName);
+                        if (targetTemplate) {
+                            const confirmMsg = (i18n("confirmDeleteTemplate") || "确定要删除模板 \"\${name}\" 吗？此操作不可撤销。")
+                                .replace('\${name}', tName);
+                            
+                            const confirmDialog = new Dialog({
+                                title: i18n("confirmDeleteTitle") || "确认删除",
+                                content: `
+                                    <div class="b3-dialog__content" style="padding: 16px;">
+                                        ${confirmMsg}
+                                    </div>
+                                    <div class="b3-dialog__action">
+                                        <button class="b3-button b3-button--cancel" id="cancelConfirmBtn">${i18n("cancel") || "取消"}</button>
+                                        <div class="fn__space"></div>
+                                        <button class="b3-button b3-button--primary" id="confirmConfirmBtn">${i18n("confirm") || "确定"}</button>
+                                    </div>
+                                `,
+                                width: "350px"
+                            });
+
+                            (confirmDialog.element.querySelector('#cancelConfirmBtn') as HTMLElement).onclick = () => confirmDialog.destroy();
+                            (confirmDialog.element.querySelector('#confirmConfirmBtn') as HTMLElement).onclick = async () => {
+                                try {
+                                    await removeFile(targetTemplate.path);
+                                    const idx = validTemplates.findIndex(t => t.name === tName);
+                                    if (idx !== -1) validTemplates.splice(idx, 1);
+                                    renderCards(searchInput.value);
+                                    showMessage(i18n("deleteSuccess") || "删除成功");
+                                    confirmDialog.destroy();
+                                } catch (err) {
+                                    console.error("Failed to delete template file", err);
+                                    showMessage(i18n("deleteFailed") || "删除失败");
+                                    confirmDialog.destroy();
+                                }
+                            };
+                        }
+                    };
+                });
+            };
+
+            searchInput.addEventListener('input', () => {
+                renderCards(searchInput.value);
+            });
+
+            renderCards();
+        });
 
         dialog.element.addEventListener('keydown', (e: KeyboardEvent) => {
             if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
