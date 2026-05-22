@@ -1137,16 +1137,12 @@ export class TaskRenderer {
             infoEl.appendChild(noteEl);
         }
 
-        // 项目名称及项目看板状态 (使用预处理的 projectCache)
+        // 项目名称 (使用预处理的 projectCache)
         const showProjectBadge = context.showProjectBadge !== false;
         const project = cachedProjHabit?.project || task.project;
         if (showProjectBadge && project) {
             const projectName = project.title || project.name;
             if (projectName) {
-                const kanbanStatusInfo = (context.showProjectKanbanStatus && context.getReminderKanbanStatusInfo)
-                    ? context.getReminderKanbanStatusInfo(task)
-                    : null;
-
                 let displayProjectName = projectName;
                 const customGroupId = typeof task.customGroupId === 'string' ? task.customGroupId.trim() : '';
                 const groupFromProject = customGroupId && Array.isArray(project.customGroups)
@@ -1215,53 +1211,62 @@ export class TaskRenderer {
                 });
 
                 infoEl.appendChild(projectInfo);
-
-                if (kanbanStatusInfo?.name) {
-                    const statusColor = kanbanStatusInfo.color || project.color || 'var(--b3-theme-primary)';
-                    const projectStatusInfo = document.createElement('div');
-                    projectStatusInfo.className = 'reminder-item__project-status';
-                    projectStatusInfo.style.cssText = `
-                        display: inline-flex;
-                        width: fit-content;
-                        align-items: center;
-                        gap: 4px;
-                        font-size: 11px;
-                        background-color: ${colorWithOpacity(statusColor, 0.12)};
-                        color: ${statusColor};
-                        border: 1px solid ${colorWithOpacity(statusColor, 0.28)};
-                        border-radius: 12px;
-                        padding: 2px 8px;
-                        margin-top: 4px;
-                        font-weight: 500;
-                        cursor: pointer;
-                        transition: opacity 0.2s;
-                    `;
-
-                    const statusNameSpan = document.createElement('span');
-                    statusNameSpan.textContent = `${kanbanStatusInfo.icon ? `${kanbanStatusInfo.icon} ` : ''}${kanbanStatusInfo.name}`;
-                    projectStatusInfo.appendChild(statusNameSpan);
-
-                    projectStatusInfo.classList.add('ariaLabel');
-                    projectStatusInfo.setAttribute('aria-label', `${i18n("showProjectKanbanStatus") || "显示项目看板状态"}: ${kanbanStatusInfo.name}`);
-
-                    projectStatusInfo.addEventListener('click', (e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        if (callbacks.onProjectClick) {
-                            callbacks.onProjectClick(task, e);
-                        }
-                    });
-
-                    projectStatusInfo.addEventListener('mouseenter', () => {
-                        projectStatusInfo.style.opacity = '0.8';
-                    });
-                    projectStatusInfo.addEventListener('mouseleave', () => {
-                        projectStatusInfo.style.opacity = '1';
-                    });
-
-                    infoEl.appendChild(projectStatusInfo);
-                }
             }
+        }
+
+        // 项目看板状态
+        const kanbanStatusInfo = (context.showProjectKanbanStatus && context.getReminderKanbanStatusInfo)
+            ? context.getReminderKanbanStatusInfo(task)
+            : null;
+
+        if (kanbanStatusInfo?.name) {
+            const statusColor = kanbanStatusInfo.color || (project ? project.color : '') || 'var(--b3-theme-primary)';
+            const projectStatusInfo = document.createElement('div');
+            projectStatusInfo.className = 'reminder-item__project-status';
+            
+            const hasProject = !!project;
+            projectStatusInfo.style.cssText = `
+                display: inline-flex;
+                width: fit-content;
+                align-items: center;
+                gap: 4px;
+                font-size: 11px;
+                background-color: ${colorWithOpacity(statusColor, 0.12)};
+                color: ${statusColor};
+                border: 1px solid ${colorWithOpacity(statusColor, 0.28)};
+                border-radius: 12px;
+                padding: 2px 8px;
+                margin-top: 4px;
+                font-weight: 500;
+                cursor: ${hasProject ? 'pointer' : 'default'};
+                transition: opacity 0.2s;
+            `;
+
+            const statusNameSpan = document.createElement('span');
+            statusNameSpan.textContent = `${kanbanStatusInfo.icon ? `${kanbanStatusInfo.icon} ` : ''}${kanbanStatusInfo.name}`;
+            projectStatusInfo.appendChild(statusNameSpan);
+
+            projectStatusInfo.classList.add('ariaLabel');
+            projectStatusInfo.setAttribute('aria-label', `${i18n("showProjectKanbanStatus") || "显示项目看板状态"}: ${kanbanStatusInfo.name}`);
+
+            if (hasProject) {
+                projectStatusInfo.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (callbacks.onProjectClick) {
+                        callbacks.onProjectClick(task, e);
+                    }
+                });
+
+                projectStatusInfo.addEventListener('mouseenter', () => {
+                    projectStatusInfo.style.opacity = '0.8';
+                });
+                projectStatusInfo.addEventListener('mouseleave', () => {
+                    projectStatusInfo.style.opacity = '1';
+                });
+            }
+
+            infoEl.appendChild(projectStatusInfo);
         }
 
         // 习惯绑定信息
