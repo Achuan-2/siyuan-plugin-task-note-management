@@ -257,6 +257,8 @@ export class QuickReminderDialog {
     private eventSource?: string; // 事件来源标识（用于避免同源视图重复刷新）
     private reminderSkipHolidayData: HolidayData = {};
     private projectSelectorPopup?: ProjectSelectorPopup;
+    private subtasksDialog?: SubtasksDialog;
+    private activeDialogTab: 'task' | 'subtasks' = 'task';
 
 
     constructor(
@@ -1560,9 +1562,9 @@ export class QuickReminderDialog {
         const editAllGroup = dialog.querySelector('#quickEditAllInstancesGroup') as HTMLElement;
         if (editAllGroup) editAllGroup.style.display = 'none';
 
-        // 隐藏子任务组
-        const subtasksGroup = dialog.querySelector('#quickSubtasksGroup') as HTMLElement;
-        if (subtasksGroup) subtasksGroup.style.display = 'none';
+        // 隐藏 Tab 导航
+        const tabs = dialog.querySelector('#quickReminderTabs') as HTMLElement;
+        if (tabs) tabs.style.display = 'none';
 
         // 隐藏预计番茄时长组
         hideGroupOf('#quickEstimatedPomodoroHours');
@@ -1616,91 +1618,70 @@ export class QuickReminderDialog {
         }
     }
 
-    /**
-     * 更新子任务入口显示
-     */
-    private async updateSubtasksDisplay() {
-        const subtasksGroup = this.dialog.element.querySelector('#quickSubtasksGroup') as HTMLElement;
-        const subtasksCountText = this.dialog.element.querySelector('#quickSubtasksCountText') as HTMLElement;
+    private shouldShowSubtasksTab(): boolean {
+        if (this.dateOnly || this.mode === 'note') return false;
+        if (this.defaultParentId) return false;
+        return !(this.mode === 'edit' && !this.reminder);
+    }
 
-        if (!subtasksGroup) return;
-
-        // 如果当前任务是子任务（有 parentId），则不显示子任务按钮
-        if (this.defaultParentId) {
-            subtasksGroup.style.display = 'none';
-            return;
-        }
-
-        // 编辑模式：需要有 reminder.id
-        // 新建模式：使用临时子任务列表
-        if (this.mode === 'edit' && !this.reminder) {
-            subtasksGroup.style.display = 'none';
-            return;
-        }
-
-        subtasksGroup.style.display = 'block';
-
+    private async getSubtasksSummary(): Promise<{ count: number; completedCount: number }> {
         let count = 0;
         let completedCount = 0;
         if (this.mode === 'edit' && this.reminder) {
             // 编辑模式：从数据库获取子任务（包括 ghost 子任务）
             const reminderData = await this.plugin.loadReminderData();
-
-            // 解析可能存在的实例信息 (id_YYYY-MM-DD)
-            let targetParentId = this.reminder.id;
+            const allTasks = Object.values(reminderData) as any[];
+            const combined: any[] = [];
+            const seen = new Set<string>();
+            let templateParentId = this.reminder.id;
             let instanceDate: string | undefined;
 
             const lastUnderscoreIndex = this.reminder.id.lastIndexOf('_');
             if (lastUnderscoreIndex !== -1) {
                 const potentialDate = this.reminder.id.substring(lastUnderscoreIndex + 1);
                 if (/^\d{4}-\d{2}-\d{2}$/.test(potentialDate)) {
-                    targetParentId = this.reminder.id.substring(0, lastUnderscoreIndex);
+                    templateParentId = this.reminder.id.substring(0, lastUnderscoreIndex);
                     instanceDate = potentialDate;
                 }
             }
 
-            // 1. 获取直接以当前 reminder.id 为父任务的任务（可能是真正的实例子任务或普通子任务）
-            const directChildren = (Object.values(reminderData) as any[]).filter((r: any) => r.parentId === this.reminder.id);
+            const addTask = (task: any, nextTemplateParentId?: string) => {
+                if (!task?.id || seen.has(task.id)) return;
+                seen.add(task.id);
+                combined.push(task);
+                collectChildren(task.id, nextTemplateParentId);
+            };
 
-            // 2. 如果是实例视图，则尝试从模板中获取 ghost 子任务
-            let ghostChildren: any[] = [];
-            if (instanceDate && targetParentId !== this.reminder.id) {
-                const templateChildren = (Object.values(reminderData) as any[]).filter((r: any) => r.parentId === targetParentId);
-                ghostChildren = templateChildren
-                    .filter(child => {
-                        // 过滤掉在当前日期隐藏的 ghost 子任务
-                        const isHidden = child.repeat?.excludeDates?.includes(instanceDate);
-                        return !isHidden;
-                    })
-                    .map(child => {
-                        const ghostId = `${child.id}_${instanceDate}`;
-                        // 检查此 ghost 子任务在当前日期是否已完成
-                        const isCompleted = child.repeat?.completedInstances?.includes(instanceDate) || false;
+            const createGhostTask = (templateTask: any, renderedParentId: string) => {
+                const instanceMod = templateTask.repeat?.instanceModifications?.[instanceDate!] || {};
+                return {
+                    ...templateTask,
+                    ...instanceMod,
+                    id: `${templateTask.id}_${instanceDate}`,
+                    parentId: renderedParentId,
+                    isRepeatInstance: true,
+                    originalId: templateTask.id,
+                    completed: templateTask.repeat?.completedInstances?.includes(instanceDate!) || false,
+                    title: instanceMod.title || templateTask.title || '(无标题)',
+                };
+            };
 
-                        // 将实例级的修改合并（如果存在 instanceModifications）
-                        const instanceMod = child.repeat?.instanceModifications?.[instanceDate] || {};
+            const collectChildren = (renderedParentId: string, currentTemplateParentId?: string) => {
+                allTasks
+                    .filter((task: any) => task.parentId === renderedParentId)
+                    .forEach((task: any) => addTask(task));
 
-                        return {
-                            ...child,
-                            ...instanceMod,
-                            id: ghostId,
-                            parentId: this.reminder.id,
-                            isRepeatInstance: true,
-                            originalId: child.id,
-                            completed: isCompleted,
-                            // 确保标题优先使用实例级修改的 title
-                            title: instanceMod.title || child.title || '(无标题)',
-                        };
+                if (!instanceDate || !currentTemplateParentId) return;
+
+                allTasks
+                    .filter((task: any) => task.parentId === currentTemplateParentId)
+                    .filter((task: any) => !task.repeat?.excludeDates?.includes(instanceDate))
+                    .forEach((templateTask: any) => {
+                        addTask(createGhostTask(templateTask, renderedParentId), templateTask.id);
                     });
-            }
+            };
 
-            // 合并数据，避免重复（如果已存在真实的实例子任务，则以真实子任务优先）
-            const combined = [...directChildren];
-            ghostChildren.forEach(ghost => {
-                if (!combined.some(r => r.id === ghost.id)) {
-                    combined.push(ghost);
-                }
-            });
+            collectChildren(this.reminder.id, instanceDate ? templateParentId : undefined);
 
             count = combined.length;
             completedCount = combined.filter(r => r.completed).length;
@@ -1710,20 +1691,103 @@ export class QuickReminderDialog {
             completedCount = this.tempSubtasks.filter(r => r.completed).length;
         }
 
-        if (subtasksCountText) {
-            const label = this.mode === 'edit'
-                ? i18n("viewSubtasks")
-                : i18n("newSubtasks");
-            // 显示格式：查看子任务 (已完成数/总数) 或 查看子任务 (总数)
-            if (count > 0) {
-                if (completedCount > 0) {
-                    subtasksCountText.textContent = `${label} (${completedCount}/${count})`;
-                } else {
-                    subtasksCountText.textContent = `${label} (${count})`;
-                }
-            } else {
-                subtasksCountText.textContent = label;
+        return { count, completedCount };
+    }
+
+    /**
+     * 更新子任务 Tab 显示和数量
+     */
+    private async updateSubtasksDisplay() {
+        const subtasksTab = this.dialog.element.querySelector('#quickSubtasksTab') as HTMLButtonElement;
+        const subtasksCountText = this.dialog.element.querySelector('#quickSubtasksCountText') as HTMLElement;
+
+        if (!subtasksTab) return;
+
+        if (!this.shouldShowSubtasksTab()) {
+            subtasksTab.style.display = 'none';
+            if (this.activeDialogTab === 'subtasks') {
+                await this.switchQuickDialogTab('task');
             }
+            return;
+        }
+
+        subtasksTab.style.display = '';
+        const { count, completedCount } = await this.getSubtasksSummary();
+
+        if (subtasksCountText) {
+            subtasksCountText.textContent = `(${count})`;
+        }
+        subtasksTab.classList.add('ariaLabel');
+        subtasksTab.setAttribute('aria-label', `${i18n("subtasks") || "子任务"} ${completedCount}/${count}`);
+    }
+
+    private updateQuickDialogTabStyles() {
+        const currentTaskTab = this.dialog.element.querySelector('#quickCurrentTaskTab') as HTMLButtonElement;
+        const subtasksTab = this.dialog.element.querySelector('#quickSubtasksTab') as HTMLButtonElement;
+
+        const applyTabStyle = (button: HTMLButtonElement | null, isActive: boolean) => {
+            if (!button) return;
+            button.style.borderBottom = isActive ? '2px solid var(--b3-theme-primary)' : '2px solid transparent';
+            button.style.color = isActive ? 'var(--b3-theme-primary)' : 'var(--b3-theme-on-surface)';
+            button.style.background = isActive ? 'var(--b3-theme-background)' : 'transparent';
+            button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        };
+
+        applyTabStyle(currentTaskTab, this.activeDialogTab === 'task');
+        applyTabStyle(subtasksTab, this.activeDialogTab === 'subtasks');
+    }
+
+    private createSubtasksDialogForTab(): SubtasksDialog {
+        if (this.mode === 'edit' && this.reminder && this.reminder.id) {
+            const isModifyAllInstances = !this.isInstanceEdit && this.reminder.repeat?.enabled;
+            return new SubtasksDialog(
+                this.reminder.id,
+                this.plugin,
+                () => {
+                    void this.updateSubtasksDisplay();
+                },
+                [],
+                undefined,
+                this.isInstanceEdit,
+                isModifyAllInstances
+            );
+        }
+
+        return new SubtasksDialog('', this.plugin, () => {
+            void this.updateSubtasksDisplay();
+        }, this.tempSubtasks, (updatedSubtasks) => {
+            this.tempSubtasks = updatedSubtasks;
+            void this.updateSubtasksDisplay();
+        });
+    }
+
+    private async mountSubtasksTab() {
+        const subtasksPanel = this.dialog.element.querySelector('#quickSubtasksTabPanel') as HTMLElement;
+        if (!subtasksPanel || subtasksPanel.dataset.mounted === 'true') return;
+
+        this.subtasksDialog = this.createSubtasksDialogForTab();
+        await this.subtasksDialog.mount(subtasksPanel);
+        subtasksPanel.dataset.mounted = 'true';
+        await this.updateSubtasksDisplay();
+    }
+
+    private async switchQuickDialogTab(tab: 'task' | 'subtasks') {
+        const taskPanel = this.dialog.element.querySelector('#quickTaskTabPanel') as HTMLElement;
+        const subtasksPanel = this.dialog.element.querySelector('#quickSubtasksTabPanel') as HTMLElement;
+        const subtasksTab = this.dialog.element.querySelector('#quickSubtasksTab') as HTMLElement;
+
+        const nextTab = tab === 'subtasks' && subtasksTab?.style.display !== 'none'
+            ? 'subtasks'
+            : 'task';
+
+        this.activeDialogTab = nextTab;
+        if (taskPanel) taskPanel.style.display = nextTab === 'task' ? '' : 'none';
+        if (subtasksPanel) subtasksPanel.style.display = nextTab === 'subtasks' ? '' : 'none';
+
+        this.updateQuickDialogTabStyles();
+
+        if (nextTab === 'subtasks') {
+            await this.mountSubtasksTab();
         }
     }
 
@@ -2189,7 +2253,16 @@ export class QuickReminderDialog {
                 </div>
             ` : `
                 <div class="quick-reminder-dialog">
-                    <div class="b3-dialog__content">
+                    <div class="b3-dialog__content quick-reminder-dialog__content" style="display: flex; flex-direction: column; gap: 0; min-height: 0;">
+                        <div id="quickReminderTabs" role="tablist" style="display: flex; gap: 12px; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--b3-border-color);">
+                            <button type="button" id="quickCurrentTaskTab" role="tab" aria-selected="true" class="b3-button b3-button--text" style="border-radius: 0; border-bottom: 2px solid var(--b3-theme-primary); color: var(--b3-theme-primary); background: var(--b3-theme-background); padding: 6px 8px;">
+                                ${i18n("currentTask") || "当前任务"}
+                            </button>
+                            <button type="button" id="quickSubtasksTab" role="tab" aria-selected="false" class="b3-button b3-button--text" style="display: none; border-radius: 0; border-bottom: 2px solid transparent; color: var(--b3-theme-on-surface); background: transparent; padding: 6px 8px;">
+                                ${i18n("subtasks") || "子任务"} <span id="quickSubtasksCountText">(0)</span>
+                            </button>
+                        </div>
+                        <div id="quickTaskTabPanel" role="tabpanel" style="min-height: 0;">
                         <div class="b3-form__group" id="quickParentTaskGroup" style="display: none;">
                             <label class="b3-form__label">${i18n("parentTask")}</label>
                             <div style="display: flex; gap: 8px; align-items: center;">
@@ -2580,18 +2653,12 @@ export class QuickReminderDialog {
                         </div>
 
                         
+                        </div>
+                        <div id="quickSubtasksTabPanel" role="tabpanel" style="display: none; min-height: 220px;"></div>
                     </div>
-                    <div class="b3-dialog__action" style="display: flex; justify-content: space-between; align-items: center;">
-                        <div id="quickSubtasksGroup" style="display: none;">
-                            <button type="button" id="quickViewSubtasksBtn" class="b3-button b3-button--text" style="display: flex; align-items: center; gap: 4px; padding: 4px 8px;">
-                                <svg class="b3-button__icon"><use xlink:href="#iconEye"></use></svg>
-                                <span id="quickSubtasksCountText">${i18n("viewSubtasks")}</span>
-                            </button>
-                        </div>
-                        <div style="display: flex; gap: 8px; margin-left: auto;">
-                            <button class="b3-button b3-button--cancel" id="quickCancelBtn">${i18n("cancel")}</button>
-                            <button class="b3-button b3-button--primary" id="quickConfirmBtn">${this.mode === 'edit' ? i18n("save") : i18n("save")}</button>
-                        </div>
+                    <div class="b3-dialog__action" style="display: flex; justify-content: flex-end; align-items: center; gap: 8px;">
+                        <button class="b3-button b3-button--cancel" id="quickCancelBtn">${i18n("cancel")}</button>
+                        <button class="b3-button b3-button--primary" id="quickConfirmBtn">${this.mode === 'edit' ? i18n("save") : i18n("save")}</button>
                     </div>
                 </div>
             `,
@@ -3999,7 +4066,8 @@ export class QuickReminderDialog {
         const createDocBtn = this.dialog.element.querySelector('#quickCreateDocBtn') as HTMLButtonElement;
         const copyBlockRefBtn = this.dialog.element.querySelector('#quickCopyBlockRefBtn') as HTMLButtonElement;
         const titleInput = this.dialog.element.querySelector('#quickReminderTitle') as HTMLTextAreaElement;
-        const viewSubtasksBtn = this.dialog.element.querySelector('#quickViewSubtasksBtn') as HTMLButtonElement;
+        const currentTaskTab = this.dialog.element.querySelector('#quickCurrentTaskTab') as HTMLButtonElement;
+        const subtasksTab = this.dialog.element.querySelector('#quickSubtasksTab') as HTMLButtonElement;
         const editAllInstancesBtn = this.dialog.element.querySelector('#quickEditAllInstancesBtn') as HTMLButtonElement;
         const viewPomodorosBtn = this.dialog.element.querySelector('#quickViewPomodorosBtn') as HTMLButtonElement;
         const durationInput = this.dialog.element.querySelector('#quickDurationDays') as HTMLInputElement;
@@ -4011,6 +4079,15 @@ export class QuickReminderDialog {
         const habitAutoCheckInCheckbox = this.dialog.element.querySelector('#quickHabitAutoCheckInOnComplete') as HTMLInputElement;
         const syncBlockTitleBtn = this.dialog.element.querySelector('#quickSyncBlockTitleBtn') as HTMLButtonElement;
         const syncTitleToBlockBtn = this.dialog.element.querySelector('#quickSyncTitleToBlockBtn') as HTMLButtonElement;
+
+        currentTaskTab?.addEventListener('click', () => {
+            void this.switchQuickDialogTab('task');
+        });
+
+        subtasksTab?.addEventListener('click', () => {
+            void this.switchQuickDialogTab('subtasks');
+        });
+        this.updateQuickDialogTabStyles();
 
         // 更新标题为绑定块内容
         syncBlockTitleBtn?.addEventListener('click', () => {
@@ -4211,36 +4288,6 @@ export class QuickReminderDialog {
                     const dur = this.getDurationInclusive(startDateInput.value, endDateInput.value);
                     durationInput.value = String(dur > 0 ? dur : 1);
                 }
-            }
-        });
-
-        // 查看/新建子任务
-        viewSubtasksBtn?.addEventListener('click', () => {
-            if (this.mode === 'edit' && this.reminder && this.reminder.id) {
-                // 编辑模式：使用正常的子任务对话框
-                // 判断是否编辑所有实例：非实例编辑模式且是重复任务
-                const isModifyAllInstances = !this.isInstanceEdit && this.reminder.repeat?.enabled;
-                const subtasksDialog = new SubtasksDialog(
-                    this.reminder.id,
-                    this.plugin,
-                    () => {
-                        this.updateSubtasksDisplay();
-                    },
-                    [],
-                    undefined,
-                    this.isInstanceEdit,
-                    isModifyAllInstances
-                );
-                subtasksDialog.show();
-            } else if (this.mode !== 'edit') {
-                // 新建模式：使用临时子任务模式
-                const subtasksDialog = new SubtasksDialog('', this.plugin, () => {
-                    this.updateSubtasksDisplay();
-                }, this.tempSubtasks, (updatedSubtasks) => {
-                    this.tempSubtasks = updatedSubtasks;
-                    this.updateSubtasksDisplay();
-                });
-                subtasksDialog.show();
             }
         });
 
@@ -6727,15 +6774,42 @@ export class QuickReminderDialog {
         try {
             const reminderData = await this.plugin.loadReminderData();
             const nowStr = new Date().toISOString();
+            const orderedTempSubtasks: any[] = [];
+            const pendingTempSubtasks = [...this.tempSubtasks];
+            const orderedTempIds = new Set<string>();
 
-            for (const tempSubtask of this.tempSubtasks) {
+            while (pendingTempSubtasks.length > 0) {
+                const nextIndex = pendingTempSubtasks.findIndex((tempSubtask: any) => {
+                    const tempParentId = tempSubtask?.parentId;
+                    return !tempParentId
+                        || tempParentId === '__TEMP_PARENT__'
+                        || orderedTempIds.has(tempParentId)
+                        || !pendingTempSubtasks.some((pending: any) => pending.id === tempParentId);
+                });
+                const [nextSubtask] = pendingTempSubtasks.splice(nextIndex >= 0 ? nextIndex : 0, 1);
+                orderedTempSubtasks.push(nextSubtask);
+                if (nextSubtask?.id) {
+                    orderedTempIds.add(nextSubtask.id);
+                }
+            }
+
+            const tempIdToRealId = new Map<string, string>();
+            const resolveTempParentId = (tempSubtask: any) => {
+                const tempParentId = tempSubtask?.parentId;
+                if (tempParentId && tempParentId !== '__TEMP_PARENT__') {
+                    return tempIdToRealId.get(tempParentId) || parentId;
+                }
+                return parentId;
+            };
+
+            for (const tempSubtask of orderedTempSubtasks) {
                 // 生成新的子任务 ID
                 const subtaskId = `reminder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
                 // 创建子任务对象
                 const subtask: any = {
                     id: subtaskId,
-                    parentId: parentId,
+                    parentId: resolveTempParentId(tempSubtask),
                     blockId: tempSubtask.blockId || null,
                     docId: tempSubtask.docId || null,
                     title: tempSubtask.title || '未命名任务',
@@ -6785,6 +6859,9 @@ export class QuickReminderDialog {
                 }
 
                 reminderData[subtaskId] = subtask;
+                if (tempSubtask.id) {
+                    tempIdToRealId.set(tempSubtask.id, subtaskId);
+                }
 
                 // 如果绑定了块，添加项目 ID 属性
                 if (subtask.blockId && subtask.projectId) {
@@ -6798,7 +6875,7 @@ export class QuickReminderDialog {
             }
 
             await this.plugin.saveReminderData(reminderData);
-            console.log(`已保存 ${this.tempSubtasks.length} 个子任务`);
+            console.log(`已保存 ${orderedTempSubtasks.length} 个子任务`);
             showMessage(i18n("subtasksSaved"));
 
             // 保存成功后清空临时子任务数组
