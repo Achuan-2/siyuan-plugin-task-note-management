@@ -789,7 +789,7 @@
                     title: i18n('unassignedTasksProjectId') || '无项目的任务归属项目',
                     description:
                         i18n('unassignedTasksProjectIdDesc') ||
-                        '新创建的且没有指定项目的任务将默认归属于此项目',
+                        '没有指定项目的任务将默认归属于此项目',
                     options: {},
                 },
                 {
