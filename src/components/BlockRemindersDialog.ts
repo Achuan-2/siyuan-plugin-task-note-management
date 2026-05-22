@@ -1,10 +1,11 @@
-﻿import { Dialog, showMessage, confirm, Menu } from "siyuan";
+import { Dialog, showMessage, confirm, Menu } from "siyuan";
 import { getBlockByID, updateBindBlockAtrrs, getBlockReminderIds, openBlock } from "../api";
 import { getLocaleTag, getLogicalDateString } from "../utils/dateUtils";
 import { CategoryManager } from "../utils/categoryManager";
 import { ProjectManager } from "../utils/projectManager";
 import { i18n } from "../pluginInstance";
 import { TaskRenderer } from "./render/TaskRenderer";
+import { PomodoroRecordManager } from "../utils/pomodoroRecord";
 
 /**
  * 块绑定任务查看对话框
@@ -16,6 +17,7 @@ export class BlockRemindersDialog {
     private plugin: any;
     private categoryManager: CategoryManager;
     private projectManager: ProjectManager;
+    private pomodoroRecordManager: PomodoroRecordManager;
     private allRemindersMap: Map<string, any> = new Map();
     private milestoneMap: Map<string, any> = new Map();
     private projectDataMap: Map<string, any> = new Map();
@@ -26,12 +28,14 @@ export class BlockRemindersDialog {
         this.plugin = plugin;
         this.categoryManager = CategoryManager.getInstance();
         this.projectManager = ProjectManager.getInstance(plugin);
+        this.pomodoroRecordManager = PomodoroRecordManager.getInstance(plugin);
     }
 
     async show() {
         try {
             // 确保 ProjectManager 已初始化
             await this.projectManager.initialize();
+            await this.pomodoroRecordManager.initialize();
             await this.buildMilestoneMap();
 
             // 获取块信息
@@ -182,9 +186,12 @@ export class BlockRemindersDialog {
     }
 
     private async createReminderItem(reminder: any): Promise<HTMLElement> {
+        const stats = await this.pomodoroRecordManager.resolveReminderPomodoroStats(reminder, this.allRemindersMap);
+
         const renderReminder = {
             ...reminder,
-            completedTime: reminder.completedTime || reminder.completedAt
+            completedTime: reminder.completedTime || reminder.completedAt,
+            ...stats
         };
         const projectCache = new Map<string, any>();
         if (renderReminder.projectId) {
@@ -476,6 +483,11 @@ export class BlockRemindersDialog {
                     await updateBindBlockAtrrs(this.blockId, this.plugin);
 
                     // 触发更新事件
+
+                    // 更新块的书签状态
+                    await updateBindBlockAtrrs(this.blockId, this.plugin);
+
+                    // 触发更新事件
                     window.dispatchEvent(new CustomEvent('reminderUpdated'));
 
                     const reminderIds = await getBlockReminderIds(this.blockId);
@@ -495,4 +507,5 @@ export class BlockRemindersDialog {
             }
         );
     }
+
 }

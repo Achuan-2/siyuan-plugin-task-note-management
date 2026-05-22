@@ -25,6 +25,15 @@ export interface PomodoroRecord {
     sessions: PomodoroSession[]; // 详细的会话记录
 }
 
+export interface PomodoroStats {
+    pomodoroCount: number;
+    focusTime: number;
+    todayPomodoroCount: number;
+    todayFocusTime: number;
+    totalRepeatingPomodoroCount: number;
+    totalRepeatingFocusTime: number;
+}
+
 type SessionTimeInput = string | number | Date;
 
 interface RecordSessionOptions {
@@ -1035,5 +1044,301 @@ export class PomodoroRecordManager {
 
         // 保存重新生成的记录
         await this.saveRecords();
+    }
+
+    /**
+     * 一键解析提醒的各项番茄钟统计数据
+     */
+    async resolveReminderPomodoroStats(reminder: any, reminderData: any): Promise<PomodoroStats> {
+        if (!this.isInitialized) {
+            await this.initialize();
+        }
+        try {
+            const reminderId = reminder?.id;
+            if (!reminderId) {
+                return {
+                    pomodoroCount: 0,
+                    focusTime: 0,
+                    todayPomodoroCount: 0,
+                    todayFocusTime: 0,
+                    totalRepeatingPomodoroCount: 0,
+                    totalRepeatingFocusTime: 0
+                };
+            }
+
+            const dataMap = await this.getReminderStatsDataMap(reminder, reminderData);
+
+            // 1. Get Pomodoro count & Focus Time
+            const pomodoroCount = await this.getReminderPomodoroCountInternal(reminderId, reminder, dataMap);
+            const focusTime = await this.getReminderFocusTimeInternal(reminderId, reminder, dataMap);
+
+            // 2. Get Today's Pomodoro count & Today's Focus Time
+            const todayPomodoroCount = await this.getReminderTodayPomodoroCountInternal(reminderId, reminder, dataMap);
+            const todayFocusTime = await this.getReminderTodayFocusTimeInternal(reminderId, reminder, dataMap);
+
+            // 3. Get Repeating Total Pomodoro count & Repeating Total Focus Time
+            let totalRepeatingPomodoroCount = 0;
+            let totalRepeatingFocusTime = 0;
+            if (reminder.isRepeatInstance) {
+                const originalId = reminder.originalId || reminderId.split('_')[0];
+                totalRepeatingPomodoroCount = this.getRepeatingEventTotalPomodoroCount(originalId);
+                totalRepeatingFocusTime = this.getRepeatingEventTotalFocusTime(originalId);
+            }
+
+            return {
+                pomodoroCount,
+                focusTime,
+                todayPomodoroCount,
+                todayFocusTime,
+                totalRepeatingPomodoroCount,
+                totalRepeatingFocusTime
+            };
+        } catch (error) {
+            console.error('解析番茄钟统计数据失败:', error, reminder);
+            return {
+                pomodoroCount: 0,
+                focusTime: 0,
+                todayPomodoroCount: 0,
+                todayFocusTime: 0,
+                totalRepeatingPomodoroCount: 0,
+                totalRepeatingFocusTime: 0
+            };
+        }
+    }
+
+    private async getReminderStatsDataMap(reminder?: any, reminderData?: any): Promise<Map<string, any>> {
+        const raw = reminderData;
+        if (raw instanceof Map) {
+            return raw;
+        }
+        if (Array.isArray(raw)) {
+            return new Map(raw.map((r: any) => [r.id, r]));
+        }
+        if (raw && typeof raw === 'object') {
+            return new Map(Object.values(raw).map((r: any) => [r.id, r]));
+        }
+        try {
+            const rd = await this.plugin.loadReminderData();
+            return new Map(Object.values(rd || {}).map((r: any) => [r.id, r]));
+        } catch (e) {
+            return new Map();
+        }
+    }
+
+    private getAllDescendantIdsForStats(id: string, reminderMap: Map<string, any>): string[] {
+        const result: string[] = [];
+        const stack = [id];
+        const visited = new Set<string>();
+        visited.add(id);
+
+        while (stack.length > 0) {
+            const curId = stack.pop()!;
+            for (const r of reminderMap.values()) {
+                if (r && r.parentId === curId && !visited.has(r.id)) {
+                    result.push(r.id);
+                    stack.push(r.id);
+                    visited.add(r.id);
+                }
+            }
+        }
+        return result;
+    }
+
+    private getAllAncestorIdsForStats(id: string, reminderMap: Map<string, any>): string[] {
+        const result: string[] = [];
+        let current = reminderMap.get(id);
+
+        while (current && current.parentId) {
+            if (result.includes(current.parentId)) {
+                break;
+            }
+            result.push(current.parentId);
+            current = reminderMap.get(current.parentId);
+        }
+        return result;
+    }
+
+    private async getReminderSubtreeIdsForStats(reminderId: string, reminder: any, dataMap: Map<string, any>): Promise<Set<string>> {
+        const idsToQuery = new Set<string>();
+        idsToQuery.add(reminderId);
+
+        try {
+            const descendantIds = this.getAllDescendantIdsForStats(reminderId, dataMap);
+            descendantIds.forEach(id => idsToQuery.add(id));
+        } catch (e) {
+            // ignore subtree resolution failures and fall back to the current node
+        }
+
+        return idsToQuery;
+    }
+
+    private async getReminderPomodoroCountInternal(reminderId: string, reminder: any, dataMap: Map<string, any>): Promise<number> {
+        // Repeat instances can also own ghost descendants. In that case we need to
+        // aggregate the whole visible instance subtree instead of only the current node.
+        if (reminder && reminder.isRepeatInstance) {
+            const idsToQuery = await this.getReminderSubtreeIdsForStats(reminderId, reminder, dataMap);
+            let total = 0;
+            for (const id of idsToQuery) {
+                total += this.getEventTotalPomodoroCount(id);
+            }
+            return total;
+        }
+
+        // Determine if this reminder has any descendants (regardless of depth)
+        let hasDescendants = false;
+        try {
+            hasDescendants = this.getAllDescendantIdsForStats(reminderId, dataMap).length > 0;
+        } catch (e) {
+            hasDescendants = false;
+        }
+
+        if (hasDescendants) {
+            return await this.getAggregatedReminderPomodoroCount(reminderId);
+        }
+        const isSubtask = reminder && reminder.parentId;
+        if (isSubtask) {
+            return this.getEventTotalPomodoroCount(reminderId);
+        }
+        return await this.getAggregatedReminderPomodoroCount(reminderId);
+    }
+
+    private async getReminderFocusTimeInternal(reminderId: string, reminder: any, dataMap: Map<string, any>): Promise<number> {
+        // Repeat instances can also own ghost descendants. Aggregate the whole
+        // visible instance subtree instead of only the current node.
+        if (reminder && reminder.isRepeatInstance) {
+            const idsToQuery = await this.getReminderSubtreeIdsForStats(reminderId, reminder, dataMap);
+            let total = 0;
+            for (const id of idsToQuery) {
+                total += this.getEventTotalFocusTime(id);
+            }
+            return total;
+        }
+
+        // Determine if this reminder has any descendants (regardless of depth)
+        let hasDescendants = false;
+        try {
+            hasDescendants = this.getAllDescendantIdsForStats(reminderId, dataMap).length > 0;
+        } catch (e) {
+            hasDescendants = false;
+        }
+
+        if (hasDescendants) {
+            return await this.getAggregatedReminderFocusTime(reminderId);
+        }
+
+        return this.getEventTotalFocusTime(reminderId);
+    }
+
+    private async getReminderTodayPomodoroCountInternal(reminderId: string, reminder: any, dataMap: Map<string, any>, date?: string): Promise<number> {
+        const targetDate = date || this.getToday();
+
+        // Repeat instances can own ghost descendants. Sum the current instance subtree.
+        if (reminder && reminder.isRepeatInstance) {
+            const idsToQuery = await this.getReminderSubtreeIdsForStats(reminderId, reminder, dataMap);
+            let total = 0;
+            for (const id of idsToQuery) {
+                total += this.getEventPomodoroCount(id, targetDate);
+            }
+            return total;
+        }
+
+        // Build a set of event ids: root id + descendants + per-instance ids that match target date
+        const idsToQuery = new Set<string>();
+        idsToQuery.add(reminderId);
+
+        if (dataMap) {
+            // Add descendants
+            try {
+                const descendantIds = this.getAllDescendantIdsForStats(reminderId, dataMap);
+                descendantIds.forEach(id => idsToQuery.add(id));
+            } catch (e) { }
+
+            // Also include per-instance IDs that match the target date (e.g. originalId_YYYY-MM-DD)
+            try {
+                const suffix = `_${targetDate}`;
+                dataMap.forEach((r, k) => {
+                    // if reminder is repeat enabled and belongs to our root, add constructed instance id
+                    if (r && r.repeat && r.repeat.enabled) {
+                        const constructed = `${k}_${targetDate}`;
+                        try {
+                            const originalId = k;
+                            if (originalId === reminderId || this.getAllAncestorIdsForStats(k, dataMap).includes(reminderId)) {
+                                idsToQuery.add(constructed);
+                            }
+                        } catch (e) { }
+                    }
+                    if (k.endsWith(suffix)) {
+                        // check whether this instance belongs to our reminder (originalId prefix)
+                        const parts = k.split('_');
+                        const originalId = parts.slice(0, -1).join('_');
+                        if (originalId === reminderId || this.getAllAncestorIdsForStats(k, dataMap).includes(reminderId)) {
+                            idsToQuery.add(k);
+                        }
+                    }
+                });
+            } catch (e) { }
+        }
+
+        // Sum event counts for the target date
+        let total = 0;
+        for (const id of idsToQuery) {
+            total += this.getEventPomodoroCount(id, targetDate);
+        }
+
+        return total;
+    }
+
+    private async getReminderTodayFocusTimeInternal(reminderId: string, reminder: any, dataMap: Map<string, any>, date?: string): Promise<number> {
+        const targetDate = date || this.getToday();
+
+        // Repeat instances can own ghost descendants. Sum the current instance subtree.
+        if (reminder && reminder.isRepeatInstance) {
+            const idsToQuery = await this.getReminderSubtreeIdsForStats(reminderId, reminder, dataMap);
+            let total = 0;
+            for (const id of idsToQuery) {
+                total += this.getEventFocusTime(id, targetDate);
+            }
+            return total;
+        }
+
+        // Build a set of ids to query: root + descendants + instance ids of the date
+        const idsToQuery = new Set<string>();
+        idsToQuery.add(reminderId);
+
+        if (dataMap) {
+            try {
+                const descendantIds = this.getAllDescendantIdsForStats(reminderId, dataMap);
+                descendantIds.forEach(id => idsToQuery.add(id));
+            } catch (e) { }
+
+            try {
+                const suffix = `_${targetDate}`;
+                dataMap.forEach((r, k) => {
+                    if (r && r.repeat && r.repeat.enabled) {
+                        const constructed = `${k}_${targetDate}`;
+                        try {
+                            const originalId = k;
+                            if (originalId === reminderId || this.getAllAncestorIdsForStats(k, dataMap).includes(reminderId)) {
+                                idsToQuery.add(constructed);
+                            }
+                        } catch (e) { }
+                    }
+                    if (k.endsWith(suffix)) {
+                        const parts = k.split('_');
+                        const originalId = parts.slice(0, -1).join('_');
+                        if (originalId === reminderId || this.getAllAncestorIdsForStats(k, dataMap).includes(reminderId)) {
+                            idsToQuery.add(k);
+                        }
+                    }
+                });
+            } catch (e) { }
+        }
+
+        let total = 0;
+        for (const id of idsToQuery) {
+            total += this.getEventFocusTime(id, targetDate);
+        }
+
+        return total;
     }
 }

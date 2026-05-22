@@ -6492,24 +6492,16 @@ export class ProjectKanbanView {
                     status = this.getTaskStatus(reminder);
                 }
                 // 获取番茄钟计数（支持重复实例的单独计数）
-                const pomodoroCount = await this.getReminderPomodoroCount(reminder.id, reminder, reminderData);
-                const focusTime = await this.getReminderFocusTime(reminder.id, reminder, reminderData);
-
-                let totalRepeatingPomodoroCount = 0;
-                let totalRepeatingFocusTime = 0;
-                if (reminder.isRepeatInstance) {
-                    totalRepeatingPomodoroCount = this.pomodoroRecordManager.getRepeatingEventTotalPomodoroCount(reminder.originalId);
-                    totalRepeatingFocusTime = this.pomodoroRecordManager.getRepeatingEventTotalFocusTime(reminder.originalId);
-                }
+                const stats = await this.pomodoroRecordManager.resolveReminderPomodoroStats(reminder, reminderData);
 
                 return this.toViewTask({
                     ...reminder,
                     status: status,
-                    pomodoroCount: pomodoroCount,
-                    focusTime: focusTime || 0,
+                    pomodoroCount: stats.pomodoroCount,
+                    focusTime: stats.focusTime || 0,
                     linkedHabit: reminder.linkedHabitId ? (habitData?.[reminder.linkedHabitId] || null) : null,
-                    totalRepeatingPomodoroCount,
-                    totalRepeatingFocusTime
+                    totalRepeatingPomodoroCount: stats.totalRepeatingPomodoroCount,
+                    totalRepeatingFocusTime: stats.totalRepeatingFocusTime
                 });
             }));
 
@@ -7040,105 +7032,7 @@ export class ProjectKanbanView {
         }
     }
 
-    /**
-     * 获取提醒的番茄钟计数（支持重复实例的单独计数）
-     * @param reminderId 提醒ID
-     * @returns 番茄钟计数
-     */
-    private async getReminderPomodoroCount(reminderId: string, reminder?: any, reminderData?: any): Promise<number> {
-        try {
-            const pomodoroManager = this.pomodoroRecordManager;
-            // Repeat instances should be shown as per-instance totals
-            if (reminder && reminder.isRepeatInstance) {
-                return await pomodoroManager.getReminderPomodoroCount(reminderId);
-            }
 
-            let hasDescendants = false;
-            if (reminder && this.getAllDescendantIds) {
-                try {
-                    let rawData = reminderData;
-                    if (!rawData) {
-                        rawData = await this.getReminders();
-                    }
-                    const reminderMap = rawData instanceof Map ? rawData : new Map(Object.values(rawData || {}).map((r: any) => [r.id, r]));
-                    hasDescendants = this.getAllDescendantIds(reminder.id, reminderMap).length > 0;
-                } catch (e) {
-                    hasDescendants = false;
-                }
-            }
-
-            if (hasDescendants) {
-                if (typeof pomodoroManager.getAggregatedReminderPomodoroCount === 'function') {
-                    return await pomodoroManager.getAggregatedReminderPomodoroCount(reminderId);
-                }
-                return await pomodoroManager.getReminderPomodoroCount(reminderId);
-            }
-
-            const isSubtask = reminder && reminder.parentId;
-            if (isSubtask) {
-                return await pomodoroManager.getReminderPomodoroCount(reminderId);
-            }
-            // For parent: return aggregated count
-            if (typeof pomodoroManager.getAggregatedReminderPomodoroCount === 'function') {
-                return await pomodoroManager.getAggregatedReminderPomodoroCount(reminderId);
-            }
-            return await pomodoroManager.getReminderPomodoroCount(reminderId);
-        } catch (error) {
-            console.error('获取番茄钟计数失败:', error);
-            return 0;
-        }
-    }
-
-    private async getReminderFocusTime(reminderId: string, reminder?: any, reminderData?: any): Promise<number> {
-        try {
-            const pomodoroManager = this.pomodoroRecordManager;
-            // If repeat instance, use per-event total
-            if (reminder && reminder.isRepeatInstance) {
-                if (!pomodoroManager['isInitialized']) await pomodoroManager.initialize();
-                if (typeof pomodoroManager.getEventTotalFocusTime === 'function') {
-                    return pomodoroManager.getEventTotalFocusTime(reminderId);
-                }
-                if (typeof pomodoroManager.getEventFocusTime === 'function') {
-                    return pomodoroManager.getEventFocusTime(reminderId);
-                }
-                return 0;
-            }
-
-            let hasDescendants = false;
-            if (reminder && this.getAllDescendantIds) {
-                try {
-                    let rawData = reminderData;
-                    if (!rawData) {
-                        rawData = await this.getReminders();
-                    }
-                    const reminderMap = rawData instanceof Map ? rawData : new Map(Object.values(rawData || {}).map((r: any) => [r.id, r]));
-                    hasDescendants = this.getAllDescendantIds(reminder.id, reminderMap).length > 0;
-                } catch (e) {
-                    hasDescendants = false;
-                }
-            }
-
-            if (hasDescendants) {
-                if (typeof pomodoroManager.getAggregatedReminderFocusTime === 'function') {
-                    return await pomodoroManager.getAggregatedReminderFocusTime(reminderId);
-                }
-                if (typeof pomodoroManager.getEventTotalFocusTime === 'function') {
-                    if (!pomodoroManager['isInitialized']) await pomodoroManager.initialize();
-                    return pomodoroManager.getEventTotalFocusTime(reminderId);
-                }
-            }
-
-            // default to per-event total
-            if (typeof pomodoroManager.getEventTotalFocusTime === 'function') {
-                if (!pomodoroManager['isInitialized']) await pomodoroManager.initialize();
-                return pomodoroManager.getEventTotalFocusTime(reminderId);
-            }
-            return 0;
-        } catch (error) {
-            console.error('获取番茄钟总专注时长失败:', error);
-            return 0;
-        }
-    }
 
     /**
      * 静态方法：计算给定项目的顶级任务在 kanbanStatus 上的数量（只计顶级，即没有 parentId）
