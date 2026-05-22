@@ -747,6 +747,7 @@ export class ProjectPanel {
 
     private async loadProjects() {
         try {
+            await ProjectManager.getInstance(this.plugin).loadProjects();
             const projectData = await this.plugin.loadProjectData();
 
             if (!projectData || typeof projectData !== 'object') {
@@ -2427,6 +2428,11 @@ export class ProjectPanel {
                 if (projectData[sourceId]) {
                     delete projectData[sourceId];
                     await this.plugin.saveProjectData(projectData);
+                    if (this.plugin.settings?.unassignedTasksProjectId === sourceId) {
+                        this.plugin.settings.unassignedTasksProjectId = '';
+                        await this.plugin.saveSettings(this.plugin.settings);
+                        window.dispatchEvent(new CustomEvent('reminderSettingsUpdated'));
+                    }
                 }
             }
 
@@ -2569,6 +2575,12 @@ export class ProjectPanel {
             delete projectData[projectId];
             await this.plugin.saveProjectData(projectData);
 
+            if (this.plugin.settings?.unassignedTasksProjectId === projectId) {
+                this.plugin.settings.unassignedTasksProjectId = '';
+                await this.plugin.saveSettings(this.plugin.settings);
+                window.dispatchEvent(new CustomEvent('reminderSettingsUpdated'));
+            }
+
             // 如果需要删除任务
             if (deleteTasks) {
                 const reminderData = await this.plugin.loadReminderData();
@@ -2631,6 +2643,11 @@ export class ProjectPanel {
             if (projectData[blockId]) {
                 delete projectData[blockId];
                 await this.plugin.saveProjectData(projectData);
+                if (this.plugin.settings?.unassignedTasksProjectId === blockId) {
+                    this.plugin.settings.unassignedTasksProjectId = '';
+                    await this.plugin.saveSettings(this.plugin.settings);
+                    window.dispatchEvent(new CustomEvent('reminderSettingsUpdated'));
+                }
                 // 关闭该项目的看板标签页
                 this.closeProjectKanbanTab(blockId);
                 window.dispatchEvent(new CustomEvent('projectUpdated'));

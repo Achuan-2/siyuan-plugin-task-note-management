@@ -19,6 +19,7 @@ import { BatchReminderDialog } from "./components/BatchReminderDialog";
 import { CalendarView } from "./components/CalendarView";
 import { EisenhowerMatrixView } from "./components/EisenhowerMatrixView";
 import { CategoryManager } from "./utils/categoryManager";
+import { ProjectManager } from "./utils/projectManager";
 import { readDir } from "./api";
 import { getLocalTimeString, getLocalDateString, getLocalDateTimeString, compareDateStrings, getLogicalDateString, setDayStartTime, setSingleDateDefaultRole } from "./utils/dateUtils";
 import { i18n, setPluginInstance } from "./pluginInstance";
@@ -119,6 +120,7 @@ export const DEFAULT_SETTINGS = {
     enableTaskListStatusSync: false, // 任务列表状态与任务进行中/放弃状态联动
     taskPriorityDisplayStyle: 'background', // 任务卡片优先级显示样式：background | checkboxBorder
     showTaskCardDocumentTitle: true, // 任务卡片是否显示绑定块所属文档标题
+    unassignedTasksProjectId: 'inbox', // 无项目的任务归属项目ID，默认'inbox'
 
     // 控制侧边栏显示
     enableReminderDock: true, // 侧边栏：提醒（任务管理）
@@ -1413,6 +1415,7 @@ export default class ReminderPlugin extends Plugin {
 
         this.categoryManager = CategoryManager.getInstance(this);
         await this.categoryManager.initialize();
+        await ProjectManager.getInstance(this).initialize();
 
 
         // 添加用户交互监听器来启用音频

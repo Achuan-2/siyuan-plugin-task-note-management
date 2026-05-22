@@ -1,4 +1,4 @@
-﻿import { Dialog, showMessage } from "siyuan";
+import { Dialog, showMessage } from "siyuan";
 import { i18n } from "../pluginInstance";
 import { autoDetectDateTimeFromTitle, getLocalDateTimeString } from "../utils/dateUtils";
 import { getBlockByID, updateBindBlockAtrrs, addBlockProjectId } from "../api";
@@ -922,7 +922,10 @@ export class PasteTaskDialog {
 
     private async batchCreateTasksWithHierarchy(tasks: HierarchicalTask[], selectedStatus?: string, selectedGroupId?: string | null, selectedMilestoneId?: string): Promise<any[]> {
         const parentTask = this.config.parentTask;
-        const projectId = this.config.projectId || (parentTask ? parentTask.projectId : undefined);
+        let projectId = this.config.projectId || (parentTask ? parentTask.projectId : undefined);
+        if (!projectId && this.config.plugin?.settings?.unassignedTasksProjectId) {
+            projectId = this.config.plugin.settings.unassignedTasksProjectId;
+        }
         const categoryId = parentTask ? parentTask.categoryId : undefined;
 
         // 临时模式下不需要从数据库读取

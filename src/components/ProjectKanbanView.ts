@@ -5971,7 +5971,21 @@ export class ProjectKanbanView {
                 console.warn("加载习惯数据失败:", error);
                 habitData = {};
             }
-            let projectTasks = Object.values(reminderData).filter((reminder: any) => reminder && this.isProjectInCurrentView(reminder.projectId));
+            // 判断当前看板项目是否为「无项目任务归属项目」
+            // 如果是，则额外纳入 projectId 为空的任务（即尚未归属任何项目的任务）
+            const unassignedProjectId = this.reminderSkipSettings?.unassignedTasksProjectId || '';
+            const isUnassignedTargetProject = !this.isAggregateView
+                && !!unassignedProjectId
+                && this.projectId === unassignedProjectId;
+
+            let projectTasks = Object.values(reminderData).filter((reminder: any) => {
+                if (!reminder) return false;
+                if (this.isProjectInCurrentView(reminder.projectId)) return true;
+                // 无项目归属看板：显示没有指定项目的任务
+                if (isUnassignedTargetProject && !reminder.projectId) return true;
+                return false;
+            });
+
 
             // 过滤已归档分组的未完成任务
             projectTasks = await this.filterArchivedGroupTasks(projectTasks);

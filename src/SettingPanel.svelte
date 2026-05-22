@@ -34,6 +34,8 @@
     import VipPanel from './components/VipPanel.svelte';
     import SubscriptionPanel from './components/icsSubscriptionPanel.svelte';
     import HelpPanel from './components/HelpPanel.svelte';
+    import { ProjectManager } from './utils/projectManager';
+    import { ProjectSelectorPopup } from './components/ProjectSelectorPopup';
 
     export let plugin;
 
@@ -42,6 +44,77 @@
 
     // 笔记本列表
     let notebooks: Array<{ id: string; name: string }> = [];
+
+    // 项目列表
+    let projectsList: Array<{ id: string; name: string }> = [];
+
+    // 项目选择器相关变量和函数
+    let activeDropdownKey: string | null = null;
+    let activePopup: ProjectSelectorPopup | null = null;
+
+    function getProjectNameById(id: string): string {
+        if (!id) return i18n('noUnassignedTasksProject') || '无';
+        const projectManager = ProjectManager.getInstance(plugin);
+        const project = projectManager.getProjectById(id);
+        return project ? project.name : (i18n('noUnassignedTasksProject') || '无');
+    }
+
+    function toggleDropdown(event: MouseEvent, key: string) {
+        event.stopPropagation();
+        if (activeDropdownKey === key) {
+            closeDropdown();
+        } else {
+            activeDropdownKey = key;
+        }
+    }
+
+    function closeDropdown() {
+        activeDropdownKey = null;
+        activePopup = null;
+    }
+
+    function mountPopup(node: HTMLElement) {
+        const popup = new ProjectSelectorPopup({
+            plugin,
+            container: node,
+            isMultiSelect: false,
+            excludeArchived: true,
+            includeNoProject: true,
+            selectedId: settings.unassignedTasksProjectId,
+            onSelect: async (projectId: string, projectName: string) => {
+                console.log(`Selected default project: ${projectId} - ${projectName}`);
+                settings.unassignedTasksProjectId = projectId;
+                settings = settings;
+                
+                await onChanged({
+                    detail: {
+                        group: '🗂️项目设置',
+                        key: 'unassignedTasksProjectId',
+                        value: projectId
+                    }
+                } as any);
+
+                closeDropdown();
+            }
+        });
+        popup.initialize().then(() => {
+            activePopup = popup;
+        });
+
+        const clickOutside = (e: MouseEvent) => {
+            if (!node.contains(e.target as Node) && !(e.target as HTMLElement).closest('.custom-select')) {
+                closeDropdown();
+            }
+        };
+
+        document.addEventListener('click', clickOutside);
+
+        return {
+            destroy() {
+                document.removeEventListener('click', clickOutside);
+            }
+        };
+    }
 
     // 音频文件管理（每个声音设置项各自独立维护文件列表）
     let isUploadingAudio = false;
@@ -708,6 +781,16 @@
                         status: i18n('projectSelectorViewModeStatus') || '状态',
                         folder: i18n('projectSelectorViewModeFolder') || '文件夹',
                     },
+                },
+                {
+                    key: 'unassignedTasksProjectId',
+                    value: settings.unassignedTasksProjectId,
+                    type: 'project-selector',
+                    title: i18n('unassignedTasksProjectId') || '无项目的任务归属项目',
+                    description:
+                        i18n('unassignedTasksProjectIdDesc') ||
+                        '新创建的且没有指定项目的任务将默认归属于此项目',
+                    options: {},
                 },
                 {
                     key: 'openGlobalProjectStatusDialog',
@@ -1793,6 +1876,7 @@
     onMount(() => {
         // 执行异步加载
         (async () => {
+            loadProjectsList();
             await loadNotebooks();
             await runload();
             // 展开时如果 settings.audioFileLists 未存在（旧数据兼容），创建空对象
@@ -1813,13 +1897,21 @@
                 settings.weekStartDay = isNaN(parsed) ? DEFAULT_SETTINGS.weekStartDay : parsed;
             }
             await ensureDefaultNotebookSelected(true);
+            loadProjectsList();
             updateGroupItems();
         };
         window.addEventListener('reminderSettingsUpdated', settingsUpdateHandler);
 
+        const projectUpdateHandler = () => {
+            loadProjectsList();
+            updateGroupItems();
+        };
+        window.addEventListener('projectUpdated', projectUpdateHandler);
+
         // 在组件销毁时移除监听
         return () => {
             window.removeEventListener('reminderSettingsUpdated', settingsUpdateHandler);
+            window.removeEventListener('projectUpdated', projectUpdateHandler);
             if (audioPreviewEl) {
                 audioPreviewEl.pause();
                 audioPreviewEl = null;
@@ -1837,6 +1929,20 @@
         } catch (error) {
             console.error('加载笔记本列表失败:', error);
             notebooks = [];
+        }
+    }
+
+    function loadProjectsList() {
+        try {
+            const projectManager = ProjectManager.getInstance(plugin);
+            const projects = projectManager.getProjects();
+            projectsList = projects.map((project: any) => ({
+                id: project.id,
+                name: project.name || project.id
+            }));
+        } catch (error) {
+            console.error('加载项目列表失败:', error);
+            projectsList = [];
         }
     }
 
@@ -1861,6 +1967,7 @@
         // 确保 audioFileLists 存在
         if (!settings.audioFileLists) settings.audioFileLists = {};
         await ensureDefaultNotebookSelected(true);
+        loadProjectsList();
         updateGroupItems();
         console.debug('加载配置文件完成');
     }
@@ -1893,6 +2000,17 @@
                         },
                         {} as { [key: string]: string }
                     );
+                }
+
+                // 为无项目的任务归属项目选择器更新选项
+                if (item.key === 'unassignedTasksProjectId') {
+                    const optionsObj: { [key: string]: string } = {
+                        '': i18n('noUnassignedTasksProject') || '无'
+                    };
+                    projectsList.forEach(project => {
+                        optionsObj[project.id] = project.name;
+                    });
+                    updatedItem.options = optionsObj;
                 }
 
                 return updatedItem;
@@ -2496,17 +2614,45 @@
                                 description={item.description}
                                 direction={item?.direction}
                             >
-                                <Form.Input
-                                    type={item.type}
-                                    key={item.key}
-                                    value={item.value}
-                                    placeholder={item?.placeholder}
-                                    options={item?.options}
-                                    slider={item?.slider}
-                                    button={item?.button}
-                                    disabled={item?.disabled}
-                                    on:changed={onChanged}
-                                />
+                                {#if item.type === 'project-selector'}
+                                    <div class="custom-select" style="position: relative; width: 300px;">
+                                        <div style="position: relative;">
+                                            <input
+                                                type="text"
+                                                class="b3-text-field"
+                                                style="cursor: pointer; width: 100%; box-sizing: border-box; padding-right: 28px;"
+                                                readonly
+                                                value={getProjectNameById(item.value)}
+                                                placeholder={i18n('pleaseSelectProject') || '请选择项目'}
+                                                on:click={(e) => toggleDropdown(e, item.key)}
+                                            />
+                                            <svg style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 12px; height: 12px; pointer-events: none; opacity: 0.5;">
+                                                <use xlink:href="#iconDown"></use>
+                                            </svg>
+                                        </div>
+                                        {#if activeDropdownKey === item.key}
+                                            <div
+                                                use:mountPopup
+                                                class="b3-menu"
+                                                style="position: absolute; width: 100%; min-width: 300px; z-index: 100; margin-top: 4px; box-shadow: var(--b3-menu-shadow); background: var(--b3-menu-background); border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius);"
+                                            >
+                                                <!-- ProjectSelectorPopup will mount its structure here -->
+                                            </div>
+                                        {/if}
+                                    </div>
+                                {:else}
+                                    <Form.Input
+                                        type={item.type}
+                                        key={item.key}
+                                        value={item.value}
+                                        placeholder={item?.placeholder}
+                                        options={item?.options}
+                                        slider={item?.slider}
+                                        button={item?.button}
+                                        disabled={item?.disabled}
+                                        on:changed={onChanged}
+                                    />
+                                {/if}
                             </Form.Wrap>
                         {/if}
                     {/if}

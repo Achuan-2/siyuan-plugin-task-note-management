@@ -309,6 +309,9 @@ export class QuickReminderDialog {
             this.mode = options.mode || 'quick';
             this.autoDetectDateTime = options.autoDetectDateTime;
             this.defaultProjectId = options.defaultProjectId ?? options.reminder?.projectId;
+            if (!this.defaultProjectId && this.mode !== 'edit' && this.plugin?.settings?.unassignedTasksProjectId) {
+                this.defaultProjectId = this.plugin.settings.unassignedTasksProjectId;
+            }
             this.showKanbanStatus = options.showKanbanStatus || 'term';
             this.defaultStatus = options.defaultStatus || 'doing';
             this.defaultCustomGroupId = options.defaultCustomGroupId !== undefined ? options.defaultCustomGroupId : options.reminder?.customGroupId;

@@ -2,6 +2,14 @@ import { getFile, putFile, removeFile } from '../api';
 import { StatusManager } from './statusManager';
 import { i18n } from '../pluginInstance';
 
+const DEFAULT_INBOX_PROJECT_ID = 'inbox';
+const DEFAULT_INBOX_INITIALIZED_KEY = '_initializedDefaultInbox';
+
+interface DefaultInboxEnsureResult {
+    dataChanged: boolean;
+    created: boolean;
+}
+
 export interface Milestone {
     id: string;
     name: string;
@@ -144,6 +152,121 @@ export class ProjectManager {
         return defaultNames[id]?.includes(name) || false;
     }
 
+    private getProjectEntries(projectData: any): [string, any][] {
+        if (!projectData || typeof projectData !== 'object') {
+            return [];
+        }
+
+        return Object.entries(projectData)
+            .filter(([key, project]: [string, any]) => !key.startsWith('_') && project && typeof project === 'object');
+    }
+
+    private getDefaultInboxProjectName(): string {
+        return i18n('defaultInboxProjectName') || '收集箱';
+    }
+
+    private isDefaultInboxProjectTitle(title: string): boolean {
+        return ['收集箱', 'Inbox', '📥 收集箱', '📥 Inbox'].includes((title || '').trim());
+    }
+
+    private getDefaultInboxStatusId(statuses: any[], defaultStatusId: string): string {
+        return statuses.some((status: any) => status?.id === 'someday') ? 'someday' : defaultStatusId;
+    }
+
+    private createDefaultInboxProject(statusId: string): any {
+        const now = new Date().toISOString();
+        const settings = this.plugin?.settings || {};
+
+        return {
+            id: DEFAULT_INBOX_PROJECT_ID,
+            title: this.getDefaultInboxProjectName(),
+            status: statusId,
+            color: '#4f46e5',
+            priority: 'none',
+            createdTime: now,
+            updatedTime: now,
+            sort: 0,
+            showCompletedSubtasks: settings.projectKanbanShowCompletedSubtasks !== false,
+            showTaskCategories: settings.projectKanbanShowTaskCategories !== false,
+            clipTitleToOneLine: settings.projectKanbanClipTitleToOneLine === true
+        };
+    }
+
+    private ensureDefaultInboxProject(projectData: any, statuses: any[], defaultStatusId: string): DefaultInboxEnsureResult {
+        const result: DefaultInboxEnsureResult = {
+            dataChanged: false,
+            created: false
+        };
+
+        if (!projectData || typeof projectData !== 'object') {
+            return result;
+        }
+
+        const projectEntries = this.getProjectEntries(projectData);
+
+        if (projectEntries.length === 0) {
+            if (projectData[DEFAULT_INBOX_INITIALIZED_KEY] === true) {
+                return result;
+            }
+
+            projectData[DEFAULT_INBOX_PROJECT_ID] = this.createDefaultInboxProject(
+                this.getDefaultInboxStatusId(statuses, defaultStatusId)
+            );
+            projectData[DEFAULT_INBOX_INITIALIZED_KEY] = true;
+            result.dataChanged = true;
+            result.created = true;
+            return result;
+        }
+
+        if (projectData[DEFAULT_INBOX_INITIALIZED_KEY] !== true) {
+            projectData[DEFAULT_INBOX_INITIALIZED_KEY] = true;
+            result.dataChanged = true;
+        }
+
+        const inboxProject = projectData[DEFAULT_INBOX_PROJECT_ID];
+        if (inboxProject && typeof inboxProject === 'object') {
+            if (inboxProject.id !== DEFAULT_INBOX_PROJECT_ID) {
+                inboxProject.id = DEFAULT_INBOX_PROJECT_ID;
+                result.dataChanged = true;
+            }
+
+            if (!inboxProject.title || this.isDefaultInboxProjectTitle(inboxProject.title)) {
+                const localizedTitle = this.getDefaultInboxProjectName();
+                if (inboxProject.title !== localizedTitle) {
+                    inboxProject.title = localizedTitle;
+                    result.dataChanged = true;
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private async setDefaultUnassignedProjectToInbox(): Promise<void> {
+        try {
+            const settings = typeof this.plugin?.loadSettings === 'function'
+                ? await this.plugin.loadSettings()
+                : this.plugin?.settings;
+
+            if (!settings || typeof settings !== 'object') return;
+            if (settings.unassignedTasksProjectId === DEFAULT_INBOX_PROJECT_ID) return;
+
+            settings.unassignedTasksProjectId = DEFAULT_INBOX_PROJECT_ID;
+
+            if (typeof this.plugin?.saveSettings === 'function') {
+                await this.plugin.saveSettings(settings);
+            } else if (this.plugin) {
+                this.plugin.settings = settings;
+            }
+
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('reminderSettingsUpdated'));
+            }
+        } catch (error) {
+            console.warn('设置默认无项目归属项目失败:', error);
+        }
+    }
+
     public async loadProjects() {
         try {
             const projectData = await this.plugin.loadProjectData() || {};
@@ -157,10 +280,19 @@ export class ProjectManager {
                 const defaultStatusId = statuses.length > 0 ? statuses[0].id : 'active';
 
                 let dataChanged = false;
-                const projectEntries = Object.entries(projectData).filter(([key]) => !key.startsWith('_'));
+                const defaultInboxResult = this.ensureDefaultInboxProject(projectData, statuses, defaultStatusId);
+                if (defaultInboxResult.dataChanged) {
+                    dataChanged = true;
+                }
+                let projectEntries = this.getProjectEntries(projectData);
 
                 projectEntries.forEach(([id, project]: [string, any]) => {
                     if (project && typeof project === 'object') {
+                        if (!project.id) {
+                            project.id = id;
+                            dataChanged = true;
+                        }
+
                         if (!project.status && project.hasOwnProperty('archived')) {
                             project.status = project.archived ? 'archived' : 'active';
                             dataChanged = true;
@@ -178,6 +310,9 @@ export class ProjectManager {
 
                 if (dataChanged) {
                     await this.plugin.saveProjectData(projectData);
+                }
+                if (defaultInboxResult.created) {
+                    await this.setDefaultUnassignedProjectToInbox();
                 }
 
                 this.projects = projectEntries

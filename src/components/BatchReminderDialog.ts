@@ -1,4 +1,4 @@
-﻿import { Dialog, showMessage } from "siyuan";
+import { Dialog, showMessage } from "siyuan";
 import { i18n } from "../pluginInstance";
 import { updateBindBlockAtrrs, getBlockByID } from "../api";
 import { getRepeatDescription } from "../utils/repeatUtils";
@@ -227,6 +227,9 @@ class SmartBatchDialog {
     private async initializeBlockSettings() {
         for (const data of this.autoDetectedData) {
             let projectId = this.defaultSettings?.defaultProjectId || '';
+            if (!projectId && this.plugin.settings?.unassignedTasksProjectId) {
+                projectId = this.plugin.settings.unassignedTasksProjectId;
+            }
             let customGroupId = this.defaultSettings?.defaultCustomGroupId || '';
             let milestoneId = this.defaultSettings?.defaultMilestoneId || '';
             let categoryId = this.defaultSettings?.defaultCategoryId || '';
