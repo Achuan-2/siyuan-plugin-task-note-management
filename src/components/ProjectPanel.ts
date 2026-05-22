@@ -2216,29 +2216,27 @@ export class ProjectPanel {
             await projectManager.initialize();
 
             let html = `
-                <div class="merge-project-dialog">
-                    <div class="b3-dialog__content" style="display:flex; flex-direction:column; gap:8px;">
-                        <label>目标项目</label>
-                        <div class="custom-select" id="mergeProjectSelectCustom" style="position: relative;">
-                            <div style="position: relative;">
-                                <input type="text" id="mergeProjectSearchInput" class="b3-text-field" placeholder="${i18n("searchProject") || '搜索项目'}" autocomplete="off" style="width: 100%; padding-right: 30px; background: var(--b3-select-background);" spellcheck="false">
-                                <input type="hidden" id="mergeTargetSelect">
-                            </div>
-                            <div id="mergeProjectDropdown" class="b3-menu" style="display: none; position: absolute; width: 100%; max-height: 200px; overflow-y: auto; z-index: 10; margin-top: 4px; box-shadow: var(--b3-menu-shadow); background: var(--b3-menu-background); border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius);">
-                                <!-- 项目选项将在这里渲染 -->
-                            </div>
+                <div class="b3-dialog__content" style="display:flex; flex-direction:column; gap:8px; overflow:visible;">
+                    <label>目标项目</label>
+                    <div class="custom-select" id="mergeProjectSelectCustom" style="position: relative;">
+                        <div style="position: relative;">
+                            <input type="text" id="mergeProjectSearchInput" class="b3-text-field" placeholder="${i18n("searchProject") || '搜索项目'}" autocomplete="off" style="width: 100%; padding-right: 30px; background: var(--b3-select-background);" spellcheck="false">
+                            <input type="hidden" id="mergeTargetSelect">
                         </div>
-
-                        <label>目标分组（可选，选择“新建分组”可输入新名称）</label>
-                        <select id="mergeGroupSelect" style="width:100%; padding:6px;" class="b3-select"></select>
-                        <input id="mergeNewGroupInput" type="text" placeholder="新分组名称" style="display:none; padding:6px;" />
-
-                        <label style="display:flex; align-items:center; gap:8px;"><input id="mergeDeleteSource" type="checkbox" class="b3-switch"/> ${i18n("deleteSourceProjectAfterMerge") || '合并后删除源项目'}</label>
+                        <div id="mergeProjectDropdown" class="b3-menu" style="display: none; position: absolute; width: 100%; max-height: 400px; overflow-y: auto; z-index: 10; margin-top: 4px; box-shadow: var(--b3-menu-shadow); background: var(--b3-menu-background); border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius);">
+                            <!-- 项目选项将在这里渲染 -->
+                        </div>
                     </div>
-                    <div class="b3-dialog__action">
-                        <button class="b3-button b3-button--cancel" id="mergeCancel">${i18n("cancel") || '取消'}</button>
-                        <button class="b3-button b3-button--primary" id="mergeConfirm">${i18n("confirm") || '确认'}</button>
-                    </div>
+
+                    <label>目标分组（可选，选择“新建分组”可输入新名称）</label>
+                    <select id="mergeGroupSelect" style="width:100%; padding:6px;" class="b3-select"></select>
+                    <input id="mergeNewGroupInput" class="b3-text-field" type="text" placeholder="新分组名称" style="display:none; padding:6px;" />
+
+                    <label style="display:flex; align-items:center; gap:8px;"><input id="mergeDeleteSource" type="checkbox" class="b3-switch"/> ${i18n("deleteSourceProjectAfterMerge") || '合并后删除源项目'}</label>
+                </div>
+                <div class="b3-dialog__action">
+                    <button class="b3-button b3-button--cancel" id="mergeCancel">${i18n("cancel") || '取消'}</button>
+                    <button class="b3-button b3-button--primary" id="mergeConfirm">${i18n("confirm") || '确认'}</button>
                 </div>
             `;
 
@@ -2258,6 +2256,13 @@ export class ProjectPanel {
             const confirmBtn = dialog.element.querySelector('#mergeConfirm') as HTMLButtonElement;
             const deleteCheckbox = dialog.element.querySelector('#mergeDeleteSource') as HTMLInputElement;
 
+            // Make sure parents are overflow visible so that the dropdown can show outside the dialog
+            let parent = dropdown.parentElement;
+            while (parent && parent !== dialog.element) {
+                parent.style.setProperty('overflow', 'visible', 'important');
+                parent = parent.parentElement;
+            }
+
             const populateGroupOptions = async (targetId: string) => {
                 groupSelect.innerHTML = '';
                 const keepOpt = document.createElement('option');
@@ -2269,6 +2274,11 @@ export class ProjectPanel {
                 newOpt.value = '__new__';
                 newOpt.textContent = i18n("createNewGroup") || '新建分组...';
                 groupSelect.appendChild(newOpt);
+
+                const newByProjectOpt = document.createElement('option');
+                newByProjectOpt.value = '__new_by_project_name__';
+                newByProjectOpt.textContent = i18n("createNewGroupByProjectName") || '以项目名新建分组';
+                groupSelect.appendChild(newByProjectOpt);
 
                 if (targetId) {
                     try {
@@ -2304,41 +2314,7 @@ export class ProjectPanel {
             });
             await popup.initialize();
 
-            // 初始选择第一个可用项目并填充其分组
-            const filteredProjects = projectManager.getProjects().filter(p => {
-                if (p.id === project.id) return false;
-                const status = projectManager.getProjectById(p.id)?.status || 'doing';
-                const statusInfo = this.statusManager.getStatusById(status);
-                return statusInfo ? !statusInfo.isArchived : true;
-            });
-
-            if (filteredProjects.length > 0) {
-                // 排序
-                const priorityOrder = { 'high': 3, 'medium': 2, 'low': 1, 'none': 0 };
-                try {
-                    const projectData = await this.plugin.loadProjectData();
-                    filteredProjects.sort((a: any, b: any) => {
-                        const priorityA = priorityOrder[a.priority || 'none'] || 0;
-                        const priorityB = priorityOrder[b.priority || 'none'] || 0;
-                        if (priorityA !== priorityB) return priorityB - priorityA;
-
-                        const sa = (projectData[a.id] && typeof projectData[a.id].sort === 'number') ? projectData[a.id].sort : 0;
-                        const sb = (projectData[b.id] && typeof projectData[b.id].sort === 'number') ? projectData[b.id].sort : 0;
-                        if (sa !== sb) return sa - sb;
-                        return (a.name || '').localeCompare(b.name || '', getLocaleTag());
-                    });
-                } catch (e) {
-                    filteredProjects.sort((a: any, b: any) => (a.name || '').localeCompare(b.name || '', getLocaleTag()));
-                }
-
-                const defaultTargetId = filteredProjects[0].id;
-                popup.updateSelection(defaultTargetId);
-                targetSelect.value = defaultTargetId;
-                searchInput.value = filteredProjects[0].name;
-                await populateGroupOptions(defaultTargetId);
-            } else {
-                await populateGroupOptions('');
-            }
+            await populateGroupOptions('');
 
             groupSelect.addEventListener('change', () => {
                 if (groupSelect.value === '__new__') {
@@ -2366,6 +2342,12 @@ export class ProjectPanel {
                         return;
                     }
                     newGroupName = name;
+                } else if (groupSelect.value === '__new_by_project_name__') {
+                    newGroupName = (project.title || project.name || '').trim();
+                    if (!newGroupName) {
+                        showMessage(i18n("projectNameEmpty") || '项目名称为空');
+                        return;
+                    }
                 } else if (groupSelect.value) {
                     groupId = groupSelect.value;
                 }
@@ -2400,7 +2382,11 @@ export class ProjectPanel {
                 const newId = `cg_${Date.now()}`;
                 const target = projectData[targetId];
                 if (!target.customGroups) target.customGroups = [];
-                target.customGroups.push({ id: newId, name: opts.newGroupName });
+                const maxSort = target.customGroups.reduce((max: number, g: any) => {
+                    const s = typeof g.sort === 'number' ? g.sort : parseInt(g.sort, 10) || 0;
+                    return Math.max(max, s);
+                }, 0);
+                target.customGroups.push({ id: newId, name: opts.newGroupName, sort: maxSort + 10 });
                 appliedGroupId = newId;
             }
 
