@@ -794,7 +794,10 @@ export class ProjectKanbanView {
                     </div>
                     <div class="b3-form__group">
                         <label class="b3-form__label">${i18n('groupColor')}</label>
-                        <input type="color" id="newGroupColor" class="b3-text-field" value="#3498db" style="width: 100%;">
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <input type="color" id="newGroupColor" class="b3-text-field" value="${generateRandomColor()}" style="width: 64px; height: 36px; padding: 2px 4px; cursor: pointer;">
+                            <button type="button" id="newGroupColorRandom" class="b3-button b3-button--outline" style="flex-shrink: 0;">${i18n('randomColor') || '随机颜色'}</button>
+                        </div>
                     </div>
                     <div class="b3-form__group">
                         <label class="b3-form__label">${i18n('iconOptional')}</label>
@@ -824,6 +827,10 @@ export class ProjectKanbanView {
 
         const nameInput = dialog.element.querySelector('#newGroupName') as HTMLInputElement;
         const colorInput = dialog.element.querySelector('#newGroupColor') as HTMLInputElement;
+        const randomColorBtn = dialog.element.querySelector('#newGroupColorRandom') as HTMLButtonElement;
+        randomColorBtn?.addEventListener('click', () => {
+            if (colorInput) colorInput.value = generateRandomColor();
+        });
         const iconInput = dialog.element.querySelector('#newGroupIcon') as HTMLInputElement;
         const blockIdInput = dialog.element.querySelector('#newGroupBlockId') as HTMLInputElement;
         const bindBlockBtn = dialog.element.querySelector('#editGroupBindBlockBtn') as HTMLButtonElement;
@@ -831,6 +838,31 @@ export class ProjectKanbanView {
         const saveBtn = dialog.element.querySelector('#newGroupSave') as HTMLButtonElement;
         const statusSelectAllBtn = dialog.element.querySelector('#newGroupStatusSelectAll') as HTMLButtonElement;
         const statusResetDefaultBtn = dialog.element.querySelector('#newGroupStatusResetDefault') as HTMLButtonElement;
+
+        // 图标选择事件
+        iconInput?.addEventListener('click', (event: MouseEvent) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const rect = iconInput.getBoundingClientRect();
+            openEmoji({
+                hideDynamicIcon: true,
+                hideCustomIcon: true,
+                position: {
+                    x: rect.left,
+                    y: rect.bottom
+                },
+                selectedCB: (emojiCode: string) => {
+                    if (!emojiCode) {
+                        iconInput.value = "";
+                        return;
+                    }
+                    // 将十六进制字符串转换为 Emoji 字符
+                    // 处理可能包含多个码点的情况（如国旗、肤色修饰符等，格式如 "1f1fa-1f1f8"）
+                    const codePoints = emojiCode.split(/[-\s]+/).map(cp => parseInt(cp, 16));
+                    iconInput.value = String.fromCodePoint(...codePoints);
+                }
+            });
+        });
 
         const setAllStatusCheckbox = (checked: boolean) => {
             const checkboxes = Array.from(dialog.element.querySelectorAll('.group-visible-status-checkbox')) as HTMLInputElement[];
@@ -1303,7 +1335,7 @@ export class ProjectKanbanView {
                 </div>
             `,
             width: "500px",
-            height: "auto"
+            height: "80vh"
         });
 
         // 获取DOM元素
@@ -3805,7 +3837,10 @@ export class ProjectKanbanView {
                     </div>
                     <div class="b3-form__group">
                         <label class="b3-form__label">${i18n('groupColor')}</label>
-                        <input type="color" id="editGroupColor" class="b3-text-field" value="${group.color}" style="width: 100%;">
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <input type="color" id="editGroupColor" class="b3-text-field" value="${group.color || generateRandomColor()}" style="width: 64px; height: 36px; padding: 2px 4px; cursor: pointer;">
+                            <button type="button" id="editGroupColorRandom" class="b3-button b3-button--outline" style="flex-shrink: 0;">${i18n('randomColor') || '随机颜色'}</button>
+                        </div>
                     </div>
                     <div class="b3-form__group">
                         <label class="b3-form__label">${i18n('iconOptional')}</label>
@@ -3840,6 +3875,10 @@ export class ProjectKanbanView {
         const editGroupName = dialog.element.querySelector('#editGroupName') as HTMLInputElement;
         const editGroupBlockId = dialog.element.querySelector('#editGroupBlockId') as HTMLInputElement;
         const editGroupColor = dialog.element.querySelector('#editGroupColor') as HTMLInputElement;
+        const editGroupColorRandom = dialog.element.querySelector('#editGroupColorRandom') as HTMLButtonElement;
+        editGroupColorRandom?.addEventListener('click', () => {
+            if (editGroupColor) editGroupColor.value = generateRandomColor();
+        });
         const editGroupIcon = dialog.element.querySelector('#editGroupIcon') as HTMLInputElement;
         const editGroupArchived = dialog.element.querySelector('#editGroupArchived') as HTMLInputElement;
         const editCancelBtn = dialog.element.querySelector('#editCancelBtn') as HTMLButtonElement;
@@ -3847,6 +3886,31 @@ export class ProjectKanbanView {
         const editGroupBindBlockBtn = dialog.element.querySelector('#editGroupBindBlockBtn') as HTMLButtonElement;
         const editGroupStatusSelectAllBtn = dialog.element.querySelector('#editGroupStatusSelectAll') as HTMLButtonElement;
         const editGroupStatusResetDefaultBtn = dialog.element.querySelector('#editGroupStatusResetDefault') as HTMLButtonElement;
+
+        // 图标选择事件
+        editGroupIcon?.addEventListener('click', (event: MouseEvent) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const rect = editGroupIcon.getBoundingClientRect();
+            openEmoji({
+                hideDynamicIcon: true,
+                hideCustomIcon: true,
+                position: {
+                    x: rect.left,
+                    y: rect.bottom
+                },
+                selectedCB: (emojiCode: string) => {
+                    if (!emojiCode) {
+                        editGroupIcon.value = "";
+                        return;
+                    }
+                    // 将十六进制字符串转换为 Emoji 字符
+                    // 处理可能包含多个码点的情况（如国旗、肤色修饰符等，格式如 "1f1fa-1f1f8"）
+                    const codePoints = emojiCode.split(/[-\s]+/).map(cp => parseInt(cp, 16));
+                    editGroupIcon.value = String.fromCodePoint(...codePoints);
+                }
+            });
+        });
 
         const setAllStatusCheckbox = (checked: boolean) => {
             const checkboxes = Array.from(dialog.element.querySelectorAll('.group-visible-status-checkbox')) as HTMLInputElement[];
