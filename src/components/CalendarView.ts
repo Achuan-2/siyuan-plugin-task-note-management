@@ -9,6 +9,7 @@ import { showMessage, confirm, openTab, Menu, Dialog, Constants, platformUtils }
 import { refreshSql, getBlockByID, updateBindBlockAtrrs, openBlock, pushMsg } from "../api";
 import { getLocalDateString, getLocalDateTime, getLocalDateTimeString, compareDateStrings, getLogicalDateString, getRelativeDateString, getDayStartAdjustedDate, getLocaleTag } from "../utils/dateUtils";
 import { QuickReminderDialog } from "./QuickReminderDialog";
+import { ProjectSelectorPopup } from "./ProjectSelectorPopup";
 import { CategoryManager, Category } from "../utils/categoryManager";
 import { confirmDialog } from "../libs/dialog";
 import { ProjectManager } from "../utils/projectManager";
@@ -47,6 +48,7 @@ export class CalendarView {
 
     private currentCategoryFilter: Set<string> = new Set(['all']); // 当前分类过滤（支持多选）
     private currentProjectFilter: Set<string> = new Set(['all']); // 当前项目过滤（支持多选）
+    private projectFilterPopup?: ProjectSelectorPopup;
     private initialProjectFilter: string | null = null;
     private openedFromHabitPanel: boolean = false;
     private showCategoryAndProject: boolean = true; // 是否显示分类和项目信息
@@ -934,10 +936,10 @@ export class CalendarView {
         projectDropdown.style.border = '1px solid var(--b3-border-color)';
         projectDropdown.style.borderRadius = '4px';
         projectDropdown.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
-        projectDropdown.style.minWidth = '200px';
-        projectDropdown.style.maxHeight = '400px';
-        projectDropdown.style.overflowY = 'auto';
-        projectDropdown.style.padding = '8px';
+        projectDropdown.style.width = '260px';
+        projectDropdown.style.maxHeight = 'none';
+        projectDropdown.style.overflow = 'visible';
+        projectDropdown.style.padding = '0';
         projectFilterContainer.appendChild(projectDropdown);
 
         filterGroup.appendChild(projectFilterContainer);
@@ -2354,133 +2356,23 @@ export class CalendarView {
 
     private async renderProjectFilterCheckboxes(container: HTMLElement, button: HTMLButtonElement) {
         try {
-            const projectData = await this.plugin.loadProjectData();
-            const statuses = this.statusManager.getStatuses();
-            const projectIds: string[] = [];
-
-            container.innerHTML = '';
-
-            // 收集所有有效项目ID（不包含归档）
-            if (projectData) {
-                Object.values(projectData).forEach((project: any) => {
-                    const projectStatus = statuses.find(status => status.id === project.status);
-                    if (projectStatus && !projectStatus.isArchived) {
-                        projectIds.push(project.id);
+            if (!this.projectFilterPopup || (this.projectFilterPopup as any).container !== container) {
+                this.projectFilterPopup = new ProjectSelectorPopup({
+                    plugin: this.plugin,
+                    container: container,
+                    isMultiSelect: true,
+                    selectedIds: this.currentProjectFilter,
+                    excludeArchived: true,
+                    includeNoProject: true,
+                    onChange: async (selectedIds) => {
+                        this.currentProjectFilter = selectedIds;
+                        this.updateProjectFilterButtonText(button);
+                        this.refreshEvents();
                     }
                 });
-            }
-            projectIds.push('none'); // 添加"无项目"标识
-
-            // 添加"全选/取消全选"按钮
-            const selectAllBtn = document.createElement('button');
-            selectAllBtn.className = 'b3-button b3-button--text';
-            selectAllBtn.style.width = '100%';
-            selectAllBtn.style.marginBottom = '8px';
-
-            const isAllSelected = this.currentProjectFilter.has('all');
-            selectAllBtn.textContent = isAllSelected ? (i18n("deselectAll") || "取消全选") : (i18n("selectAll") || "全选");
-
-            selectAllBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (this.currentProjectFilter.has('all')) {
-                    this.currentProjectFilter = new Set();
-                } else {
-                    this.currentProjectFilter = new Set(['all']);
-                }
-                this.updateProjectFilterButtonText(button);
-                this.renderProjectFilterCheckboxes(container, button);
-                this.refreshEvents();
-            });
-            container.appendChild(selectAllBtn);
-
-            const divider = document.createElement('div');
-            divider.style.borderTop = '1px solid var(--b3-border-color)';
-            divider.style.margin = '8px 0';
-            container.appendChild(divider);
-
-            // 渲染复选框的辅助函数
-            const createCheckboxItem = (id: string, name: string, icon: string = '') => {
-                const item = document.createElement('label');
-                item.style.display = 'flex';
-                item.style.alignItems = 'center';
-                item.style.padding = '4px 16px';
-                item.style.cursor = 'pointer';
-                item.style.userSelect = 'none';
-
-                const checkbox = document.createElement('input');
-                checkbox.type = 'checkbox';
-                checkbox.style.marginRight = '8px';
-                checkbox.checked = this.currentProjectFilter.has('all') || this.currentProjectFilter.has(id);
-
-                checkbox.addEventListener('change', (e) => {
-                    e.stopPropagation();
-                    if (checkbox.checked) {
-                        this.currentProjectFilter.delete('all');
-                        this.currentProjectFilter.add(id);
-
-                        // 检查是否所有项都被勾选了
-                        let allChecked = true;
-                        for (const pid of projectIds) {
-                            if (!this.currentProjectFilter.has(pid)) {
-                                allChecked = false;
-                                break;
-                            }
-                        }
-                        if (allChecked) {
-                            this.currentProjectFilter = new Set(['all']);
-                            this.renderProjectFilterCheckboxes(container, button);
-                        }
-                    } else {
-                        if (this.currentProjectFilter.has('all')) {
-                            // 从全选状态切换到部分选，先把所有ID加进去然后再删掉当前的
-                            this.currentProjectFilter = new Set(projectIds);
-                        }
-                        this.currentProjectFilter.delete(id);
-                    }
-                    this.updateProjectFilterButtonText(button);
-                    this.refreshEvents();
-                });
-
-                const label = document.createElement('span');
-                label.textContent = `${icon}${name}`;
-
-                item.appendChild(checkbox);
-                item.appendChild(label);
-                return item;
-            };
-
-            // 首先添加"无项目"可选项
-            container.appendChild(createCheckboxItem('none', i18n("noProject") || "无项目", '🚫 '));
-
-            if (projectData && Object.keys(projectData).length > 0) {
-                const projectsByStatus: { [key: string]: any[] } = {};
-                Object.values(projectData).forEach((project: any) => {
-                    const projectStatus = statuses.find(status => status.id === project.status);
-                    if (projectStatus && !projectStatus.isArchived) {
-                        if (!projectsByStatus[project.status]) {
-                            projectsByStatus[project.status] = [];
-                        }
-                        projectsByStatus[project.status].push(project);
-                    }
-                });
-
-                statuses.forEach(status => {
-                    if (status.isArchived) return;
-                    const statusProjects = projectsByStatus[status.id] || [];
-                    if (statusProjects.length > 0) {
-                        const statusHeader = document.createElement('div');
-                        statusHeader.style.padding = '4px 8px';
-                        statusHeader.style.fontWeight = 'bold';
-                        statusHeader.style.marginTop = '4px';
-                        statusHeader.style.color = 'var(--b3-theme-on-surface-light)';
-                        statusHeader.textContent = `${status.icon || ''} ${status.name}`;
-                        container.appendChild(statusHeader);
-
-                        statusProjects.forEach(project => {
-                            container.appendChild(createCheckboxItem(project.id, project.title || i18n("unnamedProject")));
-                        });
-                    }
-                });
+                await this.projectFilterPopup.initialize();
+            } else {
+                this.projectFilterPopup.updateSelection(this.currentProjectFilter);
             }
         } catch (error) {
             console.error(i18n("renderProjectFilterFailed"), error);

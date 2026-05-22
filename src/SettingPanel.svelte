@@ -697,6 +697,19 @@
                         '作为所有项目看板的默认值；修改后会同步到现有项目，新建项目也会沿用。单个项目可在看板显示设置中覆盖。',
                 },
                 {
+                    key: 'defaultProjectSelectorViewMode',
+                    value: settings.defaultProjectSelectorViewMode,
+                    type: 'select',
+                    title: i18n('defaultProjectSelectorViewMode') || '默认项目列表展示方式',
+                    description:
+                        i18n('defaultProjectSelectorViewModeDesc') ||
+                        '选择项目时（任务编辑弹窗选择项目、日历视图筛选项目等场景），默认以项目状态还是文件夹层级方式展示列表',
+                    options: {
+                        status: i18n('projectSelectorViewModeStatus') || '状态',
+                        folder: i18n('projectSelectorViewModeFolder') || '文件夹',
+                    },
+                },
+                {
                     key: 'openGlobalProjectStatusDialog',
                     value: '',
                     type: 'button',

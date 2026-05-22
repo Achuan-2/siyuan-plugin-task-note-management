@@ -177,6 +177,7 @@ export const DEFAULT_SETTINGS = {
     projectKanbanShowTaskCategories: true,
     projectKanbanClipTitleToOneLine: false,
     // 项目面板筛选与排序
+    defaultProjectSelectorViewMode: 'status', // 'status' | 'folder' - 选择项目时默认视图类型
     projectPanelSort: 'priority',
     projectPanelSortOrder: 'desc',
     projectPanelShowOnlyDoing: false,

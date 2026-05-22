@@ -22,6 +22,7 @@ import { SortCriterion, getSortCriterionName } from "../utils/sortConfig";
 import { generateRandomColor } from "../utils/uiUtils";
 import { ProjectFolderManager, ProjectFolder } from "../utils/projectFolderManager";
 import { ProjectFolderManageDialog } from "./ProjectFolderManageDialog";
+import { ProjectSelectorPopup } from "./ProjectSelectorPopup";
 
 
 const PROJECT_PANEL_SORT_METHODS = new Set(['category', 'priority', 'time', 'created', 'title']);
@@ -2217,7 +2218,15 @@ export class ProjectPanel {
                 <div class="merge-project-dialog">
                     <div class="b3-dialog__content" style="display:flex; flex-direction:column; gap:8px;">
                         <label>目标项目</label>
-                        <select id="mergeTargetSelect" style="width:100%; padding:6px;" class="b3-select"></select>
+                        <div class="custom-select" id="mergeProjectSelectCustom" style="position: relative;">
+                            <div style="position: relative;">
+                                <input type="text" id="mergeProjectSearchInput" class="b3-text-field" placeholder="${i18n("searchProject") || '搜索项目'}" autocomplete="off" style="width: 100%; padding-right: 30px; background: var(--b3-select-background);" spellcheck="false">
+                                <input type="hidden" id="mergeTargetSelect">
+                            </div>
+                            <div id="mergeProjectDropdown" class="b3-menu" style="display: none; position: absolute; width: 100%; max-height: 200px; overflow-y: auto; z-index: 10; margin-top: 4px; box-shadow: var(--b3-menu-shadow); background: var(--b3-menu-background); border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius);">
+                                <!-- 项目选项将在这里渲染 -->
+                            </div>
+                        </div>
 
                         <label>目标分组（可选，选择“新建分组”可输入新名称）</label>
                         <select id="mergeGroupSelect" style="width:100%; padding:6px;" class="b3-select"></select>
@@ -2239,64 +2248,14 @@ export class ProjectPanel {
                 height: "320px"
             });
 
-            const targetSelect = dialog.element.querySelector('#mergeTargetSelect') as HTMLSelectElement;
+            const searchInput = dialog.element.querySelector('#mergeProjectSearchInput') as HTMLInputElement;
+            const targetSelect = dialog.element.querySelector('#mergeTargetSelect') as HTMLInputElement;
+            const dropdown = dialog.element.querySelector('#mergeProjectDropdown') as HTMLElement;
             const groupSelect = dialog.element.querySelector('#mergeGroupSelect') as HTMLSelectElement;
             const newGroupInput = dialog.element.querySelector('#mergeNewGroupInput') as HTMLInputElement;
             const cancelBtn = dialog.element.querySelector('#mergeCancel') as HTMLButtonElement;
             const confirmBtn = dialog.element.querySelector('#mergeConfirm') as HTMLButtonElement;
             const deleteCheckbox = dialog.element.querySelector('#mergeDeleteSource') as HTMLInputElement;
-
-            // 填充目标项目（使用 ProjectManager 的分组样式，完全照搬 QuickReminderDialog 的实现）
-            try {
-                const groupedProjects = projectManager.getProjectsGroupedByStatus();
-
-                // 添加空选项（与 QuickReminderDialog 一致）
-                const noProjectOption = document.createElement('option');
-                noProjectOption.value = '';
-                noProjectOption.textContent = i18n('noProject') || '无项目';
-                targetSelect.appendChild(noProjectOption);
-
-                Object.keys(groupedProjects).forEach(async statusKey => {
-                    const projects = groupedProjects[statusKey] || [];
-                    let nonArchivedProjects = projects.filter(p => {
-                        const projectStatus = projectManager.getProjectById(p.id)?.status || 'doing';
-                        return projectStatus !== 'archived';
-                    });
-
-                    if (nonArchivedProjects.length > 0) {
-                        // 按手动排序值（若存在）再按名称排序，保持展示顺序稳定
-                        try {
-                            const projectData = await this.plugin.loadProjectData();
-                            nonArchivedProjects.sort((a: any, b: any) => {
-                                const sa = (projectData[a.id] && typeof projectData[a.id].sort === 'number') ? projectData[a.id].sort : 0;
-                                const sb = (projectData[b.id] && typeof projectData[b.id].sort === 'number') ? projectData[b.id].sort : 0;
-                                if (sa !== sb) return sa - sb;
-                                return (a.name || '').localeCompare(b.name || '', getLocaleTag());
-                            });
-                        } catch (e) {
-                            // fallback to name sort
-                            nonArchivedProjects.sort((a: any, b: any) => (a.name || '').localeCompare(b.name || '', getLocaleTag()));
-                        }
-
-                        const statusInfo = this.statusManager.getStatusById(statusKey);
-                        const statusName = statusInfo ? statusInfo.name : statusKey;
-                        const optgroup = document.createElement('optgroup');
-                        optgroup.label = statusName;
-
-                        nonArchivedProjects.forEach(p => {
-                            const option = document.createElement('option');
-                            option.value = p.id;
-                            option.textContent = p.name || (i18n('unnamedNote') || '未命名项目');
-                            optgroup.appendChild(option);
-                        });
-
-                        targetSelect.appendChild(optgroup);
-                    }
-                });
-
-            } catch (err) {
-                console.error('填充目标项目失败:', err);
-            }
 
             const populateGroupOptions = async (targetId: string) => {
                 groupSelect.innerHTML = '';
@@ -2325,16 +2284,60 @@ export class ProjectPanel {
                 }
             };
 
-            // 初始填充
-            if (targetSelect.options.length > 0) {
-                // 如果第一个实际项目存在，则初始化 groups
-                const firstProjectVal = (targetSelect.querySelector('option[value]:not([value=""])') as HTMLOptionElement)?.value;
-                if (firstProjectVal) await populateGroupOptions(firstProjectVal);
-            }
+            const allowedProjectIds = projectManager.getProjects()
+                .filter(p => p.id !== project.id)
+                .map(p => p.id);
 
-            targetSelect.addEventListener('change', async () => {
-                await populateGroupOptions(targetSelect.value);
+            const popup = new ProjectSelectorPopup({
+                plugin: this.plugin,
+                container: dropdown,
+                searchInput,
+                valueInput: targetSelect,
+                isMultiSelect: false,
+                excludeArchived: true,
+                allowedProjectIds,
+                includeNoProject: false,
+                onSelect: async (projectId) => {
+                    await populateGroupOptions(projectId);
+                }
             });
+            await popup.initialize();
+
+            // 初始选择第一个可用项目并填充其分组
+            const filteredProjects = projectManager.getProjects().filter(p => {
+                if (p.id === project.id) return false;
+                const status = projectManager.getProjectById(p.id)?.status || 'doing';
+                const statusInfo = this.statusManager.getStatusById(status);
+                return statusInfo ? !statusInfo.isArchived : true;
+            });
+
+            if (filteredProjects.length > 0) {
+                // 排序
+                const priorityOrder = { 'high': 3, 'medium': 2, 'low': 1, 'none': 0 };
+                try {
+                    const projectData = await this.plugin.loadProjectData();
+                    filteredProjects.sort((a: any, b: any) => {
+                        const priorityA = priorityOrder[a.priority || 'none'] || 0;
+                        const priorityB = priorityOrder[b.priority || 'none'] || 0;
+                        if (priorityA !== priorityB) return priorityB - priorityA;
+
+                        const sa = (projectData[a.id] && typeof projectData[a.id].sort === 'number') ? projectData[a.id].sort : 0;
+                        const sb = (projectData[b.id] && typeof projectData[b.id].sort === 'number') ? projectData[b.id].sort : 0;
+                        if (sa !== sb) return sa - sb;
+                        return (a.name || '').localeCompare(b.name || '', getLocaleTag());
+                    });
+                } catch (e) {
+                    filteredProjects.sort((a: any, b: any) => (a.name || '').localeCompare(b.name || '', getLocaleTag()));
+                }
+
+                const defaultTargetId = filteredProjects[0].id;
+                popup.updateSelection(defaultTargetId);
+                targetSelect.value = defaultTargetId;
+                searchInput.value = filteredProjects[0].name;
+                await populateGroupOptions(defaultTargetId);
+            } else {
+                await populateGroupOptions('');
+            }
 
             groupSelect.addEventListener('change', () => {
                 if (groupSelect.value === '__new__') {

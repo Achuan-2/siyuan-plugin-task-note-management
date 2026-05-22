@@ -258,6 +258,10 @@ export class ProjectManager {
         return sortedGrouped;
     }
 
+    public getProjects(): Project[] {
+        return [...this.projects];
+    }
+
     public getProjectById(id: string): Project | undefined {
         return this.projects.find(p => p.id === id);
     }

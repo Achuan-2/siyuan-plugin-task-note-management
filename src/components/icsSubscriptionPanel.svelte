@@ -1,8 +1,9 @@
-﻿<script lang="ts">
+<script lang="ts">
     import { onMount } from 'svelte';
     import { Dialog, confirm } from 'siyuan';
     import { i18n } from '../pluginInstance';
     import { pushMsg, pushErrMsg } from '../api';
+    import { ProjectSelectorPopup } from './ProjectSelectorPopup';
 
     export let plugin: any;
 
@@ -204,31 +205,15 @@
                             <div class="b3-label__text">${i18n('subscriptionProject')} *</div>
                             <div class="fn__hr"></div>
                             <div style="display: flex; gap: 8px;">
-                                <select class="b3-select fn__flex-1" id="sub-project" required>
-                                    <option value="">${i18n('pleaseSelectProject')}</option>
-                                    ${Object.entries(groupedProjects)
-                                        .map(([statusId, statusProjects]) => {
-                                            if (statusProjects.length === 0) return '';
-                                            const status = projectManager
-                                                .getStatusManager()
-                                                .getStatusById(statusId);
-                                            const label = status
-                                                ? `${status.icon || ''} ${status.name}`
-                                                : statusId;
-                                            return `
-                                        <optgroup label="${label}">
-                                            ${statusProjects
-                                                .map(
-                                                    p => `
-                                                <option value="${p.id}" ${subscription?.projectId === p.id ? 'selected' : ''}>${p.name}</option>
-                                            `
-                                                )
-                                                .join('')}
-                                        </optgroup>
-                                    `;
-                                        })
-                                        .join('')}
-                                </select>
+                                <div class="custom-select fn__flex-1" id="sub-project-custom" style="position: relative;">
+                                    <div style="position: relative;">
+                                        <input type="text" id="sub-project-search" class="b3-text-field" placeholder="${i18n('pleaseSelectProject')}" autocomplete="off" style="width: 100%; padding-right: 30px; background: var(--b3-select-background);" spellcheck="false">
+                                        <input type="hidden" id="sub-project" required>
+                                    </div>
+                                    <div id="sub-project-dropdown" class="b3-menu" style="display: none; position: absolute; width: 100%; max-height: 200px; overflow-y: auto; z-index: 10; margin-top: 4px; box-shadow: var(--b3-menu-shadow); background: var(--b3-menu-background); border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius);">
+                                        <!-- 项目选项将在这里渲染 -->
+                                    </div>
+                                </div>
                                 <button class="b3-button b3-button--outline ariaLabel" id="sub-create-project" aria-label="${i18n('createProject') || '新建项目'}">
                                     <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
                                 </button>
@@ -283,9 +268,29 @@
         const createProjectBtn = editDialog.element.querySelector(
             '#sub-create-project'
         ) as HTMLButtonElement;
-        const projectSelect = editDialog.element.querySelector('#sub-project') as HTMLSelectElement;
+        const projectSelect = editDialog.element.querySelector('#sub-project') as HTMLInputElement;
+        const projectSearchInput = editDialog.element.querySelector('#sub-project-search') as HTMLInputElement;
+        const projectDropdown = editDialog.element.querySelector('#sub-project-dropdown') as HTMLElement;
         const confirmBtn = editDialog.element.querySelector('#confirm-sub');
         const cancelBtn = editDialog.element.querySelector('.b3-button--cancel');
+
+        const popup = new ProjectSelectorPopup({
+            plugin,
+            container: projectDropdown,
+            searchInput: projectSearchInput,
+            valueInput: projectSelect,
+            isMultiSelect: false,
+            excludeArchived: true,
+            includeNoProject: false
+        });
+        await popup.initialize();
+
+        if (subscription?.projectId) {
+            popup.updateSelection(subscription.projectId);
+            projectSelect.value = subscription.projectId;
+            const proj = projectManager.getProjectById(subscription.projectId);
+            projectSearchInput.value = proj ? proj.name : '';
+        }
 
         createProjectBtn?.addEventListener('click', async () => {
             try {
@@ -297,24 +302,14 @@
                     await projectManager.initialize();
                     groupedProjects = projectManager.getProjectsGroupedByStatus();
 
-                    projectSelect.innerHTML = `<option value="">${i18n('pleaseSelectProject')}</option>`;
-                    Object.entries(groupedProjects).forEach(([statusId, statusProjects]) => {
-                        if (statusProjects.length === 0) return;
-                        const status = projectManager.getStatusManager().getStatusById(statusId);
-                        const optgroup = document.createElement('optgroup');
-                        optgroup.label = status ? `${status.icon || ''} ${status.name}` : statusId;
-
-                        statusProjects.forEach(p => {
-                            const option = document.createElement('option');
-                            option.value = p.id;
-                            option.textContent = p.name;
-                            optgroup.appendChild(option);
-                        });
-                        projectSelect.appendChild(optgroup);
-                    });
-
                     if (event.detail && event.detail.projectId) {
-                        projectSelect.value = event.detail.projectId;
+                        const newProjectId = event.detail.projectId;
+                        const proj = projectManager.getProjectById(newProjectId);
+                        if (proj) {
+                            popup.updateSelection(newProjectId);
+                            projectSelect.value = newProjectId;
+                            projectSearchInput.value = proj.name;
+                        }
                     }
 
                     window.removeEventListener(
@@ -340,7 +335,7 @@
                 editDialog.element.querySelector('#sub-interval') as HTMLSelectElement
             ).value as any;
             const projectId = (
-                editDialog.element.querySelector('#sub-project') as HTMLSelectElement
+                editDialog.element.querySelector('#sub-project') as HTMLInputElement
             ).value;
             const priority = (
                 editDialog.element.querySelector('#sub-priority') as HTMLSelectElement

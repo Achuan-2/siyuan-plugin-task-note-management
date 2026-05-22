@@ -2152,5 +2152,9 @@
     "kanbanStatus": "Project Kanban Status",
     "excludeAbandoned": "Exclude abandoned",
     "kanbanStatusFilterByNameHint": "Filter by status name. Statuses with the same name across projects are merged, and Completed is excluded.",
-    "task": "Tasks"
+    "task": "Tasks",
+    "defaultProjectSelectorViewMode": "Default Project Selector View",
+    "defaultProjectSelectorViewModeDesc": "Default view mode when searching or selecting projects in dialogs.",
+    "projectSelectorViewModeStatus": "Status",
+    "projectSelectorViewModeFolder": "Folder"
 }

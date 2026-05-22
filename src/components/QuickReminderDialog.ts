@@ -6,6 +6,7 @@ import { ProjectManager } from "../utils/projectManager";
 import { HabitGroupManager } from "../utils/habitGroupManager";
 import { i18n } from "../pluginInstance";
 import { RepeatSettingsDialog, RepeatConfig } from "./RepeatSettingsDialog";
+import { ProjectSelectorPopup } from "./ProjectSelectorPopup";
 import { getRepeatDescription, getDaysDifference, getReminderTaskDurationDays } from "../utils/repeatUtils";
 import { CategoryManageDialog } from "./CategoryManageDialog";
 import { BlockBindingDialog } from "./BlockBindingDialog";
@@ -2395,7 +2396,7 @@ export class QuickReminderDialog {
                                     <input type="text" id="quickProjectSearchInput" class="b3-text-field" placeholder="${i18n("searchProject")}" autocomplete="off" style="width: 100%; padding-right: 30px;  background: var(--b3-select-background);" spellcheck="false">
                                     <input type="hidden" id="quickProjectSelector">
                                 </div>
-                                <div id="quickProjectDropdown" class="b3-menu" style="display: none; position: absolute; width: 100%; max-height: 200px; overflow-y: auto; z-index: 10; margin-top: 4px; box-shadow: var(--b3-menu-shadow); background: var(--b3-menu-background); border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius);">
+                                <div id="quickProjectDropdown" class="b3-menu" style="display: none; position: absolute; width: 100%; max-height: 400px; overflow-y: auto; z-index: 10; margin-top: 4px; box-shadow: var(--b3-menu-shadow); background: var(--b3-menu-background); border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius);">
                                     <!-- 项目选项将在这里渲染 -->
                                 </div>
                             </div>
@@ -5262,160 +5263,30 @@ export class QuickReminderDialog {
         if (!searchInput || !hiddenInput || !dropdown) return;
 
         try {
-            await this.projectManager.initialize();
-            const groupedProjects = this.projectManager.getProjectsGroupedByStatus();
-            const allowedProjectIdSet = this.allowedProjectIds?.length
-                ? new Set(this.allowedProjectIds)
-                : null;
-
-            // 生成内容
-            let html = '';
-
-            // 无项目选项
-            if (!allowedProjectIdSet) {
-                html += `<div class="b3-menu__item" data-value="" data-label="${i18n('noProject')}"><span class="b3-menu__label">${i18n('noProject')}</span></div>`;
-            }
-
-            // 按状态分组添加项目
-            Object.keys(groupedProjects).forEach(statusKey => {
-                const projects = groupedProjects[statusKey] || [];
-                const nonArchivedProjects = projects.filter(project => {
-                    if (allowedProjectIdSet && !allowedProjectIdSet.has(project.id)) return false;
-                    const projectStatus = this.projectManager.getProjectById(project.id)?.status || 'doing';
-                    return projectStatus !== 'archived';
-                });
-
-                if (nonArchivedProjects.length > 0) {
-                    // 排序逻辑 (Reuse existing sort logic)
-                    nonArchivedProjects.sort((a, b) => {
-                        const priorityOrder = { 'high': 3, 'medium': 2, 'low': 1, 'none': 0 };
-                        const priorityA = priorityOrder[(a as any).priority || 'none'] || 0;
-                        const priorityB = priorityOrder[(b as any).priority || 'none'] || 0;
-                        if (priorityA !== priorityB) {
-                            return priorityB - priorityA;
-                        }
-                        const sortA = (a as any).sort || 0;
-                        const sortB = (b as any).sort || 0;
-                        if (sortA !== sortB) {
-                            return sortA - sortB;
-                        }
-                        const dateA = (a as any).startDate || (a as any).createdTime || '';
-                        const dateB = (b as any).startDate || (b as any).createdTime || '';
-                        return dateA.localeCompare(dateB);
-                    });
-
-                    const statusName = this.getStatusDisplayName(statusKey);
-
-                    // 使用分组包裹以便于搜索过滤时处理标题显示
-                    html += `<div class="project-group">
-                        <div class="b3-menu__separator"></div>
-                        <div class="b3-menu__item b3-menu__item--readonly" style="font-size: 12px; opacity: 0.6; cursor: default;">${statusName}</div>
-                        ${nonArchivedProjects.map(p =>
-                        `<div class="b3-menu__item" data-value="${p.id}" data-label="${p.name}"><span class="b3-menu__label">${p.name}</span></div>`
-                    ).join('')}
-                    </div>`;
+            const popup = new ProjectSelectorPopup({
+                plugin: this.plugin,
+                container: dropdown,
+                searchInput,
+                valueInput: hiddenInput,
+                isMultiSelect: false,
+                excludeArchived: true,
+                allowedProjectIds: this.allowedProjectIds,
+                includeNoProject: true,
+                onSelect: async (projectId) => {
+                    await this.onProjectChange(projectId);
                 }
             });
-
-            dropdown.innerHTML = html;
-
-            // 事件绑定
-            // 事件绑定
-            const showAllOptions = () => {
-                dropdown.style.display = 'block';
-                // 显示所有选项，忽略当前输入框的值
-                const items = dropdown.querySelectorAll('.b3-menu__item[data-value]');
-                items.forEach((item: HTMLElement) => {
-                    item.style.display = 'block';
-                });
-                // 显示所有分组
-                const groups = dropdown.querySelectorAll('.project-group');
-                groups.forEach((group: HTMLElement) => {
-                    group.style.display = 'block';
-                });
-            };
-
-            const hideDropdown = () => {
-                // 延迟隐藏，允许点击事件发生
-                setTimeout(() => {
-                    dropdown.style.display = 'none';
-                    // 如果输入框内容不是有效的选项，重置为当前选中项的标签
-                    const currentId = hiddenInput.value;
-                    const item = dropdown.querySelector(`.b3-menu__item[data-value="${currentId}"]`);
-                    if (item) {
-                        searchInput.value = item.getAttribute('data-label') || '';
-                    } else if (!currentId) {
-                        searchInput.value = '';
-                    }
-                }, 200);
-            };
-
-            const filterOptions = (term: string) => {
-                // Support multiple search terms separated by space
-                const terms = term.toLowerCase().split(/\s+/).filter(t => t);
-                const items = dropdown.querySelectorAll('.b3-menu__item[data-value]');
-                items.forEach((item: HTMLElement) => {
-                    const label = item.getAttribute('data-label')?.toLowerCase() || '';
-                    // Check if all terms are present in the label
-                    const match = terms.length === 0 || terms.every(t => label.includes(t));
-                    item.style.display = match ? 'block' : 'none';
-                });
-
-                // 处理分组标题显示：如果分组内有可见项，则显示分组
-                const groups = dropdown.querySelectorAll('.project-group');
-                groups.forEach((group: HTMLElement) => {
-                    const visibleItems = group.querySelectorAll('.b3-menu__item[data-value]:not([style*="display: none"])');
-                    group.style.display = visibleItems.length > 0 ? 'block' : 'none';
-                });
-            };
-
-            searchInput.addEventListener('focus', showAllOptions);
-            searchInput.addEventListener('click', showAllOptions);
-            searchInput.addEventListener('blur', hideDropdown);
-            searchInput.addEventListener('input', () => {
-                dropdown.style.display = 'block';
-                filterOptions(searchInput.value);
-            });
-
-            dropdown.addEventListener('mousedown', (e) => {
-                // 如果是左键点击，阻止默认行为防止searchInput失去焦点
-                if (e.button === 0) e.preventDefault();
-            });
-
-            dropdown.addEventListener('click', async (e) => {
-                const target = (e.target as HTMLElement).closest('.b3-menu__item');
-                if (target && !target.classList.contains('b3-menu__item--readonly')) {
-                    const val = target.getAttribute('data-value');
-                    const label = target.getAttribute('data-label');
-
-                    hiddenInput.value = val || '';
-                    searchInput.value = val ? (label || '') : '';
-
-                    dropdown.style.display = 'none';
-
-                    // 触发变更
-                    await this.onProjectChange(val || '');
-                }
-            });
+            await popup.initialize();
 
             // 初始化默认值
             if (this.defaultProjectId) {
-                hiddenInput.value = this.defaultProjectId;
-                const item = dropdown.querySelector(`.b3-menu__item[data-value="${this.defaultProjectId}"]`);
-                if (item) {
-                    searchInput.value = item.getAttribute('data-label') || '';
-                }
+                popup.updateSelection(this.defaultProjectId);
                 await this.onProjectChange(this.defaultProjectId);
-            } else if (allowedProjectIdSet) {
-                const firstItem = dropdown.querySelector('.b3-menu__item[data-value]') as HTMLElement | null;
-                const firstProjectId = firstItem?.getAttribute('data-value') || '';
-                if (firstProjectId) {
-                    hiddenInput.value = firstProjectId;
-                    searchInput.value = firstItem?.getAttribute('data-label') || '';
-                    await this.onProjectChange(firstProjectId);
-                }
+            } else if (this.allowedProjectIds?.length) {
+                const firstProjectId = this.allowedProjectIds[0];
+                popup.updateSelection(firstProjectId);
+                await this.onProjectChange(firstProjectId);
             }
-
         } catch (error) {
             console.error('渲染项目选择器失败:', error);
         }
