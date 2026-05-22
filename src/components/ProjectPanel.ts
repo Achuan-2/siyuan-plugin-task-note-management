@@ -3253,7 +3253,7 @@ export class ProjectPanel {
         this.applyDocumentTreeGuides(headerEl, depth);
         headerEl.addEventListener('contextmenu', (e) => {
             e.preventDefault();
-            this.showFolderContextMenu(e, folder);
+            this.showFolderContextMenu(e, folder, node);
         });
 
         const chevronEl = document.createElement('span');
@@ -3287,7 +3287,7 @@ export class ProjectPanel {
         moreBtn.style.padding = '2px 4px';
         moreBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            this.showFolderContextMenu(e, folder);
+            this.showFolderContextMenu(e, folder, node);
         });
 
         headerEl.appendChild(chevronEl);
@@ -3848,8 +3848,17 @@ export class ProjectPanel {
         return projectEl;
     }
 
-    private showFolderContextMenu(event: MouseEvent | { clientX: number, clientY: number }, folder: any) {
+    private showFolderContextMenu(event: MouseEvent | { clientX: number, clientY: number }, folder: any, node?: ProjectFolderTreeNode) {
         const menu = new Menu("folderContextMenu");
+
+        if (node && node.totalProjectCount > 0) {
+            menu.addItem({
+                icon: "iconProject",
+                label: i18n("openFolderKanban") || "打开看板",
+                click: () => this.openFolderKanban(node)
+            });
+            menu.addSeparator();
+        }
 
         menu.addItem({
             icon: "iconAdd",
