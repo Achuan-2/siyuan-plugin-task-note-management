@@ -2525,23 +2525,52 @@ export class PomodoroTimer {
         }
     }
 
-    private async setBrowserWindowAudioVolume(volume: number, playIfNeeded: boolean = false): Promise<void> {
+    private async setBrowserWindowAudioVolume(volume: number, playIfNeeded: boolean = false, activeSrc?: string): Promise<void> {
         try {
             const win = PomodoroTimer.browserWindowInstance;
             if (!win || (win.isDestroyed && win.isDestroyed())) return;
+
+            let targetId = '';
+            if (activeSrc) {
+                let resolvedSrc = activeSrc;
+                if (!activeSrc.startsWith('blob:') && !activeSrc.startsWith('file:') && !activeSrc.startsWith('data:')) {
+                    resolvedSrc = await resolveAudioPath(activeSrc);
+                }
+                if (resolvedSrc) {
+                    targetId = 'pomodoro-audio-' + encodeURIComponent(resolvedSrc).replace(/[^a-zA-Z0-9]/g, '_');
+                }
+            }
+
+            const safeTargetId = targetId.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/`/g, '\\`');
+
             const script = `(function(){
                 try {
                     const nodes = Array.from(document.querySelectorAll('[id^="pomodoro-audio-"]'));
                     nodes.forEach(n => {
-                        try { n.volume = ${volume}; } catch(e) {}
-                        try {
-                            if (${playIfNeeded}) {
-                                n._userPaused = false;
-                                n.play().catch(()=>{});
-                            } else {
-                                if (${volume} === 0) { n._userPaused = true; n.pause(); }
-                            }
-                        } catch(e) {}
+                        if (!n.loop) {
+                            return;
+                        }
+                        const isTarget = '${safeTargetId}' ? (n.id === '${safeTargetId}') : false;
+                        if (isTarget) {
+                            try { n.volume = ${volume}; } catch(e) {}
+                            try {
+                                if (${playIfNeeded}) {
+                                    n._userPaused = false;
+                                    n.play().catch(()=>{});
+                                } else {
+                                    if (${volume} === 0) {
+                                        n._userPaused = true;
+                                        n.pause();
+                                    }
+                                }
+                            } catch(e) {}
+                        } else {
+                            try { n.volume = 0; } catch(e) {}
+                            try {
+                                n._userPaused = true;
+                                n.pause();
+                            } catch(e) {}
+                        }
                     });
                 } catch(e) {}
             })()`;
@@ -3883,6 +3912,9 @@ export class PomodoroTimer {
     private toggleBackgroundAudio() {
         this.isBackgroundAudioMuted = !this.isBackgroundAudioMuted;
 
+        const activeAudio = this.isWorkPhase ? this.workAudio : (this.isLongBreak ? this.longBreakAudio : this.breakAudio);
+        const activeSrc = activeAudio ? activeAudio.src : '';
+
         // 判断是否为 BrowserWindow 模式
         const isBrowserWindow = !this.isTabMode && this.container && typeof (this.container as any).webContents !== 'undefined';
 
@@ -3890,10 +3922,10 @@ export class PomodoroTimer {
             // BrowserWindow 模式：更新窗口显示
             try {
                 if (this.isBackgroundAudioMuted) {
-                    this.setBrowserWindowAudioVolume(0, false);
+                    this.setBrowserWindowAudioVolume(0, false, activeSrc);
                 } else {
                     const curVol = this.isWorkPhase ? this.workVolume : (this.isLongBreak ? this.longBreakVolume : this.breakVolume);
-                    this.setBrowserWindowAudioVolume(curVol, true);
+                    this.setBrowserWindowAudioVolume(curVol, this.isRunning && !this.isPaused, activeSrc);
                 }
             } catch (e) { }
             this.updateBrowserWindowDisplay(this.container as any);
@@ -3914,7 +3946,7 @@ export class PomodoroTimer {
             if (isBrowserWindow2) {
                 const curVol = this.isWorkPhase ? this.workVolume : (this.isLongBreak ? this.longBreakVolume : this.breakVolume);
                 const vol = this.isBackgroundAudioMuted ? 0 : curVol;
-                this.setBrowserWindowAudioVolume(vol, !this.isBackgroundAudioMuted);
+                this.setBrowserWindowAudioVolume(vol, !this.isBackgroundAudioMuted && this.isRunning && !this.isPaused, activeSrc);
             }
         } catch (e) { }
 
