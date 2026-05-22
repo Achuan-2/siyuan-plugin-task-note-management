@@ -137,6 +137,10 @@ export class TaskNoteDOMManager {
         return { count: 0, minutes: 0 };
     }
 
+    private hasPomodoroStats(stats?: PomodoroStats | null): boolean {
+        return !!stats && (stats.count > 0 || stats.minutes > 0);
+    }
+
     private accumulatePomodoroStats(target: PomodoroStats, source?: PomodoroStats | null) {
         if (!source) return;
         target.count += Math.max(0, Math.floor(Number(source.count) || 0));
@@ -222,6 +226,40 @@ export class TaskNoteDOMManager {
             this.accumulatePomodoroStats(totals, stats);
         }
         return totals;
+    }
+
+    private getExactPomodoroStatsFromCache(eventId: string): PomodoroStats | null {
+        const normalizedEventId = String(eventId || "").trim();
+        if (!normalizedEventId) return null;
+        const stats = this.pomodoroStatsByEventId.get(normalizedEventId);
+        if (!this.hasPomodoroStats(stats)) return null;
+        return {
+            count: Math.max(0, Math.floor(Number(stats.count) || 0)),
+            minutes: Math.max(0, Math.floor(Number(stats.minutes) || 0)),
+        };
+    }
+
+    private getSelfPomodoroStats(
+        blockId: string,
+        attrCount: number,
+        attrMinutes: number,
+        linkedStats: PomodoroStats
+    ): PomodoroStats {
+        if (this.pomodoroStatsCacheUpdatedAt <= 0) {
+            return { count: attrCount, minutes: attrMinutes };
+        }
+
+        const exactBlockStats = this.getExactPomodoroStatsFromCache(blockId);
+        if (exactBlockStats) {
+            return exactBlockStats;
+        }
+
+        // 块属性会被番茄钟写入为“该块上的任务统计”镜像；存在绑定任务会话时再相加会翻倍。
+        if (this.hasPomodoroStats(linkedStats)) {
+            return this.getEmptyPomodoroStats();
+        }
+
+        return { count: attrCount, minutes: attrMinutes };
     }
 
     public initOutlinePrefixObserver() {
@@ -1024,8 +1062,14 @@ export class TaskNoteDOMManager {
         const selfPomodoroCount = Math.max(0, Math.floor(Number(info.pomodoroTotalCount || 0)));
         const selfPomodoroMinutes = Math.max(0, Math.floor(Number(info.pomodoroTotalMinutes || 0)));
         const linkedPomodoroStats = this.getBoundPomodoroStatsFromCache(linkedReminderIds);
-        const pomodoroTotalCount = selfPomodoroCount + linkedPomodoroStats.count;
-        const pomodoroTotalMinutes = selfPomodoroMinutes + linkedPomodoroStats.minutes;
+        const selfPomodoroStats = this.getSelfPomodoroStats(
+            blockId,
+            selfPomodoroCount,
+            selfPomodoroMinutes,
+            linkedPomodoroStats
+        );
+        const pomodoroTotalCount = selfPomodoroStats.count + linkedPomodoroStats.count;
+        const pomodoroTotalMinutes = selfPomodoroStats.minutes + linkedPomodoroStats.minutes;
         const hasPomodoroSummary = pomodoroTotalCount > 0 || pomodoroTotalMinutes > 0;
         const existingPomodoroBtn = container.querySelector(`.block-pomodoro-summary[data-block-id="${blockId}"]`) as HTMLElement | null;
         if (hasPomodoroSummary) {
@@ -1076,8 +1120,14 @@ export class TaskNoteDOMManager {
         }
 
         const linkedStats = this.getBoundPomodoroStatsFromCache(linkedReminderIds);
-        const mergedCount = Math.max(0, Math.floor(selfPomodoroCount + linkedStats.count));
-        const mergedMinutes = Math.max(0, Math.floor(selfPomodoroMinutes + linkedStats.minutes));
+        const selfStats = this.getSelfPomodoroStats(
+            blockId,
+            selfPomodoroCount,
+            selfPomodoroMinutes,
+            linkedStats
+        );
+        const mergedCount = Math.max(0, Math.floor(selfStats.count + linkedStats.count));
+        const mergedMinutes = Math.max(0, Math.floor(selfStats.minutes + linkedStats.minutes));
         const hasPomodoroSummary = mergedCount > 0 || mergedMinutes > 0;
 
         const trackedSource =
