@@ -2156,5 +2156,12 @@
     "defaultProjectSelectorViewMode": "Default Project Selector View",
     "defaultProjectSelectorViewModeDesc": "Default view mode when searching or selecting projects in dialogs.",
     "projectSelectorViewModeStatus": "Status",
-    "projectSelectorViewModeFolder": "Folder"
+    "projectSelectorViewModeFolder": "Folder",
+    "projectsSelected": "projects selected",
+    "categoriesSelected": "categories selected",
+    "deleteSourceProjectAfterMerge": "Delete source project after merge",
+    "keepGroup": "Keep original group",
+    "createNewGroup": "Create new group...",
+    "selectEmoji": "Select/Clear emoji",
+    "emojiTooltip": "Left-click to select emoji, right-click to clear"
 }

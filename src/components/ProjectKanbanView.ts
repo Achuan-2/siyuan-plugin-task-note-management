@@ -13517,7 +13517,7 @@ export class ProjectKanbanView {
                 defaultCustomGroupId: createDefaults.customGroupId,
                 // 传入默认里程碑 id（优先使用父任务的里程碑）
                 defaultMilestoneId: parentTask?.milestoneId ?? defaultMilestoneId,
-                hideProjectSelector: !this.isAggregateView, // 聚合看板需要允许选择项目
+                hideProjectSelector: false, // 项目看板新建/编辑任务，不要隐藏项目选择
                 allowedProjectIds: this.isAggregateView ? this.aggregateProjectIds : undefined, // 聚合看板只显示包含的项目
                 showKanbanStatus: 'term', // 显示任务类型选择
                 // 使用父任务的状态优先；否则使用传入的 defaultStatus 或上一次选择的 status
@@ -16941,6 +16941,7 @@ export class ProjectKanbanView {
                     plugin: this.plugin,
                     eventSource: this.kanbanInstanceId,
                     isInstanceEdit: true,
+                    hideProjectSelector: false,
                     allowedProjectIds: this.isAggregateView ? this.aggregateProjectIds : undefined // 聚合看板只显示包含的项目
                 }
             );

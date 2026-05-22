@@ -781,6 +781,9 @@ export class ProjectSelectorPopup {
             this.selectedIds = new Set(selectedIdOrIds as Set<string>);
         } else {
             this.selectedId = selectedIdOrIds as string;
+            if (this.valueInput) {
+                this.valueInput.value = this.selectedId;
+            }
             if (this.searchInput) {
                 const proj = this.projectManager.getProjectById(this.selectedId);
                 this.searchInput.value = proj ? proj.name : '';

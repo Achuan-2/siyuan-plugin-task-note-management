@@ -256,6 +256,7 @@ export class QuickReminderDialog {
     private dateOnly: boolean = false; // 是否只显示日期相关设置（用于快速编辑日期）
     private eventSource?: string; // 事件来源标识（用于避免同源视图重复刷新）
     private reminderSkipHolidayData: HolidayData = {};
+    private projectSelectorPopup?: ProjectSelectorPopup;
 
 
     constructor(
@@ -1352,12 +1353,16 @@ export class QuickReminderDialog {
             projectSelector.value = this.reminder.projectId;
 
             // 更新搜索框显示文本
-            const searchInput = this.dialog.element.querySelector('#quickProjectSearchInput') as HTMLInputElement;
-            const dropdown = this.dialog.element.querySelector('#quickProjectDropdown');
-            if (searchInput && dropdown) {
-                const item = dropdown.querySelector(`.b3-menu__item[data-value="${this.reminder.projectId}"]`);
-                if (item) {
-                    searchInput.value = item.getAttribute('data-label') || '';
+            if (this.projectSelectorPopup) {
+                this.projectSelectorPopup.updateSelection(this.reminder.projectId);
+            } else {
+                const searchInput = this.dialog.element.querySelector('#quickProjectSearchInput') as HTMLInputElement;
+                const dropdown = this.dialog.element.querySelector('#quickProjectDropdown');
+                if (searchInput && dropdown) {
+                    const item = dropdown.querySelector(`.project-item[data-value="${this.reminder.projectId}"]`);
+                    if (item) {
+                        searchInput.value = item.getAttribute('data-label') || '';
+                    }
                 }
             }
 
@@ -5277,6 +5282,7 @@ export class QuickReminderDialog {
                 }
             });
             await popup.initialize();
+            this.projectSelectorPopup = popup;
 
             // 初始化默认值
             if (this.defaultProjectId) {
