@@ -3471,7 +3471,7 @@ export class ProjectPanel {
                 projectData[projectId].folderId = folderId;
                 projectData[projectId].updatedTime = new Date().toISOString();
                 await this.plugin.saveProjectData(projectData);
-                
+
                 window.dispatchEvent(new CustomEvent('projectUpdated', {
                     detail: { projectId, project: projectData[projectId] }
                 }));
@@ -3774,7 +3774,7 @@ export class ProjectPanel {
         if (statusInfo) {
             const statusEl = document.createElement('span');
             statusEl.className = `project-status-tag project-status-${status}`;
-            
+
             let bg = 'rgba(128, 128, 128, 0.1)';
             let border = 'rgba(128, 128, 128, 0.2)';
             let color = 'var(--b3-theme-on-surface)';
@@ -3795,7 +3795,7 @@ export class ProjectPanel {
                 border = 'color-mix(in srgb, var(--b3-theme-info), transparent 70%)';
                 color = 'var(--b3-theme-info)';
             }
-            
+
             statusEl.style.cssText = `
                 display: inline-flex;
                 align-items: center;
