@@ -25,6 +25,7 @@ export class SubtasksDialog {
     private isInstanceEdit: boolean = false; // 是否为编辑单个重复实例模式
     private isModifyAllInstances: boolean = false; // 是否为编辑所有重复实例模式
     private collapsedSubtaskIds: Set<string> = new Set();
+    private tempParentName?: string | (() => string);
     private categoryManager: CategoryManager;
     private projectManager: ProjectManager;
     private milestoneMap: Map<string, any> = new Map();
@@ -37,7 +38,8 @@ export class SubtasksDialog {
         tempSubtasks: any[] = [],
         onTempSubtasksUpdate?: (subtasks: any[]) => void,
         isInstanceEdit?: boolean,
-        isModifyAllInstances?: boolean
+        isModifyAllInstances?: boolean,
+        tempParentName?: string | (() => string)
     ) {
         this.parentId = parentId;
         this.plugin = plugin;
@@ -48,6 +50,7 @@ export class SubtasksDialog {
         this.onTempSubtasksUpdate = onTempSubtasksUpdate;
         this.isInstanceEdit = isInstanceEdit || false;
         this.isModifyAllInstances = isModifyAllInstances || false;
+        this.tempParentName = tempParentName;
         this.categoryManager = CategoryManager.getInstance(this.plugin);
         this.projectManager = ProjectManager.getInstance(this.plugin);
         try {
@@ -780,7 +783,10 @@ export class SubtasksDialog {
             defaultPriority: parentTask?.priority,
             defaultSort: newSort, // 传入预计算的 sort 值，确保保存时一致
             plugin: this.plugin,
-            skipSave: this.isTempMode // 临时模式下跳过保存，通过回调返回数据
+            skipSave: this.isTempMode, // 临时模式下跳过保存，通过回调返回数据
+            tempParentName: this.isTempMode && parentIdForNew === '__TEMP_PARENT__'
+                ? (typeof this.tempParentName === 'function' ? this.tempParentName() : this.tempParentName)
+                : undefined
         });
         dialog.show();
     }
@@ -818,7 +824,10 @@ export class SubtasksDialog {
             mode: 'edit',
             reminder: task,
             plugin: this.plugin,
-            skipSave: this.isTempMode // 临时模式下跳过保存，通过回调更新
+            skipSave: this.isTempMode, // 临时模式下跳过保存，通过回调更新
+            tempParentName: this.isTempMode && task.parentId === '__TEMP_PARENT__'
+                ? (typeof this.tempParentName === 'function' ? this.tempParentName() : this.tempParentName)
+                : undefined
         });
         dialog.show();
     }

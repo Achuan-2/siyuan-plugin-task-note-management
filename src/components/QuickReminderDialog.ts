@@ -255,6 +255,7 @@ export class QuickReminderDialog {
     private skipSave: boolean = false; // 是否跳过保存到数据库（用于临时子任务创建）
     private dateOnly: boolean = false; // 是否只显示日期相关设置（用于快速编辑日期）
     private eventSource?: string; // 事件来源标识（用于避免同源视图重复刷新）
+    private tempParentName?: string;
     private reminderSkipHolidayData: HolidayData = {};
     private projectSelectorPopup?: ProjectSelectorPopup;
     private subtasksDialog?: SubtasksDialog;
@@ -294,6 +295,7 @@ export class QuickReminderDialog {
             skipSave?: boolean; // 是否跳过保存到数据库
             dateOnly?: boolean; // 是否只显示日期相关设置
             eventSource?: string; // reminderUpdated 事件来源
+            tempParentName?: string;
         }
     ) {
         this.initialDate = date;
@@ -340,6 +342,7 @@ export class QuickReminderDialog {
             this.skipSave = options.skipSave || false;
             this.dateOnly = options.dateOnly || false;
             this.eventSource = options.eventSource;
+            this.tempParentName = options.tempParentName;
         }
 
         // 如果是编辑模式，确保有reminder
@@ -1758,7 +1761,12 @@ export class QuickReminderDialog {
         }, this.tempSubtasks, (updatedSubtasks) => {
             this.tempSubtasks = updatedSubtasks;
             void this.updateSubtasksDisplay();
-        });
+        }, undefined, undefined, () => this.getCurrentTitle());
+    }
+
+    private getCurrentTitle(): string {
+        const titleInput = this.dialog?.element?.querySelector('#quickReminderTitle') as HTMLTextAreaElement;
+        return titleInput?.value?.trim() || this.reminder?.title || '';
     }
 
     private async mountSubtasksTab() {
@@ -6927,6 +6935,16 @@ export class QuickReminderDialog {
         // 显示父任务区域
         parentTaskGroup.style.display = '';
         parentTaskIdSpan.textContent = parentId;
+
+        if (parentId === '__TEMP_PARENT__') {
+            const displayTitle = this.tempParentName || i18n("newTask") || "新建任务";
+            parentTaskDisplay.value = displayTitle;
+            parentTaskDisplay.classList.add('ariaLabel');
+            parentTaskDisplay.setAttribute('aria-label', `临时父任务: ${displayTitle}`);
+            viewParentBtn.style.display = 'none';
+            removeParentBtn.style.display = '';
+            return;
+        }
 
         try {
             // 读取父任务数据
