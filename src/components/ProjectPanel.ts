@@ -3340,16 +3340,9 @@ export class ProjectPanel {
 
         headerEl.addEventListener('click', async (e) => {
             if ((e.target as HTMLElement).closest('.project-folder-more-btn')) return;
-            const chevronRect = chevronEl.getBoundingClientRect();
-            if (e.clientX <= chevronRect.right + 4) {
-                e.stopPropagation();
-                await toggleFolderCollapsed();
-                return;
-            }
-
             e.preventDefault();
             e.stopPropagation();
-            this.openFolderKanban(node);
+            await toggleFolderCollapsed();
         });
 
         groupEl.appendChild(headerEl);
