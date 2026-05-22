@@ -3739,8 +3739,24 @@ export class ProjectKanbanView {
                     this.deleteGroup(group.id, groupItem, container);
                 });
 
+                // 独立为项目按钮
+                const convertBtn = document.createElement('button');
+                convertBtn.className = 'b3-button b3-button--small b3-button--outline';
+                convertBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconProject"></use></svg>';
+                convertBtn.classList.add('ariaLabel'); convertBtn.setAttribute('aria-label', i18n('convertGroupToProject'));
+                convertBtn.style.cssText = `
+                    display: inline-flex;
+                    align-items: center;
+                    padding: 4px 8px;
+                    font-size: 12px;
+                `;
+                convertBtn.addEventListener('click', () => {
+                    this.convertGroupToProject(group, groupItem, container);
+                });
+
                 groupActions.appendChild(archiveBtn);
                 groupActions.appendChild(editBtn);
+                groupActions.appendChild(convertBtn);
                 groupActions.appendChild(deleteBtn);
 
                 groupItem.appendChild(groupInfo);
@@ -4147,6 +4163,98 @@ export class ProjectKanbanView {
             } catch (error) {
                 console.error(i18n('deleteGroupFailed'), error);
                 showMessage(i18n('deleteGroupFailed'));
+                dialog.destroy();
+            }
+        });
+    }
+
+    /**
+     * 将分组独立为单独项目，把分组下的所有任务迁移到新项目
+     */
+    private async convertGroupToProject(group: any, _groupItem: HTMLElement, container: HTMLElement) {
+        // 获取分组下的任务
+        const reminderData = await this.getReminders();
+        const tasksInGroup = Object.values(reminderData).filter((task: any) =>
+            task && task.projectId === this.projectId && task.customGroupId === group.id
+        );
+
+        const taskCount = tasksInGroup.length;
+        const confirmMsg = i18n('convertGroupToProjectConfirm', { name: group.name })
+            + (taskCount > 0 ? `\n\n${i18n('groupHasTasks', { count: String(taskCount) })}` : '');
+
+        const dialog = new Dialog({
+            title: i18n('convertGroupToProject'),
+            content: `
+                <div style="padding: 16px;">
+                    <p style="white-space: pre-wrap; margin-bottom: 16px;">${confirmMsg}</p>
+                </div>
+                <div class="b3-dialog__action">
+                    <button class="b3-button b3-button--cancel" id="convertCancelBtn">${i18n('cancel')}</button>
+                    <button class="b3-button b3-button--primary" id="convertConfirmBtn">${i18n('convertGroupToProject')}</button>
+                </div>
+            `,
+            width: "420px"
+        });
+
+        const cancelBtn = dialog.element.querySelector('#convertCancelBtn') as HTMLButtonElement;
+        const confirmBtn = dialog.element.querySelector('#convertConfirmBtn') as HTMLButtonElement;
+
+        cancelBtn.addEventListener('click', () => dialog.destroy());
+
+        confirmBtn.addEventListener('click', async () => {
+            try {
+                // 1. 创建新项目
+                const projectData = await this.plugin.loadProjectData();
+                const newProjectId = `quick_${Date.now()}`;
+                const emoji = group.icon || '';
+                const title = emoji ? `${emoji} ${group.name}` : group.name;
+
+                projectData[newProjectId] = {
+                    id: newProjectId,
+                    title: title,
+                    note: '',
+                    status: 'active',
+                    priority: 'none',
+                    color: group.color || '#3498db',
+                    createdTime: new Date().toISOString(),
+                    updatedTime: new Date().toISOString(),
+                    sort: 0,
+                };
+                await this.plugin.saveProjectData(projectData);
+
+                // 2. 迁移任务到新项目
+                if (taskCount > 0) {
+                    for (const task of tasksInGroup) {
+                        const taskData = task as any;
+                        taskData.projectId = newProjectId;
+                        delete taskData.customGroupId;
+                    }
+                    await saveReminders(this.plugin, reminderData);
+                }
+
+                // 3. 从当前项目移除分组
+                const projectManager = this.projectManager;
+                const currentGroups = await projectManager.getProjectCustomGroups(this.projectId);
+                const updatedGroups = currentGroups.filter((g: any) => g.id !== group.id);
+                await projectManager.setProjectCustomGroups(this.projectId, updatedGroups);
+
+                // 4. 刷新
+                await this.loadAndDisplayGroups(container);
+                this._lastRenderedProjectId = null;
+                await this.loadProject();
+                this.queueLoadTasks();
+                this.dispatchReminderUpdate(true);
+
+                showMessage(i18n('convertGroupToProjectSuccess', { name: group.name, count: String(taskCount) }));
+                dialog.destroy();
+
+                // 触发项目列表刷新
+                window.dispatchEvent(new CustomEvent('projectUpdated', {
+                    detail: { projectId: newProjectId }
+                }));
+            } catch (error) {
+                console.error(i18n('convertGroupToProjectFailed'), error);
+                showMessage(i18n('convertGroupToProjectFailed'));
                 dialog.destroy();
             }
         });
@@ -5188,7 +5296,7 @@ export class ProjectKanbanView {
             addTaskBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>`;
             addTaskBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                this.showCreateTaskDialog(undefined, this.lastSelectedCustomGroupId, status);
+                this.showCreateTaskDialog(undefined, this.lastSelectedCustomGroupId, status, this.getSingleFilteredMilestoneId(status));
             });
 
             rightContainer.appendChild(addTaskBtn);
@@ -7278,6 +7386,17 @@ export class ProjectKanbanView {
         return this.normalizeKanbanSortCriteria(this.currentSortCriteria);
     }
 
+    /**
+     * 当里程碑筛选器只选中了一个里程碑时，返回该里程碑 ID，用于新建任务时自动填充。
+     */
+    private getSingleFilteredMilestoneId(filterKey: string): string | undefined {
+        const set = this.selectedFilterMilestones.get(filterKey);
+        if (!set || set.size !== 1) return undefined;
+        const milestoneId = set.values().next().value;
+        if (milestoneId === '__no_milestone__') return undefined;
+        return milestoneId;
+    }
+
     private syncLegacySortStateFromCriteria() {
         const primary = this.getActiveSortCriteria()[0] || { method: 'priority', order: 'desc' as const };
         this.currentSort = primary.method;
@@ -8955,7 +9074,7 @@ export class ProjectKanbanView {
             addBtn.classList.add('ariaLabel'); addBtn.setAttribute('aria-label', i18n('newTask'));
             addBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                this.showCreateTaskDialog(undefined, undefined, 'doing');
+                this.showCreateTaskDialog(undefined, undefined, 'doing', this.getSingleFilteredMilestoneId('ungrouped'));
             });
             headerRight.appendChild(addBtn);
 
@@ -9759,7 +9878,7 @@ export class ProjectKanbanView {
                     addGroupTaskBtn.addEventListener('click', (e) => {
                         e.stopPropagation();
                         // 直接把列的 status 作为默认状态传入（支持自定义状态 id）
-                        this.showCreateTaskDialog(undefined, this.lastSelectedCustomGroupId, status);
+                        this.showCreateTaskDialog(undefined, this.lastSelectedCustomGroupId, status, this.getSingleFilteredMilestoneId(status));
                     });
 
                     headerRight.appendChild(addGroupTaskBtn);
@@ -9969,7 +10088,8 @@ export class ProjectKanbanView {
         addGroupTaskBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             const gid = group.id === 'ungrouped' ? null : group.id;
-            this.showCreateTaskDialog(undefined, gid);
+            const filterKey = group.id === 'ungrouped' ? 'ungrouped' : group.id;
+            this.showCreateTaskDialog(undefined, gid, undefined, this.getSingleFilteredMilestoneId(filterKey));
         });
 
         // 粘贴新建任务按钮（对应该自定义分组）
@@ -10247,7 +10367,7 @@ export class ProjectKanbanView {
             addTaskBtn.innerHTML = `<svg style="width: 14px; height: 14px;"><use xlink:href="#iconAdd"></use></svg>`;
             addTaskBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                this.showCreateTaskDialog(undefined, group.id, status as any);
+                this.showCreateTaskDialog(undefined, group.id, status as any, this.getSingleFilteredMilestoneId(group.id));
             });
             headerRight.appendChild(addTaskBtn);
 
@@ -10504,7 +10624,8 @@ export class ProjectKanbanView {
             addTaskBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const gid = group.id === 'ungrouped' ? null : group.id;
-                this.showCreateTaskDialog(undefined, gid, status as any);
+                const filterKey = group.id === 'ungrouped' ? 'ungrouped' : group.id;
+                this.showCreateTaskDialog(undefined, gid, status as any, this.getSingleFilteredMilestoneId(filterKey));
             });
             headerRight.appendChild(addTaskBtn);
 
