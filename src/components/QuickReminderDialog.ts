@@ -307,6 +307,7 @@ export class QuickReminderDialog {
 
         // 处理额外选项
         if (options) {
+            this.plugin = options.plugin;
             this.blockId = options.blockId;
             this.reminder = options.reminder;
             if (options.onSaved) this.onSaved = options.onSaved;
@@ -321,7 +322,6 @@ export class QuickReminderDialog {
             this.defaultCustomGroupId = options.defaultCustomGroupId !== undefined ? options.defaultCustomGroupId : options.reminder?.customGroupId;
             this.defaultMilestoneId = options.defaultMilestoneId !== undefined ? options.defaultMilestoneId : options.reminder?.milestoneId;
             this.defaultCustomReminderTime = options.defaultCustomReminderTime;
-            this.plugin = options.plugin;
             this.hideProjectSelector = options.hideProjectSelector;
             this.allowedProjectIds = Array.isArray(options.allowedProjectIds)
                 ? Array.from(new Set(options.allowedProjectIds.filter(Boolean)))
