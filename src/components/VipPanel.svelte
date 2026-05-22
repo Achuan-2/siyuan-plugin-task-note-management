@@ -498,9 +498,6 @@
             </div>
             <div class="pay-tips">
                 <p>{i18n('vipRefundNotice')}</p>
-                <p>
-                    {i18n('vipDiscountNotice1')}
-                </p>
                 <p style="margin-top: 8px;">
                     {i18n('vipDiscountNotice2')}
                 </p>
