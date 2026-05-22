@@ -4177,7 +4177,7 @@ export class ProjectKanbanView {
 
                 // 从项目数据中移除分组
                 const updatedGroups = projectGroups.filter((g: any) => g.id !== groupId);
-                await projectManager.setProjectCustomGroups(this.projectId, updatedGroups);
+                await this.projectManager.setProjectCustomGroups(this.projectId, updatedGroups);
 
                 // 处理分组下的任务
                 if (hasTasks) {
