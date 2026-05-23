@@ -65,6 +65,12 @@ export class ProjectDialog {
 
             this.bindEvents();
             await this.statusManager.initialize();
+
+            // 自动聚焦到标题输入框
+            setTimeout(() => {
+                const titleEl = this.dialog.element.querySelector('#projectTitle') as HTMLInputElement;
+                titleEl?.focus();
+            }, 0);
         } catch (error) {
             console.error('显示项目对话框失败:', error);
             showMessage(i18n("openModifyDialogFailed"));
