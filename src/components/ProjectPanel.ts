@@ -1619,6 +1619,7 @@ export class ProjectPanel {
         projectEl.addEventListener('dragover', (e) => {
             if (this.isDragging && this.draggedElement !== projectEl) {
                 e.preventDefault();
+                e.stopPropagation();
 
                 const targetProject = this.getProjectFromElement(projectEl);
                 // 只允许同优先级内的拖拽
@@ -1632,6 +1633,7 @@ export class ProjectPanel {
         projectEl.addEventListener('drop', (e) => {
             if (this.isDragging && this.draggedElement !== projectEl) {
                 e.preventDefault();
+                e.stopPropagation();
 
                 const targetProject = this.getProjectFromElement(projectEl);
                 if (targetProject && this.canDropHere(this.draggedProject, targetProject)) {
@@ -1641,7 +1643,8 @@ export class ProjectPanel {
             this.hideDropIndicator();
         });
 
-        projectEl.addEventListener('dragleave', () => {
+        projectEl.addEventListener('dragleave', (e) => {
+            e.stopPropagation();
             this.hideDropIndicator();
         });
     }
@@ -3434,12 +3437,14 @@ export class ProjectPanel {
         const handleDragOver = (e: DragEvent) => {
             if (this.isDragging && this.draggedProject) {
                 e.preventDefault();
+                e.stopPropagation();
                 e.dataTransfer.dropEffect = 'move';
                 headerEl.classList.add('drag-over');
             }
         };
 
-        const handleDragLeave = () => {
+        const handleDragLeave = (e: DragEvent) => {
+            e.stopPropagation();
             headerEl.classList.remove('drag-over');
         };
 
