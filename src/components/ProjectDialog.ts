@@ -596,7 +596,15 @@ export class ProjectDialog {
 
             if (!existingProject) {
                 project.createdTime = project.updatedTime;
-                project.sort = 0;
+                let maxSort = 0;
+                Object.values(projectData).forEach((p: any) => {
+                    if (p && (p.folderId || '') === folderId && typeof p.sort === 'number') {
+                        if (p.sort > maxSort) {
+                            maxSort = p.sort;
+                        }
+                    }
+                });
+                project.sort = maxSort + 10;
             }
 
             projectData[projectId] = project;
