@@ -37,24 +37,22 @@ export class ProjectFolderManageDialog {
 
     private createDialogContent(): string {
         return `
-            <div class="folder-manage-dialog">
-                <div class="b3-dialog__content">
-                    <div class="folder-toolbar">
-                        <button class="b3-button b3-button--primary" id="addFolderBtn">
-                            <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
-                            ${i18n("addFolder") || "新建文件夹"}
-                        </button>
-                    </div>
-                    <div class="folder-drag-hint">
-                        <span>💡 拖拽文件夹可排序，拖到行中间可设为子文件夹</span>
-                    </div>
-                    <div class="folders-list" id="foldersList">
-                        <!-- 文件夹树将在这里渲染 -->
-                    </div>
+            <div class="b3-dialog__content">
+                <div class="folder-toolbar">
+                    <button class="b3-button b3-button--primary" id="addFolderBtn">
+                        <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
+                        ${i18n("addFolder") || "新建文件夹"}
+                    </button>
                 </div>
-                <div class="b3-dialog__action">
-                    <button class="b3-button b3-button--primary" id="closeBtn">${i18n("close") || "关闭"}</button>
+                <div class="folder-drag-hint">
+                    <span>💡 拖拽文件夹可排序，拖到行中间可设为子文件夹</span>
                 </div>
+                <div class="folders-list" id="foldersList">
+                    <!-- 文件夹树将在这里渲染 -->
+                </div>
+            </div>
+            <div class="b3-dialog__action">
+                <button class="b3-button b3-button--primary" id="closeBtn">${i18n("close") || "关闭"}</button>
             </div>
             <style>
                 .folder-manage-dialog {
