@@ -1,7 +1,6 @@
 import { Dialog, showMessage, openEmoji } from "siyuan";
 import { ProjectFolderManager, ProjectFolder } from "../utils/projectFolderManager";
 import { getBlockByID } from "../api";
-import { getLogicalDateString } from "../utils/dateUtils";
 import { CategoryManager } from "../utils/categoryManager";
 import { StatusManager } from "../utils/statusManager";
 import { BlockBindingDialog } from "./BlockBindingDialog";
@@ -73,7 +72,6 @@ export class ProjectDialog {
     }
 
     private generateDialogHTML(title: string, existingProject?: any): string {
-        const today = getLogicalDateString();
         const statuses = this.statusManager.getStatuses();
         const statusOptions = statuses.map(status =>
             `<option value="${status.id}" ${existingProject?.status === status.id ? 'selected' : ''}>${status.icon ? status.icon + ' ' : ''}${status.name}</option>`
@@ -172,7 +170,7 @@ export class ProjectDialog {
                     
                     <div class="form-group">
                         <label>${i18n("startDate") || "开始日期"}:</label>
-                        <input type="date" id="projectStartDate" class="b3-text-field" value="${existingProject?.startDate || today}" max="9999-12-31">
+                        <input type="date" id="projectStartDate" class="b3-text-field" value="${existingProject?.startDate || ''}" max="9999-12-31">
                     </div>
                     
                     <div class="form-group">
