@@ -4273,6 +4273,18 @@ export class ProjectKanbanView {
                 const emoji = group.icon || '';
                 const title = emoji ? `${emoji} ${group.name}` : group.name;
 
+                const parentProject = projectData[this.projectId];
+                const parentFolderId = parentProject ? (parentProject.folderId || '') : '';
+
+                let maxSort = 0;
+                Object.values(projectData).forEach((p: any) => {
+                    if (p && (p.folderId || '') === parentFolderId && typeof p.sort === 'number') {
+                        if (p.sort > maxSort) {
+                            maxSort = p.sort;
+                        }
+                    }
+                });
+
                 projectData[newProjectId] = {
                     id: newProjectId,
                     title: title,
@@ -4282,7 +4294,8 @@ export class ProjectKanbanView {
                     color: group.color || '#3498db',
                     createdTime: new Date().toISOString(),
                     updatedTime: new Date().toISOString(),
-                    sort: 0,
+                    folderId: parentFolderId,
+                    sort: maxSort + 10,
                 };
                 await this.plugin.saveProjectData(projectData);
 
