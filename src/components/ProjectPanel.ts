@@ -910,6 +910,14 @@ export class ProjectPanel {
     private renderProjects(projects: any[]) {
         this.projectsContainer.classList.toggle('project-document-tree', this.currentViewMode === 'list');
 
+        // 文件夹视图下，即使没有项目也要渲染文件夹
+        if (this.currentViewMode === 'list') {
+            this.projectsContainer.classList.add('project-document-tree');
+            this.renderProjectsAsChecklist(projects || []);
+            this.currentProjectsCache = [...(projects || [])];
+            return;
+        }
+
         // 如果没有项目则显示空提示
         if (!projects || projects.length === 0) {
             // 当在 "all" 标签下，排除归档后可能为空
@@ -918,7 +926,7 @@ export class ProjectPanel {
             } else {
                 const status = this.statusManager.getStatusById(this.currentTab);
                 const statusName = status ? status.name : i18n("allProjects");
-                const emptyText = i18n("noProjectsInStatus")?.replace("${status}", statusName) || `暂无“${statusName}”状态的项目`;
+                const emptyText = i18n("noProjectsInStatus")?.replace("${status}", statusName) || `暂无"${statusName}"状态的项目`;
                 this.projectsContainer.innerHTML = `<div class="project-empty">${emptyText}</div>`;
             }
             // 清空缓存
@@ -928,12 +936,6 @@ export class ProjectPanel {
 
         // 缓存当前项目列表
         this.currentProjectsCache = [...projects];
-
-        if (this.currentViewMode === 'list') {
-            this.projectsContainer.classList.add('project-document-tree');
-            this.renderProjectsAsChecklist(projects);
-            return;
-        }
 
         this.projectsContainer.classList.remove('project-document-tree');
 
@@ -2228,7 +2230,7 @@ export class ProjectPanel {
                         </div>
                     </div>
 
-                    <label>目标分组（可选，选择“新建分组”可输入新名称）</label>
+                    <label>目标分组（可选，选择"新建分组"可输入新名称）</label>
                     <select id="mergeGroupSelect" style="width:100%; padding:6px;" class="b3-select"></select>
                     <input id="mergeNewGroupInput" class="b3-text-field" type="text" placeholder="新分组名称" style="display:none; padding:6px;" />
 
@@ -3146,6 +3148,14 @@ export class ProjectPanel {
             const projectEl = this.createProjectElement(project);
             this.projectsContainer.appendChild(projectEl);
         });
+
+        // 如果没有任何文件夹且没有任何项目，显示空提示
+        if (folderTree.length === 0 && rootProjects.length === 0) {
+            const emptyEl = document.createElement('div');
+            emptyEl.className = 'project-empty';
+            emptyEl.textContent = i18n("noProjects") || '暂无项目';
+            this.projectsContainer.appendChild(emptyEl);
+        }
     }
 
     private buildProjectFolderTree(folders: ProjectFolder[], folderProjectsMap: Record<string, any[]>, parentId: string = ''): ProjectFolderTreeNode[] {
