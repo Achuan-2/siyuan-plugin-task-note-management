@@ -654,7 +654,8 @@
     }
 
     .project-folder-chevron--empty {
-        display: none;
+        visibility: hidden;
+        pointer-events: none;
     }
 
     .project-folder-children {
