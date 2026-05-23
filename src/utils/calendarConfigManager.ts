@@ -31,6 +31,8 @@ export interface CalendarConfig {
     showHabits: boolean; // 是否显示习惯
     showReminderTime: boolean; // 是否显示任务提醒时间
     multiDaysCount: number; // 多天视图显示的天数，默认为3天
+    calendarOpacityLight: number; // 浅色模式任务上色背景色透明度
+    calendarOpacityDark: number; // 深色模式任务上色背景色透明度
 }
 
 export class CalendarConfigManager {
@@ -66,7 +68,9 @@ export class CalendarConfigManager {
             showTasks: true, // 默认显示任务
             showHabits: true, // 默认显示习惯
             showReminderTime: true, // 默认显示任务提醒时间
-            multiDaysCount: 3 // 默认显示3天
+            multiDaysCount: 3, // 默认显示3天
+            calendarOpacityLight: 0.25,
+            calendarOpacityDark: 0.3
         };
     }
 
@@ -110,6 +114,8 @@ export class CalendarConfigManager {
             settings.calendarShowHabits = this.config.showHabits;
             settings.calendarShowReminderTime = this.config.showReminderTime;
             settings.calendarMultiDaysCount = this.config.multiDaysCount;
+            settings.calendarOpacityLight = this.config.calendarOpacityLight;
+            settings.calendarOpacityDark = this.config.calendarOpacityDark;
             await (this.plugin as any).saveSettings(settings);
             if (typeof window !== 'undefined') {
                 window.dispatchEvent(new CustomEvent(CALENDAR_CONFIG_UPDATED_EVENT));
@@ -176,7 +182,9 @@ export class CalendarConfigManager {
                 showTasks: settings.calendarShowTasks !== false, // 默认为 true
                 showHabits: settings.calendarShowHabits !== false, // 默认为 true
                 showReminderTime: settings.calendarShowReminderTime !== false, // 默认为 true
-                multiDaysCount: settings.calendarMultiDaysCount !== undefined ? settings.calendarMultiDaysCount : 3 // 默认为3天
+                multiDaysCount: settings.calendarMultiDaysCount !== undefined ? settings.calendarMultiDaysCount : 3, // 默认为3天
+                calendarOpacityLight: settings.calendarOpacityLight !== undefined ? settings.calendarOpacityLight : 0.25,
+                calendarOpacityDark: settings.calendarOpacityDark !== undefined ? settings.calendarOpacityDark : 0.3
             };
         } catch (error) {
             console.warn('Failed to load calendar config, using defaults:', error);
@@ -206,7 +214,9 @@ export class CalendarConfigManager {
                 showTasks: true,
                 showHabits: true,
                 showReminderTime: true,
-                multiDaysCount: 3
+                multiDaysCount: 3,
+                calendarOpacityLight: 0.25,
+                calendarOpacityDark: 0.3
             };
             try {
                 await this.saveConfig();
@@ -449,6 +459,24 @@ export class CalendarConfigManager {
 
     public getShowReminderTime(): boolean {
         return this.config.showReminderTime !== false;
+    }
+
+    public async setCalendarOpacityLight(opacity: number) {
+        this.config.calendarOpacityLight = opacity;
+        await this.saveConfig();
+    }
+
+    public getCalendarOpacityLight(): number {
+        return this.config.calendarOpacityLight !== undefined ? this.config.calendarOpacityLight : 0.25;
+    }
+
+    public async setCalendarOpacityDark(opacity: number) {
+        this.config.calendarOpacityDark = opacity;
+        await this.saveConfig();
+    }
+
+    public getCalendarOpacityDark(): number {
+        return this.config.calendarOpacityDark !== undefined ? this.config.calendarOpacityDark : 0.3;
     }
 
     public getConfig(): CalendarConfig {

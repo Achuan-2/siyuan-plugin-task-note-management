@@ -72,12 +72,18 @@ export class CalendarView {
     private showCompletedTaskTimeAllDay: boolean = true; // 是否显示全天任务的完成时间
     private showCompletedTaskTimeNoDate: boolean = true; // 是否显示无日期任务的完成时间
     private completedTaskTimeUseTaskColor: boolean = false; // 完成任务时间是否使用任务上色方式
+    private calendarOpacityLight: number = 0.25; // 浅色模式任务上色背景色透明度
+    private calendarOpacityDark: number = 0.3; // 深色模式任务上色背景色透明度
     private pomodoroToggleBtn: HTMLElement | null = null; // Pomodoro toggle button
     private holidays: { [date: string]: { title: string, type: 'holiday' | 'workday' } } = {}; // 节假日数据
     private reminderSkipSettings: any = {};
     private colorBy: 'category' | 'priority' | 'project' = 'priority'; // 按分类或优先级上色
     private tooltip: HTMLElement | null = null; // 添加提示框元素
     private dropIndicator: HTMLElement | null = null; // 拖放放置指示器
+    private lightOpacitySlider: HTMLInputElement | null = null;
+    private lightOpacityValueEl: HTMLDivElement | null = null;
+    private darkOpacitySlider: HTMLInputElement | null = null;
+    private darkOpacityValueEl: HTMLDivElement | null = null;
     private externalReminderUpdatedHandler: ((e: Event) => void) | null = null;
     private externalCalendarConfigUpdatedHandler: ((e: Event) => void) | null = null;
     private settingUpdateHandler: ((e: Event) => void) | null = null;
@@ -185,8 +191,19 @@ export class CalendarView {
             this.showCompletedTaskTimeAllDay = this.calendarConfigManager.getShowCompletedTaskTimeAllDay();
             this.showCompletedTaskTimeNoDate = this.calendarConfigManager.getShowCompletedTaskTimeNoDate();
             this.completedTaskTimeUseTaskColor = this.calendarConfigManager.getCompletedTaskTimeUseTaskColor();
+            this.calendarOpacityLight = this.calendarConfigManager.getCalendarOpacityLight();
+            this.calendarOpacityDark = this.calendarConfigManager.getCalendarOpacityDark();
             this.showTasks = this.calendarConfigManager.getShowTasks();
             this.showHabits = this.calendarConfigManager.getShowHabits();
+
+            if (this.lightOpacitySlider && this.lightOpacityValueEl) {
+                this.lightOpacitySlider.value = this.calendarOpacityLight.toString();
+                this.lightOpacityValueEl.innerText = `${Math.round(this.calendarOpacityLight * 100)}%`;
+            }
+            if (this.darkOpacitySlider && this.darkOpacityValueEl) {
+                this.darkOpacitySlider.value = this.calendarOpacityDark.toString();
+                this.darkOpacityValueEl.innerText = `${Math.round(this.calendarOpacityDark * 100)}%`;
+            }
 
             try {
                 this.currentCompletionFilter = this.calendarConfigManager.getCompletionFilter();
@@ -539,6 +556,8 @@ export class CalendarView {
         this.showCompletedTaskTimeAllDay = this.calendarConfigManager.getShowCompletedTaskTimeAllDay();
         this.showCompletedTaskTimeNoDate = this.calendarConfigManager.getShowCompletedTaskTimeNoDate();
         this.completedTaskTimeUseTaskColor = this.calendarConfigManager.getCompletedTaskTimeUseTaskColor();
+        this.calendarOpacityLight = this.calendarConfigManager.getCalendarOpacityLight();
+        this.calendarOpacityDark = this.calendarConfigManager.getCalendarOpacityDark();
         this.holidays = await loadHolidays(this.plugin);
 
         // 获取周开始日设置
@@ -1326,6 +1345,70 @@ export class CalendarView {
         colorGroup.appendChild(createColorBtn(i18n("colorByProject") || "项目", 'project'));
         displaySettingsDropdown.appendChild(colorGroup);
 
+        // 任务上色透明度设置
+        const opacityDivider = document.createElement('div');
+        opacityDivider.style.height = '1px';
+        opacityDivider.style.backgroundColor = 'var(--b3-border-color)';
+        opacityDivider.style.margin = '8px 0';
+        displaySettingsDropdown.appendChild(opacityDivider);
+
+        const opacityLabel = document.createElement('div');
+        opacityLabel.style.padding = '4px 12px';
+        opacityLabel.style.fontSize = '0.9em';
+        opacityLabel.style.color = 'var(--b3-theme-on-surface-light)';
+        opacityLabel.innerText = i18n("calendarOpacitySettings") || "任务上色不透明度";
+        displaySettingsDropdown.appendChild(opacityLabel);
+
+        const lightOpacityItem = document.createElement('div');
+        lightOpacityItem.className = 'fn__flex-column';
+        lightOpacityItem.style.padding = '4px 12px';
+        lightOpacityItem.innerHTML = `
+            <div class="fn__flex fn__flex-center" style="gap: 8px;">
+                <div style="font-size: 0.85em; min-width: 60px; color: var(--b3-theme-on-surface-light);">${i18n("lightMode") || "浅色模式"}</div>
+                <input class="b3-slider fn__flex-1" type="range" min="0" max="1" step="0.05" value="${this.calendarOpacityLight}">
+                <div class="opacity-value" style="font-size: 0.85em; min-width: 35px; text-align: right;">${Math.round(this.calendarOpacityLight * 100)}%</div>
+            </div>
+        `;
+        const lightSlider = lightOpacityItem.querySelector('input') as HTMLInputElement;
+        const lightValueEl = lightOpacityItem.querySelector('.opacity-value') as HTMLDivElement;
+        lightSlider.addEventListener('input', () => {
+            lightValueEl.innerText = `${Math.round(parseFloat(lightSlider.value) * 100)}%`;
+        });
+        lightSlider.addEventListener('change', async () => {
+            const val = parseFloat(lightSlider.value);
+            this.calendarOpacityLight = val;
+            await this.calendarConfigManager.setCalendarOpacityLight(val);
+            await this.refreshEvents();
+        });
+        this.lightOpacitySlider = lightSlider;
+        this.lightOpacityValueEl = lightValueEl;
+        displaySettingsDropdown.appendChild(lightOpacityItem);
+
+        const darkOpacityItem = document.createElement('div');
+        darkOpacityItem.className = 'fn__flex-column';
+        darkOpacityItem.style.padding = '4px 12px';
+        darkOpacityItem.innerHTML = `
+            <div class="fn__flex fn__flex-center" style="gap: 8px;">
+                <div style="font-size: 0.85em; min-width: 60px; color: var(--b3-theme-on-surface-light);">${i18n("darkMode") || "深色模式"}</div>
+                <input class="b3-slider fn__flex-1" type="range" min="0" max="1" step="0.05" value="${this.calendarOpacityDark}">
+                <div class="opacity-value" style="font-size: 0.85em; min-width: 35px; text-align: right;">${Math.round(this.calendarOpacityDark * 100)}%</div>
+            </div>
+        `;
+        const darkSlider = darkOpacityItem.querySelector('input') as HTMLInputElement;
+        const darkValueEl = darkOpacityItem.querySelector('.opacity-value') as HTMLDivElement;
+        darkSlider.addEventListener('input', () => {
+            darkValueEl.innerText = `${Math.round(parseFloat(darkSlider.value) * 100)}%`;
+        });
+        darkSlider.addEventListener('change', async () => {
+            const val = parseFloat(darkSlider.value);
+            this.calendarOpacityDark = val;
+            await this.calendarConfigManager.setCalendarOpacityDark(val);
+            await this.refreshEvents();
+        });
+        this.darkOpacitySlider = darkSlider;
+        this.darkOpacityValueEl = darkValueEl;
+        displaySettingsDropdown.appendChild(darkOpacityItem);
+
         // 任务状态设置
         const statusDivider = document.createElement('div');
         statusDivider.style.height = '1px';
@@ -1950,8 +2033,8 @@ export class CalendarView {
                     targetEl.style.border = 'none';
                     // Adjust opacity based on theme mode
                     const themeMode = document.querySelector('html')?.getAttribute('data-theme-mode');
-                    const opacity = themeMode === 'dark' ? '0.3' : '0.25';
-                    targetEl.style.backgroundColor = colorWithOpacity(bgColor, parseFloat(opacity));
+                    const opacity = themeMode === 'dark' ? this.calendarOpacityDark : this.calendarOpacityLight;
+                    targetEl.style.backgroundColor = colorWithOpacity(bgColor, opacity);
 
                     const hasStartDate = !!info.event.extendedProps?.date;
                     const hasEndDate = !!info.event.extendedProps?.endDate;

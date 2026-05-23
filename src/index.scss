@@ -2858,3 +2858,8 @@
         margin-right: 0;
     }
 }
+
+.filter-dropdown-menu {
+    max-height: 75vh !important;
+    overflow-y: auto !important;
+}
