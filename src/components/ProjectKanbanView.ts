@@ -13008,8 +13008,49 @@ export class ProjectKanbanView {
         }
 
         // 获取项目标签
-        const tags = await this.projectManager.getProjectTags(this.projectId);
-        const allTagIds = tags.map(t => t.id);
+        let tags: Array<{ id: string, name: string, color: string }> = [];
+        const tagNameToIds: Map<string, string[]> = new Map();
+
+        if (this.isAggregateView) {
+            const allTags: Array<{ id: string, name: string, color: string }> = [];
+            const projectIds = this.aggregateProjectIds || [];
+            for (const projId of projectIds) {
+                const projTags = await this.projectManager.getProjectTags(projId);
+                allTags.push(...projTags);
+            }
+
+            // Merge by name
+            const mergedTagsMap = new Map<string, { id: string, name: string, color: string }>();
+            for (const tag of allTags) {
+                const nameKey = tag.name.trim();
+                if (!nameKey) continue;
+                if (!tagNameToIds.has(nameKey)) {
+                    tagNameToIds.set(nameKey, []);
+                }
+                tagNameToIds.get(nameKey)!.push(tag.id);
+
+                if (!mergedTagsMap.has(nameKey)) {
+                    mergedTagsMap.set(nameKey, {
+                        id: tag.id, // Use one of the ids as representative
+                        name: tag.name,
+                        color: tag.color
+                    });
+                }
+            }
+            tags = Array.from(mergedTagsMap.values());
+            // Sort tags by name alphabetically for better UI
+            tags.sort((a, b) => a.name.localeCompare(b.name, 'zh'));
+        } else {
+            tags = await this.projectManager.getProjectTags(this.projectId);
+            for (const tag of tags) {
+                tagNameToIds.set(tag.name.trim(), [tag.id]);
+            }
+        }
+
+        const allTagIds: string[] = [];
+        tagNameToIds.forEach(ids => {
+            allTagIds.push(...ids);
+        });
         allTagIds.push('__no_tag__');
 
         // 如果未激活筛选，则激活并默认全选（仅针对标签，日期默认为空即全选）
@@ -13301,7 +13342,27 @@ export class ProjectKanbanView {
 
         renderItem('__no_tag__', i18n('noTag') || '无标签', 'tag', undefined, '🚫', undefined, undefined, undefined, tagsList);
         tags.forEach(tag => {
-            renderItem(tag.id, tag.name, 'tag', tag.color, undefined, undefined, undefined, this.getProjectTagDescription(tag), tagsList);
+            const ids = tagNameToIds.get(tag.name.trim()) || [tag.id];
+            const isChecked = ids.some(tid => this.selectedFilterTags.has(tid));
+            renderItem(
+                tag.id,
+                tag.name,
+                'tag',
+                tag.color,
+                undefined,
+                isChecked,
+                (nextChecked) => {
+                    if (nextChecked) {
+                        ids.forEach(tid => this.selectedFilterTags.add(tid));
+                    } else {
+                        ids.forEach(tid => this.selectedFilterTags.delete(tid));
+                    }
+                    this.queueLoadTasks();
+                    this.updateFilterButtonState(allTagIds.length);
+                },
+                this.getProjectTagDescription(tag),
+                tagsList
+            );
         });
 
         // 添加到 body 并计算自适应位置
