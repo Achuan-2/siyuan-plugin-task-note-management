@@ -4275,6 +4275,7 @@ export class ProjectKanbanView {
 
                 const parentProject = projectData[this.projectId];
                 const parentFolderId = parentProject ? (parentProject.folderId || '') : '';
+                const parentTags = parentProject ? (parentProject.tags || []) : [];
 
                 let maxSort = 0;
                 Object.values(projectData).forEach((p: any) => {
@@ -4296,6 +4297,7 @@ export class ProjectKanbanView {
                     updatedTime: new Date().toISOString(),
                     folderId: parentFolderId,
                     sort: maxSort + 10,
+                    tags: parentTags,
                 };
                 await this.plugin.saveProjectData(projectData);
 
