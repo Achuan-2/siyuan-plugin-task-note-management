@@ -8824,7 +8824,7 @@ export class ProjectKanbanView {
         this.pageIndexMap[pageKey] = currentPage;
 
         const { pagedTasks, hasMore } = this.paginateTasks(tasks, currentPage);
-        this.renderTasksInColumn(groupTasksContainer, pagedTasks);
+        this.renderTasksInColumn(groupTasksContainer, pagedTasks, status);
 
         if (hasMore) {
             this.renderLoadMoreButton(groupTasksContainer, pageKey);
@@ -8880,7 +8880,7 @@ export class ProjectKanbanView {
         let visibleTasksForCount: any[] = [];
         if (allActiveGroups.length === 0) {
             // 如果没有自定义分组，直接渲染任务
-            this.renderTasksInColumn(groupTasksContainer, tasks);
+            this.renderTasksInColumn(groupTasksContainer, tasks, status);
             visibleTasksForCount = tasks;
         } else {
             // 按自定义分组渲染任务组
@@ -9456,7 +9456,7 @@ export class ProjectKanbanView {
         this.pageIndexMap[unfinishedKey] = unfinishedPage;
 
         const { pagedTasks: pagedUnfinished, hasMore: hasMoreUnfinished } = this.paginateTasks(unfinished, unfinishedPage);
-        this.renderTasksInColumn(unfinishedContainer, pagedUnfinished);
+        this.renderTasksInColumn(unfinishedContainer, pagedUnfinished, 'unfinished');
 
         if (hasMoreUnfinished) {
             this.renderLoadMoreButton(unfinishedContainer, unfinishedKey);
@@ -9563,7 +9563,7 @@ export class ProjectKanbanView {
         this.pageIndexMap[finishedKey] = finishedPage;
 
         const { pagedTasks: pagedFinished, hasMore: hasMoreFinished } = this.paginateTasks(finished, finishedPage);
-        this.renderTasksInColumn(finishedContainer, pagedFinished);
+        this.renderTasksInColumn(finishedContainer, pagedFinished, 'completed');
 
         if (hasMoreFinished) {
             this.renderLoadMoreButton(finishedContainer, finishedKey);
@@ -9666,7 +9666,7 @@ export class ProjectKanbanView {
         this.pageIndexMap[abandonedKey] = abandonedPage;
 
         const { pagedTasks: pagedAbandoned, hasMore: hasMoreAbandoned } = this.paginateTasks(abandoned, abandonedPage);
-        this.renderTasksInColumn(abandonedContainer, pagedAbandoned);
+        this.renderTasksInColumn(abandonedContainer, pagedAbandoned, 'abandoned');
 
         if (hasMoreAbandoned) {
             this.renderLoadMoreButton(abandonedContainer, abandonedKey);
@@ -9890,8 +9890,10 @@ export class ProjectKanbanView {
             content.appendChild(taskEl);
 
             let children = childTasks.filter(t => t.parentId === task.id);
-            // 过滤掉放弃状态的子任务
-            children = children.filter(t => !this.isAbandonedStatus(t.kanbanStatus));
+            // 过滤掉放弃状态的子任务（如果当前不是放弃列）
+            if (status !== 'abandoned') {
+                children = children.filter(t => !this.isAbandonedStatus(t.kanbanStatus));
+            }
             // 如果不显示已完成的子任务，则过滤掉已完成的子任务
             if (!this.showCompletedSubtasks) {
                 children = children.filter(t => !t.completed);
@@ -10430,7 +10432,7 @@ export class ProjectKanbanView {
         this.pageIndexMap[pageKey] = currentPage;
 
         const { pagedTasks, hasMore } = this.paginateTasks(tasks, currentPage);
-        this.renderTasksInColumn(groupTasksContainer, pagedTasks);
+        this.renderTasksInColumn(groupTasksContainer, pagedTasks, status);
 
         if (hasMore) {
             this.renderLoadMoreButton(groupTasksContainer, pageKey);
@@ -10442,7 +10444,7 @@ export class ProjectKanbanView {
     }
 
 
-    private renderTasksInColumn(content: HTMLElement, tasks: any[]) {
+    private renderTasksInColumn(content: HTMLElement, tasks: any[], columnStatus?: string) {
         const taskMap = new Map(tasks.map(t => [t.id, t]));
         const topLevelTasks = tasks.filter(t => !t.parentId || !taskMap.has(t.parentId));
         const childTasks = tasks.filter(t => t.parentId && taskMap.has(t.parentId));
@@ -10460,8 +10462,10 @@ export class ProjectKanbanView {
             content.appendChild(taskEl);
 
             let children = childTasks.filter(t => t.parentId === task.id);
-            // 过滤掉放弃状态的子任务
-            children = children.filter(t => !this.isAbandonedStatus(t.kanbanStatus));
+            // 过滤掉放弃状态的子任务（如果当前不是放弃列）
+            if (columnStatus !== 'abandoned') {
+                children = children.filter(t => !this.isAbandonedStatus(t.kanbanStatus));
+            }
             // 如果不显示已完成的子任务，则过滤掉已完成的子任务
             if (!this.showCompletedSubtasks) {
                 children = children.filter(t => !t.completed);
@@ -10682,7 +10686,7 @@ export class ProjectKanbanView {
         this.pageIndexMap[pageKey] = currentPage;
 
         const { pagedTasks, hasMore } = this.paginateTasks(expandedTasks, currentPage);
-        this.renderTasksInColumn(groupTasksContainer, pagedTasks);
+        this.renderTasksInColumn(groupTasksContainer, pagedTasks, status);
 
         if (hasMore) {
             this.renderLoadMoreButton(groupTasksContainer, pageKey);
@@ -10813,6 +10817,41 @@ export class ProjectKanbanView {
         return false;
     }
 
+    private getTaskListStatus(container: HTMLElement): string | undefined {
+        const customStatusGroup = container.closest('.custom-status-group') as HTMLElement | null;
+        if (customStatusGroup?.dataset.status) {
+            return customStatusGroup.dataset.status;
+        }
+
+        const stableGroup = container.closest('.status-stable-group') as HTMLElement | null;
+        if (stableGroup?.dataset.status) {
+            return stableGroup.dataset.status;
+        }
+
+        const customGroupInStatus = container.closest('.custom-group-in-status') as HTMLElement | null;
+        if (customGroupInStatus?.dataset.status) {
+            return customGroupInStatus.dataset.status;
+        }
+
+        const column = container.closest('.kanban-column') as HTMLElement | null;
+        if (column) {
+            const classList = Array.from(column.classList);
+            const statusClass = classList.find(c => c.startsWith('kanban-column-') && !c.includes('-custom-group-'));
+            if (statusClass) {
+                return statusClass.replace('kanban-column-', '');
+            }
+        }
+
+        const listSection = container.closest('.list-section') as HTMLElement | null;
+        if (listSection) {
+            if (listSection.classList.contains('list-section-unfinished')) return 'unfinished';
+            if (listSection.classList.contains('list-section-finished')) return 'completed';
+            if (listSection.classList.contains('list-section-abandoned')) return 'abandoned';
+        }
+
+        return undefined;
+    }
+
     private rerenderTaskListContainer(container: HTMLElement, toggledTask: any): void {
         const taskIds = new Set<string>();
         Array.from(container.querySelectorAll('[data-task-id]')).forEach((el) => {
@@ -10845,7 +10884,8 @@ export class ProjectKanbanView {
         });
 
         const fragmentHost = document.createElement('div');
-        this.renderTasksInColumn(fragmentHost, expandedTasks);
+        const columnStatus = this.getTaskListStatus(container);
+        this.renderTasksInColumn(fragmentHost, expandedTasks, columnStatus);
         Array.from(fragmentHost.childNodes).forEach(node => {
             container.insertBefore(node, anchor);
         });
