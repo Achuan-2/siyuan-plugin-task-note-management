@@ -18435,6 +18435,11 @@ export class ProjectKanbanView {
                 const groupId = task.customGroupId || 'ungrouped';
                 const customGroup = stableGroup.querySelector(`.custom-group-in-status[data-group-id="${groupId}"]`) as HTMLElement | null;
 
+                // 如果项目配置了自定义分组，但当前分组 DOM 不存在，必须回退到整列渲染以渲染分组头
+                if (this.hasCustomGroups && !customGroup) {
+                    return false;
+                }
+
                 let tasksContainer: HTMLElement | null = null;
                 if (customGroup) {
                     tasksContainer = customGroup.querySelector('.custom-group-tasks') as HTMLElement | null;
