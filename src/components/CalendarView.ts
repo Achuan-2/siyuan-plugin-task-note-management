@@ -8063,8 +8063,8 @@ export class CalendarView {
         return colors;
     }
 
-    private getReminderTimeEntries(reminder: any): Array<{ time: string; endTime?: string; note?: string }> {
-        const entries: Array<{ time: string; endTime?: string; note?: string }> = [];
+    private getReminderTimeEntries(reminder: any): Array<{ time: string; endTime?: string; note?: string; everyDay?: boolean }> {
+        const entries: Array<{ time: string; endTime?: string; note?: string; everyDay?: boolean }> = [];
 
         if (Array.isArray(reminder?.reminderTimes)) {
             reminder.reminderTimes.forEach((item: any) => {
@@ -8077,7 +8077,8 @@ export class CalendarView {
                     entries.push({
                         time: item.time.trim(),
                         endTime: typeof item.endTime === 'string' ? item.endTime.trim() : undefined,
-                        note: typeof item.note === 'string' ? item.note : undefined
+                        note: typeof item.note === 'string' ? item.note : undefined,
+                        everyDay: !!item.everyDay
                     });
                 }
             });
@@ -8150,6 +8151,90 @@ export class CalendarView {
         const baseTitle = reminder.title || i18n("unnamedNote");
 
         reminderEntries.forEach((entry, index) => {
+            // everyDay 项：为日期范围内每一天生成事件
+            if (entry.everyDay && reminder.date && reminder.endDate && reminder.endDate > reminder.date) {
+                const timeOnly = entry.time.includes('T') ? entry.time.split('T')[1]?.split(':').slice(0, 2).join(':') || entry.time : entry.time;
+                const timeMatch = timeOnly.match(/^\d{1,2}:\d{2}/);
+                if (!timeMatch) return;
+                const normalizedTime = timeMatch[0].padStart(5, '0');
+
+                const startParts = reminder.date.split('-').map(Number);
+                const endParts = reminder.endDate.split('-').map(Number);
+                const startDateObj = new Date(startParts[0], startParts[1] - 1, startParts[2]);
+                const endDateObj = new Date(endParts[0], endParts[1] - 1, endParts[2]);
+
+                let dayIndex = 0;
+                for (let d = new Date(startDateObj); d <= endDateObj; d.setDate(d.getDate() + 1), dayIndex++) {
+                    const dateStr = getLocalDateString(new Date(d));
+                    const eventStart = new Date(`${dateStr}T${normalizedTime}:00`);
+                    if (Number.isNaN(eventStart.getTime())) continue;
+
+                    let eventEnd = new Date(eventStart.getTime() + 15 * 60 * 1000);
+                    const parsedEnd = entry.endTime
+                        ? this.parseReminderTimeToDateTime(entry.endTime, dateStr)
+                        : null;
+                    if (parsedEnd) {
+                        const explicitEndDate = new Date(`${parsedEnd.date}T${parsedEnd.time}:00`);
+                        if (!Number.isNaN(explicitEndDate.getTime()) && explicitEndDate > eventStart) {
+                            eventEnd = explicitEndDate;
+                        }
+                    }
+                    const isExpired = !reminder.completed && eventEnd.getTime() < Date.now();
+                    const endDateStr2 = getLocalDateString(eventEnd);
+                    const endTimeStr2 = eventEnd.toTimeString().substring(0, 5);
+
+                    events.push({
+                        id: `${sourceEventId}__reminder__${index}_d${dayIndex}`,
+                        title: `⏰ ${baseTitle}`,
+                        start: `${dateStr}T${normalizedTime}:00`,
+                        end: `${endDateStr2}T${endTimeStr2}:00`,
+                        backgroundColor: colorWithOpacity(colors.backgroundColor, 0.22),
+                        borderColor: colors.borderColor,
+                        textColor: 'var(--b3-theme-on-background)',
+                        className: `reminder-time-event reminder-priority-${priority}${isRepeated ? ' reminder-repeated' : ''}${reminder.completed || isExpired ? ' completed' : ''}`,
+                        editable: !reminder.isSubscribed,
+                        startEditable: !reminder.isSubscribed,
+                        durationEditable: !reminder.isSubscribed,
+                        allDay: false,
+                        display: 'block',
+                        extendedProps: {
+                            type: 'reminderTime',
+                            eventTitle: baseTitle,
+                            sourceEventId: sourceEventId,
+                            reminderAt: entry.time,
+                            reminderEndAt: entry.endTime,
+                            isExpiredReminderTime: isExpired,
+                            reminderTimeNote: entry.note,
+                            completed: reminder.completed || false,
+                            note: (typeof entry.note === 'string' && entry.note.trim()) ? entry.note : (reminder.note || ''),
+                            taskNote: reminder.note || '',
+                            date: reminder.date,
+                            endDate: reminder.endDate || null,
+                            time: reminder.time || null,
+                            endTime: reminder.endTime || null,
+                            priority: priority,
+                            categoryId: reminder.categoryId,
+                            projectId: reminder.projectId,
+                            customGroupId: reminder.customGroupId,
+                            customGroupName: reminder.customGroupName,
+                            sort: typeof reminder.sort === 'number' ? reminder.sort : 0,
+                            blockId: reminder.blockId || null,
+                            docId: reminder.docId,
+                            docTitle: reminder.docTitle,
+                            parentId: reminder.parentId || null,
+                            parentTitle: reminder.parentTitle || null,
+                            isRepeated: isRepeated,
+                            originalId: originalId || reminder.id,
+                            repeat: reminder.repeat,
+                            isSubscribed: reminder.isSubscribed || false,
+                            subscriptionId: reminder.subscriptionId,
+                            showNoteInCalendar: reminder.showNoteInCalendar
+                        }
+                    });
+                }
+                return;
+            }
+
             const parsed = this.parseReminderTimeToDateTime(entry.time, fallbackDate);
             if (!parsed) return;
 
