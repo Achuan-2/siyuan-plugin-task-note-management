@@ -197,6 +197,8 @@ export class ProjectKanbanView {
     private manageGroupsHideNoTodayCheckbox: HTMLInputElement | null = null;
     private customGroupTabsMode: boolean = false; // 自定义分组看板是否使用页签显示
     private activeCustomGroupTabId: string | null = null; // 当前选中的分组页签
+    private statusTabsMode: boolean = false; // 状态看板是否使用页签显示
+    private activeStatusTabId: string | null = null; // 当前选中的状态页签
     private reminderSkipSettings: any = {};
     private reminderSkipHolidayData: HolidayData = {};
 
@@ -1073,6 +1075,10 @@ export class ProjectKanbanView {
             this.customGroupTabsMode = !!this.project?.customGroupTabsMode;
             this.activeCustomGroupTabId = typeof this.project?.activeCustomGroupTabId === 'string'
                 ? this.project.activeCustomGroupTabId
+                : null;
+            this.statusTabsMode = !!this.project?.statusTabsMode;
+            this.activeStatusTabId = typeof this.project?.activeStatusTabId === 'string'
+                ? this.project.activeStatusTabId
                 : null;
             if (!this.project) {
                 throw new Error(i18n('projectNotExist'));
@@ -4635,6 +4641,37 @@ export class ProjectKanbanView {
                 await this.saveFolderKanbanSetting({ customGroupTabsMode: checked });
             }
             // 切换分组页签显示模式时强制重建看板，避免旧的页签 DOM 残留
+            const kanbanContainer = this.container.querySelector('.project-kanban-container') as HTMLElement;
+            if (kanbanContainer) {
+                kanbanContainer.innerHTML = '';
+            }
+            this._lastRenderMode = null;
+            this._lastRenderedProjectId = null;
+            await this.queueLoadTasks();
+        }));
+
+        // 状态看板：页签显示模式
+        displaySettingsDropdown.appendChild(createSwitchItem(i18n("statusTabsMode") || "状态看板使用页签显示", this.statusTabsMode, async (checked) => {
+            this.statusTabsMode = checked;
+            if (!checked) {
+                this.activeStatusTabId = null;
+            }
+            const projectData = await this.plugin.loadProjectData() || {};
+            if (projectData[this.projectId]) {
+                projectData[this.projectId].statusTabsMode = checked;
+                if (!checked) {
+                    delete projectData[this.projectId].activeStatusTabId;
+                }
+                await this.plugin.saveProjectData(projectData);
+                if (this.project) {
+                    this.project.statusTabsMode = checked;
+                    if (!checked) {
+                        delete this.project.activeStatusTabId;
+                    }
+                }
+            } else if (this.isAggregateView) {
+                await this.saveFolderKanbanSetting({ statusTabsMode: checked });
+            }
             const kanbanContainer = this.container.querySelector('.project-kanban-container') as HTMLElement;
             if (kanbanContainer) {
                 kanbanContainer.innerHTML = '';
@@ -8554,6 +8591,12 @@ export class ProjectKanbanView {
         const kanbanContainer = this.container.querySelector('.project-kanban-container') as HTMLElement;
         if (!kanbanContainer) return;
 
+        // 页签模式
+        if (this.statusTabsMode) {
+            await this.renderStatusKanbanTabs(kanbanContainer);
+            return;
+        }
+
         // [新增] 移除不再存在的状态列
         const validStatusIds = new Set(this.kanbanStatuses.map(s => s.id));
         const allColumns = Array.from(kanbanContainer.querySelectorAll('.kanban-column')) as HTMLElement[];
@@ -8753,6 +8796,134 @@ export class ProjectKanbanView {
         renderActiveTab();
     }
 
+    /**
+     * 状态看板页签模式：每个状态作为 tab 按钮，点击切换显示对应状态列
+     */
+    private async renderStatusKanbanTabs(kanbanContainer: HTMLElement) {
+        // 按任务状态分组
+        const statusTasks: { [status: string]: any[] } = {};
+        const nonCompletedIncludedIds = new Set<string>();
+        const expandedTasksMap: { [status: string]: any[] } = {};
+
+        this.kanbanStatuses.forEach(status => {
+            if (status.id !== 'completed') {
+                const tasks = this.tasks.filter(task => !task.completed && this.getTaskStatus(task) === status.id);
+                expandedTasksMap[status.id] = this.augmentTasksWithDescendants(tasks);
+                expandedTasksMap[status.id].forEach(t => nonCompletedIncludedIds.add(t.id));
+            }
+        });
+
+        this.kanbanStatuses.forEach(status => {
+            if (status.id === 'completed') {
+                const completed = this.tasks.filter(task => task.completed);
+                statusTasks[status.id] = completed.filter(t => !nonCompletedIncludedIds.has(t.id));
+            } else {
+                statusTasks[status.id] = expandedTasksMap[status.id] || [];
+            }
+        });
+
+        // 构建 tab 条目
+        const tabEntries: Array<{ status: any; tasks: any[] }> = [];
+        for (const status of this.kanbanStatuses) {
+            let tasksForTab = statusTasks[status.id] || [];
+            if (status.id === 'completed') {
+                tasksForTab = this.sortDoneTasks(tasksForTab);
+            }
+            if (this.hideEmptyStatusBars && tasksForTab.length === 0) continue;
+            tabEntries.push({ status, tasks: tasksForTab });
+        }
+
+        if (tabEntries.length === 0) {
+            kanbanContainer.innerHTML = `<div style="color: var(--b3-theme-on-surface-light); text-align: center; padding: 40px;">${i18n('noTasks') || '暂无任务'}</div>`;
+            return;
+        }
+
+        // 创建或复用 tabs DOM
+        let tabsWrapper = kanbanContainer.querySelector('.custom-group-tabs-wrapper') as HTMLElement;
+        if (!tabsWrapper) {
+            kanbanContainer.innerHTML = '';
+            tabsWrapper = document.createElement('div');
+            tabsWrapper.className = 'custom-group-tabs-wrapper';
+            tabsWrapper.innerHTML = `
+                <div class="custom-group-tabs-bar"></div>
+                <div class="custom-group-tab-content"></div>
+            `;
+            kanbanContainer.appendChild(tabsWrapper);
+        }
+
+        const tabsBar = tabsWrapper.querySelector('.custom-group-tabs-bar') as HTMLElement;
+        const tabContent = tabsWrapper.querySelector('.custom-group-tab-content') as HTMLElement;
+        if (!tabsBar || !tabContent) return;
+
+        // 验证 activeStatusTabId
+        const validTabIdSet = new Set(tabEntries.map(entry => entry.status.id));
+        if (!this.activeStatusTabId || !validTabIdSet.has(this.activeStatusTabId)) {
+            this.activeStatusTabId = tabEntries[0].status.id;
+        }
+
+        // 持久化当前选中的 tab
+        const persistActiveTab = async (tabId: string) => {
+            try {
+                const projectData = await this.plugin.loadProjectData() || {};
+                if (!projectData[this.projectId]) return;
+                projectData[this.projectId].activeStatusTabId = tabId;
+                await this.plugin.saveProjectData(projectData);
+                if (this.project) {
+                    this.project.activeStatusTabId = tabId;
+                }
+            } catch (error) {
+                console.warn('保存状态页签失败:', error);
+            }
+        };
+
+        // 渲染当前激活 tab 的内容
+        const renderActiveTab = async () => {
+            const activeEntry = tabEntries.find(entry => entry.status.id === this.activeStatusTabId) || tabEntries[0];
+            if (!activeEntry) return;
+
+            tabContent.innerHTML = '';
+
+            // 在 tabContent 中创建列
+            const column = this.createKanbanColumn(tabContent, activeEntry.status.id, activeEntry.status.name, activeEntry.status.color);
+
+            // 设置分组容器结构并渲染带分组的任务
+            this.ensureColumnHasStableGroups(column, activeEntry.status.id);
+            await this.renderStatusColumnWithStableGroups(activeEntry.status.id, activeEntry.tasks, column);
+
+            // 使列占满容器
+            column.classList.add('kanban-column-tabbed');
+            column.style.width = '100%';
+            column.style.maxWidth = 'none';
+            column.style.minWidth = '100%';
+            column.style.height = '100%';
+        };
+
+        // 渲染 tab 按钮
+        tabsBar.innerHTML = '';
+        tabEntries.forEach(entry => {
+            const tabButton = document.createElement('button');
+            const isActive = entry.status.id === this.activeStatusTabId;
+            const emoji = entry.status.icon || '';
+            tabButton.className = `b3-button ${isActive ? 'b3-button--primary' : 'b3-button--outline'} custom-group-tab-btn`;
+            tabButton.textContent = emoji ? `${emoji} ${entry.status.name}` : entry.status.name;
+            tabButton.addEventListener('click', async () => {
+                if (this.activeStatusTabId === entry.status.id) return;
+                this.activeStatusTabId = entry.status.id;
+                await persistActiveTab(entry.status.id);
+                tabsBar.querySelectorAll('.custom-group-tab-btn').forEach(btn => {
+                    btn.classList.remove('b3-button--primary');
+                    btn.classList.add('b3-button--outline');
+                });
+                tabButton.classList.remove('b3-button--outline');
+                tabButton.classList.add('b3-button--primary');
+                await renderActiveTab();
+            });
+            tabsBar.appendChild(tabButton);
+        });
+
+        await renderActiveTab();
+    }
+
     private async ensureStatusColumnsExist(kanbanContainer: HTMLElement) {
         // 检查并创建必要的状态列 - 使用kanbanStatuses中定义的状态
         this.kanbanStatuses.forEach(status => {
@@ -8889,8 +9060,8 @@ export class ProjectKanbanView {
         return groupContainer;
     }
 
-    private async renderStatusColumnWithStableGroups(status: string, tasks: any[]): Promise<any[]> {
-        const column = this.container.querySelector(`.kanban-column-${status}`) as HTMLElement;
+    private async renderStatusColumnWithStableGroups(status: string, tasks: any[], columnOverride?: HTMLElement): Promise<any[]> {
+        const column = columnOverride || this.container.querySelector(`.kanban-column-${status}`) as HTMLElement;
         if (!column) return [];
 
         const content = column.querySelector('.kanban-column-content') as HTMLElement;
