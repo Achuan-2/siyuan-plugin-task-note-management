@@ -19,6 +19,7 @@ import { getSolarDateLunarString, getNextLunarMonthlyDate, getNextLunarYearlyDat
 import { getAllReminders, saveReminders } from "../utils/icsSubscription";
 import { isEventPast } from "../utils/icsImport";
 import { PasteTaskDialog } from "./PasteTaskDialog";
+import LoadingDialog from './LoadingDialog.svelte';
 import { createPomodoroStartSubmenu as createSharedPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
 import { buildProjectCategoryOrderMap, buildProjectStatusOrderMap, compareProjectsByPanelSort, normalizeProjectPanelSortCriteria } from "./ProjectPanel";
 import type { KanbanStatus } from "../utils/projectManager";
@@ -77,6 +78,7 @@ export class ReminderPanel {
     private panelId: string; // 唯一标识，用于区分事件来源，避免响应自己触发的更新
     private currentRemindersCache: any[] = [];
     private allRemindersMap: Map<string, any> = new Map(); // 存储所有任务的完整信息，用于计算进度
+    private loadingDialog: Dialog | null = null;
     private isLoading: boolean = false;
     private loadTimeoutId: number | null = null;
     private completionRemovalTimers: Map<string, number> = new Map();
@@ -5464,8 +5466,14 @@ export class ReminderPanel {
                 }
 
                 if (blockIds.length > 0) {
-                    for (const bid of blockIds) {
-                        await this.addItemByBlockId(bid, targetInfo);
+                    this.showLoadingDialog(i18n('refreshingIndex') || '刷新索引中...');
+                    try {
+                        await refreshSql(); // 刷新 SQL 索引，确保新创建的块内容及时更新
+                        for (const bid of blockIds) {
+                            await this.addItemByBlockId(bid, targetInfo);
+                        }
+                    } finally {
+                        this.closeLoadingDialog();
                     }
                     // 刷新列表
                     window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
@@ -5559,6 +5567,31 @@ export class ReminderPanel {
         } catch (error) {
             console.error('addItemByBlockId failed:', error);
             showMessage(i18n('createFailed') || '创建失败');
+        }
+    }
+
+    private showLoadingDialog(message: string) {
+        if (this.loadingDialog) {
+            this.loadingDialog.destroy();
+        }
+        this.loadingDialog = new Dialog({
+            title: "",
+            content: `<div id="loadingDialogContent"></div>`,
+            width: "350px",
+            height: "auto",
+            disableClose: true,
+            destroyCallback: null
+        });
+        new LoadingDialog({
+            target: this.loadingDialog.element.querySelector('#loadingDialogContent'),
+            props: { message }
+        });
+    }
+
+    private closeLoadingDialog() {
+        if (this.loadingDialog) {
+            this.loadingDialog.destroy();
+            this.loadingDialog = null;
         }
     }
 
