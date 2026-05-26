@@ -8451,13 +8451,24 @@ export class ProjectKanbanView {
 
         // 按任务状态分组 - 使用kanbanStatuses中定义的所有状态
         const statusTasks: { [status: string]: any[] } = {};
+        const nonCompletedIncludedIds = new Set<string>();
+        const expandedTasksMap: { [status: string]: any[] } = {};
+
+        this.kanbanStatuses.forEach(status => {
+            if (status.id !== 'completed') {
+                const tasks = this.tasks.filter(task => !task.completed && this.getTaskStatus(task) === status.id);
+                expandedTasksMap[status.id] = this.augmentTasksWithDescendants(tasks);
+                expandedTasksMap[status.id].forEach(t => nonCompletedIncludedIds.add(t.id));
+            }
+        });
+
         this.kanbanStatuses.forEach(status => {
             if (status.id === 'completed') {
-                // 已完成任务单独处理
-                statusTasks[status.id] = this.tasks.filter(task => task.completed);
+                // 已完成任务单独处理并过滤掉已经在其他状态列（作为子任务）中显示的任务
+                const completed = this.tasks.filter(task => task.completed);
+                statusTasks[status.id] = completed.filter(t => !nonCompletedIncludedIds.has(t.id));
             } else {
-                // 未完成任务按状态分组，使用 getTaskStatus 确保正确获取 kanbanStatus
-                statusTasks[status.id] = this.tasks.filter(task => !task.completed && this.getTaskStatus(task) === status.id);
+                statusTasks[status.id] = expandedTasksMap[status.id] || [];
             }
         });
 
@@ -9080,9 +9091,18 @@ export class ProjectKanbanView {
 
         // Filter tasks
         const listVisibleTasks = this.getListModeVisibleTasks(this.tasks);
-        const unfinishedTasks = listVisibleTasks.filter(t => !t.completed && !this.isAbandonedTask(t));
-        const abandonedTasks = listVisibleTasks.filter(t => !t.completed && this.isAbandonedTask(t));
-        const finishedTasks = this.sortDoneTasks(listVisibleTasks.filter(t => t.completed));
+        const rawUnfinished = listVisibleTasks.filter(t => !t.completed && !this.isAbandonedTask(t));
+        const rawAbandoned = listVisibleTasks.filter(t => !t.completed && this.isAbandonedTask(t));
+        const rawFinished = listVisibleTasks.filter(t => t.completed);
+
+        const nonCompletedIncludedIds = new Set<string>();
+        const unfinishedTasks = this.augmentTasksWithDescendants(rawUnfinished, null);
+        unfinishedTasks.forEach(t => nonCompletedIncludedIds.add(t.id));
+
+        const abandonedTasks = this.augmentTasksWithDescendants(rawAbandoned, null);
+        abandonedTasks.forEach(t => nonCompletedIncludedIds.add(t.id));
+
+        const finishedTasks = this.sortDoneTasks(rawFinished.filter(t => !nonCompletedIncludedIds.has(t.id)));
 
         if (countBadge) {
             // Count total top-level unfinished tasks
@@ -9278,9 +9298,18 @@ export class ProjectKanbanView {
         }
 
         const content = column.querySelector('.kanban-column-content') as HTMLElement;
-        const unfinishedTasks = tasks.filter(t => !t.completed && !this.isAbandonedTask(t));
-        const abandonedTasks = tasks.filter(t => !t.completed && this.isAbandonedTask(t));
-        const finishedTasks = this.sortDoneTasks(tasks.filter(t => t.completed));
+        const rawUnfinished = tasks.filter(t => !t.completed && !this.isAbandonedTask(t));
+        const rawAbandoned = tasks.filter(t => !t.completed && this.isAbandonedTask(t));
+        const rawFinished = tasks.filter(t => t.completed);
+
+        const nonCompletedIncludedIds = new Set<string>();
+        const unfinishedTasks = this.augmentTasksWithDescendants(rawUnfinished, group.id);
+        unfinishedTasks.forEach(t => nonCompletedIncludedIds.add(t.id));
+
+        const abandonedTasks = this.augmentTasksWithDescendants(rawAbandoned, group.id);
+        abandonedTasks.forEach(t => nonCompletedIncludedIds.add(t.id));
+
+        const finishedTasks = this.sortDoneTasks(rawFinished.filter(t => !nonCompletedIncludedIds.has(t.id)));
 
         // Update total count in header
         const count = column.querySelector('.kanban-column-count');
@@ -12337,14 +12366,20 @@ export class ProjectKanbanView {
             }
 
             // 乐观更新所有子任务
-            const childIds = completed ? this.getAllDescendantIds(task.id, this.tasks) : [];
+            const childIds: string[] = [];
             if (completed) {
-                childIds.forEach(childId => {
+                const parentStatus = this.getTaskStatus(optimisticTask);
+                const descendantIds = this.getAllDescendantIds(task.id, this.tasks);
+                descendantIds.forEach(childId => {
                     const localChild = this.tasks.find(t => t.id === childId);
-                    if (localChild) {
-                        localChild.completed = true;
-                        this.syncCustomProgressOnCompletion(localChild, true);
-                        localChild.completedTime = optimisticTask.completedTime;
+                    if (localChild && !localChild.completed) {
+                        const childStatus = this.getTaskStatus(localChild);
+                        if (!this.isAbandonedStatus(childStatus) && childStatus === parentStatus) {
+                            localChild.completed = true;
+                            this.syncCustomProgressOnCompletion(localChild, true);
+                            localChild.completedTime = optimisticTask.completedTime;
+                            childIds.push(childId);
+                        }
                     }
                 });
             }
@@ -12676,28 +12711,65 @@ export class ProjectKanbanView {
                         const originalIdsToUpdate = [targetId, ...this.getAllDescendantIds(targetId, reminderData)];
                         originalIdsToUpdate.forEach((id) => recurringOriginalIds.add(id));
 
+                        const parentTask = reminderData[targetId];
+                        let originalParentStatus = '';
+                        if (parentTask) {
+                            const parentInstMod = parentTask.instanceModifications?.[instanceDate];
+                            const tempParentInst = {
+                                ...parentTask,
+                                isRepeatInstance: true,
+                                originalId: parentTask.id,
+                                date: instanceDate,
+                                kanbanStatus: parentInstMod?.kanbanStatus,
+                                completed: parentInstMod?.completed
+                            };
+                            originalParentStatus = this.getTaskStatus(tempParentInst);
+                        }
+
                         for (const oid of originalIdsToUpdate) {
                             const originalTask = reminderData[oid];
                             if (!originalTask) continue;
 
-                            // 1. Ensure repeat structure exists for instance modification
-                            const instMod = this.ensureInstanceModificationStructure(originalTask, instanceDate);
-
-                            // 2. Update status
-                            instMod.kanbanStatus = newStatus;
-
-                            // 3. Ensure not marked as completed for this date (un-complete if needed)
-                            if (originalTask.repeat?.completedInstances) {
-                                const idx = originalTask.repeat.completedInstances.indexOf(instanceDate);
-                                if (idx > -1) originalTask.repeat.completedInstances.splice(idx, 1);
+                            let shouldUpdateStatus = (oid === targetId);
+                            if (!shouldUpdateStatus) {
+                                const subInstMod = originalTask.instanceModifications?.[instanceDate];
+                                const isCompleted = !!subInstMod?.completed;
+                                const tempSubInst = {
+                                    ...originalTask,
+                                    isRepeatInstance: true,
+                                    originalId: originalTask.id,
+                                    date: instanceDate,
+                                    kanbanStatus: subInstMod?.kanbanStatus,
+                                    completed: subInstMod?.completed
+                                };
+                                const originalItemStatus = this.getTaskStatus(tempSubInst);
+                                if (newStatus === 'abandoned') {
+                                    shouldUpdateStatus = !isCompleted;
+                                } else {
+                                    shouldUpdateStatus = (originalItemStatus === originalParentStatus);
+                                }
                             }
-                            if (originalTask.repeat?.instanceCompletedTimes && originalTask.repeat.instanceCompletedTimes[instanceDate]) {
-                                delete originalTask.repeat.instanceCompletedTimes[instanceDate];
-                            }
 
-                            // 4. Collect affected blocks
-                            if (originalTask.blockId || originalTask.docId) {
-                                affectedBlockIds.add(originalTask.blockId || originalTask.docId);
+                            if (shouldUpdateStatus) {
+                                // 1. Ensure repeat structure exists for instance modification
+                                const instMod = this.ensureInstanceModificationStructure(originalTask, instanceDate);
+
+                                // 2. Update status
+                                instMod.kanbanStatus = newStatus;
+
+                                // 3. Ensure not marked as completed for this date (un-complete if needed)
+                                if (originalTask.repeat?.completedInstances) {
+                                    const idx = originalTask.repeat.completedInstances.indexOf(instanceDate);
+                                    if (idx > -1) originalTask.repeat.completedInstances.splice(idx, 1);
+                                }
+                                if (originalTask.repeat?.instanceCompletedTimes && originalTask.repeat.instanceCompletedTimes[instanceDate]) {
+                                    delete originalTask.repeat.instanceCompletedTimes[instanceDate];
+                                }
+
+                                // 4. Collect affected blocks
+                                if (originalTask.blockId || originalTask.docId) {
+                                    affectedBlockIds.add(originalTask.blockId || originalTask.docId);
+                                }
                             }
                         }
                     }
@@ -12712,6 +12784,9 @@ export class ProjectKanbanView {
                         const childIds = await this.completeAllChildTasks(actualTaskId, reminderData, affectedBlockIds);
                         completedTaskIds.push(actualTaskId, ...childIds);
                     } else {
+                        const parentTask = reminderData[actualTaskId];
+                        const originalParentStatus = parentTask ? this.getTaskStatus(parentTask) : '';
+
                         reminderData[actualTaskId].completed = false;
                         delete reminderData[actualTaskId].completedTime;
 
@@ -12721,6 +12796,30 @@ export class ProjectKanbanView {
                         } else {
                             // 支持自定义 kanban status id（非 long_term/short_term/doing）
                             reminderData[actualTaskId].kanbanStatus = newStatus;
+                        }
+
+                        // 传播状态变化到非周期子任务
+                        const descIds = this.getAllDescendantIds(actualTaskId, reminderData);
+                        for (const did of descIds) {
+                            const desc = reminderData[did];
+                            if (!desc) continue;
+
+                            let shouldUpdateStatus = false;
+                            const originalItemStatus = this.getTaskStatus(desc);
+                            if (newStatus === 'abandoned') {
+                                shouldUpdateStatus = !desc.completed;
+                            } else {
+                                shouldUpdateStatus = (originalItemStatus === originalParentStatus);
+                            }
+
+                            if (shouldUpdateStatus) {
+                                desc.completed = false;
+                                delete desc.completedTime;
+                                desc.kanbanStatus = newStatus === 'doing' ? 'doing' : newStatus;
+                                if (desc.blockId || desc.docId) {
+                                    affectedBlockIds.add(desc.blockId || desc.docId);
+                                }
+                            }
                         }
                     }
 
@@ -12833,10 +12932,21 @@ export class ProjectKanbanView {
             const currentTime = getLocalDateTimeString(new Date());
             let completedCount = 0;
 
+            const parentTask = reminderData[parentId];
+            const originalParentStatus = parentTask ? this.getTaskStatus(parentTask) : '';
+
             // 自动完成所有子任务
             for (const childId of descendantIds) {
                 const childTask = reminderData[childId];
                 if (childTask && !childTask.completed) {
+                    const originalItemStatus = this.getTaskStatus(childTask);
+                    if (this.isAbandonedStatus(originalItemStatus)) {
+                        continue;
+                    }
+                    if (originalParentStatus && originalItemStatus !== originalParentStatus) {
+                        continue;
+                    }
+
                     childTask.completed = true;
                     this.syncCustomProgressOnCompletion(childTask, true);
                     childTask.completedTime = currentTime;
@@ -12874,10 +12984,40 @@ export class ProjectKanbanView {
 
             // 1. 处理 Ghost 子任务 (基于 originalId 的后代)
             const ghostDescendantIds = this.getAllDescendantIds(parentId, reminderData);
+            const parentTask = reminderData[parentId];
+            const parentInstMod = parentTask?.repeat?.instanceModifications?.[date];
+            const tempParentInst = parentTask ? {
+                ...parentTask,
+                isRepeatInstance: true,
+                originalId: parentTask.id,
+                date: date,
+                kanbanStatus: parentInstMod?.kanbanStatus,
+                completed: parentInstMod?.completed
+            } : null;
+            const originalParentStatus = tempParentInst ? this.getTaskStatus(tempParentInst) : '';
 
             for (const childId of ghostDescendantIds) {
                 const childTask = reminderData[childId];
                 if (!childTask) continue;
+
+                // Check if already completed or abandoned for this date
+                const childInstMod = childTask.repeat?.instanceModifications?.[date];
+                const tempChildInst = {
+                    ...childTask,
+                    isRepeatInstance: true,
+                    originalId: childTask.id,
+                    date: date,
+                    kanbanStatus: childInstMod?.kanbanStatus,
+                    completed: childInstMod?.completed
+                };
+                const originalItemStatus = this.getTaskStatus(tempChildInst);
+
+                if (this.isAbandonedStatus(originalItemStatus)) {
+                    continue;
+                }
+                if (originalParentStatus && originalItemStatus !== originalParentStatus) {
+                    continue;
+                }
 
                 // 确保 repeat 结构存在，记录实例完成状态
                 if (!childTask.repeat) {
@@ -12908,12 +13048,20 @@ export class ProjectKanbanView {
             // 如果未传入 instanceId，尝试构造可能的 instanceId
             const currentInstanceId = instanceId || `reminder_${parentId}_${date}`;
 
-            // 获取该实例的直接后代（普通子任务）
+            // 获取该实例 of 直接后代（普通子任务）
             const realDescendantIds = this.getAllDescendantIds(currentInstanceId, reminderData);
 
             for (const childId of realDescendantIds) {
                 const childTask = reminderData[childId];
                 if (childTask && !childTask.completed) {
+                    const originalItemStatus = this.getTaskStatus(childTask);
+                    if (this.isAbandonedStatus(originalItemStatus)) {
+                        continue;
+                    }
+                    if (originalParentStatus && originalItemStatus !== originalParentStatus) {
+                        continue;
+                    }
+
                     childTask.completed = true;
                     this.syncCustomProgressOnCompletion(childTask, true);
                     childTask.completedTime = currentTime;
@@ -16430,11 +16578,48 @@ export class ProjectKanbanView {
                     if (targetStatus !== undefined) {
                         originalIdsToUpdate.forEach((id) => recurringOriginalIds.add(id));
                     }
+
+                    const parentTask = reminderData[draggedOriginalId];
+                    let originalParentStatus = '';
+                    if (parentTask) {
+                        const parentInstMod = parentTask.instanceModifications?.[draggedInstanceDate!];
+                        const tempParentInst = {
+                            ...parentTask,
+                            isRepeatInstance: true,
+                            originalId: parentTask.id,
+                            date: draggedInstanceDate!,
+                            kanbanStatus: parentInstMod?.kanbanStatus,
+                            completed: parentInstMod?.completed
+                        };
+                        originalParentStatus = this.getTaskStatus(tempParentInst);
+                    }
+
                     for (const oid of originalIdsToUpdate) {
                         const originalTask = reminderData[oid];
                         if (!originalTask) continue;
                         const currentInstMod = this.ensureInstanceModificationStructure(originalTask, draggedInstanceDate!);
-                        if (targetStatus !== undefined) {
+
+                        let shouldUpdateStatus = (oid === draggedOriginalId);
+                        if (!shouldUpdateStatus && targetStatus !== undefined) {
+                            const subInstMod = originalTask.instanceModifications?.[draggedInstanceDate!];
+                            const isCompleted = !!subInstMod?.completed;
+                            const tempSubInst = {
+                                ...originalTask,
+                                isRepeatInstance: true,
+                                originalId: originalTask.id,
+                                date: draggedInstanceDate!,
+                                kanbanStatus: subInstMod?.kanbanStatus,
+                                completed: subInstMod?.completed
+                            };
+                            const originalItemStatus = this.getTaskStatus(tempSubInst);
+                            if (targetStatus === 'abandoned') {
+                                shouldUpdateStatus = !isCompleted;
+                            } else {
+                                shouldUpdateStatus = (originalItemStatus === originalParentStatus);
+                            }
+                        }
+
+                        if (targetStatus !== undefined && shouldUpdateStatus) {
                             const normalizedStatus = targetStatus === 'doing' ? 'doing' : targetStatus;
                             currentInstMod.kanbanStatus = normalizedStatus;
                             this.syncRepeatInstanceCompletionState(originalTask, draggedInstanceDate!, targetStatus, instanceCompletedTime);
@@ -16478,10 +16663,24 @@ export class ProjectKanbanView {
 
                 // 递归更新子任务
                 const descIds = this.getAllDescendantIds(draggedOriginalId, reminderData);
+                const parentTask = reminderData[draggedOriginalId];
+                const originalParentStatus = parentTask ? this.getTaskStatus(parentTask) : '';
+
                 for (const did of descIds) {
                     const desc = reminderData[did];
                     if (!desc) continue;
+
+                    let shouldUpdateStatus = false;
                     if (targetStatus !== undefined) {
+                        const originalItemStatus = this.getTaskStatus(desc);
+                        if (targetStatus === 'abandoned') {
+                            shouldUpdateStatus = !desc.completed;
+                        } else {
+                            shouldUpdateStatus = (originalItemStatus === originalParentStatus);
+                        }
+                    }
+
+                    if (targetStatus !== undefined && shouldUpdateStatus) {
                         if (targetStatus === 'completed') {
                             desc.completed = true;
                             this.syncCustomProgressOnCompletion(desc, true);
@@ -16872,18 +17071,28 @@ export class ProjectKanbanView {
                             desc.projectId = actualTargetProjectId;
                         }
                         // 同步状态
-                        if (newStatus === 'completed') {
-                            if (!desc.completed) {
-                                desc.completed = true;
-                                this.syncCustomProgressOnCompletion(desc, true);
-                                desc.completedTime = getLocalDateTimeString(new Date());
-                                desc.kanbanStatus = 'completed';
-                            }
+                        let shouldUpdateStatus = false;
+                        const originalItemStatus = this.getTaskStatus(desc);
+                        if (newStatus === 'abandoned') {
+                            shouldUpdateStatus = !desc.completed;
                         } else {
-                            if (desc.completed || desc.kanbanStatus !== newStatus) {
-                                desc.completed = false;
-                                delete desc.completedTime;
-                                desc.kanbanStatus = newStatus === 'doing' ? 'doing' : newStatus;
+                            shouldUpdateStatus = (originalItemStatus === oldStatus);
+                        }
+
+                        if (shouldUpdateStatus) {
+                            if (newStatus === 'completed') {
+                                if (!desc.completed) {
+                                    desc.completed = true;
+                                    this.syncCustomProgressOnCompletion(desc, true);
+                                    desc.completedTime = getLocalDateTimeString(new Date());
+                                    desc.kanbanStatus = 'completed';
+                                }
+                            } else {
+                                if (desc.completed || desc.kanbanStatus !== newStatus) {
+                                    desc.completed = false;
+                                    delete desc.completedTime;
+                                    desc.kanbanStatus = newStatus === 'doing' ? 'doing' : newStatus;
+                                }
                             }
                         }
                         // 同步优先级
@@ -17032,18 +17241,28 @@ export class ProjectKanbanView {
                     }
                     // 状态
                     if (oldStatus !== newStatus) {
-                        if (newStatus === 'completed') {
-                            if (!desc.completed) {
-                                desc.completed = true;
-                                this.syncCustomProgressOnCompletion(desc, true);
-                                desc.completedTime = getLocalDateTimeString(new Date());
-                                desc.kanbanStatus = 'completed';
-                            }
+                        let shouldUpdateStatus = false;
+                        const originalItemStatus = this.getTaskStatus(desc);
+                        if (newStatus === 'abandoned') {
+                            shouldUpdateStatus = !desc.completed;
                         } else {
-                            if (desc.completed || desc.kanbanStatus !== newStatus) {
-                                desc.completed = false;
-                                delete desc.completedTime;
-                                desc.kanbanStatus = newStatus === 'doing' ? 'doing' : newStatus;
+                            shouldUpdateStatus = (originalItemStatus === oldStatus);
+                        }
+
+                        if (shouldUpdateStatus) {
+                            if (newStatus === 'completed') {
+                                if (!desc.completed) {
+                                    desc.completed = true;
+                                    this.syncCustomProgressOnCompletion(desc, true);
+                                    desc.completedTime = getLocalDateTimeString(new Date());
+                                    desc.kanbanStatus = 'completed';
+                                }
+                            } else {
+                                if (desc.completed || desc.kanbanStatus !== newStatus) {
+                                    desc.completed = false;
+                                    delete desc.completedTime;
+                                    desc.kanbanStatus = newStatus === 'doing' ? 'doing' : newStatus;
+                                }
                             }
                         }
                     }
@@ -19622,11 +19841,7 @@ export class ProjectKanbanView {
                         }
                     }
 
-                    // [新增] 对于重复实例的“普通子任务” (Real Subtasks)，它们是独立的DB记录，需要在此同步更新
-                    // 包括：1. 原始任务系列的子任务 (originalIdsToUpdate)
-                    //       2. 直接挂载在该实例下的子任务 (instance specific subtasks)
-                    const instanceSpecificSubtasks = this.getAllDescendantIds(uiTask.id, reminderData);
-                    const allSubtaskIdsToUpdate = new Set([...originalIdsToUpdate, ...instanceSpecificSubtasks]);
+                    const originalParentStatus = this.getTaskStatus(uiTask);
 
                     for (const oid of allSubtaskIdsToUpdate) {
                         if (oid === originalId) continue; // 跳过根任务，根任务的普通更新在 instMod 循环外由 normal item 逻辑或后续逻辑处理并不准确，
@@ -19648,7 +19863,35 @@ export class ProjectKanbanView {
                         }
 
                         // 同步状态到实例级覆盖（ghost 系列子任务不改原始定义状态）
+                        let shouldUpdateStatus = false;
                         if (updates.kanbanStatus) {
+                            let isCompleted = false;
+                            let originalItemStatus = '';
+                            if (isGhostSeriesTask) {
+                                const subInstMod = subTaskInDb.instanceModifications?.[instanceDate];
+                                isCompleted = !!subInstMod?.completed;
+                                const tempSubInst = {
+                                    ...subTaskInDb,
+                                    isRepeatInstance: true,
+                                    originalId: subTaskInDb.id,
+                                    date: instanceDate,
+                                    kanbanStatus: subInstMod?.kanbanStatus,
+                                    completed: subInstMod?.completed
+                                };
+                                originalItemStatus = this.getTaskStatus(tempSubInst);
+                            } else {
+                                isCompleted = !!subTaskInDb.completed;
+                                originalItemStatus = this.getTaskStatus(subTaskInDb);
+                            }
+
+                            if (updates.kanbanStatus === 'abandoned') {
+                                shouldUpdateStatus = !isCompleted;
+                            } else {
+                                shouldUpdateStatus = (originalItemStatus === originalParentStatus);
+                            }
+                        }
+
+                        if (updates.kanbanStatus && shouldUpdateStatus) {
                             const normalizedStatus = updates.kanbanStatus === 'doing' ? 'doing' : updates.kanbanStatus;
                             if (isGhostSeriesTask) {
                                 const subInstMod = this.ensureInstanceModificationStructure(subTaskInDb, instanceDate);
@@ -19690,6 +19933,8 @@ export class ProjectKanbanView {
                 } else {
                     // 计算要更新的任务：包括当前任务及其所有后代（基于 reminderData）
                     const toUpdateIds = [dbId, ...this.getAllDescendantIds(dbId, reminderData)];
+                    const parentTask = reminderData[dbId];
+                    const originalParentStatus = parentTask ? this.getTaskStatus(parentTask) : '';
 
                     // 对于实例性操作（拖动实例），保留原先的逻辑只对原始任务做更改；但一般拖动应作用于原始与其后代
                     for (const uid of toUpdateIds) {
@@ -19698,8 +19943,18 @@ export class ProjectKanbanView {
 
                         let itemChanged = false;
 
+                        let shouldUpdateStatus = (uid === dbId);
+                        if (!shouldUpdateStatus && updates.kanbanStatus) {
+                            const originalItemStatus = this.getTaskStatus(item);
+                            if (updates.kanbanStatus === 'abandoned') {
+                                shouldUpdateStatus = !item.completed;
+                            } else {
+                                shouldUpdateStatus = (originalItemStatus === originalParentStatus);
+                            }
+                        }
+
                         // Status Update (只对非实例任务的定义进行修改)
-                        if (updates.kanbanStatus) {
+                        if (updates.kanbanStatus && shouldUpdateStatus) {
                             const newStatus = updates.kanbanStatus;
                             if (newStatus === 'completed') {
                                 if (!item.completed) {
