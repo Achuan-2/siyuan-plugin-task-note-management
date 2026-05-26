@@ -55,6 +55,7 @@ export interface TaskRenderContext {
     hasTodayIgnoreMark?: (task: any, today: string) => boolean;
     parseReminderInstanceId?: (id: string) => { originalId: string; instanceDate: string } | null;
     isTaskCollapsed?: (task: any, hasChildren: boolean, childrenInVisibleBatch: boolean, allVisibleTasks: any[]) => boolean;
+    getTaskStatus?: (task: any) => string;
 }
 
 export interface TaskRenderCallbacks {
@@ -772,7 +773,19 @@ export class TaskRenderer {
 
         // 新增：父任务层级路径显示
         const isParentHidden = task.parentId && !allVisibleTasks.some(r => r.id === task.parentId);
-        if (isParentHidden && context.allTasks) {
+        let isIndependentKanbanSubtask = false;
+        if (context.customContainerClass === 'kanban-task' && task.parentId && context.getTaskStatus && context.allTasks) {
+            const parent = context.allTasks.find((t: any) => t.id === task.parentId);
+            if (parent) {
+                const currentStatus = context.getTaskStatus(task);
+                const parentStatus = context.getTaskStatus(parent);
+                if (currentStatus !== parentStatus) {
+                    isIndependentKanbanSubtask = true;
+                }
+            }
+        }
+
+        if (level === 0 && (isParentHidden || isIndependentKanbanSubtask) && context.allTasks) {
             const ancestors: string[] = [];
             let currentParentId = task.parentId;
             while (currentParentId) {

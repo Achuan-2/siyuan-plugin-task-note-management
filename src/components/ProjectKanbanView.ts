@@ -10948,7 +10948,7 @@ export class ProjectKanbanView {
             projectCache: undefined,
             habitCache: undefined,
             isMobileClient: this.plugin.isInMobileApp,
-            
+            getTaskStatus: (t: any) => this.getTaskStatus(t),
             formatReminderTime: (dateStr: string, timeStr: string, today: string, endDateStr?: string, endTimeStr?: string, taskParam?: any) => {
                 return this.formatTaskDate(taskParam || task);
             },
