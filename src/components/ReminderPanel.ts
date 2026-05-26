@@ -599,9 +599,17 @@ export class ReminderPanel {
         this.searchInput.style.cssText = `
             flex: 1;
         `;
+        let searchTimeout: number | undefined;
         this.searchInput.addEventListener('input', () => {
             this.currentSearchQuery = this.searchInput.value.trim();
-            this.loadReminders();
+            this.currentPage = 1;
+
+            if (searchTimeout) {
+                clearTimeout(searchTimeout);
+            }
+            searchTimeout = window.setTimeout(() => {
+                this.loadReminders();
+            }, 300);
         });
 
         searchContainer.appendChild(this.searchInput);
@@ -2412,11 +2420,19 @@ export class ReminderPanel {
             // 保存到实例级缓存，供动态展开子任务时复用
             this.asyncDataCache = asyncDataCache;
 
+            // 总是先移除旧的分页控件，确保切换筛选条件时能正确隐藏
+            const existingControls = this.container.querySelector('.reminder-pagination-controls');
+            if (existingControls) {
+                existingControls.remove();
+            }
+
             // 6. 清理之前的内容并渲染新内容
             this.remindersContainer.innerHTML = '';
             const topLevelReminders = displayReminders.filter(r => !r.parentId || !displayReminders.some(p => p.id === r.parentId));
 
             if (topLevelReminders.length === 0) {
+                this.totalItems = 0;
+                this.totalPages = 1;
                 this.remindersContainer.innerHTML = `<div class="reminder-empty">${i18n("noReminders")}</div>`;
                 return;
             }
@@ -2428,12 +2444,6 @@ export class ReminderPanel {
             // 立即恢复滚动位置，避免滚动跳动
             this.remindersContainer.scrollTop = scrollTop;
             this.remindersContainer.scrollLeft = scrollLeft;
-
-            // 总是先移除旧的分页控件，确保切换筛选条件时能正确隐藏
-            const existingControls = this.container.querySelector('.reminder-pagination-controls');
-            if (existingControls) {
-                existingControls.remove();
-            }
 
             // 如果有被截断的项，添加分页提示
             if (truncatedTotal > 0 || (this.isPaginationEnabled && this.totalPages > 1)) {
@@ -2707,8 +2717,8 @@ export class ReminderPanel {
         // 一次性添加到 DOM
         this.remindersContainer.appendChild(fragment);
 
-        // 更新任务总数
-        this.totalItems = reminders.length;
+        // 注意：这里不要覆盖 this.totalItems，因为它在外部根据全量或过滤后的总量进行计算，
+        // 否则会导致分页时“总项数”显示为当前页的数量。
     }
 
     /**
@@ -4120,9 +4130,17 @@ export class ReminderPanel {
     }
 
     private renderReminders(reminderData: any) {
+        // 先移除旧的分页控件
+        const existingControls = this.container.querySelector('.reminder-pagination-controls');
+        if (existingControls) {
+            existingControls.remove();
+        }
+
         // This function is now largely superseded by the new loadReminders logic.
         // It can be kept as a fallback or for simpler views if needed, but for now, we clear the container if no data.
         if (!reminderData || (Array.isArray(reminderData) && reminderData.length === 0)) {
+            this.totalItems = 0;
+            this.totalPages = 1;
             const filterNames = {
                 'today': i18n("noTodayReminders"),
                 'tomorrow': i18n("noTomorrowReminders"),
@@ -8782,8 +8800,8 @@ export class ReminderPanel {
                             ? compareDateStrings(startLogical_cur, today) <= 0 && compareDateStrings(today, endLogical_cur) <= 0
                             : compareDateStrings(startLogical_cur, today) <= 0)
                         : reminder.endDate
-                        ? this.isReminderActiveOnAllowedDate(reminder, today)
-                        : false) ||
+                            ? this.isReminderActiveOnAllowedDate(reminder, today)
+                            : false) ||
                     ((reminder.endDate || treatsOnlyStartAsDeadline_today) && compareDateStrings(endLogical_cur, today) < 0)
                 );
 
