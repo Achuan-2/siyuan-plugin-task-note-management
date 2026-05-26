@@ -1,5 +1,5 @@
 import { showMessage, Dialog, platformUtils, confirm } from "siyuan";
-import { getBlockByID, getBlockDOM, refreshSql, updateBindBlockAtrrs, updateBlock } from "../api";
+import { getBlockByID, getBlockDOM, refreshSql, renameDocByID, updateBindBlockAtrrs, updateBlock } from "../api";
 import { compareDateStrings, getLogicalDateString, autoDetectDateTimeFromTitle, type SingleDateRole } from "../utils/dateUtils";
 import { CategoryManager } from "../utils/categoryManager";
 import { ProjectManager } from "../utils/projectManager";
@@ -4121,16 +4121,19 @@ export class QuickReminderDialog {
                         try {
                             // 获取当前块的 Markdown 以保留前缀（如 >, -, - [ ], 1. 等）
                             const block = await getBlockByID(blockId);
-                            const originalMd = block?.markdown || '';
 
-                            // 匹配前缀正则：包含空格、嵌套列表、引用、任务列表、标题等
-                            // 注意：SiYuan 的任务列表在 SQL 的 markdown 字段中通常包含前缀
-                            const prefixMatch = originalMd.match(/^(\s*(?:#+\s+|>|[-*+]\s+\[(?: |x|X)\]|[-*+]|\d+\.)\s*)/);
-                            const prefix = prefixMatch ? prefixMatch[1] : '';
+                            if (block?.type === 'd') {
+                                // 绑定的是文档，使用 renameDocByID 修改文档标题
+                                await renameDocByID(blockId, title);
+                            } else {
+                                // 绑定的是普通块，保留前缀后更新内容
+                                const originalMd = block?.markdown || '';
+                                const prefixMatch = originalMd.match(/^(\s*(?:#+\s+|>|[-*+]\s+\[(?: |x|X)\]|[-*+]|\d+\.)\s*)/);
+                                const prefix = prefixMatch ? prefixMatch[1] : '';
+                                const newMarkdown = prefix + title;
+                                await updateBlock("markdown", newMarkdown, blockId);
+                            }
 
-                            const newMarkdown = prefix + title;
-
-                            await updateBlock("markdown", newMarkdown, blockId);
                             await refreshSql(); // 强制刷新 SQL 索引以确保后续 getBlockByID 获取最新内容
                             this.blockContent = title;
                             await this.updateBlockPreview(blockId);
