@@ -10,6 +10,7 @@ export interface FolderKanbanSettings {
     hideNoDoingGroups?: boolean;
     hideNoTodayGroups?: boolean;
     customGroupTabsMode?: boolean;
+    columnWidths?: { [columnKey: string]: number };
 }
 
 export interface ProjectFolder {

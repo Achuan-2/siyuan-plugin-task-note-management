@@ -145,6 +145,9 @@ export class ProjectKanbanView {
     // 当前项目的看板状态配置
     private kanbanStatuses: import('../utils/projectManager').KanbanStatus[] = [];
 
+    // 看板列宽度记忆（key 为列标识，value 为宽度 px）
+    private columnWidths: Map<string, number> = new Map();
+
     // 多选模式状态
     private isMultiSelectMode: boolean = false;
     // 选中的任务ID集合
@@ -329,7 +332,7 @@ export class ProjectKanbanView {
             id,
             name,
             color: sourceGroup?.color || project?.color || this.projectManager.getProjectColor(projectId),
-            icon: sourceGroup?.icon || project?.icon || '📋',
+            icon: sourceGroup?.icon || project?.icon || '',
             sort: sourceGroup?.sort ?? (hasRealGroups ? Number.MAX_SAFE_INTEGER : 0),
             milestones: sourceGroup?.milestones || project?.milestones || [],
             __realProjectId: projectId,
@@ -754,7 +757,7 @@ export class ProjectKanbanView {
             return `
                 <label style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--b3-theme-border); border-radius: 6px; cursor: pointer;">
                     <input type="checkbox" class="group-visible-status-checkbox b3-switch b3-switch--small" data-status-id="${status.id}" ${isChecked ? 'checked' : ''}>
-                    <span style="display: inline-flex; align-items: center; justify-content: center; width: 18px;">${status.icon || '📋'}</span>
+                    <span style="display: inline-flex; align-items: center; justify-content: center; width: 18px;">${status.icon || ''}</span>
                     <span style="font-size: 13px; color: ${status.color || 'var(--b3-theme-on-surface)'};">${status.name}</span>
                 </label>
             `;
@@ -1109,17 +1112,59 @@ export class ProjectKanbanView {
                 if (this.kanbanStatuses.length === 0) {
                     this.kanbanStatuses = this.projectManager.getDefaultKanbanStatuses();
                 }
-                return;
+            } else {
+                this.kanbanMode = await projectManager.getProjectKanbanMode(this.projectId);
+                // 同时加载看板状态配置
+                this.kanbanStatuses = await projectManager.getProjectKanbanStatuses(this.projectId);
             }
-
-            this.kanbanMode = await projectManager.getProjectKanbanMode(this.projectId);
-            // 同时加载看板状态配置
-            this.kanbanStatuses = await projectManager.getProjectKanbanStatuses(this.projectId);
         } catch (error) {
             console.error(i18n('loadKanbanModeFailed'), error);
             this.kanbanMode = 'status';
             // 使用默认状态配置
             this.kanbanStatuses = this.projectManager.getDefaultKanbanStatuses();
+        }
+
+        // 加载列宽度记忆
+        await this.loadColumnWidths();
+    }
+
+    private async loadColumnWidths(): Promise<void> {
+        try {
+            if (this.viewOptions?.folderId) {
+                const folderManager = ProjectFolderManager.getInstance(this.plugin);
+                await folderManager.initialize();
+                const folder = folderManager.getFolderById(this.viewOptions.folderId);
+                const saved = folder?.kanbanSettings?.columnWidths;
+                if (saved) {
+                    this.columnWidths = new Map(Object.entries(saved));
+                    return;
+                }
+            }
+        } catch (error) {
+            console.warn('加载列宽度记忆失败:', error);
+        }
+        this.columnWidths = new Map();
+    }
+
+    private async saveColumnWidth(columnKey: string, width: number): Promise<void> {
+        this.columnWidths.set(columnKey, width);
+        if (!this.viewOptions?.folderId) return;
+        try {
+            const widthsObj = Object.fromEntries(this.columnWidths);
+            await this.saveFolderKanbanSetting({ columnWidths: widthsObj });
+        } catch (error) {
+            console.warn('保存列宽度失败:', error);
+        }
+    }
+
+    private async removeColumnWidth(columnKey: string): Promise<void> {
+        this.columnWidths.delete(columnKey);
+        if (!this.viewOptions?.folderId) return;
+        try {
+            const widthsObj = Object.fromEntries(this.columnWidths);
+            await this.saveFolderKanbanSetting({ columnWidths: widthsObj });
+        } catch (error) {
+            console.warn('保存列宽度失败:', error);
         }
     }
 
@@ -3639,7 +3684,7 @@ export class ProjectKanbanView {
                 });
 
                 const groupIcon = document.createElement('span');
-                groupIcon.textContent = group.icon || '📋';
+                groupIcon.textContent = group.icon || '';
                 groupIcon.style.cssText = `
                     font-size: 18px;
                     flex-shrink: 0;
@@ -4018,7 +4063,7 @@ export class ProjectKanbanView {
                             const groupIconEl = document.createElement('span');
                             groupIconEl.className = 'custom-group-header-icon';
                             groupIconEl.style.cssText = `margin-right:6px;`;
-                            groupIconEl.textContent = icon || '📋';
+                            groupIconEl.textContent = icon || '';
                             titleContainer.appendChild(groupIconEl);
 
                             // 重建标题
@@ -5320,18 +5365,27 @@ export class ProjectKanbanView {
             display: flex;
             align-items: center;
             gap: 4px;
+            min-width: 0;
+            flex: 1;
+            overflow: hidden;
         `;
 
         const titleEl = document.createElement('h3');
         // 从 kanbanStatuses 获取状态图标
         const statusConfig = this.kanbanStatuses.find(s => s.id === status);
         const emoji = statusConfig?.icon || '';
-        titleEl.textContent = emoji ? `${emoji}${title}` : title;
+        const titleText = emoji ? `${emoji}${title}` : title;
+        titleEl.textContent = titleText;
+        titleEl.title = title; // 悬浮显示完整标题
         titleEl.style.cssText = `
             margin: 0;
             font-size: 16px;
             font-weight: 600;
             color: ${color};
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: clip;
+            min-width: 0;
         `;
         titleContainer.appendChild(titleEl);
 
@@ -5365,7 +5419,7 @@ export class ProjectKanbanView {
         // 新建任务按钮（针对该状态列），已完成列不显示新建按钮
         const rightContainer = document.createElement('div');
         rightContainer.className = 'custom-header-right';
-        rightContainer.style.cssText = 'display:flex; align-items:center; gap:8px;';
+        rightContainer.style.cssText = 'display:flex; align-items:center; gap:8px; flex-shrink: 0;';
         rightContainer.appendChild(countEl);
 
         if (status !== 'completed') {
@@ -5429,6 +5483,20 @@ export class ProjectKanbanView {
 
         column.appendChild(header);
         column.appendChild(content);
+
+        // 列宽度调整手柄（右侧拖拽调整宽度）
+        const resizeHandle = document.createElement('div');
+        resizeHandle.className = 'kanban-column-resize-handle';
+        this.attachResizeHandle(resizeHandle, column, `status-${status}`);
+        column.appendChild(resizeHandle);
+
+        // 应用已保存的列宽度
+        const savedWidth = this.columnWidths.get(`status-${status}`);
+        if (savedWidth) {
+            column.style.minWidth = `${savedWidth}px`;
+            column.style.maxWidth = `${savedWidth}px`;
+            column.style.flex = `0 0 ${savedWidth}px`;
+        }
 
         // 分页容器（插入在列内容之后）
         const pagination = document.createElement('div');
@@ -5545,6 +5613,60 @@ export class ProjectKanbanView {
         }
 
         return column;
+    }
+
+    /**
+     * 为看板列附加右侧拖拽调整宽度手柄事件（支持持久化和双击恢复默认）
+     */
+    private attachResizeHandle(handle: HTMLElement, column: HTMLElement, columnKey: string): void {
+        let startX = 0;
+        let startWidth = 0;
+        let isResizing = false;
+
+        const onMouseMove = (e: MouseEvent) => {
+            if (!isResizing) return;
+            const dx = e.clientX - startX;
+            const newWidth = Math.max(180, startWidth + dx);
+            column.style.minWidth = `${newWidth}px`;
+            column.style.maxWidth = `${newWidth}px`;
+            column.style.flex = `0 0 ${newWidth}px`;
+        };
+
+        const onMouseUp = () => {
+            if (!isResizing) return;
+            isResizing = false;
+            handle.classList.remove('resizing');
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            // 保存调整后的宽度
+            const finalWidth = column.offsetWidth;
+            this.saveColumnWidth(columnKey, finalWidth);
+        };
+
+        handle.addEventListener('mousedown', (e: MouseEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+            isResizing = true;
+            startX = e.clientX;
+            startWidth = column.offsetWidth;
+            handle.classList.add('resizing');
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+        });
+
+        // 双击恢复默认宽度
+        handle.addEventListener('dblclick', (e: MouseEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+            column.style.minWidth = '';
+            column.style.maxWidth = '';
+            column.style.flex = '';
+            this.removeColumnWidth(columnKey);
+        });
     }
 
     private addDropZoneEvents(element: HTMLElement, status: string) {
@@ -8612,7 +8734,7 @@ export class ProjectKanbanView {
             const tabButton = document.createElement('button');
             const isActive = entry.group.id === this.activeCustomGroupTabId;
             tabButton.className = `b3-button ${isActive ? 'b3-button--primary' : 'b3-button--outline'} custom-group-tab-btn`;
-            tabButton.textContent = `${entry.group.icon || '📋'} ${entry.group.name}`;
+            tabButton.textContent = `${entry.group.icon || ''} ${entry.group.name}`;
             tabButton.addEventListener('click', async () => {
                 if (this.activeCustomGroupTabId === entry.group.id) return;
                 this.activeCustomGroupTabId = entry.group.id;
@@ -8737,7 +8859,7 @@ export class ProjectKanbanView {
         return [{
             status: statusId,
             label: status.name,
-            icon: status.icon || defaultIcons[statusId] || '📋'
+            icon: status.icon || defaultIcons[statusId] || ''
         }];
     }
 
@@ -9215,7 +9337,7 @@ export class ProjectKanbanView {
             const tabButton = document.createElement('button');
             const isActive = entry.group.id === this.activeCustomGroupTabId;
             tabButton.className = `b3-button ${isActive ? 'b3-button--primary' : 'b3-button--outline'} custom-group-tab-btn`;
-            tabButton.textContent = `${entry.group.icon || '📋'} ${entry.group.name}`;
+            tabButton.textContent = `${entry.group.icon || ''} ${entry.group.name}`;
             tabButton.addEventListener('click', async () => {
                 if (this.activeCustomGroupTabId === entry.group.id) return;
                 this.activeCustomGroupTabId = entry.group.id;
@@ -10034,22 +10156,30 @@ export class ProjectKanbanView {
             display: flex;
             align-items: center;
             gap: 4px;
+            min-width: 0;
+            flex: 1;
+            overflow: hidden;
         `;
 
         const titleEl = document.createElement('h3');
         // 显示分组的 emoji（如果有），然后显示名称
         const groupIconEl = document.createElement('span');
         groupIconEl.className = 'custom-group-header-icon';
-        groupIconEl.style.cssText = `margin-right:6px;`;
-        groupIconEl.textContent = group.icon || '📋';
+        groupIconEl.style.cssText = `margin-right:6px; flex-shrink: 0;`;
+        groupIconEl.textContent = group.icon || '';
         titleContainer.appendChild(groupIconEl);
 
         titleEl.textContent = group.name;
+        titleEl.title = group.name; // 悬浮显示完整分组名
         titleEl.style.cssText = `
             margin: 0;
             font-size: 16px;
             font-weight: 600;
             color: ${group.color};
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: clip;
+            min-width: 0;
         `;
 
         // 如果分组绑定了块ID，添加预览和跳转功能
@@ -10110,7 +10240,7 @@ export class ProjectKanbanView {
 
         const headerRight = document.createElement('div');
         headerRight.className = 'custom-header-right';
-        headerRight.style.cssText = 'display:flex; align-items:center; gap:8px;';
+        headerRight.style.cssText = 'display:flex; align-items:center; gap:8px; flex-shrink: 0;';
         headerRight.appendChild(countEl);
 
         headerRight.appendChild(addGroupTaskBtn);
@@ -10161,6 +10291,20 @@ export class ProjectKanbanView {
 
         column.appendChild(header);
         column.appendChild(content);
+
+        // 列宽度调整手柄（右侧拖拽调整宽度）
+        const resizeHandle = document.createElement('div');
+        resizeHandle.className = 'kanban-column-resize-handle';
+        this.attachResizeHandle(resizeHandle, column, `group-${group.id}`);
+        column.appendChild(resizeHandle);
+
+        // 应用已保存的列宽度
+        const savedWidth = this.columnWidths.get(`group-${group.id}`);
+        if (savedWidth) {
+            column.style.minWidth = `${savedWidth}px`;
+            column.style.maxWidth = `${savedWidth}px`;
+            column.style.flex = `0 0 ${savedWidth}px`;
+        }
 
         // 为自定义分组列添加拖拽事件（设置分组）
         // 如果是未分组列，传入 null 以表示移除分组目标
@@ -10319,6 +10463,9 @@ export class ProjectKanbanView {
             font-weight: 600;
             color: ${statusColor};
             font-size: 13px;
+            min-width: 0;
+            flex: 1;
+            overflow: hidden;
         `;
 
         const groupIcon = document.createElement('span');
@@ -10332,11 +10479,19 @@ export class ProjectKanbanView {
             'incomplete': '🗓'
         };
         // 优先使用 kanbanStatuses 中设置的图标，其次使用默认图标
-        groupIcon.textContent = statusConfig?.icon || defaultIcons[status] || '📋';
+        groupIcon.textContent = statusConfig?.icon || defaultIcons[status] || '';
         groupTitle.appendChild(groupIcon);
 
         const groupName = document.createElement('span');
         groupName.textContent = statusLabel;
+        groupName.title = statusLabel; // 悬浮显示完整状态名
+        groupName.style.cssText = `
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: clip;
+            min-width: 0;
+            flex: 1;
+        `;
         groupTitle.appendChild(groupName);
 
         const taskCount = document.createElement('span');
@@ -10580,18 +10735,26 @@ export class ProjectKanbanView {
         groupTitle.style.cssText = `
             display: flex;
             align-items: center;
-            gap: 6px;
             font-weight: 600;
             color: ${group.color};
             font-size: 13px;
         `;
 
         const groupIcon = document.createElement('span');
-        groupIcon.textContent = group.icon || '📋';
+        groupIcon.textContent = group.icon || '';
         groupTitle.appendChild(groupIcon);
 
         const groupName = document.createElement('span');
         groupName.textContent = group.name;
+        groupName.title = group.name;
+        groupName.style.cssText = `
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            min-width: 0;
+            flex: 1;
+        `;
         groupTitle.appendChild(groupName);
 
         const taskCount = document.createElement('span');
@@ -10617,7 +10780,7 @@ export class ProjectKanbanView {
 
         // 右侧容器：任务计数 + 新建按钮 + 粘贴按钮
         const headerRight = document.createElement('div');
-        headerRight.style.cssText = 'display:flex; align-items:center; gap:4px;';
+        headerRight.style.cssText = 'display:flex; align-items:center;';
         headerRight.appendChild(taskCount);
 
         // 非已完成状态显示新建按钮和粘贴按钮
@@ -12191,7 +12354,7 @@ export class ProjectKanbanView {
                 // 添加所有未归档分组选项
                 activeGroups.forEach((group: any) => {
                     groupMenuItems.push({
-                        iconHTML: group.icon || "📋",
+                        iconHTML: group.icon || "",
                         label: group.name,
                         current: currentGroupId === group.id,
                         // 传入 task 对象（setTaskCustomGroup 期望第一个参数为 task 对象）
@@ -15462,6 +15625,31 @@ export class ProjectKanbanView {
                     justify-content: center;
                     margin-left: 0 !important;
                 }
+            }
+
+            /* 看板列宽度调整手柄 */
+            .kanban-column-resize-handle {
+                position: absolute;
+                top: 0;
+                right: -3px;
+                width: 6px;
+                height: 100%;
+                cursor: col-resize;
+                z-index: 20;
+                background: transparent;
+                transition: background 0.15s ease;
+                border-radius: 3px;
+            }
+
+            .kanban-column-resize-handle:hover,
+            .kanban-column-resize-handle.resizing {
+                background: var(--b3-theme-primary);
+                opacity: 0.5;
+            }
+
+            /* 确保列有 position: relative 以配合绝对定位的手柄 */
+            .kanban-column {
+                position: relative;
             }
             `;
         document.head.appendChild(style);
@@ -20111,7 +20299,7 @@ export class ProjectKanbanView {
 
             const groupOptions = [
                 `<option value="">${i18n('noGroup') || '无分组'}</option>`,
-                ...activeGroups.map(g => `<option value="${g.id}">${g.icon || '📋'} ${g.name}</option>`)
+                ...activeGroups.map(g => `<option value="${g.id}">${g.icon || ''} ${g.name}</option>`)
             ].join('');
 
             const dialog = new Dialog({
