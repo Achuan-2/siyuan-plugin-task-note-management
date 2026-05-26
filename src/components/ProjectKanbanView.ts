@@ -17197,12 +17197,11 @@ export class ProjectKanbanView {
                 draggedTaskInDb.projectId = targetProjectId;
             }
 
-            // --- Clear parentId if moving to top level ---
-            if (draggedTaskInDb.parentId) {
-                delete draggedTaskInDb.parentId;
-            }
-
             // --- Update status of dragged task (Enhanced) ---
+            // NOTE: Do NOT clear parentId here. parentId should only be cleared in handleBecomeSiblingDrop
+            // when the user explicitly drags a subtask to be a sibling of a non-same-parent task.
+            // Clearing it here would incorrectly remove the parent-child relationship when a subtask
+            // is dragged between status columns.
             if (oldStatus !== newStatus) {
                 if (newStatus === 'completed') {
                     draggedTaskInDb.completed = true;
@@ -20047,13 +20046,20 @@ export class ProjectKanbanView {
                             }
                         }
 
-                        // Parent detachment: 仅对被直接拖动的任务执行（保持对子任务的父子关系）
-                        // [新增] 当 projectId 发生变化时，如果旧父任务不在新项目中，也应脱离
-                        const projectChanged = updates.projectId !== undefined && item.projectId !== updates.projectId;
-
-                        if (uid === dbId && (updates.kanbanStatus || updates.customGroupId !== undefined || projectChanged) && item.parentId) {
-                            delete item.parentId;
-                            itemChanged = true;
+                        // Parent detachment: 仅当跨项目移动且父任务不在新项目中时才解除父子关系
+                        // 修复：不应因为状态或分组变化而解除父子关系，子任务可以独立改变状态/分组
+                        if (uid === dbId && item.parentId) {
+                            const projectChanged = updates.projectId !== undefined && item.projectId !== updates.projectId;
+                            if (projectChanged) {
+                                // 只有当父任务不在目标项目中时才解除父子关系
+                                const parentInDb = reminderData[item.parentId];
+                                const parentInNewProject = parentInDb && parentInDb.projectId === updates.projectId;
+                                if (!parentInNewProject) {
+                                    delete item.parentId;
+                                    itemChanged = true;
+                                }
+                            }
+                            // 注意：仅状态或分组变化时，保留 parentId，子任务仍属于父任务
                         }
 
                         if (itemChanged) {
