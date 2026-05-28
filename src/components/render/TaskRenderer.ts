@@ -325,7 +325,20 @@ export class TaskRenderer {
                         timePart = s;
                     }
 
-                    const targetDate = datePart || date || today;
+                    let targetDate = datePart || date || today;
+                    if (rtItem && typeof rtItem === 'object' && rtItem.everyDay) {
+                        const logicalStart = this.getReminderLogicalDate(date, time, context?.plugin);
+                        const logicalEnd = this.getReminderLogicalDate(endDate || date, endTime || time, context?.plugin);
+                        if (logicalStart && logicalEnd) {
+                            if (compareDateStrings(today, logicalStart) < 0) {
+                                targetDate = date;
+                            } else if (compareDateStrings(today, logicalEnd) > 0) {
+                                targetDate = endDate || date;
+                            } else {
+                                targetDate = today;
+                            }
+                        }
+                    }
                     const logicalTarget = this.getReminderLogicalDate(targetDate, timePart || undefined, context?.plugin);
 
                     if (compareDateStrings(logicalTarget, today) < 0) return ''; // 过去的不显示
