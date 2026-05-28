@@ -884,7 +884,7 @@ export class ReminderPanel {
 
             // 定义分组：0-普通任务, 1-订阅任务, 2-每日可做(Dessert)
             const getGroupOrder = (item: any) => {
-                const isDessert = item.isAvailableToday && (!item.date && !item.endDate || (item.date || item.endDate) !== todayStr);
+                const isDessert = this.isDailyDessertTaskForDate(item, todayStr);
                 if (isDessert) return 2;
                 if (item.isSubscribed) return 1;
                 return 0;
@@ -2638,7 +2638,7 @@ export class ReminderPanel {
                     const getGroupType = (item: any) => {
                         let isBottomGroup = false;
                         if (this.isTodayLikeView()) {
-                            isBottomGroup = item.isAvailableToday && (!item.date && !item.endDate || (item.date || item.endDate) !== today);
+                            isBottomGroup = this.isDailyDessertTaskForDate(item, today);
                         } else if (this.currentTab === 'todayCompleted') {
                             const isIgnoredToday = this.hasTodayIgnoreMark(item, today);
                             if (isIgnoredToday) {
@@ -5030,7 +5030,20 @@ export class ReminderPanel {
                         timePart = s;
                     }
 
-                    const targetDate = datePart || date || today;
+                    let targetDate = datePart || date || today;
+                    if (rtItem && typeof rtItem === 'object' && rtItem.everyDay) {
+                        const logicalStart = this.getReminderLogicalDate(date, time);
+                        const logicalEnd = this.getReminderLogicalDate(endDate || date, endTime || time);
+                        if (logicalStart && logicalEnd) {
+                            if (compareDateStrings(today, logicalStart) < 0) {
+                                targetDate = date;
+                            } else if (compareDateStrings(today, logicalEnd) > 0) {
+                                targetDate = endDate || date;
+                            } else {
+                                targetDate = today;
+                            }
+                        }
+                    }
                     const logicalTarget = this.getReminderLogicalDate(targetDate, timePart || undefined);
 
                     if (compareDateStrings(logicalTarget, today) < 0) return ''; // 过去的不显示
@@ -9361,10 +9374,8 @@ export class ReminderPanel {
                 }
             }
 
-            // 8.5 特殊处理今日视图下的每日可做分隔符 (Daily Dessert Separator)
-            // 确保普通任务不会被错误地插入到分隔符下方
             if (this.isTodayLikeView()) {
-                const isSavedDessert = savedReminder.isAvailableToday && (!savedReminder.date || savedReminder.date !== today);
+                const isSavedDessert = this.isDailyDessertTaskForDate(savedReminder, today);
                 const separator = this.remindersContainer.querySelector('#daily-dessert-separator') as HTMLElement;
                 if (separator) {
                     if (!isSavedDessert) {
@@ -9375,7 +9386,7 @@ export class ReminderPanel {
                         } else {
                             const nextId = nextEl.getAttribute('data-reminder-id');
                             const nextReminder = nextId ? this.allRemindersMap.get(nextId) : null;
-                            if (nextReminder && nextReminder.isAvailableToday && (!nextReminder.date || nextReminder.date !== today)) {
+                            if (nextReminder && nextReminder.isAvailableToday && this.isDailyDessertTaskForDate(nextReminder, today)) {
                                 shouldInsertBeforeSeparator = true;
                             }
                         }
@@ -9440,13 +9451,13 @@ export class ReminderPanel {
                     if (prevEl) {
                         // 8.6 针对每日可做任务修正 prevEl
                         if (this.isTodayLikeView()) {
-                            const isSavedDessert = savedReminder.isAvailableToday && (!savedReminder.date || savedReminder.date !== today);
+                            const isSavedDessert = this.isDailyDessertTaskForDate(savedReminder, today);
                             if (isSavedDessert) {
                                 const separator = this.remindersContainer.querySelector('#daily-dessert-separator') as HTMLElement;
                                 if (separator) {
                                     const prevId = prevEl.getAttribute('data-reminder-id');
                                     const prevReminder = prevId ? this.allRemindersMap.get(prevId) : null;
-                                    const isPrevDessert = prevReminder && prevReminder.isAvailableToday && (!prevReminder.date || prevReminder.date !== today);
+                                    const isPrevDessert = prevReminder && prevReminder.isAvailableToday && this.isDailyDessertTaskForDate(prevReminder, today);
                                     if (!isPrevDessert) {
                                         // 如果前一个是普通任务，而我是每日可做，则我应该在分隔符之后
                                         prevEl = separator;
