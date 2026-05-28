@@ -42,6 +42,7 @@ export interface ReminderTimeConfig {
     note?: string;
     dayOffset?: number;
     dayIndex?: number;
+    everyDay?: boolean;
 }
 
 function resolveReminderSkipWeekendMode(...sources: any[]): ReminderSkipWeekendMode | undefined {
@@ -91,7 +92,8 @@ function normalizeReminderTimeEntry(entry: any): ReminderTimeConfig | null {
             endTime: typeof entry.endTime === 'string' ? entry.endTime : undefined,
             note: entry.note,
             dayOffset: typeof entry.dayOffset === 'number' ? entry.dayOffset : undefined,
-            dayIndex: typeof entry.dayIndex === 'number' ? entry.dayIndex : undefined
+            dayIndex: typeof entry.dayIndex === 'number' ? entry.dayIndex : undefined,
+            everyDay: typeof entry.everyDay === 'boolean' ? entry.everyDay : undefined
         };
     }
     return null;
@@ -167,40 +169,58 @@ export function resolveRepeatReminderTimes(
 
     const durationDays = getReminderTaskDurationDays(instanceDate, instanceEndDate);
 
-    const resolveEntryDateTime = (value: string | undefined, item: ReminderTimeConfig): string | undefined => {
+    const resolveEntryDateTime = (value: string | undefined, item: ReminderTimeConfig, customDate?: string): string | undefined => {
         if (!value) return undefined;
         const parsed = extractDateAndTimeParts(value);
         if (!parsed.time) return undefined;
 
-        let resolvedDate = parsed.date || instanceDate;
-        if (typeof item.dayIndex === 'number') {
-            const dayIndex = Math.min(Math.max(Math.trunc(item.dayIndex), 1), durationDays);
-            resolvedDate = addDaysToDate(instanceDate, dayIndex - 1);
-        } else if (typeof item.dayOffset === 'number') {
-            const dayOffset = Math.trunc(item.dayOffset);
-            resolvedDate = addDaysToDate(instanceDate, dayOffset <= 0 ? dayOffset : dayOffset - 1);
-        } else if (!parsed.date && originalTaskDate) {
-            const offset = getReminderEntryRelativeOffset(item, originalTaskDate, originalTaskEndDate);
-            resolvedDate = addDaysToDate(instanceDate, offset);
+        let resolvedDate = customDate || parsed.date || instanceDate;
+        if (!customDate) {
+            if (typeof item.dayIndex === 'number') {
+                const dayIndex = Math.min(Math.max(Math.trunc(item.dayIndex), 1), durationDays);
+                resolvedDate = addDaysToDate(instanceDate, dayIndex - 1);
+            } else if (typeof item.dayOffset === 'number') {
+                const dayOffset = Math.trunc(item.dayOffset);
+                resolvedDate = addDaysToDate(instanceDate, dayOffset <= 0 ? dayOffset : dayOffset - 1);
+            } else if (!parsed.date && originalTaskDate) {
+                const offset = getReminderEntryRelativeOffset(item, originalTaskDate, originalTaskEndDate);
+                resolvedDate = addDaysToDate(instanceDate, offset);
+            }
         }
 
         return `${resolvedDate}T${parsed.time}`;
     };
 
-    const resolved = reminderTimes
+    const resolved: ReminderTimeConfig[] = [];
+
+    reminderTimes
         .map((item) => normalizeReminderTimeEntry(item))
         .filter((item): item is ReminderTimeConfig => !!item)
-        .map((item) => {
-            const resolvedTime = resolveEntryDateTime(item.time, item);
-            if (!resolvedTime) return null;
-
-            return {
-                time: resolvedTime,
-                endTime: resolveEntryDateTime(item.endTime, item),
-                note: item.note
-            };
-        })
-        .filter(Boolean) as ReminderTimeConfig[];
+        .forEach((item) => {
+            if (item.everyDay && durationDays > 1) {
+                for (let i = 0; i < durationDays; i++) {
+                    const customDate = addDaysToDate(instanceDate, i);
+                    const resolvedTime = resolveEntryDateTime(item.time, item, customDate);
+                    if (resolvedTime) {
+                        resolved.push({
+                            time: resolvedTime,
+                            endTime: resolveEntryDateTime(item.endTime, item, customDate),
+                            note: item.note,
+                            everyDay: true
+                        });
+                    }
+                }
+            } else {
+                const resolvedTime = resolveEntryDateTime(item.time, item);
+                if (resolvedTime) {
+                    resolved.push({
+                        time: resolvedTime,
+                        endTime: resolveEntryDateTime(item.endTime, item),
+                        note: item.note
+                    });
+                }
+            }
+        });
 
     return resolved.length > 0 ? resolved : undefined;
 }

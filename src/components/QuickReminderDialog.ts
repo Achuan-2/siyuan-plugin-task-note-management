@@ -3478,17 +3478,18 @@ export class QuickReminderDialog {
         const normalized: CustomReminderTimeItem = typeof item === 'string' ? { time: item, note: '' } : { ...item };
         const baseDate = this.getRepeatBaseDate(date, endDate);
 
-        if (!this.isRepeatCustomReminderMode(date, endDate) || !baseDate) {
-            // everyDay 项保持时间格式（无日期），由 inDateRange 检查覆盖每天
-            if (normalized.everyDay) {
-                normalized.time = this.getCustomReminderTimeValue(normalized.time) || normalized.time || '';
-                if (normalized.endTime) {
-                    normalized.endTime = this.getCustomReminderTimeValue(normalized.endTime) || normalized.endTime;
-                }
-                delete normalized.dayIndex;
-                delete normalized.dayOffset;
-                return normalized;
+        // everyDay 项始终保持时间格式（无日期），由各处的 inDateRange 或实例展开覆盖每天
+        if (normalized.everyDay) {
+            normalized.time = this.getCustomReminderTimeValue(normalized.time) || normalized.time || '';
+            if (normalized.endTime) {
+                normalized.endTime = this.getCustomReminderTimeValue(normalized.endTime) || normalized.endTime;
             }
+            delete normalized.dayIndex;
+            delete normalized.dayOffset;
+            return normalized;
+        }
+
+        if (!this.isRepeatCustomReminderMode(date, endDate) || !baseDate) {
             // 对于非重复任务，保持完整的日期时间；若仅有时间则自动补全日期
             if (normalized.time && !normalized.time.includes('T') && baseDate) {
                 normalized.time = `${baseDate}T${normalized.time}`;
@@ -3588,8 +3589,11 @@ export class QuickReminderDialog {
         endDate?: string
     ): number {
         const normalized = this.normalizeCustomTimeItem(item, date, endDate);
+        if (normalized.everyDay) {
+            return 0;
+        }
         if (!this.isRepeatCustomReminderMode(date, endDate)) {
-            return normalized.everyDay ? 1 : 0;
+            return 0;
         }
 
         const durationDays = this.getRepeatCustomReminderDurationDays(date, endDate);
@@ -3613,18 +3617,20 @@ export class QuickReminderDialog {
         date?: string,
         endDate?: string
     ): CustomReminderTimeItem {
+        const timeOnly = this.getCustomReminderTimeValue(time) || time;
+        const endTimeOnly = endTime ? (this.getCustomReminderTimeValue(endTime) || endTime) : undefined;
+
+        if (daySelectionValue === 'every') {
+            return { time: timeOnly, endTime: endTimeOnly, note, everyDay: true };
+        }
+
         if (!this.isRepeatCustomReminderMode(date, endDate)) {
-            if (daySelectionValue === 'every') {
-                const timeOnly = this.getCustomReminderTimeValue(time) || time;
-                const endTimeOnly = endTime ? (this.getCustomReminderTimeValue(endTime) || endTime) : undefined;
-                return { time: timeOnly, endTime: endTimeOnly, note, everyDay: true };
-            }
             return { time, endTime, note };
         }
 
         const item: CustomReminderTimeItem = {
-            time: this.getCustomReminderTimeValue(time) || time,
-            endTime: endTime ? (this.getCustomReminderTimeValue(endTime) || endTime) : undefined,
+            time: timeOnly,
+            endTime: endTimeOnly,
             note
         };
         const durationDays = this.getRepeatCustomReminderDurationDays(date, endDate);

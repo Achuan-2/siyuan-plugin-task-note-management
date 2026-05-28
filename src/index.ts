@@ -3860,7 +3860,7 @@ export default class ReminderPlugin extends Plugin {
                                 const note = typeof rtItem === 'string' ? '' : rtItem.note;
 
                                 const parsed = this.extractDateAndTime(rt);
-                                if (parsed.date && parsed.date !== instance.date) continue;
+                                if (parsed.date && parsed.date !== today) continue;
 
                                 const currentNum = this.timeStringToNumber(currentTime);
                                 const reminderNum = this.timeStringToNumber(rt);
