@@ -45,7 +45,9 @@ AI知识库问答：https://zhida.zhihu.com/repositories/7611936317241043831
 
   - [用防弹笔记法来写论文的心得](https://zhuanlan.zhihu.com/p/1992933374520758739)
   - [研究生该如何做好实验计划和实验记录](https://www.zhihu.com/question/1902303924586800306/answer/1997114352512300679)
+  - [笔记越记越乱？搭建一个人生主页吧](https://zhuanlan.zhihu.com/p/2025170001015874126)
   - [研究生如何做好科研项目管理之打造科研项目主页](https://www.zhihu.com/question/573279721/answer/2035523167549132939)
+  - [研究生多个项目同时进展？如何管理](https://www.zhihu.com/question/19911326/answer/2041583083380593607)
 
 **插件重要更新**
 
