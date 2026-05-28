@@ -2128,6 +2128,10 @@ export default class ReminderPlugin extends Plugin {
                 // 清理tabViews中的引用
                 const standardTabId = this.name + POMODORO_TAB_TYPE;
                 if (this.tabViews.has(standardTabId)) {
+                    const timer = this.tabViews.get(standardTabId);
+                    if (timer && typeof timer.destroy === 'function') {
+                        timer.destroy();
+                    }
                     this.tabViews.delete(standardTabId);
                 }
             }) as any

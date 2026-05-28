@@ -5705,7 +5705,10 @@ export class PomodoroTimer {
                         async () => {
                             await this.recordInterruptedWorkSession(minutes, eventId, eventTitle, this.currentPhaseOriginalDuration);
                         },
-                        () => {
+                        async () => {
+                            if (this.activeWorkSessionId) {
+                                await this.recordManager.deleteSession(this.activeWorkSessionId);
+                            }
                             this.activeWorkSessionId = null;
                             this.activeWorkSessionStartTime = 0;
                         }
@@ -5718,13 +5721,19 @@ export class PomodoroTimer {
                         async () => {
                             await this.recordInterruptedWorkSession(minutes, eventId, eventTitle, this.currentPhaseOriginalDuration);
                         },
-                        () => {
+                        async () => {
+                            if (this.activeWorkSessionId) {
+                                await this.recordManager.deleteSession(this.activeWorkSessionId);
+                            }
                             this.activeWorkSessionId = null;
                             this.activeWorkSessionStartTime = 0;
                         }
                     );
                 }
             } else {
+                if (this.activeWorkSessionId) {
+                    await this.recordManager.deleteSession(this.activeWorkSessionId);
+                }
                 this.activeWorkSessionId = null;
                 this.activeWorkSessionStartTime = 0;
             }
@@ -7215,7 +7224,7 @@ export class PomodoroTimer {
     /**
      * 处理由用户触发的关闭操作，在专注中途时询问是否保存记录
      */
-    public handleClose() {
+    public async handleClose() {
         if (this.isWorkPhase) {
             const elapsedSeconds = this.isCountUp ? this.timeElapsed : (this.totalTime - this.timeLeft);
             if (elapsedSeconds > 0) {
@@ -7239,7 +7248,10 @@ export class PomodoroTimer {
                             await saveRecord();
                             this.destroy(); // 确认保存则保存并关闭
                         },
-                        () => {
+                        async () => {
+                            if (this.activeWorkSessionId) {
+                                await this.recordManager.deleteSession(this.activeWorkSessionId);
+                            }
                             this.destroy(); // 取消则直接关闭
                         }
                     );
@@ -7253,11 +7265,18 @@ export class PomodoroTimer {
                             await saveRecord();
                             this.destroy(); // 确认保存则保存并关闭
                         },
-                        () => {
+                        async () => {
+                            if (this.activeWorkSessionId) {
+                                await this.recordManager.deleteSession(this.activeWorkSessionId);
+                            }
                             this.destroy(); // 取消则直接关闭
                         }
                     );
                     return; // 异步等待用户选择
+                }
+            } else {
+                if (this.activeWorkSessionId) {
+                    await this.recordManager.deleteSession(this.activeWorkSessionId);
                 }
             }
         }
@@ -7854,7 +7873,17 @@ export class PomodoroTimer {
         }
 
         // 至少专注了 10 秒才记录，避免误触或频繁切换产生的碎片记录
-        if (elapsedSecs < 10) return;
+        if (elapsedSecs < 10) {
+            const activeSessionId = state ? state.activeWorkSessionId : this.activeWorkSessionId;
+            if (activeSessionId) {
+                await this.recordManager.deleteSession(activeSessionId);
+            }
+            if (!state) {
+                this.activeWorkSessionId = null;
+                this.activeWorkSessionStartTime = 0;
+            }
+            return;
+        }
 
         const eventId = forceId || this.reminder.id;
         const eventTitle = forceTitle || this.reminder.title || (i18n('pomodoroFocusDefault') || '番茄专注');
