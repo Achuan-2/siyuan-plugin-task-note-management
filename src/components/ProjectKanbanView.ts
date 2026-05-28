@@ -15916,27 +15916,9 @@ export class ProjectKanbanView {
             }
 
             // 更新背景和边框
-            let backgroundColor = '';
-            let borderColor = '';
-            switch (priority) {
-                case 'high':
-                    backgroundColor = colorWithOpacity('var(--b3-card-error-background)', 0.5);
-                    borderColor = 'var(--b3-card-error-color)';
-                    break;
-                case 'medium':
-                    backgroundColor = colorWithOpacity('var(--b3-card-warning-background)', 0.5);
-                    borderColor = 'var(--b3-card-warning-color)';
-                    break;
-                case 'low':
-                    backgroundColor = colorWithOpacity('var(--b3-card-info-background)', 0.7);
-                    borderColor = 'var(--b3-card-info-color)';
-                    break;
-                default:
-                    backgroundColor = 'var(--b3-theme-background)';
-                    borderColor = 'var(--b3-theme-surface-lighter)';
-            }
-            taskEl.style.backgroundColor = backgroundColor;
-            taskEl.style.borderColor = borderColor;
+            const checkbox = taskEl.querySelector('.kanban-task-checkbox, .reminder-task-checkbox') as HTMLInputElement;
+            const displayStyle = TaskRenderer.getPriorityDisplayStyle({ plugin: this.plugin });
+            TaskRenderer.applyPriorityDisplayStyle(taskEl, checkbox, priority, displayStyle);
 
             // 更新优先级标签
             let priorityEl = taskEl.querySelector('.kanban-task-priority') as HTMLElement;
@@ -18517,27 +18499,9 @@ export class ProjectKanbanView {
             }
 
             // 更新优先级背景色和边框
-            let backgroundColor = '';
-            let borderColor = '';
-            switch (task.priority) {
-                case 'high':
-                    backgroundColor = colorWithOpacity('var(--b3-card-error-background)', 0.5);
-                    borderColor = 'var(--b3-card-error-color)';
-                    break;
-                case 'medium':
-                    backgroundColor = colorWithOpacity('var(--b3-card-warning-background)', 0.5);
-                    borderColor = 'var(--b3-card-warning-color)';
-                    break;
-                case 'low':
-                    backgroundColor = colorWithOpacity('var(--b3-card-info-background)', 0.7);
-                    borderColor = 'var(--b3-card-info-color)';
-                    break;
-                default:
-                    backgroundColor = 'var(--b3-theme-background)';
-                    borderColor = 'var(--b3-theme-surface-lighter)';
-            }
-            taskEl.style.backgroundColor = backgroundColor;
-            taskEl.style.borderColor = borderColor;
+            const checkbox = taskEl.querySelector('.kanban-task-checkbox, .reminder-task-checkbox') as HTMLInputElement;
+            const displayStyle = TaskRenderer.getPriorityDisplayStyle({ plugin: this.plugin });
+            TaskRenderer.applyPriorityDisplayStyle(taskEl, checkbox, task.priority, displayStyle);
         }
 
         // 如果状态改变，智能移动任务卡片到新列
