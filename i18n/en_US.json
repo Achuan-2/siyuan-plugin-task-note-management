@@ -1311,6 +1311,8 @@
     "showHabitInSummaryDesc": "When enabled, task summary will include habit check-in progress statistics",
     "showTaskNotesInSummary": "Show task notes in summary",
     "showTaskNotesInSummaryDesc": "When enabled, task summary will display task note content by default",
+    "showHabitNotesInSummary": "Show habit check-in notes in summary",
+    "showHabitNotesInSummaryDesc": "When enabled, task summary will display habit check-in notes by default",
     "calendarMultiDaysCount": "Multi-days View Count",
     "calendarMultiDaysCountDesc": "Set the number of days to display in multi-days view, default is 3 days",
     "frequency": "Frequency",

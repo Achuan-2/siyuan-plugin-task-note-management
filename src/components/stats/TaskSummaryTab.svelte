@@ -45,7 +45,14 @@
         target: number;
         successCount: number;
         emojis: string[];
+        notes: HabitNoteItem[];
         frequencyLabel: string;
+    };
+
+    type HabitNoteItem = {
+        emoji: string;
+        timeText: string;
+        note: string;
     };
 
     type DateGroup = {
@@ -105,6 +112,7 @@
     let showTaskNotes = false;
     let showPomodoro = true;
     let showHabit = true;
+    let showHabitNotes = false;
 
     onMount(async () => {
         projectManager = ProjectManager.getInstance(plugin);
@@ -132,6 +140,7 @@
             showTaskNotes = settings.showTaskNotesInSummary !== false;
             showPomodoro = settings.showPomodoroInSummary !== false;
             showHabit = settings.showHabitInSummary !== false;
+            showHabitNotes = settings.showHabitNotesInSummary === true;
         } catch (e) {
             console.warn("加载设置失败:", e);
         }
@@ -1004,6 +1013,7 @@
 
                     const checkIn = habit.checkIns?.[dateStr];
                     const emojis: string[] = [];
+                    const notes = getHabitCheckInNotes(habit, checkIn);
                     if (checkIn) {
                         if (checkIn.entries && checkIn.entries.length > 0) {
                             checkIn.entries.forEach((entry: any) => {
@@ -1025,6 +1035,7 @@
                         target: habit.target || 1,
                         successCount,
                         emojis: emojis.slice(0, 10),
+                        notes,
                         frequencyLabel: getFrequencyLabel(habit),
                     });
                 }
@@ -1090,6 +1101,40 @@
                 label = i18n("daily");
         }
         return label;
+    }
+
+    function getHabitCheckInNotes(habit: any, checkIn: any): HabitNoteItem[] {
+        if (!checkIn) return [];
+        const notes: HabitNoteItem[] = [];
+        const entries = Array.isArray(checkIn.entries) ? checkIn.entries : [];
+
+        entries.forEach((entry: any) => {
+            const note = typeof entry?.note === "string" ? entry.note.trim() : "";
+            if (!note) return;
+            notes.push({
+                emoji: entry.emoji || habit.autoCheckInEmoji || "📝",
+                timeText: getTimeTextFromTimestamp(entry.timestamp || checkIn.timestamp),
+                note,
+            });
+        });
+
+        const legacyNote = typeof checkIn.note === "string" ? checkIn.note.trim() : "";
+        if (entries.length === 0 && legacyNote) {
+            notes.push({
+                emoji: habit.autoCheckInEmoji || "📝",
+                timeText: getTimeTextFromTimestamp(checkIn.timestamp),
+                note: legacyNote,
+            });
+        }
+
+        return notes;
+    }
+
+    function getTimeTextFromTimestamp(timestamp?: string): string {
+        if (!timestamp) return "";
+        const match = timestamp.match(/(\d{2}):(\d{2})/);
+        if (match) return `${match[1]}:${match[2]}`;
+        return "";
     }
 
     function shouldCheckInOnDate(habit: any, date: string): boolean {
@@ -1355,6 +1400,37 @@
         return note;
     }
 
+    function getHabitNotePrefix(note: HabitNoteItem): string {
+        const parts = [note.emoji, note.timeText].filter(Boolean);
+        return parts.length > 0 ? `${parts.join(" ")} ` : "";
+    }
+
+    function formatHabitNotesForMarkdown(habit: HabitItem): string {
+        if (!showHabitNotes || habit.notes.length === 0) return "";
+        let output = "";
+        habit.notes.forEach(note => {
+            const noteLines = note.note.split(/\r?\n/);
+            const prefix = getHabitNotePrefix(note);
+            noteLines.forEach((line, index) => {
+                output += `  ${index === 0 ? `${prefix}${line}` : line}\n`;
+            });
+        });
+        return output;
+    }
+
+    function formatHabitNotesForPlainText(habit: HabitItem): string {
+        if (!showHabitNotes || habit.notes.length === 0) return "";
+        let output = "";
+        habit.notes.forEach(note => {
+            const noteLines = note.note.split(/\r?\n/);
+            const prefix = getHabitNotePrefix(note);
+            noteLines.forEach((line, index) => {
+                output += `  ${index === 0 ? `${prefix}${line}` : line.trim()}\n`;
+            });
+        });
+        return output;
+    }
+
     function switchFilter(filter: FilterType) {
         currentFilter = filter;
         if (filter === "custom") {
@@ -1441,6 +1517,7 @@
                     const checkbox = habit.completed ? "[x]" : "[ ]";
                     const emojiStr = habit.emojis.length > 0 ? habit.emojis.join("") : i18n("noneVal");
                     markdown += `- ${checkbox} ${habit.title} (${i18n("frequency")}: ${habit.frequencyLabel}, ${i18n("targetTimes")}: ${habit.target}, ${i18n("todayCheckIn")}: ${emojiStr})\n`;
+                    markdown += formatHabitNotesForMarkdown(habit);
                 });
                 markdown += "\n";
             }
@@ -1468,7 +1545,7 @@
                     }
                     markdown += line + "\n";
 
-                    if (task.note) {
+                    if (task.note && showTaskNotes) {
                         const noteLines = task.note.split(/\r?\n/);
                         noteLines.forEach(line => {
                             markdown += `${indent}  ${line}\n`;
@@ -1498,7 +1575,7 @@
                         }
                         markdown += line + "\n";
 
-                        if (task.note) {
+                        if (task.note && showTaskNotes) {
                             const noteLines = task.note.split(/\r?\n/);
                             noteLines.forEach(line => {
                                 markdown += `${indent}  ${line}\n`;
@@ -1550,6 +1627,7 @@
                     const checkbox = habit.completed ? "✅" : "⬜";
                     const emojiStr = habit.emojis.length > 0 ? habit.emojis.join("") : i18n("noneVal");
                     text += `${checkbox} ${habit.title} (${i18n("frequency")}: ${habit.frequencyLabel}, ${i18n("targetTimes")}: ${habit.target}, ${i18n("todayCheckIn")}: ${emojiStr})\n`;
+                    text += formatHabitNotesForPlainText(habit);
                 });
                 text += "\n";
             }
@@ -1577,7 +1655,7 @@
                     }
                     text += line + "\n";
 
-                    if (task.note) {
+                    if (task.note && showTaskNotes) {
                         const noteLines = task.note.split(/\r?\n/);
                         noteLines.forEach(line => {
                             text += `${indent}  ${line.trim()}\n`;
@@ -1607,7 +1685,7 @@
                         }
                         text += line + "\n";
 
-                        if (task.note) {
+                        if (task.note && showTaskNotes) {
                             const noteLines = task.note.split(/\r?\n/);
                             noteLines.forEach(line => {
                                 text += `${indent}  ${line.trim()}\n`;
@@ -1732,6 +1810,12 @@
                 <input class="b3-switch" type="checkbox" bind:checked={showTaskNotes} />
                 {i18n("showTaskNotes") || "显示任务备注"}
             </label>
+            {#if showHabit}
+                <label class="switch-label">
+                    <input class="b3-switch" type="checkbox" bind:checked={showHabitNotes} />
+                    {i18n("showHabitNotesInSummary") || "显示习惯打卡备注"}
+                </label>
+            {/if}
         </div>
         <div class="task-summary-info-cards">
             <div class="info-card">
@@ -1784,12 +1868,26 @@
                                 {#each dateGroup.habits as habit}
                                     <li class="task-item habit-item {habit.completed ? 'completed' : ''}">
                                         <span class="task-checkbox">{habit.completed ? "✅" : "⬜"}</span>
-                                        <span class="task-title">
-                                            {habit.title}
-                                            <span class="task-meta">
-                                                ({i18n("frequency")}: {habit.frequencyLabel}, {i18n("targetTimes")}: {habit.target}, {i18n("todayCheckIn")}: {habit.emojis.length > 0 ? habit.emojis.join("") : i18n("noneVal")})
-                                            </span>
-                                        </span>
+                                        <div class="task-body">
+                                            <div class="task-line">
+                                                <span class="task-title">
+                                                    {habit.title}
+                                                    <span class="task-meta">
+                                                        ({i18n("frequency")}: {habit.frequencyLabel}, {i18n("targetTimes")}: {habit.target}, {i18n("todayCheckIn")}: {habit.emojis.length > 0 ? habit.emojis.join("") : i18n("noneVal")})
+                                                    </span>
+                                                </span>
+                                            </div>
+                                            {#if showHabitNotes && habit.notes.length > 0}
+                                                <div class="habit-notes">
+                                                    {#each habit.notes as note}
+                                                        <div class="task-note habit-note">
+                                                            <span class="habit-note-prefix">{getHabitNotePrefix(note)}</span>
+                                                            <div class="habit-note-content">{@html renderNote(note.note)}</div>
+                                                        </div>
+                                                    {/each}
+                                                </div>
+                                            {/if}
+                                        </div>
                                     </li>
                                 {/each}
                             </ul>
@@ -2162,7 +2260,30 @@
     }
 
     .habit-item {
-        align-items: center;
+        align-items: flex-start;
+    }
+
+    .habit-notes {
+        margin-top: 6px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .habit-note {
+        display: flex;
+        gap: 4px;
+        margin-top: 0;
+    }
+
+    .habit-note-prefix {
+        flex-shrink: 0;
+        color: var(--b3-theme-on-surface-light);
+    }
+
+    .habit-note-content {
+        min-width: 0;
+        word-break: break-word;
     }
 
     .task-summary-settings {

@@ -1311,6 +1311,8 @@
     "showHabitInSummaryDesc": "开启后，任务摘要将包含习惯打卡情况统计",
     "showTaskNotesInSummary": "摘要显示任务备注",
     "showTaskNotesInSummaryDesc": "开启后，任务摘要默认显示任务备注内容",
+    "showHabitNotesInSummary": "摘要显示习惯打卡备注",
+    "showHabitNotesInSummaryDesc": "开启后，任务摘要默认显示习惯打卡备注内容",
     "calendarMultiDaysCount": "多天视图天数",
     "calendarMultiDaysCountDesc": "设置多天视图显示的天数，默认为3天",
     "frequency": "频率",

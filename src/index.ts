@@ -153,6 +153,7 @@ export const DEFAULT_SETTINGS = {
     showPomodoroInSummary: true,
     showHabitInSummary: true,
     showTaskNotesInSummary: false,
+    showHabitNotesInSummary: false,
     // 任务管理侧栏排序配置
     sortMethod: "priority",
     sortOrder: "desc",
