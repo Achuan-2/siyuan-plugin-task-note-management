@@ -101,6 +101,9 @@
 {:else if type === 'textarea'}
     <textarea
         class="b3-text-field fn__block"
+        id={key}
+        {placeholder}
+        {disabled}
         style={`resize: vertical; height: 10em; white-space: nowrap; ${style}`}
         bind:value
         on:change={changed}
