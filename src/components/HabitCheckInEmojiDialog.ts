@@ -1,6 +1,7 @@
 import { Dialog, openEmoji, showMessage, confirm } from "siyuan";
 import { Habit, HabitCheckInEmoji } from "./HabitPanel";
 import { i18n } from "../pluginInstance";
+import { getBlockByID } from "../api";
 
 const DEFAULT_EMOJIS: HabitCheckInEmoji[] = [
     { emoji: "✅", meaning: "完成", promptNote: false, countsAsSuccess: true },
@@ -486,6 +487,9 @@ export class HabitCheckInEmojiDialog {
         optionRow.appendChild(promptNoteWrap);
         optionRow.appendChild(countsAsSuccessWrap);
         item.appendChild(optionRow);
+        if (this.isHabitMemoSyncEnabled()) {
+            item.appendChild(this.createMemoBlockOverrideRow(emojiConfig, index));
+        }
         item.appendChild(deleteBtn);
 
         const onDragStart = (event: DragEvent) => {
@@ -554,6 +558,139 @@ export class HabitCheckInEmojiDialog {
         item.addEventListener("dragend", onDragEnd);
 
         return item;
+    }
+
+    private isHabitMemoSyncEnabled(): boolean {
+        const mode = (this.habit as any)?.habitMemoSyncMode;
+        if (mode === "checkin" || mode === "note") return true;
+        if (mode === "none") return false;
+        return this.emojis.some((emoji: any) => emoji?.syncMemoToBlock === true);
+    }
+
+    private createMemoBlockOverrideRow(emojiConfig: HabitCheckInEmoji, index: number): HTMLElement {
+        const row = document.createElement("div");
+        row.style.cssText = "display:flex; align-items:flex-start; gap:8px; flex-wrap:wrap; width:100%; padding-left:50px; box-sizing:border-box;";
+
+        const label = document.createElement("div");
+        label.textContent = i18n("habitMemoOverrideBlockLabel") || "特定同步块";
+        label.style.cssText = "font-size:12px; color:var(--b3-theme-on-surface-light); line-height:28px; white-space:nowrap;";
+
+        const blockWrap = document.createElement("div");
+        blockWrap.style.cssText = "display:flex; flex:1 1 260px; min-width:220px; flex-direction:column; gap:6px;";
+
+        const blockInputRow = document.createElement("div");
+        blockInputRow.style.cssText = "display:flex; align-items:center; gap:6px;";
+        const blockInput = document.createElement("input");
+        blockInput.type = "text";
+        blockInput.className = "b3-text-field";
+        blockInput.value = emojiConfig.memoBlockId || "";
+        blockInput.placeholder = i18n("habitMemoOverrideBlockPlaceholder") || "可选，留空则使用习惯统一同步块";
+        blockInput.spellcheck = false;
+        blockInput.style.cssText = "flex:1; min-width:0; height:28px; font-size:12px;";
+        const clearBtn = document.createElement("button");
+        clearBtn.className = "b3-button b3-button--outline ariaLabel";
+        clearBtn.setAttribute("aria-label", i18n("clear") || "清空");
+        clearBtn.style.cssText = "height:28px; padding:2px 8px;";
+        clearBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconTrashcan"></use></svg>';
+
+        const preview = document.createElement("div");
+        preview.style.cssText = "display:none; font-size:12px; color:var(--b3-theme-on-surface-light); padding:6px 8px; border:1px solid var(--b3-border-color); border-radius:4px; background:var(--b3-theme-background);";
+
+        const updateValueAndPreview = () => {
+            const extracted = this.extractBlockId(blockInput.value.trim()) || blockInput.value.trim();
+            blockInput.value = extracted;
+            this.emojis[index].memoBlockId = extracted;
+            this.updateMemoBlockPreview(extracted, preview);
+        };
+
+        blockInput.addEventListener("input", () => {
+            const raw = blockInput.value.trim();
+            const extracted = this.extractBlockId(raw);
+            if (extracted && extracted !== raw) {
+                blockInput.value = extracted;
+            }
+            this.emojis[index].memoBlockId = blockInput.value.trim();
+            this.updateMemoBlockPreview(this.emojis[index].memoBlockId || "", preview);
+        });
+        blockInput.addEventListener("blur", updateValueAndPreview);
+        clearBtn.addEventListener("click", () => {
+            blockInput.value = "";
+            this.emojis[index].memoBlockId = "";
+            this.updateMemoBlockPreview("", preview);
+        });
+
+        blockInputRow.appendChild(blockInput);
+        blockInputRow.appendChild(clearBtn);
+        blockWrap.appendChild(blockInputRow);
+        blockWrap.appendChild(preview);
+
+        row.appendChild(label);
+        row.appendChild(blockWrap);
+        if (blockInput.value.trim()) {
+            this.updateMemoBlockPreview(blockInput.value.trim(), preview);
+        }
+
+        return row;
+    }
+
+    private extractBlockId(raw: string): string | null {
+        if (!raw) return null;
+        const blockRefRegex = /\(\(([\w\-]+)(?:\s+'[^']*')?\)\)/;
+        const blockLinkRegex = /\[(.*)\]\(siyuan:\/\/blocks\/([\w\-]+)\)/;
+        const urlRegex = /siyuan:\/\/blocks\/([\w\-]+)/;
+        const idRegex = /^([a-zA-Z0-9\-]{5,})$/;
+        const match1 = raw.match(blockRefRegex);
+        if (match1) return match1[1];
+        const match2 = raw.match(blockLinkRegex);
+        if (match2) return match2[2];
+        const match3 = raw.match(urlRegex);
+        if (match3) return match3[1];
+        if (idRegex.test(raw)) return raw;
+        return null;
+    }
+
+    private async updateMemoBlockPreview(blockId: string, preview: HTMLElement) {
+        const cleanBlockId = this.extractBlockId(blockId) || blockId.trim();
+        if (!cleanBlockId) {
+            preview.style.display = "none";
+            preview.innerHTML = "";
+            return;
+        }
+
+        try {
+            const block = await getBlockByID(cleanBlockId);
+            if (!block) {
+                preview.style.display = "block";
+                preview.innerHTML = "";
+                const errorText = document.createElement("span");
+                errorText.textContent = i18n("blockNotExist") || "块不存在";
+                errorText.style.cssText = "color:var(--b3-theme-error);";
+                preview.appendChild(errorText);
+                return;
+            }
+            const content = block.content || block.fcontent || i18n("noContent") || "无内容";
+            const display = content.length > 50 ? `${content.substring(0, 50)}...` : content;
+            preview.innerHTML = "";
+            const refEl = document.createElement("span");
+            refEl.textContent = display;
+            refEl.setAttribute("data-type", "a");
+            refEl.setAttribute("data-href", `siyuan://blocks/${block.id}`);
+            refEl.style.cssText = "font-weight:500; cursor:pointer; color:var(--b3-protyle-inline-blockref-color); border-bottom:1px dashed var(--b3-protyle-inline-blockref-color); word-break:break-word;";
+            const metaEl = document.createElement("div");
+            metaEl.style.cssText = "margin-top:4px;";
+            metaEl.textContent = `类型: ${block.type} | ID: ${block.id}`;
+            preview.appendChild(refEl);
+            preview.appendChild(metaEl);
+            preview.style.display = "block";
+        } catch (error) {
+            console.warn("获取习惯备注同步块预览失败:", error);
+            preview.style.display = "block";
+            preview.innerHTML = "";
+            const errorText = document.createElement("span");
+            errorText.textContent = i18n("blockPreviewFailed") || "预览失败";
+            errorText.style.cssText = "color:var(--b3-theme-error);";
+            preview.appendChild(errorText);
+        }
     }
 
     private openBuiltInEmojiPicker(target: HTMLElement, index: number) {
@@ -664,6 +801,13 @@ export class HabitCheckInEmojiDialog {
                 if (!emoji.group) {
                     delete emoji.group;
                 }
+            }
+            delete emoji.syncMemoToBlock;
+            if (this.isHabitMemoSyncEnabled()) {
+                emoji.memoBlockId = (emoji.memoBlockId || "").trim();
+                if (!emoji.memoBlockId) delete emoji.memoBlockId;
+            } else {
+                delete emoji.memoBlockId;
             }
         }
 

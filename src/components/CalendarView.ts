@@ -35,6 +35,7 @@ import { HabitDayDialog } from "./HabitDayDialog";
 import { getHabitProgressOnDate, getHabitReminderTimes, getHabitReminderTimesForDate, shouldCheckInOnDate as shouldCheckInOnDateUtil, isHabitActiveOnDate } from "../utils/habitUtils";
 import { HabitGroupManager } from "../utils/habitGroupManager";
 import { normalizeReminderSkipWeekendMode, shouldSkipReminderOnDate, type HolidayData } from "../utils/reminderSkipDate";
+import { syncHabitMemoBlock, type HabitMemoCheckInEntry, type HabitMemoEmojiConfig } from "../utils/habitMemoBlockSync";
 export class CalendarView {
     private container: HTMLElement;
     private calendar: Calendar;
@@ -2971,10 +2972,22 @@ export class CalendarView {
 
             // 更新打卡条目的 timestamp (格式: "YYYY-MM-DD HH:mm")
             const newTimestamp = `${newDateStr} ${newTimeStr}`;
+            const previousEntry = { ...entries[checkInIndex] } as HabitMemoCheckInEntry;
             entries[checkInIndex] = {
                 ...entries[checkInIndex],
                 timestamp: newTimestamp
-            };
+            } as HabitMemoCheckInEntry;
+
+            const emojiConfig = Array.isArray(habit.checkInEmojis)
+                ? habit.checkInEmojis.find((item: any) => item.emoji === entries[checkInIndex].emoji && (!entries[checkInIndex].meaning || item.meaning === entries[checkInIndex].meaning))
+                    || habit.checkInEmojis.find((item: any) => item.emoji === entries[checkInIndex].emoji)
+                : undefined;
+            await syncHabitMemoBlock({
+                habit,
+                entry: entries[checkInIndex] as HabitMemoCheckInEntry,
+                emojiConfig: emojiConfig as HabitMemoEmojiConfig | undefined,
+                previousEntry
+            });
 
             // 更新 checkIn 数据
             checkIn.entries = entries;
@@ -4232,13 +4245,19 @@ export class CalendarView {
             }
 
             checkIn.entries = checkIn.entries || [];
-            checkIn.entries.push({ 
+            const entry: HabitMemoCheckInEntry = {
                 emoji: emojiConfig.emoji, 
                 timestamp: customTimestamp, 
                 note,
                 meaning: emojiConfig.meaning,
                 group: (emojiConfig.group || '').trim() || undefined
+            };
+            await syncHabitMemoBlock({
+                habit,
+                entry,
+                emojiConfig: emojiConfig as HabitMemoEmojiConfig
             });
+            checkIn.entries.push(entry);
             checkIn.count = (checkIn.count || 0) + 1;
             checkIn.status = (checkIn.status || []).concat([emojiConfig.emoji]);
             checkIn.timestamp = customTimestamp;

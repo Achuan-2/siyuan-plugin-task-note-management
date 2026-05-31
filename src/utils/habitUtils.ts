@@ -2,6 +2,8 @@ export type HabitGoalType = "count" | "pomodoro";
 
 export type HabitFrequencyType = "daily" | "weekly" | "monthly" | "yearly" | "ebbinghaus" | "custom";
 
+export type HabitMemoSyncMode = "none" | "checkin" | "note";
+
 export interface HabitFrequencyLike {
     type?: HabitFrequencyType;
     interval?: number;
@@ -36,6 +38,8 @@ export interface HabitLike {
         [date: string]: HabitReminderTimeModification;
     };
     url?: string;
+    habitMemoSyncMode?: HabitMemoSyncMode;
+    habitMemoBlockId?: string;
     checkIns?: {
         [date: string]: {
             count?: number;
@@ -50,6 +54,10 @@ export interface HabitEmojiConfig {
     group?: string;
     promptNote?: boolean;
     countsAsSuccess?: boolean;
+    // Legacy flag kept for old data; new sync behavior is controlled by Habit.habitMemoSyncMode.
+    syncMemoToBlock?: boolean;
+    // Optional per-option override. Empty means use Habit.habitMemoBlockId.
+    memoBlockId?: string;
 }
 
 export interface HabitCheckInEntry {
@@ -58,6 +66,8 @@ export interface HabitCheckInEntry {
     note?: string;
     meaning?: string;
     group?: string;
+    memoBlockId?: string;
+    memoSyncKey?: string;
 }
 
 export interface HabitCheckIn {
@@ -75,6 +85,8 @@ export interface Habit extends HabitLike {
     note?: string;
     blockId?: string;
     url?: string;
+    habitMemoSyncMode?: HabitMemoSyncMode;
+    habitMemoBlockId?: string;
     target: number;
     goalType?: HabitGoalType;
     pomodoroTargetHours?: number;

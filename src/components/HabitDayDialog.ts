@@ -4,6 +4,7 @@ import { getLocalDateTimeString, getLogicalDateString } from "../utils/dateUtils
 import { PomodoroRecordManager, type PomodoroSession } from "../utils/pomodoroRecord";
 import { i18n, getPluginInstance } from "../pluginInstance";
 import { buildLinkedHabitTaskMaps, isEventIdFromTaskWithInstances } from "../utils/linkedHabitPomodoro";
+import { deleteHabitMemoBlockForEntry, syncHabitMemoBlock, type HabitMemoCheckInEntry, type HabitMemoEmojiConfig } from "../utils/habitMemoBlockSync";
 
 type HabitDayEntry = {
     emoji: string;
@@ -11,6 +12,8 @@ type HabitDayEntry = {
     timestamp: string;
     note?: string;
     group?: string;
+    memoBlockId?: string;
+    memoSyncKey?: string;
 };
 
 type HabitDayPomodoroSessionItem = {
@@ -67,7 +70,9 @@ export class HabitDayDialog {
                 meaning: e.meaning || this.getMeaningForEmoji(e.emoji),
                 timestamp: e.timestamp,
                 note: e.note,
-                group: e.group
+                group: e.group,
+                memoBlockId: e.memoBlockId,
+                memoSyncKey: e.memoSyncKey
             }));
         }
         return (checkIn.status || []).map((s: string) => ({
@@ -546,12 +551,18 @@ export class HabitDayDialog {
             return false;
         }
 
-        dayCheckIn.entries.push({ 
+        const entry: HabitMemoCheckInEntry = {
             emoji: emojiConfig.emoji, 
             timestamp: now,
             meaning: emojiConfig.meaning,
             group: (emojiConfig.group || '').trim() || undefined
+        };
+        await syncHabitMemoBlock({
+            habit: this.habit,
+            entry,
+            emojiConfig: emojiConfig as HabitMemoEmojiConfig
         });
+        dayCheckIn.entries.push(entry);
         dayCheckIn.status.push(emojiConfig.emoji);
         dayCheckIn.count = (dayCheckIn.count || 0) + 1;
         dayCheckIn.timestamp = now;
@@ -797,13 +808,20 @@ export class HabitDayDialog {
             const timestamp = `${this.dateStr} ${timeInput.value || `${hh}:${mm}`}`;
             const checkIn = this.habit.checkIns?.[this.dateStr];
             const entries = this.getEntriesForDate(checkIn);
-            entries.push({
+            const emojiConfig = emojiConfigs.find(c => c.emoji === selectedEmoji && c.meaning === selectedMeaning);
+            const entry: HabitDayEntry = {
                 emoji: selectedEmoji,
                 meaning: selectedMeaning || this.getMeaningForEmoji(selectedEmoji),
                 timestamp,
                 note: noteInput.value.trim() || undefined,
-                group: (emojiConfigs.find(c => c.emoji === selectedEmoji && c.meaning === selectedMeaning)?.group || '').trim() || undefined
+                group: (emojiConfig?.group || '').trim() || undefined
+            };
+            await syncHabitMemoBlock({
+                habit: this.habit,
+                entry: entry as HabitMemoCheckInEntry,
+                emojiConfig: emojiConfig as HabitMemoEmojiConfig | undefined
             });
+            entries.push(entry);
             await this.setEntriesForDate(this.dateStr, entries);
             this.habit.totalCheckIns = (this.habit.totalCheckIns || 0) + 1;
             this.habit.updatedAt = getLocalDateTimeString(new Date());
@@ -876,8 +894,17 @@ export class HabitDayDialog {
         saveBtn.textContent = i18n("save");
         saveBtn.addEventListener("click", async () => {
             const newTime = timeInput.value || (entry.timestamp ? entry.timestamp.split(" ")[1] : "");
+            const previousEntry = { ...entries[index] } as HabitMemoCheckInEntry;
             entries[index].timestamp = `${this.dateStr} ${newTime}`;
             entries[index].note = noteInput.value.trim() || undefined;
+            const emojiConfig = this.habit.checkInEmojis?.find(item => item.emoji === entries[index].emoji && (!entries[index].meaning || item.meaning === entries[index].meaning))
+                || this.habit.checkInEmojis?.find(item => item.emoji === entries[index].emoji);
+            await syncHabitMemoBlock({
+                habit: this.habit,
+                entry: entries[index] as HabitMemoCheckInEntry,
+                emojiConfig: emojiConfig as HabitMemoEmojiConfig | undefined,
+                previousEntry
+            });
             await this.setEntriesForDate(this.dateStr, entries);
             this.habit.updatedAt = getLocalDateTimeString(new Date());
             await this.onSave(this.habit);
@@ -895,6 +922,7 @@ export class HabitDayDialog {
         const checkIn = this.habit.checkIns?.[this.dateStr];
         const entries = this.getEntriesForDate(checkIn);
         if (index < 0 || index >= entries.length) return;
+        await deleteHabitMemoBlockForEntry(entries[index] as HabitMemoCheckInEntry);
         entries.splice(index, 1);
         await this.setEntriesForDate(this.dateStr, entries);
         this.habit.totalCheckIns = Math.max(0, (this.habit.totalCheckIns || 0) - 1);

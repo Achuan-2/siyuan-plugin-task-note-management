@@ -33,6 +33,7 @@ import {
     isHabitCompletedOnDate as isHabitCompletedOnDateUtil,
     shouldCheckInOnDate
 } from "../utils/habitUtils";
+import { syncHabitMemoBlock, type HabitMemoCheckInEntry, type HabitMemoEmojiConfig } from "../utils/habitMemoBlockSync";
 
 interface HabitPomodoroStats {
     totalCount: number;
@@ -485,7 +486,7 @@ export class HabitPanel {
         return normalized;
     }
 
-    private applyTaskCompletionAutoCheckIn(
+    private async applyTaskCompletionAutoCheckIn(
         habit: Habit,
         reminder: any,
         targetDate: string,
@@ -526,13 +527,19 @@ export class HabitPanel {
 
         const dayCheckIn = habit.checkIns[targetDate];
         dayCheckIn.entries = dayCheckIn.entries || [];
-        dayCheckIn.entries.push({
+        const entry: HabitMemoCheckInEntry = {
             emoji: emojiConfig.emoji,
             timestamp: now,
             meaning: emojiConfig.meaning,
             note: noteParts.join(' '),
             group: (emojiConfig.group || '').trim() || undefined
+        };
+        await syncHabitMemoBlock({
+            habit,
+            entry,
+            emojiConfig: emojiConfig as HabitMemoEmojiConfig
         });
+        dayCheckIn.entries.push(entry);
         dayCheckIn.status = (dayCheckIn.status || []).concat([emojiConfig.emoji]);
         dayCheckIn.count = (dayCheckIn.count || 0) + 1;
         dayCheckIn.timestamp = now;
@@ -581,7 +588,7 @@ export class HabitPanel {
                     if (syncedInstanceMap[instanceDate] === syncMarker) continue;
 
                     const targetDate = this.getCompletedDateFromRepeatInstance(reminder, instanceDate);
-                    this.applyTaskCompletionAutoCheckIn(
+                    await this.applyTaskCompletionAutoCheckIn(
                         habit,
                         reminder,
                         targetDate,
@@ -616,7 +623,7 @@ export class HabitPanel {
             if (reminder.linkedHabitLastAutoCheckInKey === syncMarker) continue;
 
             const targetDate = this.getCompletedDateFromReminder(reminder);
-            this.applyTaskCompletionAutoCheckIn(habit, reminder, targetDate, now);
+            await this.applyTaskCompletionAutoCheckIn(habit, reminder, targetDate, now);
 
             reminder.linkedHabitLastAutoCheckInKey = syncMarker;
             hasHabitChange = true;
@@ -1995,13 +2002,19 @@ export class HabitPanel {
 
             // Append an entry for this check-in, using custom timestamp if provided
             checkIn.entries = checkIn.entries || [];
-            checkIn.entries.push({ 
+            const entry: HabitMemoCheckInEntry = {
                 emoji: emojiConfig.emoji, 
                 timestamp: customTimestamp, 
                 note,
                 meaning: emojiConfig.meaning,
                 group: (emojiConfig.group || '').trim() || undefined
+            };
+            await syncHabitMemoBlock({
+                habit,
+                entry,
+                emojiConfig: emojiConfig as HabitMemoEmojiConfig
             });
+            checkIn.entries.push(entry);
             // Keep status/count/timestamp fields in sync for backward compatibility
             checkIn.count = (checkIn.count || 0) + 1;
             checkIn.status = (checkIn.status || []).concat([emojiConfig.emoji]);

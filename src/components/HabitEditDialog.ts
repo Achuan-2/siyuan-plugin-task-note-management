@@ -8,6 +8,7 @@ import { HabitCheckInEmojiDialog } from "./HabitCheckInEmojiDialog";
 import { PomodoroRecordManager } from "../utils/pomodoroRecord";
 import { PomodoroSessionsDialog } from "./PomodoroSessionsDialog";
 import { generateRandomColor } from "../utils/uiUtils";
+import type { HabitMemoSyncMode } from "../utils/habitUtils";
 
 export class HabitEditDialog {
     private dialog: Dialog;
@@ -67,6 +68,8 @@ export class HabitEditDialog {
         form.style.cssText = 'display: flex; flex-direction: column; gap: 16px;';
         let draftCheckInEmojis = JSON.parse(JSON.stringify(this.habit?.checkInEmojis || this.getDefaultCheckInEmojis()));
         let draftHideCheckedToday = !!this.habit?.hideCheckedToday;
+        const initialHabitMemoSyncMode = this.getInitialHabitMemoSyncMode();
+        const initialHabitMemoBlockId = this.getInitialHabitMemoBlockId();
 
         // 习惯标题 + 图标
         const titleGroup = this.createFormGroup(i18n("habitTitleLabel"), 'text', 'title', this.habit?.title || '');
@@ -481,6 +484,67 @@ export class HabitEditDialog {
         blockGroup.appendChild(blockPreview);
         form.appendChild(blockGroup);
 
+        // 习惯打卡记录同步到块
+        const habitMemoSyncGroup = document.createElement('div');
+        habitMemoSyncGroup.style.cssText = 'display:flex; flex-direction:column; gap:8px;';
+
+        const habitMemoSyncLabel = document.createElement('label');
+        habitMemoSyncLabel.textContent = i18n("habitMemoSyncModeLabel") || "打卡记录同步到块";
+        habitMemoSyncLabel.style.cssText = 'font-weight: bold; font-size: 14px;';
+
+        const habitMemoSyncModeSelect = document.createElement('select');
+        habitMemoSyncModeSelect.name = 'habitMemoSyncMode';
+        habitMemoSyncModeSelect.className = 'b3-select';
+        const addHabitMemoSyncModeOption = (value: HabitMemoSyncMode, text: string) => {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = text;
+            habitMemoSyncModeSelect.appendChild(option);
+        };
+        addHabitMemoSyncModeOption('none', i18n("habitMemoSyncModeNone") || "不启用");
+        addHabitMemoSyncModeOption('checkin', i18n("habitMemoSyncModeCheckIn") || "添加打卡和备注时同步");
+        addHabitMemoSyncModeOption('note', i18n("habitMemoSyncModeNote") || "仅添加备注时才同步");
+        habitMemoSyncModeSelect.value = initialHabitMemoSyncMode;
+
+        const habitMemoBlockWrap = document.createElement('div');
+        habitMemoBlockWrap.style.cssText = 'display:flex; flex-direction:column; gap:6px;';
+
+        const habitMemoBlockLabel = document.createElement('div');
+        habitMemoBlockLabel.textContent = i18n("habitMemoUnifiedBlockLabel") || "同步目标块";
+        habitMemoBlockLabel.style.cssText = 'font-size:12px; color:var(--b3-theme-on-surface-light);';
+
+        const habitMemoBlockInputRow = document.createElement('div');
+        habitMemoBlockInputRow.style.cssText = 'display:flex; gap:8px; align-items:center;';
+
+        const habitMemoBlockInput = document.createElement('input');
+        habitMemoBlockInput.type = 'text';
+        habitMemoBlockInput.name = 'habitMemoBlockId';
+        habitMemoBlockInput.className = 'b3-text-field';
+        habitMemoBlockInput.placeholder = i18n("habitMemoUnifiedBlockPlaceholder") || "输入默认同步块 ID，或粘贴块引用";
+        habitMemoBlockInput.value = initialHabitMemoBlockId;
+        habitMemoBlockInput.style.cssText = 'flex:1;';
+        habitMemoBlockInput.spellcheck = false;
+
+        const habitMemoClearBtn = document.createElement('button');
+        habitMemoClearBtn.type = 'button';
+        habitMemoClearBtn.className = 'b3-button b3-button--outline';
+        habitMemoClearBtn.classList.add('ariaLabel');
+        habitMemoClearBtn.setAttribute('aria-label', i18n("clearBlock") || "清空块");
+        habitMemoClearBtn.textContent = i18n("clearBlock") || "清空";
+
+        const habitMemoBlockPreview = document.createElement('div');
+        habitMemoBlockPreview.style.cssText = 'font-size:12px; color:var(--b3-theme-on-surface-light); padding-top:4px;';
+
+        habitMemoBlockInputRow.appendChild(habitMemoBlockInput);
+        habitMemoBlockInputRow.appendChild(habitMemoClearBtn);
+        habitMemoBlockWrap.appendChild(habitMemoBlockLabel);
+        habitMemoBlockWrap.appendChild(habitMemoBlockInputRow);
+        habitMemoBlockWrap.appendChild(habitMemoBlockPreview);
+
+        habitMemoSyncGroup.appendChild(habitMemoSyncLabel);
+        habitMemoSyncGroup.appendChild(habitMemoSyncModeSelect);
+        habitMemoSyncGroup.appendChild(habitMemoBlockWrap);
+
         // 网页链接（可选）
         const urlGroup = document.createElement('div');
         urlGroup.style.cssText = 'display:flex; flex-direction: column; gap:4px;';
@@ -513,10 +577,14 @@ export class HabitEditDialog {
         urlGroup.appendChild(urlLabel);
         urlGroup.appendChild(urlRow);
         form.appendChild(urlGroup);
+        form.appendChild(habitMemoSyncGroup);
 
         // initial preview if editing and block exists
         if (blockInput.value) {
             this.updatePreviewForBlock(blockInput.value, blockPreview).catch(err => console.warn('初始化块预览失败', err));
+        }
+        if (habitMemoBlockInput.value) {
+            this.updatePreviewForBlock(habitMemoBlockInput.value, habitMemoBlockPreview).catch(err => console.warn('初始化习惯备注同步块预览失败', err));
         }
 
         // 按钮
@@ -535,6 +603,9 @@ export class HabitEditDialog {
             const pomodoroHours = Math.max(0, parseInt((form.querySelector('input[name="pomodoroTargetHours"]') as HTMLInputElement | null)?.value || '0') || 0);
             const pomodoroMinutes = Math.max(0, parseInt((form.querySelector('input[name="pomodoroTargetMinutes"]') as HTMLInputElement | null)?.value || '0') || 0);
             const pomodoroTargetTotal = Math.max(1, pomodoroHours * 60 + pomodoroMinutes);
+            const memoSyncMode = this.normalizeHabitMemoSyncMode((form.querySelector('select[name="habitMemoSyncMode"]') as HTMLSelectElement | null)?.value);
+            const rawMemoBlockValue = (form.querySelector('input[name="habitMemoBlockId"]') as HTMLInputElement | null)?.value?.trim() || '';
+            const memoBlockId = rawMemoBlockValue ? (this.extractBlockId(rawMemoBlockValue) || rawMemoBlockValue) : undefined;
             const tempHabit: Habit = {
                 id: this.habit?.id || `habit-temp-${Date.now()}`,
                 icon: (form.querySelector('input[name="icon"]') as HTMLInputElement | null)?.value || this.habit?.icon || '🌱',
@@ -562,6 +633,8 @@ export class HabitEditDialog {
                 updatedAt: getLocalDateTimeString(new Date()),
                 blockId: this.habit?.blockId,
                 url: (form.querySelector('input[name="url"]') as HTMLInputElement | null)?.value?.trim() || this.habit?.url,
+                habitMemoSyncMode: memoSyncMode,
+                habitMemoBlockId: memoSyncMode !== 'none' ? memoBlockId : undefined,
                 hideCheckedToday: draftHideCheckedToday
             };
             const dialog = new HabitCheckInEmojiDialog(tempHabit, async (emojis) => {
@@ -654,6 +727,46 @@ export class HabitEditDialog {
             blockPreview.textContent = '';
         });
 
+        const updateHabitMemoBlockVisibility = () => {
+            const enabled = this.normalizeHabitMemoSyncMode(habitMemoSyncModeSelect.value) !== 'none';
+            habitMemoBlockWrap.style.display = enabled ? 'flex' : 'none';
+            if (!enabled) {
+                habitMemoBlockPreview.textContent = '';
+            } else if (habitMemoBlockInput.value.trim()) {
+                const id = this.extractBlockId(habitMemoBlockInput.value.trim()) || habitMemoBlockInput.value.trim();
+                this.updatePreviewForBlock(id, habitMemoBlockPreview).catch(err => console.warn('更新习惯备注同步块预览失败', err));
+            }
+        };
+
+        let isAutoSettingHabitMemoInput = false;
+        habitMemoSyncModeSelect.addEventListener('change', updateHabitMemoBlockVisibility);
+        habitMemoClearBtn.addEventListener('click', () => {
+            habitMemoBlockInput.value = '';
+            habitMemoBlockPreview.textContent = '';
+        });
+        habitMemoBlockInput.addEventListener('input', async () => {
+            const raw = habitMemoBlockInput.value?.trim();
+            if (!raw) {
+                habitMemoBlockPreview.textContent = '';
+                return;
+            }
+            const id = this.extractBlockId(raw);
+            if (!id) {
+                habitMemoBlockPreview.textContent = '';
+                return;
+            }
+            if (!isAutoSettingHabitMemoInput && raw !== id && (raw.includes("((") || raw.includes('siyuan://blocks/') || raw.includes(']('))) {
+                try {
+                    isAutoSettingHabitMemoInput = true;
+                    habitMemoBlockInput.value = id;
+                } finally {
+                    setTimeout(() => { isAutoSettingHabitMemoInput = false; }, 0);
+                }
+            }
+            await this.updatePreviewForBlock(id, habitMemoBlockPreview);
+        });
+        updateHabitMemoBlockVisibility();
+
         openUrlBtn.addEventListener('click', () => {
             const rawUrl = urlInput.value?.trim();
             if (!rawUrl) {
@@ -720,6 +833,24 @@ export class HabitEditDialog {
                 titleInput.focus();
             }
         }, 0);
+    }
+
+    private normalizeHabitMemoSyncMode(value?: string | null): HabitMemoSyncMode {
+        return value === 'checkin' || value === 'note' ? value : 'none';
+    }
+
+    private getInitialHabitMemoSyncMode(): HabitMemoSyncMode {
+        const savedMode = this.normalizeHabitMemoSyncMode(this.habit?.habitMemoSyncMode);
+        if (savedMode !== 'none') return savedMode;
+        const hasLegacySync = (this.habit?.checkInEmojis || []).some((emoji: any) => emoji?.syncMemoToBlock === true);
+        return hasLegacySync ? 'note' : 'none';
+    }
+
+    private getInitialHabitMemoBlockId(): string {
+        const savedBlockId = (this.habit?.habitMemoBlockId || '').trim();
+        if (savedBlockId) return savedBlockId;
+        const legacyEmoji = (this.habit?.checkInEmojis || []).find((emoji: any) => emoji?.syncMemoToBlock && typeof emoji?.memoBlockId === 'string' && emoji.memoBlockId.trim());
+        return legacyEmoji?.memoBlockId?.trim() || '';
     }
 
     private async updateHabitPomodorosDisplay() {
@@ -1023,6 +1154,27 @@ export class HabitEditDialog {
 
         const rawBlockVal = (formData.get('blockId') as string) || undefined;
         const parsedBlockId = rawBlockVal ? (this.extractBlockId(rawBlockVal) || rawBlockVal) : undefined;
+        const habitMemoSyncMode = this.normalizeHabitMemoSyncMode((formData.get('habitMemoSyncMode') as string) || 'none');
+        const rawHabitMemoBlockVal = ((formData.get('habitMemoBlockId') as string) || '').trim();
+        const parsedHabitMemoBlockId = rawHabitMemoBlockVal ? (this.extractBlockId(rawHabitMemoBlockVal) || rawHabitMemoBlockVal) : undefined;
+        if (habitMemoSyncMode !== 'none' && !parsedHabitMemoBlockId) {
+            showMessage(i18n("habitMemoUnifiedBlockRequired") || "启用同步后必须设置同步目标块", 3000, 'error');
+            return;
+        }
+        const normalizedCheckInEmojis = JSON.parse(JSON.stringify(draftCheckInEmojis && draftCheckInEmojis.length > 0 ? draftCheckInEmojis : this.getDefaultCheckInEmojis()));
+        normalizedCheckInEmojis.forEach((emoji: any) => {
+            delete emoji.syncMemoToBlock;
+            if (habitMemoSyncMode === 'none') {
+                delete emoji.memoBlockId;
+                return;
+            }
+            if (typeof emoji.memoBlockId === 'string') {
+                emoji.memoBlockId = emoji.memoBlockId.trim();
+                if (!emoji.memoBlockId) delete emoji.memoBlockId;
+            } else {
+                delete emoji.memoBlockId;
+            }
+        });
         const rawUrlVal = ((formData.get('url') as string) || '').trim();
         const url = rawUrlVal || undefined;
         const goalType = (formData.get('goalType') as string) === 'pomodoro' ? 'pomodoro' : 'count';
@@ -1064,11 +1216,13 @@ export class HabitEditDialog {
                 : undefined,
             blockId: parsedBlockId || undefined,
             url,
+            habitMemoSyncMode,
+            habitMemoBlockId: habitMemoSyncMode !== 'none' ? parsedHabitMemoBlockId : undefined,
             sort: this.habit?.sort,
             // 保留兼容字段，不再在编辑界面展示优先级
             priority: this.habit?.priority || 'none',
             groupId: formData.get('groupId') as string === 'none' ? undefined : formData.get('groupId') as string,
-            checkInEmojis: JSON.parse(JSON.stringify(draftCheckInEmojis && draftCheckInEmojis.length > 0 ? draftCheckInEmojis : this.getDefaultCheckInEmojis())),
+            checkInEmojis: normalizedCheckInEmojis,
             checkIns: this.habit?.checkIns || {},
             totalCheckIns: this.habit?.totalCheckIns || 0,
             createdAt: this.habit?.createdAt || now,
@@ -1309,7 +1463,8 @@ export class HabitEditDialog {
 
     private async updatePreviewForBlock(blockId: string, previewEl: HTMLElement) {
         try {
-            const block = await getBlockByID(blockId);
+            const cleanBlockId = this.extractBlockId(blockId) || blockId.trim();
+            const block = await getBlockByID(cleanBlockId);
             if (!block) {
                 previewEl.textContent = i18n("blockNotFound");
                 return;
@@ -1320,7 +1475,7 @@ export class HabitEditDialog {
                 snippet = block.content || '';
             } else {
                 try {
-                    const domString = await getBlockDOM(blockId);
+                    const domString = await getBlockDOM(cleanBlockId);
                     const parser = new DOMParser();
                     const dom = parser.parseFromString(domString.dom, 'text/html');
                     const element = dom.querySelector('div[data-type="NodeParagraph"]');
@@ -1334,7 +1489,16 @@ export class HabitEditDialog {
                 }
             }
 
-            previewEl.textContent = snippet ? snippet.trim().slice(0, 200) : '';
+            const displayText = snippet ? snippet.trim().slice(0, 200) : '';
+            previewEl.innerHTML = '';
+            if (!displayText) return;
+
+            const refEl = document.createElement('span');
+            refEl.textContent = displayText;
+            refEl.setAttribute('data-type', 'a');
+            refEl.setAttribute('data-href', `siyuan://blocks/${cleanBlockId}`);
+            refEl.style.cssText = 'cursor:pointer; color:var(--b3-protyle-inline-blockref-color); border-bottom:1px dashed var(--b3-protyle-inline-blockref-color); word-break:break-word;';
+            previewEl.appendChild(refEl);
         } catch (err) {
             console.error('获取块预览失败:', err);
             previewEl.textContent = i18n("blockPreviewFailed");
@@ -1343,7 +1507,7 @@ export class HabitEditDialog {
 
     private extractBlockId(raw: string): string | null {
         if (!raw) return null;
-        const blockRefRegex = /\(\(([\w\-]+)\s+'(.*)'\)\)/;
+        const blockRefRegex = /\(\(([\w\-]+)(?:\s+'[^']*')?\)\)/;
         const blockLinkRegex = /\[(.*)\]\(siyuan:\/\/blocks\/([\w\-]+)\)/;
         const match1 = raw.match(blockRefRegex);
         if (match1) return match1[1];
