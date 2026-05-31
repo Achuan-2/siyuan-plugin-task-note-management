@@ -4358,6 +4358,7 @@ export class ProjectKanbanView {
                         const taskData = task as any;
                         taskData.projectId = newProjectId;
                         delete taskData.customGroupId;
+                        delete taskData.customGroupName;
                     }
                     await saveReminders(this.plugin, reminderData);
                 }

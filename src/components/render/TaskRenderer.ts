@@ -1171,13 +1171,14 @@ export class TaskRenderer {
             if (projectName) {
                 let displayProjectName = projectName;
                 const customGroupId = typeof task.customGroupId === 'string' ? task.customGroupId.trim() : '';
-                const groupFromProject = customGroupId && Array.isArray(project.customGroups)
-                    ? project.customGroups.find((g: any) => g.id === customGroupId)
+                const projectGroups = Array.isArray(project.customGroups) ? project.customGroups : [];
+                const groupFromProject = customGroupId
+                    ? projectGroups.find((g: any) => g?.id === customGroupId && !g?.archived)
                     : null;
-                const customGroupName = groupFromProject?.name
-                    || cachedProjHabit?.customGroup?.name
-                    || cachedProjHabit?.customGroupName
-                    || task.customGroupName;
+                const cachedGroup = customGroupId && cachedProjHabit?.customGroup?.id === customGroupId && !cachedProjHabit.customGroup?.archived
+                    ? cachedProjHabit.customGroup
+                    : null;
+                const customGroupName = groupFromProject?.name || cachedGroup?.name;
                 if (customGroupName) {
                     displayProjectName = `${projectName}/${customGroupName}`;
                 }
