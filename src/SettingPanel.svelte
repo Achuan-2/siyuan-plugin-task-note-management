@@ -2121,9 +2121,6 @@
                 updated.hidden = settings.icsSyncMethod !== 'webdav';
             }
 
-            if (['reminderWebhookUrl', 'reminderWebhookJsonTemplate'].includes(item.key)) {
-                updated.disabled = settings.reminderWebhookEnabled !== true;
-            }
 
             return updated;
         }),
