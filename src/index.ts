@@ -60,6 +60,7 @@ import {
 import { ChangelogUtils } from "./utils/changelogNotify";
 import { createPomodoroStartSubmenu as createSharedPomodoroStartSubmenu } from "./utils/pomodoroPresets";
 import { normalizeReminderSkipWeekendMode, shouldSkipReminderOnDate, type HolidayData } from "./utils/reminderSkipDate";
+import { DEFAULT_HABIT_MEMO_SYNC_TEMPLATE } from "./utils/habitMemoTemplate";
 
 
 export const SETTINGS_FILE = "reminder-settings.json";
@@ -154,6 +155,7 @@ export const DEFAULT_SETTINGS = {
     showHabitInSummary: true,
     showTaskNotesInSummary: false,
     showHabitNotesInSummary: false,
+    habitMemoSyncTemplate: DEFAULT_HABIT_MEMO_SYNC_TEMPLATE,
     // 任务管理侧栏排序配置
     sortMethod: "priority",
     sortOrder: "desc",
@@ -245,6 +247,9 @@ export const DEFAULT_SETTINGS = {
     reminderSkipWeekendMode: 'none', // 任务提醒跳过周末模式：none | saturdaySunday | saturday | sunday
     reminderSkipHolidays: false, // 任务提醒是否跳过节假日
     showInternalNotification: false, // 新增：是否显示内部通知框
+    reminderWebhookEnabled: false, // 是否启用 Webhook 通知
+    reminderWebhookUrl: '', // Webhook 通知 URL
+    reminderWebhookJsonTemplate: '{\n    "msg_type": "text",\n    "content": {\n        "text": "${message}"\n    }\n}', // Webhook 自定义 JSON 请求体模板
     dailyNotificationTime: '08:00', // 新增：每日通知时间，默认08:00
     dailyNotificationEnabled: false, // 新增：是否启用每日统一通知
     randomRestEnabled: false,
@@ -1753,6 +1758,16 @@ export default class ReminderPlugin extends Plugin {
                 settings.dailyNotificationTime = DEFAULT_SETTINGS.dailyNotificationTime as any;
             }
         }
+        settings.reminderWebhookEnabled = settings.reminderWebhookEnabled === true;
+        settings.reminderWebhookUrl = typeof settings.reminderWebhookUrl === 'string'
+            ? settings.reminderWebhookUrl.trim()
+            : '';
+        settings.reminderWebhookJsonTemplate = typeof settings.reminderWebhookJsonTemplate === 'string'
+            ? settings.reminderWebhookJsonTemplate
+            : '';
+        settings.habitMemoSyncTemplate = typeof settings.habitMemoSyncTemplate === 'string'
+            ? settings.habitMemoSyncTemplate
+            : DEFAULT_SETTINGS.habitMemoSyncTemplate;
         if (typeof settings.todayStartTime === 'number') {
             const hours = Math.max(0, Math.min(23, Math.floor(settings.todayStartTime)));
             settings.todayStartTime = (hours < 10 ? '0' : '') + hours.toString() + ':00';
@@ -1882,6 +1897,184 @@ export default class ReminderPlugin extends Plugin {
     async getShowInternalNotificationEnabled(): Promise<boolean> {
         const settings = await this.loadSettings();
         return settings.showInternalNotification !== false;
+    }
+
+    private buildWebhookReminderInfo(reminderInfo: any): any | undefined {
+        if (!reminderInfo || typeof reminderInfo !== 'object') return undefined;
+
+        const keys = [
+            'id',
+            'blockId',
+            'title',
+            'note',
+            'priority',
+            'categoryId',
+            'categoryName',
+            'categoryColor',
+            'categoryIcon',
+            'time',
+            'date',
+            'endDate',
+            'isAllDay',
+            'isOverdue',
+            'isRepeatInstance',
+            'originalId',
+        ];
+        const result: any = {};
+        keys.forEach((key) => {
+            const value = reminderInfo[key];
+            if (value !== undefined && value !== null && value !== '') {
+                result[key] = value;
+            }
+        });
+
+        return Object.keys(result).length > 0 ? result : undefined;
+    }
+
+    private replaceWebhookTemplateVariables(value: any, variables: Record<string, string>): any {
+        if (typeof value === 'string') {
+            return value.replace(/\$\{([a-zA-Z0-9_]+)\}/g, (match, name) =>
+                Object.prototype.hasOwnProperty.call(variables, name) ? variables[name] : match
+            );
+        }
+
+        if (Array.isArray(value)) {
+            return value.map((item) => this.replaceWebhookTemplateVariables(item, variables));
+        }
+
+        if (value && typeof value === 'object') {
+            const result: any = {};
+            Object.entries(value).forEach(([key, item]) => {
+                result[key] = this.replaceWebhookTemplateVariables(item, variables);
+            });
+            return result;
+        }
+
+        return value;
+    }
+
+    private renderWebhookTemplateAsJsonText(template: string, variables: Record<string, string>): string {
+        return template.replace(/\$\{([a-zA-Z0-9_]+)\}/g, (match, name) => {
+            if (!Object.prototype.hasOwnProperty.call(variables, name)) return match;
+            return JSON.stringify(variables[name]);
+        });
+    }
+
+    private buildDefaultWebhookPayload(
+        title: string,
+        message: string,
+        event: string,
+        sentAt: string,
+        options: { reminderInfo?: any; reminders?: any[] } = {}
+    ): any {
+        const payload: any = {
+            source: STORAGE_NAME,
+            event,
+            title,
+            message,
+            sentAt,
+        };
+
+        const reminder = this.buildWebhookReminderInfo(options.reminderInfo);
+        if (reminder) {
+            payload.reminder = reminder;
+        }
+
+        if (Array.isArray(options.reminders)) {
+            payload.reminders = options.reminders
+                .map((item) => this.buildWebhookReminderInfo(item))
+                .filter(Boolean);
+            payload.count = payload.reminders.length;
+        }
+
+        return payload;
+    }
+
+    private buildWebhookPayload(
+        title: string,
+        message: string,
+        event: string,
+        sentAt: string,
+        jsonTemplate: string,
+        options: { reminderInfo?: any; reminders?: any[] } = {}
+    ): any | null {
+        const template = typeof jsonTemplate === 'string' && jsonTemplate.trim()
+            ? jsonTemplate.trim()
+            : DEFAULT_SETTINGS.reminderWebhookJsonTemplate.trim();
+        if (!template) {
+            return this.buildDefaultWebhookPayload(title, message, event, sentAt, options);
+        }
+
+        const defaultPayload = this.buildDefaultWebhookPayload(title, message, event, sentAt, options);
+        const variables: Record<string, string> = {
+            source: STORAGE_NAME,
+            event,
+            title,
+            message,
+            sentAt,
+            count: String(defaultPayload.count ?? ''),
+        };
+
+        try {
+            const parsed = JSON.parse(template);
+            return this.replaceWebhookTemplateVariables(parsed, variables);
+        } catch (parseError) {
+            try {
+                return JSON.parse(this.renderWebhookTemplateAsJsonText(template, variables));
+            } catch (renderError) {
+                console.warn('Webhook JSON 模板格式无效:', renderError || parseError);
+                return null;
+            }
+        }
+    }
+
+    private async sendReminderWebhookNotification(
+        title: string,
+        message: string,
+        options: { event?: string; reminderInfo?: any; reminders?: any[] } = {}
+    ): Promise<void> {
+        try {
+            const settings = await this.loadSettings();
+            if (settings.reminderWebhookEnabled !== true) return;
+
+            const url = typeof settings.reminderWebhookUrl === 'string'
+                ? settings.reminderWebhookUrl.trim()
+                : '';
+            if (!url) return;
+
+            const event = options.event || 'reminder';
+            const sentAt = new Date().toISOString();
+            const payload = this.buildWebhookPayload(
+                title,
+                message,
+                event,
+                sentAt,
+                settings.reminderWebhookJsonTemplate,
+                options
+            );
+            if (!payload) return;
+
+            const controller = new AbortController();
+            const timeout = window.setTimeout(() => controller.abort(), 8000);
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload),
+                    signal: controller.signal,
+                });
+
+                if (!response.ok) {
+                    console.warn(`Webhook 通知发送失败: HTTP ${response.status}`);
+                }
+            } finally {
+                window.clearTimeout(timeout);
+            }
+        } catch (error) {
+            console.warn('Webhook 通知发送失败:', error);
+        }
     }
 
     // 获取通知声音设置
@@ -3649,36 +3842,41 @@ export default class ReminderPlugin extends Plugin {
                     NotificationDialog.showAllDayReminders(sortedReminders);
                 }
 
+                const totalCount = sortedReminders.length;
+                const title = '📅 ' + i18n("dailyRemindersNotification") + ` (${totalCount})`;
+
+                // 创建任务列表 - 直接显示所有任务
+                let taskList = ``;
+
+                // 显示前2个任务
+                sortedReminders.slice(0, 2).forEach(reminder => {
+                    let timeText = '';
+                    // 使用仅时间部分进行提示文本显示
+                    const parsed = this.extractDateAndTime(reminder.time);
+                    if (parsed && parsed.time) {
+                        timeText = ` ⏰${parsed.time}`;
+                    } else if (reminder.time) {
+                        timeText = ` ${reminder.time}`;
+                    }
+                    const categoryText = (reminder as any).categoryName ? ` [${(reminder as any).categoryName}]` : '';
+                    const overdueIcon = reminder.isOverdue ? '⚠️ ' : '';
+                    taskList += `${overdueIcon}• ${reminder.title}${timeText}${categoryText}\n`;
+                });
+
+                // 如果任务超过2个，显示省略信息
+                if (sortedReminders.length > 2) {
+                    taskList += `... ${i18n("moreItems", { count: (sortedReminders.length - 2).toString() })}\n`;
+                }
+
+                const message = taskList.trim();
+
+                void this.sendReminderWebhookNotification(title, message, {
+                    event: 'daily-reminders',
+                    reminders: sortedReminders,
+                });
+
                 // 如果启用了系统弹窗，显示系统通知
                 if (systemNotificationEnabled) {
-                    const totalCount = sortedReminders.length;
-                    const title = '📅 ' + i18n("dailyRemindersNotification") + ` (${totalCount})`;
-
-                    // 创建任务列表 - 直接显示所有任务
-                    let taskList = ``;
-
-                    // 显示前2个任务
-                    sortedReminders.slice(0, 2).forEach(reminder => {
-                        let timeText = '';
-                        // 使用仅时间部分进行提示文本显示
-                        const parsed = this.extractDateAndTime(reminder.time);
-                        if (parsed && parsed.time) {
-                            timeText = ` ⏰${parsed.time}`;
-                        } else if (reminder.time) {
-                            timeText = ` ${reminder.time}`;
-                        }
-                        const categoryText = (reminder as any).categoryName ? ` [${(reminder as any).categoryName}]` : '';
-                        const overdueIcon = reminder.isOverdue ? '⚠️ ' : '';
-                        taskList += `${overdueIcon}• ${reminder.title}${timeText}${categoryText}\n`;
-                    });
-
-                    // 如果任务超过2个，显示省略信息
-                    if (sortedReminders.length > 2) {
-                        taskList += `... ${i18n("moreItems", { count: (sortedReminders.length - 2).toString() })}\n`;
-                    }
-
-                    const message = taskList.trim();
-
                     await this.showReminderSystemNotification(title, message);
                 }
 
@@ -4388,17 +4586,23 @@ export default class ReminderPlugin extends Plugin {
                             NotificationDialog.show(reminderInfo as any);
                         }
 
+                        // 统一标题格式：习惯提醒（不含 emoji）
+                        const title = "🌱" + i18n('habitReminder');
+                        // message 格式为：时间 + 习惯名称（备注）
+                        let message = reminderInfo.time ? `${reminderInfo.time} ${reminderInfo.title}` : `${reminderInfo.title}`;
+                        // 如果有备注，添加（备注）格式
+                        if (reminderInfo.note) {
+                            message += `（${reminderInfo.note}）`;
+                        }
+
+                        void this.sendReminderWebhookNotification(title, message, {
+                            event: 'habit-reminder',
+                            reminderInfo,
+                        });
+
                         // 桌面端：如果启用了系统通知，显示浏览器通知
                         // 移动端：系统定时通知由 scheduleMobileNotification 设置，不在此处处理
                         if (systemNotificationEnabled && !this.isInMobileApp) {
-                            // 统一标题格式：习惯提醒（不含 emoji）
-                            const title = "🌱" + i18n('habitReminder');
-                            // message 格式为：时间 + 习惯名称（备注）
-                            let message = reminderInfo.time ? `${reminderInfo.time} ${reminderInfo.title}` : `${reminderInfo.title}`;
-                            // 如果有备注，添加（备注）格式
-                            if (reminderInfo.note) {
-                                message += `（${reminderInfo.note}）`;
-                            }
                             await this.showReminderSystemNotification(title, message, reminderInfo);
                         }
 
@@ -4469,45 +4673,50 @@ export default class ReminderPlugin extends Plugin {
                 NotificationDialog.show(reminderInfo);
             }
 
+            // 统一标题格式：任务提醒
+            const title = `⏰ ${i18n("timeReminderNotification")}`;
+
+            let timeText = '';
+            let rawTime = '';
+            if (displayChosen) {
+                timeText = `${displayChosen}`;
+                rawTime = rawChosenTime;
+            } else if (triggerField === 'time' && reminder.time) {
+                const dt = this.extractDateAndTime(reminder.time);
+                timeText = `${dt.time || reminder.time}`;
+                rawTime = reminder.time;
+            } else if (triggerField === 'reminderTimes' && triggeredTime) {
+                const dt = this.extractDateAndTime(triggeredTime);
+                timeText = `${dt.time || triggeredTime}`;
+                rawTime = triggeredTime;
+            }
+
+            // 从 reminderTimes 中获取备注
+            let timeNote = '';
+            if (reminder.reminderTimes && Array.isArray(reminder.reminderTimes)) {
+                for (const rt of reminder.reminderTimes) {
+                    if (typeof rt === 'object' && rt.time && rt.note && rt.time === rawTime) {
+                        timeNote = rt.note;
+                        break;
+                    }
+                }
+            }
+
+            // 构建消息：时间 + 任务名（备注）
+            let message = timeText ? `${timeText} ` : '';
+            message += `${reminder.title || i18n("unnamedNote")}`;
+            if (timeNote) {
+                message += `（${timeNote}）`;
+            }
+
+            void this.sendReminderWebhookNotification(title, message, {
+                event: 'time-reminder',
+                reminderInfo,
+            });
+
             // 桌面端：如果启用了系统通知，显示浏览器通知
             // 移动端：系统定时通知由 scheduleMobileNotification 设置，不在此处处理
             if (systemNotificationEnabled && !this.isInMobileApp) {
-                // 统一标题格式：任务提醒
-                const title = `⏰ ${i18n("timeReminderNotification")}`;
-
-                let timeText = '';
-                let rawTime = '';
-                if (displayChosen) {
-                    timeText = `${displayChosen}`;
-                    rawTime = rawChosenTime;
-                } else if (triggerField === 'time' && reminder.time) {
-                    const dt = this.extractDateAndTime(reminder.time);
-                    timeText = `${dt.time || reminder.time}`;
-                    rawTime = reminder.time;
-                } else if (triggerField === 'reminderTimes' && triggeredTime) {
-                    const dt = this.extractDateAndTime(triggeredTime);
-                    timeText = `${dt.time || triggeredTime}`;
-                    rawTime = triggeredTime;
-                }
-
-                // 从 reminderTimes 中获取备注
-                let timeNote = '';
-                if (reminder.reminderTimes && Array.isArray(reminder.reminderTimes)) {
-                    for (const rt of reminder.reminderTimes) {
-                        if (typeof rt === 'object' && rt.time && rt.note && rt.time === rawTime) {
-                            timeNote = rt.note;
-                            break;
-                        }
-                    }
-                }
-
-                // 构建消息：时间 + 任务名（备注）
-                let message = timeText ? `${timeText} ` : '';
-                message += `${reminder.title || i18n("unnamedNote")}`;
-                if (timeNote) {
-                    message += `（${timeNote}）`;
-                }
-
                 await this.showReminderSystemNotification(title, message, reminderInfo);
             }
 

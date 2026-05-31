@@ -579,6 +579,22 @@
             ],
         },
         {
+            name: i18n('habitCheckinSettings') || '✅习惯打卡设置',
+            items: [
+                {
+                    key: 'habitMemoSyncTemplate',
+                    value: settings.habitMemoSyncTemplate,
+                    type: 'textarea',
+                    title: i18n('habitMemoSyncTemplate') || '同步块模板',
+                    description:
+                        i18n('habitMemoSyncTemplateDesc') ||
+                        '用于习惯打卡同步到块的 Markdown 模板。支持变量：${date}、${time}、${dateTime}、${habitName}、${habitCheckinEmoji}、${habitCheckinMeaning}、${habitMemo}。清空后使用默认模板。',
+                    placeholder: DEFAULT_SETTINGS.habitMemoSyncTemplate,
+                    direction: 'column',
+                },
+            ],
+        },
+        {
             name: i18n('notificationReminder'),
             items: [
                 {
@@ -601,6 +617,35 @@
                     type: 'checkbox',
                     title: i18n('showInternalNotification'),
                     description: i18n('showInternalNotificationDesc'),
+                },
+                {
+                    key: 'reminderWebhookEnabled',
+                    value: settings.reminderWebhookEnabled,
+                    type: 'checkbox',
+                    title: i18n('reminderWebhookEnabled') || '启用 Webhook 通知',
+                    description:
+                        i18n('reminderWebhookEnabledDesc') ||
+                        '任务/习惯提醒触发时，向指定 URL 发送 POST JSON 通知。',
+                },
+                {
+                    key: 'reminderWebhookUrl',
+                    value: settings.reminderWebhookUrl,
+                    type: 'textinput',
+                    placeholder: 'https://example.com/webhook',
+                    title: i18n('reminderWebhookUrl') || 'Webhook 地址',
+                    description:
+                        i18n('reminderWebhookUrlDesc') ||
+                        '开启 Webhook 通知后使用，通知内容包含 title、message、event、reminder/reminders 等字段。',
+                },
+                {
+                    key: 'reminderWebhookJsonTemplate',
+                    value: settings.reminderWebhookJsonTemplate,
+                    type: 'textarea',
+                    title: i18n('reminderWebhookJsonTemplate') || 'Webhook JSON 格式',
+                    description:
+                        i18n('reminderWebhookJsonTemplateDesc') ||
+                        '自定义 POST 的 JSON 请求体，支持 ${message}；清空后使用默认 text 消息格式。',
+                    direction: 'column',
                 },
                 {
                     key: 'dailyNotificationTime',
@@ -1763,6 +1808,12 @@
                     newValue = DEFAULT_SETTINGS[key];
                 }
             }
+        } else if (key === 'reminderWebhookUrl' && typeof value === 'string') {
+            newValue = value.trim();
+        } else if (key === 'reminderWebhookJsonTemplate' && typeof value !== 'string') {
+            newValue = '';
+        } else if (key === 'habitMemoSyncTemplate' && typeof value !== 'string') {
+            newValue = DEFAULT_SETTINGS.habitMemoSyncTemplate;
         }
 
         // 更新设置并保存
@@ -2068,6 +2119,10 @@
             // WebDAV 配置显示条件
             if (['webdavUrl', 'webdavUsername', 'webdavPassword'].includes(item.key)) {
                 updated.hidden = settings.icsSyncMethod !== 'webdav';
+            }
+
+            if (['reminderWebhookUrl', 'reminderWebhookJsonTemplate'].includes(item.key)) {
+                updated.disabled = settings.reminderWebhookEnabled !== true;
             }
 
             return updated;
