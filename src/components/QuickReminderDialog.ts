@@ -7,7 +7,7 @@ import { HabitGroupManager } from "../utils/habitGroupManager";
 import { i18n } from "../pluginInstance";
 import { RepeatSettingsDialog, RepeatConfig } from "./RepeatSettingsDialog";
 import { ProjectSelectorPopup } from "./ProjectSelectorPopup";
-import { getRepeatDescription, getDaysDifference, getReminderTaskDurationDays } from "../utils/repeatUtils";
+import { getRepeatDescription, getDaysDifference, getReminderTaskDurationDays, generateRepeatInstances } from "../utils/repeatUtils";
 import { CategoryManageDialog } from "./CategoryManageDialog";
 import { BlockBindingDialog } from "./BlockBindingDialog";
 import { SubtasksDialog } from "./SubtasksDialog";
@@ -261,6 +261,8 @@ export class QuickReminderDialog {
     private projectSelectorPopup?: ProjectSelectorPopup;
     private subtasksDialog?: SubtasksDialog;
     private activeDialogTab: 'task' | 'subtasks' = 'task';
+    private editFutureInstancesOnly: boolean = false;
+    private futureEditOriginalReminder?: any;
 
 
     constructor(
@@ -297,6 +299,8 @@ export class QuickReminderDialog {
             dateOnly?: boolean; // 是否只显示日期相关设置
             eventSource?: string; // reminderUpdated 事件来源
             tempParentName?: string;
+            editFutureInstancesOnly?: boolean; // 从重复实例进入系列编辑，以当前实例作为新的系列起点
+            futureEditOriginalReminder?: any; // 后续实例编辑前的原始系列快照
         }
     ) {
         this.initialDate = date;
@@ -344,6 +348,8 @@ export class QuickReminderDialog {
             this.dateOnly = options.dateOnly || false;
             this.eventSource = options.eventSource;
             this.tempParentName = options.tempParentName;
+            this.editFutureInstancesOnly = options.editFutureInstancesOnly || false;
+            this.futureEditOriginalReminder = options.futureEditOriginalReminder;
         }
 
         // 如果是编辑模式，确保有reminder
@@ -6146,6 +6152,7 @@ export class QuickReminderDialog {
             optimisticReminder.hideInCalendar = hideInCalendar;
             this.applyStartDateOnlyOverdueOverride(optimisticReminder, date, endDate);
             this.applyReminderSkipDateOverrides(optimisticReminder);
+            this.applyCompletedInstanceSnapshots({}, optimisticReminder);
 
             // 同步 docId 用于 UI 显示
             optimisticReminder.docId = optimisticDocId !== null ? optimisticDocId : (this.reminder?.docId || undefined);
@@ -6399,6 +6406,8 @@ export class QuickReminderDialog {
                             }
                         }
 
+                        this.applyCompletedInstanceSnapshots(reminderData, reminder);
+
                         // 不在编辑时修改已提醒标志（notifiedTime / notifiedCustomTime）。
                         // 过去的提醒无需在编辑时处理，未来的提醒将在未来正常触发，
                         // 所以这里保留原有的 notified 字段值，不做重置或计算。
@@ -6408,7 +6417,7 @@ export class QuickReminderDialog {
 
                         // 更新移动端定时通知
                         try {
-                            await this.plugin.updateMobileNotification(reminder, this.reminder);
+                            await this.plugin.updateMobileNotification(reminder, this.futureEditOriginalReminder || this.reminder);
                         } catch (e) {
                             console.warn('更新移动端通知失败:', e);
                         }
@@ -7118,6 +7127,268 @@ export class QuickReminderDialog {
     }
 
     /**
+     * 构造从当前实例继续编辑的系列模板：保留原任务 ID，但用当前实例作为新的系列起点。
+     */
+    private createFutureSeriesEditReminder(originalTask: any, instanceTask: any, instanceDate: string): any {
+        const clone = this.clonePlainValue(originalTask);
+        const futureTask = {
+            ...clone,
+            id: originalTask.id,
+            repeat: this.clonePlainValue(originalTask.repeat),
+            completed: originalTask.completed || false
+        };
+
+        const editableFields = [
+            'title',
+            'date',
+            'endDate',
+            'time',
+            'endTime',
+            'blockId',
+            'docId',
+            'url',
+            'note',
+            'priority',
+            'categoryId',
+            'projectId',
+            'linkedHabitId',
+            'linkedHabitSyncPomodoroToday',
+            'linkedHabitAutoCheckInOnComplete',
+            'linkedHabitAutoCheckInOptionKey',
+            'linkedHabitAutoCheckInEmoji',
+            'customGroupId',
+            'milestoneId',
+            'kanbanStatus',
+            'tagIds',
+            'reminderTimes',
+            'estimatedPomodoroDuration',
+            'customProgress',
+            'isAvailableToday',
+            'availableStartDate',
+            'hideInCalendar',
+            'pinned',
+            'treatStartDateAsDeadline',
+            'reminderSkipWeekendMode',
+            'reminderSkipHolidays'
+        ];
+
+        editableFields.forEach((field) => {
+            if (Object.prototype.hasOwnProperty.call(instanceTask, field)) {
+                futureTask[field] = this.clonePlainValue(instanceTask[field]);
+            }
+        });
+
+        futureTask.date = futureTask.date || instanceDate;
+        delete futureTask.originalId;
+        delete futureTask.instanceDate;
+        delete futureTask.isInstance;
+        delete futureTask.isRepeatInstance;
+        delete futureTask.isRepeatedInstance;
+        delete futureTask.completedTime;
+
+        return futureTask;
+    }
+
+    private clonePlainValue(value: any): any {
+        if (value === undefined) return undefined;
+        try {
+            return JSON.parse(JSON.stringify(value));
+        } catch (_error) {
+            return value;
+        }
+    }
+
+    private getRepeatInstanceOriginalDateKey(instance: any): string {
+        if (instance?.instanceDate) return instance.instanceDate;
+        const instanceId = instance?.instanceId || instance?.id;
+        if (typeof instanceId === 'string') {
+            const lastUnderscoreIndex = instanceId.lastIndexOf('_');
+            if (lastUnderscoreIndex !== -1) {
+                const potentialDate = instanceId.substring(lastUnderscoreIndex + 1);
+                if (/^\d{4}-\d{2}-\d{2}$/.test(potentialDate)) {
+                    return potentialDate;
+                }
+            }
+        }
+        return instance?.date;
+    }
+
+    private createInstanceLikeFromModification(originalReminder: any, originalDateKey: string, modification: any): any | null {
+        if (modification && Object.prototype.hasOwnProperty.call(modification, 'date') && modification.date === null) {
+            return null;
+        }
+
+        const repeat = originalReminder.repeat || {};
+        const completedInstances = repeat.completedInstances || [];
+        const completedTimes = repeat.instanceCompletedTimes || repeat.completedTimes || {};
+        return {
+            ...originalReminder,
+            ...(modification || {}),
+            date: modification?.date || originalDateKey,
+            instanceId: `${originalReminder.id}_${originalDateKey}`,
+            originalId: originalReminder.id,
+            completed: completedInstances.includes(originalDateKey),
+            completedTime: modification?.completedTime || completedTimes[originalDateKey]
+        };
+    }
+
+    private getHistoricalInstancesByKey(originalReminder: any, candidateKeys: Set<string>): Map<string, any> {
+        const instancesByKey = new Map<string, any>();
+        const sortedKeys = Array.from(candidateKeys).filter(Boolean).sort();
+        const rangeStart = sortedKeys[0];
+        const rangeEnd = sortedKeys[sortedKeys.length - 1];
+        if (!rangeStart || compareDateStrings(rangeEnd, rangeStart) < 0) {
+            return instancesByKey;
+        }
+
+        try {
+            const maxInstances = Math.max(getDaysDifference(rangeStart, rangeEnd) + sortedKeys.length + 10, 100);
+            const historicalInstances = generateRepeatInstances(originalReminder, rangeStart, rangeEnd, maxInstances);
+            historicalInstances.forEach((instance: any) => {
+                const originalKey = this.getRepeatInstanceOriginalDateKey(instance);
+                if (originalKey && candidateKeys.has(originalKey)) {
+                    instancesByKey.set(originalKey, instance);
+                }
+            });
+        } catch (error) {
+            console.warn('生成历史重复实例快照失败:', error);
+        }
+
+        return instancesByKey;
+    }
+
+    private setSnapshotField(snapshot: any, field: string, value: any): void {
+        snapshot[field] = value === undefined ? null : this.clonePlainValue(value);
+    }
+
+    private buildFrozenHistoryModification(originalReminder: any, instance: any, originalDateKey: string): any {
+        const repeat = originalReminder.repeat || {};
+        const completedTimes = repeat.instanceCompletedTimes || repeat.completedTimes || {};
+        const snapshot: any = {
+            preservedFromSeriesEdit: true,
+            title: instance.title || originalReminder.title || '(无标题)',
+            date: instance.date || originalDateKey,
+            modifiedAt: new Date().toISOString().split('T')[0]
+        };
+
+        [
+            'endDate',
+            'time',
+            'endTime',
+            'blockId',
+            'docId',
+            'url',
+            'note',
+            'priority',
+            'categoryId',
+            'projectId',
+            'linkedHabitId',
+            'linkedHabitSyncPomodoroToday',
+            'linkedHabitAutoCheckInOnComplete',
+            'linkedHabitAutoCheckInOptionKey',
+            'linkedHabitAutoCheckInEmoji',
+            'customGroupId',
+            'milestoneId',
+            'kanbanStatus',
+            'tagIds',
+            'reminderTimes',
+            'customReminderPreset',
+            'estimatedPomodoroDuration',
+            'customProgress',
+            'isAvailableToday',
+            'availableStartDate',
+            'hideInCalendar',
+            'pinned',
+            'treatStartDateAsDeadline',
+            'reminderSkipWeekendMode',
+            'reminderSkipHolidays',
+            'sort'
+        ].forEach((field) => {
+            this.setSnapshotField(snapshot, field, instance[field]);
+        });
+
+        const completedTime = instance.completedTime || completedTimes[originalDateKey];
+        if (completedTime) {
+            snapshot.completedTime = completedTime;
+        }
+
+        return snapshot;
+    }
+
+    private mergeRepeatHistoryMetadata(targetRepeat: any, sourceRepeat: any): void {
+        const mergeArray = (key: string) => {
+            if (!Array.isArray(sourceRepeat?.[key])) return;
+            const current = Array.isArray(targetRepeat[key]) ? targetRepeat[key] : [];
+            targetRepeat[key] = Array.from(new Set([...current, ...sourceRepeat[key]]));
+        };
+
+        const mergeRecord = (key: string) => {
+            if (!sourceRepeat?.[key] || typeof sourceRepeat[key] !== 'object') return;
+            targetRepeat[key] = {
+                ...(sourceRepeat[key] || {}),
+                ...(targetRepeat[key] || {})
+            };
+        };
+
+        mergeArray('completedInstances');
+        mergeArray('excludeDates');
+        mergeRecord('completedTimes');
+        mergeRecord('instanceCompletedTimes');
+    }
+
+    private applyCompletedInstanceSnapshots(_reminderData: any, updatedReminder: any): void {
+        if (this.isInstanceEdit && this.reminder?.isInstance && !this.editFutureInstancesOnly) {
+            return;
+        }
+        if (!updatedReminder?.repeat?.enabled) {
+            return;
+        }
+
+        const originalReminder = this.futureEditOriginalReminder || this.reminder;
+        if (!originalReminder?.repeat?.enabled) {
+            return;
+        }
+
+        const originalRepeat = originalReminder.repeat || {};
+        const completedInstances = Array.isArray(originalRepeat.completedInstances) ? originalRepeat.completedInstances : [];
+        const existingModifications = originalRepeat.instanceModifications || {};
+        const candidateKeys = new Set<string>();
+
+        completedInstances.forEach((dateKey: string) => {
+            if (/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+                candidateKeys.add(dateKey);
+            }
+        });
+
+        Object.entries(existingModifications).forEach(([dateKey, modification]: [string, any]) => {
+            if (modification?.preservedFromSeriesEdit) {
+                candidateKeys.add(dateKey);
+            }
+        });
+
+        if (candidateKeys.size === 0) {
+            this.mergeRepeatHistoryMetadata(updatedReminder.repeat, originalRepeat);
+            return;
+        }
+
+        if (!updatedReminder.repeat.instanceModifications) {
+            updatedReminder.repeat.instanceModifications = {};
+        } else {
+            updatedReminder.repeat.instanceModifications = { ...updatedReminder.repeat.instanceModifications };
+        }
+
+        this.mergeRepeatHistoryMetadata(updatedReminder.repeat, originalRepeat);
+        const historicalInstances = this.getHistoricalInstancesByKey(originalReminder, candidateKeys);
+
+        candidateKeys.forEach((dateKey) => {
+            const instance = historicalInstances.get(dateKey) ||
+                this.createInstanceLikeFromModification(originalReminder, dateKey, existingModifications[dateKey]);
+            if (!instance) return;
+            updatedReminder.repeat.instanceModifications[dateKey] = this.buildFrozenHistoryModification(originalReminder, instance, dateKey);
+        });
+    }
+
+    /**
      * 编辑所有实例
      */
     private async editAllInstances() {
@@ -7135,21 +7406,28 @@ export class QuickReminderDialog {
                 return;
             }
 
-            // 创建新的QuickReminderDialog来编辑原始任务（非实例编辑模式）
+            const originalSnapshot = this.clonePlainValue(originalTask);
+            const reminderForEdit = this.instanceDate
+                ? this.createFutureSeriesEditReminder(originalSnapshot, this.reminder, this.instanceDate)
+                : originalSnapshot;
+
+            // 创建新的QuickReminderDialog来编辑系列模板；从重复实例进入时，已完成实例会在保存时自动保留。
             const allInstancesDialog = new QuickReminderDialog(
-                originalTask.date,
-                originalTask.time,
+                reminderForEdit.date,
+                reminderForEdit.time,
                 undefined,
-                originalTask.endDate ? {
+                reminderForEdit.endDate ? {
                     isTimeRange: true,
-                    endDate: originalTask.endDate,
-                    endTime: originalTask.endTime
+                    endDate: reminderForEdit.endDate,
+                    endTime: reminderForEdit.endTime
                 } : undefined,
                 {
-                    reminder: originalTask,
+                    reminder: reminderForEdit,
                     mode: 'edit',
                     plugin: this.plugin,
                     isInstanceEdit: false, // 明确设置为非实例编辑模式，即修改所有实例
+                    editFutureInstancesOnly: !!this.instanceDate,
+                    futureEditOriginalReminder: this.instanceDate ? originalSnapshot : undefined,
                     eventSource: this.eventSource,
                     onSaved: async () => {
                         window.dispatchEvent(new CustomEvent('reminderUpdated', {
