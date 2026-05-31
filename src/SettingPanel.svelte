@@ -202,8 +202,9 @@
             settings.audioSelected[key] = remaining.length > 0 ? remaining[0].path : '';
         }
 
-        await saveSettings();
+        settings = settings;
         updateGroupItems();
+        await saveSettings();
     }
 
     async function downloadOnlineAudio(url: string, key: string) {
@@ -276,8 +277,9 @@
             if (!settings.audioSelected) settings.audioSelected = {};
             settings.audioSelected[key] = localUrl;
 
-            saveSettings();
+            settings = settings;
             updateGroupItems();
+            saveSettings();
             return; // downloadOnlineAudio 已处理列表状态，此处直接返回
         }
 
@@ -288,8 +290,9 @@
         } else {
             settings.audioSelected[key] = value; // 选中
         }
-        saveSettings();
+        settings = settings;
         updateGroupItems();
+        saveSettings();
     }
 
     async function toggleAudio(path: string, volume: number = 1) {
@@ -355,8 +358,9 @@
                     settings.audioSelected[settingKey] = firstUrl;
                 }
                 settings.audioFileLists[settingKey] = list;
-                saveSettings();
+                settings = settings;
                 updateGroupItems();
+                saveSettings();
             })
             .catch(() => {})
             .finally(() => {
@@ -590,7 +594,7 @@
                         i18n('habitMemoSyncTemplateDesc') ||
                         '用于习惯打卡同步到块的 Markdown 模板。支持变量：${date}、${time}、${dateTime}、${habitName}、${habitCheckinEmoji}、${habitCheckinMeaning}、${habitMemo}。清空后使用默认模板。',
                     placeholder: DEFAULT_SETTINGS.habitMemoSyncTemplate,
-                    direction: 'column',
+                    direction: 'row',
                 },
             ],
         },
@@ -645,7 +649,7 @@
                     description:
                         i18n('reminderWebhookJsonTemplateDesc') ||
                         '自定义 POST 的 JSON 请求体，支持 ${message}；清空后使用默认 text 消息格式。',
-                    direction: 'column',
+                    direction: 'row',
                 },
                 {
                     key: 'dailyNotificationTime',
@@ -1749,6 +1753,7 @@
                         ...currentDatatransfer,
                     },
                 };
+                updateGroupItems();
 
                 await saveSettings();
 
@@ -1763,7 +1768,6 @@
                 }
 
                 await applyProjectKanbanDisplaySettingsToAllProjects();
-                updateGroupItems();
                 await pushMsg(i18n('defaultSettingsRestored') || '设置已恢复默认值');
             },
             async () => {}
@@ -1825,6 +1829,7 @@
 
         settings[key] = newValue;
         settings = settings; // 触发布尔响应式（如果需要）
+        updateGroupItems(); // 同步更新 UI 数据，避免异步保存期间 UI 反弹/闪烁
 
         // 特殊逻辑：一天起始时间变更
         if (key === 'todayStartTime' && oldValue !== newValue) {
@@ -1907,7 +1912,6 @@
         if (isProjectKanbanDisplaySettingKey(key)) {
             await applyProjectKanbanDisplaySettingsToAllProjects();
         }
-        updateGroupItems();
     };
 
     async function saveSettings(emitEvent = true) {
