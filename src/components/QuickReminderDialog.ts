@@ -6002,7 +6002,7 @@ export class QuickReminderDialog {
         // 验证结束日期时间不能早于开始日期时间
         if (endDate && date) {
             const startDateTime = time ? `${date}T${time}` : `${date}T00:00:00`;
-            const endDateTime = endTime ? `${endDate}T${endTime}` : `${endDate}T00:00:00`;
+            const endDateTime = endTime ? `${endDate}T${endTime}` : `${endDate}T23:59:59`;
 
             if (new Date(endDateTime) < new Date(startDateTime)) {
                 showMessage(i18n("endDateCannotBeEarlier"));

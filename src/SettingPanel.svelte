@@ -56,7 +56,7 @@
         if (!id) return i18n('noUnassignedTasksProject') || '无';
         const projectManager = ProjectManager.getInstance(plugin);
         const project = projectManager.getProjectById(id);
-        return project ? project.name : (i18n('noUnassignedTasksProject') || '无');
+        return project ? project.name : i18n('noUnassignedTasksProject') || '无';
     }
 
     function toggleDropdown(event: MouseEvent, key: string) {
@@ -91,17 +91,20 @@
                     detail: {
                         group: '🗂️项目设置',
                         key: 'unassignedTasksProjectId',
-                        value: projectId
-                    }
+                        value: projectId,
+                    },
                 } as any);
-            }
+            },
         });
         popup.initialize().then(() => {
             activePopup = popup;
         });
 
         const clickOutside = (e: MouseEvent) => {
-            if (!node.contains(e.target as Node) && !(e.target as HTMLElement).closest('.custom-select')) {
+            if (
+                !node.contains(e.target as Node) &&
+                !(e.target as HTMLElement).closest('.custom-select')
+            ) {
                 closeDropdown();
             }
         };
@@ -111,7 +114,7 @@
         return {
             destroy() {
                 document.removeEventListener('click', clickOutside);
-            }
+            },
         };
     }
 
@@ -1999,7 +2002,7 @@
             const projects = projectManager.getProjects();
             projectsList = projects.map((project: any) => ({
                 id: project.id,
-                name: project.name || project.id
+                name: project.name || project.id,
             }));
         } catch (error) {
             console.error('加载项目列表失败:', error);
@@ -2066,7 +2069,7 @@
                 // 为无项目的任务归属项目选择器更新选项
                 if (item.key === 'unassignedTasksProjectId') {
                     const optionsObj: { [key: string]: string } = {
-                        '': i18n('noUnassignedTasksProject') || '无'
+                        '': i18n('noUnassignedTasksProject') || '无',
                     };
                     projectsList.forEach(project => {
                         optionsObj[project.id] = project.name;
@@ -2124,7 +2127,6 @@
             if (['webdavUrl', 'webdavUsername', 'webdavPassword'].includes(item.key)) {
                 updated.hidden = settings.icsSyncMethod !== 'webdav';
             }
-
 
             return updated;
         }),
@@ -2677,18 +2679,26 @@
                                 direction={item?.direction}
                             >
                                 {#if item.type === 'project-selector'}
-                                    <div class="custom-select" style="position: relative; width: 300px;">
+                                    <div
+                                        class="custom-select"
+                                        style="position: relative; width: 300px;"
+                                    >
                                         <div style="position: relative;">
                                             <input
                                                 type="text"
                                                 class="b3-text-field"
                                                 style="cursor: pointer; width: 100%; box-sizing: border-box; padding-right: 28px;"
                                                 readonly
-                                                value={getProjectNameById(settings.unassignedTasksProjectId)}
-                                                placeholder={i18n('pleaseSelectProject') || '请选择项目'}
-                                                on:click={(e) => toggleDropdown(e, item.key)}
+                                                value={getProjectNameById(
+                                                    settings.unassignedTasksProjectId
+                                                )}
+                                                placeholder={i18n('pleaseSelectProject') ||
+                                                    '请选择项目'}
+                                                on:click={e => toggleDropdown(e, item.key)}
                                             />
-                                            <svg style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 12px; height: 12px; pointer-events: none; opacity: 0.5;">
+                                            <svg
+                                                style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 12px; height: 12px; pointer-events: none; opacity: 0.5;"
+                                            >
                                                 <use xlink:href="#iconDown"></use>
                                             </svg>
                                         </div>
