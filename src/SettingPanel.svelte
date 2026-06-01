@@ -651,7 +651,7 @@
                     title: i18n('reminderWebhookJsonTemplate') || 'Webhook JSON 格式',
                     description:
                         i18n('reminderWebhookJsonTemplateDesc') ||
-                        '自定义 POST 的 JSON 请求体，支持 ${title} 和 ${message}；清空后使用默认 text 消息格式。',
+                        '自定义 POST 的 JSON 请求体，变量: ${title} 和 ${message}；清空后使用默认 text 消息格式。',
                     direction: 'row',
                 },
                 {
