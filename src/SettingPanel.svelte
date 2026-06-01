@@ -645,6 +645,37 @@
                         '开启 Webhook 通知后对指定URL进行通知。',
                 },
                 {
+                    key: 'testWebhook',
+                    value: '',
+                    type: 'button',
+                    title: i18n('testWebhook') || '测试 Webhook',
+                    description: i18n('testWebhookDesc') || '发送一条测试 Webhook 消息以验证配置。',
+                    button: {
+                        label: i18n('test') || '测试',
+                        callback: async () => {
+                            if (!settings.reminderWebhookUrl) {
+                                await pushErrMsg(i18n('webhookUrlRequired') || '请先填写 Webhook 地址');
+                                return;
+                            }
+                            await pushMsg(i18n('webhookTesting') || '正在发送测试 Webhook...');
+                            try {
+                                const success = await plugin.sendTestWebhook(
+                                    settings.reminderWebhookUrl,
+                                    settings.reminderWebhookJsonTemplate
+                                );
+                                if (success) {
+                                    await pushMsg(i18n('webhookTestSuccess') || 'Webhook 测试成功！');
+                                } else {
+                                    await pushErrMsg(i18n('webhookTestFailed') || 'Webhook 测试失败');
+                                }
+                            } catch (error: any) {
+                                console.error('Webhook测试异常:', error);
+                                await pushErrMsg((i18n('webhookTestFailed') || 'Webhook 测试失败') + ': ' + (error.message || String(error)));
+                            }
+                        },
+                    },
+                },
+                {
                     key: 'reminderWebhookJsonTemplate',
                     value: settings.reminderWebhookJsonTemplate,
                     type: 'textarea',

@@ -2221,5 +2221,14 @@
     "reminderWebhookUrlDesc": "The URL to send notifications to when Webhook Notifications are enabled.",
     "reminderWebhookJsonTemplate": "Webhook JSON Template",
     "reminderWebhookJsonTemplateDesc": "Customize the POST JSON request body. Variables: ${title} and ${message}. Leave empty to use the default text message format.",
-    "statusTabsMode": "Use Tabs for Status Board"
+    "statusTabsMode": "Use Tabs for Status Board",
+    "testWebhook": "Test Webhook",
+    "testWebhookDesc": "Send a test Webhook message to verify the configuration.",
+    "test": "Test",
+    "testWebhookTitle": "Webhook Test",
+    "testWebhookMessage": "This is a test Webhook message from the SiYuan task note management plugin.",
+    "webhookUrlRequired": "Please fill in the Webhook URL first",
+    "webhookTesting": "Sending test Webhook...",
+    "webhookTestSuccess": "Webhook test successful!",
+    "webhookTestFailed": "Webhook test failed"
 }

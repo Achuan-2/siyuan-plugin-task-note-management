@@ -2082,6 +2082,50 @@ export default class ReminderPlugin extends Plugin {
         }
     }
 
+    public async sendTestWebhook(url: string, template: string): Promise<boolean> {
+        try {
+            const testTitle = i18n('testWebhookTitle') || 'Webhook 测试';
+            const testMessage = i18n('testWebhookMessage') || '这是一条来自思源笔记任务管理插件的测试 Webhook 消息。';
+            const event = 'test';
+            const sentAt = new Date().toISOString();
+            const payload = this.buildWebhookPayload(
+                testTitle,
+                testMessage,
+                event,
+                sentAt,
+                template,
+                {}
+            );
+            if (!payload) {
+                throw new Error('Payload generation failed (invalid template)');
+            }
+
+            const controller = new AbortController();
+            const timeout = window.setTimeout(() => controller.abort(), 8000);
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload),
+                    signal: controller.signal,
+                });
+
+                if (!response.ok) {
+                    console.warn(`Webhook 测试发送失败: HTTP ${response.status}`);
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                return true;
+            } finally {
+                window.clearTimeout(timeout);
+            }
+        } catch (error: any) {
+            console.error('Webhook test error:', error);
+            throw error;
+        }
+    }
+
     // 获取通知声音设置
     async getNotificationSound(): Promise<string> {
         const settings = await this.loadSettings();
