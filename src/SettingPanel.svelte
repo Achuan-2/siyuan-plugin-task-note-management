@@ -642,7 +642,7 @@
                     title: i18n('reminderWebhookUrl') || 'Webhook 地址',
                     description:
                         i18n('reminderWebhookUrlDesc') ||
-                        '开启 Webhook 通知后使用，通知内容包含 title、message、event、reminder/reminders 等字段。',
+                        '开启 Webhook 通知后对指定URL进行通知。',
                 },
                 {
                     key: 'reminderWebhookJsonTemplate',
