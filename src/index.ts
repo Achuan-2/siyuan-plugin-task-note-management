@@ -249,7 +249,7 @@ export const DEFAULT_SETTINGS = {
     showInternalNotification: false, // 新增：是否显示内部通知框
     reminderWebhookEnabled: false, // 是否启用 Webhook 通知
     reminderWebhookUrl: '', // Webhook 通知 URL
-    reminderWebhookJsonTemplate: '{\n    "msg_type": "text",\n    "content": {\n        "text": "${message}"\n    }\n}', // Webhook 自定义 JSON 请求体模板
+    reminderWebhookJsonTemplate: '{\n    "msg_type": "text",\n    "content": {\n        "text": "${title}\\n${message}"\n    }\n}', // Webhook 自定义 JSON 请求体模板
     dailyNotificationTime: '08:00', // 新增：每日通知时间，默认08:00
     dailyNotificationEnabled: false, // 新增：是否启用每日统一通知
     randomRestEnabled: false,
@@ -1765,6 +1765,11 @@ export default class ReminderPlugin extends Plugin {
         settings.reminderWebhookJsonTemplate = typeof settings.reminderWebhookJsonTemplate === 'string'
             ? settings.reminderWebhookJsonTemplate
             : '';
+        const oldDefaultWebhookTemplate = '{\n    "msg_type": "text",\n    "content": {\n        "text": "${message}"\n    }\n}';
+        const newDefaultWebhookTemplate = '{\n    "msg_type": "text",\n    "content": {\n        "text": "${title}\\n${message}"\n    }\n}';
+        if (settings.reminderWebhookJsonTemplate === oldDefaultWebhookTemplate) {
+            settings.reminderWebhookJsonTemplate = newDefaultWebhookTemplate;
+        }
         settings.habitMemoSyncTemplate = typeof settings.habitMemoSyncTemplate === 'string'
             ? settings.habitMemoSyncTemplate
             : DEFAULT_SETTINGS.habitMemoSyncTemplate;
