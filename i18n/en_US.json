@@ -2214,5 +2214,12 @@
     "default": "Default",
     "visibleStatusesForGroupHint": "Unchecked statuses will be hidden in this group",
     "openFolderKanban": "Open Folder Kanban",
-    "mergeSuccess": "Merged successfully"
+    "mergeSuccess": "Merged successfully",
+    "reminderWebhookEnabled": "Enable Webhook Notifications",
+    "reminderWebhookEnabledDesc": "When a task or habit reminder triggers, send a POST JSON notification to the specified URL.",
+    "reminderWebhookUrl": "Webhook URL",
+    "reminderWebhookUrlDesc": "The URL to send notifications to when Webhook Notifications are enabled.",
+    "reminderWebhookJsonTemplate": "Webhook JSON Template",
+    "reminderWebhookJsonTemplateDesc": "Customize the POST JSON request body. Variables: ${title} and ${message}. Leave empty to use the default text message format.",
+    "statusTabsMode": "Use Tabs for Status Board"
 }

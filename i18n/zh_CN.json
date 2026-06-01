@@ -1937,10 +1937,10 @@
     "freqWeekdays": "每周${days}",
     "freqEveryNWeeks": "每${n}周",
     "freqEveryWeek": "每周",
-    "freqMonthDays": "每月${days}日",
+    "freqMonthDays": "每月${days}号",
     "freqEveryNMonths": "每${n}月",
     "freqEveryMonth": "每月",
-    "freqYearMonthDays": "每年${months}月的${days}日",
+    "freqYearMonthDays": "每年${months}月的${days}号",
     "freqYearMonths": "每年${months}月",
     "freqEveryNYears": "每${n}年",
     "freqEveryYear": "每年",
@@ -2214,5 +2214,12 @@
     "default": "默认",
     "visibleStatusesForGroupHint": "未勾选的状态将在该分组里隐藏",
     "openFolderKanban": "打开文件夹看板",
-    "mergeSuccess": "合并成功"
+    "mergeSuccess": "合并成功",
+    "reminderWebhookEnabled": "启用 Webhook 通知",
+    "reminderWebhookEnabledDesc": "任务/习惯提醒触发时，向指定 URL 发送 POST JSON 通知。",
+    "reminderWebhookUrl": "Webhook 地址",
+    "reminderWebhookUrlDesc": "开启 Webhook 通知后对指定URL进行通知。",
+    "reminderWebhookJsonTemplate": "Webhook JSON 格式",
+    "reminderWebhookJsonTemplateDesc": "自定义 POST 的 JSON 请求体，变量: ${title} 和 ${message}；清空后使用默认 text 消息格式。",
+    "statusTabsMode": "状态看板使用页签显示"
 }

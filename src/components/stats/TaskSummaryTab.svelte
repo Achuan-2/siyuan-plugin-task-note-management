@@ -1228,7 +1228,9 @@
                         const keys = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
                         return i18n(keys[d]);
                     }).join("、");
-                    return `🔄 ${i18n("weekly") || "每周"} (${days})`;
+                    return interval === 1
+                        ? `🔄 ${i18n("weekly") || "每周"} (${days})`
+                        : `🔄 ${i18n("every") || "每"}${interval}${i18n("weeks") || "周"} (${days})`;
                 }
                 if (startDate) {
                     try {
@@ -1243,7 +1245,10 @@
             }
             case "monthly": {
                 if (repeat.monthDays && repeat.monthDays.length > 0) {
-                    return `🔄 ${i18n("monthly") || "每月"} (${repeat.monthDays.join("、")}${i18n("day") || "日"})`;
+                    const days = `${repeat.monthDays.join("、")}号`;
+                    return interval === 1
+                        ? `🔄 ${i18n("monthly") || "每月"} (${days})`
+                        : `🔄 ${i18n("every") || "每"}${interval}${i18n("months") || "月"} (${days})`;
                 }
                 return interval === 1 ? `🔄 ${i18n("monthly") || "每月"}` : `🔄 ${i18n("every") || "每"}${interval}${i18n("months") || "月"}`;
             }
@@ -1256,7 +1261,7 @@
                     parts.push(`${i18n("weekly") || "每周"}(${days.join("、")})`);
                 }
                 if (repeat.monthDays && repeat.monthDays.length) {
-                    parts.push(`${i18n("monthly") || "每月"}(${repeat.monthDays.join("、")}${i18n("day") || "日"})`);
+                    parts.push(`${i18n("monthly") || "每月"}(${repeat.monthDays.join("、")}号)`);
                 }
                 if (repeat.months && repeat.months.length) {
                     parts.push(`${i18n("yearly") || "每年"}(${repeat.months.join("、")}${i18n("month") || "月"})`);

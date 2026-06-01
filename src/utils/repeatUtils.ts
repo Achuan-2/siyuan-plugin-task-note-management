@@ -666,19 +666,22 @@ export function getRepeatDescription(repeatConfig: RepeatConfig): string {
             break;
         case 'weekly':
             if (repeatConfig.weekDays && repeatConfig.weekDays.length > 0) {
-                const dayNames = [i18n("sun"), i18n("mon"), i18n("tue"), i18n("wed"), i18n("thu"), i18n("fri"), i18n("sat")];
-                const days = repeatConfig.weekDays.map(d => dayNames[d]).join(',');
-                description = `每周${days}`;
+                const keys = interval === 1
+                    ? ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]
+                    : ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+                const dayNames = keys.map(k => i18n(k));
+                const days = repeatConfig.weekDays.map(d => dayNames[d]).join('、');
+                description = interval === 1 ? `每周${days}` : `每${interval}周的${days}`;
             } else {
                 description = interval === 1 ? i18n("everyWeek") : i18n("everyNWeeks", { n: interval.toString() });
             }
             break;
         case 'monthly':
             if (repeatConfig.monthDays && repeatConfig.monthDays.length > 0) {
-                const monthDaysText = repeatConfig.monthDays.join(',');
+                const monthDaysText = repeatConfig.monthDays.join('、');
                 description = interval === 1
-                    ? `每月${monthDaysText}日`
-                    : `每${interval}个月的${monthDaysText}日`;
+                    ? `每月${monthDaysText}号`
+                    : `每${interval}个月的${monthDaysText}号`;
             } else {
                 description = interval === 1 ? i18n("everyMonth") : i18n("everyNMonths", { n: interval.toString() });
             }
@@ -686,7 +689,7 @@ export function getRepeatDescription(repeatConfig: RepeatConfig): string {
         case 'yearly':
             if (repeatConfig.months && repeatConfig.months.length > 0 &&
                 repeatConfig.monthDays && repeatConfig.monthDays.length > 0) {
-                description = `每年${repeatConfig.months[0]}月${repeatConfig.monthDays[0]}日`;
+                description = `每年${repeatConfig.months[0]}月${repeatConfig.monthDays[0]}号`;
             } else {
                 description = interval === 1 ? i18n("everyYear") : i18n("everyNYears", { n: interval.toString() });
             }
