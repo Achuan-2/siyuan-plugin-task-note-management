@@ -97,6 +97,49 @@ export const PROJECT_KANBAN_TAB_TYPE = "project_kanban_tab";
 const POMODORO_TAB_TYPE = "pomodoro_timer_tab";
 export const STORAGE_NAME = "siyuan-plugin-task-note-management";
 
+export const WEBHOOK_JSON_TYPES = ['feishu', 'wecom', 'custom'] as const;
+export type ReminderWebhookJsonType = (typeof WEBHOOK_JSON_TYPES)[number];
+
+export const WEBHOOK_JSON_TEMPLATES: Record<Exclude<ReminderWebhookJsonType, 'custom'>, string> = {
+    feishu: '{\n    "msg_type": "text",\n    "content": {\n        "text": "${title}\\n${message}"\n    }\n}',
+    wecom: '{\n    "msgType": "text",\n    "text": {\n        "content": "${title}\\n${message}"\n    }\n}',
+};
+
+const DEFAULT_WEBHOOK_JSON_TYPE: ReminderWebhookJsonType = 'feishu';
+
+function isReminderWebhookJsonType(value: unknown): value is ReminderWebhookJsonType {
+    return typeof value === 'string' && WEBHOOK_JSON_TYPES.includes(value as ReminderWebhookJsonType);
+}
+
+function normalizeReminderWebhookJsonType(value: unknown): ReminderWebhookJsonType {
+    return isReminderWebhookJsonType(value) ? value : DEFAULT_WEBHOOK_JSON_TYPE;
+}
+
+function normalizeWebhookTemplateText(value: string): string {
+    return value.replace(/\r\n/g, '\n').trim();
+}
+
+function inferReminderWebhookJsonType(jsonTemplate: string): ReminderWebhookJsonType {
+    const normalizedTemplate = normalizeWebhookTemplateText(jsonTemplate);
+    if (!normalizedTemplate || normalizedTemplate === normalizeWebhookTemplateText(WEBHOOK_JSON_TEMPLATES.feishu)) {
+        return 'feishu';
+    }
+    if (normalizedTemplate === normalizeWebhookTemplateText(WEBHOOK_JSON_TEMPLATES.wecom)) {
+        return 'wecom';
+    }
+    return 'custom';
+}
+
+function resolveReminderWebhookJsonTemplate(jsonType: unknown, customTemplate: unknown): string {
+    const normalizedType = normalizeReminderWebhookJsonType(jsonType);
+    if (normalizedType !== 'custom') {
+        return WEBHOOK_JSON_TEMPLATES[normalizedType];
+    }
+    return typeof customTemplate === 'string' && customTemplate.trim()
+        ? customTemplate
+        : WEBHOOK_JSON_TEMPLATES.feishu;
+}
+
 export interface BoundReminderDateDisplayInfo {
     reminderId: string;
     displayText: string;
@@ -249,7 +292,8 @@ export const DEFAULT_SETTINGS = {
     showInternalNotification: false, // 新增：是否显示内部通知框
     reminderWebhookEnabled: false, // 是否启用 Webhook 通知
     reminderWebhookUrl: '', // Webhook 通知 URL
-    reminderWebhookJsonTemplate: '{\n    "msg_type": "text",\n    "content": {\n        "text": "${title}\\n${message}"\n    }\n}', // Webhook 自定义 JSON 请求体模板
+    reminderWebhookJsonType: DEFAULT_WEBHOOK_JSON_TYPE, // Webhook JSON 格式类型：feishu | wecom | custom
+    reminderWebhookJsonTemplate: WEBHOOK_JSON_TEMPLATES.feishu, // Webhook 自定义 JSON 请求体模板
     dailyNotificationTime: '08:00', // 新增：每日通知时间，默认08:00
     dailyNotificationEnabled: false, // 新增：是否启用每日统一通知
     randomRestEnabled: false,
@@ -1766,10 +1810,12 @@ export default class ReminderPlugin extends Plugin {
             ? settings.reminderWebhookJsonTemplate
             : '';
         const oldDefaultWebhookTemplate = '{\n    "msg_type": "text",\n    "content": {\n        "text": "${message}"\n    }\n}';
-        const newDefaultWebhookTemplate = '{\n    "msg_type": "text",\n    "content": {\n        "text": "${title}\\n${message}"\n    }\n}';
         if (settings.reminderWebhookJsonTemplate === oldDefaultWebhookTemplate) {
-            settings.reminderWebhookJsonTemplate = newDefaultWebhookTemplate;
+            settings.reminderWebhookJsonTemplate = WEBHOOK_JSON_TEMPLATES.feishu;
         }
+        settings.reminderWebhookJsonType = Object.prototype.hasOwnProperty.call(data, 'reminderWebhookJsonType')
+            ? normalizeReminderWebhookJsonType(settings.reminderWebhookJsonType)
+            : inferReminderWebhookJsonType(settings.reminderWebhookJsonTemplate);
         settings.habitMemoSyncTemplate = typeof settings.habitMemoSyncTemplate === 'string'
             ? settings.habitMemoSyncTemplate
             : DEFAULT_SETTINGS.habitMemoSyncTemplate;
@@ -2001,11 +2047,10 @@ export default class ReminderPlugin extends Plugin {
         event: string,
         sentAt: string,
         jsonTemplate: string,
+        jsonType: string = 'custom',
         options: { reminderInfo?: any; reminders?: any[] } = {}
     ): any | null {
-        const template = typeof jsonTemplate === 'string' && jsonTemplate.trim()
-            ? jsonTemplate.trim()
-            : DEFAULT_SETTINGS.reminderWebhookJsonTemplate.trim();
+        const template = resolveReminderWebhookJsonTemplate(jsonType, jsonTemplate).trim();
         if (!template) {
             return this.buildDefaultWebhookPayload(title, message, event, sentAt, options);
         }
@@ -2055,6 +2100,7 @@ export default class ReminderPlugin extends Plugin {
                 event,
                 sentAt,
                 settings.reminderWebhookJsonTemplate,
+                settings.reminderWebhookJsonType,
                 options
             );
             if (!payload) return;
@@ -2082,7 +2128,11 @@ export default class ReminderPlugin extends Plugin {
         }
     }
 
-    public async sendTestWebhook(url: string, template: string): Promise<boolean> {
+    public async sendTestWebhook(
+        url: string,
+        template: string,
+        jsonType: string = 'custom'
+    ): Promise<boolean> {
         try {
             const testTitle = i18n('testWebhookTitle') || 'Webhook 测试';
             const testMessage = i18n('testWebhookMessage') || '这是一条来自思源笔记任务管理插件的测试 Webhook 消息。';
@@ -2094,6 +2144,7 @@ export default class ReminderPlugin extends Plugin {
                 event,
                 sentAt,
                 template,
+                jsonType,
                 {}
             );
             if (!payload) {

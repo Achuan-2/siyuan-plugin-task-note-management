@@ -605,6 +605,21 @@
             name: i18n('notificationReminder'),
             items: [
                 {
+                    key: 'dailyNotificationTime',
+                    value: settings.dailyNotificationTime,
+                    type: 'textinput',
+                    placeholder: '09:00',
+                    title: i18n('dailyNotificationTime'),
+                    description: i18n('dailyNotificationTimeDesc'),
+                },
+                {
+                    key: 'dailyNotificationEnabled',
+                    value: settings.dailyNotificationEnabled,
+                    type: 'checkbox',
+                    title: i18n('dailyNotificationEnabled'),
+                    description: i18n('dailyNotificationEnabledDesc'),
+                },
+                {
                     key: 'notificationSound',
                     value: settings.audioSelected?.notificationSound || '',
                     type: 'custom-audio',
@@ -641,8 +656,7 @@
                     placeholder: 'https://example.com/webhook',
                     title: i18n('reminderWebhookUrl') || 'Webhook 地址',
                     description:
-                        i18n('reminderWebhookUrlDesc') ||
-                        '开启 Webhook 通知后对指定URL进行通知。',
+                        i18n('reminderWebhookUrlDesc') || '开启 Webhook 通知后对指定URL进行通知。',
                 },
                 {
                     key: 'testWebhook',
@@ -654,25 +668,50 @@
                         label: i18n('test') || '测试',
                         callback: async () => {
                             if (!settings.reminderWebhookUrl) {
-                                await pushErrMsg(i18n('webhookUrlRequired') || '请先填写 Webhook 地址');
+                                await pushErrMsg(
+                                    i18n('webhookUrlRequired') || '请先填写 Webhook 地址'
+                                );
                                 return;
                             }
                             await pushMsg(i18n('webhookTesting') || '正在发送测试 Webhook...');
                             try {
                                 const success = await plugin.sendTestWebhook(
                                     settings.reminderWebhookUrl,
-                                    settings.reminderWebhookJsonTemplate
+                                    settings.reminderWebhookJsonTemplate,
+                                    settings.reminderWebhookJsonType
                                 );
                                 if (success) {
-                                    await pushMsg(i18n('webhookTestSuccess') || 'Webhook 测试成功！');
+                                    await pushMsg(
+                                        i18n('webhookTestSuccess') || 'Webhook 测试成功！'
+                                    );
                                 } else {
-                                    await pushErrMsg(i18n('webhookTestFailed') || 'Webhook 测试失败');
+                                    await pushErrMsg(
+                                        i18n('webhookTestFailed') || 'Webhook 测试失败'
+                                    );
                                 }
                             } catch (error: any) {
                                 console.error('Webhook测试异常:', error);
-                                await pushErrMsg((i18n('webhookTestFailed') || 'Webhook 测试失败') + ': ' + (error.message || String(error)));
+                                await pushErrMsg(
+                                    (i18n('webhookTestFailed') || 'Webhook 测试失败') +
+                                        ': ' +
+                                        (error.message || String(error))
+                                );
                             }
                         },
+                    },
+                },
+                {
+                    key: 'reminderWebhookJsonType',
+                    value: settings.reminderWebhookJsonType,
+                    type: 'select',
+                    title: i18n('reminderWebhookJsonType') || 'Webhook JSON 类型',
+                    description:
+                        i18n('reminderWebhookJsonTypeDesc') ||
+                        '选择预设 JSON 格式；选择自定义时可手动编辑 JSON 请求体。',
+                    options: {
+                        feishu: i18n('webhookJsonTypeFeishu') || '飞书',
+                        wecom: i18n('webhookJsonTypeWecom') || '企业微信',
+                        custom: i18n('webhookJsonTypeCustom') || '自定义',
                     },
                 },
                 {
@@ -682,23 +721,8 @@
                     title: i18n('reminderWebhookJsonTemplate') || 'Webhook JSON 格式',
                     description:
                         i18n('reminderWebhookJsonTemplateDesc') ||
-                        '自定义 POST 的 JSON 请求体，变量: ${title} 和 ${message}；清空后使用默认 text 消息格式。',
+                        '选择自定义时生效。变量: ${title} 和 ${message}；清空后使用默认飞书 text 消息格式。',
                     direction: 'row',
-                },
-                {
-                    key: 'dailyNotificationTime',
-                    value: settings.dailyNotificationTime,
-                    type: 'textinput',
-                    placeholder: '09:00',
-                    title: i18n('dailyNotificationTime'),
-                    description: i18n('dailyNotificationTimeDesc'),
-                },
-                {
-                    key: 'dailyNotificationEnabled',
-                    value: settings.dailyNotificationEnabled,
-                    type: 'checkbox',
-                    title: i18n('dailyNotificationEnabled'),
-                    description: i18n('dailyNotificationEnabledDesc'),
                 },
             ],
         },
@@ -1848,6 +1872,13 @@
             }
         } else if (key === 'reminderWebhookUrl' && typeof value === 'string') {
             newValue = value.trim();
+        } else if (key === 'reminderWebhookJsonType') {
+            newValue = ['feishu', 'wecom', 'custom'].includes(value)
+                ? value
+                : DEFAULT_SETTINGS.reminderWebhookJsonType;
+            if (newValue === 'custom' && !settings.reminderWebhookJsonTemplate) {
+                settings.reminderWebhookJsonTemplate = DEFAULT_SETTINGS.reminderWebhookJsonTemplate;
+            }
         } else if (key === 'reminderWebhookJsonTemplate' && typeof value !== 'string') {
             newValue = '';
         } else if (key === 'habitMemoSyncTemplate' && typeof value !== 'string') {
@@ -2157,6 +2188,11 @@
             // WebDAV 配置显示条件
             if (['webdavUrl', 'webdavUsername', 'webdavPassword'].includes(item.key)) {
                 updated.hidden = settings.icsSyncMethod !== 'webdav';
+            }
+
+            // 预设飞书/企业微信格式不需要用户手动维护 JSON 请求体
+            if (item.key === 'reminderWebhookJsonTemplate') {
+                updated.hidden = settings.reminderWebhookJsonType !== 'custom';
             }
 
             return updated;
