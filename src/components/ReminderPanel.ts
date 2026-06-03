@@ -6859,10 +6859,13 @@ export class ReminderPanel {
             menu.addSeparator();
 
             // 生产力工具
+            const pomodoroDirectStart = this.plugin?.settings?.pomodoroDirectStart;
             menu.addItem({
                 iconHTML: "🍅",
                 label: i18n("startPomodoro") || "开始番茄钟",
-                submenu: this.createPomodoroStartSubmenu(reminder)
+                ...(pomodoroDirectStart
+                    ? { click: () => this.startPomodoro(reminder) }
+                    : { submenu: this.createPomodoroStartSubmenu(reminder) })
             });
             menu.addItem({
                 iconHTML: "⏱️",
@@ -7316,10 +7319,13 @@ export class ReminderPanel {
                 menu.addSeparator();
             }
 
+            const pomodoroDirectStart2 = this.plugin?.settings?.pomodoroDirectStart;
             menu.addItem({
                 iconHTML: "🍅",
                 label: i18n("startPomodoro"),
-                submenu: this.createPomodoroStartSubmenu(reminder)
+                ...(pomodoroDirectStart2
+                    ? { click: () => this.startPomodoro(reminder) }
+                    : { submenu: this.createPomodoroStartSubmenu(reminder) })
             });
             menu.addItem({
                 iconHTML: "⏱️",
@@ -7441,10 +7447,13 @@ export class ReminderPanel {
                 menu.addSeparator();
             }
 
+            const pomodoroDirectStart3 = this.plugin?.settings?.pomodoroDirectStart;
             menu.addItem({
                 iconHTML: "🍅",
                 label: i18n("startPomodoro"),
-                submenu: this.createPomodoroStartSubmenu(reminder)
+                ...(pomodoroDirectStart3
+                    ? { click: () => this.startPomodoro(reminder) }
+                    : { submenu: this.createPomodoroStartSubmenu(reminder) })
             });
             menu.addItem({
                 iconHTML: "⏱️",

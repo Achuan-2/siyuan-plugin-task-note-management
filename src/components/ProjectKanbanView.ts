@@ -11804,10 +11804,13 @@ export class ProjectKanbanView {
         menu.addSeparator();
 
         // 生产力工具
+        const pomodoroDirectStart = this.plugin?.settings?.pomodoroDirectStart;
         menu.addItem({
             iconHTML: "🍅",
             label: i18n("startPomodoro") || "开始番茄钟",
-            submenu: this.createPomodoroStartSubmenu(task)
+            ...(pomodoroDirectStart
+                ? { click: () => this.startPomodoro(task) }
+                : { submenu: this.createPomodoroStartSubmenu(task) })
         });
         menu.addItem({
             iconHTML: "⏱️",
@@ -12477,10 +12480,13 @@ export class ProjectKanbanView {
         menu.addSeparator();
 
         // 番茄钟
+        const pomodoroDirectStart2 = this.plugin?.settings?.pomodoroDirectStart;
         menu.addItem({
             iconHTML: "🍅",
             label: i18n('startPomodoro'),
-            submenu: this.createPomodoroStartSubmenu(task)
+            ...(pomodoroDirectStart2
+                ? { click: () => this.startPomodoro(task) }
+                : { submenu: this.createPomodoroStartSubmenu(task) })
         });
 
         menu.addItem({

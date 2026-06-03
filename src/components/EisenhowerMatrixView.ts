@@ -2812,10 +2812,13 @@ export class EisenhowerMatrixView {
             }
 
             // 番茄钟功能对订阅任务仍然可用
+            const pomodoroDirectStart = this.plugin?.settings?.pomodoroDirectStart;
             menu.addItem({
                 iconHTML: "🍅",
                 label: i18n("startPomodoro"),
-                submenu: this.createPomodoroStartSubmenu(task)
+                ...(pomodoroDirectStart
+                    ? { click: () => this.startPomodoro(task) }
+                    : { submenu: this.createPomodoroStartSubmenu(task) })
             });
 
             menu.addItem({
@@ -2971,10 +2974,13 @@ export class EisenhowerMatrixView {
 
         menu.addSeparator();
 
+        const pomodoroDirectStart2 = this.plugin?.settings?.pomodoroDirectStart;
         menu.addItem({
             iconHTML: "🍅",
             label: i18n("startPomodoro"),
-            submenu: this.createPomodoroStartSubmenu(task)
+            ...(pomodoroDirectStart2
+                ? { click: () => this.startPomodoro(task) }
+                : { submenu: this.createPomodoroStartSubmenu(task) })
         });
 
         menu.addItem({

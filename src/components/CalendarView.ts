@@ -3369,10 +3369,13 @@ export class CalendarView {
 
             menu.addSeparator();
 
+            const pomodoroDirectStart = this.plugin?.settings?.pomodoroDirectStart;
             menu.addItem({
                 iconHTML: "🍅",
                 label: i18n("startPomodoro"),
-                submenu: this.createPomodoroStartSubmenu(calendarEvent)
+                ...(pomodoroDirectStart
+                    ? { click: () => this.startPomodoro(calendarEvent) }
+                    : { submenu: this.createPomodoroStartSubmenu(calendarEvent) })
             });
 
             menu.addItem({
@@ -3617,10 +3620,13 @@ export class CalendarView {
         }
 
         // 添加番茄钟选项
+        const pomodoroDirectStart2 = this.plugin?.settings?.pomodoroDirectStart;
         menu.addItem({
             iconHTML: "🍅",
             label: i18n("startPomodoro"),
-            submenu: this.createPomodoroStartSubmenu(calendarEvent)
+            ...(pomodoroDirectStart2
+                ? { click: () => this.startPomodoro(calendarEvent) }
+                : { submenu: this.createPomodoroStartSubmenu(calendarEvent) })
         });
 
         menu.addItem({

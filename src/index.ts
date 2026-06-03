@@ -281,6 +281,7 @@ export const DEFAULT_SETTINGS = {
     pomodoroLongBreakDuration: 30,
     pomodoroLongBreakInterval: 4,
     pomodoroAutoMode: false,
+    pomodoroDirectStart: true, // 直接开始番茄钟，不显示预设子菜单
     pomodoroGlobalWindow: true, // 新增：桌面端启用全局独立番茄钟窗口
     pomodoroSystemNotification: true, // 新增：番茄结束后系统弹窗
     pomodoroEndPopupWindow: true, // 新增：番茄钟结束弹窗提醒，默认关闭

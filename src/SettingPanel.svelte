@@ -1109,6 +1109,15 @@
                         '专注完成并保存记录后弹出备注窗口',
                 },
                 {
+                    key: 'pomodoroDirectStart',
+                    value: settings.pomodoroDirectStart,
+                    type: 'checkbox',
+                    title: i18n('pomodoroDirectStart') || '直接开始番茄钟',
+                    description:
+                        i18n('pomodoroDirectStartDesc') ||
+                        '启用后点击开始番茄钟会直接使用默认时长开始，不再弹出预设子菜单选择',
+                },
+                {
                     key: 'pomodoroDockPosition',
                     value: settings.pomodoroDockPosition,
                     type: 'select',

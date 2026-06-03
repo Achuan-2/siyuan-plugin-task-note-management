@@ -1499,10 +1499,13 @@ export class HabitPanel {
 
         menu.addSeparator();
 
+        const pomodoroDirectStart = this.plugin?.settings?.pomodoroDirectStart;
         menu.addItem({
             iconHTML: "🍅",
             label: i18n("startPomodoro") || "开始番茄钟",
-            submenu: this.createPomodoroStartSubmenu(habit)
+            ...(pomodoroDirectStart
+                ? { click: () => this.startPomodoro(habit) }
+                : { submenu: this.createPomodoroStartSubmenu(habit) })
         });
         menu.addItem({
             iconHTML: "⏱️",

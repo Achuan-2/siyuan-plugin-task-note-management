@@ -1590,6 +1590,8 @@
     "pomodoroEndPopupWindowDesc": "Shows a popup reminder in the center of the screen when the pomodoro work session ends (global popup on desktop, SiYuan internal popup on other platforms)",
     "pomodoroCompletionNotePopup": "Prompt for note after pomodoro completion",
     "pomodoroCompletionNotePopupDesc": "Show a note popup after a focus session is completed and saved",
+    "pomodoroDirectStart": "Direct Start Pomodoro",
+    "pomodoroDirectStartDesc": "When enabled, clicking start pomodoro will directly begin with default duration without showing the preset submenu",
     "enableSubscription": "Enable",
     "disableSubscription": "Disable",
     "copy": "Copy",

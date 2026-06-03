@@ -1590,6 +1590,8 @@
     "pomodoroEndPopupWindowDesc": "番茄钟工作结束时会在屏幕中央显示弹窗提醒（电脑桌面端为全局弹窗，其他端为思源内部弹窗）",
     "pomodoroCompletionNotePopup": "番茄钟完成后记录备注",
     "pomodoroCompletionNotePopupDesc": "专注完成并保存记录后弹出备注窗口",
+    "pomodoroDirectStart": "开始番茄钟不显示预设子菜单",
+    "pomodoroDirectStartDesc": "启用后点击开始番茄钟会直接使用默认时长开始，不再弹出预设子菜单选择",
     "enableSubscription": "启用",
     "disableSubscription": "停用",
     "copy": "复制",
