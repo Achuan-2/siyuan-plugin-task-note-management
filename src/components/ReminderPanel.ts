@@ -781,6 +781,7 @@ export class ReminderPanel {
 
             if (!r.date && !r.endDate) {
                 if (this.isDatelessReminderActiveOnDate(r, today)) {
+                    if (excludeDesserts) return false;
                     if (this.canApplyTodayIgnore(r, today) && hasIgnoreMark) return false;
                     const dailyCompleted = Array.isArray(r.dailyDessertCompleted) ? r.dailyDessertCompleted : [];
                     if (dailyCompleted.includes(today)) return false;
