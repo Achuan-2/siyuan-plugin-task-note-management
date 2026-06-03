@@ -252,6 +252,7 @@ export class QuickReminderDialog {
     private currentKanbanStatuses: import('../utils/projectManager').KanbanStatus[] = []; // 当前项目的kanbanStatuses
     private currentActiveProjectGroups: import('../utils/projectManager').ProjectGroup[] = []; // 当前项目未归档分组
     private durationManuallyChanged: boolean = false; // 标记用户是否手动修改了持续天数
+    private isApplyingNaturalLanguageResult: boolean = false; // 标记当前是否正在应用自然语言识别结果
     private tempSubtasks: any[] = []; // 新建模式下的临时子任务列表
     private skipSave: boolean = false; // 是否跳过保存到数据库（用于临时子任务创建）
     private dateOnly: boolean = false; // 是否只显示日期相关设置（用于快速编辑日期）
@@ -2073,45 +2074,50 @@ export class QuickReminderDialog {
     }) {
         if (!result.date && !result.endDate && !result.time && !result.endTime) return;
 
-        const titleInput = this.dialog.element.querySelector('#quickReminderTitle') as HTMLTextAreaElement;
-        const dateInput = this.dialog.element.querySelector('#quickReminderDate') as HTMLInputElement;
-        const endDateInput = this.dialog.element.querySelector('#quickReminderEndDate') as HTMLInputElement;
-        const timeInput = this.dialog.element.querySelector('#quickReminderTime') as HTMLInputElement;
-        const endTimeInput = this.dialog.element.querySelector('#quickReminderEndTime') as HTMLInputElement;
+        this.isApplyingNaturalLanguageResult = true;
+        try {
+            const titleInput = this.dialog.element.querySelector('#quickReminderTitle') as HTMLTextAreaElement;
+            const dateInput = this.dialog.element.querySelector('#quickReminderDate') as HTMLInputElement;
+            const endDateInput = this.dialog.element.querySelector('#quickReminderEndDate') as HTMLInputElement;
+            const timeInput = this.dialog.element.querySelector('#quickReminderTime') as HTMLInputElement;
+            const endTimeInput = this.dialog.element.querySelector('#quickReminderEndTime') as HTMLInputElement;
 
-        // 更新标题（如果识别并清理了）
-        if (result.cleanTitle !== undefined && titleInput) {
-            titleInput.value = result.cleanTitle;
+            // 更新标题（如果识别并清理了）
+            if (result.cleanTitle !== undefined && titleInput) {
+                titleInput.value = result.cleanTitle;
+            }
+
+            // 设置开始日期；只有截止日期时不要反填开始日期。
+            if (result.date && result.hasDate) {
+                dateInput.value = result.date;
+            } else if (!result.hasDate) {
+                dateInput.value = '';
+            }
+
+            // 设置时间（独立输入框）
+            if (result.time && timeInput) {
+                timeInput.value = result.time;
+            }
+
+            // 设置结束日期和时间
+            if (result.endDate && result.hasEndDate) {
+                endDateInput.value = result.endDate;
+            } else if (!result.hasEndDate) {
+                endDateInput.value = '';
+            }
+            if (result.endTime && endTimeInput) {
+                endTimeInput.value = result.endTime;
+            }
+
+            this.updateStartEndSwapButtonState();
+            this.updateStartDateOnlyOverdueControl();
+            this.updateReminderSkipDateControls();
+
+            // 触发日期变化事件以更新结束日期限制
+            dateInput.dispatchEvent(new Event('change'));
+        } finally {
+            this.isApplyingNaturalLanguageResult = false;
         }
-
-        // 设置开始日期；只有截止日期时不要反填开始日期。
-        if (result.date && result.hasDate) {
-            dateInput.value = result.date;
-        } else if (!result.hasDate) {
-            dateInput.value = '';
-        }
-
-        // 设置时间（独立输入框）
-        if (result.time && timeInput) {
-            timeInput.value = result.time;
-        }
-
-        // 设置结束日期和时间
-        if (result.endDate && result.hasEndDate) {
-            endDateInput.value = result.endDate;
-        } else if (!result.hasEndDate) {
-            endDateInput.value = '';
-        }
-        if (result.endTime && endTimeInput) {
-            endTimeInput.value = result.endTime;
-        }
-
-        this.updateStartEndSwapButtonState();
-        this.updateStartDateOnlyOverdueControl();
-        this.updateReminderSkipDateControls();
-
-        // 触发日期变化事件以更新结束日期限制
-        dateInput.dispatchEvent(new Event('change'));
 
         let msg = '✨ 已识别设置';
         if (result.date && result.hasDate) {
@@ -4295,15 +4301,23 @@ export class QuickReminderDialog {
             this.updateReminderSkipDateControls();
             if (!startDateInput.value) return;
 
-            // 只有在用户手动修改了持续天数，或者编辑模式下结束日期已存在时，才自动填充/更新结束日期
-            if (endDateInput && !endDateInput.value && durationInput && this.durationManuallyChanged) {
+            // 如果任务已有开始和结束日期，修改开始日期时保持当前持续天数并平移结束日期
+            if (endDateInput && endDateInput.value && durationInput && !this.isApplyingNaturalLanguageResult) {
+                let days = parseInt(durationInput.value || '1', 10) || 1;
+                if (days < 1) days = 1;
+                durationInput.value = String(days);
+                endDateInput.value = this.addDaysToDate(startDateInput.value, days - 1);
+                this.updateStartDateOnlyOverdueControl();
+                this.updateReminderSkipDateControls();
+                endDateInput.dispatchEvent(new Event('change'));
+            } else if (endDateInput && !endDateInput.value && durationInput && this.durationManuallyChanged) {
                 const days = parseInt(durationInput.value || '1') || 1;
                 endDateInput.value = this.addDaysToDate(startDateInput.value, days - 1);
                 this.updateStartDateOnlyOverdueControl();
                 this.updateReminderSkipDateControls();
                 endDateInput.dispatchEvent(new Event('change'));
             } else if (endDateInput && endDateInput.value && durationInput) {
-                // 如果结束日期已存在，重新计算持续天数
+                // 自动识别等场景会同时写入开始/结束日期，此时根据新的日期范围刷新持续天数
                 const dur = this.getDurationInclusive(startDateInput.value, endDateInput.value);
                 durationInput.value = String(dur > 0 ? dur : 1);
             }
