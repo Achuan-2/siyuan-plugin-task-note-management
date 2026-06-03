@@ -1949,9 +1949,20 @@ export class CalendarView {
                 }
             },
             // 添加视图切换和日期变化的监听
-            datesSet: () => {
+            datesSet: (info: any) => {
                 // 当视图的日期范围改变时（包括切换前后时间），刷新事件
                 this.refreshEvents();
+
+                // 在周视图标题中追加周数
+                const titleEl = this.container?.querySelector('.fc-toolbar-title');
+                if (titleEl) {
+                    const viewType = info?.view?.type || '';
+                    if (viewType.includes('Week')) {
+                        const weekNum = this.getISOWeekNumber(info.view.activeStart);
+                        const originalTitle = titleEl.textContent?.replace(/\s*\(第\d+周\)\s*$/, '') || '';
+                        titleEl.textContent = `${originalTitle} (第${weekNum}周)`;
+                    }
+                }
             }
         });
 
@@ -10244,6 +10255,17 @@ export class CalendarView {
             // 出错时返回默认值（周一）
             return 1;
         }
+    }
+
+    /**
+     * 计算 ISO 8601 周数
+     */
+    private getISOWeekNumber(date: Date): number {
+        const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+        const dayNum = d.getUTCDay() || 7;
+        d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+        const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+        return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
     }
 
     /**
