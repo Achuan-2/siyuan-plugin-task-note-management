@@ -15839,7 +15839,7 @@ export class ProjectKanbanView {
                 width: 6px;
                 height: 100%;
                 cursor: col-resize;
-                z-index: 20;
+                z-index: 10;
                 background: transparent;
                 transition: background 0.15s ease;
                 border-radius: 3px;
