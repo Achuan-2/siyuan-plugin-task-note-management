@@ -255,7 +255,26 @@ export class ProjectKanbanView {
     }
 
     private getDefaultProjectIdForCreate(): string {
-        return this.isAggregateView ? (this.aggregateProjectIds[0] || '') : this.projectId;
+        if (this.isAggregateView) {
+            const firstNormalId = this.aggregateProjectIds.find(projectId => {
+                const context = this.aggregateProjectContext.get(projectId);
+                const proj = context?.project || this.projectManager.getProjectById(projectId);
+                return proj && !proj.isSubscription;
+            });
+            return firstNormalId || this.aggregateProjectIds[0] || '';
+        }
+        return this.projectId;
+    }
+
+    private get canCreateTask(): boolean {
+        if (!this.isAggregateView) {
+            return !this.project?.isSubscription;
+        }
+        return this.aggregateProjectIds.some(projectId => {
+            const context = this.aggregateProjectContext.get(projectId);
+            const proj = context?.project || this.projectManager.getProjectById(projectId);
+            return proj && !proj.isSubscription;
+        });
     }
 
     private getAggregateProjectName(projectId: string): string {
@@ -4363,7 +4382,7 @@ export class ProjectKanbanView {
         controlsGroup.className = 'project-kanban-controls';
 
         // 新建任务按钮
-        if (!this.project?.isSubscription) {
+        if (this.canCreateTask) {
             const addTaskBtn = document.createElement('button');
             addTaskBtn.className = 'b3-button b3-button--primary';
             addTaskBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg> ${i18n('newTask')}`;
@@ -5390,7 +5409,7 @@ export class ProjectKanbanView {
         rightContainer.style.cssText = 'display:flex; align-items:center; gap:8px; flex-shrink: 0;';
         rightContainer.appendChild(countEl);
 
-        if (status !== 'completed' && !this.project?.isSubscription) {
+        if (status !== 'completed' && this.canCreateTask) {
             const addTaskBtn = document.createElement('button');
             addTaskBtn.className = 'b3-button b3-button--outline';
             addTaskBtn.classList.add('ariaLabel'); addTaskBtn.setAttribute('aria-label', i18n('newTask'));
@@ -9273,7 +9292,7 @@ export class ProjectKanbanView {
             countBadge.style.cssText = 'background: var(--b3-theme-primary); color: white; border-radius: 12px; padding: 2px 8px; font-size: 12px; min-width: 20px; text-align: center;';
             headerRight.appendChild(countBadge);
 
-            if (!this.project?.isSubscription) {
+            if (this.canCreateTask) {
                 // Add Task Button
                 const addBtn = document.createElement('button');
                 addBtn.className = 'b3-button b3-button--outline';
@@ -10096,7 +10115,7 @@ export class ProjectKanbanView {
                 }
 
                 // 不在已完成列显示新建按钮
-                if (status !== 'completed' && !this.project?.isSubscription) {
+                if (status !== 'completed' && this.canCreateTask) {
                     const addGroupTaskBtn = document.createElement('button');
                     addGroupTaskBtn.className = 'b3-button b3-button--small b3-button--primary';
                     addGroupTaskBtn.classList.add('ariaLabel'); addGroupTaskBtn.setAttribute('aria-label', i18n('newTask'));
@@ -10345,7 +10364,7 @@ export class ProjectKanbanView {
         headerRight.style.cssText = 'display:flex; align-items:center; gap:8px; flex-shrink: 0;';
         headerRight.appendChild(countEl);
 
-        if (!this.project?.isSubscription) {
+        if (this.canCreateTask) {
             headerRight.appendChild(addGroupTaskBtn);
             headerRight.appendChild(pasteGroupTaskBtn);
         }
@@ -10855,7 +10874,7 @@ export class ProjectKanbanView {
         headerRight.appendChild(taskCount);
 
         // 非已完成状态显示新建按钮和粘贴按钮
-        if (status !== 'completed' && !this.project?.isSubscription) {
+        if (status !== 'completed' && this.canCreateTask) {
             const addTaskBtn = document.createElement('button');
             addTaskBtn.className = 'b3-button b3-button--text';
             addTaskBtn.style.cssText = 'padding: 2px; margin-left: 2px;';
@@ -11215,10 +11234,7 @@ export class ProjectKanbanView {
             onCardDoubleClick: async (task: any, e: MouseEvent) => {
                 e.preventDefault();
                 e.stopPropagation();
-                const isEditable = !task.isSubscribed || (task.subscriptionType === 'caldav' && task.caldavEditable);
-                if (isEditable) {
-                    await this.editTask(task);
-                }
+                await this.editTask(task);
             },
             onCardClick: (task: any, e: MouseEvent) => {
                 if (this.handleMultiSelectTaskClick(task, e)) {
@@ -11760,6 +11776,11 @@ export class ProjectKanbanView {
             label: i18n("subscribedTaskReadOnly") || "订阅任务（只读）",
             disabled: true
         });
+        menu.addItem({
+            iconHTML: "👁️",
+            label: i18n("viewTasks") || "查看任务",
+            click: () => this.editTask(task)
+        });
         menu.addSeparator();
 
         // 导航选项
@@ -11962,6 +11983,11 @@ export class ProjectKanbanView {
                 iconHTML: "ℹ️",
                 label: i18n("subscribedTaskReadOnly") || "订阅任务（只读）",
                 disabled: true
+            });
+            menu.addItem({
+                iconHTML: "👁️",
+                label: i18n("viewTasks") || "查看任务",
+                click: () => this.editTask(task)
             });
             menu.addSeparator();
 

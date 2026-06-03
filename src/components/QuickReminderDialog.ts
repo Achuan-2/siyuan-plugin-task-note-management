@@ -264,6 +264,7 @@ export class QuickReminderDialog {
     private activeDialogTab: 'task' | 'subtasks' = 'task';
     private editFutureInstancesOnly: boolean = false;
     private futureEditOriginalReminder?: any;
+    private readOnly: boolean = false; // 是否为只读模式
 
 
     constructor(
@@ -302,6 +303,7 @@ export class QuickReminderDialog {
             tempParentName?: string;
             editFutureInstancesOnly?: boolean; // 从重复实例进入系列编辑，以当前实例作为新的系列起点
             futureEditOriginalReminder?: any; // 后续实例编辑前的原始系列快照
+            readOnly?: boolean; // 是否为只读模式
         }
     ) {
         this.initialDate = date;
@@ -351,11 +353,20 @@ export class QuickReminderDialog {
             this.tempParentName = options.tempParentName;
             this.editFutureInstancesOnly = options.editFutureInstancesOnly || false;
             this.futureEditOriginalReminder = options.futureEditOriginalReminder;
+            this.readOnly = !!options.readOnly;
         }
 
         // 如果是编辑模式，确保有reminder
         if (this.mode === 'edit' && !this.reminder) {
             throw new Error('编辑模式需要提供reminder参数');
+        }
+
+        // 自动将不可编辑的订阅任务识别为只读模式
+        if (this.mode === 'edit' && this.reminder) {
+            const isEditable = !this.reminder.isSubscribed || (this.reminder.subscriptionType === 'caldav' && this.reminder.caldavEditable);
+            if (!isEditable) {
+                this.readOnly = true;
+            }
         }
 
         // 如果是块绑定模式，确保有blockId
@@ -1760,7 +1771,9 @@ export class QuickReminderDialog {
                 [],
                 undefined,
                 this.isInstanceEdit,
-                isModifyAllInstances
+                isModifyAllInstances,
+                undefined,
+                this.readOnly
             );
         }
 
@@ -1769,7 +1782,7 @@ export class QuickReminderDialog {
         }, this.tempSubtasks, (updatedSubtasks) => {
             this.tempSubtasks = updatedSubtasks;
             void this.updateSubtasksDisplay();
-        }, undefined, undefined, () => this.getCurrentTitle());
+        }, undefined, undefined, () => this.getCurrentTitle(), this.readOnly);
     }
 
     private getCurrentTitle(): string {
@@ -1804,6 +1817,8 @@ export class QuickReminderDialog {
 
         if (nextTab === 'subtasks') {
             await this.mountSubtasksTab();
+        } else {
+            this.applyReadOnlyMode();
         }
     }
 
@@ -2277,7 +2292,7 @@ export class QuickReminderDialog {
         const langTag = (window as any).siyuan?.config?.lang?.replace('_', '-') || 'en-US';
 
         this.dialog = new Dialog({
-            title: this.dateOnly ? i18n("editDate") : (this.mode === 'edit' ? i18n("editReminder") : (this.mode === 'note' ? i18n("editNote") : i18n("createQuickReminder"))),
+            title: this.readOnly ? (i18n("viewTasks") || "查看任务") : (this.dateOnly ? i18n("editDate") : (this.mode === 'edit' ? i18n("editReminder") : (this.mode === 'note' ? i18n("editNote") : i18n("createQuickReminder")))),
             content: this.mode === 'note' ? `
                 <div class="quick-reminder-dialog">
                     <div class="b3-dialog__content">
@@ -2287,8 +2302,8 @@ export class QuickReminderDialog {
                         </div>
                     </div>
                     <div class="b3-dialog__action">
-                        <button class="b3-button b3-button--cancel" id="quickCancelBtn">${i18n("cancel")}</button>
-                        <button class="b3-button b3-button--primary" id="quickConfirmBtn">${i18n("save")}</button>
+                        <button class="b3-button b3-button--cancel" id="quickCancelBtn">${this.readOnly ? i18n("close") : i18n("cancel")}</button>
+                        ${this.readOnly ? '' : `<button class="b3-button b3-button--primary" id="quickConfirmBtn">${i18n("save")}</button>`}
                     </div>
                 </div>
             ` : `
@@ -2697,8 +2712,8 @@ export class QuickReminderDialog {
                         <div id="quickSubtasksTabPanel" role="tabpanel" style="display: none; min-height: 220px;"></div>
                     </div>
                     <div class="b3-dialog__action" style="display: flex; justify-content: flex-end; align-items: center; gap: 8px;">
-                        <button class="b3-button b3-button--cancel" id="quickCancelBtn">${i18n("cancel")}</button>
-                        <button class="b3-button b3-button--primary" id="quickConfirmBtn">${this.mode === 'edit' ? i18n("save") : i18n("save")}</button>
+                        <button class="b3-button b3-button--cancel" id="quickCancelBtn">${this.readOnly ? i18n("close") : i18n("cancel")}</button>
+                        ${this.readOnly ? '' : `<button class="b3-button b3-button--primary" id="quickConfirmBtn">${i18n("save")}</button>`}
                     </div>
                 </div>
             `,
@@ -2728,6 +2743,7 @@ export class QuickReminderDialog {
                     ctx.set(defaultValueCtx, initialNote);
                     ctx.update(editorViewOptionsCtx, (prev) => ({
                         ...prev,
+                        editable: () => !this.readOnly,
                         attributes: {
                             ...prev.attributes,
                             spellcheck: "false",
@@ -3117,6 +3133,7 @@ export class QuickReminderDialog {
 
             // 初始化预设下拉状态
             this.updatePresetSelectState();
+            this.applyReadOnlyMode();
         }, 50);
     }
 
@@ -5164,6 +5181,8 @@ export class QuickReminderDialog {
                 showMessage(i18n("pleaseEnterUrl"));
             }
         });
+
+        this.applyReadOnlyMode();
     }
 
     private showRepeatSettingsDialog() {
@@ -5881,8 +5900,61 @@ export class QuickReminderDialog {
         }
     }
 
-    // 仅保存备注
+    private applyReadOnlyMode() {
+        if (!this.readOnly) return;
+        const container = this.dialog?.element;
+        if (!container) return;
+
+        // 1. 禁用所有输入框、文本域和选择框
+        container.querySelectorAll('input, textarea, select').forEach((el: any) => {
+            el.disabled = true;
+            if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
+                el.readOnly = true;
+                el.style.cursor = 'default';
+            }
+        });
+
+        // 2. 禁用所有交互按钮和操作项，包括标签、分类、优先级、状态选项、自然语言识别按钮等
+        container.querySelectorAll([
+            '.priority-option',
+            '.category-option',
+            '.task-status-option',
+            '.tag-option',
+            '.preset-option',
+            '#quickNlBtn',
+            '#quickSwapStartEndTimeBtn',
+            '#quickClearStartDateBtn',
+            '#quickClearStartTimeBtn',
+            '#quickClearEndDateBtn',
+            '#quickClearEndTimeBtn',
+            '#quickSyncBlockTitleBtn',
+            '#quickSyncTitleToBlockBtn',
+            '#quickRepeatSettingsBtn',
+            '#quickCreateDocBtn',
+            '#quickCopyBlockRefBtn',
+            '#quickProjectSearchInput',
+            '#quickHabitSearchInput',
+            '.quick-reminder-dialog__add-time',
+            '.b3-button:not(#quickCancelBtn):not(#quickCurrentTaskTab):not(#quickSubtasksTab):not(#quickViewParentBtn)'
+        ].join(', ')).forEach((el: any) => {
+            el.style.pointerEvents = 'none';
+            el.style.opacity = '0.6';
+        });
+
+        // 3. 确保关闭和导航按钮是可交互且可见的
+        const cancelBtn = container.querySelector('#quickCancelBtn') as HTMLButtonElement;
+        if (cancelBtn) {
+            cancelBtn.innerText = i18n("close") || "关闭";
+            cancelBtn.style.pointerEvents = 'auto';
+            cancelBtn.style.opacity = '1';
+        }
+    }
+
     private async saveNoteOnly() {
+        if (this.readOnly) {
+            this.destroyDialog();
+            return;
+        }
         if (!this.reminder) return;
 
         const note = this.editor ? this.currentNote : this.reminder.note;
@@ -5923,6 +5995,10 @@ export class QuickReminderDialog {
     }
 
     private async saveReminder() {
+        if (this.readOnly) {
+            this.destroyDialog();
+            return;
+        }
         if (this.mode === 'note') {
             await this.saveNoteOnly();
             return;

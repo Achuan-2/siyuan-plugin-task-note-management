@@ -30,6 +30,7 @@ export class SubtasksDialog {
     private projectManager: ProjectManager;
     private milestoneMap: Map<string, any> = new Map();
     private lute: any;
+    private readOnly: boolean = false; // 是否为只读模式
 
     constructor(
         parentId: string,
@@ -39,7 +40,8 @@ export class SubtasksDialog {
         onTempSubtasksUpdate?: (subtasks: any[]) => void,
         isInstanceEdit?: boolean,
         isModifyAllInstances?: boolean,
-        tempParentName?: string | (() => string)
+        tempParentName?: string | (() => string),
+        readOnly?: boolean
     ) {
         this.parentId = parentId;
         this.plugin = plugin;
@@ -53,6 +55,7 @@ export class SubtasksDialog {
         this.tempParentName = tempParentName;
         this.categoryManager = CategoryManager.getInstance(this.plugin);
         this.projectManager = ProjectManager.getInstance(this.plugin);
+        this.readOnly = !!readOnly;
         try {
             this.lute = (window as any).Lute?.New?.();
         } catch (error) {
@@ -117,6 +120,7 @@ export class SubtasksDialog {
                             <svg class="b3-button__icon"><use xlink:href="#iconSort"></use></svg>
                             ${i18n("sort") || "排序"}
                         </button>
+                        ${this.readOnly ? '' : `
                         <button id="pasteSubtaskBtn" class="b3-button b3-button--outline">
                             <svg class="b3-button__icon"><use xlink:href="#iconPaste"></use></svg>
                             ${i18n("pasteSubtasks") || "粘贴新建"}
@@ -125,6 +129,7 @@ export class SubtasksDialog {
                             <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
                             ${i18n("createSubtask") || "创建子任务"}
                         </button>
+                        `}
                     </div>
                     <div id="subtasksList" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column;min-height: 100px;max-height: 500px;">
                         <!-- 子任务列表 -->
@@ -635,11 +640,15 @@ export class SubtasksDialog {
             menuEl.appendChild(button);
         };
 
-        createButton(i18n("createSubtask") || "创建子任务", '#iconAdd', () => {
-            void this.addSubtask(task);
-        });
-        createButton(i18n("edit") || "编辑", '#iconEdit', () => this.editSubtask(task));
-        createButton(i18n("delete") || "删除", '#iconTrashcan', () => this.deleteSubtask(task.id));
+        if (!this.readOnly) {
+            createButton(i18n("createSubtask") || "创建子任务", '#iconAdd', () => {
+                void this.addSubtask(task);
+            });
+        }
+        createButton(this.readOnly ? (i18n("viewTasks") || "查看任务") : (i18n("edit") || "编辑"), '#iconEdit', () => this.editSubtask(task));
+        if (!this.readOnly) {
+            createButton(i18n("delete") || "删除", '#iconTrashcan', () => this.deleteSubtask(task.id));
+        }
 
         document.body.appendChild(menuEl);
         const rect = element.getBoundingClientRect();
@@ -828,7 +837,8 @@ export class SubtasksDialog {
             skipSave: this.isTempMode, // 临时模式下跳过保存，通过回调更新
             tempParentName: this.isTempMode && task.parentId === '__TEMP_PARENT__'
                 ? (typeof this.tempParentName === 'function' ? this.tempParentName() : this.tempParentName)
-                : undefined
+                : undefined,
+            readOnly: this.readOnly
         });
         dialog.show();
     }
@@ -1061,7 +1071,7 @@ export class SubtasksDialog {
     }
 
     private setupSubtaskDragAndDrop(element: HTMLElement, task: any) {
-        if (this.plugin?.isInMobileApp || this.isDragDisabledBySortMode()) {
+        if (this.readOnly || this.plugin?.isInMobileApp || this.isDragDisabledBySortMode()) {
             element.draggable = false;
             element.style.cursor = 'default';
             return;
