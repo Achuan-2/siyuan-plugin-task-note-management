@@ -5010,15 +5010,36 @@ export class ReminderPanel {
             result = time ? `${dateStr} ${time}` : dateStr;
         }
 
+        // 如果是无日期的任务，我们不要前面的 dateStr / time
+        const hasNoDate = reminder && !reminder.date && !reminder.endDate;
+        if (hasNoDate) {
+            result = '';
+        }
+
         // 如果存在 reminderTimes，按规则显示
         try {
-            if (reminder?.reminderTimes && Array.isArray(reminder.reminderTimes) && reminder.reminderTimes.length > 0) {
-                const times = reminder.reminderTimes.map((rtItem: any) => {
-                    if (!rtItem) return '';
+            const entries: Array<{ time: string; note?: string; everyDay?: boolean }> = [];
+            if (reminder?.reminderTimes && Array.isArray(reminder.reminderTimes)) {
+                reminder.reminderTimes.forEach((rtItem: any) => {
+                    if (!rtItem) return;
                     const rt = typeof rtItem === 'string' ? rtItem : rtItem.time;
                     const note = typeof rtItem === 'string' ? '' : String(rtItem.note || '').trim();
+                    if (rt) {
+                        entries.push({ time: rt, note, everyDay: !!rtItem.everyDay });
+                    }
+                });
+            }
+            if (entries.length === 0 && typeof reminder?.customReminderTime === 'string' && reminder.customReminderTime.trim()) {
+                entries.push({ time: reminder.customReminderTime.trim() });
+            }
+
+            if (entries.length > 0) {
+                const times = entries.map((rtItem: any) => {
+                    if (!rtItem) return '';
+                    const rt = rtItem.time;
+                    const note = String(rtItem.note || '').trim();
                     if (!rt) return '';
-                    let s = String(rt).trim();
+                    const s = String(rt).trim();
                     let datePart: string | null = null;
                     let timePart: string | null = null;
 
@@ -5031,16 +5052,24 @@ export class ReminderPanel {
                     }
 
                     let targetDate = datePart || date || today;
-                    if (rtItem && typeof rtItem === 'object' && rtItem.everyDay) {
-                        const logicalStart = this.getReminderLogicalDate(date, time);
-                        const logicalEnd = this.getReminderLogicalDate(endDate || date, endTime || time);
-                        if (logicalStart && logicalEnd) {
-                            if (compareDateStrings(today, logicalStart) < 0) {
+                    if (rtItem.everyDay) {
+                        if (!reminder.completed) {
+                            if (date && compareDateStrings(today, date) < 0 && !reminder.isAvailableToday) {
                                 targetDate = date;
-                            } else if (compareDateStrings(today, logicalEnd) > 0) {
-                                targetDate = endDate || date;
                             } else {
                                 targetDate = today;
+                            }
+                        } else {
+                            const logicalStart = this.getReminderLogicalDate(date, time);
+                            const logicalEnd = this.getReminderLogicalDate(endDate || date, endTime || time);
+                            if (logicalStart && logicalEnd) {
+                                if (compareDateStrings(today, logicalStart) < 0) {
+                                    targetDate = date;
+                                } else if (compareDateStrings(today, logicalEnd) > 0) {
+                                    targetDate = endDate || date;
+                                } else {
+                                    targetDate = today;
+                                }
                             }
                         }
                     }
@@ -5068,7 +5097,7 @@ export class ReminderPanel {
             console.warn('格式化 reminderTimes 失败', e);
         }
 
-        return result;
+        return result.trim();
     }
 
     private async deleteRemindersByBlockId(blockId: string) {

@@ -1994,16 +1994,26 @@ export class QuickReminderDialog {
                 cleanTitle: finalCleanTitle
             };
 
-            if (currentParseResult.date || currentParseResult.endDate) {
-                let previewText = `📅 ${currentParseResult.date || currentParseResult.endDate || ''}`;
-                if (currentParseResult.time || currentParseResult.endTime) {
-                    previewText += ` ⏰ ${currentParseResult.time || currentParseResult.endTime || ''}`;
+            const hasDate = !!(currentParseResult.date && currentParseResult.hasDate) || !!(currentParseResult.endDate && currentParseResult.hasEndDate);
+            const hasTime = !!(currentParseResult.time && currentParseResult.hasTime) || !!(currentParseResult.endTime && currentParseResult.hasEndTime);
+
+            if (hasDate || hasTime) {
+                let previewText = '';
+                if (currentParseResult.date && currentParseResult.hasDate) {
+                    previewText += `📅 ${currentParseResult.date}`;
+                }
+                if (currentParseResult.time && currentParseResult.hasTime) {
+                    previewText += `${previewText ? ' ' : ''}⏰ ${currentParseResult.time}`;
                 }
 
-                if (currentParseResult.date && currentParseResult.endDate) {
+                if (currentParseResult.date && currentParseResult.hasDate && currentParseResult.endDate && currentParseResult.hasEndDate) {
                     previewText = `📅 ${currentParseResult.date}${currentParseResult.time ? ' ' + currentParseResult.time : ''} ➡️ ${currentParseResult.endDate}${currentParseResult.endTime ? ' ' + currentParseResult.endTime : ''}`;
-                } else if (currentParseResult.endDate && !currentParseResult.date) {
+                } else if (currentParseResult.endDate && currentParseResult.hasEndDate && !(currentParseResult.date && currentParseResult.hasDate)) {
                     previewText = `🏁 截止：${currentParseResult.endDate}${currentParseResult.endTime ? ' ' + currentParseResult.endTime : ''}`;
+                } else if (currentParseResult.endTime && currentParseResult.hasEndTime && !hasDate) {
+                    previewText = `⏰ 提醒时间：${currentParseResult.endTime}`;
+                } else if (currentParseResult.time && currentParseResult.hasTime && !hasDate) {
+                    previewText = `⏰ 提醒时间：${currentParseResult.time}`;
                 }
 
                 if (removeMode !== 'none' && currentParseResult.cleanTitle) {
@@ -2054,12 +2064,14 @@ export class QuickReminderDialog {
         date?: string;
         time?: string;
         hasTime?: boolean;
+        hasDate?: boolean;
         endDate?: string;
         endTime?: string;
         hasEndTime?: boolean;
+        hasEndDate?: boolean;
         cleanTitle?: string;
     }) {
-        if (!result.date && !result.endDate) return;
+        if (!result.date && !result.endDate && !result.time && !result.endTime) return;
 
         const titleInput = this.dialog.element.querySelector('#quickReminderTitle') as HTMLTextAreaElement;
         const dateInput = this.dialog.element.querySelector('#quickReminderDate') as HTMLInputElement;
@@ -2073,13 +2085,10 @@ export class QuickReminderDialog {
         }
 
         // 设置开始日期；只有截止日期时不要反填开始日期。
-        if (result.date) {
+        if (result.date && result.hasDate) {
             dateInput.value = result.date;
-        } else if (result.endDate && this.mode !== 'edit') {
+        } else if (!result.hasDate) {
             dateInput.value = '';
-            if (timeInput) {
-                timeInput.value = '';
-            }
         }
 
         // 设置时间（独立输入框）
@@ -2088,8 +2097,10 @@ export class QuickReminderDialog {
         }
 
         // 设置结束日期和时间
-        if (result.endDate) {
+        if (result.endDate && result.hasEndDate) {
             endDateInput.value = result.endDate;
+        } else if (!result.hasEndDate) {
+            endDateInput.value = '';
         }
         if (result.endTime && endTimeInput) {
             endTimeInput.value = result.endTime;
@@ -2103,9 +2114,17 @@ export class QuickReminderDialog {
         dateInput.dispatchEvent(new Event('change'));
 
         let msg = '✨ 已识别设置';
-        if (result.date) msg += `：${result.date}${result.time ? ' ' + result.time : ''}`;
-        if (result.endDate && result.endDate !== result.date) msg += ` 至 ${result.endDate}${result.endTime ? ' ' + result.endTime : ''}`;
-        if (result.endDate && !result.date) msg += ` 截止于 ${result.endDate}${result.endTime ? ' ' + result.endTime : ''}`;
+        if (result.date && result.hasDate) {
+            msg += `：${result.date}${result.time ? ' ' + result.time : ''}`;
+        } else if (result.time) {
+            msg += `：⏰ ${result.time}`;
+        }
+        if (result.endDate && result.hasEndDate && result.endDate !== result.date) {
+            msg += ` 至 ${result.endDate}${result.endTime ? ' ' + result.endTime : ''}`;
+        }
+        if (result.endDate && result.hasEndDate && !result.date) {
+            msg += ` 截止于 ${result.endDate}${result.endTime ? ' ' + result.endTime : ''}`;
+        }
 
         showMessage(msg);
     }
@@ -3563,8 +3582,8 @@ export class QuickReminderDialog {
             return { selectValue: 'every', beforeDays: 1 };
         }
 
-        // 非重复跨天任务：有完整日期时间的为"指定时间"
-        if (!this.isRepeatCustomReminderMode(date, endDate) && !!date && !!endDate && endDate > date) {
+        // 非重复任务：有完整日期时间的为"指定时间" (specific)
+        if (!this.isRepeatCustomReminderMode(date, endDate)) {
             return { selectValue: 'specific', beforeDays: 1 };
         }
 
@@ -3764,12 +3783,12 @@ export class QuickReminderDialog {
                 addPresetBtn.disabled = true;
                 addPresetBtn.classList.add('ariaLabel'); addPresetBtn.setAttribute('aria-label', '重复任务请直接设置提醒日与时间');
             }
-        } else if (isCrossDay) {
-            // 普通跨天任务：每天 / 指定时间
+        } else {
+            // 普通非重复任务（跨天、单天、无日期）
             dayWrapper.style.display = '';
             dayHint.style.display = '';
             const previousValue = daySelect.value;
-            daySelect.innerHTML = '<option value="every">每天</option><option value="specific">指定时间</option>';
+            daySelect.innerHTML = '<option value="every">每天</option><option value="specific">指定日期</option>';
             daySelect.value = previousValue === 'every' || previousValue === 'specific' ? previousValue : 'every';
             if (!daySelect.value) daySelect.value = 'every';
             dayHint.textContent = '每天提醒，或指定具体日期和时间';
@@ -3786,14 +3805,6 @@ export class QuickReminderDialog {
                     customReminderInput.value = `${date}T${customReminderInput.value}`;
                 }
             }
-        } else {
-            customReminderInput.type = 'datetime-local';
-            dayWrapper.style.display = 'none';
-            beforeDaysWrapper.style.display = 'none';
-            dayHint.style.display = 'none';
-            daySelect.innerHTML = '<option value="today">当天</option><option value="before">提前</option>';
-            daySelect.value = 'today';
-            beforeDaysInput.value = '1';
             if (addPresetBtn) {
                 addPresetBtn.disabled = false;
                 addPresetBtn.classList.add('ariaLabel'); addPresetBtn.setAttribute('aria-label', '');
@@ -3810,7 +3821,6 @@ export class QuickReminderDialog {
         const isRepeatMode = this.isRepeatCustomReminderMode(date, endDate);
         const durationDays = this.getRepeatCustomReminderDurationDays(date, endDate);
         const isCrossDay = !!date && !!endDate && endDate > date;
-        const useTimeInput = isRepeatMode || isCrossDay;
         // 渲染为多行可编辑输入：每行包含 datetime-local 输入、备注输入、移除按钮
         container.innerHTML = '';
         this.customTimes.forEach((item, index) => {
@@ -3832,21 +3842,21 @@ export class QuickReminderDialog {
             timeGroup.style.cssText = 'display: flex; gap: 8px; align-items: center; flex: 1 1 280px; min-width: 0; flex-wrap: wrap;';
 
             const timeInput = document.createElement('input');
-            const isSpecificCrossDay = isCrossDay && !isRepeatMode && !normalizedItem.everyDay;
-            timeInput.type = isSpecificCrossDay ? 'datetime-local' : (useTimeInput ? 'time' : 'datetime-local');
+            const isSpecificNonRepeat = !isRepeatMode && !normalizedItem.everyDay;
+            timeInput.type = isSpecificNonRepeat ? 'datetime-local' : 'time';
             timeInput.className = 'b3-text-field';
             timeInput.style.cssText = 'flex: 1 1 140px;min-width: 150px;';
-            timeInput.value = isSpecificCrossDay
+            timeInput.value = isSpecificNonRepeat
                 ? (normalizedItem.time || '')
-                : (useTimeInput ? this.getCustomReminderTimeValue(normalizedItem.time) : (normalizedItem.time || ''));
+                : this.getCustomReminderTimeValue(normalizedItem.time);
             timeInput.placeholder = '开始：';
 
             const endTimeInput = document.createElement('input');
-            endTimeInput.type = isSpecificCrossDay ? 'datetime-local' : (useTimeInput ? 'time' : 'datetime-local');
+            endTimeInput.type = isSpecificNonRepeat ? 'datetime-local' : 'time';
             endTimeInput.className = 'b3-text-field';
             endTimeInput.style.cssText = 'flex: 1 1 140px;min-width: 150px;';
             endTimeInput.value = normalizedItem.endTime
-                ? (isSpecificCrossDay ? normalizedItem.endTime : (useTimeInput ? this.getCustomReminderTimeValue(normalizedItem.endTime) : normalizedItem.endTime))
+                ? (isSpecificNonRepeat ? normalizedItem.endTime : this.getCustomReminderTimeValue(normalizedItem.endTime))
                 : '';
             endTimeInput.placeholder = '结束：';
 
@@ -3861,85 +3871,85 @@ export class QuickReminderDialog {
             let daySelect: HTMLSelectElement | null = null;
             let beforeDaysInput: HTMLInputElement | null = null;
             let dayWrapper: HTMLDivElement | null = null;
-            if (isRepeatMode || isCrossDay) {
-                dayWrapper = document.createElement('div');
-                dayWrapper.style.cssText = 'display: flex; align-items: center; gap: 6px; flex: 0 0 auto; flex-wrap: wrap;';
-                daySelect = document.createElement('select');
-                daySelect.className = 'b3-text-field';
-                daySelect.style.cssText = 'min-width: 120px;';
-                const selection = this.getCustomReminderDaySelection(normalizedItem, date, endDate);
-                if (isRepeatMode && durationDays > 1) {
-                    const options = Array.from({ length: durationDays }, (_, idx) => {
-                        const day = idx + 1;
-                        return `<option value="day:${day}">第${day}天</option>`;
-                    }).join('') + '<option value="every">每天</option><option value="before">提前</option>';
-                    daySelect.innerHTML = options;
-                    daySelect.value = selection.selectValue.startsWith('day:') || selection.selectValue === 'before' || selection.selectValue === 'every'
-                        ? selection.selectValue
-                        : 'day:1';
-                } else if (isCrossDay && !isRepeatMode) {
-                    daySelect.innerHTML = '<option value="every">每天</option><option value="specific">指定时间</option>';
-                    daySelect.value = selection.selectValue === 'every' || selection.selectValue === 'specific'
-                        ? selection.selectValue
-                        : 'every';
-                } else {
-                    daySelect.innerHTML = '<option value="today">当天</option><option value="before">提前</option>';
-                    daySelect.value = selection.selectValue === 'before' ? 'before' : 'today';
-                }
-                const beforeWrapper = document.createElement('div');
-                beforeWrapper.style.cssText = `display: ${daySelect.value === 'before' ? 'flex' : 'none'}; align-items: center; gap: 6px;`;
-                beforeDaysInput = document.createElement('input');
-                beforeDaysInput.type = 'number';
-                beforeDaysInput.className = 'b3-text-field';
-                beforeDaysInput.style.cssText = 'width: 72px;';
-                beforeDaysInput.min = '1';
-                beforeDaysInput.step = '1';
-                beforeDaysInput.value = String(selection.beforeDays);
-                const beforeSuffix = document.createElement('span');
-                beforeSuffix.textContent = '天';
-                beforeWrapper.appendChild(beforeDaysInput);
-                beforeWrapper.appendChild(beforeSuffix);
+            
+            // 为所有重复和非重复任务生成日/每天选择
+            dayWrapper = document.createElement('div');
+            dayWrapper.style.cssText = 'display: flex; align-items: center; gap: 6px; flex: 0 0 auto; flex-wrap: wrap;';
+            daySelect = document.createElement('select');
+            daySelect.className = 'b3-text-field';
+            daySelect.style.cssText = 'min-width: 120px;';
+            const selection = this.getCustomReminderDaySelection(normalizedItem, date, endDate);
+            if (isRepeatMode && durationDays > 1) {
+                const options = Array.from({ length: durationDays }, (_, idx) => {
+                    const day = idx + 1;
+                    return `<option value="day:${day}">第${day}天</option>`;
+                }).join('') + '<option value="every">每天</option><option value="before">提前</option>';
+                daySelect.innerHTML = options;
+                daySelect.value = selection.selectValue.startsWith('day:') || selection.selectValue === 'before' || selection.selectValue === 'every'
+                    ? selection.selectValue
+                    : 'day:1';
+            } else if (!isRepeatMode) {
+                daySelect.innerHTML = '<option value="every">每天</option><option value="specific">指定日期</option>';
+                daySelect.value = selection.selectValue === 'every' || selection.selectValue === 'specific'
+                    ? selection.selectValue
+                    : 'every';
+            } else {
+                daySelect.innerHTML = '<option value="today">当天</option><option value="before">提前</option>';
+                daySelect.value = selection.selectValue === 'before' ? 'before' : 'today';
+            }
+            const beforeWrapper = document.createElement('div');
+            beforeWrapper.style.cssText = `display: ${daySelect.value === 'before' ? 'flex' : 'none'}; align-items: center; gap: 6px;`;
+            beforeDaysInput = document.createElement('input');
+            beforeDaysInput.type = 'number';
+            beforeDaysInput.className = 'b3-text-field';
+            beforeDaysInput.style.cssText = 'width: 72px;';
+            beforeDaysInput.min = '1';
+            beforeDaysInput.step = '1';
+            beforeDaysInput.value = String(selection.beforeDays);
+            const beforeSuffix = document.createElement('span');
+            beforeSuffix.textContent = '天';
+            beforeWrapper.appendChild(beforeDaysInput);
+            beforeWrapper.appendChild(beforeSuffix);
 
-                dayWrapper.appendChild(daySelect);
-                dayWrapper.appendChild(beforeWrapper);
+            dayWrapper.appendChild(daySelect);
+            dayWrapper.appendChild(beforeWrapper);
 
-                daySelect.addEventListener('change', () => {
-                    beforeWrapper.style.display = daySelect?.value === 'before' ? 'flex' : 'none';
-                    // 跨天任务：切换"每天"(time)和"指定时间"(datetime-local)
-                    if (daySelect?.value === 'every' || daySelect?.value === 'specific') {
-                        if (daySelect.value === 'every') {
-                            timeInput.type = 'time';
-                            endTimeInput.type = 'time';
-                            if (timeInput.value.includes('T')) {
-                                timeInput.value = this.getCustomReminderTimeValue(timeInput.value);
-                            }
-                            if (endTimeInput.value.includes('T')) {
-                                endTimeInput.value = this.getCustomReminderTimeValue(endTimeInput.value);
-                            }
-                        } else {
-                            timeInput.type = 'datetime-local';
-                            endTimeInput.type = 'datetime-local';
-                            if (!timeInput.value.includes('T') && timeInput.value && date) {
-                                timeInput.value = `${date}T${timeInput.value}`;
-                            }
-                            if (!endTimeInput.value.includes('T') && endTimeInput.value && date) {
-                                endTimeInput.value = `${date}T${endTimeInput.value}`;
-                            }
+            daySelect.addEventListener('change', () => {
+                beforeWrapper.style.display = daySelect?.value === 'before' ? 'flex' : 'none';
+                // 切换"每天"(time)和"指定日期"(datetime-local)
+                if (daySelect?.value === 'every' || daySelect?.value === 'specific') {
+                    if (daySelect.value === 'every') {
+                        timeInput.type = 'time';
+                        endTimeInput.type = 'time';
+                        if (timeInput.value.includes('T')) {
+                            timeInput.value = this.getCustomReminderTimeValue(timeInput.value);
+                        }
+                        if (endTimeInput.value.includes('T')) {
+                            endTimeInput.value = this.getCustomReminderTimeValue(endTimeInput.value);
+                        }
+                    } else {
+                        timeInput.type = 'datetime-local';
+                        endTimeInput.type = 'datetime-local';
+                        if (!timeInput.value.includes('T') && timeInput.value && date) {
+                            timeInput.value = `${date}T${timeInput.value}`;
+                        }
+                        if (!endTimeInput.value.includes('T') && endTimeInput.value && date) {
+                            endTimeInput.value = `${date}T${endTimeInput.value}`;
                         }
                     }
-                    this.customTimes[index] = this.buildCustomTimeItem(
-                        timeInput.value || '',
-                        endTimeInput.value || undefined,
-                        this.customTimes[index]?.note || '',
-                        daySelect?.value || '',
-                        beforeDaysInput?.value || '',
-                        date,
-                        endDate
-                    );
-                    this.sortCustomTimes(date, endDate);
-                    this.renderCustomTimeList();
-                });
-            }
+                }
+                this.customTimes[index] = this.buildCustomTimeItem(
+                    timeInput.value || '',
+                    endTimeInput.value || undefined,
+                    this.customTimes[index]?.note || '',
+                    daySelect?.value || '',
+                    beforeDaysInput?.value || '',
+                    date,
+                    endDate
+                );
+                this.sortCustomTimes(date, endDate);
+                this.renderCustomTimeList();
+            });
 
             const removeBtn = document.createElement('button');
             removeBtn.type = 'button';
@@ -4571,7 +4581,7 @@ export class QuickReminderDialog {
                     note: '',
                     ...(durationDays > 1 ? { dayIndex: 1 } : { dayOffset: 1 })
                 });
-            } else if (isCrossDay) {
+            } else if (isCrossDay || !date) {
                 this.addCustomTime({
                     time: `${hh}:${min}`,
                     note: '',

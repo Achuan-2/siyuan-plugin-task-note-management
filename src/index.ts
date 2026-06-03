@@ -4047,7 +4047,13 @@ export default class ReminderPlugin extends Plugin {
 
                             const parsed = this.extractDateAndTime(rt);
                             const hasDate = !!parsed.date;
-                            const shouldCheck = hasDate ? (parsed.date === today) : inDateRange;
+                            
+                            let shouldCheck = false;
+                            if (typeof rtItem === 'object' && rtItem.everyDay) {
+                                shouldCheck = !reminderObj.date || today >= reminderObj.date;
+                            } else {
+                                shouldCheck = hasDate ? (parsed.date === today) : inDateRange;
+                            }
 
                             if (shouldCheck) {
                                 const notifyKey = `${reminderObj.id}_${today}_${rt}_reminderTimes`;
@@ -4387,7 +4393,39 @@ export default class ReminderPlugin extends Plugin {
 
     private formatReminderScheduleDisplayText(reminder: any): string {
         const dateText = this.normalizeReminderDateText(reminder?.date);
-        if (!dateText) return "";
+        if (!dateText) {
+            const entries: Array<{ time: string; note?: string }> = [];
+            if (Array.isArray(reminder?.reminderTimes)) {
+                reminder.reminderTimes.forEach((rtItem: any) => {
+                    if (!rtItem) return;
+                    const rt = typeof rtItem === 'string' ? rtItem : rtItem.time;
+                    const note = typeof rtItem === 'string' ? '' : String(rtItem.note || '').trim();
+                    if (rt) {
+                        entries.push({ time: rt, note });
+                    }
+                });
+            }
+            if (entries.length === 0 && typeof reminder?.customReminderTime === 'string' && reminder.customReminderTime.trim()) {
+                entries.push({ time: reminder.customReminderTime.trim() });
+            }
+
+            if (entries.length > 0) {
+                try {
+                    const times = entries.map(item => {
+                        let s = String(item.time).trim();
+                        let timePart = s.includes('T') ? s.split('T')[1] : s;
+                        const displayTime = timePart ? timePart.substring(0, 5) : '';
+                        return item.note && displayTime ? `${displayTime}（${item.note}）` : displayTime;
+                    }).filter(Boolean).join(', ');
+                    if (times) {
+                        return `⏰${times}`;
+                    }
+                } catch (e) {
+                    console.warn('format reminderTimes failed', e);
+                }
+            }
+            return "";
+        }
         const timeText = this.normalizeReminderTimeText(reminder?.time);
         const displayDateText = this.formatReminderDateForBoundDisplay(dateText);
         const endDateText = this.normalizeReminderDateText(reminder?.endDate) || dateText;
@@ -4493,7 +4531,13 @@ export default class ReminderPlugin extends Plugin {
         }
 
         const logicalToday = getLogicalDateString();
-        const incompleteWithDate = reminders.filter((reminder: any) => !reminder.completed && this.normalizeReminderDateText(reminder?.date));
+        const incompleteWithDate = reminders.filter((reminder: any) => 
+            !reminder.completed && (
+                this.normalizeReminderDateText(reminder?.date) || 
+                (reminder.reminderTimes && reminder.reminderTimes.length > 0) ||
+                (typeof reminder.customReminderTime === 'string' && reminder.customReminderTime.trim())
+            )
+        );
         if (incompleteWithDate.length === 0) return null;
 
         const nonOverdueIncomplete = incompleteWithDate.filter((reminder: any) =>

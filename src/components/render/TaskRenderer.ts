@@ -305,13 +305,34 @@ export class TaskRenderer {
             result = time ? `${dateStr} ${time}` : dateStr;
         }
 
+        // 如果是无日期的任务，我们不要前面的 dateStr / time
+        const hasNoDate = reminder && !reminder.date && !reminder.endDate;
+        if (hasNoDate) {
+            result = '';
+        }
+
         // 处理 reminderTimes
         try {
-            if (reminder?.reminderTimes && Array.isArray(reminder.reminderTimes) && reminder.reminderTimes.length > 0) {
-                const times = reminder.reminderTimes.map((rtItem: any) => {
-                    if (!rtItem) return '';
+            const entries: Array<{ time: string; note?: string; everyDay?: boolean }> = [];
+            if (reminder?.reminderTimes && Array.isArray(reminder.reminderTimes)) {
+                reminder.reminderTimes.forEach((rtItem: any) => {
+                    if (!rtItem) return;
                     const rt = typeof rtItem === 'string' ? rtItem : rtItem.time;
                     const note = typeof rtItem === 'string' ? '' : String(rtItem.note || '').trim();
+                    if (rt) {
+                        entries.push({ time: rt, note, everyDay: !!rtItem.everyDay });
+                    }
+                });
+            }
+            if (entries.length === 0 && typeof reminder?.customReminderTime === 'string' && reminder.customReminderTime.trim()) {
+                entries.push({ time: reminder.customReminderTime.trim() });
+            }
+
+            if (entries.length > 0) {
+                const times = entries.map((rtItem: any) => {
+                    if (!rtItem) return '';
+                    const rt = rtItem.time;
+                    const note = String(rtItem.note || '').trim();
                     if (!rt) return '';
                     const s = String(rt).trim();
                     let datePart: string | null = null;
@@ -326,12 +347,16 @@ export class TaskRenderer {
                     }
 
                     let targetDate = datePart || date || today;
-                    if (rtItem && typeof rtItem === 'object' && rtItem.everyDay) {
+                    if (rtItem.everyDay) {
                         const logicalStart = this.getReminderLogicalDate(date, time, context?.plugin);
                         const logicalEnd = this.getReminderLogicalDate(endDate || date, endTime || time, context?.plugin);
                         if (logicalStart && logicalEnd) {
                             if (compareDateStrings(today, logicalStart) < 0) {
-                                targetDate = date;
+                                if (reminder?.isAvailableToday) {
+                                    targetDate = today;
+                                } else {
+                                    targetDate = date;
+                                }
                             } else if (compareDateStrings(today, logicalEnd) > 0) {
                                 targetDate = endDate || date;
                             } else {
@@ -362,13 +387,16 @@ export class TaskRenderer {
             console.warn('格式化 reminderTimes 失败', e);
         }
 
-        return result;
+        return result.trim();
     }
 
     /**
      * 创建倒计时标签
      */
     private static createCountdownBadge(task: any, today: string, context: TaskRenderContext): HTMLElement | null {
+        if (!task.date && !task.endDate) {
+            return null;
+        }
         let targetDate: string;
         let isOverdueEvent = false;
         let isStartedOnlyEvent = false;
@@ -902,13 +930,15 @@ export class TaskRenderer {
             timeContainer.appendChild(repeatIcon);
         }
 
-        const displayDate = task.date || task.endDate;
+        const hasCustomTimes = (task.reminderTimes && task.reminderTimes.length > 0) || (typeof task.customReminderTime === 'string' && task.customReminderTime.trim());
+        const displayDate = task.date || task.endDate || (hasCustomTimes ? today : null);
         if (displayDate) {
             const timeEl = document.createElement('div');
             timeEl.className = 'reminder-item__time';
             const displayTime = task.date ? task.time : (task.endTime || task.time);
             const timeText = this.formatReminderTime(displayDate, displayTime, today, task.endDate, task.endTime, task, context);
-            timeEl.textContent = '🗓' + timeText;
+            const hasNoDate = !task.date && !task.endDate;
+            timeEl.textContent = (hasNoDate ? '' : '🗓') + timeText;
 
             if (!task.isSubscribed) {
                 timeEl.style.cursor = 'pointer';

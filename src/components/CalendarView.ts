@@ -8164,22 +8164,48 @@ export class CalendarView {
         if (!reminderEntries.length) return;
 
         const fallbackDate = reminder.date || reminder.endDate;
-        if (!fallbackDate) return;
+        const hasEveryDay = reminderEntries.some(e => e.everyDay);
+        const hasExplicitDateInEntries = reminderEntries.some(e => e.time.includes('T'));
+        if (!fallbackDate && !hasEveryDay && !hasExplicitDateInEntries) return;
 
         const colors = this.getEventColors(reminder);
         const priority = reminder.priority || 'none';
         const baseTitle = reminder.title || i18n("unnamedNote");
 
         reminderEntries.forEach((entry, index) => {
-            // everyDay 项：为日期范围内每一天生成事件
-            if (entry.everyDay && reminder.date && reminder.endDate && reminder.endDate > reminder.date) {
+            // everyDay 项：为日期范围内（或至任务完成、至视图结束）每一天生成事件
+            if (entry.everyDay) {
                 const timeOnly = entry.time.includes('T') ? entry.time.split('T')[1]?.split(':').slice(0, 2).join(':') || entry.time : entry.time;
                 const timeMatch = timeOnly.match(/^\d{1,2}:\d{2}/);
                 if (!timeMatch) return;
                 const normalizedTime = timeMatch[0].padStart(5, '0');
 
-                const startParts = reminder.date.split('-').map(Number);
-                const endParts = reminder.endDate.split('-').map(Number);
+                const currentView = this.calendar?.view;
+                const activeStart = currentView ? getLocalDateString(currentView.activeStart) : undefined;
+                const activeEnd = currentView ? getLocalDateString(currentView.activeEnd) : undefined;
+                const todayStr = getLocalDateString(new Date());
+
+                let startStr = reminder.date || activeStart || todayStr;
+                let endStr = reminder.endDate;
+                
+                // If not cross-day task, calculate dynamic end date
+                const isCrossDay = reminder.date && reminder.endDate && reminder.endDate > reminder.date;
+                if (!isCrossDay) {
+                    if (reminder.completed) {
+                        endStr = reminder.completedTime ? reminder.completedTime.substring(0, 10) : (reminder.date || todayStr);
+                        if (startStr > endStr) {
+                            endStr = startStr;
+                        }
+                    } else {
+                        endStr = activeEnd || todayStr;
+                        if (startStr > endStr) {
+                            endStr = startStr;
+                        }
+                    }
+                }
+
+                const startParts = startStr.split('-').map(Number);
+                const endParts = endStr.split('-').map(Number);
                 const startDateObj = new Date(startParts[0], startParts[1] - 1, startParts[2]);
                 const endDateObj = new Date(endParts[0], endParts[1] - 1, endParts[2]);
 

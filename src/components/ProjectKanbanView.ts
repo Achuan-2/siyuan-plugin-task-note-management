@@ -11588,7 +11588,39 @@ export class ProjectKanbanView {
 
         // 使用逻辑日期判断（考虑一天起始时间）
         const displayDate = task.date || task.endDate;
-        if (!displayDate) return "未设置日期";
+        if (!displayDate) {
+            const entries: Array<{ time: string; note?: string }> = [];
+            if (Array.isArray(task.reminderTimes)) {
+                task.reminderTimes.forEach((rtItem: any) => {
+                    if (!rtItem) return;
+                    const rt = typeof rtItem === 'string' ? rtItem : rtItem.time;
+                    const note = typeof rtItem === 'string' ? '' : String(rtItem.note || '').trim();
+                    if (rt) {
+                        entries.push({ time: rt, note });
+                    }
+                });
+            }
+            if (entries.length === 0 && typeof task.customReminderTime === 'string' && task.customReminderTime.trim()) {
+                entries.push({ time: task.customReminderTime.trim() });
+            }
+
+            if (entries.length > 0) {
+                try {
+                    const times = entries.map(item => {
+                        let s = String(item.time).trim();
+                        let timePart = s.includes('T') ? s.split('T')[1] : s;
+                        const displayTime = timePart ? timePart.substring(0, 5) : '';
+                        return item.note && displayTime ? `${displayTime}（${item.note}）` : displayTime;
+                    }).filter(Boolean).join(', ');
+                    if (times) {
+                        return `⏰${times}`;
+                    }
+                } catch (e) {
+                    console.warn('Kanban format custom times failed', e);
+                }
+            }
+            return "未设置日期";
+        }
 
         const logicalStart = this.getTaskLogicalDate(task.date || task.endDate, task.date ? task.time : (task.endTime || task.time));
         const logicalEnd = this.getTaskLogicalDate(task.endDate || task.date, task.endTime || task.time);
