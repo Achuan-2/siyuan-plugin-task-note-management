@@ -17,6 +17,7 @@ export interface ProjectSelectorPopupOptions {
     excludeArchived?: boolean; // defaults to true
     allowedProjectIds?: string[];
     includeNoProject?: boolean; // render "No Project" item
+    excludeSubscription?: boolean;
     
     // Callbacks
     onSelect?: (projectId: string, projectName: string) => void | Promise<void>;
@@ -46,6 +47,7 @@ export class ProjectSelectorPopup {
     private excludeArchived: boolean;
     private allowedProjectIds?: string[];
     private includeNoProject: boolean;
+    private excludeSubscription: boolean;
     
     private onSelect?: (projectId: string, projectName: string) => void | Promise<void>;
     private onChange?: (selectedIds: Set<string>) => void | Promise<void>;
@@ -73,6 +75,7 @@ export class ProjectSelectorPopup {
         this.excludeArchived = options.excludeArchived !== false;
         this.allowedProjectIds = options.allowedProjectIds;
         this.includeNoProject = options.includeNoProject !== false;
+        this.excludeSubscription = !!options.excludeSubscription;
         
         this.onSelect = options.onSelect;
         this.onChange = options.onChange;
@@ -200,6 +203,7 @@ export class ProjectSelectorPopup {
                 const statusInfo = statuses.find(s => s.id === projectStatus);
                 if (statusInfo?.isArchived) return false;
             }
+            if (this.excludeSubscription && project.isSubscription) return false;
             return true;
         });
         
@@ -802,6 +806,7 @@ export class ProjectSelectorPopup {
                     const statusInfo = statuses.find(s => s.id === project.status);
                     if (statusInfo?.isArchived) return false;
                 }
+                if (this.excludeSubscription && project.isSubscription) return false;
                 return true;
             })
             .map(p => p.id);
@@ -873,6 +878,7 @@ export class ProjectSelectorPopup {
                     const statusInfo = statuses.find(s => s.id === project.status);
                     if (statusInfo?.isArchived) return false;
                 }
+                if (this.excludeSubscription && project.isSubscription) return false;
                 return true;
             })
             .map(p => p.id);

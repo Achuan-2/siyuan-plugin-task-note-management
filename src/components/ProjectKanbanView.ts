@@ -14,7 +14,7 @@ import { generateRepeatInstances, getRepeatDescription, getDaysDifference, addDa
 import { getSolarDateLunarString } from "../utils/lunarUtils";
 import { QuickReminderDialog } from "./QuickReminderDialog";
 import { BlockBindingDialog } from "./BlockBindingDialog";
-import { getAllReminders, saveReminders } from '../utils/icsSubscription';
+import { getAllReminders, saveReminders, loadSubscriptions, syncSubscription, deleteSubscriptionReminderTask } from '../utils/icsSubscription';
 import { VipManager } from "../utils/vip";
 
 import { PasteTaskDialog } from "./PasteTaskDialog";
@@ -4362,17 +4362,19 @@ export class ProjectKanbanView {
         controlsGroup.className = 'project-kanban-controls';
 
         // 新建任务按钮
-        const addTaskBtn = document.createElement('button');
-        addTaskBtn.className = 'b3-button b3-button--primary';
-        addTaskBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg> ${i18n('newTask')}`;
-        addTaskBtn.addEventListener('click', () => this.showCreateTaskDialog());
-        controlsGroup.appendChild(addTaskBtn);
+        if (!this.project?.isSubscription) {
+            const addTaskBtn = document.createElement('button');
+            addTaskBtn.className = 'b3-button b3-button--primary';
+            addTaskBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg> ${i18n('newTask')}`;
+            addTaskBtn.addEventListener('click', () => this.showCreateTaskDialog());
+            controlsGroup.appendChild(addTaskBtn);
 
-        const pasteTaskBtn = document.createElement('button');
-        pasteTaskBtn.className = 'b3-button';
-        pasteTaskBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconPaste"></use></svg> ${i18n('pasteNew')}`;
-        pasteTaskBtn.addEventListener('click', () => this.showPasteTaskDialog(undefined, undefined, undefined, true));
-        controlsGroup.appendChild(pasteTaskBtn);
+            const pasteTaskBtn = document.createElement('button');
+            pasteTaskBtn.className = 'b3-button';
+            pasteTaskBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconPaste"></use></svg> ${i18n('pasteNew')}`;
+            pasteTaskBtn.addEventListener('click', () => this.showPasteTaskDialog(undefined, undefined, undefined, true));
+            controlsGroup.appendChild(pasteTaskBtn);
+        }
 
         // 排序按钮
         this.sortButton = document.createElement('button');
@@ -4694,6 +4696,22 @@ export class ProjectKanbanView {
             const svgIcon = refreshBtn.querySelector('svg');
             svgIcon?.classList.add('fn__rotate');
             try {
+                if (this.project?.isSubscription) {
+                    const subData = await loadSubscriptions(this.plugin);
+                    const subscription = Object.values(subData.subscriptions || {}).find(
+                        (sub: any) => sub.projectId === this.projectId || sub.id === this.project.subscriptionId
+                    );
+                    if (subscription) {
+                        try {
+                            const res = await syncSubscription(this.plugin, subscription);
+                            if (res && !res.success) {
+                                console.error('Auto sync subscription failed on refresh:', res.error);
+                            }
+                        } catch (err) {
+                            console.error('Auto sync subscription threw error on refresh:', err);
+                        }
+                    }
+                }
                 // 重新加载项目信息（包括分组信息）
                 await this.loadProject();
                 // 重新加载任务数据
@@ -5371,7 +5389,7 @@ export class ProjectKanbanView {
         rightContainer.style.cssText = 'display:flex; align-items:center; gap:8px; flex-shrink: 0;';
         rightContainer.appendChild(countEl);
 
-        if (status !== 'completed') {
+        if (status !== 'completed' && !this.project?.isSubscription) {
             const addTaskBtn = document.createElement('button');
             addTaskBtn.className = 'b3-button b3-button--outline';
             addTaskBtn.classList.add('ariaLabel'); addTaskBtn.setAttribute('aria-label', i18n('newTask'));
@@ -9254,27 +9272,29 @@ export class ProjectKanbanView {
             countBadge.style.cssText = 'background: var(--b3-theme-primary); color: white; border-radius: 12px; padding: 2px 8px; font-size: 12px; min-width: 20px; text-align: center;';
             headerRight.appendChild(countBadge);
 
-            // Add Task Button
-            const addBtn = document.createElement('button');
-            addBtn.className = 'b3-button b3-button--outline';
-            addBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>`;
-            addBtn.classList.add('ariaLabel'); addBtn.setAttribute('aria-label', i18n('newTask'));
-            addBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.showCreateTaskDialog(undefined, undefined, 'doing', this.getSingleFilteredMilestoneId('ungrouped'));
-            });
-            headerRight.appendChild(addBtn);
+            if (!this.project?.isSubscription) {
+                // Add Task Button
+                const addBtn = document.createElement('button');
+                addBtn.className = 'b3-button b3-button--outline';
+                addBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>`;
+                addBtn.classList.add('ariaLabel'); addBtn.setAttribute('aria-label', i18n('newTask'));
+                addBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.showCreateTaskDialog(undefined, undefined, 'doing', this.getSingleFilteredMilestoneId('ungrouped'));
+                });
+                headerRight.appendChild(addBtn);
 
-            // Paste Task Button
-            const pasteBtn = document.createElement('button');
-            pasteBtn.className = 'b3-button b3-button--outline';
-            pasteBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconPaste"></use></svg>`;
-            pasteBtn.classList.add('ariaLabel'); pasteBtn.setAttribute('aria-label', i18n('pasteNew'));
-            pasteBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.showPasteTaskDialog(undefined, undefined, 'doing', true);
-            });
-            headerRight.appendChild(pasteBtn);
+                // Paste Task Button
+                const pasteBtn = document.createElement('button');
+                pasteBtn.className = 'b3-button b3-button--outline';
+                pasteBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconPaste"></use></svg>`;
+                pasteBtn.classList.add('ariaLabel'); pasteBtn.setAttribute('aria-label', i18n('pasteNew'));
+                pasteBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.showPasteTaskDialog(undefined, undefined, 'doing', true);
+                });
+                headerRight.appendChild(pasteBtn);
+            }
 
             header.appendChild(headerRight);
             column.appendChild(header);
@@ -10075,7 +10095,7 @@ export class ProjectKanbanView {
                 }
 
                 // 不在已完成列显示新建按钮
-                if (status !== 'completed') {
+                if (status !== 'completed' && !this.project?.isSubscription) {
                     const addGroupTaskBtn = document.createElement('button');
                     addGroupTaskBtn.className = 'b3-button b3-button--small b3-button--primary';
                     addGroupTaskBtn.classList.add('ariaLabel'); addGroupTaskBtn.setAttribute('aria-label', i18n('newTask'));
@@ -10324,8 +10344,10 @@ export class ProjectKanbanView {
         headerRight.style.cssText = 'display:flex; align-items:center; gap:8px; flex-shrink: 0;';
         headerRight.appendChild(countEl);
 
-        headerRight.appendChild(addGroupTaskBtn);
-        headerRight.appendChild(pasteGroupTaskBtn);
+        if (!this.project?.isSubscription) {
+            headerRight.appendChild(addGroupTaskBtn);
+            headerRight.appendChild(pasteGroupTaskBtn);
+        }
 
         header.appendChild(headerRight);
 
@@ -10832,7 +10854,7 @@ export class ProjectKanbanView {
         headerRight.appendChild(taskCount);
 
         // 非已完成状态显示新建按钮和粘贴按钮
-        if (status !== 'completed') {
+        if (status !== 'completed' && !this.project?.isSubscription) {
             const addTaskBtn = document.createElement('button');
             addTaskBtn.className = 'b3-button b3-button--text';
             addTaskBtn.style.cssText = 'padding: 2px; margin-left: 2px;';
@@ -11182,11 +11204,19 @@ export class ProjectKanbanView {
                     await this.showBatchContextMenu(e);
                     return;
                 }
-                if (task.isSubscribed) {
+                if (task.isSubscribed && task.subscriptionType !== 'caldav') {
                     this.showSubscribedTaskContextMenu(e, task);
                     return;
                 }
                 await this.showTaskContextMenu(e, task);
+            },
+            onCardDoubleClick: async (task: any, e: MouseEvent) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const isEditable = !task.isSubscribed || (task.subscriptionType === 'caldav' && task.caldavEditable);
+                if (isEditable) {
+                    await this.editTask(task);
+                }
             },
             onCardClick: (task: any, e: MouseEvent) => {
                 if (this.handleMultiSelectTaskClick(task, e)) {
@@ -11267,7 +11297,7 @@ export class ProjectKanbanView {
                                 (targetGroup !== draggedGroup) ||
                                 (targetPriority !== draggedPriority) ||
                                 (targetParentId !== draggedParentId)) {
-                                if (!this.draggedTask.isSubscribed) {
+                                if (!this.draggedTask.isSubscribed || this.draggedTask.subscriptionType === 'caldav') {
                                     isStructuralChange = true;
                                 }
                             }
@@ -11390,7 +11420,7 @@ export class ProjectKanbanView {
                                 (targetGroup !== draggedGroup) ||
                                 (targetPriority !== draggedPriority) ||
                                 (targetParentId !== draggedParentId)) {
-                                if (!this.draggedTask.isSubscribed) {
+                                if (!this.draggedTask.isSubscribed || this.draggedTask.subscriptionType === 'caldav') {
                                     isStructuralChange = true;
                                 }
                             }
@@ -11863,34 +11893,77 @@ export class ProjectKanbanView {
 
         const childTasks = this.tasks.filter(t => t.parentId === task.id);
 
+        const isEditable = !task.isSubscribed || (task.subscriptionType === 'caldav' && task.caldavEditable);
+        const isDeletable = !task.isSubscribed || (task.subscriptionType === 'caldav' && task.caldavDeletable);
+
         // 编辑任务 - 针对周期任务显示不同选项
-        if (task.isRepeatInstance) {
-            // 周期事件实例 - 显示修改此实例和修改所有实例
-            menu.addItem({
-                iconHTML: "📝",
-                label: i18n('modifyThisInstance'),
-                click: () => this.editInstanceReminder(task)
-            });
-            menu.addItem({
-                iconHTML: "🔄",
-                label: i18n('modifyAllInstances'),
-                click: () => this.editTask(task)
-            });
-        } else if (task.repeat?.enabled) {
-            // 原始周期事件 - 只显示编辑选项
-            menu.addItem({
-                iconHTML: "📝",
-                label: i18n('editTask'),
-                click: () => this.editTask(task)
-            });
+        if (isEditable) {
+            if (task.isRepeatInstance) {
+                // 周期事件实例 - 显示修改此实例和修改所有实例
+                menu.addItem({
+                    iconHTML: "📝",
+                    label: i18n('modifyThisInstance'),
+                    click: () => this.editInstanceReminder(task)
+                });
+                menu.addItem({
+                    iconHTML: "🔄",
+                    label: i18n('modifyAllInstances'),
+                    click: () => this.editTask(task)
+                });
+            } else if (task.repeat?.enabled) {
+                // 原始周期事件 - 只显示编辑选项
+                menu.addItem({
+                    iconHTML: "📝",
+                    label: i18n('editTask'),
+                    click: () => this.editTask(task)
+                });
+            } else {
+                // 普通任务
+                menu.addItem({
+                    iconHTML: "📝",
+                    label: i18n('editTask'),
+                    click: () => this.editTask(task)
+                });
+                // 绑定块功能
+                if (task.blockId || task.docId) {
+                    menu.addItem({
+                        iconHTML: "📋",
+                        label: i18n('copyBlockRef'),
+                        click: () => this.copyBlockRef(task)
+                    });
+                } else {
+                    menu.addItem({
+                        iconHTML: "🔗",
+                        label: i18n('bindToBlock'),
+                        submenu: [
+                            {
+                                iconHTML: "🔗",
+                                label: i18n('bindToBlock'),
+                                click: () => this.showBindToBlockDialog(task, 'bind')
+                            },
+                            {
+                                iconHTML: "📑",
+                                label: i18n('newHeading'),
+                                click: () => this.showBindToBlockDialog(task, 'heading')
+                            },
+                            {
+                                iconHTML: "📄",
+                                label: i18n('newDocument'),
+                                click: () => this.showBindToBlockDialog(task, 'document')
+                            }
+                        ]
+                    });
+                }
+            }
         } else {
-            // 普通任务
             menu.addItem({
-                iconHTML: "📝",
-                label: i18n('editTask'),
-                click: () => this.editTask(task)
+                iconHTML: "ℹ️",
+                label: i18n("subscribedTaskReadOnly") || "订阅任务（只读）",
+                disabled: true
             });
-            // 绑定块功能
+            menu.addSeparator();
+
+            // 绑定块功能 (即使是只读订阅任务也允许块操作)
             if (task.blockId || task.docId) {
                 menu.addItem({
                     iconHTML: "📋",
@@ -11922,33 +11995,35 @@ export class ProjectKanbanView {
             }
         }
 
-        menu.addItem({
-            iconHTML: "➕",
-            label: i18n('createSubtask'),
-            click: () => this.showCreateTaskDialog(task)
-        });
+        if (!task.isSubscribed) {
+            menu.addItem({
+                iconHTML: "➕",
+                label: i18n('createSubtask'),
+                click: () => this.showCreateTaskDialog(task)
+            });
 
-        menu.addItem({
-            iconHTML: "⬆️",
-            label: i18n('createTaskBeforeCurrent') || '在当前任务前新增任务',
-            click: () => this.createTaskAdjacentTo(task, true)
-        });
+            menu.addItem({
+                iconHTML: "⬆️",
+                label: i18n('createTaskBeforeCurrent') || '在当前任务前新增任务',
+                click: () => this.createTaskAdjacentTo(task, true)
+            });
 
-        menu.addItem({
-            iconHTML: "⬇️",
-            label: i18n('createTaskAfterCurrent') || '在当前任务后新增任务',
-            click: () => this.createTaskAdjacentTo(task, false)
-        });
+            menu.addItem({
+                iconHTML: "⬇️",
+                label: i18n('createTaskAfterCurrent') || '在当前任务后新增任务',
+                click: () => this.createTaskAdjacentTo(task, false)
+            });
 
-        // 粘贴新建子任务
-        menu.addItem({
-            iconHTML: "📋",
-            label: i18n('pasteCreateSubtask'),
-            click: () => this.showPasteTaskDialog(task)
-        });
+            // 粘贴新建子任务
+            menu.addItem({
+                iconHTML: "📋",
+                label: i18n('pasteCreateSubtask'),
+                click: () => this.showPasteTaskDialog(task)
+            });
+        }
 
-        // 父子任务管理
-        if (task.parentId) {
+        // 父子任务管理 (订阅任务不允许修改父子关系)
+        if (task.parentId && !task.isSubscribed) {
             menu.addItem({
                 iconHTML: "🔗",
                 label: i18n('unsetParentRelation'),
@@ -12175,199 +12250,198 @@ export class ProjectKanbanView {
             click: () => this.setReminderPinned(task, !isPinned)
         });
 
-        // 快速调整日期
-        menu.addItem({
-            iconHTML: "📆",
-            label: i18n('quickReschedule') || '快速调整日期',
-            submenu: createQuickDateMenuItems(task, !!task.isRepeatInstance)
-        });
-
-        // 设置优先级子菜单
-        const priorityMenuItems = [];
-        const priorities = [
-            { key: 'high', label: i18n('priorityHigh'), icon: '🔴' },
-            { key: 'medium', label: i18n('priorityMedium'), icon: '🟡' },
-            { key: 'low', label: i18n('priorityLow'), icon: '🔵' },
-            { key: 'none', label: i18n('none'), icon: '⚫' }
-        ];
-
-        const currentPriority = task.priority || 'none';
-        priorities.forEach(priority => {
-            priorityMenuItems.push({
-                iconHTML: priority.icon,
-                label: priority.label,
-                current: currentPriority === priority.key,
-                click: () => this.setPriority(task, priority.key)
+        if (isEditable) {
+            // 快速调整日期
+            menu.addItem({
+                iconHTML: "📆",
+                label: i18n('quickReschedule') || '快速调整日期',
+                submenu: createQuickDateMenuItems(task, !!task.isRepeatInstance)
             });
-        });
 
-        menu.addItem({
-            iconHTML: "🎯",
-            label: i18n('setPriority'),
-            submenu: priorityMenuItems
-        });
+            // 设置优先级子菜单
+            const priorityMenuItems = [];
+            const priorities = [
+                { key: 'high', label: i18n('priorityHigh'), icon: '🔴' },
+                { key: 'medium', label: i18n('priorityMedium'), icon: '🟡' },
+                { key: 'low', label: i18n('priorityLow'), icon: '🔵' },
+                { key: 'none', label: i18n('none'), icon: '⚫' }
+            ];
 
-        // 状态切换：显示“设置状态”子菜单，列出所有可用状态（优先使用项目自定义的看板状态）
-        const currentStatus = this.getTaskStatus(task);
+            const currentPriority = task.priority || 'none';
+            priorities.forEach(priority => {
+                priorityMenuItems.push({
+                    iconHTML: priority.icon,
+                    label: priority.label,
+                    current: currentPriority === priority.key,
+                    click: () => this.setPriority(task, priority.key)
+                });
+            });
 
-        const statuses = (this.kanbanStatuses && this.kanbanStatuses.length > 0)
-            ? this.kanbanStatuses
-            : this.projectManager.getDefaultKanbanStatuses();
+            menu.addItem({
+                iconHTML: "🎯",
+                label: i18n('setPriority'),
+                submenu: priorityMenuItems
+            });
 
-        let statusCandidates = statuses;
-        const taskGroupId = task.customGroupId;
-        if (taskGroupId && taskGroupId !== 'ungrouped') {
-            try {
-                const projectGroups = await this.projectManager.getProjectCustomGroups(this.projectId);
-                const taskGroup = projectGroups.find((group: any) => group.id === taskGroupId);
-                if (taskGroup) {
-                    const visibleStatusIdSet = new Set(this.getVisibleStatusesForGroup(taskGroup).map(status => status.id));
-                    const filteredStatuses = statuses.filter(status => visibleStatusIdSet.has(status.id));
-                    if (filteredStatuses.length > 0) {
-                        statusCandidates = filteredStatuses;
+            // 状态切换：显示“设置状态”子菜单，列出所有可用状态（优先使用项目自定义的看板状态）
+            const currentStatus = this.getTaskStatus(task);
+
+            const statuses = (this.kanbanStatuses && this.kanbanStatuses.length > 0)
+                ? this.kanbanStatuses
+                : this.projectManager.getDefaultKanbanStatuses();
+
+            let statusCandidates = statuses;
+            const taskGroupId = task.customGroupId;
+            if (taskGroupId && taskGroupId !== 'ungrouped') {
+                try {
+                    const projectGroups = await this.projectManager.getProjectCustomGroups(this.projectId);
+                    const taskGroup = projectGroups.find((group: any) => group.id === taskGroupId);
+                    if (taskGroup) {
+                        const visibleStatusIdSet = new Set(this.getVisibleStatusesForGroup(taskGroup).map(status => status.id));
+                        const filteredStatuses = statuses.filter(status => visibleStatusIdSet.has(status.id));
+                        if (filteredStatuses.length > 0) {
+                            statusCandidates = filteredStatuses;
+                        }
                     }
+                } catch (error) {
+                    console.warn('[Kanban] 加载分组可见状态失败，使用全部状态:', error);
+                }
+            }
+
+            const statusMenuItems: any[] = [];
+            statusCandidates.forEach((s: any) => {
+                statusMenuItems.push({
+                    iconHTML: s.icon || '',
+                    label: s.name || s.id,
+                    current: currentStatus === s.id,
+                    click: () => this.changeTaskStatus(task, s.id)
+                });
+            });
+
+            menu.addItem({
+                iconHTML: "🔀",
+                label: i18n('setStatus') || '设置状态',
+                submenu: statusMenuItems
+            });
+
+            // 设置分组子菜单（仅在项目有自定义分组时显示）
+            try {
+                const { ProjectManager } = await import('../utils/projectManager');
+                const projectManager = ProjectManager.getInstance(this.plugin);
+                const projectGroups = await projectManager.getProjectCustomGroups(this.projectId);
+
+                // 过滤掉已归档的分组
+                const activeGroups = projectGroups.filter((g: any) => !g.archived);
+
+                if (activeGroups.length > 0) {
+                    const groupMenuItems = [];
+                    const currentGroupId = task.customGroupId;
+
+                    // 添加"移除分组"选项
+                    groupMenuItems.push({
+                        iconHTML: "❌",
+                        label: i18n('removeGroup'),
+                        current: !currentGroupId,
+                        // 传入 task 对象（setTaskCustomGroup 期望第一个参数为 task 对象）
+                        click: () => this.setTaskCustomGroup(task, null)
+                    });
+
+                    // 添加所有未归档分组选项
+                    activeGroups.forEach((group: any) => {
+                        groupMenuItems.push({
+                            iconHTML: group.icon || "",
+                            label: group.name,
+                            current: currentGroupId === group.id,
+                            // 传入 task 对象（setTaskCustomGroup 期望第一个参数为 task 对象）
+                            click: () => this.setTaskCustomGroup(task, group.id)
+                        });
+                    });
+
+                    menu.addItem({
+                        iconHTML: "📂",
+                        label: i18n('setGroup'),
+                        submenu: groupMenuItems
+                    });
                 }
             } catch (error) {
-                console.warn('[Kanban] 加载分组可见状态失败，使用全部状态:', error);
+                console.error('加载分组信息失败:', error);
             }
-        }
+            // 设置标签子菜单（仅在项目有标签时显示）
+            try {
+                const projectTags = await this.projectManager.getProjectTags(this.projectId);
 
-        const statusMenuItems: any[] = [];
-        statusCandidates.forEach((s: any) => {
-            statusMenuItems.push({
-                iconHTML: s.icon || '',
-                label: s.name || s.id,
-                current: currentStatus === s.id,
-                click: () => this.changeTaskStatus(task, s.id)
-            });
-        });
+                if (projectTags.length > 0) {
+                    const tagMenuItems = [];
+                    const currentTagIds = task.tagIds || [];
 
-        menu.addItem({
-            iconHTML: "🔀",
-            label: i18n('setStatus') || '设置状态',
-            submenu: statusMenuItems
-        });
+                    projectTags.forEach((tag: any) => {
+                        const isSelected = currentTagIds.includes(tag.id);
 
-        // 设置分组子菜单（仅在项目有自定义分组时显示）
-        try {
-            const { ProjectManager } = await import('../utils/projectManager');
-            const projectManager = ProjectManager.getInstance(this.plugin);
-            const projectGroups = await projectManager.getProjectCustomGroups(this.projectId);
-
-            // 过滤掉已归档的分组
-            const activeGroups = projectGroups.filter((g: any) => !g.archived);
-
-            if (activeGroups.length > 0) {
-                const groupMenuItems = [];
-                const currentGroupId = task.customGroupId;
-
-                // 添加"移除分组"选项
-                groupMenuItems.push({
-                    iconHTML: "❌",
-                    label: i18n('removeGroup'),
-                    current: !currentGroupId,
-                    // 传入 task 对象（setTaskCustomGroup 期望第一个参数为 task 对象）
-                    click: () => this.setTaskCustomGroup(task, null)
-                });
-
-                // 添加所有未归档分组选项
-                activeGroups.forEach((group: any) => {
-                    groupMenuItems.push({
-                        iconHTML: group.icon || "",
-                        label: group.name,
-                        current: currentGroupId === group.id,
-                        // 传入 task 对象（setTaskCustomGroup 期望第一个参数为 task 对象）
-                        click: () => this.setTaskCustomGroup(task, group.id)
+                        tagMenuItems.push({
+                            iconHTML: "",
+                            label: this.buildTagMenuItemHTML(tag, isSelected),
+                            click: () => this.toggleTaskTag(task, tag.id)
+                        });
                     });
-                });
 
-                menu.addItem({
-                    iconHTML: "📂",
-                    label: i18n('setGroup'),
-                    submenu: groupMenuItems
-                });
-            }
-        } catch (error) {
-            console.error('加载分组信息失败:', error);
-        }
-        // 设置标签子菜单（仅在项目有标签时显示）
-        try {
-            const projectTags = await this.projectManager.getProjectTags(this.projectId);
-
-            if (projectTags.length > 0) {
-                const tagMenuItems = [];
-                const currentTagIds = task.tagIds || [];
-
-                projectTags.forEach((tag: any) => {
-                    const isSelected = currentTagIds.includes(tag.id);
-
-                    tagMenuItems.push({
-                        iconHTML: "",
-                        label: this.buildTagMenuItemHTML(tag, isSelected),
-                        click: () => this.toggleTaskTag(task, tag.id)
+                    menu.addItem({
+                        iconHTML: "🏷️",
+                        label: i18n('setTags'),
+                        submenu: tagMenuItems
                     });
-                });
-
-                menu.addItem({
-                    iconHTML: "🏷️",
-                    label: i18n('setTags'),
-                    submenu: tagMenuItems
-                });
-            }
-        } catch (error) {
-            console.error('加载项目标签失败:', error);
-        }
-
-        // 设置里程碑子菜单
-        try {
-            const projectManager = this.projectManager;
-            const projectGroups = await projectManager.getProjectCustomGroups(this.projectId);
-            const projectData = await this.plugin.loadProjectData() || {};
-            const project = projectData[this.projectId];
-
-            const currentMilestoneId = task.milestoneId;
-            const taskGroupId = task.customGroupId;
-
-            let availableMilestones = [];
-            if (!taskGroupId || taskGroupId === 'ungrouped') {
-                availableMilestones = (project?.milestones || []).filter((m: any) => !m.archived);
-            } else {
-                const group = projectGroups.find((g: any) => g.id === taskGroupId);
-                availableMilestones = (group?.milestones || []).filter((m: any) => !m.archived);
+                }
+            } catch (error) {
+                console.error('加载项目标签失败:', error);
             }
 
-            if (availableMilestones.length > 0) {
-                const milestoneMenuItems = [];
+            // 设置里程碑子菜单
+            try {
+                const projectManager = this.projectManager;
+                const projectGroups = await projectManager.getProjectCustomGroups(this.projectId);
+                const projectData = await this.plugin.loadProjectData() || {};
+                const project = projectData[this.projectId];
 
-                // 添加“移除里程碑”选项
-                milestoneMenuItems.push({
-                    iconHTML: "❌",
-                    label: i18n('noMilestone') || '无里程碑',
-                    current: !currentMilestoneId,
-                    click: () => this.setTaskMilestone(task, null)
-                });
+                const currentMilestoneId = task.milestoneId;
+                const taskGroupId = task.customGroupId;
 
-                availableMilestones.forEach(ms => {
+                let availableMilestones = [];
+                if (!taskGroupId || taskGroupId === 'ungrouped') {
+                    availableMilestones = (project?.milestones || []).filter((m: any) => !m.archived);
+                } else {
+                    const group = projectGroups.find((g: any) => g.id === taskGroupId);
+                    availableMilestones = (group?.milestones || []).filter((m: any) => !m.archived);
+                }
+
+                if (availableMilestones.length > 0) {
+                    const milestoneMenuItems = [];
+
+                    // 添加“移除里程碑”选项
                     milestoneMenuItems.push({
-                        iconHTML: ms.icon || "🚩",
-                        label: ms.name,
-                        current: currentMilestoneId === ms.id,
-                        click: () => this.setTaskMilestone(task, ms.id)
+                        iconHTML: "❌",
+                        label: i18n('noMilestone') || '无里程碑',
+                        current: !currentMilestoneId,
+                        click: () => this.setTaskMilestone(task, null)
                     });
-                });
 
-                menu.addItem({
-                    iconHTML: "🚩",
-                    label: i18n('setMilestone') || "设置里程碑",
-                    submenu: milestoneMenuItems
-                });
+                    availableMilestones.forEach(ms => {
+                        milestoneMenuItems.push({
+                            iconHTML: ms.icon || "🚩",
+                            label: ms.name,
+                            current: currentMilestoneId === ms.id,
+                            click: () => this.setTaskMilestone(task, ms.id)
+                        });
+                    });
+
+                    menu.addItem({
+                        iconHTML: "🚩",
+                        label: i18n('setMilestone') || "设置里程碑",
+                        submenu: milestoneMenuItems
+                    });
+                }
+            } catch (error) {
+                console.error('加载项目里程碑失败:', error);
             }
-        } catch (error) {
-            console.error('加载项目里程碑失败:', error);
         }
-
-
-
 
         menu.addSeparator();
 
@@ -12389,28 +12463,30 @@ export class ProjectKanbanView {
             click: () => this.showPomodoroSessions(task)
         });
 
-        menu.addSeparator();
+        if (isDeletable) {
+            menu.addSeparator();
 
-        // 删除任务 - 针对周期任务显示不同选项
-        if (task.isRepeatInstance) {
-            // 周期事件实例 - 显示删除此实例和删除所有实例
-            menu.addItem({
-                iconHTML: "🗑️",
-                label: i18n('deleteThisInstance'),
-                click: () => this.deleteInstanceOnly(task)
-            });
-            menu.addItem({
-                iconHTML: "🗑️",
-                label: i18n('deleteAllInstances'),
-                click: () => this.deleteTask(task)
-            });
-        } else {
-            // 普通任务或原始周期事件
-            menu.addItem({
-                iconHTML: "🗑️",
-                label: i18n('deleteTask'),
-                click: () => this.deleteTask(task)
-            });
+            // 删除任务 - 针对周期任务显示不同选项
+            if (task.isRepeatInstance) {
+                // 周期事件实例 - 显示删除此实例和删除所有实例
+                menu.addItem({
+                    iconHTML: "🗑️",
+                    label: i18n('deleteThisInstance'),
+                    click: () => this.deleteInstanceOnly(task)
+                });
+                menu.addItem({
+                    iconHTML: "🗑️",
+                    label: i18n('deleteAllInstances'),
+                    click: () => this.deleteTask(task)
+                });
+            } else {
+                // 普通任务或原始周期事件
+                menu.addItem({
+                    iconHTML: "🗑️",
+                    label: i18n('deleteTask'),
+                    click: () => this.deleteTask(task)
+                });
+            }
         }
 
         menu.open({
@@ -14320,6 +14396,9 @@ export class ProjectKanbanView {
                             }
                             // 取消移动端通知
                             await this.plugin.cancelMobileNotification(taskId);
+                            if (t.isSubscribed) {
+                                await deleteSubscriptionReminderTask(this.plugin, t);
+                            }
                             // 删除数据项
                             delete reminderData[taskId];
                         }

@@ -2914,7 +2914,10 @@ export class ReminderPanel {
                 }
             },
             onTimeClick: (r: any, e: Event) => {
-                this.showTimeEditDialog(r);
+                const isEditable = !r.isSubscribed || (r.subscriptionType === 'caldav' && r.caldavEditable);
+                if (isEditable) {
+                    this.showTimeEditDialog(r);
+                }
             },
             setupDragAndDrop: (el: HTMLElement, r: any) => {
                 this.addDragFunctionality(el, r);
@@ -6825,7 +6828,7 @@ export class ReminderPanel {
         const today = getLogicalDateString();
 
         // --- 订阅任务处理 ---
-        if (reminder.isSubscribed) {
+        if (reminder.isSubscribed && reminder.subscriptionType !== 'caldav') {
             // 导航选项
             if (reminder.blockId) {
                 menu.addItem({
@@ -6888,6 +6891,9 @@ export class ReminderPanel {
             return;
         }
 
+        const isEditable = !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable);
+        const isDeletable = !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavDeletable);
+
         const isSpanningDays = reminder.endDate && reminder.endDate !== reminder.date;
 
         // 判断是否为重复/循环任务或重复实例
@@ -6907,19 +6913,21 @@ export class ReminderPanel {
         const isIgnoredToday = this.hasTodayIgnoreMark(reminder, today);
 
         // 任务完成/取消完成（置于右键菜单最顶部）
-        menu.addItem({
-            iconHTML: reminder.completed ? "↩️" : "✅",
-            label: reminder.completed ? (i18n("markAsUncompleted") || "取消完成") : (i18n("markAsCompleted") || "完成任务"),
-            click: () => {
-                if (reminder.isRepeatInstance) {
-                    const originalInstanceDate = (reminder.id && reminder.id.includes('_')) ? reminder.id.split('_').pop() : reminder.date;
-                    this.toggleReminder(reminder.originalId, !reminder.completed, true, originalInstanceDate, reminder.id);
-                } else {
-                    this.toggleReminder(reminder.id, !reminder.completed, false, undefined, reminder.id);
+        if (isEditable) {
+            menu.addItem({
+                iconHTML: reminder.completed ? "↩️" : "✅",
+                label: reminder.completed ? (i18n("markAsUncompleted") || "取消完成") : (i18n("markAsCompleted") || "完成任务"),
+                click: () => {
+                    if (reminder.isRepeatInstance) {
+                        const originalInstanceDate = (reminder.id && reminder.id.includes('_')) ? reminder.id.split('_').pop() : reminder.date;
+                        this.toggleReminder(reminder.originalId, !reminder.completed, true, originalInstanceDate, reminder.id);
+                    } else {
+                        this.toggleReminder(reminder.id, !reminder.completed, false, undefined, reminder.id);
+                    }
                 }
-            }
-        });
-        menu.addSeparator();
+            });
+            menu.addSeparator();
+        }
 
         // --- 每日可做任务专用菜单 ---
         // 只有当今天还没完成时才显示 "今日已完成"
@@ -6927,7 +6935,7 @@ export class ReminderPanel {
         const isAlreadyCompletedToday = dailyCompletedList.includes(today);
 
         // 添加"今日已完成"选项 (普通任务/跨天任务)
-        if (canToggleTodayCompleted) {
+        if (isEditable && canToggleTodayCompleted) {
             const isTodayCompleted = this.hasDailyCompletionMark(reminder, today);
             if (!isIgnoredToday) {
                 menu.addItem({
@@ -6963,7 +6971,7 @@ export class ReminderPanel {
             menu.addSeparator();
         }
 
-        if (isDessert && !reminder.completed && !isAlreadyCompletedToday) {
+        if (isEditable && isDessert && !reminder.completed && !isAlreadyCompletedToday) {
             menu.addItem({
                 iconHTML: "✅",
                 label: i18n("markTodayCompleted"),
@@ -6998,7 +7006,7 @@ export class ReminderPanel {
         // --- 取消今日已完成 (对于已经标记为今日完成的 Daily Dessert) ---
         // 这种情况通常在 "todayCompleted" 视图中出现
         // 我们检查 dailyDessertCompleted 数组
-        if (this.isDailyDessertTaskForDate(reminder, today)) {
+        if (isEditable && this.isDailyDessertTaskForDate(reminder, today)) {
             const dailyCompleted = Array.isArray(reminder.dailyDessertCompleted) ? reminder.dailyDessertCompleted : [];
             const today = getLogicalDateString();
             if (dailyCompleted.includes(today)) {
@@ -7012,38 +7020,42 @@ export class ReminderPanel {
                 menu.addSeparator();
             }
         }
-        if (reminder.isRepeatInstance) {
+        if (isEditable) {
+            if (reminder.isRepeatInstance) {
+                menu.addItem({
+                    iconHTML: "📝",
+                    label: i18n("modifyThisInstance"),
+                    click: () => this.showTimeEditDialog(reminder, false)
+                });
+                menu.addItem({
+                    iconHTML: "🔄",
+                    label: i18n("modifyAllInstances"),
+                    click: () => this.showTimeEditDialog(reminder, true)
+                });
+            } else {
+                menu.addItem({
+                    iconHTML: "📝",
+                    label: i18n("modify"),
+                    click: () => this.showTimeEditDialog(reminder)
+                });
+            }
+        }
+        // --- 创建子任务 (订阅任务不允许创建子任务) ---
+        if (!reminder.isSubscribed) {
             menu.addItem({
-                iconHTML: "📝",
-                label: i18n("modifyThisInstance"),
-                click: () => this.showTimeEditDialog(reminder, false)
+                iconHTML: "➕",
+                label: i18n("createSubtask"),
+                click: () => this.showCreateSubtaskDialog(reminder)
             });
+            // 粘贴新建子任务（参考 ProjectKanbanView 的实现）
             menu.addItem({
-                iconHTML: "🔄",
-                label: i18n("modifyAllInstances"),
-                click: () => this.showTimeEditDialog(reminder, true)
-            });
-        } else {
-            menu.addItem({
-                iconHTML: "📝",
-                label: i18n("modify"),
-                click: () => this.showTimeEditDialog(reminder)
+                iconHTML: "📋",
+                label: i18n("pasteCreateSubtask"),
+                click: () => this.showPasteTaskDialog(reminder)
             });
         }
-        // --- 创建子任务 ---
-        menu.addItem({
-            iconHTML: "➕",
-            label: i18n("createSubtask"),
-            click: () => this.showCreateSubtaskDialog(reminder)
-        });
-        // 粘贴新建子任务（参考 ProjectKanbanView 的实现）
-        menu.addItem({
-            iconHTML: "📋",
-            label: i18n("pasteCreateSubtask"),
-            click: () => this.showPasteTaskDialog(reminder)
-        });
-        // 解除父子任务关系（仅当任务有父任务时显示）
-        if (reminder.parentId) {
+        // 解除父子任务关系（仅当任务有父任务时显示，且非订阅任务）
+        if (reminder.parentId && !reminder.isSubscribed) {
             menu.addItem({
                 iconHTML: "🔓",
                 label: i18n("unsetParentRelation"),
@@ -7225,28 +7237,30 @@ export class ReminderPanel {
                     label: i18n("copyBlockRef"),
                     click: () => this.copyBlockRef(reminder)
                 });
-                menu.addItem({
-                    iconHTML: "🔗",
-                    label: i18n("bindToBlock"),
-                    submenu: [
-                        {
-                            iconHTML: "🔗",
-                            label: i18n("bindToBlock"),
-                            click: () => this.showBindToBlockDialog(reminder, 'bind')
-                        },
-                        {
-                            iconHTML: "📑",
-                            label: i18n("newHeading"),
-                            click: () => this.showBindToBlockDialog(reminder, 'heading')
-                        },
-                        {
-                            iconHTML: "📄",
-                            label: i18n("newDocument"),
-                            click: () => this.showBindToBlockDialog(reminder, 'document')
-                        }
-                    ]
-                });
-            } else {
+                if (isEditable) {
+                    menu.addItem({
+                        iconHTML: "🔗",
+                        label: i18n("bindToBlock"),
+                        submenu: [
+                            {
+                                iconHTML: "🔗",
+                                label: i18n("bindToBlock"),
+                                click: () => this.showBindToBlockDialog(reminder, 'bind')
+                            },
+                            {
+                                iconHTML: "📑",
+                                label: i18n("newHeading"),
+                                click: () => this.showBindToBlockDialog(reminder, 'heading')
+                            },
+                            {
+                                iconHTML: "📄",
+                                label: i18n("newDocument"),
+                                click: () => this.showBindToBlockDialog(reminder, 'document')
+                            }
+                        ]
+                    });
+                }
+            } else if (isEditable) {
                 // 未绑定块的事件显示绑定块选项
                 menu.addItem({
                     iconHTML: "🔗",
@@ -7280,25 +7294,28 @@ export class ReminderPanel {
                 click: () => this.setReminderPinned(reminder, !isPinned)
             });
 
-            // 快速调整日期 (重复实例：只修改此实例)
-            menu.addItem({
-                iconHTML: "📆",
-                label: i18n("quickReschedule") || "快速调整日期",
-                submenu: this.createQuickDateContextMenuItems(reminder, true)
-            });
+            if (isEditable) {
+                // 快速调整日期 (重复实例：只修改此实例)
+                menu.addItem({
+                    iconHTML: "📆",
+                    label: i18n("quickReschedule") || "快速调整日期",
+                    submenu: this.createQuickDateContextMenuItems(reminder, true)
+                });
 
-            // 重复实例右键修改优先级/分类时，统一修改原始任务（影响所有实例）
-            menu.addItem({
-                iconHTML: "🎯",
-                label: i18n("setPriority"),
-                submenu: createPriorityMenuItems(true)
-            });
-            menu.addItem({
-                iconHTML: "🏷️",
-                label: i18n("setCategory"),
-                submenu: createCategoryMenuItems(false)
-            });
-            menu.addSeparator();
+                // 重复实例右键修改优先级/分类时，统一修改原始任务（影响所有实例）
+                menu.addItem({
+                    iconHTML: "🎯",
+                    label: i18n("setPriority"),
+                    submenu: createPriorityMenuItems(true)
+                });
+                menu.addItem({
+                    iconHTML: "🏷️",
+                    label: i18n("setCategory"),
+                    submenu: createCategoryMenuItems(false)
+                });
+                menu.addSeparator();
+            }
+
             menu.addItem({
                 iconHTML: "🍅",
                 label: i18n("startPomodoro"),
@@ -7314,17 +7331,20 @@ export class ReminderPanel {
                 label: i18n("viewPomodoros") || "查看番茄钟",
                 click: () => this.showPomodoroSessions(reminder)
             });
-            menu.addSeparator();
-            menu.addItem({
-                iconHTML: "🗑️",
-                label: i18n("deleteThisInstance"),
-                click: () => this.deleteInstanceOnly(reminder)
-            });
-            menu.addItem({
-                iconHTML: "🗑️",
-                label: i18n("deleteAllInstances"),
-                click: () => this.deleteOriginalReminder(reminder.originalId)
-            });
+
+            if (isDeletable) {
+                menu.addSeparator();
+                menu.addItem({
+                    iconHTML: "🗑️",
+                    label: i18n("deleteThisInstance"),
+                    click: () => this.deleteInstanceOnly(reminder)
+                });
+                menu.addItem({
+                    iconHTML: "🗑️",
+                    label: i18n("deleteAllInstances"),
+                    click: () => this.deleteOriginalReminder(reminder.originalId)
+                });
+            }
 
         } else {
             // --- Menu for a SIMPLE, NON-RECURRING EVENT ---
@@ -7344,7 +7364,30 @@ export class ReminderPanel {
                     label: i18n("copyBlockRef"),
                     click: () => this.copyBlockRef(reminder)
                 });
-            } else {
+                if (isEditable) {
+                    menu.addItem({
+                        iconHTML: "🔗",
+                        label: i18n("bindToBlock"),
+                        submenu: [
+                            {
+                                iconHTML: "🔗",
+                                label: i18n("bindToBlock"),
+                                click: () => this.showBindToBlockDialog(reminder, 'bind')
+                            },
+                            {
+                                iconHTML: "📑",
+                                label: i18n("newHeading"),
+                                click: () => this.showBindToBlockDialog(reminder, 'heading')
+                            },
+                            {
+                                iconHTML: "📄",
+                                label: i18n("newDocument"),
+                                click: () => this.showBindToBlockDialog(reminder, 'document')
+                            }
+                        ]
+                    });
+                }
+            } else if (isEditable) {
                 // 未绑定块的事件显示绑定块选项
                 menu.addItem({
                     iconHTML: "🔗",
@@ -7378,23 +7421,26 @@ export class ReminderPanel {
                 click: () => this.setReminderPinned(reminder, !isPinned)
             });
 
-            // 快速调整日期（普通任务）
-            menu.addItem({
-                iconHTML: "📆",
-                label: i18n("quickReschedule") || "快速调整日期",
-                submenu: this.createQuickDateContextMenuItems(reminder, false)
-            });
-            menu.addItem({
-                iconHTML: "🎯",
-                label: i18n("setPriority"),
-                submenu: createPriorityMenuItems()
-            });
-            menu.addItem({
-                iconHTML: "🏷️",
-                label: i18n("setCategory"),
-                submenu: createCategoryMenuItems()
-            });
-            menu.addSeparator();
+            if (isEditable) {
+                // 快速调整日期（普通任务）
+                menu.addItem({
+                    iconHTML: "📆",
+                    label: i18n("quickReschedule") || "快速调整日期",
+                    submenu: this.createQuickDateContextMenuItems(reminder, false)
+                });
+                menu.addItem({
+                    iconHTML: "🎯",
+                    label: i18n("setPriority"),
+                    submenu: createPriorityMenuItems()
+                });
+                menu.addItem({
+                    iconHTML: "🏷️",
+                    label: i18n("setCategory"),
+                    submenu: createCategoryMenuItems()
+                });
+                menu.addSeparator();
+            }
+
             menu.addItem({
                 iconHTML: "🍅",
                 label: i18n("startPomodoro"),
@@ -7410,11 +7456,14 @@ export class ReminderPanel {
                 label: i18n("viewPomodoros") || "查看番茄钟",
                 click: () => this.showPomodoroSessions(reminder)
             });
-            menu.addItem({
-                iconHTML: "🗑",
-                label: i18n("deleteReminder"),
-                click: () => this.deleteReminder(reminder)
-            });
+            
+            if (isDeletable) {
+                menu.addItem({
+                    iconHTML: "🗑",
+                    label: i18n("deleteReminder"),
+                    click: () => this.deleteReminder(reminder)
+                });
+            }
         }
 
         menu.open({
@@ -8243,6 +8292,10 @@ export class ReminderPanel {
                     if (rem.blockId) affectedBlockIds.add(rem.blockId);
                     // 取消移动端通知
                     await this.plugin.cancelMobileNotification(id);
+                    if (rem.isSubscribed && rem.subscriptionType === 'caldav') {
+                        const { deleteSubscriptionReminderTask } = await import('../utils/icsSubscription');
+                        await deleteSubscriptionReminderTask(this.plugin, rem);
+                    }
                     delete reminderData[id];
                     deletedCount++;
                 }
@@ -8257,6 +8310,10 @@ export class ReminderPanel {
                         if (inst && inst.blockId) affectedBlockIds.add(inst.blockId);
                         // 取消移动端通知
                         await this.plugin.cancelMobileNotification(key);
+                        if (inst?.isSubscribed && inst.subscriptionType === 'caldav') {
+                            const { deleteSubscriptionReminderTask } = await import('../utils/icsSubscription');
+                            await deleteSubscriptionReminderTask(this.plugin, inst);
+                        }
                         delete reminderData[key];
                         deletedCount++;
                     }

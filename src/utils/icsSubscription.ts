@@ -1,11 +1,17 @@
 import { pushErrMsg, pushMsg, putFile, getFile, removeFile } from '../api';
-import { parseIcsFile, isEventPast, resolveDefaultKanbanStatus } from './icsImport';
+import { ParsedIcsEvent, parseIcsFile, isEventPast, resolveDefaultKanbanStatus } from './icsImport';
+import { deleteCalDavTask, fetchCalDavEvents, putCalDavTask } from './caldavSubscription';
 import { i18n } from "../pluginInstance";
 
 export interface IcsSubscription {
     id: string;
     name: string;
+    type?: 'ics' | 'caldav';
+    provider?: 'generic' | 'feishu' | 'dingtalk' | 'wecom' | 'qq';
+    readonly?: boolean; // Whether CalDAV write-back is disabled (e.g. DingTalk is read-only)
     url: string;
+    username?: string;
+    password?: string;
     projectId: string; // Required - must have a project
     categoryId?: string;
     priority?: 'high' | 'medium' | 'low' | 'none';
@@ -19,7 +25,31 @@ export interface IcsSubscription {
     showInSidebar?: boolean;
     showInMatrix?: boolean;
     showNoteInCalendar?: boolean;
+    caldavEditable?: boolean;
+    caldavDeletable?: boolean;
     createdAt: string;
+}
+
+export function isSubscriptionEditable(subscription: any): boolean {
+    if (!subscription || subscription.type !== 'caldav') return false;
+    if (subscription.readonly === true) return false;
+    const provider = subscription.provider || 'generic';
+    if (provider === 'wecom') return true;
+    if (provider === 'dingtalk') return false;
+    if (provider === 'feishu') return false;
+    if (provider === 'qq') return false;
+    return subscription.caldavEditable !== false;
+}
+
+export function isSubscriptionDeletable(subscription: any): boolean {
+    if (!subscription || subscription.type !== 'caldav') return false;
+    if (subscription.readonly === true) return false;
+    const provider = subscription.provider || 'generic';
+    if (provider === 'wecom') return true;
+    if (provider === 'dingtalk') return true;
+    if (provider === 'feishu') return false;
+    if (provider === 'qq') return true;
+    return subscription.caldavDeletable !== false;
 }
 
 export interface IcsSubscriptionData {
@@ -124,12 +154,8 @@ export async function saveSubscriptionTasks(plugin: any, subscriptionId: string,
 }
 
 /**
- * Get all reminders including subscriptions
- * This merges reminder.json with all subscription files
- */
-/**
- * Get all reminders including subscriptions
- * This merges reminder.json with all subscription files
+ * Get all reminders including subscriptions.
+ * This merges reminder.json with all subscription files.
  * @param plugin The plugin instance
  * @param projectId Optional project ID to filter by
  * @param force Whether to force reload data from disk/network
@@ -179,6 +205,13 @@ export async function getAllReminders(
                 Object.keys(subTasks).forEach(key => {
                     const task = subTasks[key];
 
+                    // Skip manually deleted tasks — they exist in the file to prevent
+                    // re-appearing after sync, but should never be shown in the UI
+                    if (task.manualDelete) {
+                        updatedSubTasks[key] = task;
+                        return;
+                    }
+
                     // 处理重复事件 - 无需生成实例，直接透传
                     if (task.repeat && task.repeat.enabled) {
                         updatedSubTasks[key] = task;
@@ -187,7 +220,10 @@ export async function getAllReminders(
                             ...task,
                             isSubscribed: true,
                             subscriptionId: subscription.id,
+                            subscriptionType: subscription.type || task.subscriptionType || 'ics',
                             showNoteInCalendar: subscription.showNoteInCalendar,
+                            caldavEditable: isSubscriptionEditable(subscription),
+                            caldavDeletable: isSubscriptionDeletable(subscription),
                         };
                     } else {
                         // 非重复事件的处理逻辑（原有逻辑）
@@ -207,7 +243,10 @@ export async function getAllReminders(
                             completed,
                             isSubscribed: true,
                             subscriptionId: subscription.id,
+                            subscriptionType: subscription.type || task.subscriptionType || 'ics',
                             showNoteInCalendar: subscription.showNoteInCalendar,
+                            caldavEditable: isSubscriptionEditable(subscription),
+                            caldavDeletable: isSubscriptionDeletable(subscription),
                         };
                     }
                 });
@@ -251,6 +290,181 @@ function isSameReminderPayload(a: any, b: any): boolean {
     return JSON.stringify(normalizeForCompare(a || {})) === JSON.stringify(normalizeForCompare(b || {}));
 }
 
+function isCalDavSubscription(subscription: IcsSubscription | undefined): boolean {
+    return subscription?.type === 'caldav';
+}
+
+interface CalDavCapabilities {
+    canCreate: boolean;   // Can PUT new events to server
+    canUpdate: boolean;   // Can PUT updates to existing events
+    canDelete: boolean;   // Can DELETE events from server
+}
+
+/**
+ * Returns the write capabilities for a CalDAV subscription.
+ */
+function getProviderCapabilities(subscription: IcsSubscription): CalDavCapabilities {
+    const editable = isSubscriptionEditable(subscription);
+    const deletable = isSubscriptionDeletable(subscription);
+    return {
+        canCreate: editable,
+        canUpdate: editable,
+        canDelete: deletable
+    };
+}
+
+function stripRuntimeSubscriptionFields(reminder: any): any {
+    const { isSubscribed, subscriptionId, subscriptionType, showNoteInCalendar, caldavEditable, caldavDeletable, ...cleanReminder } = reminder;
+    return cleanReminder;
+}
+
+function normalizeSubscriptionTasksForCompare(tasks: any): any {
+    const normalized: any = {};
+    Object.entries(tasks || {}).forEach(([id, task]) => {
+        normalized[id] = stripRuntimeSubscriptionFields(task);
+    });
+    return normalized;
+}
+
+async function syncCalDavTaskChanges(
+    subscription: IcsSubscription,
+    currentTasks: any,
+    nextTasks: any
+): Promise<any> {
+    const caps = getProviderCapabilities(subscription);
+    const syncedTasks = { ...(nextTasks || {}) };
+
+    // Preserve any existing manualDelete markers (don't lose them on save)
+    for (const [id, task] of Object.entries(currentTasks || {}) as [string, any][]) {
+        if (task.manualDelete && !syncedTasks[id]) {
+            syncedTasks[id] = task;
+        }
+    }
+
+    // Handle deletions: tasks in currentTasks but removed from nextTasks
+    for (const [id, currentTask] of Object.entries(currentTasks || {}) as [string, any][]) {
+        if (currentTask.manualDelete) continue; // already handled above
+        if (syncedTasks[id] && !syncedTasks[id].manualDelete) continue; // still exists
+        // Task was deleted locally
+        if (caps.canDelete) {
+            try {
+                await deleteCalDavTask(subscription, currentTask);
+            } catch (e: any) {
+                console.warn(`[CalDAV] DELETE failed for task ${id}, skipping:`, e?.message || e);
+            }
+            // Let it be removed (not re-added to syncedTasks)
+        } else {
+            // Cannot delete from server — mark locally so it won't reappear after sync
+            console.warn(`[CalDAV] Provider "${subscription.provider}" does not support DELETE. Marking task ${id} as manualDelete.`);
+            syncedTasks[id] = { ...currentTask, manualDelete: true };
+        }
+    }
+
+    // Handle creates and updates
+    for (const [id, nextTask] of Object.entries(syncedTasks) as [string, any][]) {
+        if (nextTask.manualDelete) continue; // skip soft-deleted tasks
+
+        const currentTask = currentTasks?.[id];
+        const isNew = !nextTask.caldavHref; // no href means not yet on server
+
+        if (!isNew && currentTask &&
+            isSameReminderPayload(stripRuntimeSubscriptionFields(currentTask), nextTask)) {
+            continue; // no changes
+        }
+
+        const shouldPut = isNew ? caps.canCreate : caps.canUpdate;
+        if (!shouldPut) {
+            console.warn(`[CalDAV] Provider "${subscription.provider}" does not support ${isNew ? 'CREATE' : 'UPDATE'}. Skipping task ${id}.`);
+            continue;
+        }
+
+        try {
+            const result = await putCalDavTask(subscription, nextTask);
+            syncedTasks[id] = {
+                ...nextTask,
+                caldavHref: result.href,
+                caldavEtag: result.etag,
+                caldavRawIcs: result.rawIcs,
+                subscriptionType: 'caldav'
+            };
+        } catch (e: any) {
+            console.warn(`[CalDAV] PUT failed for task ${id}, keeping local state:`, e?.message || e);
+        }
+    }
+
+    return syncedTasks;
+}
+
+async function saveSubscriptionReminderTasks(
+    plugin: any,
+    subscription: IcsSubscription,
+    nextTasks: any
+): Promise<void> {
+    const currentTasks = await loadSubscriptionTasks(plugin, subscription.id);
+    
+    // Merge the incoming updates (nextTasks) into the full list of current tasks
+    const mergedTasks = { ...(currentTasks || {}) };
+    Object.keys(nextTasks || {}).forEach(id => {
+        mergedTasks[id] = nextTasks[id];
+    });
+
+    let tasksToSave = mergedTasks;
+
+    if (isCalDavSubscription(subscription)) {
+        tasksToSave = await syncCalDavTaskChanges(subscription, currentTasks, tasksToSave);
+    }
+
+    if (
+        !isSameReminderPayload(
+            normalizeSubscriptionTasksForCompare(currentTasks),
+            normalizeSubscriptionTasksForCompare(tasksToSave)
+        )
+    ) {
+        await saveSubscriptionTasks(plugin, subscription.id, tasksToSave);
+    }
+}
+
+export async function deleteSubscriptionReminderTask(plugin: any, reminder: any): Promise<void> {
+    if (!reminder?.subscriptionId) return;
+
+    const subscriptionData = await loadSubscriptions(plugin);
+    const subscription = subscriptionData.subscriptions?.[reminder.subscriptionId];
+    if (!subscription) return;
+
+    const currentTasks = await loadSubscriptionTasks(plugin, reminder.subscriptionId);
+
+    if (isCalDavSubscription(subscription)) {
+        const caps = getProviderCapabilities(subscription);
+        if (caps.canDelete) {
+            // Delete from server (ignore errors — file will be cleaned up anyway)
+            try {
+                await deleteCalDavTask(subscription, reminder);
+            } catch (e: any) {
+                console.warn('[CalDAV] DELETE failed, removing locally anyway:', e?.message || e);
+            }
+            // Remove from local file
+            if (currentTasks && currentTasks[reminder.id]) {
+                delete currentTasks[reminder.id];
+                await saveSubscriptionTasks(plugin, reminder.subscriptionId, currentTasks);
+            }
+        } else {
+            // Provider does not support DELETE — mark locally so it won't reappear after sync
+            console.warn(`[CalDAV] Provider "${subscription.provider}" does not support DELETE. Marking task as manualDelete.`);
+            if (currentTasks && currentTasks[reminder.id]) {
+                currentTasks[reminder.id] = { ...currentTasks[reminder.id], manualDelete: true };
+                await saveSubscriptionTasks(plugin, reminder.subscriptionId, currentTasks);
+            }
+        }
+        return;
+    }
+
+    // Non-CalDAV (plain ICS): just remove from local file
+    if (currentTasks && currentTasks[reminder.id]) {
+        delete currentTasks[reminder.id];
+        await saveSubscriptionTasks(plugin, reminder.subscriptionId, currentTasks);
+    }
+}
+
 export async function saveReminders(plugin: any, allReminders: any): Promise<void> {
     try {
         const localReminders: any = {};
@@ -266,8 +480,7 @@ export async function saveReminders(plugin: any, allReminders: any): Promise<voi
                     subRemindersBySubId[reminder.subscriptionId] = {};
                 }
                 // Don't save the extra fields we added during merge
-                const { isSubscribed, ...cleanReminder } = reminder;
-                subRemindersBySubId[reminder.subscriptionId][id] = cleanReminder;
+                subRemindersBySubId[reminder.subscriptionId][id] = stripRuntimeSubscriptionFields(reminder);
             } else {
                 localReminders[id] = reminder;
             }
@@ -278,19 +491,9 @@ export async function saveReminders(plugin: any, allReminders: any): Promise<voi
 
         // Save each subscription's tasks
         for (const subId of Object.keys(subRemindersBySubId)) {
-            if (subscriptionData.subscriptions[subId]) {
-                const nextTasks = subRemindersBySubId[subId];
-                let shouldSave = true;
-                try {
-                    const currentTasks = await loadSubscriptionTasks(plugin, subId);
-                    shouldSave = !isSameReminderPayload(currentTasks, nextTasks);
-                } catch (error) {
-                    console.warn(`Failed to compare subscription tasks for ${subId}, fallback to save`, error);
-                }
-
-                if (shouldSave) {
-                    await saveSubscriptionTasks(plugin, subId, nextTasks);
-                }
+            const subscription = subscriptionData.subscriptions[subId];
+            if (subscription) {
+                await saveSubscriptionReminderTasks(plugin, subscription, subRemindersBySubId[subId]);
             }
         }
     } catch (error) {
@@ -334,6 +537,102 @@ async function fetchIcsContent(url: string): Promise<string> {
     }
 }
 
+async function buildTasksFromSubscriptionEvents(
+    plugin: any,
+    subscription: IcsSubscription,
+    events: Array<ParsedIcsEvent & Record<string, any>>
+): Promise<any> {
+    const existingTasks = await loadSubscriptionTasks(plugin, subscription.id);
+
+    // Build set of manually-deleted UIDs so they don't reappear after sync
+    const manuallyDeletedUids = new Set<string>();
+    const manuallyDeletedTasks: any = {};
+    for (const [id, task] of Object.entries(existingTasks) as [string, any][]) {
+        if (task.manualDelete) {
+            manuallyDeletedTasks[id] = task;
+            if (task.uid) manuallyDeletedUids.add(task.uid);
+        }
+    }
+
+    if (events.length === 0) {
+        // Preserve manualDelete entries even when server returns no events
+        return { ...manuallyDeletedTasks };
+    }
+
+    const existingTasksByUid = new Map<string, any>();
+    for (const task of Object.values(existingTasks) as any[]) {
+        if (task.uid && !task.manualDelete) {
+            existingTasksByUid.set(task.uid, task);
+        }
+    }
+
+    const defaultKanbanStatus = await resolveDefaultKanbanStatus(plugin, subscription.projectId);
+    const tasks: any = {};
+    const subscriptionType = subscription.type || 'ics';
+
+    for (const event of events) {
+        // Skip events the user has manually deleted locally
+        if (event.uid && manuallyDeletedUids.has(event.uid)) continue;
+
+        const existingTask = event.uid ? existingTasksByUid.get(event.uid) : undefined;
+        const preserveCompleted = existingTask?.completed === true;
+
+        const id =
+            existingTask?.id ||
+            window.Lute?.NewNodeID?.() ||
+            `${subscription.id}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+        const isPast = isEventPast(event);
+        const isCompleted = preserveCompleted ? existingTask.completed : event.completed || isPast;
+
+        if (existingTask) {
+            tasks[id] = {
+                ...existingTask,
+                title: event.title,
+                date: event.date,
+                time: event.time,
+                endDate: event.endDate,
+                endTime: event.endTime,
+                repeat: event.repeat,
+                completed: isCompleted,
+                completedAt: preserveCompleted ? existingTask.completedAt : undefined,
+                kanbanStatus: isCompleted ? 'completed' : (existingTask.kanbanStatus === 'completed' ? defaultKanbanStatus : existingTask.kanbanStatus),
+                subscriptionId: subscription.id,
+                subscriptionType,
+                isSubscribed: true,
+                showNoteInCalendar: subscription.showNoteInCalendar,
+                caldavEditable: isSubscriptionEditable(subscription),
+                caldavDeletable: isSubscriptionDeletable(subscription),
+            };
+        } else {
+            tasks[id] = {
+                id,
+                ...event,
+                note: event.description,
+                projectId: subscription.projectId,
+                categoryId: subscription.categoryId,
+                priority: subscription.priority || 'none',
+                tagIds: subscription.tagIds || [],
+                completed: isCompleted,
+                completedAt: undefined,
+                kanbanStatus: isCompleted ? 'completed' : defaultKanbanStatus,
+                createdAt: event.createdAt || new Date().toISOString(),
+                subscriptionId: subscription.id,
+                subscriptionType,
+                isSubscribed: true,
+                showNoteInCalendar: subscription.showNoteInCalendar,
+                caldavEditable: isSubscriptionEditable(subscription),
+                caldavDeletable: isSubscriptionDeletable(subscription),
+            };
+        }
+    }
+
+    // Re-attach manually deleted tasks so the markers persist across syncs
+    Object.assign(tasks, manuallyDeletedTasks);
+
+    return tasks;
+}
+
 /**
  * Sync a single ICS subscription
  */
@@ -346,11 +645,21 @@ export async function syncSubscription(
         return { success: false, error: 'Subscription is undefined' };
     }
     try {
-        // Fetch ICS content
-        const icsContent = await fetchIcsContent(subscription.url);
+        const subscriptionType = subscription.type || 'ics';
+        let events: Array<ParsedIcsEvent & Record<string, any>>;
 
-        // Parse ICS file
-        const events = await parseIcsFile(icsContent);
+        if (subscriptionType === 'caldav') {
+            const remoteEvents = await fetchCalDavEvents(subscription);
+            events = remoteEvents.map(remoteEvent => ({
+                ...remoteEvent.event,
+                caldavHref: remoteEvent.href,
+                caldavEtag: remoteEvent.etag,
+                caldavRawIcs: remoteEvent.rawIcs
+            }));
+        } else {
+            const icsContent = await fetchIcsContent(subscription.url);
+            events = await parseIcsFile(icsContent);
+        }
 
         if (events.length === 0) {
             // Clear subscription file if no events
@@ -358,57 +667,7 @@ export async function syncSubscription(
             return { success: true, eventsCount: 0 };
         }
 
-        // Load existing tasks to merge with new data
-        const existingTasks = await loadSubscriptionTasks(plugin, subscription.id);
-
-        // Build a map of existing tasks by UID for quick lookup
-        const existingTasksByUid = new Map<string, any>();
-        for (const task of Object.values(existingTasks) as any[]) {
-            if (task.uid) {
-                existingTasksByUid.set(task.uid, task);
-            }
-        }
-
-        // Resolve default kanban status based on subscription's project configuration
-        const defaultKanbanStatus = await resolveDefaultKanbanStatus(plugin, subscription.projectId);
-
-        // Convert events to reminder format and merge with existing data
-        const tasks: any = {};
-        for (const event of events) {
-            // Check if there's an existing task with the same UID
-            const existingTask = event.uid ? existingTasksByUid.get(event.uid) : undefined;
-
-            // Determine if we should preserve the completed status
-            // If the existing task is completed, preserve completed and completedAt
-            const preserveCompleted = existingTask?.completed === true;
-
-            const id = existingTask?.id || window.Lute?.NewNodeID?.() || `${subscription.id}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-
-            const isPast = isEventPast(event);
-            const isCompleted = preserveCompleted ? existingTask.completed : (event.completed || isPast);
-
-            tasks[id] = {
-                id,
-                ...event,
-                note: event.description,
-                // Apply subscription settings
-                projectId: subscription.projectId,
-                categoryId: subscription.categoryId,
-                priority: subscription.priority || 'none',
-                tagIds: subscription.tagIds || [],
-                // Preserve completed status if the existing task is completed
-                completed: isCompleted,
-                completedAt: preserveCompleted ? existingTask.completedAt : undefined,
-                // 看板状态：已有任务保留原状态；新建任务按完成状态和项目配置决定
-                kanbanStatus: existingTask?.kanbanStatus ||
-                    (isCompleted ? 'completed' : defaultKanbanStatus),
-                createdAt: existingTask?.createdAt || event.createdAt || new Date().toISOString(),
-                // Mark as subscribed (read-only)
-                subscriptionId: subscription.id,
-                isSubscribed: true,
-                showNoteInCalendar: subscription.showNoteInCalendar,
-            };
-        }
+        const tasks = await buildTasksFromSubscriptionEvents(plugin, subscription, events);
 
         // Save to subscription's dedicated file
         await saveSubscriptionTasks(plugin, subscription.id, tasks);
@@ -463,13 +722,13 @@ export async function syncAllSubscriptions(plugin: any): Promise<void> {
 
         // Show notification
         if (errorCount > 0) {
-            await pushErrMsg(`ICS订阅同步完成：成功 ${successCount} 个，失败 ${errorCount} 个`);
+            await pushErrMsg(`日历订阅同步完成：成功 ${successCount} 个，失败 ${errorCount} 个`);
         } else {
-            await pushMsg(`ICS订阅同步成功：已同步 ${successCount} 个日历`);
+            await pushMsg(`日历订阅同步成功：已同步 ${successCount} 个日历`);
         }
     } catch (error) {
         console.error('Failed to sync all subscriptions:', error);
-        await pushErrMsg('ICS订阅同步失败: ' + (error.message || error));
+        await pushErrMsg('日历订阅同步失败: ' + (error.message || error));
     }
 }
 

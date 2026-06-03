@@ -1877,9 +1877,11 @@ export class CalendarView {
             eventDrop: this.handleEventDrop.bind(this),
             eventResize: this.handleEventResize.bind(this),
             eventAllow: (dropInfo, draggedEvent) => {
-                // 禁用订阅任务拖拽；习惯仅允许拖动提醒时间，且不能跨天
+                // ICS 订阅只读；CalDAV 订阅根据 caldavEditable 决定是否允许编辑。
                 if (draggedEvent.extendedProps.isSubscribed) {
-                    return false;
+                    if (draggedEvent.extendedProps.subscriptionType !== 'caldav' || !draggedEvent.extendedProps.caldavEditable) {
+                        return false;
+                    }
                 }
                 if (draggedEvent.extendedProps.isHabit) {
                     if (draggedEvent.extendedProps.type !== 'habitReminderTime' && draggedEvent.extendedProps.type !== 'habitCheckInTime') {
@@ -3460,7 +3462,7 @@ export class CalendarView {
             return;
         }
 
-        if (calendarEvent.extendedProps.isSubscribed) {
+        if (calendarEvent.extendedProps.isSubscribed && calendarEvent.extendedProps.subscriptionType !== 'caldav') {
             menu.addItem({
                 iconHTML: "ℹ️",
                 label: i18n("subscribedTaskReadOnly"),
@@ -3508,58 +3510,80 @@ export class CalendarView {
             return;
         }
 
-        // 如果事项没有绑定块，显示绑定块选项
-        menu.addItem({
-            iconHTML: "✅",
-            label: calendarEvent.extendedProps.completed ? i18n("markAsUncompleted") : i18n("markAsCompleted"),
-            click: () => {
-                this.toggleEventCompleted(calendarEvent);
-            }
-        });
+        const isEditable = !calendarEvent.extendedProps.isSubscribed || (calendarEvent.extendedProps.subscriptionType === 'caldav' && calendarEvent.extendedProps.caldavEditable);
+        const isDeletable = !calendarEvent.extendedProps.isSubscribed || (calendarEvent.extendedProps.subscriptionType === 'caldav' && calendarEvent.extendedProps.caldavDeletable);
 
-        menu.addSeparator();
-
-        if (!calendarEvent.extendedProps.blockId) {
+        if (isEditable) {
+            // 如果事项没有绑定块，显示绑定块选项
             menu.addItem({
-                iconHTML: "🔗",
-                label: i18n("bindToBlock"),
-                submenu: [
-                    {
-                        iconHTML: "🔗",
-                        label: i18n("bindToBlock"),
-                        click: () => this.showBindToBlockDialog(calendarEvent, 'bind')
-                    },
-                    {
-                        iconHTML: "📑",
-                        label: i18n("newHeading"),
-                        click: () => this.showBindToBlockDialog(calendarEvent, 'heading')
-                    },
-                    {
-                        iconHTML: "📄",
-                        label: i18n("newDocument"),
-                        click: () => this.showBindToBlockDialog(calendarEvent, 'document')
-                    }
-                ]
-            });
-            menu.addSeparator();
-        } else {
-            menu.addItem({
-                iconHTML: "📖",
-                label: i18n("openNote"),
+                iconHTML: "✅",
+                label: calendarEvent.extendedProps.completed ? i18n("markAsUncompleted") : i18n("markAsCompleted"),
                 click: () => {
-                    this.handleEventClick({ event: calendarEvent });
+                    this.toggleEventCompleted(calendarEvent);
                 }
             });
-        }
 
-        // 对于重复事件实例，提供特殊选项
-        if (calendarEvent.extendedProps.isRepeated) {
-            if (!calendarEvent.extendedProps.isSubscribed) {
+            menu.addSeparator();
+
+            if (!calendarEvent.extendedProps.blockId) {
+                menu.addItem({
+                    iconHTML: "🔗",
+                    label: i18n("bindToBlock"),
+                    submenu: [
+                        {
+                            iconHTML: "🔗",
+                            label: i18n("bindToBlock"),
+                            click: () => this.showBindToBlockDialog(calendarEvent, 'bind')
+                        },
+                        {
+                            iconHTML: "📑",
+                            label: i18n("newHeading"),
+                            click: () => this.showBindToBlockDialog(calendarEvent, 'heading')
+                        },
+                        {
+                            iconHTML: "📄",
+                            label: i18n("newDocument"),
+                            click: () => this.showBindToBlockDialog(calendarEvent, 'document')
+                        }
+                    ]
+                });
+                menu.addSeparator();
+            } else {
+                menu.addItem({
+                    iconHTML: "📖",
+                    label: i18n("openNote"),
+                    click: () => {
+                        this.handleEventClick({ event: calendarEvent });
+                    }
+                });
+            }
+
+            // 对于重复事件实例，提供特殊选项
+            if (calendarEvent.extendedProps.isRepeated) {
+                if (!(calendarEvent.extendedProps.isSubscribed && calendarEvent.extendedProps.subscriptionType !== 'caldav')) {
+                    menu.addItem({
+                        iconHTML: "📝",
+                        label: i18n("modifyThisInstance"),
+                        click: () => {
+                            this.showInstanceEditDialog(calendarEvent);
+                        }
+                    });
+
+                    menu.addItem({
+                        iconHTML: "📝",
+                        label: i18n("modifyAllInstances"),
+                        click: () => {
+                            this.showTimeEditDialogForSeries(calendarEvent);
+                        }
+                    });
+                }
+            } else if (calendarEvent.extendedProps.repeat?.enabled) {
+                // 对于周期原始事件，提供与实例一致的选项
                 menu.addItem({
                     iconHTML: "📝",
                     label: i18n("modifyThisInstance"),
                     click: () => {
-                        this.showInstanceEditDialog(calendarEvent);
+                        this.splitRecurringEvent(calendarEvent);
                     }
                 });
 
@@ -3567,45 +3591,40 @@ export class CalendarView {
                     iconHTML: "📝",
                     label: i18n("modifyAllInstances"),
                     click: () => {
-                        this.showTimeEditDialogForSeries(calendarEvent);
+                        this.showTimeEditDialog(calendarEvent);
+                    }
+                });
+            } else {
+                menu.addItem({
+                    iconHTML: "📝",
+                    label: i18n("modify"),
+                    click: () => {
+                        this.showTimeEditDialog(calendarEvent);
                     }
                 });
             }
-        } else if (calendarEvent.extendedProps.repeat?.enabled) {
-            // 对于周期原始事件，提供与实例一致的选项
-            menu.addItem({
-                iconHTML: "📝",
-                label: i18n("modifyThisInstance"),
-                click: () => {
-                    this.splitRecurringEvent(calendarEvent);
-                }
-            });
-
-            menu.addItem({
-                iconHTML: "📝",
-                label: i18n("modifyAllInstances"),
-                click: () => {
-                    this.showTimeEditDialog(calendarEvent);
-                }
-            });
         } else {
+            if (calendarEvent.extendedProps.blockId) {
+                menu.addItem({
+                    iconHTML: "📖",
+                    label: i18n("openNote"),
+                    click: () => {
+                        this.handleEventClick({ event: calendarEvent });
+                    }
+                });
+            }
+        }
+
+        // 添加创建子任务选项 (订阅任务不允许创建子任务)
+        if (!calendarEvent.extendedProps.isSubscribed) {
             menu.addItem({
-                iconHTML: "📝",
-                label: i18n("modify"),
+                iconHTML: "➕",
+                label: i18n("createSubtask"),
                 click: () => {
-                    this.showTimeEditDialog(calendarEvent);
+                    this.showCreateSubtaskDialog(calendarEvent);
                 }
             });
         }
-
-        // 添加创建子任务选项
-        menu.addItem({
-            iconHTML: "➕",
-            label: i18n("createSubtask"),
-            click: () => {
-                this.showCreateSubtaskDialog(calendarEvent);
-            }
-        });
 
         // 如果是子任务，添加查看父任务选项
         if (calendarEvent.extendedProps.parentId) {
@@ -3618,42 +3637,43 @@ export class CalendarView {
             });
         }
 
+        if (isEditable) {
+            menu.addSeparator();
 
-        menu.addSeparator();
+            // 添加优先级设置子菜单
+            const priorityMenuItems = [];
+            const priorities = [
+                { key: 'high', label: i18n("high"), color: '#e74c3c', icon: '🔴' },
+                { key: 'medium', label: i18n("medium"), color: '#f39c12', icon: '🟡' },
+                { key: 'low', label: i18n("low"), color: '#3498db', icon: '🔵' },
+                { key: 'none', label: i18n("none"), color: '#8f8f8f', icon: '⚫' }
+            ];
 
-        // 添加优先级设置子菜单
-        const priorityMenuItems = [];
-        const priorities = [
-            { key: 'high', label: i18n("high"), color: '#e74c3c', icon: '🔴' },
-            { key: 'medium', label: i18n("medium"), color: '#f39c12', icon: '🟡' },
-            { key: 'low', label: i18n("low"), color: '#3498db', icon: '🔵' },
-            { key: 'none', label: i18n("none"), color: '#8f8f8f', icon: '⚫' }
-        ];
-
-        priorities.forEach(priority => {
-            priorityMenuItems.push({
-                iconHTML: priority.icon,
-                label: priority.label,
-                click: () => {
-                    this.setPriority(calendarEvent, priority.key);
-                }
+            priorities.forEach(priority => {
+                priorityMenuItems.push({
+                    iconHTML: priority.icon,
+                    label: priority.label,
+                    click: () => {
+                        this.setPriority(calendarEvent, priority.key);
+                    }
+                });
             });
-        });
 
-        menu.addItem({
-            iconHTML: "🎯",
-            label: i18n("setPriority"),
-            submenu: priorityMenuItems
-        });
-
-        if (originalEventType !== 'reminderTime') {
             menu.addItem({
-                iconHTML: calendarEvent.allDay ? "⏰" : "📅",
-                label: calendarEvent.allDay ? i18n("changeToTimed") : i18n("changeToAllDay"),
-                click: () => {
-                    this.toggleAllDayEvent(calendarEvent);
-                }
+                iconHTML: "🎯",
+                label: i18n("setPriority"),
+                submenu: priorityMenuItems
             });
+
+            if (originalEventType !== 'reminderTime') {
+                menu.addItem({
+                    iconHTML: calendarEvent.allDay ? "⏰" : "📅",
+                    label: calendarEvent.allDay ? i18n("changeToTimed") : i18n("changeToAllDay"),
+                    click: () => {
+                        this.toggleAllDayEvent(calendarEvent);
+                    }
+                });
+            }
         }
 
         menu.addSeparator();
@@ -3724,59 +3744,61 @@ export class CalendarView {
             }
         });
 
-        menu.addSeparator();
+        if (isDeletable) {
+            menu.addSeparator();
 
-        if (originalEventType === 'reminderTime') {
-            menu.addItem({
-                iconHTML: "🗑️",
-                label: i18n("deleteReminderTime") || "删除此提醒时间",
-                click: () => {
-                    this.deleteReminderTimeEvent(rawCalendarEvent);
-                }
-            });
-        }
+            if (originalEventType === 'reminderTime') {
+                menu.addItem({
+                    iconHTML: "🗑️",
+                    label: i18n("deleteReminderTime") || "删除此提醒时间",
+                    click: () => {
+                        this.deleteReminderTimeEvent(rawCalendarEvent);
+                    }
+                });
+            }
 
-        if (calendarEvent.extendedProps.isRepeated) {
-            menu.addItem({
-                iconHTML: "🗑️",
-                label: i18n("deleteThisInstance"),
-                click: () => {
-                    this.deleteInstanceOnly(calendarEvent);
-                }
-            });
+            if (calendarEvent.extendedProps.isRepeated) {
+                menu.addItem({
+                    iconHTML: "🗑️",
+                    label: i18n("deleteThisInstance"),
+                    click: () => {
+                        this.deleteInstanceOnly(calendarEvent);
+                    }
+                });
 
-            menu.addItem({
-                iconHTML: "🗑️",
-                label: i18n("deleteAllInstances"),
-                click: () => {
-                    this.deleteEvent(calendarEvent);
-                }
-            });
-        } else if (calendarEvent.extendedProps.repeat?.enabled) {
-            // 对于周期原始事件，提供与实例一致的删除选项
-            menu.addItem({
-                iconHTML: "🗑️",
-                label: i18n("deleteThisInstance"),
-                click: () => {
-                    this.skipFirstOccurrence(calendarEvent);
-                }
-            });
+                menu.addItem({
+                    iconHTML: "🗑️",
+                    label: i18n("deleteAllInstances"),
+                    click: () => {
+                        this.deleteEvent(calendarEvent);
+                    }
+                });
+            } else if (calendarEvent.extendedProps.repeat?.enabled) {
+                // 对于周期原始事件，提供与实例一致的删除选项
+                menu.addItem({
+                    iconHTML: "🗑️",
+                    label: i18n("deleteThisInstance"),
+                    click: () => {
+                        this.skipFirstOccurrence(calendarEvent);
+                    }
+                });
 
-            menu.addItem({
-                iconHTML: "🗑️",
-                label: i18n("deleteAllInstances"),
-                click: () => {
-                    this.deleteEvent(calendarEvent);
-                }
-            });
-        } else {
-            menu.addItem({
-                iconHTML: "🗑️",
-                label: i18n("deleteReminder"),
-                click: () => {
-                    this.deleteEvent(calendarEvent);
-                }
-            });
+                menu.addItem({
+                    iconHTML: "🗑️",
+                    label: i18n("deleteAllInstances"),
+                    click: () => {
+                        this.deleteEvent(calendarEvent);
+                    }
+                });
+            } else {
+                menu.addItem({
+                    iconHTML: "🗑️",
+                    label: i18n("deleteReminder"),
+                    click: () => {
+                        this.deleteEvent(calendarEvent);
+                    }
+                });
+            }
         }
 
         menu.open({
@@ -4689,9 +4711,14 @@ export class CalendarView {
                 const reminderData = await getAllReminders(this.plugin);
 
                 if (reminderData[reminderId]) {
-                    const blockId = reminderData[reminderId].blockId;
+                    const reminder = reminderData[reminderId];
+                    const blockId = reminder.blockId;
                     // 取消移动端通知
                     await this.plugin.cancelMobileNotification(reminderId);
+                    if (reminder.isSubscribed && reminder.subscriptionType === 'caldav') {
+                        const { deleteSubscriptionReminderTask } = await import('../utils/icsSubscription');
+                        await deleteSubscriptionReminderTask(this.plugin, reminder);
+                    }
                     delete reminderData[reminderId];
                     // 保存数据到存储
                     await saveReminders(this.plugin, reminderData);
@@ -7661,8 +7688,8 @@ export class CalendarView {
                     borderColor: 'transparent',
                     textColor: 'var(--b3-theme-on-background)',
                     className: 'completed-task-time-event',
-                    editable: !reminder.isSubscribed,
-                    startEditable: !reminder.isSubscribed,
+                    editable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable),
+                    startEditable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable),
                     durationEditable: false,
                     allDay: false,
                     extendedProps: {
@@ -7684,6 +7711,9 @@ export class CalendarView {
                         sort: reminder.sort || 0,
                         isSubscribed: reminder.isSubscribed || false,
                         subscriptionId: reminder.subscriptionId,
+                        subscriptionType: reminder.subscriptionType,
+                        caldavEditable: reminder.caldavEditable,
+                        caldavDeletable: reminder.caldavDeletable,
                         repeat: reminder.repeat,
                         parentId: reminder.parentId || null,
                         parentTitle: reminder.parentTitle || null
@@ -7757,8 +7787,8 @@ export class CalendarView {
                         borderColor: 'transparent',
                         textColor: 'var(--b3-theme-on-background)',
                         className: 'completed-task-time-event',
-                        editable: !reminder.isSubscribed,
-                        startEditable: !reminder.isSubscribed,
+                        editable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable),
+                        startEditable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable),
                         durationEditable: false,
                         allDay: false,
                         extendedProps: {
@@ -7780,6 +7810,9 @@ export class CalendarView {
                             sort: reminder.sort || 0,
                             isSubscribed: reminder.isSubscribed || false,
                             subscriptionId: reminder.subscriptionId,
+                            subscriptionType: reminder.subscriptionType,
+                            caldavEditable: reminder.caldavEditable,
+                            caldavDeletable: reminder.caldavDeletable,
                             repeat: reminder.repeat,
                             parentId: reminder.parentId || null,
                             parentTitle: reminder.parentTitle || null
@@ -8238,9 +8271,9 @@ export class CalendarView {
                         borderColor: colors.borderColor,
                         textColor: 'var(--b3-theme-on-background)',
                         className: `reminder-time-event reminder-priority-${priority}${isRepeated ? ' reminder-repeated' : ''}${reminder.completed || isExpired ? ' completed' : ''}`,
-                        editable: !reminder.isSubscribed,
-                        startEditable: !reminder.isSubscribed,
-                        durationEditable: !reminder.isSubscribed,
+                        editable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable),
+                        startEditable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable),
+                        durationEditable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable),
                         allDay: false,
                         display: 'block',
                         extendedProps: {
@@ -8274,6 +8307,9 @@ export class CalendarView {
                             repeat: reminder.repeat,
                             isSubscribed: reminder.isSubscribed || false,
                             subscriptionId: reminder.subscriptionId,
+                            subscriptionType: reminder.subscriptionType,
+                            caldavEditable: reminder.caldavEditable,
+                            caldavDeletable: reminder.caldavDeletable,
                             showNoteInCalendar: reminder.showNoteInCalendar
                         }
                     });
@@ -8310,9 +8346,9 @@ export class CalendarView {
                 borderColor: colors.borderColor,
                 textColor: 'var(--b3-theme-on-background)',
                 className: `reminder-time-event reminder-priority-${priority}${isRepeated ? ' reminder-repeated' : ''}${reminder.completed || isExpiredReminderTime ? ' completed' : ''}`,
-                editable: !reminder.isSubscribed,
-                startEditable: !reminder.isSubscribed,
-                durationEditable: !reminder.isSubscribed,
+                editable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable),
+                startEditable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable),
+                durationEditable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable),
                 allDay: false,
                 display: 'block',
                 extendedProps: {
@@ -8346,6 +8382,9 @@ export class CalendarView {
                     repeat: reminder.repeat,
                     isSubscribed: reminder.isSubscribed || false,
                     subscriptionId: reminder.subscriptionId,
+                    subscriptionType: reminder.subscriptionType,
+                    caldavEditable: reminder.caldavEditable,
+                    caldavDeletable: reminder.caldavDeletable,
                     showNoteInCalendar: reminder.showNoteInCalendar
                 }
             });
@@ -8376,9 +8415,9 @@ export class CalendarView {
             borderColor: colors.borderColor,
             textColor: 'var(--b3-theme-on-background)',
             className: classNames,
-            editable: !reminder.isSubscribed, // 如果是订阅任务，禁止编辑
-            startEditable: !reminder.isSubscribed, // 如果是订阅任务，禁止拖动开始时间
-            durationEditable: !reminder.isSubscribed, // 如果是订阅任务，禁止调整时长
+            editable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable), // ICS订阅只读，CalDAV可写
+            startEditable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable), // ICS订阅只读，CalDAV可写
+            durationEditable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable), // ICS订阅只读，CalDAV可写
             extendedProps: {
                 completed: isCompleted,
                 note: reminder.note || '',
@@ -8402,6 +8441,9 @@ export class CalendarView {
                 repeat: reminder.repeat,
                 isSubscribed: reminder.isSubscribed || false,
                 subscriptionId: reminder.subscriptionId,
+                subscriptionType: reminder.subscriptionType,
+                caldavEditable: reminder.caldavEditable,
+                caldavDeletable: reminder.caldavDeletable,
                 showNoteInCalendar: reminder.showNoteInCalendar
             }
         };

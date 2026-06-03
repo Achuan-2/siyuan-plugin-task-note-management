@@ -753,8 +753,8 @@ export class TaskRenderer {
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.className = 'reminder-task-checkbox';
-        checkbox.checked = task.completed || false;
-        if (task.isSubscribed) {
+        const isEditable = !task.isSubscribed || (task.subscriptionType === 'caldav' && task.caldavEditable);
+        if (!isEditable) {
             checkbox.disabled = true;
         }
         this.applyPriorityDisplayStyle(taskEl, checkbox, priority, priorityDisplayStyle);
@@ -940,7 +940,8 @@ export class TaskRenderer {
             const hasNoDate = !task.date && !task.endDate;
             timeEl.textContent = (hasNoDate ? '' : '🗓') + timeText;
 
-            if (!task.isSubscribed) {
+            const isEditable = !task.isSubscribed || (task.subscriptionType === 'caldav' && task.caldavEditable);
+            if (isEditable) {
                 timeEl.style.cursor = 'pointer';
                 timeEl.classList.add('ariaLabel');
                 timeEl.setAttribute('aria-label', i18n("clickToModifyTime") || "点击修改时间");

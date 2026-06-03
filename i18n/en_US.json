@@ -1251,6 +1251,11 @@
     "parseIcsFailed": "Failed to parse ICS file",
     "icsSubscription": "Calendar Subscription",
     "icsSubscriptionDesc": "Subscribe to external ICS calendars (such as Outlook-generated ICS links, as well as importing holiday calendars, weather calendars, etc., created by others), and automatically synchronize events into this plugin. It is recommended to set up dedicated projects for each subscribed calendar (you can create a project status \"Subscribed Calendar\" specifically for storing these items). ⚠️ Note: Subscribed events cannot be edited. Help Documentation: <a href=\"https://zhuanlan.zhihu.com/p/2010849488441459078\">How to Subscribe to External Online Calendars, such as Weather Calendars, Holiday Calendars, Outlook Calendars</a>",
+    "genericCalendar": "Generic Calendar",
+    "feishuCalendar": "Feishu Calendar",
+    "dingtalkCalendar": "DingTalk Calendar",
+    "wecomCalendar": "WeCom Calendar",
+    "qqCalendar": "QQ Mail Calendar",
     "addSubscription": "Add Subscription",
     "manageSubscriptions": "Manage Subscriptions",
     "subscriptionName": "Subscription Name",
@@ -1260,7 +1265,7 @@
     "subscriptionProject": "Project",
     "subscriptionShowInSidebar": "Show in Task Sidebar",
     "subscriptionShowInMatrix": "Show in Eisenhower Matrix",
-    "subscriptionShowNoteInCalendar": "Show in Calendar",
+    "subscriptionShowNoteInCalendar": "Show Note in Calendar",
     "subscriptionCategory": "Default Category",
     "subscriptionPriority": "Default Priority",
     "subscriptionEnabled": "Subscription Enabled",
@@ -2235,5 +2240,7 @@
     "webhookUrlRequired": "Please fill in the Webhook URL first",
     "webhookTesting": "Sending test Webhook...",
     "webhookTestSuccess": "Webhook test successful!",
-    "webhookTestFailed": "Webhook test failed"
+    "webhookTestFailed": "Webhook test failed",
+    "showPassword": "Show Password",
+    "hidePassword": "Hide Password"
 }

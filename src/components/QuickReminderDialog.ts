@@ -5478,6 +5478,7 @@ export class QuickReminderDialog {
                 valueInput: hiddenInput,
                 isMultiSelect: false,
                 excludeArchived: true,
+                excludeSubscription: true,
                 allowedProjectIds: this.allowedProjectIds,
                 includeNoProject: true,
                 onSelect: async (projectId) => {
@@ -6437,7 +6438,12 @@ export class QuickReminderDialog {
                         // 所以这里保留原有的 notified 字段值，不做重置或计算。
 
                         reminderData[reminderId] = reminder;
-                        await this.plugin.saveReminderData(reminderData);
+                        if (reminder.isSubscribed) {
+                            const { saveReminders } = await import('../utils/icsSubscription');
+                            await saveReminders(this.plugin, reminderData);
+                        } else {
+                            await this.plugin.saveReminderData(reminderData);
+                        }
 
                         // 更新移动端定时通知
                         try {
@@ -6503,7 +6509,12 @@ export class QuickReminderDialog {
 
                             // 持久化子任务变更（如果有）
                             if (anyChildChanged) {
-                                await this.plugin.saveReminderData(reminderData);
+                                if (reminder.isSubscribed) {
+                                    const { saveReminders } = await import('../utils/icsSubscription');
+                                    await saveReminders(this.plugin, reminderData);
+                                } else {
+                                    await this.plugin.saveReminderData(reminderData);
+                                }
 
                                 // 如果有绑定块需要同步 projectId，异步调用 API 处理
                                 if (changedBlockProjects.length > 0) {
@@ -6713,7 +6724,12 @@ export class QuickReminderDialog {
                 }
 
                 reminderData[reminderId] = reminder;
-                await this.plugin.saveReminderData(reminderData);
+                if (reminder.isSubscribed) {
+                    const { saveReminders } = await import('../utils/icsSubscription');
+                    await saveReminders(this.plugin, reminderData);
+                } else {
+                    await this.plugin.saveReminderData(reminderData);
+                }
 
                 // 更新移动端定时通知（创建新提醒）
                 try {
@@ -6729,7 +6745,12 @@ export class QuickReminderDialog {
                         reminder.docId = block?.root_id || (block?.type === 'd' ? block?.id : reminder.blockId);
                         // 更新持久化数据以包含 docId
                         reminderData[reminderId] = reminder;
-                        await this.plugin.saveReminderData(reminderData);
+                        if (reminder.isSubscribed) {
+                            const { saveReminders } = await import('../utils/icsSubscription');
+                            await saveReminders(this.plugin, reminderData);
+                        } else {
+                            await this.plugin.saveReminderData(reminderData);
+                        }
                     } catch (err) {
                         console.warn('获取块信息失败（保存 docId）:', err);
                     }
