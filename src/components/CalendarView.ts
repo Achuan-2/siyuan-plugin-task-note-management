@@ -3469,6 +3469,14 @@ export class CalendarView {
                 disabled: true
             });
 
+            menu.addItem({
+                iconHTML: "👁️",
+                label: i18n("viewTasks") || "查看任务",
+                click: () => {
+                    this.showTimeEditDialog(calendarEvent);
+                }
+            });
+
             if (calendarEvent.extendedProps.projectId) {
                 menu.addItem({
                     iconHTML: "📂",
@@ -3604,6 +3612,13 @@ export class CalendarView {
                 });
             }
         } else {
+            menu.addItem({
+                iconHTML: "👁️",
+                label: i18n("viewTasks") || "查看任务",
+                click: () => {
+                    this.showTimeEditDialog(calendarEvent);
+                }
+            });
             if (calendarEvent.extendedProps.blockId) {
                 menu.addItem({
                     iconHTML: "📖",
@@ -5571,6 +5586,9 @@ export class CalendarView {
 
         // 如果没有绑定块，提示用户绑定块 (订阅任务除外)
         if (!reminder.blockId) {
+            if (reminder.isSubscribed) {
+                this.showTimeEditDialog(info.event);
+            }
             return;
         }
 
