@@ -1069,7 +1069,9 @@ export class TaskRenderer {
             }
         } else {
             const currentToday = getLogicalDateString();
-            const canRenderDessertStatus = task.isAvailableToday && isBeforePeriod_rendering;
+            const canRenderDessertStatus = (context as any).isDailyDessertTaskForDate 
+                ? (context as any).isDailyDessertTaskForDate(task, currentToday) 
+                : this.isDailyDessertTaskForDate(task, currentToday);
             const canRenderTodayIgnoreStatus = context.canApplyTodayIgnore ? context.canApplyTodayIgnore(task, currentToday) : false;
 
             const checkIgnoreMark = () => context.hasTodayIgnoreMark ? context.hasTodayIgnoreMark(task, currentToday) : false;
@@ -1560,5 +1562,58 @@ export class TaskRenderer {
         taskEl.appendChild(contentEl);
 
         return taskEl;
+    }
+
+
+    private static getReminderTimeEntries(reminder: any): Array<{ time: string; endTime?: string; note?: string; everyDay?: boolean }> {
+        const entries: Array<{ time: string; endTime?: string; note?: string; everyDay?: boolean }> = [];
+        if (Array.isArray(reminder?.reminderTimes)) {
+            reminder.reminderTimes.forEach((rtItem: any) => {
+                if (!rtItem) return;
+                const rt = typeof rtItem === 'string' ? rtItem : rtItem.time;
+                const note = typeof rtItem === 'string' ? '' : String(rtItem.note || '').trim();
+                if (rt) {
+                    entries.push({
+                        time: rt,
+                        endTime: typeof rtItem === 'string' ? undefined : (typeof rtItem.endTime === 'string' ? rtItem.endTime.trim() : undefined),
+                        note,
+                        everyDay: typeof rtItem === 'string' ? false : !!rtItem.everyDay
+                    });
+                }
+            });
+        }
+        if (entries.length === 0 && typeof reminder?.customReminderTime === 'string' && reminder.customReminderTime.trim()) {
+            entries.push({ time: reminder.customReminderTime.trim() });
+        }
+        return entries;
+    }
+
+    private static isDatelessReminderActiveOnDate(reminder: any, targetDate: string): boolean {
+        const hasDate = reminder?.date || reminder?.endDate;
+        if (hasDate) return false;
+        const entries = this.getReminderTimeEntries(reminder);
+        if (entries.length === 0) return false;
+        return entries.some(entry => {
+            if (entry.everyDay) {
+                return true;
+            }
+            if (entry.time.includes('T')) {
+                const datePart = entry.time.split('T')[0];
+                return datePart === targetDate;
+            }
+            return true;
+        });
+    }
+
+    private static isDailyDessertTaskForDate(reminder: any, targetDate: string): boolean {
+        if (!reminder?.isAvailableToday) {
+            if (!reminder.date && !reminder.endDate && this.isDatelessReminderActiveOnDate(reminder, targetDate)) {
+                return true;
+            }
+            return false;
+        }
+        const startLogical = this.getReminderLogicalDate(reminder.date, reminder.time);
+        const isInOrAfterPeriod = reminder.date && compareDateStrings(startLogical, targetDate) <= 0;
+        return !isInOrAfterPeriod;
     }
 }

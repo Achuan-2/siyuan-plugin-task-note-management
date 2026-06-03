@@ -161,6 +161,15 @@ export class ReminderTaskLogic {
                     if (!this.canReminderShowOnDate(r, today, settings, holidayData)) return false;
                     const hasIgnoreMark = this.hasTodayIgnoreMark(r, today);
 
+                    if (!r.date && !r.endDate) {
+                        if (this.isDatelessReminderActiveOnDate(r, today)) {
+                            if (this.canApplyTodayIgnore(r, today, settings) && hasIgnoreMark) return false;
+                            const dailyCompleted = Array.isArray(r.dailyDessertCompleted) ? r.dailyDessertCompleted : [];
+                            if (dailyCompleted.includes(today)) return false;
+                            return true;
+                        }
+                    }
+
                     const hasDate = r.date || r.endDate;
                     const startLogical = hasDate ? this.getReminderLogicalDate(r.date || r.endDate, r.time || r.endTime) : null;
                     const endLogical = hasDate ? this.getReminderLogicalDate(r.endDate || r.date, r.endTime || r.time) : null;
@@ -363,7 +372,12 @@ export class ReminderTaskLogic {
     }
 
     private static isDailyDessertTaskForDate(reminder: any, targetDate: string): boolean {
-        if (!reminder?.isAvailableToday) return false;
+        if (!reminder?.isAvailableToday) {
+            if (!reminder.date && !reminder.endDate && this.isDatelessReminderActiveOnDate(reminder, targetDate)) {
+                return true;
+            }
+            return false;
+        }
         const startLogical = this.getReminderLogicalDate(reminder.date, reminder.time);
         const isInOrAfterPeriod = reminder.date && compareDateStrings(startLogical, targetDate) <= 0;
         return !isInOrAfterPeriod;
@@ -381,6 +395,10 @@ export class ReminderTaskLogic {
 
     private static canApplyTodayIgnore(reminder: any, targetDate: string, settings?: any): boolean {
         if (!reminder || reminder.completed) return false;
+
+        if (this.isDailyDessertTaskForDate(reminder, targetDate)) {
+            return true;
+        }
 
         const isSpanningDays = reminder.endDate && reminder.endDate !== reminder.date;
         if (isSpanningDays) {
@@ -412,5 +430,45 @@ export class ReminderTaskLogic {
             return reminder.dailyCompletions && reminder.dailyCompletions[today] === true;
         }
         return false;
+    }
+
+    private static isDatelessReminderActiveOnDate(reminder: any, targetDate: string): boolean {
+        const hasDate = reminder?.date || reminder?.endDate;
+        if (hasDate) return false;
+        const entries = this.getReminderTimeEntries(reminder);
+        if (entries.length === 0) return false;
+        return entries.some(entry => {
+            if (entry.everyDay) {
+                return true;
+            }
+            if (entry.time.includes('T')) {
+                const datePart = entry.time.split('T')[0];
+                return datePart === targetDate;
+            }
+            return true;
+        });
+    }
+
+    private static getReminderTimeEntries(reminder: any): Array<{ time: string; endTime?: string; note?: string; everyDay?: boolean }> {
+        const entries: Array<{ time: string; endTime?: string; note?: string; everyDay?: boolean }> = [];
+        if (Array.isArray(reminder?.reminderTimes)) {
+            reminder.reminderTimes.forEach((rtItem: any) => {
+                if (!rtItem) return;
+                const rt = typeof rtItem === 'string' ? rtItem : rtItem.time;
+                const note = typeof rtItem === 'string' ? '' : String(rtItem.note || '').trim();
+                if (rt) {
+                    entries.push({
+                        time: rt,
+                        endTime: typeof rtItem === 'string' ? undefined : (typeof rtItem.endTime === 'string' ? rtItem.endTime.trim() : undefined),
+                        note,
+                        everyDay: typeof rtItem === 'string' ? false : !!rtItem.everyDay
+                    });
+                }
+            });
+        }
+        if (entries.length === 0 && typeof reminder?.customReminderTime === 'string' && reminder.customReminderTime.trim()) {
+            entries.push({ time: reminder.customReminderTime.trim() });
+        }
+        return entries;
     }
 }
