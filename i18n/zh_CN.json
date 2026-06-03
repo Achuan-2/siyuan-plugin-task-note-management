@@ -1256,6 +1256,7 @@
     "dingtalkCalendar": "钉钉日历",
     "wecomCalendar": "企业微信日历",
     "qqCalendar": "QQ邮箱日历",
+    "readOnly": "只读",
     "addSubscription": "添加订阅",
     "manageSubscriptions": "管理订阅",
     "subscriptionName": "订阅名称",

@@ -46,9 +46,10 @@ export function isSubscriptionDeletable(subscription: any): boolean {
     if (subscription.readonly === true) return false;
     const provider = subscription.provider || 'generic';
     if (provider === 'wecom') return true;
-    if (provider === 'dingtalk') return true;
-    if (provider === 'feishu') return false;
     if (provider === 'qq') return true;
+    if (provider === 'feishu' || provider === 'dingtalk') {
+        return subscription.caldavDeletable === true;
+    }
     return subscription.caldavDeletable !== false;
 }
 
@@ -305,11 +306,12 @@ interface CalDavCapabilities {
  */
 function getProviderCapabilities(subscription: IcsSubscription): CalDavCapabilities {
     const editable = isSubscriptionEditable(subscription);
-    const deletable = isSubscriptionDeletable(subscription);
+    const provider = subscription.provider || 'generic';
+    const serverCanDelete = (provider === 'wecom' || provider === 'qq' || (provider === 'generic' && subscription.caldavDeletable !== false));
     return {
         canCreate: editable,
         canUpdate: editable,
-        canDelete: deletable
+        canDelete: serverCanDelete
     };
 }
 

@@ -1256,6 +1256,7 @@
     "dingtalkCalendar": "DingTalk Calendar",
     "wecomCalendar": "WeCom Calendar",
     "qqCalendar": "QQ Mail Calendar",
+    "readOnly": "Read-only",
     "addSubscription": "Add Subscription",
     "manageSubscriptions": "Manage Subscriptions",
     "subscriptionName": "Subscription Name",

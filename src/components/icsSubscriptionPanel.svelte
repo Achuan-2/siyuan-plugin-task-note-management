@@ -369,21 +369,20 @@
                     caldavEditableInput.disabled = true;
                     caldavDeletableInput.checked = true;
                     caldavDeletableInput.disabled = true;
-                } else if (provider === 'dingtalk') {
-                    caldavEditableInput.checked = false;
-                    caldavEditableInput.disabled = true;
-                    caldavDeletableInput.checked = true;
-                    caldavDeletableInput.disabled = true;
-                } else if (provider === 'feishu') {
-                    caldavEditableInput.checked = false;
-                    caldavEditableInput.disabled = true;
-                    caldavDeletableInput.checked = false;
-                    caldavDeletableInput.disabled = true;
                 } else if (provider === 'qq') {
                     caldavEditableInput.checked = false;
                     caldavEditableInput.disabled = true;
                     caldavDeletableInput.checked = true;
                     caldavDeletableInput.disabled = true;
+                } else if (provider === 'dingtalk' || provider === 'feishu') {
+                    caldavEditableInput.checked = false;
+                    caldavEditableInput.disabled = true;
+                    caldavDeletableInput.disabled = false;
+                    if (!subscription) {
+                        caldavDeletableInput.checked = false;
+                    } else {
+                        caldavDeletableInput.checked = subscription.caldavDeletable === true;
+                    }
                 } else {
                     caldavEditableInput.disabled = false;
                     caldavDeletableInput.disabled = false;
