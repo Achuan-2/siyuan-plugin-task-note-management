@@ -15858,40 +15858,7 @@ export class ProjectKanbanView {
             `;
         document.head.appendChild(style);
     }
-    private renderCategorySelector(container: HTMLElement, defaultCategoryId?: string) {
-        container.innerHTML = '';
-        const categories = this.categoryManager.getCategories();
 
-        const noCategoryEl = document.createElement('div');
-        noCategoryEl.className = 'category-option';
-        noCategoryEl.setAttribute('data-category', '');
-        noCategoryEl.innerHTML = `<span>无分类</span>`;
-        if (!defaultCategoryId) {
-            noCategoryEl.classList.add('selected');
-        }
-        container.appendChild(noCategoryEl);
-
-        categories.forEach(category => {
-            const categoryEl = document.createElement('div');
-            categoryEl.className = 'category-option';
-            categoryEl.setAttribute('data-category', category.id);
-            categoryEl.style.backgroundColor = category.color;
-            categoryEl.innerHTML = `<span>${category.icon ? category.icon + ' ' : ''}${category.name}</span>`;
-            if (category.id === defaultCategoryId) {
-                categoryEl.classList.add('selected');
-            }
-            container.appendChild(categoryEl);
-        });
-
-        container.addEventListener('click', (e) => {
-            const target = e.target as HTMLElement;
-            const option = target.closest('.category-option') as HTMLElement;
-            if (option) {
-                container.querySelectorAll('.category-option').forEach(opt => opt.classList.remove('selected'));
-                option.classList.add('selected');
-            }
-        });
-    }
 
     // 设置任务优先级
     private async setReminderPinned(task: any, pinned: boolean) {
