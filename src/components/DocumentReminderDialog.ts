@@ -1,4 +1,4 @@
-﻿import { Dialog, showMessage, confirm } from "siyuan";
+import { Dialog, showMessage, confirm } from "siyuan";
 import { updateBindBlockAtrrs, getBlockByID, openBlock } from "../api";
 import { getLocalDateString, compareDateStrings, getLocalDateTimeString, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../utils/dateUtils";
 import { CategoryManager } from "../utils/categoryManager";
@@ -616,6 +616,7 @@ export class DocumentReminderDialog {
                 clipTitleToOneLine: true,
                 isMobileClient: this.plugin?.isInMobileApp,
                 projectCache,
+                isReminderPinned: (t: any) => !!t.pinned,
                 getCompletedTime: (task: any) => this.getCompletedTime(task),
                 formatCompletedTime: (timeStr: string) => this.formatCompletedTime(timeStr)
             },

@@ -557,7 +557,8 @@ export class SubtasksDialog {
             lute: this.lute,
             projectCache,
             isMobileClient: this.plugin?.isInMobileApp,
-            isTaskCollapsed: (task: any) => this.collapsedSubtaskIds.has(task.id)
+            isTaskCollapsed: (task: any) => this.collapsedSubtaskIds.has(task.id),
+            isReminderPinned: (t: any) => !!t.pinned
         };
         const callbacks: TaskRenderCallbacks = {
             onCheckboxClick: (task: any, checked: boolean) => {

@@ -222,6 +222,7 @@ export class BlockRemindersDialog {
                 milestoneMap: this.milestoneMap,
                 projectCache,
                 isMobileClient: this.plugin?.isInMobileApp,
+                isReminderPinned: (t: any) => !!t.pinned,
                 formatCompletedTime: (timeStr: string) => this.formatCompletedTime(timeStr)
             },
             {
