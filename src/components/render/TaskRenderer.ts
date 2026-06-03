@@ -1235,12 +1235,6 @@ export class TaskRenderer {
                     transition: opacity 0.2s;
                 `;
 
-                if (project.icon) {
-                    const iconSpan = document.createElement('span');
-                    iconSpan.textContent = project.icon;
-                    iconSpan.style.cssText = 'font-size: 10px;';
-                    projectInfo.appendChild(iconSpan);
-                }
 
                 const nameSpan = document.createElement('span');
                 nameSpan.textContent = `📂${i18n("project") || "项目"}：${displayProjectName}`;

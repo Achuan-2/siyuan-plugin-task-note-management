@@ -543,7 +543,6 @@
                 id: projectId,
                 folderId: folder.id,
                 title: `🗓 ${name}`,
-                icon: '🗓',
                 isSubscription: true,
                 subscriptionId: subId,
                 status: existingProj.status || 'doing',

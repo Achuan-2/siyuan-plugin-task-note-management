@@ -60,7 +60,6 @@ export interface Project {
     clipTitleToOneLine?: boolean;
     hideEmptyStatusBars?: boolean;
     folderId?: string;
-    icon?: string;
     isSubscription?: boolean;
     subscriptionId?: string;
 }
@@ -331,7 +330,6 @@ export class ProjectManager {
                         createdTime: project.createdTime,
                         categoryId: project.categoryId,
                         folderId: project.folderId,
-                        icon: project.icon,
                         isSubscription: project.isSubscription,
                         subscriptionId: project.subscriptionId
                     }));
