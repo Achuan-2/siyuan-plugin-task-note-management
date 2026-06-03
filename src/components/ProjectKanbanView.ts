@@ -478,97 +478,8 @@ export class ProjectKanbanView {
         );
     }
 
-    /**
-     * 解析提醒时间字符串，返回对应的日期
-     * @param reminderTimeStr 提醒时间字符串（可能是时间、日期时间或完整的datetime-local格式）
-     * @param taskDate 任务日期（用作默认日期）
-     * @returns 日期字符串 YYYY-MM-DD
-     */
-    private parseReminderDate(reminderTimeStr: string, taskDate?: string): string | null {
-        if (!reminderTimeStr) return null;
 
-        const s = String(reminderTimeStr).trim();
-        let datePart: string | null = null;
-        let timePart: string | null = null;
 
-        // 解析不同格式
-        if (s.includes('T')) {
-            // ISO格式: YYYY-MM-DDTHH:MM
-            const parts = s.split('T');
-            datePart = parts[0];
-            timePart = parts[1] || null;
-        } else if (s.includes(' ')) {
-            // 空格分隔: YYYY-MM-DD HH:MM 或 HH:MM extra
-            const parts = s.split(' ');
-            if (/^\d{4}-\d{2}-\d{2}$/.test(parts[0])) {
-                datePart = parts[0];
-                timePart = parts.slice(1).join(' ') || null;
-            } else {
-                timePart = parts[0];
-            }
-        } else if (/^\d{2}:\d{2}/.test(s)) {
-            // 仅时间: HH:MM
-            timePart = s;
-        } else if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-            // 仅日期: YYYY-MM-DD
-            datePart = s;
-        } else {
-            timePart = s;
-        }
-
-        // 确定有效日期
-        const effectiveDate = datePart || taskDate || getLogicalDateString();
-
-        // 返回逻辑日期（考虑时间因素）
-        return this.getTaskLogicalDate(effectiveDate, timePart || undefined);
-    }
-
-    /**
-     * 格式化提醒时间显示
-     * @param reminderTimeStr 提醒时间字符串
-     * @param taskDate 任务日期
-     * @param today 今天的日期
-     * @returns 格式化后的显示文本
-     */
-    private formatReminderTimeDisplay(reminderTimeStr: string, taskDate: string | undefined, today: string): string {
-        const s = String(reminderTimeStr).trim();
-        let datePart: string | null = null;
-        let timePart: string | null = null;
-
-        // 解析格式（同上）
-        if (s.includes('T')) {
-            const parts = s.split('T');
-            datePart = parts[0];
-            timePart = parts[1] || null;
-        } else if (s.includes(' ')) {
-            const parts = s.split(' ');
-            if (/^\d{4}-\d{2}-\d{2}$/.test(parts[0])) {
-                datePart = parts[0];
-                timePart = parts.slice(1).join(' ') || null;
-            } else {
-                timePart = parts[0];
-            }
-        } else if (/^\d{2}:\d{2}/.test(s)) {
-            timePart = s;
-        } else if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-            datePart = s;
-        } else {
-            timePart = s;
-        }
-
-        const effectiveDate = datePart || taskDate || today;
-        const logicalDate = this.getTaskLogicalDate(effectiveDate, timePart || undefined);
-
-        // 根据日期关系决定显示内容
-        if (compareDateStrings(logicalDate, today) === 0) {
-            // 今天：仅显示时间
-            return timePart ? timePart.substring(0, 5) : effectiveDate;
-        } else {
-            // 未来：显示日期+时间
-            const showTime = timePart ? ` ${timePart.substring(0, 5)}` : '';
-            return `${effectiveDate}${showTime}`;
-        }
-    }
 
     private normalizeGroupVisibleStatusIds(rawStatusIds: any): string[] {
         if (!Array.isArray(rawStatusIds)) return [];
@@ -7536,9 +7447,7 @@ export class ProjectKanbanView {
         this.currentSortOrder = primary.order;
     }
 
-    private isPriorityPrimarySort(): boolean {
-        return this.getActiveSortCriteria()?.[0]?.method === 'priority';
-    }
+
 
     private async saveFolderKanbanSetting(partial: Partial<FolderKanbanSettings>): Promise<void> {
         const folderId = this.viewOptions?.folderId;
@@ -10838,40 +10747,7 @@ export class ProjectKanbanView {
         topLevelTasks.forEach(task => renderTaskWithChildren(task, 0));
     }
 
-    private async renderTasksGroupedByCustomGroup(content: HTMLElement, tasks: any[], projectGroups: any[]) {
-        // 创建分组容器
-        const groupsContainer = document.createElement('div');
-        groupsContainer.className = 'status-column-groups';
-        groupsContainer.style.cssText = `
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        `;
 
-        // 为每个自定义分组创建子容器
-        projectGroups.forEach((group: any) => {
-            const groupTasks = tasks.filter(task => task.customGroupId === group.id);
-            if (groupTasks.length > 0) {
-                const groupContainer = this.createCustomGroupInStatusColumn(group, groupTasks, false, '');
-                groupsContainer.appendChild(groupContainer);
-            }
-        });
-
-        // 添加未分组任务
-        const ungroupedTasks = tasks.filter(task => !task.customGroupId);
-        if (ungroupedTasks.length > 0) {
-            const ungroupedGroup = {
-                id: 'ungrouped',
-                name: '未分组',
-                color: '#95a5a6',
-                icon: '📋'
-            };
-            const ungroupedContainer = this.createCustomGroupInStatusColumn(ungroupedGroup, ungroupedTasks, false, '');
-            groupsContainer.appendChild(ungroupedContainer);
-        }
-
-        content.appendChild(groupsContainer);
-    }
 
     private createCustomGroupInStatusColumn(group: any, tasks: any[], isCollapsedDefault: boolean = false, status: string = ''): HTMLElement {
         const groupContainer = document.createElement('div');
@@ -11083,24 +10959,7 @@ export class ProjectKanbanView {
         }
     }
 
-    private getTaskProgressInfo(task: any): { shouldShow: boolean; percent: number } {
-        const customPercent = this.normalizeCustomProgress(task?.customProgress);
-        if (customPercent !== undefined) {
-            if (task?.completed) {
-                return { shouldShow: true, percent: 100 };
-            }
-            return { shouldShow: true, percent: customPercent };
-        }
 
-        const directChildren = this.tasks.filter(t => t.parentId === task?.id);
-        if (directChildren.length === 0) {
-            return { shouldShow: false, percent: 0 };
-        }
-
-        const completedCount = directChildren.filter(c => c.completed).length;
-        const percent = Math.round((completedCount / directChildren.length) * 100);
-        return { shouldShow: true, percent: Math.max(0, Math.min(100, percent)) };
-    }
 
     private getTaskListContainerForTaskElement(taskEl: HTMLElement): HTMLElement | null {
         const nestedTaskList = taskEl.closest(
@@ -11673,152 +11532,8 @@ export class ProjectKanbanView {
         return dateStr || "未设置日期";
     }
 
-    private getTaskCountdownInfo(task: any): { text: string; days: number; type: 'start' | 'end' | 'started' | 'overdue' | 'none' } {
-        // 使用逻辑日期计算天数差（考虑一天起始时间）
-        const today = getLogicalDateString();
 
-        const calcDays = (targetLogicalDate: string) => {
-            const target = new Date(targetLogicalDate + 'T00:00:00');
-            const base = new Date(today + 'T00:00:00');
-            return Math.round((target.getTime() - base.getTime()) / (1000 * 60 * 60 * 24));
-        };
 
-        const hasStartDate = !!task.date;
-        const hasEndDate = !!task.endDate;
-        const isOnlyEndDate = !hasStartDate && hasEndDate;
-        const isOnlyStartDate = hasStartDate && !hasEndDate;
-        const isSpanningRealEvent = !!(hasStartDate && hasEndDate && task.endDate !== task.date);
-
-        if (!hasStartDate && !hasEndDate) {
-            return { text: '', days: 0, type: 'none' };
-        }
-
-        if (isSpanningRealEvent) {
-            const logicalStart = this.getTaskLogicalDate(task.date, task.time);
-            const logicalEnd = this.getTaskLogicalDate(task.endDate, task.endTime || task.time);
-            const startDays = calcDays(logicalStart);
-            const endDays = calcDays(logicalEnd);
-
-            if (startDays > 0) {
-                return {
-                    text: i18n('startsInNDays', { days: String(startDays) }),
-                    days: startDays,
-                    type: 'start'
-                };
-            }
-
-            if (endDays < 0) {
-                return {
-                    text: i18n('overdueDays', { days: String(Math.abs(endDays)) }),
-                    days: endDays,
-                    type: 'overdue'
-                };
-            }
-
-            return {
-                text: endDays === 0
-                    ? i18n('spanningDaysLeftPlural', { days: '0' })
-                    : endDays === 1
-                    ? i18n('spanningDaysLeftSingle')
-                    : i18n('spanningDaysLeftPlural', { days: String(endDays) }),
-                days: endDays,
-                type: 'end'
-            };
-        }
-
-        if (isOnlyEndDate) {
-            const logicalEnd = this.getTaskLogicalDate(task.endDate, task.endTime || task.time);
-            const endDays = calcDays(logicalEnd);
-
-            if (endDays > 0) {
-                return {
-                    text: i18n('endsInNDays', { days: String(endDays) }),
-                    days: endDays,
-                    type: 'end'
-                };
-            }
-
-            if (endDays < 0) {
-                return {
-                    text: i18n('overdueDays', { days: String(Math.abs(endDays)) }),
-                    days: endDays,
-                    type: 'overdue'
-                };
-            }
-
-            return { text: '', days: 0, type: 'none' };
-        }
-
-        if (isOnlyStartDate) {
-            const logicalStart = this.getTaskLogicalDate(task.date, task.time);
-            const startDays = calcDays(logicalStart);
-
-            if (startDays > 0) {
-                return {
-                    text: i18n('startsInNDays', { days: String(startDays) }),
-                    days: startDays,
-                    type: 'start'
-                };
-            }
-
-            if (startDays < 0) {
-                return shouldTreatStartDateOnlyAsOverdue(task, this.plugin?.settings)
-                    ? {
-                        text: i18n('overdueDays', { days: String(Math.abs(startDays)) }),
-                        days: startDays,
-                        type: 'overdue'
-                    }
-                    : {
-                        text: i18n('startedDays', { days: String(Math.abs(startDays)) }),
-                        days: startDays,
-                        type: 'started'
-                    };
-            }
-
-            return { text: '', days: 0, type: 'none' };
-        }
-
-        // 同一天的开始和结束日期：未来显示开始倒计时，过去按结束日期过期。
-        if (task.date && task.endDate) {
-            const logicalStart = this.getTaskLogicalDate(task.date, task.time);
-            const logicalEnd = this.getTaskLogicalDate(task.endDate, task.endTime || task.time);
-            const startDays = calcDays(logicalStart);
-            const endDays = calcDays(logicalEnd);
-
-            if (startDays > 0) {
-                return {
-                    text: i18n('startsInNDays', { days: String(startDays) }),
-                    days: startDays,
-                    type: 'start'
-                };
-            }
-
-            if (endDays < 0) {
-                return {
-                    text: i18n('overdueDays', { days: String(Math.abs(endDays)) }),
-                    days: endDays,
-                    type: 'overdue'
-                };
-            }
-        }
-
-        return { text: '', days: 0, type: 'none' };
-    }
-
-    private getCountdownBadgeClass(type: 'start' | 'end' | 'started' | 'overdue' | 'none'): string {
-        switch (type) {
-            case 'start':
-                return 'countdown-start';
-            case 'end':
-                return 'countdown-end';
-            case 'started':
-                return 'countdown-started';
-            case 'overdue':
-                return 'countdown-overdue';
-            default:
-                return '';
-        }
-    }
 
     private addTaskDragEvents(element: HTMLElement, task: any) {
         element.addEventListener('dragover', (e) => {
