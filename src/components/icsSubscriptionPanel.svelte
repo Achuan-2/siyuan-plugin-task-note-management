@@ -137,13 +137,37 @@
         syncingSubIds[sub.id] = true;
         syncingSubIds = { ...syncingSubIds };
         try {
-            const { syncSubscription } = await import('../utils/icsSubscription');
-            await syncSubscription(plugin, sub);
+            const { saveSubscriptions, syncSubscription } = await import('../utils/icsSubscription');
+            const result = await syncSubscription(plugin, sub);
+
+            sub.lastSync = new Date().toISOString();
+            sub.lastSyncStatus = result.success ? 'success' : 'error';
+
+            if (!result.success) {
+                sub.lastSyncError = result.error;
+                data.subscriptions[sub.id] = sub;
+                await saveSubscriptions(plugin, data);
+                subscriptions = [...subscriptions];
+                pushErrMsg(
+                    `${i18n('subscriptionSyncError') || 'ICS订阅同步失败'}: ${
+                        result.error || '解析ICS文件失败'
+                    }`
+                );
+                return;
+            }
+
+            sub.lastSyncError = undefined;
+            data.subscriptions[sub.id] = sub;
+            await saveSubscriptions(plugin, data);
             await loadData(true);
             pushMsg(i18n('syncFinished'));
         } catch (error) {
             console.error('Failed to sync subscription:', error);
-            pushErrMsg(i18n('subscriptionSyncError') || 'Sync failed');
+            pushErrMsg(
+                `${i18n('subscriptionSyncError') || 'ICS订阅同步失败'}: ${
+                    error.message || String(error)
+                }`
+            );
         } finally {
             delete syncingSubIds[sub.id];
             syncingSubIds = { ...syncingSubIds };
@@ -204,17 +228,17 @@
                         <div class="b3-label">
                             <div class="b3-label__text">${i18n('subscriptionProject')} *</div>
                             <div class="fn__hr"></div>
-                            <div style="display: flex; gap: 8px;">
-                                <div class="custom-select fn__flex-1" id="sub-project-custom" style="position: relative;">
+                            <div style="display: flex; gap: 8px; align-items: flex-start;">
+                                <div class="custom-select fn__flex-1" id="sub-project-custom" style="position: relative; min-width: 0;">
                                     <div style="position: relative;">
                                         <input type="text" id="sub-project-search" class="b3-text-field" placeholder="${i18n('pleaseSelectProject')}" autocomplete="off" style="width: 100%; padding-right: 30px; background: var(--b3-select-background);" spellcheck="false">
                                         <input type="hidden" id="sub-project" required>
                                     </div>
-                                    <div id="sub-project-dropdown" class="b3-menu" style="display: none; position: absolute; width: 100%; max-height: 200px; overflow-y: auto; z-index: 10; margin-top: 4px; box-shadow: var(--b3-menu-shadow); background: var(--b3-menu-background); border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius);">
+                                    <div id="sub-project-dropdown" class="b3-menu" style="display: none; position: relative; width: 100%; max-height: 240px; overflow-y: auto; z-index: 10; margin-top: 4px; box-shadow: var(--b3-menu-shadow); background: var(--b3-menu-background); border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius);">
                                         <!-- 项目选项将在这里渲染 -->
                                     </div>
                                 </div>
-                                <button class="b3-button b3-button--outline ariaLabel" id="sub-create-project" aria-label="${i18n('createProject') || '新建项目'}">
+                                <button class="b3-button b3-button--outline ariaLabel" id="sub-create-project" aria-label="${i18n('createProject') || '新建项目'}" style="width: 32px; height: 32px; min-height: 32px; padding: 0; flex: 0 0 32px; display: flex; align-items: center; justify-content: center;">
                                     <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
                                 </button>
                             </div>
@@ -274,22 +298,35 @@
         const confirmBtn = editDialog.element.querySelector('#confirm-sub');
         const cancelBtn = editDialog.element.querySelector('.b3-button--cancel');
 
+        const updateProjectSelection = (projectId: string, projectName?: string) => {
+            projectSelect.value = projectId;
+            if (projectName !== undefined) {
+                projectSearchInput.value = projectName;
+                return;
+            }
+
+            const project = projectManager?.getProjectById(projectId);
+            projectSearchInput.value = project ? project.name : '';
+        };
+
         const popup = new ProjectSelectorPopup({
             plugin,
             container: projectDropdown,
             searchInput: projectSearchInput,
             valueInput: projectSelect,
             isMultiSelect: false,
+            selectedId: subscription?.projectId || '',
             excludeArchived: true,
-            includeNoProject: false
+            includeNoProject: false,
+            onSelect: (projectId, projectName) => {
+                updateProjectSelection(projectId, projectName);
+            }
         });
         await popup.initialize();
 
         if (subscription?.projectId) {
             popup.updateSelection(subscription.projectId);
-            projectSelect.value = subscription.projectId;
-            const proj = projectManager.getProjectById(subscription.projectId);
-            projectSearchInput.value = proj ? proj.name : '';
+            updateProjectSelection(subscription.projectId);
         }
 
         createProjectBtn?.addEventListener('click', async () => {
@@ -301,15 +338,17 @@
                 const handleProjectCreated = async (event: CustomEvent) => {
                     await projectManager.initialize();
                     groupedProjects = projectManager.getProjectsGroupedByStatus();
+                    popup.renderList();
 
-                    if (event.detail && event.detail.projectId) {
-                        const newProjectId = event.detail.projectId;
-                        const proj = projectManager.getProjectById(newProjectId);
-                        if (proj) {
-                            popup.updateSelection(newProjectId);
-                            projectSelect.value = newProjectId;
-                            projectSearchInput.value = proj.name;
-                        }
+                    const newProjectId = event.detail?.projectId;
+                    if (!newProjectId) {
+                        return;
+                    }
+
+                    const proj = projectManager.getProjectById(newProjectId);
+                    if (proj) {
+                        popup.updateSelection(newProjectId);
+                        updateProjectSelection(newProjectId, proj.name);
                     }
 
                     window.removeEventListener(
