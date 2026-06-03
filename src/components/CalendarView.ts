@@ -27,7 +27,7 @@ import { getNextLunarMonthlyDate, getNextLunarYearlyDate, getSolarDateLunarStrin
 import { BlockBindingDialog } from "./BlockBindingDialog";
 import { PomodoroRecordManager, type PomodoroSession } from "../utils/pomodoroRecord";
 import { Solar } from 'lunar-typescript';
-import { VipManager } from "../utils/vip";
+
 import { createPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
 import { HabitEditDialog } from "./HabitEditDialog";
 import { HabitStatsDialog } from "./stats/HabitStatsDialog";
@@ -271,7 +271,6 @@ export class CalendarView {
         if (this.isCalendarVisible()) {
             this.calendar.updateSize();
         }
-        this.checkVip();
     }
 
     private shouldDisplayRepeatInstance(instance: any, fallbackReminder?: any): boolean {
@@ -325,123 +324,6 @@ export class CalendarView {
         }
     }
 
-    private interactionBlocker = (e: Event) => {
-        if (this.plugin.vip.isVip) return;
-
-        // 允许在升级提示框内的点击和交互
-        const target = e.target as HTMLElement;
-        if (target && typeof target.closest === 'function' && target.closest('.vip-upgrade-prompt')) {
-            return;
-        }
-
-        e.stopPropagation();
-        e.preventDefault();
-    };
-
-    private async checkVip() {
-        const status = await VipManager.checkAndUpdateVipStatus(this.plugin);
-        this.plugin.vip.isVip = status.isVip;
-        this.plugin.vip.expireDate = status.expireDate;
-
-        const isVip = this.plugin.vip.isVip;
-        console.log("CalendarView checkVip:", isVip);
-        const overlay = this.container.querySelector('.vip-mask-overlay');
-        const prompt = this.container.querySelector('.vip-upgrade-prompt');
-
-        if (isVip) {
-            if (overlay) overlay.remove();
-            if (prompt) prompt.remove();
-
-            // 移除事件拦截
-            const eventsToBlock = ['click', 'mousedown', 'mouseup', 'mousemove', 'dblclick', 'contextmenu', 'wheel', 'touchstart', 'touchmove', 'touchend', 'keydown', 'keyup'];
-            eventsToBlock.forEach(eventType => {
-                this.container.removeEventListener(eventType, this.interactionBlocker, true);
-            });
-            return;
-        }
-
-        // 显示遮罩层和升级提示
-        this.showVipUpgradePrompt();
-    }
-
-    private showVipUpgradePrompt() {
-        this.container.style.position = 'relative';
-
-        // 1. 透明遮罩层，阻断所有点击
-        let overlay = this.container.querySelector('.vip-mask-overlay') as HTMLElement;
-        if (!overlay) {
-            overlay = document.createElement('div');
-            overlay.className = 'vip-mask-overlay';
-            overlay.style.cssText = `
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background: rgba(255, 255, 255, 0.01);
-                z-index: 10;
-                cursor: not-allowed;
-            `;
-            this.container.appendChild(overlay);
-        }
-
-        // 2. 居中的升级提示卡片
-        let prompt = this.container.querySelector('.vip-upgrade-prompt') as HTMLElement;
-        if (!prompt) {
-            prompt = document.createElement('div');
-            prompt.className = 'vip-upgrade-prompt';
-            prompt.style.cssText = `
-                position: absolute;
-                top: 50%;
-                left: 50%;
-                transform: translate(-50%, -50%);
-                background: var(--b3-theme-surface);
-                color: var(--b3-theme-on-surface);
-                padding: 24px 40px;
-                border-radius: 12px;
-                box-shadow: var(--b3-dialog-shadow);
-                border: 1px solid var(--b3-theme-primary-light);
-                z-index: 10;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                gap: 16px;
-                cursor: pointer;
-                transition: transform 0.2s ease;
-            `;
-            prompt.innerHTML = `
-                <div style="font-size: 40px;">👑</div>
-                <div style="font-weight: bold; font-size: 18px; color: var(--b3-theme-primary);">
-                    ${i18n('vipOnlyFeature') || '此功能仅限 VIP 用户使用'}
-                </div>
-                <div style="font-size: 14px; opacity: 0.8; text-align: center;">
-                    ${i18n('upgradeToVipTip') || '升级到 VIP 以解锁更多高级功能，让任务管理更高效'}
-                </div>
-                <button class="b3-button b3-button--text" style="padding: 8px 24px; font-weight: bold;">
-                    ${i18n('upgradeNow') || '立即升级'}
-                </button>
-            `;
-
-            prompt.addEventListener('mouseenter', () => {
-                prompt.style.transform = 'translate(-50%, -52%)';
-            });
-            prompt.addEventListener('mouseleave', () => {
-                prompt.style.transform = 'translate(-50%, -50%)';
-            });
-            prompt.addEventListener('click', () => {
-                if (this.plugin && typeof this.plugin.openVipDialog === 'function') {
-                    this.plugin.openVipDialog();
-                }
-            });
-            this.container.appendChild(prompt);
-        }
-
-        // 添加事件拦截器，防止用户删除 DOM 后直接使用
-        const eventsToBlock = ['click', 'mousedown', 'mouseup', 'mousemove', 'dblclick', 'contextmenu', 'wheel', 'touchstart', 'touchmove', 'touchend', 'keydown', 'keyup'];
-        eventsToBlock.forEach(eventType => {
-            this.container.addEventListener(eventType, this.interactionBlocker, true);
-        });
-    }
 
     private setupAllDayResizer(el: HTMLElement) {
         // 查找包含 all-day daygrid 的 row
@@ -2435,8 +2317,6 @@ export class CalendarView {
 
         // 添加滚轮缩放监听器
         this.addWheelZoomListener(calendarEl);
-
-        this.checkVip();
     }
 
 

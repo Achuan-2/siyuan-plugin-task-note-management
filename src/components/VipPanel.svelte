@@ -452,7 +452,7 @@
                             </tr>
                             <tr>
                                 <td>{i18n('vipCalendarView')}</td>
-                                <td>❌</td>
+                                <td>✅</td>
                                 <td>✅</td>
                             </tr>
                             <tr>
