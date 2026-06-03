@@ -3088,7 +3088,7 @@ export class ProjectKanbanView {
                                 }
                             },
                             onNoteClick: async (task: any) => {
-                                await this.editTask(task);
+                                await this.showTaskNotePreview(task);
                                 dialog.destroy();
                             },
                             onTimeClick: async (task: any) => {
@@ -11236,6 +11236,9 @@ export class ProjectKanbanView {
                 e.stopPropagation();
                 await this.editTask(task);
             },
+            onNoteClick: (task: any, e: Event) => {
+                this.showTaskNotePreview(task);
+            },
             onCardClick: (task: any, e: MouseEvent) => {
                 if (this.handleMultiSelectTaskClick(task, e)) {
                     return;
@@ -14182,6 +14185,106 @@ export class ProjectKanbanView {
                 console.error('保存上一次选择的自定义分组失败:', error);
             }
         };
+    }
+
+    private async showTaskNotePreview(task: any, onNoteSaved?: (savedTask: any) => void) {
+        try {
+            let taskToEdit = task;
+            const isRepeatInstance = !!task.isRepeatInstance;
+            const originalId = task.originalId;
+            const isInstanceEdit = isRepeatInstance && !!originalId;
+            const originalInstanceDate = isRepeatInstance ? this.getRepeatInstanceOriginalDate(task) : task.date;
+
+            if (isRepeatInstance && originalId) {
+                const reminderData = await this.getReminders();
+                const originalReminder = reminderData[originalId];
+                if (!originalReminder) {
+                    showMessage("原始周期事件不存在");
+                    return;
+                }
+                taskToEdit = originalReminder;
+            } else if (this.isAggregateView) {
+                const reminderData = await this.getReminders();
+                taskToEdit = reminderData[task.id] || {
+                    ...task,
+                    projectId: this.getTaskRealProjectId(task),
+                    customGroupId: this.getTaskRealCustomGroupId(task) || undefined
+                };
+            }
+
+            const callback = async (savedTask?: any) => {
+                if (savedTask) {
+                    if (savedTask.repeat?.enabled || taskToEdit?.repeat?.enabled) {
+                        this.reminderData = null;
+                        await this.queueLoadTasks();
+                        this.dispatchReminderUpdate(true);
+                        if (onNoteSaved) onNoteSaved(savedTask);
+                        return;
+                    }
+
+                    const taskIndex = this.tasks.findIndex(t => t.id === savedTask.id);
+                    if (savedTask.createdAt && !savedTask.createdTime) {
+                        savedTask.createdTime = savedTask.createdAt;
+                    }
+
+                    if (taskIndex >= 0) {
+                        const oldTask = this.tasks[taskIndex];
+                        if (!this.isTaskInCurrentView(savedTask)) {
+                            this.tasks.splice(taskIndex, 1);
+                        } else {
+                            const savedTaskForView = this.toViewTask(savedTask);
+                            this.tasks[taskIndex] = {
+                                ...savedTaskForView,
+                                status: oldTask.status || this.getTaskStatus(savedTask),
+                                pomodoroCount: oldTask.pomodoroCount || 0,
+                                focusTime: oldTask.focusTime || 0,
+                                totalRepeatingPomodoroCount: oldTask.totalRepeatingPomodoroCount || 0,
+                                totalRepeatingFocusTime: oldTask.totalRepeatingFocusTime || 0
+                            };
+                        }
+                    }
+
+                    if (this.reminderData) {
+                        if (this.isTaskInCurrentView(savedTask)) {
+                            this.reminderData[savedTask.id] = {
+                                ...(this.reminderData[savedTask.id] || {}),
+                                ...savedTask
+                            };
+                        } else {
+                            delete this.reminderData[savedTask.id];
+                        }
+                    }
+
+                    this.sortTasks();
+                    this.renderKanban();
+                    if (onNoteSaved) onNoteSaved(savedTask);
+                }
+                this.dispatchReminderUpdate(true);
+            };
+
+            const noteDialog = new QuickReminderDialog(
+                undefined, undefined, callback, undefined,
+                {
+                    plugin: this.plugin,
+                    mode: 'note',
+                    reminder: isInstanceEdit ? {
+                        ...taskToEdit,
+                        isInstance: true,
+                        originalId: originalId,
+                        instanceDate: originalInstanceDate
+                    } : taskToEdit,
+                    isInstanceEdit: isInstanceEdit,
+                    eventSource: this.kanbanInstanceId,
+                    defaultProjectId: taskToEdit.projectId,
+                    defaultCustomGroupId: taskToEdit.customGroupId,
+                    allowedProjectIds: this.isAggregateView ? this.aggregateProjectIds : undefined
+                }
+            );
+            noteDialog.show();
+        } catch (error) {
+            console.error('打开备注预览对话框失败:', error);
+            showMessage("打开备注预览对话框失败");
+        }
     }
 
     private async editTask(task: any) {
