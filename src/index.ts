@@ -246,6 +246,7 @@ export const DEFAULT_SETTINGS = {
     icsFileName: '', // ICS文件名，默认为空时自动生成
     icsSilentUpload: false, // 是否静默上传ICS文件，不显示成功提示
     icsTaskFilter: 'all', // 'all' | 'completed' | 'uncompleted' - 任务筛选
+    icsDateFilter: 'thisYear', // 'all' | 'thisYear' | 'lastWeek' | 'lastMonth' | 'lastHalfYear'
     // ICS 同步方式配置
     icsSyncMethod: 'siyuan', // 'siyuan' | 's3' | 'webdav' - 同步方式
     // WebDAV 配置

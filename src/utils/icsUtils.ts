@@ -35,6 +35,14 @@ export async function exportIcsFile(
     try {
         const dataDir = 'data/storage/petal/siyuan-plugin-task-note-management';
         const reminders = await plugin.loadReminderData();
+        const settings = await plugin.loadSettings();
+        const dateFilter = settings.icsDateFilter || 'thisYear';
+
+        function getOffsetDateStr(daysOffset: number): string {
+            const dt = new Date();
+            dt.setDate(dt.getDate() + daysOffset);
+            return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+        }
 
         // 辅助函数：解析日期为 [year, month, day]
         function parseDateArray(dateStr: string): [number, number, number] | null {
@@ -158,6 +166,203 @@ export async function exportIcsFile(
             return [];
         }
 
+        function getReminderTimeEntries(reminder: any): Array<{ time: string; endTime?: string; note?: string; everyDay?: boolean }> {
+            const entries: Array<{ time: string; endTime?: string; note?: string; everyDay?: boolean }> = [];
+
+            if (Array.isArray(reminder?.reminderTimes)) {
+                reminder.reminderTimes.forEach((item: any) => {
+                    if (typeof item === 'string' && item.trim()) {
+                        entries.push({ time: item.trim() });
+                        return;
+                    }
+
+                    if (item && typeof item.time === 'string' && item.time.trim()) {
+                        entries.push({
+                            time: item.time.trim(),
+                            endTime: typeof item.endTime === 'string' ? item.endTime.trim() : undefined,
+                            note: typeof item.note === 'string' ? item.note : undefined,
+                            everyDay: !!item.everyDay
+                        });
+                    }
+                });
+            }
+
+            if (entries.length === 0 && typeof reminder?.customReminderTime === 'string' && reminder.customReminderTime.trim()) {
+                entries.push({ time: reminder.customReminderTime.trim() });
+            }
+
+            return entries;
+        }
+
+        function getTodayDateStr(): string {
+            const dt = new Date();
+            return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+        }
+
+        function parseDateTime(dateTimeStr: string, defaultDateStr: string): [number, number, number, number, number] | null {
+            if (!dateTimeStr) return null;
+            let dateStr = defaultDateStr;
+            let timeStr = dateTimeStr;
+            if (dateTimeStr.includes('T')) {
+                const parts = dateTimeStr.split('T');
+                dateStr = parts[0];
+                timeStr = parts[1];
+            } else if (dateTimeStr.includes(' ')) {
+                const parts = dateTimeStr.split(' ');
+                if (/^\d{4}-\d{2}-\d{2}$/.test(parts[0])) {
+                    dateStr = parts[0];
+                    timeStr = parts.slice(1).join(' ');
+                }
+            }
+            if (!dateStr) return null;
+            const dateParts = dateStr.split('-').map(n => parseInt(n, 10));
+            const timeParts = timeStr.split(':').map(n => parseInt(n, 10));
+            if (dateParts.length !== 3 || dateParts.some(isNaN) || timeParts.length < 2 || timeParts.slice(0, 2).some(isNaN)) {
+                return null;
+            }
+            return [dateParts[0], dateParts[1], dateParts[2], timeParts[0], timeParts[1]];
+        }
+
+        function compareDateArrays(a: [number, number, number, number, number], b: [number, number, number, number, number]): number {
+            for (let i = 0; i < 5; i++) {
+                if (a[i] !== b[i]) {
+                    return a[i] - b[i];
+                }
+            }
+            return 0;
+        }
+
+        function addMinutesToDateArray(dateArray: [number, number, number, number, number], minutes: number): [number, number, number, number, number] {
+            const [year, month, day, hour, min] = dateArray;
+            const dt = new Date(year, month - 1, day, hour, min + minutes);
+            return [dt.getFullYear(), dt.getMonth() + 1, dt.getDate(), dt.getHours(), dt.getMinutes()];
+        }
+
+        function processReminderTimes(
+            reminder: any,
+            id: string,
+            title: string,
+            completed: boolean,
+            events: any[]
+        ) {
+            if (completed) return;
+
+            const reminderEntries = getReminderTimeEntries(reminder);
+            if (!reminderEntries || reminderEntries.length === 0) return;
+
+            const baseDateStr = reminder.date || reminder.endDate || getTodayDateStr();
+
+            reminderEntries.forEach((entry, index) => {
+                let parsedStart: [number, number, number, number, number] | null = null;
+                if (entry.everyDay) {
+                    const timeOnly = entry.time.includes('T') ? entry.time.split('T')[1] : entry.time;
+                    parsedStart = parseDateTime(timeOnly, baseDateStr);
+                } else {
+                    parsedStart = parseDateTime(entry.time, baseDateStr);
+                }
+                if (!parsedStart) return;
+
+                // Date filtering based on reminder's actual date
+                const reminderDateStr = `${parsedStart[0]}-${String(parsedStart[1]).padStart(2, '0')}-${String(parsedStart[2]).padStart(2, '0')}`;
+                if (dateFilter !== 'all') {
+                    let thresholdDate = '';
+                    if (dateFilter === 'thisYear') {
+                        thresholdDate = `${new Date().getFullYear()}-01-01`;
+                    } else if (dateFilter === 'lastWeek') {
+                        thresholdDate = getOffsetDateStr(-7);
+                    } else if (dateFilter === 'lastMonth') {
+                        thresholdDate = getOffsetDateStr(-30);
+                    } else if (dateFilter === 'lastHalfYear') {
+                        thresholdDate = getOffsetDateStr(-180);
+                    }
+
+                    if (thresholdDate && reminderDateStr < thresholdDate) {
+                        if (entry.everyDay) {
+                            let untilDateStr = reminder.endDate || (reminder.date && reminder.endDate ? reminder.endDate : null);
+                            if (untilDateStr && untilDateStr < thresholdDate) {
+                                return;
+                            }
+                        } else {
+                            return;
+                        }
+                    }
+                }
+
+                const reminderEvent: any = {
+                    uid: `${id}-reminder-${index}@siyuan`,
+                    title: `⏰ ${title}`,
+                    description: entry.note || reminder.note || '',
+                    status: 'TENTATIVE',
+                    start: parsedStart,
+                };
+
+                if (entry.everyDay) {
+                    if (entry.endTime) {
+                        const parsedEnd = parseDateTime(entry.endTime, baseDateStr);
+                        if (parsedEnd && compareDateArrays(parsedEnd, parsedStart) > 0) {
+                            reminderEvent.end = parsedEnd;
+                        } else {
+                            reminderEvent.end = addMinutesToDateArray(parsedStart, 15);
+                        }
+                    } else {
+                        reminderEvent.end = addMinutesToDateArray(parsedStart, 15);
+                    }
+
+                    let untilDateStr: string | null = null;
+                    if (reminder.date && reminder.endDate) {
+                        untilDateStr = reminder.endDate;
+                    }
+
+                    if (untilDateStr) {
+                        try {
+                            const dt = new Date(untilDateStr + 'T23:59:59');
+                            const until = `${dt.getUTCFullYear()}${String(dt.getUTCMonth() + 1).padStart(2, '0')}${String(dt.getUTCDate()).padStart(2, '0')}T${String(dt.getUTCHours()).padStart(2, '0')}${String(dt.getUTCMinutes()).padStart(2, '0')}${String(dt.getUTCSeconds()).padStart(2, '0')}Z`;
+                            reminderEvent.recurrenceRule = `FREQ=DAILY;UNTIL=${until}`;
+                        } catch (e) {
+                            reminderEvent.recurrenceRule = 'FREQ=DAILY';
+                        }
+                    } else {
+                        reminderEvent.recurrenceRule = 'FREQ=DAILY';
+                    }
+                } else {
+                    if (entry.endTime) {
+                        const parsedEnd = parseDateTime(entry.endTime, baseDateStr);
+                        if (parsedEnd && compareDateArrays(parsedEnd, parsedStart) > 0) {
+                            reminderEvent.end = parsedEnd;
+                        } else {
+                            reminderEvent.end = addMinutesToDateArray(parsedStart, 15);
+                        }
+                    } else {
+                        reminderEvent.end = addMinutesToDateArray(parsedStart, 15);
+                    }
+                }
+
+                if (!completed) {
+                    reminderEvent.alarms = [
+                        {
+                            action: 'display',
+                            description: entry.note || `⏰ ${title}`,
+                            trigger: { before: true, minutes: '0' as any },
+                        }
+                    ];
+                }
+
+                if (reminder.createdAt) {
+                    const created = new Date(reminder.createdAt);
+                    reminderEvent.created = [
+                        created.getUTCFullYear(),
+                        created.getUTCMonth() + 1,
+                        created.getUTCDate(),
+                        created.getUTCHours(),
+                        created.getUTCMinutes(),
+                        created.getUTCSeconds(),
+                    ];
+                }
+
+                events.push(reminderEvent);
+            });
+        }
+
         const events: any[] = [];
 
         function buildRRuleFromRepeat(repeat: any, startDateStr: string) {
@@ -239,7 +444,6 @@ export async function exportIcsFile(
 
         for (const id of rootIds) {
             const r = reminderMap[id];
-            if (!r.date) continue;
 
             const title = r.title || '无标题';
             let description = r.note || '';
@@ -256,7 +460,10 @@ export async function exportIcsFile(
 
                         if (childHasTime) {
                             let childStartDateArray = parseDateArray(child.date || r.date);
-                            if (!childStartDateArray) continue;
+                            if (!childStartDateArray) {
+                                processReminderTimes(child, child.id || id, childTitle, child.completed, events);
+                                continue;
+                            }
 
                             // 如果子任务也有重复设置，调整起始日期
                             if (child.repeat && child.repeat.enabled) {
@@ -375,6 +582,31 @@ export async function exportIcsFile(
                             if (filterType === 'uncompleted' && child.completed) childMatches = false;
                             if (child.hideInCalendar) childMatches = false;
 
+                            if (childMatches && dateFilter !== 'all') {
+                                let childDateStr = child.date || child.endDate;
+                                if (!childDateStr && child.createdAt) {
+                                    const dt = new Date(child.createdAt);
+                                    childDateStr = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+                                }
+
+                                if (childDateStr) {
+                                    let thresholdDate = '';
+                                    if (dateFilter === 'thisYear') {
+                                        thresholdDate = `${new Date().getFullYear()}-01-01`;
+                                    } else if (dateFilter === 'lastWeek') {
+                                        thresholdDate = getOffsetDateStr(-7);
+                                    } else if (dateFilter === 'lastMonth') {
+                                        thresholdDate = getOffsetDateStr(-30);
+                                    } else if (dateFilter === 'lastHalfYear') {
+                                        thresholdDate = getOffsetDateStr(-180);
+                                    }
+
+                                    if (thresholdDate && childDateStr < thresholdDate) {
+                                        childMatches = false;
+                                    }
+                                }
+                            }
+
                             if (!childMatches) continue;
 
                             if (childStartTimeArray) {
@@ -435,7 +667,7 @@ export async function exportIcsFile(
                                 childTitle,
                                 child.completed,
                                 childStartTimeArray,
-                                child.reminderTimes
+                                undefined
                             );
                             if (childAlarms.length > 0) {
                                 childEvent.alarms = childAlarms;
@@ -456,9 +688,12 @@ export async function exportIcsFile(
                             }
 
                             events.push(childEvent);
+
+                            processReminderTimes(child, child.id || id, childTitle, child.completed, events);
                         } else {
                             const prefix = '\n- ';
                             description += `${prefix}${childTitle}${childNote ? '：' + childNote : ''}`;
+                            processReminderTimes(child, child.id || id, childTitle, child.completed, events);
                         }
                     } catch (ce) {
                         console.error('处理子任务失败:', ce, child);
@@ -473,6 +708,33 @@ export async function exportIcsFile(
             if (filterType === 'completed' && !r.completed) parentMatches = false;
             if (filterType === 'uncompleted' && r.completed) parentMatches = false;
             if (r.hideInCalendar) parentMatches = false;
+
+            if (parentMatches && dateFilter !== 'all') {
+                let taskDateStr = r.date || r.endDate;
+                if (!taskDateStr && r.createdAt) {
+                    const dt = new Date(r.createdAt);
+                    taskDateStr = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+                }
+
+                if (taskDateStr) {
+                    let thresholdDate = '';
+                    if (dateFilter === 'thisYear') {
+                        thresholdDate = `${new Date().getFullYear()}-01-01`;
+                    } else if (dateFilter === 'lastWeek') {
+                        thresholdDate = getOffsetDateStr(-7);
+                    } else if (dateFilter === 'lastMonth') {
+                        thresholdDate = getOffsetDateStr(-30);
+                    } else if (dateFilter === 'lastHalfYear') {
+                        thresholdDate = getOffsetDateStr(-180);
+                    }
+
+                    if (thresholdDate && taskDateStr < thresholdDate) {
+                        parentMatches = false;
+                    }
+                }
+            }
+
+            processReminderTimes(r, id, title, r.completed, events);
 
             if (!parentMatches) continue;
 
@@ -669,7 +931,7 @@ export async function exportIcsFile(
                 title,
                 r.completed,
                 startTimeArray,
-                r.reminderTimes
+                undefined
             );
             if (parentAlarms.length > 0) {
                 event.alarms = parentAlarms;
@@ -844,7 +1106,7 @@ export async function exportIcsFile(
                                 title,
                                 r.completed,
                                 startTimeArray,
-                                r.reminderTimes
+                                undefined
                             );
                             if (lunarYearlyAlarms.length > 0) {
                                 occEvent.alarms = lunarYearlyAlarms;
@@ -945,7 +1207,7 @@ export async function exportIcsFile(
                                             title,
                                             r.completed,
                                             startTimeArray,
-                                            r.reminderTimes
+                                            undefined
                                         );
                                         if (lunarMonthlyAlarms.length > 0) {
                                             occEvent.alarms = lunarMonthlyAlarms;

@@ -1342,6 +1342,20 @@
                     },
                 },
                 {
+                    key: 'icsDateFilter',
+                    value: settings.icsDateFilter || 'thisYear',
+                    type: 'select',
+                    title: i18n('icsDateFilter'),
+                    description: i18n('icsDateFilterDesc'),
+                    options: {
+                        thisYear: i18n('icsDateFilterThisYear'),
+                        lastWeek: i18n('icsDateFilterLastWeek'),
+                        lastMonth: i18n('icsDateFilterLastMonth'),
+                        lastHalfYear: i18n('icsDateFilterLastHalfYear'),
+                        all: i18n('icsDateFilterAll'),
+                    },
+                },
+                {
                     key: 'icsFileName',
                     value: settings.icsFileName,
                     type: 'textinput',
