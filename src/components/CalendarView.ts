@@ -2043,8 +2043,8 @@ export class CalendarView {
 
                     if (hasStartDate || hasEndDate) {
                         if (isTimeGridTimedEvent) {
-                            targetEl.style.borderTop = hasStartDate ? `3px solid ${borderColor}` : 'none';
-                            targetEl.style.borderBottom = hasEndDate ? `3px solid ${borderColor}` : 'none';
+                            targetEl.style.borderLeft = `3px solid ${borderColor}`;
+                            // no bottom border
                         } else {
                             targetEl.style.borderLeft = hasStartDate ? `3px solid ${borderColor}` : 'none';
                             targetEl.style.borderRight = hasEndDate ? `3px solid ${borderColor}` : 'none';
