@@ -1959,7 +1959,7 @@ export class CalendarView {
                     const viewType = info?.view?.type || '';
                     if (viewType.includes('Week')) {
                         const weekNum = this.getISOWeekNumber(info.view.activeStart);
-                        const originalTitle = titleEl.textContent?.replace(/\s*\(第\d+周\)\s*$/, '') || '';
+                        const originalTitle = (info.view.title || titleEl.textContent || '').replace(/\s*\(第\d+周\)\s*$/, '') || '';
                         titleEl.textContent = `${originalTitle} (第${weekNum}周)`;
                     }
                 }
