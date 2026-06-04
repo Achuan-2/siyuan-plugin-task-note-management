@@ -2782,7 +2782,20 @@ export class ReminderPanel {
                     const originalInstanceDate = (r.id && r.id.includes('_')) ? r.id.split('_').pop() : r.date;
                     this.toggleReminder(r.originalId, checked, true, originalInstanceDate, r.id);
                 } else {
-                    this.toggleReminder(r.id, checked, false, undefined, r.id);
+                    const isSpanningTask = !!(r.date && r.endDate && r.endDate !== r.date);
+                    if (isSpanningTask) {
+                        if (checked) {
+                            this.markSpanningEventTodayCompleted(r);
+                        } else {
+                            if (r.completed) {
+                                this.toggleReminder(r.id, false, false, undefined, r.id);
+                            } else {
+                                this.unmarkSpanningEventTodayCompleted(r);
+                            }
+                        }
+                    } else {
+                        this.toggleReminder(r.id, checked, false, undefined, r.id);
+                    }
                 }
             },
             onCollapseClick: async (r: any, collapsed: boolean, e: MouseEvent) => {
@@ -4120,7 +4133,7 @@ export class ReminderPanel {
                 const completedTime = this.getCompletedTime(reminder);
                 if (completedTime) {
                     const completedDate = getLogicalDateString(new Date(completedTime.replace(' ', 'T')));
-                    if (completedDate === today) return true;
+                    return completedDate === today;
                 }
             } catch (e) {
                 // ignore and fallback to date checks

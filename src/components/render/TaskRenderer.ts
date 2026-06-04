@@ -753,6 +753,7 @@ export class TaskRenderer {
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.className = 'reminder-task-checkbox';
+        checkbox.checked = !!task.completed;
         const isEditable = !task.isSubscribed || (task.subscriptionType === 'caldav' && task.caldavEditable);
         if (!isEditable) {
             checkbox.disabled = true;
@@ -1036,7 +1037,7 @@ export class TaskRenderer {
 
         // 已完成/已忽略状态渲染
         const isTodayCompleted = context.isTodayCompleted ? context.isTodayCompleted(task, today) : false;
-        const virtualTodayCompletedTime = !task.completed && context.currentTab === 'todayCompleted' && isTodayCompleted
+        const virtualTodayCompletedTime = !task.completed && isTodayCompleted
             ? (context.getCompletedTime ? context.getCompletedTime(task) : null)
             : null;
 
@@ -1045,6 +1046,7 @@ export class TaskRenderer {
 
         if (task.completed || virtualTodayCompletedTime) {
             taskEl.classList.add('reminder-completed');
+            checkbox.checked = true;
             try {
                 taskEl.style.setProperty('opacity', '0.5', 'important');
             } catch (e) { }
@@ -1081,6 +1083,7 @@ export class TaskRenderer {
                 const dailyCompletedList = Array.isArray(task.dailyDessertCompleted) ? task.dailyDessertCompleted : [];
                 if (dailyCompletedList.includes(currentToday)) {
                     taskEl.classList.add('reminder-completed');
+                    checkbox.checked = true;
                     try {
                         taskEl.style.setProperty('opacity', '0.5', 'important');
                     } catch (e) { }
