@@ -78,6 +78,7 @@ export class ReminderPanel {
     private panelId: string; // 唯一标识，用于区分事件来源，避免响应自己触发的更新
     private currentRemindersCache: any[] = [];
     private allRemindersMap: Map<string, any> = new Map(); // 存储所有任务的完整信息，用于计算进度
+    private optimisticUpdatesCache: Map<string, any> = new Map(); // 存储乐观更新缓存，避免刷新跳动
     private loadingDialog: Dialog | null = null;
     private isLoading: boolean = false;
     private loadTimeoutId: number | null = null;
@@ -131,6 +132,11 @@ export class ReminderPanel {
             // 如果事件来自自己或显式要求跳过面板刷新，则忽略
             if (event && event.detail) {
                 if (event.detail.source === this.panelId) return;
+            }
+
+            // 清理已持久化的乐观更新缓存
+            if (this.optimisticUpdatesCache) {
+                this.optimisticUpdatesCache.clear();
             }
 
             const refreshDelayMs = (event && event.detail && typeof event.detail.refreshDelayMs === 'number')
@@ -2229,9 +2235,12 @@ export class ReminderPanel {
             return;
         }
 
-        // 如果强制刷新，重置正在加载标志以允许覆盖进行中的加载
+        // 如果强制刷新，重置正在加载标志以允许覆盖进行中的加载，并清理乐观缓存
         if (force) {
             this.isLoading = false;
+            if (this.optimisticUpdatesCache) {
+                this.optimisticUpdatesCache.clear();
+            }
         }
 
         this.isLoading = true;
@@ -2261,6 +2270,15 @@ export class ReminderPanel {
             }
             if (needsSave) {
                 await saveReminders(this.plugin, reminderData);
+            }
+
+            // 合并缓存中的乐观更新，避免在后台写入时加载到旧数据而导致闪烁或显示多余任务
+            if (this.optimisticUpdatesCache && this.optimisticUpdatesCache.size > 0) {
+                this.optimisticUpdatesCache.forEach((value, key) => {
+                    if (reminderData) {
+                        reminderData[key] = { ...reminderData[key], ...value };
+                    }
+                });
             }
 
             const today = getLogicalDateString();
@@ -9602,10 +9620,29 @@ export class ReminderPanel {
         try {
             if (!savedReminder || typeof savedReminder !== 'object') return;
 
+            // 无论是否为跨天任务，都在缓存中记录该乐观更新（使用原ID作为键）
+            const targetId = savedReminder.originalId || savedReminder.id;
+            if (this.optimisticUpdatesCache) {
+                const normalizedReminder = { ...savedReminder, id: targetId };
+                if (normalizedReminder.isSpanningTodayCompletedInstance) {
+                    delete normalizedReminder.isSpanningTodayCompletedInstance;
+                }
+                if (normalizedReminder.isSpanningTodayUncompletedInstance) {
+                    delete normalizedReminder.isSpanningTodayUncompletedInstance;
+                }
+                this.optimisticUpdatesCache.set(targetId, normalizedReminder);
+            }
+
             // 重复任务模板和跨天任务在列表中是“按实例/拆分渲染”，不能像普通任务一样直接单条乐观插入。
             // 否则在 today/todayCompleted 视图会短暂出现冲突/多余任务后又被刷新移除。
             const isRepeatTemplate = !!savedReminder.repeat?.enabled && !savedReminder.isRepeatInstance;
-            const isSpanningTask = !!(savedReminder.date && savedReminder.endDate && savedReminder.endDate !== savedReminder.date);
+            const oldReminder = this.allRemindersMap.get(targetId) || this.allRemindersMap.get(savedReminder.id);
+            const isSpanningTask = !!(savedReminder.date && savedReminder.endDate && savedReminder.endDate !== savedReminder.date)
+                || !!(oldReminder && oldReminder.date && oldReminder.endDate && oldReminder.endDate !== oldReminder.date)
+                || (typeof savedReminder.id === 'string' && savedReminder.id.endsWith('_completed_today'))
+                || !!this.remindersContainer.querySelector(`[data-reminder-id="${savedReminder.id}_completed_today"]`)
+                || !!this.remindersContainer.querySelector(`[data-reminder-id="${targetId}_completed_today"]`);
+
             if (isRepeatTemplate || isSpanningTask) {
                 // 先乐观更新缓存，再走普通刷新（不强制），避免出现闪烁/跳动
                 this.allRemindersMap.set(savedReminder.id, savedReminder);
