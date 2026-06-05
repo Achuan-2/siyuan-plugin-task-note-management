@@ -2199,6 +2199,18 @@ export class QuickReminderDialog {
     }
 
     public async show() {
+        // 如果是跨天已完成的今日实例，我们需要编辑原始任务本身而不是实例副本
+        if (this.reminder && this.reminder.isSpanningTodayCompletedInstance && this.reminder.originalId) {
+            try {
+                const reminderData = await this.plugin.loadReminderData();
+                if (reminderData && reminderData[this.reminder.originalId]) {
+                    this.reminder = reminderData[this.reminder.originalId];
+                }
+            } catch (err) {
+                console.warn('QuickReminderDialog: failed to load original spanning task:', err);
+            }
+        }
+
         await this.categoryManager.initialize();
         await this.projectManager.initialize();
         await this.habitGroupManager.initialize();

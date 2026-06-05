@@ -2251,6 +2251,18 @@ export class ReminderPanel {
                 return;
             }
 
+            // 清理可能因为之前的 Bug 写入的错误 _completed_today 副本数据
+            let needsSave = false;
+            for (const key in reminderData) {
+                if (key.endsWith('_completed_today')) {
+                    delete reminderData[key];
+                    needsSave = true;
+                }
+            }
+            if (needsSave) {
+                await saveReminders(this.plugin, reminderData);
+            }
+
             const today = getLogicalDateString();
             const allRemindersWithInstances = this.generateAllRemindersWithInstances(reminderData, today);
             const activeSortCriteria = this.getActiveSortCriteria();
@@ -4171,6 +4183,9 @@ export class ReminderPanel {
      * @returns 是否是今天完成的
      */
     private isTodayCompleted(reminder: any, today: string): boolean {
+        if (reminder.isSpanningTodayUncompletedInstance) {
+            return false;
+        }
         // 已标记为完成的：如果其完成时间（completedTime）在今日，则视为今日已完成
         if (reminder.completed) {
             try {
@@ -9587,11 +9602,12 @@ export class ReminderPanel {
         try {
             if (!savedReminder || typeof savedReminder !== 'object') return;
 
-            // 重复任务模板在列表中是“按实例渲染”，不能像普通任务一样直接插入。
-            // 否则在 today/todayCompleted 视图会短暂出现“多出一条模板任务”后又被刷新移除。
+            // 重复任务模板和跨天任务在列表中是“按实例/拆分渲染”，不能像普通任务一样直接单条乐观插入。
+            // 否则在 today/todayCompleted 视图会短暂出现冲突/多余任务后又被刷新移除。
             const isRepeatTemplate = !!savedReminder.repeat?.enabled && !savedReminder.isRepeatInstance;
-            if (isRepeatTemplate) {
-                // 先乐观更新缓存，再走普通刷新（不强制），避免编辑整组重复任务时出现闪烁/跳动
+            const isSpanningTask = !!(savedReminder.date && savedReminder.endDate && savedReminder.endDate !== savedReminder.date);
+            if (isRepeatTemplate || isSpanningTask) {
+                // 先乐观更新缓存，再走普通刷新（不强制），避免出现闪烁/跳动
                 this.allRemindersMap.set(savedReminder.id, savedReminder);
                 if (this.originalRemindersCache) {
                     this.originalRemindersCache[savedReminder.id] = savedReminder;
