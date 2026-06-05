@@ -60,6 +60,82 @@ export async function exportIcsFile(
             return [parts[0], parts[1]];
         }
 
+        function getDateFilterRange(filter: string): { start: string; end: string } | null {
+            if (filter === 'all') return null;
+            const todayStr = getOffsetDateStr(0);
+            if (filter === 'thisYear') {
+                return {
+                    start: `${new Date().getFullYear()}-01-01`,
+                    end: `${new Date().getFullYear()}-12-31`
+                };
+            } else if (filter === 'lastWeek') {
+                return {
+                    start: todayStr,
+                    end: getOffsetDateStr(7)
+                };
+            } else if (filter === 'lastMonth') {
+                return {
+                    start: todayStr,
+                    end: getOffsetDateStr(30)
+                };
+            } else if (filter === 'lastHalfYear') {
+                return {
+                    start: todayStr,
+                    end: getOffsetDateStr(180)
+                };
+            }
+            return null;
+        }
+
+        function checkTaskInDateRange(
+            taskDate: string | null,
+            taskEndDate: string | null,
+            repeat: any,
+            range: { start: string; end: string } | null
+        ): boolean {
+            if (!range) return true;
+
+            if (repeat && repeat.enabled) {
+                const start = taskDate;
+                if (!start) return false;
+
+                if (start > range.end) return false;
+
+                let end: string | null = null;
+                if (repeat.endType === 'date' && repeat.endDate) {
+                    end = repeat.endDate;
+                } else if (repeat.endType === 'count' && repeat.endCount && start) {
+                    const type = repeat.type || 'daily';
+                    const count = Math.max(1, Number(repeat.endCount) - 1);
+                    const dt = new Date(start);
+                    if (type === 'daily') {
+                        dt.setDate(dt.getDate() + count);
+                    } else if (type === 'weekly') {
+                        dt.setDate(dt.getDate() + count * 7);
+                    } else if (type === 'monthly') {
+                        dt.setMonth(dt.getMonth() + count);
+                    } else if (type === 'yearly' || type === 'lunar-yearly') {
+                        dt.setFullYear(dt.getFullYear() + count);
+                    } else if (type === 'ebbinghaus') {
+                        dt.setDate(dt.getDate() + 15 + 15 * count);
+                    } else {
+                        dt.setDate(dt.getDate() + count);
+                    }
+                    end = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+                }
+
+                if (end && end < range.start) return false;
+
+                return true;
+            }
+
+            const start = taskDate || taskEndDate;
+            const end = taskEndDate || taskDate;
+            if (!start || !end) return false;
+
+            return start <= range.end && end >= range.start;
+        }
+
         function shiftDateArrayByDays(dateArray: number[], dayOffset: number): number[] {
             if (!Array.isArray(dateArray) || dateArray.length < 3) return dateArray;
             const [year, month, day] = dateArray;
@@ -265,25 +341,21 @@ export async function exportIcsFile(
                 // Date filtering based on reminder's actual date
                 const reminderDateStr = `${parsedStart[0]}-${String(parsedStart[1]).padStart(2, '0')}-${String(parsedStart[2]).padStart(2, '0')}`;
                 if (dateFilter !== 'all') {
-                    let thresholdDate = '';
-                    if (dateFilter === 'thisYear') {
-                        thresholdDate = `${new Date().getFullYear()}-01-01`;
-                    } else if (dateFilter === 'lastWeek') {
-                        thresholdDate = getOffsetDateStr(-7);
-                    } else if (dateFilter === 'lastMonth') {
-                        thresholdDate = getOffsetDateStr(-30);
-                    } else if (dateFilter === 'lastHalfYear') {
-                        thresholdDate = getOffsetDateStr(-180);
-                    }
-
-                    if (thresholdDate && reminderDateStr < thresholdDate) {
+                    const range = getDateFilterRange(dateFilter);
+                    if (range) {
                         if (entry.everyDay) {
-                            let untilDateStr = reminder.endDate || (reminder.date && reminder.endDate ? reminder.endDate : null);
-                            if (untilDateStr && untilDateStr < thresholdDate) {
+                            const repeatObj = {
+                                enabled: true,
+                                type: 'daily',
+                                endDate: reminder.endDate || (reminder.date && reminder.endDate ? reminder.endDate : null)
+                            };
+                            if (!checkTaskInDateRange(reminderDateStr, null, repeatObj, range)) {
                                 return;
                             }
                         } else {
-                            return;
+                            if (!checkTaskInDateRange(reminderDateStr, reminderDateStr, null, range)) {
+                                return;
+                            }
                         }
                     }
                 }
@@ -583,27 +655,16 @@ export async function exportIcsFile(
                             if (child.hideInCalendar) childMatches = false;
 
                             if (childMatches && dateFilter !== 'all') {
-                                let childDateStr = child.date || child.endDate;
-                                if (!childDateStr && child.createdAt) {
+                                let childDateStr = child.date;
+                                let childEndDateStr = child.endDate;
+                                if (!childDateStr && !childEndDateStr && child.createdAt) {
                                     const dt = new Date(child.createdAt);
                                     childDateStr = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
                                 }
 
-                                if (childDateStr) {
-                                    let thresholdDate = '';
-                                    if (dateFilter === 'thisYear') {
-                                        thresholdDate = `${new Date().getFullYear()}-01-01`;
-                                    } else if (dateFilter === 'lastWeek') {
-                                        thresholdDate = getOffsetDateStr(-7);
-                                    } else if (dateFilter === 'lastMonth') {
-                                        thresholdDate = getOffsetDateStr(-30);
-                                    } else if (dateFilter === 'lastHalfYear') {
-                                        thresholdDate = getOffsetDateStr(-180);
-                                    }
-
-                                    if (thresholdDate && childDateStr < thresholdDate) {
-                                        childMatches = false;
-                                    }
+                                const range = getDateFilterRange(dateFilter);
+                                if (range) {
+                                    childMatches = checkTaskInDateRange(childDateStr, childEndDateStr || childDateStr, child.repeat, range);
                                 }
                             }
 
@@ -620,34 +681,45 @@ export async function exportIcsFile(
                                         ...childEndTimeArray,
                                     ];
                                 } else {
-                                    const startDt = new Date(
-                                        childStartDateArray[0],
-                                        childStartDateArray[1] - 1,
-                                        childStartDateArray[2],
-                                        childStartTimeArray[0],
-                                        childStartTimeArray[1]
-                                    );
-                                    const endDt = new Date(startDt.getTime() + 60 * 60 * 1000);
-                                    childEvent.end = [
-                                        endDt.getFullYear(),
-                                        endDt.getMonth() + 1,
-                                        endDt.getDate(),
-                                        endDt.getHours(),
-                                        endDt.getMinutes(),
-                                    ];
+                                    const isSameDay = childEndDateArray[0] === childStartDateArray[0] &&
+                                                      childEndDateArray[1] === childStartDateArray[1] &&
+                                                      childEndDateArray[2] === childStartDateArray[2];
+                                    if (isSameDay) {
+                                        const startDt = new Date(
+                                            childStartDateArray[0],
+                                            childStartDateArray[1] - 1,
+                                            childStartDateArray[2],
+                                            childStartTimeArray[0],
+                                            childStartTimeArray[1]
+                                        );
+                                        const endDt = new Date(startDt.getTime() + 60 * 60 * 1000);
+                                        childEvent.end = [
+                                            endDt.getFullYear(),
+                                            endDt.getMonth() + 1,
+                                            endDt.getDate(),
+                                            endDt.getHours(),
+                                            endDt.getMinutes(),
+                                        ];
+                                    } else {
+                                        childEvent.end = [
+                                            ...childEndDateArray,
+                                            ...childStartTimeArray,
+                                        ];
+                                    }
                                 }
                             } else {
                                 childEvent.start = childStartDateArray;
-                                const nextDay = new Date(
-                                    childStartDateArray[0],
-                                    childStartDateArray[1] - 1,
-                                    childStartDateArray[2]
+                                const targetEndDateArray = childEndDateArray || childStartDateArray;
+                                const endDate = new Date(
+                                    targetEndDateArray[0],
+                                    targetEndDateArray[1] - 1,
+                                    targetEndDateArray[2]
                                 );
-                                nextDay.setDate(nextDay.getDate() + 1);
+                                endDate.setDate(endDate.getDate() + 1);
                                 childEvent.end = [
-                                    nextDay.getFullYear(),
-                                    nextDay.getMonth() + 1,
-                                    nextDay.getDate(),
+                                    endDate.getFullYear(),
+                                    endDate.getMonth() + 1,
+                                    endDate.getDate(),
                                 ];
                             }
 
@@ -710,27 +782,16 @@ export async function exportIcsFile(
             if (r.hideInCalendar) parentMatches = false;
 
             if (parentMatches && dateFilter !== 'all') {
-                let taskDateStr = r.date || r.endDate;
-                if (!taskDateStr && r.createdAt) {
+                let taskDateStr = r.date;
+                let taskEndDateStr = r.endDate;
+                if (!taskDateStr && !taskEndDateStr && r.createdAt) {
                     const dt = new Date(r.createdAt);
                     taskDateStr = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
                 }
 
-                if (taskDateStr) {
-                    let thresholdDate = '';
-                    if (dateFilter === 'thisYear') {
-                        thresholdDate = `${new Date().getFullYear()}-01-01`;
-                    } else if (dateFilter === 'lastWeek') {
-                        thresholdDate = getOffsetDateStr(-7);
-                    } else if (dateFilter === 'lastMonth') {
-                        thresholdDate = getOffsetDateStr(-30);
-                    } else if (dateFilter === 'lastHalfYear') {
-                        thresholdDate = getOffsetDateStr(-180);
-                    }
-
-                    if (thresholdDate && taskDateStr < thresholdDate) {
-                        parentMatches = false;
-                    }
+                const range = getDateFilterRange(dateFilter);
+                if (range) {
+                    parentMatches = checkTaskInDateRange(taskDateStr, taskEndDateStr || taskDateStr, r.repeat, range);
                 }
             }
 
@@ -865,54 +926,46 @@ export async function exportIcsFile(
                 if (endTimeArray && endDateArray) {
                     event.end = [...endDateArray, ...endTimeArray];
                 } else {
-                    const startDt = new Date(
-                        startDateArray[0],
-                        startDateArray[1] - 1,
-                        startDateArray[2],
-                        startTimeArray[0],
-                        startTimeArray[1]
-                    );
-                    const endDt = new Date(startDt.getTime() + 60 * 60 * 1000);
-                    event.end = [
-                        endDt.getFullYear(),
-                        endDt.getMonth() + 1,
-                        endDt.getDate(),
-                        endDt.getHours(),
-                        endDt.getMinutes(),
-                    ];
+                    const isSameDay = endDateArray[0] === startDateArray[0] &&
+                                      endDateArray[1] === startDateArray[1] &&
+                                      endDateArray[2] === startDateArray[2];
+                    if (isSameDay) {
+                        const startDt = new Date(
+                            startDateArray[0],
+                            startDateArray[1] - 1,
+                            startDateArray[2],
+                            startTimeArray[0],
+                            startTimeArray[1]
+                        );
+                        const endDt = new Date(startDt.getTime() + 60 * 60 * 1000);
+                        event.end = [
+                            endDt.getFullYear(),
+                            endDt.getMonth() + 1,
+                            endDt.getDate(),
+                            endDt.getHours(),
+                            endDt.getMinutes(),
+                        ];
+                    } else {
+                        event.end = [
+                            ...endDateArray,
+                            ...startTimeArray,
+                        ];
+                    }
                 }
             } else {
                 event.start = startDateArray;
-                if (
-                    endDateArray &&
-                    (endDateArray[0] !== startDateArray[0] ||
-                        endDateArray[1] !== startDateArray[1] ||
-                        endDateArray[2] !== startDateArray[2])
-                ) {
-                    const endDate = new Date(
-                        endDateArray[0],
-                        endDateArray[1] - 1,
-                        endDateArray[2]
-                    );
-                    endDate.setDate(endDate.getDate() + 1);
-                    event.end = [
-                        endDate.getFullYear(),
-                        endDate.getMonth() + 1,
-                        endDate.getDate(),
-                    ];
-                } else {
-                    const nextDay = new Date(
-                        startDateArray[0],
-                        startDateArray[1] - 1,
-                        startDateArray[2]
-                    );
-                    nextDay.setDate(nextDay.getDate() + 1);
-                    event.end = [
-                        nextDay.getFullYear(),
-                        nextDay.getMonth() + 1,
-                        nextDay.getDate(),
-                    ];
-                }
+                const targetEndDateArray = endDateArray || startDateArray;
+                const endDate = new Date(
+                    targetEndDateArray[0],
+                    targetEndDateArray[1] - 1,
+                    targetEndDateArray[2]
+                );
+                endDate.setDate(endDate.getDate() + 1);
+                event.end = [
+                    endDate.getFullYear(),
+                    endDate.getMonth() + 1,
+                    endDate.getDate(),
+                ];
             }
 
             if (r.createdAt) {
@@ -1059,34 +1112,46 @@ export async function exportIcsFile(
                                         ...endTimeArray,
                                     ];
                                 } else {
-                                    const startDt = new Date(
-                                        occDateArr[0],
-                                        occDateArr[1] - 1,
-                                        occDateArr[2],
-                                        startTimeArray[0],
-                                        startTimeArray[1]
-                                    );
-                                    const endDt = new Date(startDt.getTime() + 60 * 60 * 1000);
-                                    occEvent.end = [
-                                        endDt.getFullYear(),
-                                        endDt.getMonth() + 1,
-                                        endDt.getDate(),
-                                        endDt.getHours(),
-                                        endDt.getMinutes(),
-                                    ];
+                                    const targetEndDateArray = parseDateArray(r.endDate || solar) || occDateArr;
+                                    const isSameDay = targetEndDateArray[0] === occDateArr[0] &&
+                                                      targetEndDateArray[1] === occDateArr[1] &&
+                                                      targetEndDateArray[2] === occDateArr[2];
+                                    if (isSameDay) {
+                                        const startDt = new Date(
+                                            occDateArr[0],
+                                            occDateArr[1] - 1,
+                                            occDateArr[2],
+                                            startTimeArray[0],
+                                            startTimeArray[1]
+                                        );
+                                        const endDt = new Date(startDt.getTime() + 60 * 60 * 1000);
+                                        occEvent.end = [
+                                            endDt.getFullYear(),
+                                            endDt.getMonth() + 1,
+                                            endDt.getDate(),
+                                            endDt.getHours(),
+                                            endDt.getMinutes(),
+                                        ];
+                                    } else {
+                                        occEvent.end = [
+                                            ...targetEndDateArray,
+                                            ...startTimeArray,
+                                        ];
+                                    }
                                 }
                             } else {
                                 occEvent.start = occDateArr;
-                                const nextDay = new Date(
-                                    occDateArr[0],
-                                    occDateArr[1] - 1,
-                                    occDateArr[2]
+                                const targetEndDateArray = parseDateArray(r.endDate || solar) || occDateArr;
+                                const endDate = new Date(
+                                    targetEndDateArray[0],
+                                    targetEndDateArray[1] - 1,
+                                    targetEndDateArray[2]
                                 );
-                                nextDay.setDate(nextDay.getDate() + 1);
+                                endDate.setDate(endDate.getDate() + 1);
                                 occEvent.end = [
-                                    nextDay.getFullYear(),
-                                    nextDay.getMonth() + 1,
-                                    nextDay.getDate(),
+                                    endDate.getFullYear(),
+                                    endDate.getMonth() + 1,
+                                    endDate.getDate(),
                                 ];
                             }
 
@@ -1160,34 +1225,46 @@ export async function exportIcsFile(
                                                     ...endTimeArray,
                                                 ];
                                             } else {
-                                                const startDt = new Date(
-                                                    occDateArr[0],
-                                                    occDateArr[1] - 1,
-                                                    occDateArr[2],
-                                                    startTimeArray[0],
-                                                    startTimeArray[1]
-                                                );
-                                                const endDt = new Date(startDt.getTime() + 60 * 60 * 1000);
-                                                occEvent.end = [
-                                                    endDt.getFullYear(),
-                                                    endDt.getMonth() + 1,
-                                                    endDt.getDate(),
-                                                    endDt.getHours(),
-                                                    endDt.getMinutes(),
-                                                ];
+                                                const targetEndDateArray = parseDateArray(r.endDate || solarStr) || occDateArr;
+                                                const isSameDay = targetEndDateArray[0] === occDateArr[0] &&
+                                                                  targetEndDateArray[1] === occDateArr[1] &&
+                                                                  targetEndDateArray[2] === occDateArr[2];
+                                                if (isSameDay) {
+                                                     const startDt = new Date(
+                                                         occDateArr[0],
+                                                         occDateArr[1] - 1,
+                                                         occDateArr[2],
+                                                         startTimeArray[0],
+                                                         startTimeArray[1]
+                                                     );
+                                                     const endDt = new Date(startDt.getTime() + 60 * 60 * 1000);
+                                                     occEvent.end = [
+                                                         endDt.getFullYear(),
+                                                         endDt.getMonth() + 1,
+                                                         endDt.getDate(),
+                                                         endDt.getHours(),
+                                                         endDt.getMinutes(),
+                                                     ];
+                                                } else {
+                                                     occEvent.end = [
+                                                         ...targetEndDateArray,
+                                                         ...startTimeArray,
+                                                     ];
+                                                }
                                             }
                                         } else {
                                             occEvent.start = occDateArr;
-                                            const nextDay = new Date(
-                                                occDateArr[0],
-                                                occDateArr[1] - 1,
-                                                occDateArr[2]
+                                            const targetEndDateArray = parseDateArray(r.endDate || solarStr) || occDateArr;
+                                            const endDate = new Date(
+                                                targetEndDateArray[0],
+                                                targetEndDateArray[1] - 1,
+                                                targetEndDateArray[2]
                                             );
-                                            nextDay.setDate(nextDay.getDate() + 1);
+                                            endDate.setDate(endDate.getDate() + 1);
                                             occEvent.end = [
-                                                nextDay.getFullYear(),
-                                                nextDay.getMonth() + 1,
-                                                nextDay.getDate(),
+                                                endDate.getFullYear(),
+                                                endDate.getMonth() + 1,
+                                                endDate.getDate(),
                                             ];
                                         }
 
