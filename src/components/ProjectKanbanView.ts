@@ -8579,7 +8579,7 @@ export class ProjectKanbanView {
             if (status.id === 'completed') {
                 // 已完成任务单独处理并过滤掉已经在其他状态列（作为子任务）中显示的任务
                 const completed = this.tasks.filter(task => task.completed);
-                statusTasks[status.id] = completed.filter(t => !nonCompletedIncludedIds.has(t.id));
+                statusTasks[status.id] = completed;
             } else {
                 statusTasks[status.id] = expandedTasksMap[status.id] || [];
             }
@@ -8764,7 +8764,7 @@ export class ProjectKanbanView {
         this.kanbanStatuses.forEach(status => {
             if (status.id === 'completed') {
                 const completed = this.tasks.filter(task => task.completed);
-                statusTasks[status.id] = completed.filter(t => !nonCompletedIncludedIds.has(t.id));
+                statusTasks[status.id] = completed;
             } else {
                 statusTasks[status.id] = expandedTasksMap[status.id] || [];
             }
@@ -9345,7 +9345,7 @@ export class ProjectKanbanView {
         const abandonedTasks = this.augmentTasksWithDescendants(rawAbandoned, null);
         abandonedTasks.forEach(t => nonCompletedIncludedIds.add(t.id));
 
-        const finishedTasks = this.sortDoneTasks(rawFinished.filter(t => !nonCompletedIncludedIds.has(t.id)));
+        const finishedTasks = this.sortDoneTasks(rawFinished);
 
         if (countBadge) {
             // Count total top-level unfinished tasks
@@ -9552,7 +9552,7 @@ export class ProjectKanbanView {
         const abandonedTasks = this.augmentTasksWithDescendants(rawAbandoned, group.id);
         abandonedTasks.forEach(t => nonCompletedIncludedIds.add(t.id));
 
-        const finishedTasks = this.sortDoneTasks(rawFinished.filter(t => !nonCompletedIncludedIds.has(t.id)));
+        const finishedTasks = this.sortDoneTasks(rawFinished);
 
         // Update total count in header
         const count = column.querySelector('.kanban-column-count');
@@ -10497,7 +10497,7 @@ export class ProjectKanbanView {
             if (status.id === 'completed') {
                 // 已完成任务需要过滤掉已经在其他分组中显示的任务
                 const completedTasks = statusTasks[status.id] || [];
-                tasks = completedTasks.filter(t => !nonCompletedIncludedIds.has(t.id));
+                tasks = completedTasks;
             } else {
                 tasks = expandedTasksMap[status.id] || [];
             }
@@ -12669,7 +12669,7 @@ export class ProjectKanbanView {
                         // 标记完成后不再触发整页 queueLoadTasks 刷新，避免滚动条跳动
                         // 但如果是父任务完成（有子任务被级联完成），必须刷新以保持子任务DOM和层级结构一致
                         // 取消完成时仍保留兜底刷新，确保状态回退一致
-                        if (!completed || (completed && childIds.length > 0)) {
+                        if (!completed || (completed && childIds.length > 0) || task.parentId) {
                             this.queueLoadTasks();
                         }
                     }
