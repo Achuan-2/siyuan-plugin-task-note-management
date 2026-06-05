@@ -57,7 +57,31 @@ export class ReminderTaskLogic {
 
         reminders.forEach((reminder: any) => {
             if (!reminder.repeat?.enabled) {
-                allReminders.push(reminder);
+                const isSpanningTask = !!(reminder.date && reminder.endDate && reminder.endDate !== reminder.date);
+                if (isSpanningTask && reminder.dailyCompletions && reminder.dailyCompletions[today] === true && !reminder.completed) {
+                    // 1. 已完成的跨天任务今日实例
+                    const completedInstance = {
+                        ...reminder,
+                        id: `${reminder.id}_completed_today`,
+                        originalId: reminder.id,
+                        isSpanningTodayCompletedInstance: true,
+                        completed: true,
+                        completedTime: reminder.dailyCompletionsTimes?.[today] || getLocalDateTimeString(new Date())
+                    };
+                    allReminders.push(completedInstance);
+
+                    // 2. 未完成的跨天任务实例
+                    const uncompletedInstance = {
+                        ...reminder,
+                        id: reminder.id,
+                        originalId: reminder.id,
+                        isSpanningTodayUncompletedInstance: true,
+                        completed: false
+                    };
+                    allReminders.push(uncompletedInstance);
+                } else {
+                    allReminders.push(reminder);
+                }
             } else {
                 const isLunarRepeat = reminder.repeat?.enabled &&
                     (reminder.repeat.type === 'lunar-monthly' || reminder.repeat.type === 'lunar-yearly');
@@ -131,6 +155,9 @@ export class ReminderTaskLogic {
 
         const isEffectivelyCompleted = (reminder: any) => {
             if (reminder.completed) return true;
+            if (reminder.isSpanningTodayUncompletedInstance) {
+                return targetTab === 'today';
+            }
             if (reminder.endDate) {
                 const startLogical = this.getReminderLogicalDate(reminder.date, reminder.time);
                 const endLogical = this.getReminderLogicalDate(reminder.endDate || reminder.date, reminder.endTime || reminder.time);

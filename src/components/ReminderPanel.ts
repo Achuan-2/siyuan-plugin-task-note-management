@@ -1268,7 +1268,7 @@ export class ReminderPanel {
         if (!reminder) return false;
         if (reminder.pinned === true) return true;
 
-        if (reminder.isRepeatInstance && reminder.originalId) {
+        if ((reminder.isRepeatInstance || reminder.isSpanningTodayCompletedInstance) && reminder.originalId) {
             const originalReminder = this.getOriginalReminder(reminder.originalId);
             return originalReminder?.pinned === true;
         }
@@ -1287,7 +1287,7 @@ export class ReminderPanel {
         if (!reminder) return 0;
 
         // 重复实例的手动排序统一读取原始任务 sort，避免单个实例排序与后续实例脱节
-        if (reminder.isRepeatInstance && reminder.originalId) {
+        if ((reminder.isRepeatInstance || reminder.isSpanningTodayCompletedInstance) && reminder.originalId) {
             const originalReminder = this.originalRemindersCache?.[reminder.originalId];
             if (originalReminder) {
                 return originalReminder.sort ?? reminder.sort ?? 0;
@@ -3305,7 +3305,33 @@ export class ReminderPanel {
                 if (hasRepeatingAncestor) {
                     return;
                 }
-                allReminders.push(reminder);
+
+                const isSpanningTask = !!(reminder.date && reminder.endDate && reminder.endDate !== reminder.date);
+                if (isSpanningTask && reminder.dailyCompletions && reminder.dailyCompletions[today] === true && !reminder.completed) {
+                    this.originalRemindersCache[reminder.id] = reminder;
+                    // 1. 已完成的跨天任务今日实例
+                    const completedInstance = {
+                        ...reminder,
+                        id: `${reminder.id}_completed_today`,
+                        originalId: reminder.id,
+                        isSpanningTodayCompletedInstance: true,
+                        completed: true,
+                        completedTime: reminder.dailyCompletionsTimes?.[today] || getLocalDateTimeString(new Date())
+                    };
+                    allReminders.push(completedInstance);
+
+                    // 2. 未完成的跨天任务实例
+                    const uncompletedInstance = {
+                        ...reminder,
+                        id: reminder.id,
+                        originalId: reminder.id,
+                        isSpanningTodayUncompletedInstance: true,
+                        completed: false
+                    };
+                    allReminders.push(uncompletedInstance);
+                } else {
+                    allReminders.push(reminder);
+                }
             } else {
                 // 缓存原始提醒，供实例查询原始数据（如 completedTimes、dailyCompletions 等）使用
                 this.originalRemindersCache[reminder.id] = reminder;
@@ -3468,6 +3494,19 @@ export class ReminderPanel {
             // 如果任务已标记为完成，直接返回 true
             if (reminder.completed) return true;
 
+            // 如果是跨天事件的未完成实例，只有在今天/今日任务视图中才视为已完成 (以便从今日任务中过滤掉)
+            if (reminder.isSpanningTodayUncompletedInstance) {
+                const isTodayLike = targetTab === 'today' || (
+                    targetTab.startsWith('custom_') && (() => {
+                        const filterId = targetTab.replace('custom_', '');
+                        const filterConfig = this.getCustomFilterConfig(filterId);
+                        if (!filterConfig || filterConfig.statusFilter === 'completed') return false;
+                        return this.getTodayLikeCustomFilterMode(filterConfig) !== null;
+                    })()
+                );
+                return isTodayLike;
+            }
+
             // 如果是跨天事件且今天在范围内，检查是否今天已完成（使用逻辑日期判断范围）
             if (reminder.endDate) {
                 const startLogical = this.getReminderLogicalDate(reminder.date || reminder.endDate, reminder.time || reminder.endTime);
@@ -3626,7 +3665,12 @@ export class ReminderPanel {
                     return compareDateStrings(sevenDaysAgo, startLogical) <= 0 && compareDateStrings(endLogical, today) < 0;
                 });
             case 'allUncompleted': // 所有未完成任务
-                return sourceReminders.filter(r => !isEffectivelyCompleted(r) && !isCompletedDueToParent(r));
+                return sourceReminders.filter(r => {
+                    if (r.isSpanningTodayUncompletedInstance) {
+                        return !isCompletedDueToParent(r);
+                    }
+                    return !isEffectivelyCompleted(r) && !isCompletedDueToParent(r);
+                });
             case 'noDate': // 无日期任务（根据顶级父任务是否有日期来判断）
                 return sourceReminders.filter(r => {
                     // 排除已完成的任务和因父任务完成而视为完成的任务
@@ -4170,7 +4214,9 @@ export class ReminderPanel {
             }
         } else {
             // 普通事件：检查事件的每日完成记录
-            return reminder.dailyCompletions && reminder.dailyCompletions[today] === true;
+            const targetId = reminder.isSpanningTodayCompletedInstance ? reminder.originalId : reminder.id;
+            const target = this.originalRemindersCache?.[targetId] || reminder;
+            return target.dailyCompletions && target.dailyCompletions[today] === true;
         }
 
         return false;
@@ -4196,7 +4242,9 @@ export class ReminderPanel {
             }
         } else {
             // 普通事件：检查事件的每日完成记录
-            return reminder.dailyCompletions && reminder.dailyCompletions[yesterdayStr] === true;
+            const targetId = reminder.isSpanningTodayCompletedInstance ? reminder.originalId : reminder.id;
+            const target = this.originalRemindersCache?.[targetId] || reminder;
+            return target.dailyCompletions && target.dailyCompletions[yesterdayStr] === true;
         }
 
         return false;
@@ -6100,8 +6148,8 @@ export class ReminderPanel {
         }
 
         // 检查循环任务限制：循环任务不能有父任务或子任务
-        const draggedIsRecurring = draggedReminder.isRepeatInstance || (draggedReminder.repeat && draggedReminder.repeat.enabled);
-        const targetIsRecurring = targetReminder.isRepeatInstance || (targetReminder.repeat && targetReminder.repeat.enabled);
+        const draggedIsRecurring = draggedReminder.isRepeatInstance || draggedReminder.isSpanningTodayCompletedInstance || (draggedReminder.repeat && draggedReminder.repeat.enabled);
+        const targetIsRecurring = targetReminder.isRepeatInstance || targetReminder.isSpanningTodayCompletedInstance || (targetReminder.repeat && targetReminder.repeat.enabled);
 
         if (isSetParent) {
             // 设置父子关系时的额外检查
@@ -6479,8 +6527,8 @@ export class ReminderPanel {
 
             // 判断是否为重复实例
             // 仅在明确标记为实例，或可从 id 解析出实例日期时，才按实例处理。
-            const isDraggedInstance = draggedReminder?.isRepeatInstance === true || (!!draggedReminder?.originalId && !!draggedParsed);
-            const isTargetInstance = targetReminder?.isRepeatInstance === true || (!!targetReminder?.originalId && !!targetParsed);
+            const isDraggedInstance = draggedReminder?.isRepeatInstance === true || draggedReminder?.isSpanningTodayCompletedInstance === true || (!!draggedReminder?.originalId && !!draggedParsed);
+            const isTargetInstance = targetReminder?.isRepeatInstance === true || targetReminder?.isSpanningTodayCompletedInstance === true || (!!targetReminder?.originalId && !!targetParsed);
 
             // 获取原始ID
             const draggedOriginalId = isDraggedInstance
@@ -6925,7 +6973,7 @@ export class ReminderPanel {
         const isSpanningInToday = isSpanningDays && compareDateStrings(startLogical, today) <= 0 && compareDateStrings(today, endLogical) <= 0;
         const isFutureReminderInToday = this.isFutureTaskRemindedOnDate(reminder, today);
         const isOpenEndedStartInToday = this.isOpenEndedStartDateTask(reminder) && this.isReminderActiveOnDate(reminder, today);
-        const canToggleTodayCompleted = !reminder.completed && !isDessert && (isSpanningInToday || isFutureReminderInToday || isOpenEndedStartInToday);
+        const canToggleTodayCompleted = (!reminder.completed || reminder.isSpanningTodayCompletedInstance) && !isDessert && (isSpanningInToday || isFutureReminderInToday || isOpenEndedStartInToday || reminder.isSpanningTodayCompletedInstance);
         const isIgnoredToday = this.hasTodayIgnoreMark(reminder, today);
 
         // 任务完成/取消完成（置于右键菜单最顶部）
@@ -6937,6 +6985,8 @@ export class ReminderPanel {
                     if (reminder.isRepeatInstance) {
                         const originalInstanceDate = (reminder.id && reminder.id.includes('_')) ? reminder.id.split('_').pop() : reminder.date;
                         this.toggleReminder(reminder.originalId, !reminder.completed, true, originalInstanceDate, reminder.id);
+                    } else if (reminder.isSpanningTodayCompletedInstance) {
+                        this.unmarkSpanningEventTodayCompleted(reminder);
                     } else {
                         this.toggleReminder(reminder.id, !reminder.completed, false, undefined, reminder.id);
                     }
@@ -6952,7 +7002,7 @@ export class ReminderPanel {
 
         // 添加"今日已完成"选项 (普通任务/跨天任务)
         if (isEditable && canToggleTodayCompleted) {
-            const isTodayCompleted = this.hasDailyCompletionMark(reminder, today);
+            const isTodayCompleted = reminder.isSpanningTodayCompletedInstance || this.hasDailyCompletionMark(reminder, today);
             if (!isIgnoredToday) {
                 menu.addItem({
                     iconHTML: isTodayCompleted ? "↩️" : "✅",
@@ -8223,15 +8273,16 @@ export class ReminderPanel {
 
     private async deleteReminder(reminder: any) {
         try {
+            const targetId = reminder.isSpanningTodayCompletedInstance ? reminder.originalId : reminder.id;
             const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
             let hasDescendants = false;
             if (reminderData) {
                 // 快速判断是否存在子任务（深度优先）
                 const reminderMap = new Map<string, any>();
                 Object.values(reminderData).forEach((r: any) => { if (r && r.id) reminderMap.set(r.id, r); });
-                const stack = [reminder.id];
+                const stack = [targetId];
                 const visited = new Set<string>();
-                visited.add(reminder.id);
+                visited.add(targetId);
                 while (stack.length > 0) {
                     const cur = stack.pop()!;
                     for (const r of reminderMap.values()) {
@@ -8250,16 +8301,17 @@ export class ReminderPanel {
                 i18n("deleteReminder"),
                 `${i18n("confirmDelete", { title: reminder.title })}${extra}`,
                 () => {
-                    this.performDeleteReminder(reminder.id);
+                    this.performDeleteReminder(targetId);
                 }
             );
         } catch (error) {
             // 回退到默认提示
+            const targetId = reminder.isSpanningTodayCompletedInstance ? reminder.originalId : reminder.id;
             await confirm(
                 i18n("deleteReminder"),
                 i18n("confirmDelete", { title: reminder.title }),
                 () => {
-                    this.performDeleteReminder(reminder.id);
+                    this.performDeleteReminder(targetId);
                 }
             );
         }
@@ -8442,7 +8494,7 @@ export class ReminderPanel {
     private async setReminderPinned(reminder: any, pinned: boolean) {
         try {
             const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
-            const targetId = reminder?.isRepeatInstance ? reminder?.originalId : reminder?.id;
+            const targetId = reminder?.isRepeatInstance ? reminder?.originalId : (reminder?.isSpanningTodayCompletedInstance ? reminder?.originalId : reminder?.id);
             if (!targetId || !reminderData[targetId]) {
                 showMessage(i18n("reminderNotExist"));
                 return;
@@ -8465,7 +8517,7 @@ export class ReminderPanel {
                 }
             }
             this.currentRemindersCache.forEach(item => {
-                const itemTargetId = item?.isRepeatInstance ? item?.originalId : item?.id;
+                const itemTargetId = item?.isRepeatInstance ? item?.originalId : (item?.isSpanningTodayCompletedInstance ? item?.originalId : item?.id);
                 if (itemTargetId === targetId) {
                     if (pinned) {
                         item.pinned = true;
