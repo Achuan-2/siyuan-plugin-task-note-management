@@ -1061,7 +1061,7 @@ export class TaskRenderer {
                 const completionLogicalDay = getLogicalDateString(completionDate);
                 const formattedTime = context.formatCompletedTime ? context.formatCompletedTime(completedTimeStr) : getLocalDateTimeString(completionDate);
 
-                if (completionLogicalDay === currentLogicalToday) {
+                if (completionLogicalDay === currentLogicalToday && virtualTodayCompletedTime) {
                     const timeOnly = formattedTime.includes(' ') ? formattedTime.substring(formattedTime.indexOf(' ') + 1) : formattedTime;
                     completedEl.textContent = i18n('todayCompletedWithTime', { time: timeOnly }) || `今日完成于 ${timeOnly}`;
                 } else {

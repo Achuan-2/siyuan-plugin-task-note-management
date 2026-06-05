@@ -433,9 +433,17 @@ export class BlockRemindersDialog {
 
     private formatCompletedTime(completedTime: string): string {
         const completed = new Date(completedTime);
-        const now = new Date();
-        const diffMs = now.getTime() - completed.getTime();
-        const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+        const todayStr = getLogicalDateString();
+        const completedLogicalStr = getLogicalDateString(completed);
+        
+        let diffDays = 0;
+        if (completedLogicalStr !== todayStr) {
+            const todayDate = new Date(todayStr + 'T00:00:00');
+            const completedDate = new Date(completedLogicalStr + 'T00:00:00');
+            const diffTime = todayDate.getTime() - completedDate.getTime();
+            diffDays = Math.round(diffTime / (24 * 60 * 60 * 1000));
+        }
+
         const cleanCompletedTemplate = (template: string) => template.replace(/^[\s(（]+/, '').replace(/[)）\s]+$/, '');
         const completedAtTemplate = cleanCompletedTemplate(i18n("completedAtTemplate") || "完成于 ${time}");
         const completedAtWithDateTemplate = cleanCompletedTemplate(i18n("completedAtWithDateTemplate") || "完成于 ${date} ${time}");

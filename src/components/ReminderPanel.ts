@@ -2782,12 +2782,12 @@ export class ReminderPanel {
                     const originalInstanceDate = (r.id && r.id.includes('_')) ? r.id.split('_').pop() : r.date;
                     this.toggleReminder(r.originalId, checked, true, originalInstanceDate, r.id);
                 } else {
-                    const isSpanningTask = !!(r.date && r.endDate && r.endDate !== r.date);
+                    const isSpanningTask = !!(r.date && r.endDate && r.endDate !== r.date) || r.isSpanningTodayCompletedInstance;
                     if (isSpanningTask) {
                         if (checked) {
                             this.markSpanningEventTodayCompleted(r);
                         } else {
-                            if (r.completed) {
+                            if (r.completed && !r.isSpanningTodayCompletedInstance) {
                                 this.toggleReminder(r.id, false, false, undefined, r.id);
                             } else {
                                 this.unmarkSpanningEventTodayCompleted(r);
@@ -4171,7 +4171,7 @@ export class ReminderPanel {
      * @returns 是否是今天完成的
      */
     private isTodayCompleted(reminder: any, today: string): boolean {
-        // 已标记为完成的：如果其日期范围包含今日，或其原始日期是今日，或其完成时间（completedTime）在今日，则视为今日已完成
+        // 已标记为完成的：如果其完成时间（completedTime）在今日，则视为今日已完成
         if (reminder.completed) {
             try {
                 const completedTime = this.getCompletedTime(reminder);
@@ -4184,8 +4184,7 @@ export class ReminderPanel {
             }
 
             const startLogical = this.getReminderLogicalDate(reminder.date, reminder.time);
-            const endLogical = this.getReminderLogicalDate(reminder.endDate || reminder.date, reminder.endTime || reminder.time);
-            return (reminder.endDate && compareDateStrings(startLogical, today) <= 0 && compareDateStrings(today, endLogical) <= 0) || startLogical === today;
+            return startLogical === today;
         }
 
         // 未直接标记为完成的（可能为跨天事件的今日已完成标记）
@@ -4655,8 +4654,8 @@ export class ReminderPanel {
             const originalReminder = this.getOriginalReminder(reminder.originalId);
             const today = getLogicalDateString();
 
-            // 优先检查跨天任务的今日完成记录
-            if (originalReminder && originalReminder.dailyCompletionsTimes && originalReminder.dailyCompletionsTimes[today]) {
+            // 优先检查跨天任务的今日完成记录 (只有在未完全完成时，才使用每日完成记录)
+            if (!reminder.completed && originalReminder && originalReminder.dailyCompletionsTimes && originalReminder.dailyCompletionsTimes[today]) {
                 return originalReminder.dailyCompletionsTimes[today];
             }
 
@@ -4666,8 +4665,8 @@ export class ReminderPanel {
         } else {
             // 普通事件的完成时间
             const today = getLogicalDateString();
-            // 优先检查跨天任务的今日完成记录
-            if (reminder.dailyCompletionsTimes && reminder.dailyCompletionsTimes[today]) {
+            // 优先检查跨天任务的今日完成记录 (只有在未完全完成时，才使用每日完成记录)
+            if (!reminder.completed && reminder.dailyCompletionsTimes && reminder.dailyCompletionsTimes[today]) {
                 return reminder.dailyCompletionsTimes[today];
             }
             return reminder.completedTime || null;
@@ -7777,6 +7776,7 @@ export class ReminderPanel {
 
 
 
+            const targetId = reminder.isSpanningTodayCompletedInstance ? reminder.originalId : reminder.id;
             if (reminder.isRepeatInstance) {
                 // 重复事件实例：更新原始事件的每日完成记录
                 const originalId = reminder.originalId;
@@ -7791,15 +7791,15 @@ export class ReminderPanel {
                     reminderData[originalId].dailyCompletionsTimes[today] = getLocalDateTimeString(new Date());
                 }
             } else {
-                if (reminderData[reminder.id]) {
-                    if (!reminderData[reminder.id].dailyCompletions) {
-                        reminderData[reminder.id].dailyCompletions = {};
+                if (reminderData[targetId]) {
+                    if (!reminderData[targetId].dailyCompletions) {
+                        reminderData[targetId].dailyCompletions = {};
                     }
-                    if (!reminderData[reminder.id].dailyCompletionsTimes) {
-                        reminderData[reminder.id].dailyCompletionsTimes = {};
+                    if (!reminderData[targetId].dailyCompletionsTimes) {
+                        reminderData[targetId].dailyCompletionsTimes = {};
                     }
-                    reminderData[reminder.id].dailyCompletions[today] = true;
-                    reminderData[reminder.id].dailyCompletionsTimes[today] = getLocalDateTimeString(new Date());
+                    reminderData[targetId].dailyCompletions[today] = true;
+                    reminderData[targetId].dailyCompletionsTimes[today] = getLocalDateTimeString(new Date());
                 }
             }
 
@@ -7833,6 +7833,7 @@ export class ReminderPanel {
 
 
 
+            const targetId = reminder.isSpanningTodayCompletedInstance ? reminder.originalId : reminder.id;
             if (reminder.isRepeatInstance) {
                 // 重复事件实例：更新原始事件的每日完成记录
                 const originalId = reminder.originalId;
@@ -7846,12 +7847,12 @@ export class ReminderPanel {
                 }
             } else {
                 // 普通事件：更新事件的每日完成记录
-                if (reminderData[reminder.id]) {
-                    if (reminderData[reminder.id].dailyCompletions) {
-                        delete reminderData[reminder.id].dailyCompletions[today];
+                if (reminderData[targetId]) {
+                    if (reminderData[targetId].dailyCompletions) {
+                        delete reminderData[targetId].dailyCompletions[today];
                     }
-                    if (reminderData[reminder.id].dailyCompletionsTimes) {
-                        delete reminderData[reminder.id].dailyCompletionsTimes[today];
+                    if (reminderData[targetId].dailyCompletionsTimes) {
+                        delete reminderData[targetId].dailyCompletionsTimes[today];
                     }
                 }
             }
