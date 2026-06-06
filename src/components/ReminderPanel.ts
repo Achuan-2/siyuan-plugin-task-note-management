@@ -62,6 +62,9 @@ export class ReminderPanel {
     private isDragging: boolean = false;
     private draggedElement: HTMLElement | null = null;
     private draggedReminder: any = null;
+    private dragScrollIntervalId: number | null = null;
+    private lastDragTime: number = 0;
+    private lastDragClientY: number | null = null;
     private collapsedTasks: Set<string> = new Set(); // 管理任务的折叠状态
     // 记录用户手动展开的任务（优先于默认折叠）
     private userExpandedTasks: Set<string> = new Set();
@@ -270,6 +273,7 @@ export class ReminderPanel {
 
     // 添加销毁方法以清理事件监听器
     public destroy() {
+        this.stopDragScroll();
         // 清理定时器
         if (this.loadTimeoutId) {
             clearTimeout(this.loadTimeoutId);
@@ -5526,6 +5530,7 @@ export class ReminderPanel {
             this.isDragging = false;
             this.draggedElement = null;
             this.draggedReminder = null;
+            this.stopDragScroll();
             try {
                 element.style.removeProperty('opacity');
             } catch (e) {
@@ -5581,12 +5586,23 @@ export class ReminderPanel {
 
     // 容器拖拽事件：处理外部拖入（如从看板拖入）
     private addContainerDragEvents() {
+        this.remindersContainer.addEventListener('wheel', (e: WheelEvent) => {
+            if (this.isDragging || document.querySelector('.dragging')) {
+                this.remindersContainer.scrollTop += e.deltaY;
+            }
+        }, { passive: true });
+
         this.remindersContainer.addEventListener('dragover', (e) => {
             const types = e.dataTransfer?.types || [];
             const isSiYuanDrag = Array.from(types).some(t => t.startsWith(Constants.SIYUAN_DROP_GUTTER)) ||
                 types.includes(Constants.SIYUAN_DROP_FILE) ||
                 types.includes(Constants.SIYUAN_DROP_TAB);
             const isInternalDrag = types.includes('application/x-reminder');
+
+            const isAnyDrag = this.isDragging || isInternalDrag || isSiYuanDrag;
+            if (isAnyDrag) {
+                this.handleDragScroll(e.clientY);
+            }
 
             if (!this.isDragging && !this.draggedElement && (isSiYuanDrag || isInternalDrag)) {
                 e.preventDefault();
@@ -5605,11 +5621,13 @@ export class ReminderPanel {
 
         this.remindersContainer.addEventListener('dragleave', () => {
             this.remindersContainer.classList.remove('drag-over-active');
+            this.stopDragScroll();
         });
 
         this.remindersContainer.addEventListener('drop', async (e) => {
             this.hideDropIndicator();
             this.remindersContainer.classList.remove('drag-over-active');
+            this.stopDragScroll();
 
             // 获取拖拽目标信息（用于排序）
             const targetElement = (e.target as HTMLElement).closest('.reminder-item') as HTMLElement;
@@ -5818,6 +5836,51 @@ export class ReminderPanel {
                 }
             }
         });
+    }
+
+    private handleDragScroll(clientY: number) {
+        this.lastDragClientY = clientY;
+        this.lastDragTime = Date.now();
+        if (this.dragScrollIntervalId !== null) return;
+
+        this.dragScrollIntervalId = window.setInterval(() => {
+            if (Date.now() - this.lastDragTime > 200) {
+                this.stopDragScroll();
+                return;
+            }
+
+            if (this.lastDragClientY === null || !this.remindersContainer) {
+                this.stopDragScroll();
+                return;
+            }
+
+            const rect = this.remindersContainer.getBoundingClientRect();
+            const threshold = 50; // px near top/bottom to start scrolling
+            const maxSpeed = 15; // px per tick
+
+            const distTop = this.lastDragClientY - rect.top;
+            const distBottom = rect.bottom - this.lastDragClientY;
+
+            if (distTop >= 0 && distTop < threshold) {
+                // Scroll up
+                const speed = Math.max(2, Math.round((1 - distTop / threshold) * maxSpeed));
+                this.remindersContainer.scrollTop -= speed;
+            } else if (distBottom >= 0 && distBottom < threshold) {
+                // Scroll down
+                const speed = Math.max(2, Math.round((1 - distBottom / threshold) * maxSpeed));
+                this.remindersContainer.scrollTop += speed;
+            } else {
+                this.stopDragScroll();
+            }
+        }, 30);
+    }
+
+    private stopDragScroll() {
+        if (this.dragScrollIntervalId !== null) {
+            clearInterval(this.dragScrollIntervalId);
+            this.dragScrollIntervalId = null;
+        }
+        this.lastDragClientY = null;
     }
 
 

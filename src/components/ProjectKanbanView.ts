@@ -76,6 +76,10 @@ export class ProjectKanbanView {
     private isDragging: boolean = false;
     private draggedTask: any = null;
     private draggedElement: HTMLElement | null = null;
+    private dragScrollIntervalId: number | null = null;
+    private lastDragTime: number = 0;
+    private lastDragClientX: number | null = null;
+    private lastDragClientY: number | null = null;
     // 当前正在拖拽的分组ID（用于分组管理对话框的拖拽排序）
     private draggedGroupId: string | null = null;
     // 当前显示的分组拖拽指示器（绝对定位在 container 内）
@@ -4912,6 +4916,32 @@ export class ProjectKanbanView {
         const kanbanContainer = document.createElement('div');
         kanbanContainer.className = 'project-kanban-container';
         this.container.appendChild(kanbanContainer);
+
+        // 绑定拖拽过程中的鼠标滚轮与边缘自动滚动
+        kanbanContainer.addEventListener('wheel', (e: WheelEvent) => {
+            if (this.isDragging || document.querySelector('.dragging')) {
+                const targetColumnContent = (e.target as HTMLElement).closest('.kanban-column-content') as HTMLElement | null;
+                if (targetColumnContent) {
+                    targetColumnContent.scrollTop += e.deltaY;
+                } else {
+                    kanbanContainer.scrollLeft += e.deltaY;
+                }
+            }
+        }, { passive: true });
+
+        kanbanContainer.addEventListener('dragover', (e: DragEvent) => {
+            if (this.isDragging || document.querySelector('.dragging') || e.dataTransfer?.types.includes('application/x-reminder')) {
+                this.handleDragScroll(e.clientX, e.clientY, e.target as HTMLElement);
+            }
+        });
+
+        kanbanContainer.addEventListener('dragleave', () => {
+            this.stopDragScroll();
+        });
+
+        kanbanContainer.addEventListener('drop', () => {
+            this.stopDragScroll();
+        });
 
         // 创建四个列：进行中、短期、长期、已完成
         this.createKanbanColumn(kanbanContainer, 'doing', i18n('doing'), '#f39c12');
@@ -11757,6 +11787,7 @@ export class ProjectKanbanView {
             this.isDragging = false;
             this.draggedTask = null;
             this.draggedElement = null;
+            this.stopDragScroll();
             element.style.opacity = '';
             element.style.cursor = 'grab';
             element.style.transform = 'translateY(0)';
@@ -20728,6 +20759,72 @@ export class ProjectKanbanView {
         }
 
         return changed;
+    }
+
+    private handleDragScroll(clientX: number, clientY: number, targetEl: HTMLElement) {
+        this.lastDragClientX = clientX;
+        this.lastDragClientY = clientY;
+        this.lastDragTime = Date.now();
+        if (this.dragScrollIntervalId !== null) return;
+
+        this.dragScrollIntervalId = window.setInterval(() => {
+            if (Date.now() - this.lastDragTime > 200) {
+                this.stopDragScroll();
+                return;
+            }
+
+            if (this.lastDragClientX === null || this.lastDragClientY === null) {
+                this.stopDragScroll();
+                return;
+            }
+
+            // 1. 处理列的垂直滚动
+            const columnContent = targetEl.closest('.kanban-column-content') as HTMLElement | null;
+            if (columnContent) {
+                const rect = columnContent.getBoundingClientRect();
+                const threshold = 40; // px near top/bottom to start scrolling
+                const maxSpeed = 15; // px per tick
+
+                const distTop = this.lastDragClientY - rect.top;
+                const distBottom = rect.bottom - this.lastDragClientY;
+
+                if (distTop >= 0 && distTop < threshold) {
+                    const speed = Math.max(2, Math.round((1 - distTop / threshold) * maxSpeed));
+                    columnContent.scrollTop -= speed;
+                } else if (distBottom >= 0 && distBottom < threshold) {
+                    const speed = Math.max(2, Math.round((1 - distBottom / threshold) * maxSpeed));
+                    columnContent.scrollTop += speed;
+                }
+            }
+
+            // 2. 处理主容器的水平滚动
+            const kanbanContainer = this.container.querySelector('.project-kanban-container') as HTMLElement | null;
+            if (kanbanContainer) {
+                const rect = kanbanContainer.getBoundingClientRect();
+                const threshold = 60; // px near left/right to start scrolling
+                const maxSpeed = 20; // px per tick
+
+                const distLeft = this.lastDragClientX - rect.left;
+                const distRight = rect.right - this.lastDragClientX;
+
+                if (distLeft >= 0 && distLeft < threshold) {
+                    const speed = Math.max(2, Math.round((1 - distLeft / threshold) * maxSpeed));
+                    kanbanContainer.scrollLeft -= speed;
+                } else if (distRight >= 0 && distRight < threshold) {
+                    const speed = Math.max(2, Math.round((1 - distRight / threshold) * maxSpeed));
+                    kanbanContainer.scrollLeft += speed;
+                }
+            }
+        }, 30);
+    }
+
+    private stopDragScroll() {
+        if (this.dragScrollIntervalId !== null) {
+            clearInterval(this.dragScrollIntervalId);
+            this.dragScrollIntervalId = null;
+        }
+        this.lastDragClientX = null;
+        this.lastDragClientY = null;
     }
 
 }
