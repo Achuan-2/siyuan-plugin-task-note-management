@@ -313,7 +313,11 @@ export class ReminderPanel {
             const reminder = this.currentRemindersCache.find(r => r.id === reminderId);
             if (!reminder) return;
 
-            const shouldStillHide = this.isTodayLikeView() && !!reminder.completed && !this.shouldShowInCurrentView(reminder);
+            const today = getLogicalDateString();
+            const isDessert = this.isDailyDessertTaskForDate(reminder, today);
+            const isSpanningToday = reminder.isSpanningTodayCompletedInstance;
+            const isEffectivelyCompleted = !!reminder.completed || isSpanningToday || (isDessert && Array.isArray(reminder.dailyDessertCompleted) && reminder.dailyDessertCompleted.includes(today));
+            const shouldStillHide = this.isTodayLikeView() && isEffectivelyCompleted && !this.shouldShowInCurrentView(reminder);
             if (!shouldStillHide) return;
 
             const el = this.remindersContainer.querySelector(`[data-reminder-id="${reminderId}"]`) as HTMLElement | null;
@@ -2808,7 +2812,65 @@ export class ReminderPanel {
 
         const callbacks = {
             onCheckboxClick: (r: any, checked: boolean, e: Event) => {
-                if (r.isRepeatInstance) {
+                const today = getLogicalDateString();
+                if (this.isDailyDessertTaskForDate(r, today)) {
+                    // 每日可做任务，点击 checkbox 视为今日已完成 / 取消今日已完成
+                    // 乐观更新缓存中的 dailyDessertCompleted 和 dailyDessertCompletedTimes
+                    const cacheIndex = this.currentRemindersCache.findIndex(item => item.id === r.id);
+                    if (cacheIndex >= 0) {
+                        const cached = { ...this.currentRemindersCache[cacheIndex] };
+                        if (!Array.isArray(cached.dailyDessertCompleted)) {
+                            cached.dailyDessertCompleted = [];
+                        }
+                        if (checked) {
+                            if (!cached.dailyDessertCompleted.includes(today)) {
+                                cached.dailyDessertCompleted.push(today);
+                            }
+                            if (!cached.dailyDessertCompletedTimes) {
+                                cached.dailyDessertCompletedTimes = {};
+                            }
+                            cached.dailyDessertCompletedTimes[today] = getLocalDateTimeString(new Date());
+                        } else {
+                            cached.dailyDessertCompleted = cached.dailyDessertCompleted.filter((d: string) => d !== today);
+                            if (cached.dailyDessertCompletedTimes) {
+                                delete cached.dailyDessertCompletedTimes[today];
+                            }
+                        }
+                        this.currentRemindersCache[cacheIndex] = cached;
+                        this.allRemindersMap.set(r.id, { ...(this.allRemindersMap.get(r.id) || {}), ...cached });
+                    }
+
+                    // 局部更新 DOM 样式
+                    const el = this.remindersContainer.querySelector(`[data-reminder-id="${r.id}"]`) as HTMLElement | null;
+                    if (el) {
+                        const checkbox = el.querySelector('.reminder-task-checkbox') as HTMLInputElement | null;
+                        if (checkbox) checkbox.checked = checked;
+                        if (checked) {
+                            el.classList.add('reminder-completed');
+                            try {
+                                el.style.setProperty('opacity', '0.5', 'important');
+                            } catch (err) {}
+                            
+                            if (this.isTodayLikeView()) {
+                                this.scheduleCompletionRemoval(r.id);
+                            }
+                        } else {
+                            el.classList.remove('reminder-completed');
+                            el.style.removeProperty('opacity');
+                            el.style.opacity = '';
+                            
+                            // 移除今日完成时间的文字显示
+                            const completedEl = el.querySelector('.reminder-item__completed-time');
+                            if (completedEl) completedEl.remove();
+                        }
+                    }
+
+                    if (checked) {
+                        this.completeDailyDessert(r, true);
+                    } else {
+                        this.undoDailyDessertCompletion(r, true);
+                    }
+                } else if (r.isRepeatInstance) {
                     const originalInstanceDate = (r.id && r.id.includes('_')) ? r.id.split('_').pop() : r.date;
                     this.toggleReminder(r.originalId, checked, true, originalInstanceDate, r.id);
                 } else {
@@ -3115,7 +3177,7 @@ export class ReminderPanel {
         return order;
     }
 
-    private async completeDailyDessert(reminder: any) {
+    private async completeDailyDessert(reminder: any, skipReload: boolean = false) {
         try {
             const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
             const targetId = reminder.isRepeatInstance ? reminder.originalId : reminder.id;
@@ -3147,7 +3209,9 @@ export class ReminderPanel {
                 await saveReminders(this.plugin, reminderData);
                 window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
                 // 刷新界面显示
-                this.loadReminders();
+                if (!skipReload) {
+                    this.loadReminders();
+                }
             }
         } catch (e) {
             console.error("完成每日可做任务失败", e);
@@ -3155,7 +3219,7 @@ export class ReminderPanel {
         }
     }
 
-    private async undoDailyDessertCompletion(reminder: any) {
+    private async undoDailyDessertCompletion(reminder: any, skipReload: boolean = false) {
         try {
             const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
             const targetId = reminder.isRepeatInstance ? reminder.originalId : reminder.id;
@@ -3175,7 +3239,9 @@ export class ReminderPanel {
                     await saveReminders(this.plugin, reminderData);
                     window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
                     // 刷新界面显示
-                    this.loadReminders();
+                    if (!skipReload) {
+                        this.loadReminders();
+                    }
                     showMessage("已取消今日完成标记");
                 }
             }
