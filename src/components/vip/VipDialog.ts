@@ -1,4 +1,4 @@
-import { svelteDialog } from "../libs/dialog";
+import { svelteDialog } from "../../libs/dialog";
 import VipPanel from "./VipPanel.svelte";
 
 export const showVipDialog = (plugin: any) => {

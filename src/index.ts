@@ -8,7 +8,7 @@ import {
     getFrontend,
     getBackend,
 } from "siyuan";
-import { VipManager } from "./utils/vip";
+import { VipManager } from "./components/vip/vip";
 import "./index.scss";
 
 import { QuickReminderDialog } from "./components/QuickReminderDialog";
@@ -35,7 +35,7 @@ import SettingPanelComponent from "./SettingPanel.svelte";
 import { exportIcsFile } from "./utils/icsUtils";
 import { getFile, sendNotification, cancelNotification, pushErrMsg, pushMsg, isInMobileApp, batchUpdateTaskListItemMarker, isTaskListLikeBlock, type TaskListItemMarker } from "./api";
 import { resolveAudioPath } from "./utils/audioUtils";
-import { showVipDialog } from "./components/VipDialog";
+import { showVipDialog } from "./components/vip/VipDialog";
 import { performDataMigration } from "./utils/dataMigration";
 import { initIcsSync, initIcsSubscriptionSync, handleIcsSyncSettingsChange, cleanupIcsSync } from "./utils/icsSync";
 import { TaskNoteDOMManager } from "./utils/taskNoteDOM";

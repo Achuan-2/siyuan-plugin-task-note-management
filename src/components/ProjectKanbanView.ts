@@ -15,7 +15,7 @@ import { getSolarDateLunarString } from "../utils/lunarUtils";
 import { QuickReminderDialog } from "./QuickReminderDialog";
 import { BlockBindingDialog } from "./BlockBindingDialog";
 import { getAllReminders, saveReminders, loadSubscriptions, syncSubscription, deleteSubscriptionReminderTask } from '../utils/icsSubscription';
-import { VipManager } from "../utils/vip";
+import { VipManager } from "./vip/vip";
 
 import { PasteTaskDialog } from "./PasteTaskDialog";
 import { ProjectDialog } from "./ProjectDialog";

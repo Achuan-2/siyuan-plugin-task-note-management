@@ -31,7 +31,7 @@
     import { PomodoroManager } from './utils/pomodoroManager';
     import { resolveAudioPath } from './utils/audioUtils';
     import { getGlobalReminderSkipWeekendMode } from './utils/reminderSkipDate';
-    import VipPanel from './components/VipPanel.svelte';
+    import VipPanel from './components/vip/VipPanel.svelte';
     import SubscriptionPanel from './components/icsSubscriptionPanel.svelte';
     import HelpPanel from './components/HelpPanel.svelte';
     import { ProjectManager } from './utils/projectManager';

@@ -1,8 +1,8 @@
 <script lang="ts">
-    import { VipManager, type VIPStatus } from '../utils/vip';
+    import { VipManager, type VIPStatus } from './vip';
     import { platformUtils } from 'siyuan';
-    import { pushMsg } from '../api';
-    import { i18n } from '../pluginInstance';
+    import { pushMsg } from '../../api';
+    import { i18n } from '../../pluginInstance';
 
     import { onMount } from 'svelte';
 
