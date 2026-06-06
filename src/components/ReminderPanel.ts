@@ -2813,7 +2813,8 @@ export class ReminderPanel {
         const callbacks = {
             onCheckboxClick: (r: any, checked: boolean, e: Event) => {
                 const today = getLogicalDateString();
-                if (this.isDailyDessertTaskForDate(r, today)) {
+                const checkboxAction = this.plugin?.settings?.checkboxActionForSpanningAndDessert || 'global';
+                if (this.isDailyDessertTaskForDate(r, today) && checkboxAction === 'today') {
                     // 每日可做任务，点击 checkbox 视为今日已完成 / 取消今日已完成
                     // 乐观更新缓存中的 dailyDessertCompleted 和 dailyDessertCompletedTimes
                     const cacheIndex = this.currentRemindersCache.findIndex(item => item.id === r.id);
@@ -2876,14 +2877,18 @@ export class ReminderPanel {
                 } else {
                     const isSpanningTask = !!(r.date && r.endDate && r.endDate !== r.date) || r.isSpanningTodayCompletedInstance;
                     if (isSpanningTask) {
-                        if (checked) {
-                            this.markSpanningEventTodayCompleted(r);
-                        } else {
-                            if (r.completed && !r.isSpanningTodayCompletedInstance) {
-                                this.toggleReminder(r.id, false, false, undefined, r.id);
+                        if (checkboxAction === 'today') {
+                            if (checked) {
+                                this.markSpanningEventTodayCompleted(r);
                             } else {
-                                this.unmarkSpanningEventTodayCompleted(r);
+                                if (r.completed && !r.isSpanningTodayCompletedInstance) {
+                                    this.toggleReminder(r.id, false, false, undefined, r.id);
+                                } else {
+                                    this.unmarkSpanningEventTodayCompleted(r);
+                                }
                             }
+                        } else {
+                            this.toggleReminder(r.id, checked, false, undefined, r.id);
                         }
                     } else {
                         this.toggleReminder(r.id, checked, false, undefined, r.id);

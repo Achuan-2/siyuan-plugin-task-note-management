@@ -291,6 +291,7 @@ export const DEFAULT_SETTINGS = {
     reminderSystemNotification: true, // 新增：事件到期提醒系统弹窗
     reminderSkipWeekendMode: 'none', // 任务提醒跳过周末模式：none | saturdaySunday | saturday | sunday
     reminderSkipHolidays: false, // 任务提醒是否跳过节假日
+    checkboxActionForSpanningAndDessert: 'global', // 跨天/每日可做任务复选框行为：'global'=整体完成 | 'today'=今日已完成
     showInternalNotification: false, // 新增：是否显示内部通知框
     reminderWebhookEnabled: false, // 是否启用 Webhook 通知
     reminderWebhookUrl: '', // Webhook 通知 URL

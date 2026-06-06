@@ -583,6 +583,21 @@
                         i18n('reminderSkipHolidaysDesc') ||
                         '仅对重复任务，以及同时横跨节假日和非节假日的跨天任务生效；单个任务可在任务编辑弹窗单独覆盖。',
                 },
+                {
+                    key: 'checkboxActionForSpanningAndDessert',
+                    value: settings.checkboxActionForSpanningAndDessert || 'global',
+                    type: 'select',
+                    title:
+                        i18n('checkboxActionForSpanningAndDessert') ||
+                        '跨天/每日可做任务复选框行为',
+                    description:
+                        i18n('checkboxActionForSpanningAndDessertDesc') ||
+                        '点击复选框时，跨天任务和每日可做任务标记为今日已完成还是整体完成，默认整体完成。',
+                    options: {
+                        global: i18n('checkboxActionGlobal') || '整体完成',
+                        today: i18n('checkboxActionToday') || '今日已完成',
+                    },
+                },
             ],
         },
         {
