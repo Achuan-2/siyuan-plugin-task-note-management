@@ -19,6 +19,7 @@ import { VipManager } from "../utils/vip";
 
 import { PasteTaskDialog } from "./PasteTaskDialog";
 import { ProjectDialog } from "./ProjectDialog";
+import { showProjectStatsDialog } from "./dialog/ProjectStatsDialog";
 import { getFrontend, getBackend } from "siyuan";
 import { createPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
 import { SortMenuDialog } from "./SortMenuDialog";
@@ -4826,6 +4827,14 @@ export class ProjectKanbanView {
             e.preventDefault();
             const menu = new Menu("project-kanban-more-menu");
 
+            menu.addItem({
+                iconHTML: "📊",
+                label: i18n('viewStatsMenuItem') || "查看统计",
+                click: () => {
+                    const project = this.project || this.projectManager.getProjectById(this.projectId) || { id: this.projectId, title: '看板项目' };
+                    showProjectStatsDialog(this.plugin, project);
+                }
+            });
             menu.addItem({
                 icon: "iconSettings",
                 label: i18n('editProject'),

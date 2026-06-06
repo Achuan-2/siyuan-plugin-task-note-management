@@ -23,6 +23,7 @@ import { generateRandomColor } from "../utils/uiUtils";
 import { ProjectFolderManager, ProjectFolder } from "../utils/projectFolderManager";
 import { ProjectFolderManageDialog } from "./ProjectFolderManageDialog";
 import { ProjectSelectorPopup } from "./ProjectSelectorPopup";
+import { showProjectStatsDialog, showFolderStatsDialog } from "./dialog/ProjectStatsDialog";
 
 
 const PROJECT_PANEL_SORT_METHODS = new Set(['category', 'priority', 'time', 'created', 'title']);
@@ -1970,6 +1971,12 @@ export class ProjectPanel {
             click: () => this.openProjectKanban(project)
         });
 
+        menu.addItem({
+            iconHTML: "📊",
+            label: i18n("viewStatsMenuItem") || "查看统计",
+            click: () => showProjectStatsDialog(this.plugin, project, this.reminderDataCache)
+        });
+
         menu.addSeparator();
 
         if (project.blockId) {
@@ -3862,6 +3869,11 @@ export class ProjectPanel {
                 icon: "iconProject",
                 label: i18n("openFolderKanban") || "打开看板",
                 click: () => this.openFolderKanban(node)
+            });
+            menu.addItem({
+                iconHTML: "📊",
+                label: i18n("viewStatsMenuItem") || "查看统计",
+                click: () => showFolderStatsDialog(this.plugin, folder, node, this.reminderDataCache)
             });
             menu.addSeparator();
         }
