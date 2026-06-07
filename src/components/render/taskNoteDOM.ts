@@ -1,7 +1,7 @@
 import { showMessage } from "siyuan";
-import { i18n } from "../pluginInstance";
-import { PomodoroRecordManager } from "./pomodoroRecord";
-import { ProjectManager, type MilestoneDateDisplayInfo } from "./projectManager";
+import { i18n } from "../../pluginInstance";
+import { PomodoroRecordManager } from "../../utils/pomodoroRecord";
+import { ProjectManager, type MilestoneDateDisplayInfo } from "../../utils/projectManager";
 
 const PROJECT_KANBAN_TAB_TYPE = "project_kanban_tab";
 const BLOCK_POMODORO_COUNT_ATTR = "custom-task-pomodoro-count";
@@ -68,8 +68,8 @@ export class TaskNoteDOMManager {
         if (this.dialogsPreloaded) return;
         this.dialogsPreloaded = true;
         void Promise.allSettled([
-            import("../components/BlockRemindersDialog"),
-            import("../components/PomodoroSessionsDialog"),
+            import("../BlockRemindersDialog"),
+            import("../PomodoroSessionsDialog"),
         ]);
     }
 
@@ -254,7 +254,7 @@ export class TaskNoteDOMManager {
             return exactBlockStats;
         }
 
-        // 块属性会被番茄钟写入为“该块上的任务统计”镜像；存在绑定任务会话时再相加会翻倍。
+        // 块属性会被番茄钟写入为"该块上的任务统计"镜像；存在绑定任务会话时再相加会翻倍。
         if (this.hasPomodoroStats(linkedStats)) {
             return this.getEmptyPomodoroStats();
         }
@@ -405,7 +405,7 @@ export class TaskNoteDOMManager {
 
             this.currentHeadingIds = new Set(blockIds);
 
-            const { sql } = await import("../api");
+            const { sql } = await import("../../api");
             const idsStr = blockIds.map((id) => `'${id}'`).join(",");
             const sqlQuery = `SELECT block_id, value FROM attributes WHERE block_id IN (${idsStr}) AND name = 'bookmark' LIMIT -1`;
             const attrsResults = await sql(sqlQuery);
@@ -1397,7 +1397,7 @@ export class TaskNoteDOMManager {
                     showMessage(i18n("taskNotFound") || "任务不存在", 3000, "error");
                     return;
                 }
-                const { QuickReminderDialog } = await import("../components/QuickReminderDialog");
+                const { QuickReminderDialog } = await import("../QuickReminderDialog");
                 const dialog = new QuickReminderDialog(undefined, undefined, undefined, undefined, {
                     blockId,
                     reminder,
@@ -1489,7 +1489,7 @@ export class TaskNoteDOMManager {
             e.preventDefault();
             e.stopPropagation();
             try {
-                const { PomodoroSessionsDialog } = await import("../components/PomodoroSessionsDialog");
+                const { PomodoroSessionsDialog } = await import("../PomodoroSessionsDialog");
                 const linkedEventIds = this.normalizeReminderIds(btn.dataset.pomodoroIncludeEventIds);
                 const includeInstances = btn.dataset.pomodoroIncludeInstances === "true";
                 const dialog = new PomodoroSessionsDialog(
@@ -1624,7 +1624,7 @@ export class TaskNoteDOMManager {
             e.preventDefault();
             e.stopPropagation();
             try {
-                const { BlockRemindersDialog } = await import("../components/BlockRemindersDialog");
+                const { BlockRemindersDialog } = await import("../BlockRemindersDialog");
                 const dialog = new BlockRemindersDialog(blockId, this.plugin);
                 await dialog.show();
             } catch (err) {
@@ -1678,7 +1678,7 @@ export class TaskNoteDOMManager {
             return;
         }
 
-        const { ProjectKanbanView } = await import("../components/ProjectKanbanView");
+        const { ProjectKanbanView } = await import("../ProjectKanbanView");
         const tempContainer = document.createElement("div");
         const tempView = new ProjectKanbanView(tempContainer, this.plugin, projectId);
         await tempView.showMilestoneTasksDialog(milestone, groupId);

@@ -38,7 +38,7 @@ import { resolveAudioPath } from "./utils/audioUtils";
 import { showVipDialog } from "./components/vip/VipDialog";
 import { performDataMigration } from "./utils/dataMigration";
 import { initIcsSync, initIcsSubscriptionSync, handleIcsSyncSettingsChange, cleanupIcsSync } from "./utils/icsSync";
-import { TaskNoteDOMManager } from "./utils/taskNoteDOM";
+import { TaskNoteDOMManager } from "./components/render/taskNoteDOM";
 import { addDaysToDate, generateRepeatInstances, getDaysDifference, getRelativeReminderWindow } from "./utils/repeatUtils";
 import { getDockItemSelector, setDockBadgeByType as applyDockBadgeByType } from "./utils/addDockBadge";
 import { shouldTreatStartDateOnlyAsOverdue } from "./utils/startDateOverdue";
