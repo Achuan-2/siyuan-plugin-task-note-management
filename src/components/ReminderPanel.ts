@@ -7050,9 +7050,58 @@ export class ReminderPanel {
         }
     }
 
-    private showReminderContextMenu(event: { clientX: number; clientY: number }, reminder: any) {
+    private async showReminderContextMenu(event: { clientX: number; clientY: number }, reminder: any) {
         const menu = new Menu("reminderContextMenu");
         const today = getLogicalDateString();
+
+        // 状态切换：显示“设置状态”子菜单，列出所有可用状态（优先使用项目自定义的看板状态）
+        const currentStatus = this.getReminderKanbanStatusId(reminder);
+        const projectId = reminder.projectId;
+
+        const { ProjectManager } = await import('../utils/projectManager');
+        const projectManager = ProjectManager.getInstance(this.plugin);
+
+        let statuses: KanbanStatus[] = [];
+        if (projectId) {
+            statuses = await projectManager.getProjectKanbanStatuses(projectId);
+        } else {
+            statuses = projectManager.getDefaultKanbanStatuses();
+        }
+
+        let statusCandidates = statuses;
+        const taskGroupId = reminder.customGroupId;
+        if (projectId && taskGroupId && taskGroupId !== 'ungrouped') {
+            try {
+                const projectGroups = await projectManager.getProjectCustomGroups(projectId);
+                const taskGroup = projectGroups.find((group: any) => group.id === taskGroupId);
+                if (taskGroup && Array.isArray(taskGroup.visibleStatusIds) && taskGroup.visibleStatusIds.length > 0) {
+                    const visibleStatusIdSet = new Set(taskGroup.visibleStatusIds);
+                    const filteredStatuses = statuses.filter(status => visibleStatusIdSet.has(status.id));
+                    if (filteredStatuses.length > 0) {
+                        statusCandidates = filteredStatuses;
+                    }
+                }
+            } catch (error) {
+                console.warn('[ReminderPanel] 加载分组可见状态失败，使用全部状态:', error);
+            }
+        }
+
+        const statusMenuItems: any[] = [];
+        statusCandidates.forEach((s: any) => {
+            statusMenuItems.push({
+                iconHTML: s.icon || '',
+                label: s.name || s.id,
+                current: currentStatus === s.id,
+                click: () => {
+                    if (reminder.isRepeatInstance) {
+                        const originalInstanceDate = (reminder.id && reminder.id.includes('_')) ? reminder.id.split('_').pop()! : reminder.date;
+                        this.setReminderKanbanStatus(reminder.originalId, s.id, true, originalInstanceDate);
+                    } else {
+                        this.setReminderKanbanStatus(reminder.id, s.id, false);
+                    }
+                }
+            });
+        });
 
         // --- 订阅任务处理 ---
         if (reminder.isSubscribed && reminder.subscriptionType !== 'caldav') {
@@ -7545,6 +7594,11 @@ export class ReminderPanel {
                     label: i18n("setCategory"),
                     submenu: createCategoryMenuItems(false)
                 });
+                menu.addItem({
+                    iconHTML: "🔀",
+                    label: i18n('setStatus') || '设置状态',
+                    submenu: statusMenuItems
+                });
                 menu.addSeparator();
             }
 
@@ -7672,6 +7726,11 @@ export class ReminderPanel {
                     iconHTML: "🏷️",
                     label: i18n("setCategory"),
                     submenu: createCategoryMenuItems()
+                });
+                menu.addItem({
+                    iconHTML: "🔀",
+                    label: i18n('setStatus') || '设置状态',
+                    submenu: statusMenuItems
                 });
                 menu.addSeparator();
             }
@@ -8961,6 +9020,224 @@ export class ReminderPanel {
 
 
 
+
+    private async refreshRecurringMobileNotifications(reminderData: any, originalIds: Iterable<string>): Promise<void> {
+        const uniqueIds = Array.from(new Set(Array.from(originalIds || []).filter(Boolean)));
+        if (uniqueIds.length === 0) return;
+
+        if (this.plugin?.updateMobileNotification) {
+            for (const originalId of uniqueIds) {
+                const originalReminder = reminderData?.[originalId];
+                if (!originalReminder) continue;
+                try {
+                    await this.plugin.updateMobileNotification(originalReminder);
+                } catch (e) {
+                    console.warn('刷新重复任务移动端通知失败:', originalId, e);
+                }
+            }
+            return;
+        }
+
+        if (this.plugin?.cancelMobileNotification) {
+            for (const originalId of uniqueIds) {
+                try {
+                    await this.plugin.cancelMobileNotification(originalId);
+                } catch (e) {
+                    console.warn('取消重复任务移动端通知失败:', originalId, e);
+                }
+            }
+        }
+    }
+
+    private async setReminderKanbanStatus(reminderId: string, newStatus: string, isRepeatInstance?: boolean, instanceDate?: string) {
+        try {
+            const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
+            const actualTaskId = reminderId;
+
+            const affectedBlockIds = new Set<string>();
+            const recurringOriginalIds = new Set<string>();
+
+            if (isRepeatInstance && instanceDate) {
+                const original = reminderData[actualTaskId];
+                if (!original) {
+                    showMessage(i18n("reminderNotExist"));
+                    return;
+                }
+
+                recurringOriginalIds.add(actualTaskId);
+                const descIds = this.getAllDescendantIds(actualTaskId, new Map(Object.entries(reminderData)));
+                descIds.forEach(id => recurringOriginalIds.add(id));
+
+                const instanceMod = original.repeat?.instanceModifications?.[instanceDate] || {};
+                const instanceBlockId = instanceMod.blockId !== undefined ? instanceMod.blockId : original.blockId;
+                if (instanceBlockId) affectedBlockIds.add(instanceBlockId);
+
+                const completedTaskIds: string[] = [];
+
+                if (newStatus === 'completed') {
+                    if (!original.repeat) original.repeat = {};
+                    if (!original.repeat.completedInstances) original.repeat.completedInstances = [];
+                    if (!original.repeat.completedTimes) original.repeat.completedTimes = {};
+
+                    if (!original.repeat.completedInstances.includes(instanceDate)) {
+                        original.repeat.completedInstances.push(instanceDate);
+                    }
+                    original.repeat.completedTimes[instanceDate] = getLocalDateTimeString(new Date());
+
+                    const childIds = await this.completeAllChildTasks(actualTaskId, reminderData, affectedBlockIds, instanceDate);
+                    completedTaskIds.push(actualTaskId, ...childIds);
+
+                    if (this.plugin?.cancelMobileNotification) {
+                        for (const taskId of completedTaskIds) {
+                            try {
+                                await this.plugin.cancelMobileNotification(taskId);
+                            } catch (e) {
+                                console.warn('取消移动端通知失败:', taskId, e);
+                            }
+                        }
+                    }
+                } else {
+                    if (!original.repeat) original.repeat = {};
+                    if (!original.repeat.instanceModifications) original.repeat.instanceModifications = {};
+                    if (!original.repeat.instanceModifications[instanceDate]) {
+                        original.repeat.instanceModifications[instanceDate] = {};
+                    }
+                    original.repeat.instanceModifications[instanceDate].kanbanStatus = newStatus;
+
+                    if (original.repeat?.completedInstances) {
+                        const idx = original.repeat.completedInstances.indexOf(instanceDate);
+                        if (idx > -1) original.repeat.completedInstances.splice(idx, 1);
+                    }
+                    if (original.repeat?.completedTimes && original.repeat.completedTimes[instanceDate]) {
+                        delete original.repeat.completedTimes[instanceDate];
+                    }
+                    if (original.repeat?.instanceCompletedTimes && original.repeat.instanceCompletedTimes[instanceDate]) {
+                        delete original.repeat.instanceCompletedTimes[instanceDate];
+                    }
+
+                    // For repeat instances, propagate new status to instance modifications of ghost descendant subtasks
+                    const parentTask = reminderData[actualTaskId];
+                    let originalParentStatus = '';
+                    if (parentTask) {
+                        const parentInstMod = parentTask.repeat?.instanceModifications?.[instanceDate];
+                        const tempParentInst = {
+                            ...parentTask,
+                            isRepeatInstance: true,
+                            originalId: parentTask.id,
+                            date: instanceDate,
+                            kanbanStatus: parentInstMod?.kanbanStatus,
+                            completed: parentInstMod?.completed
+                        };
+                        originalParentStatus = this.getReminderKanbanStatusId(tempParentInst);
+                    }
+
+                    for (const oid of descIds) {
+                        const originalTask = reminderData[oid];
+                        if (!originalTask) continue;
+
+                        const subInstMod = originalTask.repeat?.instanceModifications?.[instanceDate];
+                        const isCompleted = !!(originalTask.repeat?.completedInstances?.includes(instanceDate));
+                        const tempSubInst = {
+                            ...originalTask,
+                            isRepeatInstance: true,
+                            originalId: originalTask.id,
+                            date: instanceDate,
+                            kanbanStatus: subInstMod?.kanbanStatus,
+                            completed: isCompleted
+                        };
+                        const originalItemStatus = this.getReminderKanbanStatusId(tempSubInst);
+                        
+                        if (originalItemStatus === originalParentStatus && !isCompleted) {
+                            if (!originalTask.repeat) originalTask.repeat = {};
+                            if (!originalTask.repeat.instanceModifications) originalTask.repeat.instanceModifications = {};
+                            if (!originalTask.repeat.instanceModifications[instanceDate]) {
+                                originalTask.repeat.instanceModifications[instanceDate] = {};
+                            }
+                            originalTask.repeat.instanceModifications[instanceDate].kanbanStatus = newStatus;
+
+                            if (originalTask.blockId) affectedBlockIds.add(originalTask.blockId);
+                        }
+                    }
+                }
+            } else {
+                const reminder = reminderData[actualTaskId];
+                if (!reminder) {
+                    showMessage(i18n("reminderNotExist"));
+                    return;
+                }
+
+                if (newStatus === 'completed') {
+                    reminder.completed = true;
+                    reminder.completedTime = getLocalDateTimeString(new Date());
+                    this.syncCustomProgressOnCompletion(reminder, true);
+                    if (reminder.blockId) affectedBlockIds.add(reminder.blockId);
+
+                    const childIds = await this.completeAllChildTasks(actualTaskId, reminderData, affectedBlockIds);
+
+                    if (this.plugin?.cancelMobileNotification) {
+                        for (const taskId of [actualTaskId, ...childIds]) {
+                            try {
+                                await this.plugin.cancelMobileNotification(taskId);
+                            } catch (e) {
+                                console.warn('取消移动端通知失败:', taskId, e);
+                            }
+                        }
+                    }
+                } else {
+                    const oldStatus = this.getReminderKanbanStatusId(reminder);
+                    reminder.completed = false;
+                    delete reminder.completedTime;
+                    
+                    if (newStatus === 'doing') {
+                        reminder.kanbanStatus = 'doing';
+                    } else {
+                        reminder.kanbanStatus = newStatus;
+                    }
+
+                    if (reminder.blockId) affectedBlockIds.add(reminder.blockId);
+
+                    const descIds = this.getAllDescendantIds(actualTaskId, new Map(Object.entries(reminderData)));
+                    for (const did of descIds) {
+                        const desc = reminderData[did];
+                        if (!desc) continue;
+                        
+                        const isSubtaskRecurring = desc.isRepeatInstance || (desc.repeat && desc.repeat.enabled);
+                        if (!desc.completed && !isSubtaskRecurring && this.getReminderKanbanStatusId(desc) === oldStatus) {
+                            desc.completed = false;
+                            delete desc.completedTime;
+                            desc.kanbanStatus = newStatus === 'doing' ? 'doing' : newStatus;
+                            if (desc.blockId) affectedBlockIds.add(desc.blockId);
+                        }
+                    }
+                }
+            }
+
+            await saveReminders(this.plugin, reminderData);
+
+            // Rebuild mobile notifications
+            await this.refreshRecurringMobileNotifications(reminderData, recurringOriginalIds);
+
+            if (this.plugin && typeof this.plugin.updateBadges === 'function') {
+                this.plugin.updateBadges();
+            }
+
+            // Update block bookmarks
+            for (const bId of affectedBlockIds) {
+                try {
+                    await updateBindBlockAtrrs(bId, this.plugin);
+                } catch (err) {
+                    console.warn('更新任务块属性失败:', bId, err);
+                }
+            }
+
+            await this.loadReminders();
+            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
+            showMessage(i18n("operationSuccessful"));
+        } catch (error) {
+            console.error('设置任务状态失败:', error);
+            showMessage(i18n("operationFailed"));
+        }
+    }
 
     // 新增：删除单个重复事件实例
     private async deleteInstanceOnly(reminder: any) {
