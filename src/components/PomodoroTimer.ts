@@ -197,14 +197,18 @@ export class PomodoroTimer {
         }
 
         // 如果有继承状态，应用继承的状态
-        // 如果有继承状态，应用继承的状态
-        if (inheritState && inheritState.isRunning) {
-            // 无论是否同任务，只要是继承运行状态，就视为上一段专注结束，先记录
-            // 注意：这会导致同任务继承时被拆分为两条记录，但能保证时间统计准确
-            this.recordPartialWorkSession(inheritState.reminderId, inheritState.reminderTitle, inheritState);
-            this.applyInheritedState(inheritState);
-            // reminderUpdate事件触发更新
-            window.dispatchEvent(new CustomEvent('reminderUpdated'));
+        if (inheritState) {
+            if (inheritState.isRunning) {
+                // 无论是否同任务，只要是继承运行状态，就视为上一段专注结束，先记录
+                // 注意：这会导致同任务继承时被拆分为两条记录，但能保证时间统计准确
+                this.recordPartialWorkSession(inheritState.reminderId, inheritState.reminderTitle, inheritState);
+                this.applyInheritedState(inheritState);
+                // reminderUpdate事件触发更新
+                window.dispatchEvent(new CustomEvent('reminderUpdated'));
+            } else {
+                // 如果没有运行，但有继承状态，依然继承窗口模式和位置
+                this.applyInheritedWindowSettings(inheritState);
+            }
         }
 
         if (orphanedWindow) {
@@ -305,6 +309,14 @@ export class PomodoroTimer {
             void this.ensureActiveWorkSessionStarted(this.activeWorkSessionStartTime || this.phaseStartTime || Date.now());
         }
 
+        // 继承窗口模式与设置
+        this.applyInheritedWindowSettings(inheritState);
+    }
+
+    /**
+     * 仅继承窗口模式及位置设置（用于未运行状态下切换任务）
+     */
+    private applyInheritedWindowSettings(inheritState: any) {
         // 保存继承的窗口位置信息（稍后在窗口创建后应用）
         if (inheritState.windowBounds) {
             this.inheritedWindowBounds = inheritState.windowBounds;
@@ -5240,8 +5252,11 @@ export class PomodoroTimer {
             this.stopBtn.style.display = 'none';
         }
 
-        // 如果是最小化状态，更新最小化显示
+        // 如果是最小化状态，确保 container 包含 minimized 类，并更新最小化显示
         if (this.isMinimized) {
+            if (this.container && !this.container.classList.contains('minimized')) {
+                this.container.classList.add('minimized');
+            }
             this.updateMinimizedDisplay();
             return;
         }
