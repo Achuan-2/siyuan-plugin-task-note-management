@@ -8384,17 +8384,15 @@ export class ProjectKanbanView {
             return formatDateWithYear(new Date(dateStr + 'T00:00:00'));
         };
 
-        // 使用逻辑日期判断（考虑一天起始时间）
-        const displayDate = task.date || task.endDate;
-        if (!displayDate) {
-            const entries: Array<{ time: string; note?: string }> = [];
+        const getUnexpiredReminderTimesStr = (): string => {
+            const entries: Array<{ time: string; note?: string; everyDay?: boolean }> = [];
             if (Array.isArray(task.reminderTimes)) {
                 task.reminderTimes.forEach((rtItem: any) => {
                     if (!rtItem) return;
                     const rt = typeof rtItem === 'string' ? rtItem : rtItem.time;
                     const note = typeof rtItem === 'string' ? '' : String(rtItem.note || '').trim();
                     if (rt) {
-                        entries.push({ time: rt, note });
+                        entries.push({ time: rt, note, everyDay: !!rtItem.everyDay });
                     }
                 });
             }
@@ -8406,9 +8404,48 @@ export class ProjectKanbanView {
                 try {
                     const times = entries.map(item => {
                         let s = String(item.time).trim();
-                        let timePart = s.includes('T') ? s.split('T')[1] : s;
-                        const displayTime = timePart ? timePart.substring(0, 5) : '';
-                        return item.note && displayTime ? `${displayTime}（${item.note}）` : displayTime;
+                        let datePart: string | null = null;
+                        let timePart: string | null = null;
+
+                        if (s.includes('T')) {
+                            const parts = s.split('T');
+                            datePart = parts[0];
+                            timePart = parts[1] || null;
+                        } else {
+                            timePart = s;
+                        }
+
+                        let targetDate = datePart || task.date || today;
+                        if (item.everyDay) {
+                            const logicalStart = this.getTaskLogicalDate(task.date, task.time);
+                            const logicalEnd = this.getTaskLogicalDate(task.endDate || task.date, task.endTime || task.time);
+                            if (logicalStart && logicalEnd) {
+                                if (compareDateStrings(today, logicalStart) < 0) {
+                                    if (task.isAvailableToday) {
+                                        targetDate = today;
+                                    } else {
+                                        targetDate = task.date;
+                                    }
+                                } else if (compareDateStrings(today, logicalEnd) > 0) {
+                                    targetDate = task.endDate || task.date;
+                                } else {
+                                    targetDate = today;
+                                }
+                            }
+                        }
+
+                        const logicalTarget = this.getTaskLogicalDate(targetDate, timePart || undefined);
+                        if (compareDateStrings(logicalTarget, today) < 0) return ''; // 过去的不显示
+
+                        if (compareDateStrings(logicalTarget, today) === 0) {
+                            const displayTime = timePart ? timePart.substring(0, 5) : '';
+                            return item.note && displayTime ? `${displayTime}（${item.note}）` : displayTime;
+                        } else {
+                            const d = new Date(targetDate + 'T00:00:00');
+                            const ds = d.toLocaleDateString(getLocaleTag(), { month: 'short', day: 'numeric' });
+                            const displayTime = `${ds}${timePart ? ' ' + timePart.substring(0, 5) : ''}`;
+                            return item.note ? `${displayTime}（${item.note}）` : displayTime;
+                        }
                     }).filter(Boolean).join(', ');
                     if (times) {
                         return `⏰${times}`;
@@ -8417,9 +8454,17 @@ export class ProjectKanbanView {
                     console.warn('Kanban format custom times failed', e);
                 }
             }
-            return "未设置日期";
+            return '';
+        };
+
+        // 使用逻辑日期判断（考虑一天起始时间）
+        const displayDate = task.date || task.endDate;
+        if (!displayDate) {
+            const timesStr = getUnexpiredReminderTimesStr();
+            return timesStr ? timesStr : "未设置日期";
         }
 
+        let baseResult = '';
         const logicalStart = this.getTaskLogicalDate(task.date || task.endDate, task.date ? task.time : (task.endTime || task.time));
         const logicalEnd = this.getTaskLogicalDate(task.endDate || task.date, task.endTime || task.time);
 
@@ -8428,47 +8473,51 @@ export class ProjectKanbanView {
             let endDateStr = formatDateLabel(task.endDate, logicalEnd);
             const endTime = task.endTime || task.time;
             if (endTime) endDateStr += ` ${endTime}`;
-            return endDateStr;
-        }
+            baseResult = endDateStr;
+        } else {
+            // 如果有开始时间，按逻辑日期显示
+            let dateStr = formatDateLabel(task.date, logicalStart);
 
-        // 如果有开始时间，按逻辑日期显示
-        let dateStr = formatDateLabel(task.date, logicalStart);
-
-        // 如果是农历循环事件，添加农历日期显示
-        if (task.repeat?.enabled && (task.repeat.type === 'lunar-monthly' || task.repeat.type === 'lunar-yearly')) {
-            try {
-                const lunarStr = getSolarDateLunarString(task.date);
-                if (lunarStr) {
-                    dateStr = `${dateStr} (${lunarStr})`;
+            // 如果是农历循环事件，添加农历日期显示
+            if (task.repeat?.enabled && (task.repeat.type === 'lunar-monthly' || task.repeat.type === 'lunar-yearly')) {
+                try {
+                    const lunarStr = getSolarDateLunarString(task.date);
+                    if (lunarStr) {
+                        dateStr = `${dateStr} (${lunarStr})`;
+                    }
+                } catch (error) {
+                    console.error('Failed to format lunar date:', error);
                 }
-            } catch (error) {
-                console.error('Failed to format lunar date:', error);
+            }
+
+            let endDateStr = '';
+            if (task.endDate && task.endDate !== task.date) {
+                endDateStr = formatDateLabel(task.endDate, logicalEnd);
+            }
+
+            if (task.time) {
+                dateStr += ` ${task.time}`;
+            }
+
+            if (endDateStr) {
+                // 如果有截止时间，加到截止日期后面
+                if (task.endTime) {
+                    endDateStr += ` ${task.endTime}`;
+                }
+                baseResult = `${dateStr} → ${endDateStr}`;
+            } else if (task.endTime && task.endTime !== task.time) {
+                // 如果是同一天，但是有结束时间（比如 14:00 - 16:00）
+                baseResult = `${dateStr} - ${task.endTime}`;
+            } else {
+                baseResult = dateStr || "未设置日期";
             }
         }
 
-        let endDateStr = '';
-        if (task.endDate && task.endDate !== task.date) {
-            endDateStr = formatDateLabel(task.endDate, logicalEnd);
+        const timesStr = getUnexpiredReminderTimesStr();
+        if (timesStr) {
+            baseResult += ` ${timesStr}`;
         }
-
-        if (task.time) {
-            dateStr += ` ${task.time}`;
-        }
-
-        if (endDateStr) {
-            // 如果有截止时间，加到截止日期后面
-            if (task.endTime) {
-                endDateStr += ` ${task.endTime}`;
-            }
-            return `${dateStr} → ${endDateStr} `;
-        }
-
-        // 如果是同一天，但是有结束时间（比如 14:00 - 16:00）
-        if (task.endTime && task.endTime !== task.time) {
-            return `${dateStr} - ${task.endTime}`;
-        }
-
-        return dateStr || "未设置日期";
+        return baseResult;
     }
 
 

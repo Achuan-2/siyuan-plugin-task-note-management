@@ -5,7 +5,7 @@ import { CategoryManager } from "../utils/categoryManager";
 import { ProjectManager } from "../utils/projectManager";
 import { QuickReminderDialog } from "./QuickReminderDialog";
 import { TaskRenderer } from "./render/TaskRenderer";
-import { generateRepeatInstances } from "../utils/repeatUtils";
+import { generateRepeatInstances, resolveRepeatReminderTimes, addDaysToDate, getDaysDifference } from "../utils/repeatUtils";
 import { i18n } from "../pluginInstance";
 
 export class DocumentReminderDialog {
@@ -274,7 +274,28 @@ export class DocumentReminderDialog {
                 (reminder.blockId && reminder.blockId.startsWith(this.documentId));
 
             if (belongsToDocument) {
-                reminders.push(reminder);
+                if (reminder.repeat?.enabled) {
+                    const instanceDateVal = reminder.date;
+                    const defaultEndDate = reminder.endDate && reminder.date
+                        ? addDaysToDate(instanceDateVal, getDaysDifference(reminder.date, reminder.endDate))
+                        : undefined;
+                    const instanceEndDate = reminder.endDate !== undefined ? reminder.endDate : defaultEndDate;
+                    const reminderTimes = resolveRepeatReminderTimes(
+                        reminder.reminderTimes,
+                        instanceDateVal,
+                        instanceEndDate,
+                        reminder.date,
+                        reminder.endDate
+                    );
+                    reminders.push({
+                        ...reminder,
+                        date: instanceDateVal,
+                        endDate: instanceEndDate,
+                        reminderTimes
+                    });
+                } else {
+                    reminders.push(reminder);
+                }
 
                 // 如果是重复事件，生成实例
                 if (reminder.repeat?.enabled) {
@@ -301,6 +322,7 @@ export class DocumentReminderDialog {
                                 endDate: instance.endDate,
                                 time: instance.time,
                                 endTime: instance.endTime,
+                                reminderTimes: instance.reminderTimes,
                                 isRepeatInstance: true,
                                 originalId: instance.originalId,
                                 instanceDate: originalKey,

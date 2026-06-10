@@ -6,6 +6,7 @@ import { ProjectManager } from "../utils/projectManager";
 import { i18n } from "../pluginInstance";
 import { TaskRenderer } from "./render/TaskRenderer";
 import { PomodoroRecordManager } from "../utils/pomodoroRecord";
+import { resolveRepeatReminderTimes, addDaysToDate, getDaysDifference } from "../utils/repeatUtils";
 
 /**
  * 块绑定任务查看对话框
@@ -150,7 +151,30 @@ export class BlockRemindersDialog {
     private resolveBoundReminders(reminderData: any, reminderIds: string[]): any[] {
         return reminderIds
             .map(id => {
-                if (reminderData[id]) return reminderData[id];
+                if (reminderData[id]) {
+                    const reminder = reminderData[id];
+                    if (reminder.repeat?.enabled) {
+                        const instanceDateVal = reminder.date;
+                        const defaultEndDate = reminder.endDate && reminder.date
+                            ? addDaysToDate(instanceDateVal, getDaysDifference(reminder.date, reminder.endDate))
+                            : undefined;
+                        const instanceEndDate = reminder.endDate !== undefined ? reminder.endDate : defaultEndDate;
+                        const reminderTimes = resolveRepeatReminderTimes(
+                            reminder.reminderTimes,
+                            instanceDateVal,
+                            instanceEndDate,
+                            reminder.date,
+                            reminder.endDate
+                        );
+                        return {
+                            ...reminder,
+                            date: instanceDateVal,
+                            endDate: instanceEndDate,
+                            reminderTimes
+                        };
+                    }
+                    return reminder;
+                }
 
                 const splitIndex = id.lastIndexOf('_');
                 if (splitIndex <= 0) return null;
@@ -167,6 +191,22 @@ export class BlockRemindersDialog {
                 const completedTimes = originalReminder.repeat?.completedTimes || originalReminder.repeat?.instanceCompletedTimes || {};
                 const completed = completedInstances.includes(instanceDate);
 
+                const instanceDateVal = instanceMod.date !== undefined ? instanceMod.date : instanceDate;
+                const defaultEndDate = originalReminder.endDate && originalReminder.date
+                    ? addDaysToDate(instanceDateVal, getDaysDifference(originalReminder.date, originalReminder.endDate))
+                    : undefined;
+                const instanceEndDate = instanceMod.endDate !== undefined ? instanceMod.endDate : defaultEndDate;
+                const reminderTimesSource = instanceMod.reminderTimes !== undefined ? instanceMod.reminderTimes : originalReminder.reminderTimes;
+                const reminderTimes = instanceMod.preservedFromSeriesEdit
+                    ? reminderTimesSource || undefined
+                    : resolveRepeatReminderTimes(
+                        reminderTimesSource,
+                        instanceDateVal,
+                        instanceEndDate,
+                        originalReminder.date,
+                        originalReminder.endDate
+                    );
+
                 return {
                     ...originalReminder,
                     ...instanceMod,
@@ -177,6 +217,11 @@ export class BlockRemindersDialog {
                     completed,
                     completedAt: completed ? completedTimes[instanceDate] : undefined,
                     completedTime: completed ? completedTimes[instanceDate] : undefined,
+                    date: instanceDateVal,
+                    endDate: instanceEndDate,
+                    time: instanceMod.time !== undefined ? instanceMod.time : originalReminder.time,
+                    endTime: instanceMod.endTime !== undefined ? instanceMod.endTime : originalReminder.endTime,
+                    reminderTimes,
                     projectId: instanceMod.projectId !== undefined ? instanceMod.projectId : originalReminder.projectId,
                     customGroupId: instanceMod.customGroupId !== undefined ? instanceMod.customGroupId : originalReminder.customGroupId,
                     customGroupName: instanceMod.customGroupName !== undefined ? instanceMod.customGroupName : originalReminder.customGroupName

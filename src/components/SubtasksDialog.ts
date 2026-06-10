@@ -9,6 +9,7 @@ import { CategoryManager } from "../utils/categoryManager";
 import { ProjectManager } from "../utils/projectManager";
 import { getLogicalDateString } from "../utils/dateUtils";
 import { getSortCriterionName, loadSortConfig, saveSortConfig, type SortCriterion } from "../utils/sortConfig";
+import { resolveRepeatReminderTimes, addDaysToDate, getDaysDifference } from "../utils/repeatUtils";
 
 export class SubtasksDialog {
     private dialog: Dialog;
@@ -220,13 +221,52 @@ export class SubtasksDialog {
         const addTask = (task: any, templateParentId?: string) => {
             if (!task?.id || seen.has(task.id)) return;
             seen.add(task.id);
-            combined.push(task);
+            
+            let resolvedTask = task;
+            if (task.repeat?.enabled && !task.isRepeatInstance) {
+                const instanceDateVal = task.date;
+                const defaultEndDate = task.endDate && task.date
+                    ? addDaysToDate(instanceDateVal, getDaysDifference(task.date, task.endDate))
+                    : undefined;
+                const instanceEndDate = task.endDate !== undefined ? task.endDate : defaultEndDate;
+                const reminderTimes = resolveRepeatReminderTimes(
+                    task.reminderTimes,
+                    instanceDateVal,
+                    instanceEndDate,
+                    task.date,
+                    task.endDate
+                );
+                resolvedTask = {
+                    ...task,
+                    date: instanceDateVal,
+                    endDate: instanceEndDate,
+                    reminderTimes
+                };
+            }
+            
+            combined.push(resolvedTask);
             collectChildren(task.id, templateParentId);
         };
 
         const createGhostTask = (templateTask: any, renderedParentId: string) => {
             const ghostId = `${templateTask.id}_${instanceDate}`;
             const instanceMod = templateTask.repeat?.instanceModifications?.[instanceDate!] || {};
+            const instanceDateVal = instanceMod.date !== undefined ? instanceMod.date : instanceDate!;
+            const defaultEndDate = templateTask.endDate && templateTask.date
+                ? addDaysToDate(instanceDateVal, getDaysDifference(templateTask.date, templateTask.endDate))
+                : undefined;
+            const instanceEndDate = instanceMod.endDate !== undefined ? instanceMod.endDate : defaultEndDate;
+            const reminderTimesSource = instanceMod.reminderTimes !== undefined ? instanceMod.reminderTimes : templateTask.reminderTimes;
+            const reminderTimes = instanceMod.preservedFromSeriesEdit
+                ? reminderTimesSource || undefined
+                : resolveRepeatReminderTimes(
+                    reminderTimesSource,
+                    instanceDateVal,
+                    instanceEndDate,
+                    templateTask.date,
+                    templateTask.endDate
+                );
+
             return {
                 ...templateTask,
                 ...instanceMod,
@@ -236,6 +276,11 @@ export class SubtasksDialog {
                 originalId: templateTask.id,
                 completed: templateTask.repeat?.completedInstances?.includes(instanceDate!) || false,
                 title: instanceMod.title || templateTask.title || '(无标题)',
+                date: instanceDateVal,
+                endDate: instanceEndDate,
+                time: instanceMod.time !== undefined ? instanceMod.time : templateTask.time,
+                endTime: instanceMod.endTime !== undefined ? instanceMod.endTime : templateTask.endTime,
+                reminderTimes
             };
         };
 
