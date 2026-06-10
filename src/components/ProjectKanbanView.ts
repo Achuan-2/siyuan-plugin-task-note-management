@@ -9452,13 +9452,12 @@ export class ProjectKanbanView {
             // 乐观更新所有子任务
             const childIds: string[] = [];
             if (completed) {
-                const parentStatus = this.getTaskStatus(optimisticTask);
                 const descendantIds = this.getAllDescendantIds(task.id, this.tasks);
                 descendantIds.forEach(childId => {
                     const localChild = this.tasks.find(t => t.id === childId);
                     if (localChild && !localChild.completed) {
                         const childStatus = this.getTaskStatus(localChild);
-                        if (!this.isAbandonedStatus(childStatus) && childStatus === parentStatus) {
+                        if (!this.isAbandonedStatus(childStatus)) {
                             localChild.completed = true;
                             this.syncCustomProgressOnCompletion(localChild, true);
                             localChild.completedTime = optimisticTask.completedTime;
@@ -10016,18 +10015,12 @@ export class ProjectKanbanView {
             const currentTime = getLocalDateTimeString(new Date());
             let completedCount = 0;
 
-            const parentTask = reminderData[parentId];
-            const originalParentStatus = parentTask ? this.getTaskStatus(parentTask) : '';
-
             // 自动完成所有子任务
             for (const childId of descendantIds) {
                 const childTask = reminderData[childId];
                 if (childTask && !childTask.completed) {
                     const originalItemStatus = this.getTaskStatus(childTask);
                     if (this.isAbandonedStatus(originalItemStatus)) {
-                        continue;
-                    }
-                    if (originalParentStatus && originalItemStatus !== originalParentStatus) {
                         continue;
                     }
 
@@ -10068,17 +10061,6 @@ export class ProjectKanbanView {
 
             // 1. 处理 Ghost 子任务 (基于 originalId 的后代)
             const ghostDescendantIds = this.getAllDescendantIds(parentId, reminderData);
-            const parentTask = reminderData[parentId];
-            const parentInstMod = parentTask?.repeat?.instanceModifications?.[date];
-            const tempParentInst = parentTask ? {
-                ...parentTask,
-                isRepeatInstance: true,
-                originalId: parentTask.id,
-                date: date,
-                kanbanStatus: parentInstMod?.kanbanStatus,
-                completed: parentInstMod?.completed
-            } : null;
-            const originalParentStatus = tempParentInst ? this.getTaskStatus(tempParentInst) : '';
 
             for (const childId of ghostDescendantIds) {
                 const childTask = reminderData[childId];
@@ -10097,9 +10079,6 @@ export class ProjectKanbanView {
                 const originalItemStatus = this.getTaskStatus(tempChildInst);
 
                 if (this.isAbandonedStatus(originalItemStatus)) {
-                    continue;
-                }
-                if (originalParentStatus && originalItemStatus !== originalParentStatus) {
                     continue;
                 }
 
@@ -10140,9 +10119,6 @@ export class ProjectKanbanView {
                 if (childTask && !childTask.completed) {
                     const originalItemStatus = this.getTaskStatus(childTask);
                     if (this.isAbandonedStatus(originalItemStatus)) {
-                        continue;
-                    }
-                    if (originalParentStatus && originalItemStatus !== originalParentStatus) {
                         continue;
                     }
 
