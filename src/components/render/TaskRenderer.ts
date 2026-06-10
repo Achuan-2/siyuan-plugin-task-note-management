@@ -754,6 +754,11 @@ export class TaskRenderer {
         checkbox.type = 'checkbox';
         checkbox.className = 'reminder-task-checkbox';
         checkbox.checked = !!task.completed;
+        const taskStatus = context.getTaskStatus ? context.getTaskStatus(task) : (task.kanbanStatus || task.status);
+        const isAbandoned = !task.completed && taskStatus === 'abandoned';
+        if (isAbandoned) {
+            checkbox.classList.add('reminder-task-checkbox--abandoned');
+        }
         const isEditable = !task.isSubscribed || (task.subscriptionType === 'caldav' && task.caldavEditable);
         if (!isEditable) {
             checkbox.disabled = true;

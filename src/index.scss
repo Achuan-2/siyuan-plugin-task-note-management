@@ -1554,6 +1554,21 @@
         transform: scale(1);
         box-shadow: inset 1em 1em var(--b3-theme-surface);
     }
+
+    .reminder-task-checkbox--abandoned {
+        background: var(--b3-theme-error) !important;
+        border-color: var(--b3-theme-error) !important;
+    }
+
+    .reminder-task-checkbox--abandoned::before {
+        content: "" !important;
+        width: 0.55em !important;
+        height: 0.55em !important;
+        transform: scale(1) !important;
+        box-shadow: inset 1em 1em var(--b3-theme-surface) !important;
+        clip-path: polygon(20% 0%, 0% 20%, 30% 50%, 0% 80%, 20% 100%, 50% 70%, 80% 100%, 100% 80%, 70% 50%, 100% 20%, 80% 0%, 50% 30%) !important;
+        transform-origin: center !important;
+    }
 }
 
 .collapse-btn {

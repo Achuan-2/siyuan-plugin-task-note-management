@@ -608,7 +608,8 @@ export class SubtasksDialog {
             projectCache,
             isMobileClient: this.plugin?.isInMobileApp,
             isTaskCollapsed: (task: any) => this.collapsedSubtaskIds.has(task.id),
-            isReminderPinned: (t: any) => !!t.pinned
+            isReminderPinned: (t: any) => !!t.pinned,
+            getTaskStatus: (t: any) => t.completed ? 'completed' : (t.kanbanStatus || t.status || 'todo')
         };
         const callbacks: TaskRenderCallbacks = {
             onCheckboxClick: (task: any, checked: boolean) => {

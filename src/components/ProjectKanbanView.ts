@@ -15132,33 +15132,43 @@ export class ProjectKanbanView {
             }
         }
 
-        if ('completed' in updates) {
+        if ('completed' in updates || 'kanbanStatus' in updates) {
             const checkbox = taskEl.querySelector('.kanban-task-checkbox, .reminder-task-checkbox') as HTMLInputElement;
-            if (checkbox) checkbox.checked = task.completed;
-            taskEl.style.opacity = task.completed ? '0.5' : '1';
+            if (checkbox) {
+                checkbox.checked = !!task.completed;
+                const status = this.getTaskStatus(task);
+                if (!task.completed && status === 'abandoned') {
+                    checkbox.classList.add('reminder-task-checkbox--abandoned');
+                } else {
+                    checkbox.classList.remove('reminder-task-checkbox--abandoned');
+                }
+            }
+            if ('completed' in updates) {
+                taskEl.style.opacity = task.completed ? '0.5' : '1';
 
-            // 更新完成时间显示
-            const infoEl = taskEl.querySelector('.kanban-task-info, .reminder-item__info') as HTMLElement;
-            if (infoEl) {
-                let completedTimeEl = infoEl.querySelector('.kanban-task-completed-time, .reminder-item__completed-time') as HTMLElement;
-                if (task.completed && task.completedTime) {
-                    if (!completedTimeEl) {
-                        completedTimeEl = document.createElement('div');
-                        completedTimeEl.className = 'reminder-item__completed-time';
-                        completedTimeEl.style.cssText = `
-                            font-size: 12px;
-                            color: var(--b3-theme-on-surface);
-                            opacity: 0.7;
-                            display: flex;
-                            align-items: center;
-                            gap: 4px;
-                            margin-bottom: 4px;
-                        `;
-                        infoEl.insertBefore(completedTimeEl, infoEl.firstChild);
+                // 更新完成时间显示
+                const infoEl = taskEl.querySelector('.kanban-task-info, .reminder-item__info') as HTMLElement;
+                if (infoEl) {
+                    let completedTimeEl = infoEl.querySelector('.kanban-task-completed-time, .reminder-item__completed-time') as HTMLElement;
+                    if (task.completed && task.completedTime) {
+                        if (!completedTimeEl) {
+                            completedTimeEl = document.createElement('div');
+                            completedTimeEl.className = 'reminder-item__completed-time';
+                            completedTimeEl.style.cssText = `
+                                font-size: 12px;
+                                color: var(--b3-theme-on-surface);
+                                opacity: 0.7;
+                                display: flex;
+                                align-items: center;
+                                gap: 4px;
+                                margin-bottom: 4px;
+                            `;
+                            infoEl.insertBefore(completedTimeEl, infoEl.firstChild);
+                        }
+                        completedTimeEl.innerHTML = `<span>✅</span><span>完成于: ${getLocalDateTimeString(new Date(task.completedTime))}</span>`;
+                    } else if (completedTimeEl) {
+                        completedTimeEl.remove();
                     }
-                    completedTimeEl.innerHTML = `<span>✅</span><span>完成于: ${getLocalDateTimeString(new Date(task.completedTime))}</span>`;
-                } else if (completedTimeEl) {
-                    completedTimeEl.remove();
                 }
             }
         }
