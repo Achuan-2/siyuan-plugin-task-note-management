@@ -600,6 +600,112 @@
                     border-right-color: var(--b3-theme-primary-light) !important;
                 }
             }
+
+            /* 分割任务样式 (Split Tasks Style) */
+            .fc-event.reminder-split-block {
+                position: relative;
+                
+
+                // 去除分割边缘的圆角并应用锯齿效果 (using mask on pseudo-element for reliable rendering)
+                &.reminder-split-first {
+                    border-top-right-radius: 0 !important;
+                    border-bottom-right-radius: 0 !important;
+                    border-right: none !important; // 移除被分割边缘的直边框
+                    
+                    .fc-event-main-frame {
+                        padding-right: 12px !important;
+                    }
+
+                    &::after {
+                        content: "";
+                        position: absolute;
+                        top: 0;
+                        right: 0;
+                        bottom: 0;
+                        width: 8px;
+                        background-color: var(--b3-theme-background);
+                        -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='16' viewBox='0 0 8 16'%3E%3Cpath d='M0 0 L8 4 L0 8 L8 12 L0 16 L8 16 L8 0 Z'/%3E%3C/svg%3E");
+                        -webkit-mask-size: 8px 16px;
+                        -webkit-mask-repeat: repeat-y;
+                        mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='16' viewBox='0 0 8 16'%3E%3Cpath d='M0 0 L8 4 L0 8 L8 12 L0 16 L8 16 L8 0 Z'/%3E%3C/svg%3E");
+                        mask-size: 8px 16px;
+                        mask-repeat: repeat-y;
+                        z-index: 5;
+                    }
+                }
+                
+                &.reminder-split-last {
+                    border-top-left-radius: 0 !important;
+                    border-bottom-left-radius: 0 !important;
+                    border-left: none !important; // 移除被分割边缘的直边框
+                    
+                    .fc-event-main-frame {
+                        padding-left: 12px !important;
+                    }
+
+                    &::before {
+                        content: "";
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        bottom: 0;
+                        width: 8px;
+                        background-color: var(--b3-theme-background);
+                        -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='16' viewBox='0 0 8 16'%3E%3Cpath d='M8 0 L0 4 L8 8 L0 12 L8 16 L0 16 L0 0 Z'/%3E%3C/svg%3E");
+                        -webkit-mask-size: 8px 16px;
+                        -webkit-mask-repeat: repeat-y;
+                        mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='16' viewBox='0 0 8 16'%3E%3Cpath d='M8 0 L0 4 L8 8 L0 12 L8 16 L0 16 L0 0 Z'/%3E%3C/svg%3E");
+                        mask-size: 8px 16px;
+                        mask-repeat: repeat-y;
+                        z-index: 5;
+                    }
+                }
+                
+                &.reminder-split-middle {
+                    border-radius: 0 !important;
+                    border-left: none !important;
+                    border-right: none !important;
+                    
+                    .fc-event-main-frame {
+                        padding-left: 12px !important;
+                        padding-right: 12px !important;
+                    }
+
+                    &::after {
+                        content: "";
+                        position: absolute;
+                        top: 0;
+                        right: 0;
+                        bottom: 0;
+                        width: 8px;
+                        background-color: var(--b3-theme-background);
+                        -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='16' viewBox='0 0 8 16'%3E%3Cpath d='M0 0 L8 4 L0 8 L8 12 L0 16 L8 16 L8 0 Z'/%3E%3C/svg%3E");
+                        -webkit-mask-size: 8px 16px;
+                        -webkit-mask-repeat: repeat-y;
+                        mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='16' viewBox='0 0 8 16'%3E%3Cpath d='M0 0 L8 4 L0 8 L8 12 L0 16 L8 16 L8 0 Z'/%3E%3C/svg%3E");
+                        mask-size: 8px 16px;
+                        mask-repeat: repeat-y;
+                        z-index: 5;
+                    }
+
+                    &::before {
+                        content: "";
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        bottom: 0;
+                        width: 8px;
+                        background-color: var(--b3-theme-background);
+                        -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='16' viewBox='0 0 8 16'%3E%3Cpath d='M8 0 L0 4 L8 8 L0 12 L8 16 L0 16 L0 0 Z'/%3E%3C/svg%3E");
+                        -webkit-mask-size: 8px 16px;
+                        -webkit-mask-repeat: repeat-y;
+                        mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='16' viewBox='0 0 8 16'%3E%3Cpath d='M8 0 L0 4 L8 8 L0 12 L8 16 L0 16 L0 0 Z'/%3E%3C/svg%3E");
+                        mask-size: 8px 16px;
+                        mask-repeat: repeat-y;
+                        z-index: 5;
+                    }
+                }
+            }
         }
     }
 }

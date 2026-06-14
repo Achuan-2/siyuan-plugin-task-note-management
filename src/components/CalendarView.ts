@@ -7074,7 +7074,7 @@ export class CalendarView {
 
                     if (isCrossDay) {
                         const activeBlocks = this.getActiveBlocks(startDateStr, endDateStr, reminder);
-                        if (activeBlocks.length > 0) {
+                        if (activeBlocks.length > 1) {
                             for (let i = 0; i < activeBlocks.length; i++) {
                                 const block = activeBlocks[i];
                                 const blockReminder = {
@@ -7090,6 +7090,14 @@ export class CalendarView {
                                 const uniqueId = `${reminder.id}_block_${i}`;
                                 this.addEventToList(events, blockReminder, uniqueId, false, reminder.id);
                             }
+                        } else if (activeBlocks.length === 1) {
+                            const block = activeBlocks[0];
+                            const blockReminder = {
+                                ...reminder,
+                                date: block.start,
+                                endDate: block.end
+                            };
+                            this.addEventToList(events, blockReminder, reminder.id, false);
                         }
                     } else {
                         // Check if the single-day task itself is skipped
