@@ -4590,11 +4590,12 @@ export class CalendarView {
                 }
             );
         } else {
+            const actualId = calendarEvent.id.includes('_block_') ? calendarEvent.id.split('_block_')[0] : calendarEvent.id;
             await confirm(
                 i18n("deleteReminder"),
                 i18n("confirmDelete", { title: calendarEvent.title }),
                 () => {
-                    this.performDeleteEvent(calendarEvent.id);
+                    this.performDeleteEvent(actualId);
                 }
             );
         }
@@ -5479,7 +5480,8 @@ export class CalendarView {
         }
 
         const reminder = info.event.extendedProps;
-        const blockId = reminder.blockId || info.event.id; // 兼容旧数据格式
+        const actualEventId = info.event.id.includes('_block_') ? info.event.id.split('_block_')[0] : info.event.id;
+        const blockId = reminder.blockId || actualEventId; // 兼容旧数据格式
 
         // 如果没有绑定块，提示用户绑定块 (订阅任务除外)
         if (!reminder.blockId) {
@@ -6089,8 +6091,110 @@ export class CalendarView {
     private async updateEventTime(reminderId: string, info, isResize: boolean) {
         try {
             const reminderData = await getAllReminders(this.plugin);
+            const actualReminderId = reminderId.includes('_block_') ? reminderId.split('_block_')[0] : reminderId;
 
-            if (reminderData[reminderId]) {
+            if (reminderData[actualReminderId]) {
+                const targetReminder = reminderData[actualReminderId];
+                const originalProps = info.event.extendedProps;
+
+                if (originalProps.isSplitBlock) {
+                    const splitIndex = originalProps.splitIndex ?? 0;
+                    const splitTotal = originalProps.splitTotal ?? 1;
+
+                    if (isResize) {
+                        if (splitIndex === 0) {
+                            // First block: only allow resizing start date
+                            const oldEnd = info.oldEvent.end;
+                            const newEnd = info.event.end;
+                            if (oldEnd && newEnd && oldEnd.getTime() !== newEnd.getTime()) {
+                                info.revert();
+                                return;
+                            }
+
+                            const oldStart = info.oldEvent.start;
+                            const newStart = info.event.start;
+                            const deltaMs = newStart.getTime() - oldStart.getTime();
+
+                            const origStartDt = new Date(originalProps.originalDate + 'T00:00:00');
+                            const shiftedStartDt = new Date(origStartDt.getTime() + deltaMs);
+                            const { dateStr: newStartDateStr, timeStr: newStartTimeStr } = getLocalDateTime(shiftedStartDt);
+
+                            targetReminder.date = newStartDateStr;
+                            if (targetReminder.time && !info.event.allDay) {
+                                targetReminder.time = newStartTimeStr;
+                            }
+                        } else if (splitIndex === splitTotal - 1) {
+                            // Last block: only allow resizing end date
+                            const oldStart = info.oldEvent.start;
+                            const newStart = info.event.start;
+                            if (oldStart && newStart && oldStart.getTime() !== newStart.getTime()) {
+                                info.revert();
+                                return;
+                            }
+
+                            const oldEnd = info.oldEvent.end;
+                            const newEnd = info.event.end;
+                            const deltaMs = newEnd.getTime() - oldEnd.getTime();
+
+                            if (originalProps.originalEndDate) {
+                                const origEndDt = new Date(originalProps.originalEndDate + 'T00:00:00');
+                                const shiftedEndDt = new Date(origEndDt.getTime() + deltaMs);
+                                const { dateStr: newEndDateStr, timeStr: newEndTimeStr } = getLocalDateTime(shiftedEndDt);
+                                targetReminder.endDate = newEndDateStr;
+                                if (targetReminder.endTime && !info.event.allDay) {
+                                    targetReminder.endTime = newEndTimeStr;
+                                }
+                            }
+                        } else {
+                            // Middle blocks cannot be resized at all
+                            info.revert();
+                            return;
+                        }
+                    } else {
+                        // Drag & Drop: shift the entire task by the dragged block's start delta
+                        const oldStart = info.oldEvent.start;
+                        const newStart = info.event.start;
+                        const deltaMs = newStart.getTime() - oldStart.getTime();
+
+                        // Shift original start date
+                        const origStartDt = new Date(originalProps.originalDate + 'T00:00:00');
+                        const shiftedStartDt = new Date(origStartDt.getTime() + deltaMs);
+                        const { dateStr: newStartDateStr } = getLocalDateTime(shiftedStartDt);
+
+                        targetReminder.date = newStartDateStr;
+
+                        // Shift original end date
+                        if (originalProps.originalEndDate) {
+                            const origEndDt = new Date(originalProps.originalEndDate + 'T00:00:00');
+                            const shiftedEndDt = new Date(origEndDt.getTime() + deltaMs);
+                            const { dateStr: newEndDateStr } = getLocalDateTime(shiftedEndDt);
+                            targetReminder.endDate = newEndDateStr;
+                        }
+
+                        // Shift start/end times if they exist and we are not in allDay
+                        if (targetReminder.time && !info.event.allDay) {
+                            const { timeStr } = getLocalDateTime(newStart);
+                            targetReminder.time = timeStr;
+                        }
+                        if (targetReminder.endTime && info.event.end && !info.event.allDay) {
+                            const { timeStr } = getLocalDateTime(info.event.end);
+                            targetReminder.endTime = timeStr;
+                        }
+                    }
+
+                    // Clear notified status if needed
+                    const newStart = info.event.start;
+                    const shouldResetNotified = this.shouldResetNotification(newStart, info.event.allDay);
+                    if (shouldResetNotified) {
+                        delete targetReminder.notified;
+                        delete targetReminder.notifiedEnd;
+                    }
+
+                    await saveReminders(this.plugin, reminderData);
+                    try { window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } })); } catch (err) { /* ignore */ }
+                    return;
+                }
+
                 let newStartDate = info.event.start;
                 let newEndDate = info.event.end;
 
@@ -6451,9 +6555,12 @@ export class CalendarView {
         try {
             calendarEvent = this.normalizeReminderTimeTaskEvent(calendarEvent);
             // 对于重复事件实例，需要使用原始ID来获取原始提醒数据
-            const reminderId = calendarEvent.extendedProps.isRepeated ?
+            let reminderId = calendarEvent.extendedProps.isRepeated ?
                 calendarEvent.extendedProps.originalId :
                 calendarEvent.id;
+            if (reminderId.includes('_block_')) {
+                reminderId = reminderId.split('_block_')[0];
+            }
 
             const reminderData = await getAllReminders(this.plugin);
 
@@ -6961,7 +7068,41 @@ export class CalendarView {
 
                 // If repeat settings exist, do not display the original event (only display instances); otherwise, display the original event
                 if (!reminder.repeat?.enabled) {
-                    this.addEventToList(events, reminder, reminder.id, false);
+                    const startDateStr = reminder.date;
+                    const endDateStr = reminder.endDate || startDateStr;
+                    const isCrossDay = startDateStr && endDateStr && startDateStr !== endDateStr;
+
+                    if (isCrossDay) {
+                        const activeBlocks = this.getActiveBlocks(startDateStr, endDateStr, reminder);
+                        if (activeBlocks.length > 0) {
+                            for (let i = 0; i < activeBlocks.length; i++) {
+                                const block = activeBlocks[i];
+                                const blockReminder = {
+                                    ...reminder,
+                                    date: block.start,
+                                    endDate: block.end,
+                                    isSplitBlock: true,
+                                    originalDate: reminder.date,
+                                    originalEndDate: reminder.endDate,
+                                    splitIndex: i,
+                                    splitTotal: activeBlocks.length
+                                };
+                                const uniqueId = `${reminder.id}_block_${i}`;
+                                this.addEventToList(events, blockReminder, uniqueId, false, reminder.id);
+                            }
+                        }
+                    } else {
+                        // Check if the single-day task itself is skipped
+                        const isSkipped = startDateStr && shouldSkipReminderOnDate(
+                            reminder,
+                            startDateStr,
+                            this.reminderSkipSettings || this.plugin?.settings,
+                            this.holidays as HolidayData
+                        );
+                        if (!isSkipped) {
+                            this.addEventToList(events, reminder, reminder.id, false);
+                        }
+                    }
                     this.addReminderTimeEventsToList(events, reminder, reminder.id, false);
                 } else if (this.showRepeatTasks) {
                     // Generate repeat event instances
@@ -8160,6 +8301,14 @@ export class CalendarView {
                 let dayIndex = 0;
                 for (let d = new Date(startDateObj); d <= endDateObj; d.setDate(d.getDate() + 1), dayIndex++) {
                     const dateStr = getLocalDateString(new Date(d));
+                    const isSkipped = shouldSkipReminderOnDate(
+                        reminder,
+                        dateStr,
+                        this.reminderSkipSettings || this.plugin?.settings,
+                        this.holidays as HolidayData
+                    );
+                    if (isSkipped) continue;
+
                     const eventStart = new Date(`${dateStr}T${normalizedTime}:00`);
                     if (Number.isNaN(eventStart.getTime())) continue;
 
@@ -8235,6 +8384,14 @@ export class CalendarView {
             const parsed = this.parseReminderTimeToDateTime(entry.time, fallbackDate);
             if (!parsed) return;
 
+            const isSkipped = shouldSkipReminderOnDate(
+                reminder,
+                parsed.date,
+                this.reminderSkipSettings || this.plugin?.settings,
+                this.holidays as HolidayData
+            );
+            if (isSkipped) return;
+
             const startDate = new Date(`${parsed.date}T${parsed.time}:00`);
             if (Number.isNaN(startDate.getTime())) return;
 
@@ -8306,6 +8463,50 @@ export class CalendarView {
         });
     }
 
+    private getActiveBlocks(
+        startDateStr: string,
+        endDateStr: string,
+        reminder: any
+    ): Array<{ start: string; end: string }> {
+        const blocks: Array<{ start: string; end: string }> = [];
+        let currentBlockStart: string | null = null;
+        let currentBlockEnd: string | null = null;
+
+        let currentDate = new Date(startDateStr + 'T00:00:00');
+        const finalDate = new Date(endDateStr + 'T00:00:00');
+
+        while (currentDate <= finalDate) {
+            const currentDateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
+            const isSkipped = shouldSkipReminderOnDate(
+                reminder,
+                currentDateStr,
+                this.reminderSkipSettings || this.plugin?.settings,
+                this.holidays as HolidayData
+            );
+
+            if (!isSkipped) {
+                if (currentBlockStart === null) {
+                    currentBlockStart = currentDateStr;
+                }
+                currentBlockEnd = currentDateStr;
+            } else {
+                if (currentBlockStart !== null && currentBlockEnd !== null) {
+                    blocks.push({ start: currentBlockStart, end: currentBlockEnd });
+                    currentBlockStart = null;
+                    currentBlockEnd = null;
+                }
+            }
+
+            currentDate.setDate(currentDate.getDate() + 1);
+        }
+
+        if (currentBlockStart !== null && currentBlockEnd !== null) {
+            blocks.push({ start: currentBlockStart, end: currentBlockEnd });
+        }
+
+        return blocks;
+    }
+
     private addEventToList(events: any[], reminder: any, eventId: string, isRepeated: boolean, originalId?: string) {
         const allowAbandonedDisplay = !!(reminder && reminder._allowAbandonedDisplay);
         if (this.isAbandonedReminder(reminder) && !allowAbandonedDisplay) return;
@@ -8322,17 +8523,41 @@ export class CalendarView {
         // 仅根据是否存在 blockId 决定绑定样式，允许已绑定块的快速提醒显示绑定样式
         classNames += (!reminder.blockId) ? ' no-block-binding' : ' has-block-binding';
 
+        if (reminder.isSplitBlock) {
+            classNames += ' reminder-split-block';
+            if (reminder.splitIndex === 0) {
+                classNames += ' reminder-split-first';
+            } else if (reminder.splitIndex === reminder.splitTotal - 1) {
+                classNames += ' reminder-split-last';
+            } else {
+                classNames += ' reminder-split-middle';
+            }
+        }
+
         // 构建事件对象（优化：直接使用colors.backgroundColor和colors.borderColor）
+        let baseTitle = reminder.title || i18n("unnamedNote");
+        if (reminder.isSplitBlock) {
+            const splitIndex = reminder.splitIndex ?? 0;
+            const splitTotal = reminder.splitTotal ?? 1;
+            if (splitIndex > 0) {
+                baseTitle = '← ' + baseTitle;
+            }
+            if (splitIndex < splitTotal - 1) {
+                baseTitle = baseTitle + ' →';
+            }
+        }
+
         const eventObj: any = {
             id: eventId,
-            title: reminder.title || i18n("unnamedNote"),
+            title: baseTitle,
             backgroundColor: colors.backgroundColor,
             borderColor: colors.borderColor,
             textColor: 'var(--b3-theme-on-background)',
             className: classNames,
             editable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable), // ICS订阅只读，CalDAV可写
             startEditable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable), // ICS订阅只读，CalDAV可写
-            durationEditable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable), // ICS订阅只读，CalDAV可写
+            durationEditable: (!reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable)) && 
+                (!reminder.isSplitBlock || reminder.splitIndex === 0 || reminder.splitIndex === reminder.splitTotal - 1), // 第一和最后一个分割块允许缩放，中间的不行
             extendedProps: {
                 completed: isCompleted,
                 note: reminder.note || '',
@@ -8359,7 +8584,12 @@ export class CalendarView {
                 subscriptionType: reminder.subscriptionType,
                 caldavEditable: reminder.caldavEditable,
                 caldavDeletable: reminder.caldavDeletable,
-                showNoteInCalendar: reminder.showNoteInCalendar
+                showNoteInCalendar: reminder.showNoteInCalendar,
+                isSplitBlock: reminder.isSplitBlock || false,
+                splitIndex: reminder.splitIndex ?? null,
+                splitTotal: reminder.splitTotal ?? null,
+                originalDate: reminder.originalDate || null,
+                originalEndDate: reminder.originalEndDate || null
             }
         };
 
@@ -8384,7 +8614,7 @@ export class CalendarView {
                 if (reminder.time) {
                     const startMonthDay = startDate.length >= 10 ? startDate.substring(5) : startDate;
                     const endMonthDay = endDate.length >= 10 ? endDate.substring(5) : endDate;
-                    eventObj.title = `${reminder.title || i18n("unnamedNote")} (${startMonthDay} ${reminder.time} - ${endMonthDay})`;
+                    eventObj.title = `${baseTitle} (${startMonthDay} ${reminder.time} - ${endMonthDay})`;
                 }
             }
         } else if (endDate && !reminder.date) {
@@ -9855,8 +10085,9 @@ export class CalendarView {
 
     private resolvePomodoroTargetEventId(calendarEvent: any): string {
         const rawId = String(calendarEvent?.id || "").trim();
-        if (rawId && /_(\d{4}-\d{2}-\d{2})$/.test(rawId)) {
-            return rawId;
+        const actualId = rawId.includes('_block_') ? rawId.split('_block_')[0] : rawId;
+        if (actualId && /_(\d{4}-\d{2}-\d{2})$/.test(actualId)) {
+            return actualId;
         }
 
         const extendedProps = calendarEvent?.extendedProps || {};
@@ -9866,7 +10097,7 @@ export class CalendarView {
             return `${originalId}_${instanceDate}`;
         }
 
-        return rawId || originalId;
+        return actualId || originalId;
     }
 
     private async showPomodoroSessions(calendarEvent: any) {
