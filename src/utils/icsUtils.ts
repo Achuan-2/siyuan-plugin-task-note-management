@@ -8,11 +8,16 @@
  */
 
 import * as ics from 'ics';
+import { DateTime } from 'ics';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { lunarToSolar, solarToLunar } from './lunarUtils';
 import { pushErrMsg, pushMsg, putFile, getBlockKramdown, uploadCloud, getFileBlob, forwardProxy } from '../api';
 import { Constants } from 'siyuan';
+import { getLocalDateString } from './dateUtils';
+import { shouldSkipReminderOnDate, type HolidayData } from './reminderSkipDate';
+import { loadHolidays } from './icsSubscription';
+import { generateRepeatInstances } from './repeatUtils';
 
 const useShell = async (cmd: 'showItemInFolder' | 'openPath', filePath: string) => {
     try {
@@ -37,6 +42,7 @@ export async function exportIcsFile(
         const reminders = await plugin.loadReminderData();
         const settings = await plugin.loadSettings();
         const dateFilter = settings.icsDateFilter || 'thisYear';
+        const holidayData = await loadHolidays(plugin) || {};
 
         function getOffsetDateStr(daysOffset: number): string {
             const dt = new Date();
@@ -166,6 +172,45 @@ export async function exportIcsFile(
             delete occEvent.recurrenceRule;
             delete occEvent.exclusionDates;
             return occEvent;
+        }
+
+        function getActiveBlocks(
+            startDateStr: string,
+            endDateStr: string,
+            reminder: any
+        ): Array<{ start: string; end: string }> {
+            const blocks: Array<{ start: string; end: string }> = [];
+            let currentBlockStart: string | null = null;
+            let currentBlockEnd: string | null = null;
+
+            let currentDate = new Date(startDateStr + 'T00:00:00');
+            const finalDate = new Date(endDateStr + 'T00:00:00');
+
+            while (currentDate <= finalDate) {
+                const currentDateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
+                const isSkipped = shouldSkipReminderOnDate(reminder, currentDateStr, settings, holidayData);
+
+                if (!isSkipped) {
+                    if (currentBlockStart === null) {
+                        currentBlockStart = currentDateStr;
+                    }
+                    currentBlockEnd = currentDateStr;
+                } else {
+                    if (currentBlockStart !== null && currentBlockEnd !== null) {
+                        blocks.push({ start: currentBlockStart, end: currentBlockEnd });
+                        currentBlockStart = null;
+                        currentBlockEnd = null;
+                    }
+                }
+
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+
+            if (currentBlockStart !== null && currentBlockEnd !== null) {
+                blocks.push({ start: currentBlockStart, end: currentBlockEnd });
+            }
+
+            return blocks;
         }
 
         /**
@@ -340,6 +385,9 @@ export async function exportIcsFile(
 
                 // Date filtering based on reminder's actual date
                 const reminderDateStr = `${parsedStart[0]}-${String(parsedStart[1]).padStart(2, '0')}-${String(parsedStart[2]).padStart(2, '0')}`;
+                if (shouldSkipReminderOnDate(reminder, reminderDateStr, settings, holidayData)) {
+                    return;
+                }
                 if (dateFilter !== 'all') {
                     const range = getDateFilterRange(dateFilter);
                     if (range) {
@@ -753,13 +801,97 @@ export async function exportIcsFile(
                                     );
                                     if (childRrule) {
                                         childEvent.recurrenceRule = childRrule;
+
+                                        // Generate exclusion dates for recurring child task
+                                        const excludeDates = child.repeat.excludeDates || [];
+                                        let exclusionEndDateStr = '';
+                                        if (child.repeat.endType === 'date' && child.repeat.endDate) {
+                                            exclusionEndDateStr = child.repeat.endDate;
+                                        } else {
+                                            const futureDate = new Date();
+                                            futureDate.setFullYear(futureDate.getFullYear() + 3);
+                                            exclusionEndDateStr = `${futureDate.getFullYear()}-${String(futureDate.getMonth() + 1).padStart(2, '0')}-${String(futureDate.getDate()).padStart(2, '0')}`;
+                                        }
+
+                                        const virtualReminder = {
+                                            ...child,
+                                            reminderSkipWeekendMode: 'none',
+                                            reminderSkipHolidays: false,
+                                            repeat: {
+                                                ...child.repeat,
+                                                excludeDates: [],
+                                                reminderSkipWeekendMode: 'none',
+                                                reminderSkipHolidays: false,
+                                            }
+                                        };
+                                        const potentialInstances = generateRepeatInstances(virtualReminder, child.date || r.date, exclusionEndDateStr, 1000);
+                                        const childExclusionDates: DateTime[] = [];
+                                        for (const instance of potentialInstances) {
+                                            const isManuallyExcluded = excludeDates.includes(instance.date);
+                                            const isSkippedByRules = shouldSkipReminderOnDate(child, instance.date, settings, holidayData);
+                                            if (isManuallyExcluded || isSkippedByRules) {
+                                                const parts = instance.date.split('-').map(n => parseInt(n, 10));
+                                                if (childStartTimeArray) {
+                                                    childExclusionDates.push([parts[0], parts[1], parts[2], childStartTimeArray[0], childStartTimeArray[1]]);
+                                                } else {
+                                                    childExclusionDates.push([parts[0], parts[1], parts[2]]);
+                                                }
+                                            }
+                                        }
+                                        if (childExclusionDates.length > 0) {
+                                            childEvent.exclusionDates = childExclusionDates;
+                                        }
                                     }
                                 } catch (e) {
                                     console.warn('构建子任务 RRULE 失败', e, child);
                                 }
                             }
 
-                            events.push(childEvent);
+                            const childStartDateStr = child.date || r.date;
+                            const childEndDateStr = child.endDate || childStartDateStr;
+
+                            if (!child.repeat || !child.repeat.enabled) {
+                                const activeBlocks = getActiveBlocks(childStartDateStr, childEndDateStr, child);
+                                if (activeBlocks.length > 0) {
+                                    for (let i = 0; i < activeBlocks.length; i++) {
+                                        const block = activeBlocks[i];
+                                        const blockEvent = {
+                                            ...childEvent,
+                                            uid: activeBlocks.length > 1 ? `${childEvent.uid}-block-${i}` : childEvent.uid,
+                                        };
+
+                                        const bStartArray = parseDateArray(block.start)!;
+                                        const bEndArray = parseDateArray(block.end)!;
+
+                                        if (childStartTimeArray) {
+                                            if (block.start === childStartDateStr) {
+                                                blockEvent.start = [...bStartArray, ...childStartTimeArray];
+                                            } else {
+                                                blockEvent.start = [...bStartArray, 0, 0];
+                                            }
+
+                                            if (block.end === childEndDateStr && childEndTimeArray) {
+                                                blockEvent.end = [...bEndArray, ...childEndTimeArray];
+                                            } else {
+                                                blockEvent.end = [...bEndArray, 23, 59];
+                                            }
+                                        } else {
+                                            blockEvent.start = bStartArray;
+                                            const endDate = new Date(bEndArray[0], bEndArray[1] - 1, bEndArray[2]);
+                                            endDate.setDate(endDate.getDate() + 1);
+                                            blockEvent.end = [
+                                                endDate.getFullYear(),
+                                                endDate.getMonth() + 1,
+                                                endDate.getDate()
+                                            ];
+                                        }
+
+                                        events.push(blockEvent);
+                                    }
+                                }
+                            } else {
+                                events.push(childEvent);
+                            }
 
                             processReminderTimes(child, child.id || id, childTitle, child.completed, events);
                         } else {
@@ -1307,13 +1439,99 @@ export async function exportIcsFile(
                 // 处理其他重复类型的 RRULE
                 try {
                     const rrule = buildRRuleFromRepeat(r.repeat, r.date);
-                    event.recurrenceRule = rrule;
+                    if (rrule) {
+                        event.recurrenceRule = rrule;
+
+                        // Generate exclusion dates for recurring parent task
+                        const excludeDates = r.repeat.excludeDates || [];
+                        let exclusionEndDateStr = '';
+                        if (r.repeat.endType === 'date' && r.repeat.endDate) {
+                            exclusionEndDateStr = r.repeat.endDate;
+                        } else {
+                            const futureDate = new Date();
+                            futureDate.setFullYear(futureDate.getFullYear() + 3);
+                            exclusionEndDateStr = `${futureDate.getFullYear()}-${String(futureDate.getMonth() + 1).padStart(2, '0')}-${String(futureDate.getDate()).padStart(2, '0')}`;
+                        }
+
+                        const virtualReminder = {
+                            ...r,
+                            reminderSkipWeekendMode: 'none',
+                            reminderSkipHolidays: false,
+                            repeat: {
+                                ...r.repeat,
+                                excludeDates: [],
+                                reminderSkipWeekendMode: 'none',
+                                reminderSkipHolidays: false,
+                            }
+                        };
+                        const potentialInstances = generateRepeatInstances(virtualReminder, r.date, exclusionEndDateStr, 1000);
+                        const parentExclusionDates: DateTime[] = [];
+                        for (const instance of potentialInstances) {
+                            const isManuallyExcluded = excludeDates.includes(instance.date);
+                            const isSkippedByRules = shouldSkipReminderOnDate(r, instance.date, settings, holidayData);
+                            if (isManuallyExcluded || isSkippedByRules) {
+                                const parts = instance.date.split('-').map(n => parseInt(n, 10));
+                                if (startTimeArray) {
+                                    parentExclusionDates.push([parts[0], parts[1], parts[2], startTimeArray[0], startTimeArray[1]]);
+                                } else {
+                                    parentExclusionDates.push([parts[0], parts[1], parts[2]]);
+                                }
+                            }
+                        }
+                        if (parentExclusionDates.length > 0) {
+                            event.exclusionDates = parentExclusionDates;
+                        }
+                    }
                 } catch (e) {
                     console.warn('构建 RRULE 失败', e, r);
                 }
             }
 
-            events.push(event);
+            const rStartDateStr = r.date;
+            const rEndDateStr = r.endDate || rStartDateStr;
+
+            if (!r.repeat || !r.repeat.enabled) {
+                const activeBlocks = getActiveBlocks(rStartDateStr, rEndDateStr, r);
+                if (activeBlocks.length > 0) {
+                    for (let i = 0; i < activeBlocks.length; i++) {
+                        const block = activeBlocks[i];
+                        const blockEvent = {
+                            ...event,
+                            uid: activeBlocks.length > 1 ? `${event.uid}-block-${i}` : event.uid,
+                        };
+
+                        const bStartArray = parseDateArray(block.start)!;
+                        const bEndArray = parseDateArray(block.end)!;
+
+                        if (startTimeArray) {
+                            if (block.start === rStartDateStr) {
+                                blockEvent.start = [...bStartArray, ...startTimeArray];
+                            } else {
+                                blockEvent.start = [...bStartArray, 0, 0];
+                            }
+
+                            if (block.end === rEndDateStr && endTimeArray) {
+                                blockEvent.end = [...bEndArray, ...endTimeArray];
+                            } else {
+                                blockEvent.end = [...bEndArray, 23, 59];
+                            }
+                        } else {
+                            blockEvent.start = bStartArray;
+                            const endDate = new Date(bEndArray[0], bEndArray[1] - 1, bEndArray[2]);
+                            endDate.setDate(endDate.getDate() + 1);
+                            blockEvent.end = [
+                                endDate.getFullYear(),
+                                endDate.getMonth() + 1,
+                                endDate.getDate()
+                            ];
+                        }
+
+                        events.push(blockEvent);
+                    }
+                }
+            } else {
+                events.push(event);
+            }
         }
 
         const { error, value } = ics.createEvents(events, {
