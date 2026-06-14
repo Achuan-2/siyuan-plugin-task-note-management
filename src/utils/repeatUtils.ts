@@ -1,7 +1,7 @@
 import { RepeatConfig } from '../components/RepeatSettingsDialog';
 import { compareDateStrings, getLocalDateTimeString } from './dateUtils';
 import { i18n } from '../pluginInstance';
-import { solarToLunar } from './lunarUtils';
+import { solarToLunar, formatLunarMonth, formatLunarDay } from './lunarUtils';
 import { normalizeReminderSkipWeekendMode, type ReminderSkipWeekendMode } from './reminderSkipDate';
 
 export interface RepeatInstance {
@@ -695,10 +695,21 @@ export function getRepeatDescription(repeatConfig: RepeatConfig): string {
             }
             break;
         case 'lunar-monthly':
-            description = i18n("lunarMonthlyRepeat");
+            if (repeatConfig.lunarDay) {
+                const dayText = formatLunarDay(repeatConfig.lunarDay);
+                description = `农历每月${dayText}`;
+            } else {
+                description = i18n("lunarMonthlyRepeat");
+            }
             break;
         case 'lunar-yearly':
-            description = i18n("lunarYearlyRepeat");
+            if (repeatConfig.lunarMonth && repeatConfig.lunarDay) {
+                const monthText = formatLunarMonth(repeatConfig.lunarMonth);
+                const dayText = formatLunarDay(repeatConfig.lunarDay);
+                description = `农历每年${monthText}${dayText}`;
+            } else {
+                description = i18n("lunarYearlyRepeat");
+            }
             break;
         case 'custom':
             description = i18n("customRepeat");

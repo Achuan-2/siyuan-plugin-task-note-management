@@ -8478,8 +8478,8 @@ export class ProjectKanbanView {
             // 如果有开始时间，按逻辑日期显示
             let dateStr = formatDateLabel(task.date, logicalStart);
 
-            // 如果是农历循环事件，添加农历日期显示
-            if (task.repeat?.enabled && (task.repeat.type === 'lunar-monthly' || task.repeat.type === 'lunar-yearly')) {
+            // 如果是农历循环事件的实例，添加该实例对应的农历日期显示
+            if (task.isRepeatInstance && task.repeat?.enabled && (task.repeat.type === 'lunar-monthly' || task.repeat.type === 'lunar-yearly')) {
                 try {
                     const lunarStr = getSolarDateLunarString(task.date);
                     if (lunarStr) {

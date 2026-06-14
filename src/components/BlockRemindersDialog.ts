@@ -1,12 +1,12 @@
 import { Dialog, showMessage, confirm, Menu } from "siyuan";
 import { getBlockByID, updateBindBlockAtrrs, getBlockReminderIds, openBlock } from "../api";
-import { getLocaleTag, getLogicalDateString } from "../utils/dateUtils";
+import { getLocaleTag, getLogicalDateString, getLocalDateString, compareDateStrings } from "../utils/dateUtils";
 import { CategoryManager } from "../utils/categoryManager";
 import { ProjectManager } from "../utils/projectManager";
 import { i18n } from "../pluginInstance";
 import { TaskRenderer } from "./render/TaskRenderer";
 import { PomodoroRecordManager } from "../utils/pomodoroRecord";
-import { resolveRepeatReminderTimes, addDaysToDate, getDaysDifference } from "../utils/repeatUtils";
+import { resolveRepeatReminderTimes, addDaysToDate, getDaysDifference, generateRepeatInstances } from "../utils/repeatUtils";
 
 /**
  * 块绑定任务查看对话框
@@ -149,85 +149,168 @@ export class BlockRemindersDialog {
     }
 
     private resolveBoundReminders(reminderData: any, reminderIds: string[]): any[] {
-        return reminderIds
-            .map(id => {
-                if (reminderData[id]) {
-                    const reminder = reminderData[id];
-                    if (reminder.repeat?.enabled) {
-                        const instanceDateVal = reminder.date;
-                        const defaultEndDate = reminder.endDate && reminder.date
-                            ? addDaysToDate(instanceDateVal, getDaysDifference(reminder.date, reminder.endDate))
-                            : undefined;
-                        const instanceEndDate = reminder.endDate !== undefined ? reminder.endDate : defaultEndDate;
-                        const reminderTimes = resolveRepeatReminderTimes(
-                            reminder.reminderTimes,
-                            instanceDateVal,
-                            instanceEndDate,
-                            reminder.date,
-                            reminder.endDate
-                        );
-                        return {
-                            ...reminder,
-                            date: instanceDateVal,
-                            endDate: instanceEndDate,
-                            reminderTimes
-                        };
+        const result: any[] = [];
+        const today = getLogicalDateString();
+
+        for (const id of reminderIds) {
+            if (reminderData[id]) {
+                const reminder = reminderData[id];
+                if (reminder.repeat?.enabled) {
+                    const isLunarRepeat = reminder.repeat.type === 'lunar-monthly' || reminder.repeat.type === 'lunar-yearly';
+                    
+                    // We want to generate all instances from the series start date up to a future date
+                    // that guarantees at least one uncompleted future instance.
+                    let monthsToAdd = isLunarRepeat || reminder.repeat.type === 'yearly' ? 14 : 3;
+                    let repeatInstances: any[] = [];
+                    let hasUncompletedFutureInstance = false;
+                    const maxAttempts = 5;
+                    let attempts = 0;
+                    
+                    const completedInstances = reminder.repeat.completedInstances || [];
+                    const completedTimes = reminder.repeat.completedTimes || reminder.repeat.instanceCompletedTimes || {};
+                    const originalStartDate = reminder.date || today;
+                    
+                    while (!hasUncompletedFutureInstance && attempts < maxAttempts) {
+                        const monthStart = new Date(originalStartDate + 'T00:00:00');
+                        // Go back 1 month to catch any recent occurrences or completed ones
+                        monthStart.setMonth(monthStart.getMonth() - 1);
+                        
+                        const monthEnd = new Date();
+                        monthEnd.setMonth(monthEnd.getMonth() + monthsToAdd);
+                        monthEnd.setDate(0);
+                        
+                        const genStart = getLocalDateString(monthStart);
+                        const genEnd = getLocalDateString(monthEnd);
+                        
+                        try {
+                            repeatInstances = generateRepeatInstances(reminder, genStart, genEnd);
+                        } catch (e) {
+                            console.error('Failed to generate repeat instances in BlockRemindersDialog:', e);
+                            repeatInstances = [];
+                        }
+                        
+                        hasUncompletedFutureInstance = repeatInstances.some(instance => {
+                            const instanceLogical = compareDateStrings(instance.date, today);
+                            if (instanceLogical <= 0) return false;
+                            
+                            const instanceIdStr = instance.instanceId || `${reminder.id}_${instance.date}`;
+                            const originalKey = instanceIdStr.split('_').pop() || instance.date;
+                            return !completedInstances.includes(originalKey);
+                        });
+                        
+                        if (!hasUncompletedFutureInstance) {
+                            monthsToAdd += reminder.repeat.type === 'yearly' || isLunarRepeat ? 12 : 6;
+                            attempts++;
+                        }
                     }
-                    return reminder;
+                    
+                    // Now filter the repeatInstances:
+                    // 1. Completed instances
+                    // 2. The first (nearest) uncompleted instance
+                    const completedList = repeatInstances.filter(instance => {
+                        const instanceIdStr = instance.instanceId || `${reminder.id}_${instance.date}`;
+                        const originalKey = instanceIdStr.split('_').pop() || instance.date;
+                        return completedInstances.includes(originalKey);
+                    });
+                    
+                    const uncompletedList = repeatInstances.filter(instance => {
+                        const instanceIdStr = instance.instanceId || `${reminder.id}_${instance.date}`;
+                        const originalKey = instanceIdStr.split('_').pop() || instance.date;
+                        return !completedInstances.includes(originalKey);
+                    });
+                    
+                    // Add all completed instances
+                    completedList.forEach(instance => {
+                        const originalKey = (instance.instanceId || `${reminder.id}_${instance.date}`).split('_').pop() || instance.date;
+                        result.push({
+                            ...reminder,
+                            ...instance,
+                            id: instance.instanceId || `${reminder.id}_${instance.date}`,
+                            originalId: reminder.id,
+                            instanceDate: originalKey,
+                            completed: true,
+                            isRepeatInstance: true,
+                            completedAt: completedTimes[originalKey],
+                            completedTime: completedTimes[originalKey]
+                        });
+                    });
+                    
+                    // Add the nearest uncompleted instance
+                    if (uncompletedList.length > 0) {
+                        const nearestUncompleted = uncompletedList[0];
+                        const originalKey = (nearestUncompleted.instanceId || `${reminder.id}_${nearestUncompleted.date}`).split('_').pop() || nearestUncompleted.date;
+                        result.push({
+                            ...reminder,
+                            ...nearestUncompleted,
+                            id: nearestUncompleted.instanceId || `${reminder.id}_${nearestUncompleted.date}`,
+                            originalId: reminder.id,
+                            instanceDate: originalKey,
+                            completed: false,
+                            isRepeatInstance: true
+                        });
+                    }
+                } else {
+                    result.push(reminder);
                 }
-
+            } else {
+                // Handle specific instance binding (e.g. originalId_YYYY-MM-DD)
                 const splitIndex = id.lastIndexOf('_');
-                if (splitIndex <= 0) return null;
-                const originalId = id.substring(0, splitIndex);
-                const instanceDate = id.substring(splitIndex + 1);
-                if (!/^\d{4}-\d{2}-\d{2}$/.test(instanceDate)) return null;
+                if (splitIndex > 0) {
+                    const originalId = id.substring(0, splitIndex);
+                    const instanceDate = id.substring(splitIndex + 1);
+                    if (/^\d{4}-\d{2}-\d{2}$/.test(instanceDate)) {
+                        const originalReminder = reminderData[originalId];
+                        if (originalReminder) {
+                            const instanceMod = originalReminder.repeat?.instanceModifications?.[instanceDate];
+                            if (instanceMod && instanceMod.blockId === this.blockId) {
+                                if (!(originalReminder.repeat?.excludeDates || []).includes(instanceDate)) {
+                                    const completedInstances = originalReminder.repeat?.completedInstances || [];
+                                    const completedTimes = originalReminder.repeat?.completedTimes || originalReminder.repeat?.instanceCompletedTimes || {};
+                                    const completed = completedInstances.includes(instanceDate);
 
-                const originalReminder = reminderData[originalId];
-                const instanceMod = originalReminder?.repeat?.instanceModifications?.[instanceDate];
-                if (!originalReminder || !instanceMod || instanceMod.blockId !== this.blockId) return null;
-                if ((originalReminder.repeat?.excludeDates || []).includes(instanceDate)) return null;
+                                    const instanceDateVal = instanceMod.date !== undefined ? instanceMod.date : instanceDate;
+                                    const defaultEndDate = originalReminder.endDate && originalReminder.date
+                                        ? addDaysToDate(instanceDateVal, getDaysDifference(originalReminder.date, originalReminder.endDate))
+                                        : undefined;
+                                    const instanceEndDate = instanceMod.endDate !== undefined ? instanceMod.endDate : defaultEndDate;
+                                    const reminderTimesSource = instanceMod.reminderTimes !== undefined ? instanceMod.reminderTimes : originalReminder.reminderTimes;
+                                    const reminderTimes = instanceMod.preservedFromSeriesEdit
+                                        ? reminderTimesSource || undefined
+                                        : resolveRepeatReminderTimes(
+                                            reminderTimesSource,
+                                            instanceDateVal,
+                                            instanceEndDate,
+                                            originalReminder.date,
+                                            originalReminder.endDate
+                                        );
 
-                const completedInstances = originalReminder.repeat?.completedInstances || [];
-                const completedTimes = originalReminder.repeat?.completedTimes || originalReminder.repeat?.instanceCompletedTimes || {};
-                const completed = completedInstances.includes(instanceDate);
-
-                const instanceDateVal = instanceMod.date !== undefined ? instanceMod.date : instanceDate;
-                const defaultEndDate = originalReminder.endDate && originalReminder.date
-                    ? addDaysToDate(instanceDateVal, getDaysDifference(originalReminder.date, originalReminder.endDate))
-                    : undefined;
-                const instanceEndDate = instanceMod.endDate !== undefined ? instanceMod.endDate : defaultEndDate;
-                const reminderTimesSource = instanceMod.reminderTimes !== undefined ? instanceMod.reminderTimes : originalReminder.reminderTimes;
-                const reminderTimes = instanceMod.preservedFromSeriesEdit
-                    ? reminderTimesSource || undefined
-                    : resolveRepeatReminderTimes(
-                        reminderTimesSource,
-                        instanceDateVal,
-                        instanceEndDate,
-                        originalReminder.date,
-                        originalReminder.endDate
-                    );
-
-                return {
-                    ...originalReminder,
-                    ...instanceMod,
-                    id,
-                    originalId,
-                    instanceDate,
-                    isRepeatInstance: true,
-                    completed,
-                    completedAt: completed ? completedTimes[instanceDate] : undefined,
-                    completedTime: completed ? completedTimes[instanceDate] : undefined,
-                    date: instanceDateVal,
-                    endDate: instanceEndDate,
-                    time: instanceMod.time !== undefined ? instanceMod.time : originalReminder.time,
-                    endTime: instanceMod.endTime !== undefined ? instanceMod.endTime : originalReminder.endTime,
-                    reminderTimes,
-                    projectId: instanceMod.projectId !== undefined ? instanceMod.projectId : originalReminder.projectId,
-                    customGroupId: instanceMod.customGroupId !== undefined ? instanceMod.customGroupId : originalReminder.customGroupId,
-                    customGroupName: instanceMod.customGroupName !== undefined ? instanceMod.customGroupName : originalReminder.customGroupName
-                };
-            })
-            .filter(Boolean);
+                                    result.push({
+                                        ...originalReminder,
+                                        ...instanceMod,
+                                        id,
+                                        originalId,
+                                        instanceDate,
+                                        isRepeatInstance: true,
+                                        completed,
+                                        completedAt: completed ? completedTimes[instanceDate] : undefined,
+                                        completedTime: completed ? completedTimes[instanceDate] : undefined,
+                                        date: instanceDateVal,
+                                        endDate: instanceEndDate,
+                                        time: instanceMod.time !== undefined ? instanceMod.time : originalReminder.time,
+                                        endTime: instanceMod.endTime !== undefined ? instanceMod.endTime : originalReminder.endTime,
+                                        reminderTimes,
+                                        projectId: instanceMod.projectId !== undefined ? instanceMod.projectId : originalReminder.projectId,
+                                        customGroupId: instanceMod.customGroupId !== undefined ? instanceMod.customGroupId : originalReminder.customGroupId,
+                                        customGroupName: instanceMod.customGroupName !== undefined ? instanceMod.customGroupName : originalReminder.customGroupName
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return result;
     }
 
     private async createReminderItem(reminder: any): Promise<HTMLElement> {

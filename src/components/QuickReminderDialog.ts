@@ -6,6 +6,7 @@ import { ProjectManager } from "../utils/projectManager";
 import { HabitGroupManager } from "../utils/habitGroupManager";
 import { i18n } from "../pluginInstance";
 import { RepeatSettingsDialog, RepeatConfig } from "./RepeatSettingsDialog";
+import { solarToLunar } from "../utils/lunarUtils";
 import { ProjectSelectorPopup } from "./ProjectSelectorPopup";
 import { getRepeatDescription, getDaysDifference, getReminderTaskDurationDays, generateRepeatInstances } from "../utils/repeatUtils";
 import { CategoryManageDialog } from "./CategoryManageDialog";
@@ -5208,12 +5209,28 @@ export class QuickReminderDialog {
             startDate = this.getRepeatBaseDate(this.initialDate, this.initialEndDate);
         }
 
-        // 如果是农历重复类型，需要重新计算农历日期
+        // 如果是农历重复类型，在开始日期发生变化且与当前农历日期匹配（未被用户自定义）时，需要重新计算农历日期
         if (this.repeatConfig.enabled &&
             (this.repeatConfig.type === 'lunar-monthly' || this.repeatConfig.type === 'lunar-yearly')) {
-            // 清除现有的农历日期，让 RepeatSettingsDialog 重新计算
-            this.repeatConfig.lunarDay = undefined;
-            this.repeatConfig.lunarMonth = undefined;
+            const originalStartDate = this.reminder?.date || this.initialDate;
+            if (originalStartDate && /^\d{4}-\d{2}-\d{2}$/.test(originalStartDate) && startDate !== originalStartDate) {
+                try {
+                    const originalLunar = solarToLunar(originalStartDate);
+                    const isLunarMonthlyMatch = this.repeatConfig.type === 'lunar-monthly' && 
+                        this.repeatConfig.lunarDay === originalLunar.day;
+                    const isLunarYearlyMatch = this.repeatConfig.type === 'lunar-yearly' && 
+                        this.repeatConfig.lunarDay === originalLunar.day && 
+                        this.repeatConfig.lunarMonth === originalLunar.month;
+
+                    if (isLunarMonthlyMatch || isLunarYearlyMatch) {
+                        // 清除现有的农历日期，让 RepeatSettingsDialog 重新计算
+                        this.repeatConfig.lunarDay = undefined;
+                        this.repeatConfig.lunarMonth = undefined;
+                    }
+                } catch (e) {
+                    console.error("Failed to check lunar date match:", e);
+                }
+            }
         }
 
         const dialogRepeatConfig = this.createRepeatConfigForSettingsDialog();

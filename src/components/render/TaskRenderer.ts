@@ -278,8 +278,8 @@ export class TaskRenderer {
 
         dateStr = formatDateLabel(date, logicalStart);
 
-        // 如果是农历循环事件，添加农历日期显示
-        if (reminder?.repeat?.enabled && (reminder.repeat.type === 'lunar-monthly' || reminder.repeat.type === 'lunar-yearly')) {
+        // 如果是农历循环事件的实例，添加该实例对应的农历日期显示
+        if (reminder?.isRepeatInstance && reminder?.repeat?.enabled && (reminder.repeat.type === 'lunar-monthly' || reminder.repeat.type === 'lunar-yearly')) {
             try {
                 const lunarStr = getSolarDateLunarString(date);
                 if (lunarStr) {
