@@ -135,9 +135,17 @@ export class CalendarView {
 
     // Dock 和 Tab 独立的视图配置代理方法
     private _getViewMode(): ReturnType<typeof this.calendarConfigManager.getViewMode> {
-        return this.isDockMode
-            ? this.calendarConfigManager.getDockViewMode()
-            : this.calendarConfigManager.getViewMode();
+        if (this.isDockMode) {
+            const viewType = this._getViewType();
+            if (viewType === 'timeline') {
+                return 'timeGridDay';
+            } else if (viewType === 'kanban') {
+                return 'dayGridDay';
+            } else {
+                return 'listDay';
+            }
+        }
+        return this.calendarConfigManager.getViewMode();
     }
     private async _setViewMode(viewMode: Parameters<typeof this.calendarConfigManager.setViewMode>[0]) {
         if (this.isDockMode) {
@@ -158,6 +166,8 @@ export class CalendarView {
             await this.calendarConfigManager.setViewType(viewType);
         }
     }
+
+
 
     private async updateSettings() {
         const settings = await this.plugin.loadSettings();
@@ -479,13 +489,13 @@ export class CalendarView {
         toolbar.className = 'reminder-calendar-toolbar';
         this.container.appendChild(toolbar);
 
-        // Dock 模式：添加“在标签页打开”按钮和折叠按钮
-        let collapsibleContent: HTMLDivElement | null = null;
+        // Dock 模式：声明“在标签页打开”按钮
+        let openTabBtn: HTMLButtonElement | null = null;
         if (this.isDockMode) {
             toolbar.classList.add('reminder-calendar-toolbar--dock');
 
             // 在标签页打开按钮（始终显示）
-            const openTabBtn = document.createElement('button');
+            openTabBtn = document.createElement('button');
             openTabBtn.className = 'b3-button b3-button--outline';
             openTabBtn.style.padding = '4px 8px';
             openTabBtn.innerHTML = '<svg class="b3-button__icon" style="margin-right: 0;"><use xlink:href="#iconOpen"></use></svg>';
@@ -493,41 +503,21 @@ export class CalendarView {
             openTabBtn.addEventListener('click', () => {
                 this.plugin.openCalendarTab();
             });
-            toolbar.appendChild(openTabBtn);
-
-            // 折叠切换按钮
-            const toggleBtn = document.createElement('button');
-            toggleBtn.className = 'b3-button b3-button--outline reminder-calendar-toolbar-toggle';
-            toggleBtn.style.padding = '4px 8px';
-            toggleBtn.innerHTML = '<svg class="b3-button__icon" style="margin-right: 0;"><use xlink:href="#iconDown"></use></svg>';
-            toggleBtn.classList.add('ariaLabel'); toggleBtn.setAttribute('aria-label', i18n("toggleToolbar") || "展开/收起工具栏");
-            toolbar.appendChild(toggleBtn);
-
-            // 可折叠内容容器
-            collapsibleContent = document.createElement('div');
-            collapsibleContent.className = 'reminder-calendar-toolbar-collapsible';
-            collapsibleContent.style.display = 'none';
-            this.container.insertBefore(collapsibleContent, toolbar.nextSibling);
-
-            toggleBtn.addEventListener('click', () => {
-                const isCollapsed = collapsibleContent.style.display === 'none';
-                collapsibleContent.style.display = isCollapsed ? 'flex' : 'none';
-                toggleBtn.innerHTML = isCollapsed
-                    ? '<svg class="b3-button__icon" style="margin-right: 0;"><use xlink:href="#iconUp"></use></svg>'
-                    : '<svg class="b3-button__icon" style="margin-right: 0;"><use xlink:href="#iconDown"></use></svg>';
-            });
         }
 
-        // 工具栏内容的实际父容器（dock模式下放入可折叠区域，否则放入toolbar本身）
-        const toolbarViewParent = collapsibleContent || toolbar;
-        const toolbarFilterParent = collapsibleContent || toolbar;
+        // 工具栏内容的实际父容器
+        const toolbarViewParent = toolbar;
+        const toolbarFilterParent = toolbar;
 
 
 
         // 视图切换按钮
-        const viewGroup = document.createElement('div');
-        viewGroup.className = 'reminder-calendar-view-group';
-        toolbarViewParent.appendChild(viewGroup);
+        let viewGroup: HTMLDivElement | null = null;
+        if (!this.isDockMode) {
+            viewGroup = document.createElement('div');
+            viewGroup.className = 'reminder-calendar-view-group';
+            toolbarViewParent.appendChild(viewGroup);
+        }
         this.yearBtn = document.createElement('button');
         this.yearBtn.className = 'b3-button b3-button--outline';
         this.yearBtn.textContent = i18n("year");
@@ -545,7 +535,9 @@ export class CalendarView {
             this.updateViewButtonStates();
             this.updatePomodoroButtonVisibility();
         });
-        viewGroup.appendChild(this.yearBtn);
+        if (!this.isDockMode && viewGroup) {
+            viewGroup.appendChild(this.yearBtn);
+        }
         this.monthBtn = document.createElement('button');
         this.monthBtn.className = 'b3-button b3-button--outline';
         this.monthBtn.textContent = i18n("month");
@@ -563,7 +555,9 @@ export class CalendarView {
             this.updateViewButtonStates();
             this.updatePomodoroButtonVisibility();
         });
-        viewGroup.appendChild(this.monthBtn);
+        if (!this.isDockMode && viewGroup) {
+            viewGroup.appendChild(this.monthBtn);
+        }
 
         this.weekBtn = document.createElement('button');
         this.weekBtn.className = 'b3-button b3-button--outline';
@@ -583,7 +577,9 @@ export class CalendarView {
             this.updateViewButtonStates();
             this.updatePomodoroButtonVisibility();
         });
-        viewGroup.appendChild(this.weekBtn);
+        if (!this.isDockMode && viewGroup) {
+            viewGroup.appendChild(this.weekBtn);
+        }
 
         // 多天视图按钮（默认最近3天，今日为第二天）
         this.multiDaysBtn = document.createElement('button');
@@ -609,7 +605,9 @@ export class CalendarView {
             this.updateViewButtonStates();
             this.updatePomodoroButtonVisibility();
         });
-        viewGroup.appendChild(this.multiDaysBtn);
+        if (!this.isDockMode && viewGroup) {
+            viewGroup.appendChild(this.multiDaysBtn);
+        }
 
         this.dayBtn = document.createElement('button');
         this.dayBtn.className = 'b3-button b3-button--outline';
@@ -629,7 +627,9 @@ export class CalendarView {
             this.updateViewButtonStates();
             this.updatePomodoroButtonVisibility();
         });
-        viewGroup.appendChild(this.dayBtn);
+        if (!this.isDockMode && viewGroup) {
+            viewGroup.appendChild(this.dayBtn);
+        }
 
 
 
@@ -772,22 +772,12 @@ export class CalendarView {
         });
 
         viewTypeContainer.appendChild(viewTypeDropdown);
-        // Create Pomodoro toggle button
-        this.pomodoroToggleBtn = document.createElement('button');
-        this.pomodoroToggleBtn.className = 'b3-button b3-button--outline';
-        this.pomodoroToggleBtn.style.padding = '4px 8px';
-        this.pomodoroToggleBtn.style.marginRight = '8px';
-        this.pomodoroToggleBtn.style.display = 'none'; // Initially hidden, logic controls visibility based on view
-        this.pomodoroToggleBtn.innerHTML = '🍅';
-        this.pomodoroToggleBtn.classList.add('ariaLabel'); this.pomodoroToggleBtn.setAttribute('aria-label', i18n("togglePomodoroRecords") || "显示/隐藏番茄专注记录");
-        this.pomodoroToggleBtn.onclick = async () => {
-            this.showPomodoro = !this.showPomodoro;
-            await this.calendarConfigManager.setShowPomodoro(this.showPomodoro);
-            this.updatePomodoroButtonState();
-            this.refreshEvents();
-        };
-        viewGroup.appendChild(viewTypeContainer);
-        viewGroup.appendChild(this.pomodoroToggleBtn);
+        if (this.isDockMode) {
+            // 在 Dock 模式下，我们将 viewTypeContainer 放入过滤器组（filterGroup）中，以实现单行自适应排版
+        } else if (viewGroup) {
+            viewGroup.appendChild(viewTypeContainer);
+        }
+
 
 
         // 初始化按钮状态
@@ -806,10 +796,17 @@ export class CalendarView {
         }
 
         // 筛选图标
-        const filterIcon = document.createElement('span');
-        filterIcon.innerHTML = '<svg style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"><use xlink:href="#iconFilter"></use></svg>';
-        filterIcon.style.color = 'var(--b3-theme-on-surface-light)';
-        filterGroup.appendChild(filterIcon);
+        if (!this.isDockMode) {
+            const filterIcon = document.createElement('span');
+            filterIcon.innerHTML = '<svg style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"><use xlink:href="#iconFilter"></use></svg>';
+            filterIcon.style.color = 'var(--b3-theme-on-surface-light)';
+            filterGroup.appendChild(filterIcon);
+        }
+
+        // 如果是 Dock 模式，把视图类型下拉框（时间轴/看板/列表）合并到过滤器组中，紧跟筛选图标
+        if (this.isDockMode) {
+            filterGroup.appendChild(viewTypeContainer);
+        }
 
         // 创建项目筛选容器（带下拉菜单）
         const projectFilterContainer = document.createElement('div');
@@ -832,19 +829,26 @@ export class CalendarView {
         projectDropdown.style.display = 'none';
         projectDropdown.style.position = 'absolute';
         projectDropdown.style.top = '100%';
-        projectDropdown.style.left = '0';
+        if (this.isDockMode) {
+            projectDropdown.style.right = '0';
+            projectDropdown.style.width = '220px';
+        } else {
+            projectDropdown.style.left = '0';
+            projectDropdown.style.width = '260px';
+        }
         projectDropdown.style.zIndex = '1000';
         projectDropdown.style.backgroundColor = 'var(--b3-theme-background)';
         projectDropdown.style.border = '1px solid var(--b3-border-color)';
         projectDropdown.style.borderRadius = '4px';
         projectDropdown.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
-        projectDropdown.style.width = '260px';
         projectDropdown.style.maxHeight = 'none';
         projectDropdown.style.overflow = 'visible';
         projectDropdown.style.padding = '0';
         projectFilterContainer.appendChild(projectDropdown);
 
-        filterGroup.appendChild(projectFilterContainer);
+        if (!this.isDockMode) {
+            filterGroup.appendChild(projectFilterContainer);
+        }
 
         // 创建分类筛选容器（带下拉菜单）
         const categoryFilterContainer = document.createElement('div');
@@ -867,19 +871,26 @@ export class CalendarView {
         categoryDropdown.style.display = 'none';
         categoryDropdown.style.position = 'absolute';
         categoryDropdown.style.top = '100%';
-        categoryDropdown.style.left = '0';
+        if (this.isDockMode) {
+            categoryDropdown.style.right = '0';
+            categoryDropdown.style.minWidth = '180px';
+        } else {
+            categoryDropdown.style.left = '0';
+            categoryDropdown.style.minWidth = '200px';
+        }
         categoryDropdown.style.zIndex = '1000';
         categoryDropdown.style.backgroundColor = 'var(--b3-theme-background)';
         categoryDropdown.style.border = '1px solid var(--b3-border-color)';
         categoryDropdown.style.borderRadius = '4px';
         categoryDropdown.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
-        categoryDropdown.style.minWidth = '200px';
         categoryDropdown.style.maxHeight = '400px';
         categoryDropdown.style.overflowY = 'auto';
         categoryDropdown.style.padding = '8px';
         categoryFilterContainer.appendChild(categoryDropdown);
 
-        filterGroup.appendChild(categoryFilterContainer);
+        if (!this.isDockMode) {
+            filterGroup.appendChild(categoryFilterContainer);
+        }
 
 
 
@@ -916,7 +927,11 @@ export class CalendarView {
         displaySettingsDropdown.style.border = '1px solid var(--b3-border-color)';
         displaySettingsDropdown.style.borderRadius = '4px';
         displaySettingsDropdown.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
-        displaySettingsDropdown.style.minWidth = '220px';
+        if (this.isDockMode) {
+            displaySettingsDropdown.style.minWidth = '200px';
+        } else {
+            displaySettingsDropdown.style.minWidth = '220px';
+        }
         displaySettingsDropdown.style.padding = '8px';
 
         const createSwitchItem = (label: string, value: boolean, onChange: (checked: boolean) => void) => {
@@ -1333,18 +1348,17 @@ export class CalendarView {
         displaySettingsDropdown.appendChild(statusGroup);
 
         displaySettingsContainer.appendChild(displaySettingsDropdown);
-        filterGroup.appendChild(displaySettingsContainer);
+        if (!this.isDockMode) {
+            filterGroup.appendChild(displaySettingsContainer);
+        }
 
         displaySettingsButton.addEventListener('click', (e) => {
             e.stopPropagation();
             const isVisible = displaySettingsDropdown.style.display === 'block';
             displaySettingsDropdown.style.display = isVisible ? 'none' : 'block';
-            projectDropdown.style.display = isVisible ? 'none' : 'none'; // Ensure others hide
-            if (!isVisible) {
-                projectDropdown.style.display = 'none';
-                categoryDropdown.style.display = 'none';
-                viewTypeDropdown.style.display = 'none';
-            }
+            projectDropdown.style.display = 'none';
+            categoryDropdown.style.display = 'none';
+            viewTypeDropdown.style.display = 'none';
         });
 
         // 更新原有的下拉菜单关闭逻辑
@@ -1496,6 +1510,10 @@ export class CalendarView {
             });
 
             filterGroup.appendChild(moreBtn);
+        }
+
+        if (openTabBtn) {
+            filterGroup.appendChild(openTabBtn);
         }
         // 创建日历容器
         const calendarEl = document.createElement('div');
@@ -9643,6 +9661,8 @@ export class CalendarView {
             this.tooltip.remove();
             this.tooltip = null;
         }
+
+
 
         // 清理缓存
         this.colorCache.clear();
