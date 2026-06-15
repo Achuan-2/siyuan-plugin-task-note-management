@@ -7539,7 +7539,7 @@ export class CalendarView {
                         }
 
                         // Construct title: "<TomatoIcon> TaskName"
-                        const prefix = session.inProgress ? '⚠️' : '🍅';
+                        const prefix = session.inProgress ? '⏳' : '🍅';
                         const title = `${prefix} ${session.eventTitle || i18n('unnamedTask')}`;
 
                         // Determine colors based on session type
