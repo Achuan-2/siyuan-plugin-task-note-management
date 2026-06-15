@@ -116,6 +116,7 @@
     "confirm": "Confirm",
     "deleteReminder": "Delete Task",
     "confirmDelete": "Are you sure you want to delete task \"${title}\"? This action cannot be undone.",
+    "confirmDeleteReminder": "Are you sure you want to delete reminder \"${title}\"? This action cannot be undone.",
     "batchSetReminder": "Batch Set Time Reminders",
     "batchSetReminderBlocks": "Batch Set Time Reminders (${count} blocks)",
     "taskListStatusMenu": "Set Task Status",

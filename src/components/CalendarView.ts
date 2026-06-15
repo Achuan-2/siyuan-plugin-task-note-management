@@ -3054,7 +3054,7 @@ export class CalendarView {
 
         await confirm(
             i18n("deleteReminderTime") || "删除此提醒时间",
-            i18n("confirmDelete", { title: calendarEvent.title }),
+            i18n("confirmDeleteReminder", { title: calendarEvent.title }),
             async () => {
                 try {
                     const reminderData = await getAllReminders(this.plugin);
@@ -3558,6 +3558,14 @@ export class CalendarView {
                     }
                 });
             }
+
+            menu.addItem({
+                iconHTML: "⏰",
+                label: i18n("addReminderTime") || "添加提醒时间",
+                click: () => {
+                    this.addCurrentTimeReminder(calendarEvent);
+                }
+            });
         } else {
             menu.addItem({
                 iconHTML: "👁️",
@@ -5245,6 +5253,55 @@ export class CalendarView {
         } catch (error) {
             console.error('切换事件完成状态失败:', error);
             showMessage('切换完成状态失败，请重试');
+        }
+    }
+
+    private async addCurrentTimeReminder(event: any) {
+        try {
+            const reminderData = await getAllReminders(this.plugin);
+            const reminderId = event.extendedProps.originalId || event.id;
+            const reminder = reminderData[reminderId];
+
+            if (!reminder) {
+                showMessage(i18n("reminderNotExist"));
+                return;
+            }
+
+            const now = new Date();
+            const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+            if (!reminder.reminderTimes) {
+                reminder.reminderTimes = [];
+            }
+
+            // Check for duplicates
+            const hasDuplicate = reminder.reminderTimes.some((rt: any) => {
+                const rtTime = typeof rt === 'string' ? rt.trim() : rt?.time?.trim();
+                return rtTime === timeStr;
+            });
+
+            if (hasDuplicate) {
+                showMessage(i18n("reminderTimeExists") || "已存在该提醒时间");
+                return;
+            }
+
+            reminder.reminderTimes.push({ time: timeStr });
+
+            await saveReminders(this.plugin, reminderData);
+            if (this.plugin?.updateMobileNotification) {
+                try {
+                    await this.plugin.updateMobileNotification(reminder);
+                } catch (e) {
+                    console.warn('添加当前时间提醒后更新移动端通知失败:', e);
+                }
+            }
+
+            await this.refreshEvents();
+            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
+            showMessage(i18n("operationSuccessful") || "添加成功");
+        } catch (error) {
+            console.error('添加当前时间提醒失败:', error);
+            showMessage(i18n("operationFailed"));
         }
     }
 

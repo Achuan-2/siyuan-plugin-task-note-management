@@ -115,6 +115,7 @@
     "confirm": "确定",
     "deleteReminder": "删除任务",
     "confirmDelete": "确定要删除任务“${title}”吗？此操作无法撤销。",
+    "confirmDeleteReminder": "确定要删除提醒“${title}”吗？此操作无法撤销。",
     "confirmDeleteNormal": "确定要删除吗？",
     "batchSetReminder": "批量设置任务",
     "batchSetReminderBlocks": "批量设置任务 (${count}个块)",
