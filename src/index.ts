@@ -4017,6 +4017,14 @@ export default class ReminderPlugin extends Plugin {
                 if (reminderObj.completed) continue;
                 if (!this.canReminderNotifyOnDate(reminderObj, today, holidayData)) continue;
 
+                // 如果是跨天事件且今日已完成，跳过其所有通知提醒
+                const checkStartDate = reminderObj.date || reminderObj.endDate;
+                const checkEndDate = reminderObj.endDate || checkStartDate;
+                const checkIsCrossDay = checkStartDate && checkEndDate && checkStartDate !== checkEndDate;
+                if (checkIsCrossDay && reminderObj.dailyCompletions && reminderObj.dailyCompletions[today] === true) {
+                    continue;
+                }
+
                 // 处理普通提醒
                 if (!reminderObj.repeat?.enabled) {
                     // 普通（非重复）提醒：按字段分别处理 time 和 reminderTimes
@@ -5775,59 +5783,98 @@ export default class ReminderPlugin extends Plugin {
         }
 
         // 获取提醒日期和时间
-        const reminderDate = reminder.date || today;
-        const times: string[] = [];
+        const startDateStr = reminder.date || today;
+        const endDateStr = reminder.endDate || startDateStr;
+        const isCrossDay = !!(reminder.date && reminder.endDate && reminder.endDate !== reminder.date);
 
-        // 收集所有可能的提醒时间
+        const entries: Array<{ time: string; everyDay: boolean }> = [];
         if (reminder.time) {
-            times.push(reminder.time);
+            entries.push({ time: reminder.time, everyDay: isCrossDay });
         }
         if (reminder.reminderTimes && Array.isArray(reminder.reminderTimes)) {
             for (const rt of reminder.reminderTimes) {
                 if (typeof rt === 'string') {
-                    times.push(rt);
+                    entries.push({ time: rt, everyDay: isCrossDay });
                 } else if (rt?.time) {
-                    times.push(rt.time);
+                    entries.push({ time: rt.time, everyDay: !!rt.everyDay || isCrossDay });
                 }
             }
         }
 
-        if (times.length === 0) return [];
+        if (entries.length === 0) return [];
 
         // 收集所有未来的有效时间
         const futureTimes: Date[] = [];
 
-        for (const timeStr of times) {
-            const parsed = this.extractDateAndTime(timeStr);
+        for (const entry of entries) {
+            const parsed = this.extractDateAndTime(entry.time);
             if (!parsed.time) continue;
+
             const hasExplicitDate = !!parsed.date;
+            const applicableDates: string[] = [];
 
-            // 构建完整的日期时间
-            const datePart = parsed.date || reminderDate;
-            if (!this.canReminderNotifyOnDate(reminder, datePart, holidayData)) continue;
-            const dateTime = new Date(`${datePart}T${parsed.time}`);
+            if (hasExplicitDate) {
+                applicableDates.push(parsed.date!);
+            } else {
+                const isDaily = entry.everyDay || isCrossDay;
+                if (isDaily) {
+                    if (endDateStr >= startDateStr) {
+                        const startParts = startDateStr.split('-').map(Number);
+                        const endParts = endDateStr.split('-').map(Number);
+                        const startObj = new Date(startParts[0], startParts[1] - 1, startParts[2]);
+                        const endObj = new Date(endParts[0], endParts[1] - 1, endParts[2]);
 
-            // 检查日期是否在任务范围内
-            const startDate = reminder.date || today;
-            const endDate = reminder.endDate || startDate;
+                        const scanDays = this.getRepeatNotificationScanDays(reminder, daysLimit);
+                        const maxDateObj = new Date(startObj.getTime() + scanDays * 24 * 60 * 60 * 1000);
+                        const finalEndObj = endObj < maxDateObj ? endObj : maxDateObj;
 
-            // 显式日期的提醒应以字段日期为准，不受任务 date/endDate 过滤
-            if (!hasExplicitDate && (datePart < startDate || datePart > endDate)) continue;
+                        for (let d = new Date(startObj); d <= finalEndObj; d.setDate(d.getDate() + 1)) {
+                            const y = d.getFullYear();
+                            const m = String(d.getMonth() + 1).padStart(2, '0');
+                            const dateDay = String(d.getDate()).padStart(2, '0');
+                            applicableDates.push(`${y}-${m}-${dateDay}`);
+                        }
+                    } else {
+                        applicableDates.push(startDateStr);
+                    }
+                } else {
+                    applicableDates.push(startDateStr);
+                }
+            }
 
-            // 检查是否超过限制天数
-            if (limitDate && dateTime.getTime() > limitDate.getTime()) continue;
+            for (const datePart of applicableDates) {
+                if (!this.canReminderNotifyOnDate(reminder, datePart, holidayData)) continue;
 
-            // 只考虑未来的时间（给 1 分钟缓冲）
-            const diff = dateTime.getTime() - now.getTime();
-            if (diff > -60000) {
-                futureTimes.push(dateTime);
+                // 如果是跨天事件且在该日期已完成，则跳过通知
+                const isCompletedOnDate = reminder.completed || (reminder.dailyCompletions && reminder.dailyCompletions[datePart] === true);
+                if (isCrossDay && isCompletedOnDate) continue;
+
+                const dateTime = new Date(`${datePart}T${parsed.time}`);
+                if (isNaN(dateTime.getTime())) continue;
+
+                // 检查是否超过限制天数
+                if (limitDate && dateTime.getTime() > limitDate.getTime()) continue;
+
+                // 只考虑未来的时间（给 1 分钟缓冲）
+                const diff = dateTime.getTime() - now.getTime();
+                if (diff > -60000) {
+                    futureTimes.push(dateTime);
+                }
             }
         }
 
-        // 按时间升序排序
+        // 按时间升序排序并且去重
         futureTimes.sort((a, b) => a.getTime() - b.getTime());
+        const dedupSet = new Set<number>();
+        const deduped: Date[] = [];
+        for (const dt of futureTimes) {
+            const ts = dt.getTime();
+            if (dedupSet.has(ts)) continue;
+            dedupSet.add(ts);
+            deduped.push(dt);
+        }
 
-        return futureTimes;
+        return deduped;
     }
 
     private calculateHabitNotificationTimes(

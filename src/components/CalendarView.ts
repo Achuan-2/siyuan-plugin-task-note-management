@@ -3434,14 +3434,49 @@ export class CalendarView {
         const isDeletable = !calendarEvent.extendedProps.isSubscribed || (calendarEvent.extendedProps.subscriptionType === 'caldav' && calendarEvent.extendedProps.caldavDeletable);
 
         if (isEditable) {
-            // 如果事项没有绑定块，显示绑定块选项
-            menu.addItem({
-                iconHTML: "✅",
-                label: calendarEvent.extendedProps.completed ? i18n("markAsUncompleted") : i18n("markAsCompleted"),
-                click: () => {
-                    this.toggleEventCompleted(calendarEvent);
-                }
-            });
+            const startDateStr = calendarEvent.extendedProps.date || calendarEvent.extendedProps.originalDate;
+            const endDateStr = calendarEvent.extendedProps.endDate || calendarEvent.extendedProps.originalEndDate || startDateStr;
+            const isCrossDay = startDateStr && endDateStr && startDateStr !== endDateStr;
+
+            const viewType = this.calendar?.view?.type;
+            const isSingleDayView = viewType === 'timeGridDay' || 
+                                    viewType === 'dayGridDay' || 
+                                    viewType === 'listDay';
+
+            const reminderData = await getAllReminders(this.plugin);
+            const reminderId = calendarEvent.extendedProps.originalId || calendarEvent.id;
+            const reminder = reminderData[reminderId];
+
+            if (isCrossDay) {
+                const isGloballyCompleted = reminder ? reminder.completed === true : calendarEvent.extendedProps.completed;
+                const targetDate = isSingleDayView ? getLocalDateString(this.calendar.getDate()) : getLogicalDateString();
+                const isTodayCompleted = !!(reminder && reminder.dailyCompletions && reminder.dailyCompletions[targetDate] === true);
+
+                menu.addItem({
+                    iconHTML: isGloballyCompleted ? "↩️" : "✅",
+                    label: isGloballyCompleted ? (i18n("markAsUncompleted") || "取消完成") : (i18n("markAsCompleted") || "完成任务"),
+                    click: () => {
+                        this.toggleEventCompleted(calendarEvent, 'global');
+                    }
+                });
+
+                menu.addItem({
+                    iconHTML: isTodayCompleted ? "↩️" : "✅",
+                    label: isTodayCompleted ? (i18n("unmarkTodayCompleted") || "取消今日已完成") : (i18n("markTodayCompleted") || "今日已完成"),
+                    click: () => {
+                        this.toggleEventCompleted(calendarEvent, 'today', targetDate);
+                    }
+                });
+            } else {
+                const isGloballyCompleted = calendarEvent.extendedProps.completed;
+                menu.addItem({
+                    iconHTML: isGloballyCompleted ? "↩️" : "✅",
+                    label: isGloballyCompleted ? i18n("markAsUncompleted") : i18n("markAsCompleted"),
+                    click: () => {
+                        this.toggleEventCompleted(calendarEvent);
+                    }
+                });
+            }
 
             menu.addSeparator();
 
@@ -5052,7 +5087,7 @@ export class CalendarView {
 
     // ...existing code...
 
-    private async toggleEventCompleted(event) {
+    private async toggleEventCompleted(event, action?: 'global' | 'today', targetDate?: string) {
         try {
             const reminderData = await getAllReminders(this.plugin);
 
@@ -5113,33 +5148,98 @@ export class CalendarView {
 
                 if (reminderData[reminderId]) {
                     const blockId = reminderData[reminderId].blockId;
-                    const newCompletedState = !reminderData[reminderId].completed;
+                    const reminder = reminderData[reminderId];
 
-                    reminderData[reminderId].completed = newCompletedState;
+                    const startDateStr = reminder.date || reminder.endDate;
+                    const endDateStr = reminder.endDate || startDateStr;
+                    const isCrossDay = startDateStr && endDateStr && startDateStr !== endDateStr;
 
-                    // 记录或清除完成时间
-                    if (newCompletedState) {
-                        reminderData[reminderId].completedTime = getLocalDateTimeString(new Date());
+                    const viewType = this.calendar?.view?.type;
+                    const isSingleDayView = viewType === 'timeGridDay' || 
+                                            viewType === 'dayGridDay' || 
+                                            viewType === 'listDay';
+
+                    const settings = this.reminderSkipSettings || this.plugin?.settings || {};
+                    const checkboxAction = settings.checkboxActionForSpanningAndDessert || 'global';
+
+                    const useTodayAction = action === 'today' || (action === undefined && isCrossDay && isSingleDayView && checkboxAction === 'today');
+
+                    if (useTodayAction && this.calendar) {
+                        const viewDate = targetDate || (isSingleDayView ? getLocalDateString(this.calendar.getDate()) : getLogicalDateString());
+
+                        if (reminder.completed) {
+                            // 如果是全局完成的，取消全局完成状态
+                            reminder.completed = false;
+                            delete reminder.completedTime;
+
+                            await saveReminders(this.plugin, reminderData);
+                            await this.refreshTaskMobileNotification(reminder, reminderId);
+
+                            if (blockId) {
+                                await updateBindBlockAtrrs(blockId, this.plugin);
+                            }
+
+                            event.setExtendedProp('completed', false);
+                            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
+                            await this.refreshEvents();
+                        } else {
+                            if (!reminder.dailyCompletions) {
+                                reminder.dailyCompletions = {};
+                            }
+                            if (!reminder.dailyCompletionsTimes) {
+                                reminder.dailyCompletionsTimes = {};
+                            }
+
+                            const isCurrentlyCompleted = reminder.dailyCompletions[viewDate] === true;
+                            const newCompletedState = !isCurrentlyCompleted;
+
+                            if (newCompletedState) {
+                                reminder.dailyCompletions[viewDate] = true;
+                                reminder.dailyCompletionsTimes[viewDate] = getLocalDateTimeString(new Date());
+                            } else {
+                                delete reminder.dailyCompletions[viewDate];
+                                delete reminder.dailyCompletionsTimes[viewDate];
+                            }
+
+                            await saveReminders(this.plugin, reminderData);
+                            await this.refreshTaskMobileNotification(reminder, reminderId);
+
+                            if (blockId) {
+                                await updateBindBlockAtrrs(blockId, this.plugin);
+                            }
+
+                            event.setExtendedProp('completed', newCompletedState);
+                            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
+                            await this.refreshEvents();
+                        }
                     } else {
-                        delete reminderData[reminderId].completedTime;
+                        const newCompletedState = !reminder.completed;
+                        reminder.completed = newCompletedState;
+
+                        // 记录或清除完成时间
+                        if (newCompletedState) {
+                            reminder.completedTime = getLocalDateTimeString(new Date());
+                        } else {
+                            delete reminder.completedTime;
+                        }
+
+                        await saveReminders(this.plugin, reminderData);
+                        await this.refreshTaskMobileNotification(reminderData[reminderId], reminderId);
+
+                        // 更新块的书签状态
+                        if (blockId) {
+                            await updateBindBlockAtrrs(blockId, this.plugin);
+                        }
+
+                        // 更新事件的显示状态
+                        event.setExtendedProp('completed', newCompletedState);
+
+                        // 触发更新事件
+                        window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
+
+                        // 立即刷新事件显示
+                        await this.refreshEvents();
                     }
-
-                    await saveReminders(this.plugin, reminderData);
-                    await this.refreshTaskMobileNotification(reminderData[reminderId], reminderId);
-
-                    // 更新块的书签状态
-                    if (blockId) {
-                        await updateBindBlockAtrrs(blockId, this.plugin);
-                    }
-
-                    // 更新事件的显示状态
-                    event.setExtendedProp('completed', newCompletedState);
-
-                    // 触发更新事件
-                    window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
-
-                    // 立即刷新事件显示
-                    await this.refreshEvents();
                 }
             }
         } catch (error) {
@@ -8069,16 +8169,34 @@ export class CalendarView {
     }
 
     passesCompletionFilter(reminder: any): boolean {
+        const viewType = this.calendar?.view?.type;
+        const isSingleDayView = viewType === 'timeGridDay' || 
+                                viewType === 'dayGridDay' || 
+                                viewType === 'listDay';
+
+        let isCompleted = reminder.completed === true;
+        if (!isCompleted && isSingleDayView && this.calendar) {
+            const startDateStr = reminder.date || reminder.endDate;
+            const endDateStr = reminder.endDate || startDateStr;
+            const isCrossDay = startDateStr && endDateStr && startDateStr !== endDateStr;
+            if (isCrossDay) {
+                const viewDate = getLocalDateString(this.calendar.getDate());
+                if (reminder.dailyCompletions && reminder.dailyCompletions[viewDate] === true) {
+                    isCompleted = true;
+                }
+            }
+        }
+
         if (this.currentCompletionFilter === 'all') {
             return true;
         }
 
         if (this.currentCompletionFilter === 'completed') {
-            return reminder.completed === true;
+            return isCompleted;
         }
 
         if (this.currentCompletionFilter === 'incomplete') {
-            return reminder.completed !== true;
+            return !isCompleted;
         }
 
         return true;
@@ -8283,6 +8401,7 @@ export class CalendarView {
         const hasExplicitDateInEntries = reminderEntries.some(e => e.time.includes('T'));
         if (!fallbackDate && !hasEveryDay && !hasExplicitDateInEntries) return;
 
+        const isCrossDay = !!(reminder.date && reminder.endDate && reminder.endDate > reminder.date);
         const colors = this.getEventColors(reminder);
         const priority = reminder.priority || 'none';
         const baseTitle = reminder.title || i18n("unnamedNote");
@@ -8304,7 +8423,6 @@ export class CalendarView {
                 let endStr = reminder.endDate;
                 
                 // If not cross-day task, calculate dynamic end date
-                const isCrossDay = reminder.date && reminder.endDate && reminder.endDate > reminder.date;
                 if (!isCrossDay) {
                     if (reminder.completed) {
                         endStr = reminder.completedTime ? reminder.completedTime.substring(0, 10) : (reminder.date || todayStr);
@@ -8334,6 +8452,10 @@ export class CalendarView {
                         this.holidays as HolidayData
                     );
                     if (isSkipped) continue;
+
+                    // 如果是跨天事件且在该日期已完成，则不显示提醒时间
+                    const isCompletedOnDate = reminder.completed || (reminder.dailyCompletions && reminder.dailyCompletions[dateStr] === true);
+                    if (isCrossDay && isCompletedOnDate) continue;
 
                     const eventStart = new Date(`${dateStr}T${normalizedTime}:00`);
                     if (Number.isNaN(eventStart.getTime())) continue;
@@ -8409,6 +8531,10 @@ export class CalendarView {
 
             const parsed = this.parseReminderTimeToDateTime(entry.time, fallbackDate);
             if (!parsed) return;
+
+            // 如果是跨天事件且在该日期已完成，则不显示提醒时间
+            const isCompletedOnDate = reminder.completed || (reminder.dailyCompletions && reminder.dailyCompletions[parsed.date] === true);
+            if (isCrossDay && isCompletedOnDate) return;
 
             const isSkipped = shouldSkipReminderOnDate(
                 reminder,
@@ -8540,7 +8666,23 @@ export class CalendarView {
         const colors = this.getEventColors(reminder);
 
         // 检查完成状态（简化逻辑）
-        const isCompleted = reminder.completed || false;
+        let isCompleted = reminder.completed || false;
+
+        const viewType = this.calendar?.view?.type;
+        const isSingleDayView = viewType === 'timeGridDay' || 
+                                viewType === 'dayGridDay' || 
+                                viewType === 'listDay';
+
+        const startDateStr = reminder.date || reminder.endDate;
+        const endDateStr = reminder.endDate || startDateStr;
+        const isCrossDay = startDateStr && endDateStr && startDateStr !== endDateStr;
+
+        if (!isCompleted && isCrossDay && isSingleDayView && this.calendar) {
+            const viewDate = getLocalDateString(this.calendar.getDate());
+            if (reminder.dailyCompletions && reminder.dailyCompletions[viewDate] === true) {
+                isCompleted = true;
+            }
+        }
 
         // 构建 className（优化：减少数组分配，直接字符串拼接）
         let classNames = `reminder-priority-${priority}`;
