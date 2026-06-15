@@ -8510,9 +8510,8 @@ export class CalendarView {
                     );
                     if (isSkipped) continue;
 
-                    // 如果是跨天事件且在该日期已完成，则不显示提醒时间
-                    const isCompletedOnDate = reminder.completed || (reminder.dailyCompletions && reminder.dailyCompletions[dateStr] === true);
-                    if (isCrossDay && isCompletedOnDate) continue;
+                    // 如果是跨天事件且在该日期已完成，依然显示提醒时间，只不过提醒时间变暗
+                    const isCompletedOnDate = !!(reminder.completed || (isCrossDay && reminder.dailyCompletions && reminder.dailyCompletions[dateStr] === true));
 
                     const eventStart = new Date(`${dateStr}T${normalizedTime}:00`);
                     if (Number.isNaN(eventStart.getTime())) continue;
@@ -8527,7 +8526,7 @@ export class CalendarView {
                             eventEnd = explicitEndDate;
                         }
                     }
-                    const isExpired = !reminder.completed && eventEnd.getTime() < Date.now();
+                    const isExpired = !isCompletedOnDate && eventEnd.getTime() < Date.now();
                     const endDateStr2 = getLocalDateString(eventEnd);
                     const endTimeStr2 = eventEnd.toTimeString().substring(0, 5);
 
@@ -8539,7 +8538,7 @@ export class CalendarView {
                         backgroundColor: colorWithOpacity(colors.backgroundColor, 0.22),
                         borderColor: colors.borderColor,
                         textColor: 'var(--b3-theme-on-background)',
-                        className: `reminder-time-event reminder-priority-${priority}${isRepeated ? ' reminder-repeated' : ''}${reminder.completed || isExpired ? ' completed' : ''}`,
+                        className: `reminder-time-event reminder-priority-${priority}${isRepeated ? ' reminder-repeated' : ''}${isCompletedOnDate || isExpired ? ' completed' : ''}`,
                         editable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable),
                         startEditable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable),
                         durationEditable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable),
@@ -8553,7 +8552,7 @@ export class CalendarView {
                             reminderEndAt: entry.endTime,
                             isExpiredReminderTime: isExpired,
                             reminderTimeNote: entry.note,
-                            completed: reminder.completed || false,
+                            completed: isCompletedOnDate || false,
                             note: (typeof entry.note === 'string' && entry.note.trim()) ? entry.note : (reminder.note || ''),
                             taskNote: reminder.note || '',
                             date: reminder.date,
@@ -8589,9 +8588,8 @@ export class CalendarView {
             const parsed = this.parseReminderTimeToDateTime(entry.time, fallbackDate);
             if (!parsed) return;
 
-            // 如果是跨天事件且在该日期已完成，则不显示提醒时间
-            const isCompletedOnDate = reminder.completed || (reminder.dailyCompletions && reminder.dailyCompletions[parsed.date] === true);
-            if (isCrossDay && isCompletedOnDate) return;
+            // 如果是跨天事件且在该日期已完成，依然显示提醒时间，只不过提醒时间变暗
+            const isCompletedOnDate = !!(reminder.completed || (isCrossDay && reminder.dailyCompletions && reminder.dailyCompletions[parsed.date] === true));
 
             const isSkipped = shouldSkipReminderOnDate(
                 reminder,
@@ -8614,7 +8612,7 @@ export class CalendarView {
                     endDate = explicitEndDate;
                 }
             }
-            const isExpiredReminderTime = !reminder.completed && endDate.getTime() < Date.now();
+            const isExpiredReminderTime = !isCompletedOnDate && endDate.getTime() < Date.now();
             const endDateStr = getLocalDateString(endDate);
             const endTimeStr = endDate.toTimeString().substring(0, 5);
 
@@ -8626,7 +8624,7 @@ export class CalendarView {
                 backgroundColor: colorWithOpacity(colors.backgroundColor, 0.22),
                 borderColor: colors.borderColor,
                 textColor: 'var(--b3-theme-on-background)',
-                className: `reminder-time-event reminder-priority-${priority}${isRepeated ? ' reminder-repeated' : ''}${reminder.completed || isExpiredReminderTime ? ' completed' : ''}`,
+                className: `reminder-time-event reminder-priority-${priority}${isRepeated ? ' reminder-repeated' : ''}${isCompletedOnDate || isExpiredReminderTime ? ' completed' : ''}`,
                 editable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable),
                 startEditable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable),
                 durationEditable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable),
@@ -8640,7 +8638,7 @@ export class CalendarView {
                     reminderEndAt: entry.endTime,
                     isExpiredReminderTime,
                     reminderTimeNote: entry.note,
-                    completed: reminder.completed || false,
+                    completed: isCompletedOnDate || false,
                     note: (typeof entry.note === 'string' && entry.note.trim()) ? entry.note : (reminder.note || ''),
                     taskNote: reminder.note || '',
                     date: reminder.date,
