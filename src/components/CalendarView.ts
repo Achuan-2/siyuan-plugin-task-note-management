@@ -96,6 +96,7 @@ export class CalendarView {
     private readonly calendarViewInstanceId: string = `calendar-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     private currentCompletionFilter: string = 'all'; // 当前完成状态过滤
     private isDragging: boolean = false; // 标记是否正在拖动事件
+    private refreshPendingDuringDrag: boolean = false; // 标记拖动期间是否有未处理的刷新请求
     private allDayDragState: {
         draggedEvent: any;
         targetEvent: { id: string; el: HTMLElement } | null;
@@ -1772,9 +1773,27 @@ export class CalendarView {
                 // 延迟重置拖动标志，防止拖动结束后立即触发点击
                 setTimeout(() => {
                     this.isDragging = false;
+                    if (this.refreshPendingDuringDrag) {
+                        this.refreshPendingDuringDrag = false;
+                        this.refreshEvents();
+                    }
                 }, 100);
             },
             eventDrop: this.handleEventDrop.bind(this),
+            eventResizeStart: (info) => {
+                this.isDragging = true;
+                this.forceHideTooltip();
+            },
+            eventResizeStop: (info) => {
+                // 延迟重置拖动标志，防止调整大小结束后立即触发点击
+                setTimeout(() => {
+                    this.isDragging = false;
+                    if (this.refreshPendingDuringDrag) {
+                        this.refreshPendingDuringDrag = false;
+                        this.refreshEvents();
+                    }
+                }, 100);
+            },
             eventResize: this.handleEventResize.bind(this),
             eventAllow: (dropInfo, draggedEvent) => {
                 // ICS 订阅只读；CalDAV 订阅根据 caldavEditable 决定是否允许编辑。
@@ -5359,6 +5378,10 @@ export class CalendarView {
             this.isAllDayReordering = false;
             this.allDayDragState = null;
             this.isDragging = false;
+            if (this.refreshPendingDuringDrag) {
+                this.refreshPendingDuringDrag = false;
+                this.refreshEvents();
+            }
         }
     }
 
@@ -7043,6 +7066,11 @@ export class CalendarView {
     }
 
     private async refreshEvents(force: boolean = false) {
+        if (this.isDragging) {
+            this.refreshPendingDuringDrag = true;
+            return;
+        }
+
         // 清除之前的刷新超时
         if (this.refreshTimeout) {
             clearTimeout(this.refreshTimeout);
@@ -7050,6 +7078,10 @@ export class CalendarView {
 
         // 使用防抖机制，避免频繁刷新
         this.refreshTimeout = window.setTimeout(async () => {
+            if (this.isDragging) {
+                this.refreshPendingDuringDrag = true;
+                return;
+            }
             // 1. 记录当前所有滚动容器的位置 (特别是月视图或时间轴视图中的滚动条)
             const scrollerStates = Array.from(this.container.querySelectorAll('.fc-scroller')).map((el: HTMLElement) => ({
                 el,
