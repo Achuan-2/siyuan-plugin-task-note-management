@@ -1324,7 +1324,7 @@
     "taskGroupByCategory": "分类区分",
     "uncategorizedProject": "未分配项目",
     "uncategorizedCategory": "未分类",
-    "summarySettings": "📋摘要设置",
+    "summarySettings": "📋任务摘要设置",
     "showPomodoroInSummary": "在摘要中显示番茄钟统计",
     "showPomodoroInSummaryDesc": "开启后，任务摘要将包含番茄钟专注时长统计",
     "showHabitInSummary": "在摘要中显示习惯打卡统计",

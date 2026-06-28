@@ -948,7 +948,7 @@
             ],
         },
         {
-            name: i18n('summarySettings') || '📋摘要设置',
+            name: i18n('summarySettings') || '📋任务摘要设置',
             items: [
                 {
                     key: 'showPomodoroInSummary',

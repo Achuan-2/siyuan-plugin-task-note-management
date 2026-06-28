@@ -1324,7 +1324,7 @@
     "taskGroupByCategory": "By Category",
     "uncategorizedProject": "Unassigned Project",
     "uncategorizedCategory": "Uncategorized",
-    "summarySettings": "📋Summary Settings",
+    "summarySettings": "📋Task Summary Settings",
     "showPomodoroInSummary": "Show Pomodoro in Summary",
     "showPomodoroInSummaryDesc": "When enabled, task summary will include Pomodoro focus time statistics",
     "showHabitInSummary": "Show Habits in Summary",
