@@ -114,6 +114,9 @@ export class CalendarView {
     private startResizeY: number = 0;
     private startResizeHeight: number = 0;
     private isCollapseTimeRangeTemp: boolean = true; // 缓存临时的折叠状态，支持在界面上手动展开/折叠
+    private isTopCollapseTemp: boolean = true; // 缓存顶部临时的折叠状态
+    private isBottomCollapseTemp: boolean = true; // 缓存底部临时的折叠状态
+    private isMiddleCollapseTemp: boolean = true; // 缓存中间临时的折叠状态（折叠区间位于一天中间）
     private dragHandleEl: HTMLElement | null = null; // 缓存拖拽手柄元素
     private isDraggingCollapseEnd: boolean = false; // 标记当前是否在拖拽手柄
     private justDraggedCollapseEnd: boolean = false; // 标记是否刚刚结束拖拽手柄调整
@@ -175,7 +178,7 @@ export class CalendarView {
 
 
 
-    private async updateSettings() {
+    private async updateSettings(fromSettingPanel = false) {
         const settings = await this.plugin.loadSettings();
         this.reminderSkipSettings = settings || {};
         this.showCategoryAndProject = settings.calendarShowCategoryAndProject !== false;
@@ -232,21 +235,37 @@ export class CalendarView {
         const weekStartDay = await this.getWeekStartDay();
         const dayStartTime = await this.getDayStartTime();
         const todayStartTime = await this.getTodayStartTime();
-        if (this.lastCalendarCollapseTimeRangeSetting === undefined || 
+        
+        // 只有从设置面板修改/保存，或者首次加载时，或者配置的值真实发生改变时，才重载 UI 的折叠状态。
+        // 其余日常刷新（如其他位置发送的广播）需要保留当前 UI 界面的临时展开/收起状态。
+        if (fromSettingPanel || this.lastCalendarCollapseTimeRangeSetting === undefined || 
             this.lastCalendarCollapseTimeRangeSetting !== settings.calendarCollapseTimeRange) {
             this.isCollapseTimeRangeTemp = settings.calendarCollapseTimeRange === true;
+            this.isTopCollapseTemp = settings.calendarCollapseTimeRange === true;
+            this.isBottomCollapseTemp = settings.calendarCollapseTimeRange === true;
+            this.isMiddleCollapseTemp = settings.calendarCollapseTimeRange === true;
             this.lastCalendarCollapseTimeRangeSetting = settings.calendarCollapseTimeRange;
         }
         const collapseStart = settings.calendarCollapseStartTime || '00:00';
         const collapseEnd = settings.calendarCollapseEndTime || '08:00';
-        const adjustedTimes = this.calculateAdjustedSlotTimes(todayStartTime, this.isCollapseTimeRangeTemp, collapseStart, collapseEnd);
+        const adjustedTimes = this.calculateAdjustedSlotTimes(
+            todayStartTime, 
+            settings.calendarCollapseTimeRange === true, 
+            this.isTopCollapseTemp, 
+            this.isBottomCollapseTemp, 
+            collapseStart, 
+            collapseEnd
+        );
 
         this.calendar.setOption('firstDay', weekStartDay);
         this.calendar.setOption('slotMinTime', adjustedTimes.slotMinTime);
         this.calendar.setOption('slotMaxTime', adjustedTimes.slotMaxTime);
         
-        // 如果是展开状态，起始滚动时间应该是首个可见时间 (即 00:00)，避免强行滚动到日历默认起始时间
-        const targetScrollTime = this.isCollapseTimeRangeTemp ? dayStartTime : adjustedTimes.slotMinTime;
+        // 滚动目标：优先使用用户设置的日历视图起始时间（dayStartTime）。
+        // 当顶部展开且底部折叠时，slotMinTime 可能仍在底部段结束后（如 08:00），
+        // 此时若直接滚动到 slotMinTime 会跳过用户关心的 dayStartTime；
+        // 因此只要底部仍处于折叠状态，就保持滚动到 dayStartTime，避免错误跳转。
+        const targetScrollTime = this.isBottomCollapseTemp ? dayStartTime : adjustedTimes.slotMinTime;
         this.calendar.setOption('scrollTime', targetScrollTime);
         this.calendar.setOption('nextDayThreshold', todayStartTime);
 
@@ -486,9 +505,19 @@ export class CalendarView {
         // 获取逻辑一天起始时间（todayStartTime）与折叠时间区设置
         const todayStartTime = await this.getTodayStartTime();
         this.isCollapseTimeRangeTemp = settings.calendarCollapseTimeRange === true;
+        this.isTopCollapseTemp = settings.calendarCollapseTimeRange === true;
+        this.isBottomCollapseTemp = settings.calendarCollapseTimeRange === true;
+        this.isMiddleCollapseTemp = settings.calendarCollapseTimeRange === true;
         const collapseStart = settings.calendarCollapseStartTime || '00:00';
         const collapseEnd = settings.calendarCollapseEndTime || '08:00';
-        const adjustedTimes = this.calculateAdjustedSlotTimes(todayStartTime, this.isCollapseTimeRangeTemp, collapseStart, collapseEnd);
+        const adjustedTimes = this.calculateAdjustedSlotTimes(
+            todayStartTime, 
+            this.isCollapseTimeRangeTemp, 
+            this.isTopCollapseTemp, 
+            this.isBottomCollapseTemp, 
+            collapseStart, 
+            collapseEnd
+        );
         const slotMinTimeVal = adjustedTimes.slotMinTime;
         const slotMaxTimeVal = adjustedTimes.slotMaxTime;
 
@@ -2053,6 +2082,7 @@ export class CalendarView {
             if (!settings.calendarCollapseTimeRange) return;
 
             const todayStartTime = await this.getTodayStartTime();
+            const collapseStartTime = settings.calendarCollapseStartTime || '00:00';
             const collapseEndTime = settings.calendarCollapseEndTime || '08:00';
 
             const parseToMinutes = (t: string): number => {
@@ -2060,12 +2090,60 @@ export class CalendarView {
                 return parseInt(parts[0] || '0', 10) * 60 + parseInt(parts[1] || '0', 10);
             };
 
-            const startMin = parseToMinutes(todayStartTime);
-            const endMin = parseToMinutes(collapseEndTime);
+            const logicalStartMin = parseToMinutes(todayStartTime);
+            const cStartMin = parseToMinutes(collapseStartTime);
+            const cEndMin = parseToMinutes(collapseEndTime);
             const rowMin = parseToMinutes(timeStr);
+            const normalizedRowMin = rowMin % 1440;
 
-            // 当展开状态下点击置灰的时间轴单元格时，折叠该时段
-            if (!this.isCollapseTimeRangeTemp && rowMin >= startMin && rowMin < endMin) {
+            // 计算相对逻辑天起始时间的偏移
+            const relStart = (cStartMin - logicalStartMin + 1440) % 1440;
+            const relEnd = (cEndMin - logicalStartMin + 1440) % 1440;
+
+            let shouldCollapse = false;
+
+            if (relStart > relEnd) {
+                // 跨越逻辑天起始时间：
+                // 顶部段位于时间轴开头 [todayStartTime, collapseEnd]
+                // 底部段位于时间轴结尾 [collapseStart, todayStartTime]
+                const inTopSegment = normalizedRowMin >= logicalStartMin && normalizedRowMin < cEndMin;
+                const inBottomSegment = normalizedRowMin >= cStartMin && normalizedRowMin < logicalStartMin;
+                if (!this.isCollapseTimeRangeTemp) {
+                    // 完全展开状态：点击任意一段折叠该段
+                    if (inTopSegment) {
+                        this.isTopCollapseTemp = true;
+                        shouldCollapse = true;
+                    } else if (inBottomSegment) {
+                        this.isBottomCollapseTemp = true;
+                        shouldCollapse = true;
+                    }
+                } else {
+                    // 部分折叠状态：只折叠尚未折叠的段
+                    if (inTopSegment && !this.isTopCollapseTemp) {
+                        this.isTopCollapseTemp = true;
+                        shouldCollapse = true;
+                    } else if (inBottomSegment && !this.isBottomCollapseTemp) {
+                        this.isBottomCollapseTemp = true;
+                        shouldCollapse = true;
+                    }
+                }
+            } else {
+                // 不跨越：折叠区间位于一侧
+                const inCollapsedRange = relStart === 0
+                    ? (normalizedRowMin >= logicalStartMin && normalizedRowMin < cEndMin)
+                    : (normalizedRowMin >= cStartMin && normalizedRowMin < cEndMin);
+                if (inCollapsedRange) {
+                    if (relStart === 0) {
+                        this.isTopCollapseTemp = true;
+                    } else {
+                        this.isBottomCollapseTemp = true;
+                    }
+                    shouldCollapse = true;
+                }
+            }
+
+            // 当展开状态下点击置灰的时间轴单元格时，折叠对应时段
+            if (shouldCollapse) {
                 e.stopPropagation();
                 e.preventDefault();
                 this.isCollapseTimeRangeTemp = true;
@@ -2336,7 +2414,14 @@ export class CalendarView {
                     const settings = await this.plugin.loadSettings();
                     const collapseStart = settings.calendarCollapseStartTime || '00:00';
                     const collapseEnd = settings.calendarCollapseEndTime || '08:00';
-                    const adjustedTimes = this.calculateAdjustedSlotTimes(todayStartTime, this.isCollapseTimeRangeTemp, collapseStart, collapseEnd);
+                    const adjustedTimes = this.calculateAdjustedSlotTimes(
+                        todayStartTime,
+                        this.isCollapseTimeRangeTemp,
+                        this.isTopCollapseTemp,
+                        this.isBottomCollapseTemp,
+                        collapseStart,
+                        collapseEnd
+                    );
                     const slotMin = this.parseDuration(adjustedTimes.slotMinTime);
                     const slotMax = this.parseDuration(adjustedTimes.slotMaxTime);
 
@@ -2423,13 +2508,15 @@ export class CalendarView {
         window.addEventListener('reminderUpdated', this.externalReminderUpdatedHandler);
 
         // 监听设置更新事件
-        this.settingUpdateHandler = async () => {
-            await this.updateSettings();
+        this.settingUpdateHandler = async (e: Event) => {
+            const customEvent = e as CustomEvent;
+            const fromSettingPanel = customEvent?.detail?.fromSettingPanel === true;
+            await this.updateSettings(fromSettingPanel);
         };
         window.addEventListener('reminderSettingsUpdated', this.settingUpdateHandler);
 
         this.externalCalendarConfigUpdatedHandler = async () => {
-            await this.updateSettings();
+            await this.updateSettings(true);
         };
         window.addEventListener(CALENDAR_CONFIG_UPDATED_EVENT, this.externalCalendarConfigUpdatedHandler);
 
@@ -11208,10 +11295,13 @@ export class CalendarView {
 
     /**
      * 计算经过折叠（隐藏非工作时段）调整后的 slotMinTime 和 slotMaxTime
+     * 支持分段折叠：当折叠区间跨越逻辑一天起始时间时，顶部段与底部段可独立展开/折叠。
      */
     private calculateAdjustedSlotTimes(
         todayStartTime: string,
         collapseEnabled: boolean,
+        isTopCollapsed: boolean,
+        isBottomCollapsed: boolean,
         collapseStart: string,
         collapseEnd: string
     ): { slotMinTime: string, slotMaxTime: string } {
@@ -11229,39 +11319,82 @@ export class CalendarView {
             return h * 60 + m;
         };
 
+        const formatMinutes = (totalMins: number): string => {
+            const h = Math.floor(totalMins / 60);
+            const m = totalMins % 60;
+            return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:00`;
+        };
+
         try {
             const logicalStartMin = parseToMinutes(todayStartTime);
-            const collapseStartMin = parseToMinutes(collapseStart);
-            const collapseEndMin = parseToMinutes(collapseEnd);
+            const cStartMin = parseToMinutes(collapseStart);
+            const cEndMin = parseToMinutes(collapseEnd);
 
-            if (collapseStartMin === collapseEndMin) {
+            if (cStartMin === cEndMin) {
                 return { slotMinTime: todayStartTime, slotMaxTime: defaultSlotMax };
             }
 
-            const getRelativeMinutes = (min: number) => {
-                let rel = min - logicalStartMin;
-                if (rel < 0) rel += 1440;
-                return rel;
-            };
+            // 相对逻辑天起始时间的偏移（0 ~ 1440）
+            const relStart = (cStartMin - logicalStartMin + 1440) % 1440;
+            const relEnd = (cEndMin - logicalStartMin + 1440) % 1440;
 
-            const relStart = getRelativeMinutes(collapseStartMin);
-            const relEnd = getRelativeMinutes(collapseEndMin);
+            // 跨越逻辑天起始时间：
+            // 顶部折叠行隐藏时间轴开头的 [todayStartTime, collapseEnd]
+            // 底部折叠行隐藏时间轴结尾的 [collapseStart, todayStartTime]
+            if (relStart > relEnd) {
+                // 顶部段在 FC 时间轴上实际显示为 [logicalStartMin, cEndMin]
+                const topSlotMin = logicalStartMin;
+                const topSlotMax = cEndMin;
+                // 底部段在 FC 时间轴上实际显示为 [cStartMin + 24h, logicalStartMin + 24h]
+                const bottomSlotMin = cStartMin + 1440;
+                const bottomSlotMax = logicalStartMin + 1440;
 
-            let absStart = logicalStartMin + relEnd;
-            let absEnd = logicalStartMin + relStart;
-            if (relStart <= relEnd) {
-                absEnd += 1440;
+                let slotMin: number;
+                let slotMax: number;
+
+                if (isTopCollapsed) {
+                    // 顶部折叠：可见区从顶部段结束后开始
+                    slotMin = topSlotMax;
+                } else {
+                    // 顶部展开：从逻辑天起始时间开始
+                    slotMin = topSlotMin;
+                }
+
+                if (isBottomCollapsed) {
+                    // 底部折叠：可见区到底部段开始前结束
+                    slotMax = bottomSlotMin;
+                } else {
+                    // 底部展开：可见区延伸到逻辑天结束
+                    slotMax = bottomSlotMax;
+                }
+
+                return {
+                    slotMinTime: formatMinutes(slotMin),
+                    slotMaxTime: formatMinutes(slotMax)
+                };
             }
 
-            const formatAbsoluteMinutes = (totalMins: number): string => {
-                const h = Math.floor(totalMins / 60);
-                const m = totalMins % 60;
-                return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:00`;
-            };
+            // 不跨越逻辑天起始时间：折叠区间位于连续的一侧
+            if (relStart === 0) {
+                // 折叠区间从逻辑天起始时间开始（顶部折叠）
+                return {
+                    slotMinTime: isTopCollapsed ? formatMinutes(cEndMin) : todayStartTime,
+                    slotMaxTime: defaultSlotMax
+                };
+            }
 
+            if (relEnd === 0) {
+                // 折叠区间到逻辑天结束时间结束（底部折叠）
+                return {
+                    slotMinTime: todayStartTime,
+                    slotMaxTime: isBottomCollapsed ? formatMinutes(cStartMin) : defaultSlotMax
+                };
+            }
+
+            // 折叠区间位于中间，统一按顶部折叠处理（FullCalendar 只能隐藏连续区间）
             return {
-                slotMinTime: formatAbsoluteMinutes(absStart),
-                slotMaxTime: formatAbsoluteMinutes(absEnd)
+                slotMinTime: isTopCollapsed ? formatMinutes(cEndMin) : todayStartTime,
+                slotMaxTime: defaultSlotMax
             };
         } catch (e) {
             console.error('计算折叠时间段 slot 失败:', e);
@@ -11279,6 +11412,7 @@ export class CalendarView {
         const isTimeGrid = viewType && viewType.startsWith('timeGrid');
         const settings = await this.plugin.loadSettings();
         const isCollapseEnabled = settings.calendarCollapseTimeRange === true;
+        const todayStartTime = await this.getTodayStartTime();
 
         // 如果不是时间轴视图，或者未开启折叠时间区，则清除折叠行与手柄，并还原样式与置灰轴
         if (!isTimeGrid || !isCollapseEnabled) {
@@ -11299,46 +11433,155 @@ export class CalendarView {
             const slotsTbody = this.container.querySelector('.fc-timegrid-slots tbody');
             if (!slotsTbody) return;
 
-            // 移除已有的折叠行，避免状态残留
-            const existingRow = slotsTbody.querySelector('.calendar-collapsed-night-row');
-            if (existingRow) {
-                existingRow.remove();
-            }
+            // 移除所有已有的折叠行，避免状态残留
+            const existingRows = slotsTbody.querySelectorAll('.calendar-collapsed-night-row');
+            existingRows.forEach(r => r.remove());
 
             const collapseStart = settings.calendarCollapseStartTime || '00:00';
             const collapseEnd = settings.calendarCollapseEndTime || '08:00';
 
-            const row = document.createElement('tr');
-            row.className = 'fc-timegrid-slot calendar-collapsed-night-row';
-            row.style.height = '28px';
+            const parseToMinutes = (timeStr: string): number => {
+                const parts = timeStr.split(':');
+                return parseInt(parts[0] || '0', 10) * 60 + parseInt(parts[1] || '0', 10);
+            };
 
-            row.innerHTML = `
-                <td class="fc-timegrid-slot-label fc-scrollgrid-shrink" style="background-color: var(--b3-theme-background-page); text-align: center; vertical-align: middle; cursor: pointer; border-bottom: 1px solid var(--b3-border-color); padding: 0;">
-                    <div class="fc-timegrid-slot-label-frame fc-scrollgrid-shrink-frame">
-                        <div class="fc-timegrid-slot-label-cushion fc-scrollgrid-shrink-cushion" style="font-size: 0.8em; color: var(--b3-theme-on-surface-light); line-height: 1.2; padding: 2px;">
-                            ${collapseStart}<br>- ${collapseEnd}
+            const dayStartMin = parseToMinutes(todayStartTime);
+            const cStartMin = parseToMinutes(collapseStart);
+            const cEndMin = parseToMinutes(collapseEnd);
+
+            const relStart = (cStartMin - dayStartMin + 1440) % 1440;
+            const relEnd = (cEndMin - dayStartMin + 1440) % 1440;
+
+            let hasTopCollapse = false;
+            let hasBottomCollapse = false;
+            let topStartLabel = todayStartTime;
+            let topEndLabel = collapseEnd;
+            let bottomStartLabel = collapseStart;
+            let bottomEndLabel = todayStartTime;
+
+            if (relStart > relEnd) {
+                // 跨越逻辑天起始时间分界线：
+                // 顶部折叠行隐藏时间轴开头的 [todayStartTime, collapseEnd]（如 03:00-08:00）
+                // 底部折叠行隐藏时间轴结尾的 [collapseStart, todayStartTime]（如 00:00-03:00）
+                // 标签默认值已符合该语义，无需覆盖
+                if (this.isTopCollapseTemp && relEnd > 0) {
+                    hasTopCollapse = true;
+                }
+                if (this.isBottomCollapseTemp && relStart < 1440) {
+                    hasBottomCollapse = true;
+                }
+            } else {
+                // 不跨越逻辑天起始时间分界线：位于一侧
+                if (relStart === 0) {
+                    hasTopCollapse = this.isTopCollapseTemp;
+                    topStartLabel = collapseStart;
+                    topEndLabel = collapseEnd;
+                } else if (relEnd === 0) {
+                    hasBottomCollapse = this.isBottomCollapseTemp;
+                    bottomStartLabel = collapseStart;
+                    bottomEndLabel = collapseEnd;
+                } else {
+                    // 其他包含在一整天中的情况，统一在顶部折叠
+                    hasTopCollapse = this.isTopCollapseTemp;
+                    topStartLabel = collapseStart;
+                    topEndLabel = collapseEnd;
+                }
+            }
+
+            // 1. 渲染顶部折叠行
+            if (hasTopCollapse) {
+                const row = document.createElement('tr');
+                row.className = 'fc-timegrid-slot calendar-collapsed-night-row';
+                row.style.height = '28px';
+
+                row.innerHTML = `
+                    <td class="fc-timegrid-slot-label fc-scrollgrid-shrink" style="background-color: var(--b3-theme-background-page); text-align: center; vertical-align: middle; cursor: pointer; border-bottom: 1px solid var(--b3-border-color); padding: 0;">
+                        <div class="fc-timegrid-slot-label-frame fc-scrollgrid-shrink-frame">
+                            <div class="fc-timegrid-slot-label-cushion fc-scrollgrid-shrink-cushion" style="font-size: 0.8em; color: var(--b3-theme-on-surface-light); line-height: 1.2; padding: 2px;">
+                                ${topStartLabel}<br>- ${topEndLabel}
+                            </div>
                         </div>
-                    </div>
-                </td>
-                <td class="fc-timegrid-slot-lane" style="background-color: var(--b3-theme-background-page); opacity: 0.8; cursor: pointer; border-bottom: 1px solid var(--b3-border-color); vertical-align: middle; text-align: center; font-size: 0.85em; color: var(--b3-theme-on-surface-light); padding: 0;">
-                    <div style="display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; height: 100%;">
-                        <svg style="width: 12px; height: 12px; fill: var(--b3-theme-on-surface-light);"><use xlink:href="#iconDown"></use></svg>
-                        <span>${i18n('calendarCollapseActiveMsg', { start: collapseStart, end: collapseEnd }) || `${collapseStart} - ${collapseEnd} 时段已折叠，点击展开`}</span>
-                    </div>
-                </td>
-            `;
-            row.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                this.isCollapseTimeRangeTemp = false;
-                await this.applyCollapseState();
-            });
+                    </td>
+                    <td class="fc-timegrid-slot-lane" style="background-color: var(--b3-theme-background-page); opacity: 0.8; cursor: pointer; border-bottom: 1px solid var(--b3-border-color); vertical-align: middle; text-align: center; font-size: 0.85em; color: var(--b3-theme-on-surface-light); padding: 0;">
+                        <div style="display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; height: 100%;">
+                            <svg style="width: 12px; height: 12px; fill: var(--b3-theme-on-surface-light);"><use xlink:href="#iconDown"></use></svg>
+                            <span>${i18n('calendarCollapseActiveMsg', { start: topStartLabel, end: topEndLabel }) || `${topStartLabel} - ${topEndLabel} 时段已折叠，点击展开`}</span>
+                        </div>
+                    </td>
+                `;
+                row.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    // 展开顶部折叠段，底部段保持原状态
+                    this.isTopCollapseTemp = false;
+                    this.isCollapseTimeRangeTemp = this.isBottomCollapseTemp;
+                    await this.applyCollapseState();
+                });
 
-            slotsTbody.insertBefore(row, slotsTbody.firstChild);
+                slotsTbody.insertBefore(row, slotsTbody.firstChild);
 
-            const colsContainer = this.container.querySelector('.fc-timegrid-cols') as HTMLElement;
-            if (colsContainer) {
-                colsContainer.style.setProperty('top', '28px', 'important');
+                const colsContainer = this.container.querySelector('.fc-timegrid-cols') as HTMLElement;
+                if (colsContainer) {
+                    colsContainer.style.setProperty('top', '28px', 'important');
+                }
+            } else {
+                const colsContainer = this.container.querySelector('.fc-timegrid-cols') as HTMLElement;
+                if (colsContainer) {
+                    colsContainer.style.removeProperty('top');
+                }
+            }
+
+            // 2. 渲染底部折叠行
+            if (hasBottomCollapse) {
+                const row = document.createElement('tr');
+                row.className = 'fc-timegrid-slot calendar-collapsed-night-row';
+                row.style.height = '28px';
+
+                row.innerHTML = `
+                    <td class="fc-timegrid-slot-label fc-scrollgrid-shrink" style="background-color: var(--b3-theme-background-page); text-align: center; vertical-align: middle; cursor: pointer; border-bottom: 1px solid var(--b3-border-color); padding: 0;">
+                        <div class="fc-timegrid-slot-label-frame fc-scrollgrid-shrink-frame">
+                            <div class="fc-timegrid-slot-label-cushion fc-scrollgrid-shrink-cushion" style="font-size: 0.8em; color: var(--b3-theme-on-surface-light); line-height: 1.2; padding: 2px;">
+                                ${bottomStartLabel}<br>- ${bottomEndLabel}
+                            </div>
+                        </div>
+                    </td>
+                    <td class="fc-timegrid-slot-lane" style="background-color: var(--b3-theme-background-page); opacity: 0.8; cursor: pointer; border-bottom: 1px solid var(--b3-border-color); vertical-align: middle; text-align: center; font-size: 0.85em; color: var(--b3-theme-on-surface-light); padding: 0;">
+                        <div style="display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; height: 100%;">
+                            <svg style="width: 12px; height: 12px; fill: var(--b3-theme-on-surface-light);"><use xlink:href="#iconDown"></use></svg>
+                            <span>${i18n('calendarCollapseActiveMsg', { start: bottomStartLabel, end: bottomEndLabel }) || `${bottomStartLabel} - ${bottomEndLabel} 时段已折叠，点击展开`}</span>
+                        </div>
+                    </td>
+                `;
+                row.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    // 展开底部折叠段，顶部段保持原状态
+                    this.isBottomCollapseTemp = false;
+                    this.isCollapseTimeRangeTemp = this.isTopCollapseTemp;
+                    await this.applyCollapseState();
+                });
+
+                slotsTbody.appendChild(row);
+            }
+
+            // 3. 部分折叠时，对仍处于展开状态的段进行置灰，使其可以通过点击重新折叠
+            if (relStart > relEnd) {
+                const greyRanges: Array<{start: string, end: string}> = [];
+                if (!this.isTopCollapseTemp) {
+                    // 顶部折叠行已展开：置灰时间轴开头的 [todayStartTime, collapseEnd]
+                    greyRanges.push({ start: todayStartTime, end: collapseEnd });
+                }
+                if (!this.isBottomCollapseTemp) {
+                    // 底部折叠行已展开：置灰时间轴结尾的 [collapseStart, todayStartTime]
+                    greyRanges.push({ start: collapseStart, end: todayStartTime });
+                }
+                if (greyRanges.length > 0) {
+                    await this.styleCollapseAxis(greyRanges);
+                }
+            } else {
+                if (!this.isTopCollapseTemp || !this.isBottomCollapseTemp) {
+                    await this.styleCollapseAxis(collapseEnd, collapseStart);
+                }
             }
         } else {
             // ================= 展开状态 =================
@@ -11357,10 +11600,8 @@ export class CalendarView {
     private removeCollapsedNightRow() {
         const slotsTbody = this.container.querySelector('.fc-timegrid-slots tbody');
         if (slotsTbody) {
-            const row = slotsTbody.querySelector('.calendar-collapsed-night-row');
-            if (row) {
-                row.remove();
-            }
+            const rows = slotsTbody.querySelectorAll('.calendar-collapsed-night-row');
+            rows.forEach(row => row.remove());
         }
         const colsContainer = this.container.querySelector('.fc-timegrid-cols') as HTMLElement;
         if (colsContainer) {
@@ -11374,18 +11615,33 @@ export class CalendarView {
 
     /**
      * 动态置灰时间轴上特定折叠区间内的行，并添加 hover / 指针及 tooltip 等样式
+     * @param ranges 折叠区间数组；也可传入单一终点字符串（兼容旧调用），此时起点使用设置中的 collapseStart
+     * @param currentStartTime 当 ranges 为单一终点字符串时，可选的折叠区间起点覆盖
      */
-    private async styleCollapseAxis(currentEndTime: string) {
+    private async styleCollapseAxis(ranges: Array<{start: string, end: string}> | string, currentStartTime?: string) {
         const settings = await this.plugin.loadSettings();
-        const todayStartTime = await this.getTodayStartTime();
+        const collapseStartSetting = settings.calendarCollapseStartTime || '00:00';
         
+        let normalizedRanges: Array<{start: string, end: string}>;
+        if (typeof ranges === 'string') {
+            const start = currentStartTime !== undefined ? currentStartTime : collapseStartSetting;
+            normalizedRanges = [{ start, end: ranges }];
+        } else {
+            normalizedRanges = ranges;
+        }
+
         const parseToMinutes = (timeStr: string): number => {
             const parts = timeStr.split(':');
             return parseInt(parts[0] || '0', 10) * 60 + parseInt(parts[1] || '0', 10);
         };
 
-        const startMin = parseToMinutes(todayStartTime);
-        const endMin = parseToMinutes(currentEndTime);
+        const rangeEntries = normalizedRanges.map(r => {
+            const startMin = parseToMinutes(r.start);
+            const endMin = parseToMinutes(r.end);
+            // 当终点为 "00:00" 时视为清理标志（兼容原清理调用 styleCollapseAxis('00:00')）
+            const hasNoRange = (startMin === endMin) || (r.end === '00:00');
+            return { startMin, endMin, hasNoRange };
+        });
 
         const rows = Array.from(this.container.querySelectorAll('.fc-timegrid-slots tbody tr')) as HTMLElement[];
         for (const row of rows) {
@@ -11393,9 +11649,27 @@ export class CalendarView {
             if (labelCell) {
                 const timeStr = labelCell.getAttribute('data-time') || '';
                 if (!timeStr) continue;
+
                 const rowMin = parseToMinutes(timeStr);
-                // 判断行是否处于折叠睡眠时段范围内
-                if (rowMin >= startMin && rowMin < endMin) {
+                const normalizedRowMin = rowMin % 1440;
+
+                let isCollapsed = false;
+                for (const entry of rangeEntries) {
+                    if (entry.hasNoRange) continue;
+                    if (entry.startMin < entry.endMin) {
+                        if (normalizedRowMin >= entry.startMin && normalizedRowMin < entry.endMin) {
+                            isCollapsed = true;
+                            break;
+                        }
+                    } else if (entry.startMin > entry.endMin) {
+                        if (normalizedRowMin >= entry.startMin || normalizedRowMin < entry.endMin) {
+                            isCollapsed = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (isCollapsed) {
                     labelCell.setAttribute('title', i18n('clickToCollapseThisPeriod') || '点击折叠该时段');
                     labelCell.classList.add('calendar-collapse-axis-grey');
                 } else {
@@ -11602,29 +11876,53 @@ export class CalendarView {
         const adjustedTimes = this.calculateAdjustedSlotTimes(
             todayStartTime, 
             this.isCollapseTimeRangeTemp, 
+            this.isTopCollapseTemp,
+            this.isBottomCollapseTemp,
             collapseStart, 
             collapseEnd
         );
 
+        // 保存当前滚动位置，以便在不需要主动跳转时恢复
+        const scroller = this.container.querySelector('.fc-timegrid-slots')?.closest('.fc-scroller') as HTMLElement;
+        const savedScrollTop = scroller ? scroller.scrollTop : null;
+
         if (this.calendar) {
-            // 先设置 scrollTime 为新的可见区间首行，让 FullCalendar 内部渲染时自动对齐到正确的滚动位置
-            this.calendar.setOption('scrollTime', adjustedTimes.slotMinTime);
+            // 先设置 slot 范围，让 FullCalendar 内部渲染时包含正确的可见区间
             this.calendar.setOption('slotMinTime', adjustedTimes.slotMinTime);
             this.calendar.setOption('slotMaxTime', adjustedTimes.slotMaxTime);
         }
 
         await this.handleCollapseUI();
 
-        // 强行在 DOM 重绘完毕后滚动到当前折叠状态对应的起始可见时间
-        requestAnimationFrame(() => {
-            setTimeout(() => {
-                try {
-                    this.calendar.scrollToTime(adjustedTimes.slotMinTime);
-                } catch (e) {
-                    // ignore
-                }
-            }, 50);
-        });
+        // 仅在底部仍折叠时才主动滚动到可见区首行；
+        // 展开底部段（00:00-03:00）时保持当前滚动位置，避免错误跳转。
+        const shouldScrollToVisibleStart = this.isCollapseTimeRangeTemp && this.isBottomCollapseTemp;
+        if (shouldScrollToVisibleStart) {
+            if (this.calendar) {
+                this.calendar.setOption('scrollTime', adjustedTimes.slotMinTime);
+            }
+            requestAnimationFrame(() => {
+                setTimeout(() => {
+                    try {
+                        this.calendar.scrollToTime(adjustedTimes.slotMinTime);
+                    } catch (e) {
+                        // ignore
+                    }
+                }, 50);
+            });
+        } else if (savedScrollTop !== null) {
+            requestAnimationFrame(() => {
+                setTimeout(() => {
+                    try {
+                        if (scroller) {
+                            scroller.scrollTop = savedScrollTop;
+                        }
+                    } catch (e) {
+                        // ignore
+                    }
+                }, 50);
+            });
+        }
     }
 
     private async addItemByBlockId(blockId: string, startDate: Date, isAllDay: boolean) {

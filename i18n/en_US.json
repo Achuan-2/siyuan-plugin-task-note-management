@@ -2270,7 +2270,7 @@
     "calendarCollapseTimeRange": "Collapse Non-Working Hours",
     "calendarCollapseTimeRangeDesc": "Collapse specified sleep or non-working hours in the calendar view (week/day views only) to save space",
     "calendarCollapseStartTime": "Collapse Start Time",
-    "calendarCollapseStartTimeDesc": "Start time of the collapsed period, e.g., 24:00 or 00:00",
+    "calendarCollapseStartTimeDesc": "Start time of the collapsed period, e.g., 03:00",
     "calendarCollapseEndTime": "Collapse End Time",
     "calendarCollapseEndTimeDesc": "End time of the collapsed period, e.g., 08:00",
     "calendarCollapseActiveMsg": "${start} - ${end} collapsed, click to expand",
