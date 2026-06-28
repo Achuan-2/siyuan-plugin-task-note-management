@@ -3629,6 +3629,13 @@ export class CalendarView {
         if (isEditable) {
             menu.addSeparator();
 
+            // 快速调整日期
+            menu.addItem({
+                iconHTML: "📆",
+                label: i18n("quickReschedule") || "快速调整日期",
+                submenu: this.createQuickDateContextMenuItems(calendarEvent, calendarEvent.extendedProps.isRepeated)
+            });
+
             // 添加优先级设置子菜单
             const priorityMenuItems = [];
             const priorities = [
@@ -3797,6 +3804,279 @@ export class CalendarView {
             x: event.clientX,
             y: event.clientY
         });
+    }
+
+    private parseReminderInstanceId(reminderId?: string): { originalId: string; instanceDate: string } | null {
+        if (!reminderId || typeof reminderId !== 'string') return null;
+
+        const splitIndex = reminderId.lastIndexOf('_');
+        if (splitIndex <= 0 || splitIndex >= reminderId.length - 1) return null;
+
+        const originalId = reminderId.substring(0, splitIndex);
+        const instanceDate = reminderId.substring(splitIndex + 1);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(instanceDate)) return null;
+
+        return { originalId, instanceDate };
+    }
+
+    private async setReminderBaseDate(reminderId: string, newDate: string | null) {
+        const reminderData = await getAllReminders(this.plugin);
+        const reminder = reminderData[reminderId];
+        if (!reminder) {
+            showMessage(i18n("reminderNotExist"));
+            return;
+        }
+
+        try {
+            const oldDate: string | undefined = reminder.date;
+            const oldEndDate: string | undefined = reminder.endDate;
+
+            if (newDate === null) {
+                // 清除日期及相关结束日期/时间
+                delete reminder.date;
+                delete reminder.time;
+                delete reminder.endDate;
+                delete reminder.endTime;
+            } else {
+                reminder.date = newDate;
+                if (oldEndDate && oldDate) {
+                    const span = getDaysDifference(oldDate, oldEndDate);
+                    reminder.endDate = addDaysToDate(newDate, span);
+                }
+            }
+
+            await saveReminders(this.plugin, reminderData);
+
+            if (reminder.blockId) {
+                try { await updateBindBlockAtrrs(reminder.blockId, this.plugin); } catch (e) { /* ignore */ }
+            }
+
+            await this.refreshEvents();
+            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
+        } catch (err) {
+            console.error('设置基准日期失败:', err);
+            showMessage(i18n("operationFailed"));
+        }
+    }
+
+    private async setReminderEndDate(reminderId: string, newDate: string) {
+        const reminderData = await getAllReminders(this.plugin);
+        const reminder = reminderData[reminderId];
+        if (!reminder) {
+            showMessage(i18n("reminderNotExist"));
+            return;
+        }
+
+        try {
+            const startDate = reminder.date || reminder.endDate;
+            if (startDate && compareDateStrings(newDate, startDate) < 0) {
+                reminder.endDate = startDate;
+                showMessage(i18n('endDateAdjusted') || '结束日期已自动调整为开始日期');
+            } else {
+                reminder.endDate = newDate;
+            }
+
+            await saveReminders(this.plugin, reminderData);
+
+            if (reminder.blockId) {
+                try { await updateBindBlockAtrrs(reminder.blockId, this.plugin); } catch (e) { /* ignore */ }
+            }
+
+            await this.refreshEvents();
+            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
+        } catch (err) {
+            console.error('设置结束日期失败:', err);
+            showMessage(i18n("operationFailed"));
+        }
+    }
+
+    private async setInstanceDate(originalId: string, instanceDate: string, newDate: string | null) {
+        const reminderData = await getAllReminders(this.plugin);
+        const originalReminder = reminderData[originalId];
+        if (!originalReminder || !originalReminder.repeat?.enabled) {
+            showMessage(i18n("reminderNotExist"));
+            return;
+        }
+
+        try {
+            if (!originalReminder.repeat.instanceModifications) {
+                originalReminder.repeat.instanceModifications = {};
+            }
+            if (!originalReminder.repeat.instanceModifications[instanceDate]) {
+                originalReminder.repeat.instanceModifications[instanceDate] = {};
+            }
+
+            if (newDate === null) {
+                originalReminder.repeat.instanceModifications[instanceDate].date = null;
+                delete originalReminder.repeat.instanceModifications[instanceDate].endDate;
+            } else {
+                originalReminder.repeat.instanceModifications[instanceDate].date = newDate;
+
+                if (originalReminder.endDate && originalReminder.date) {
+                    const span = getDaysDifference(originalReminder.date, originalReminder.endDate);
+                    originalReminder.repeat.instanceModifications[instanceDate].endDate = addDaysToDate(newDate, span);
+                }
+            }
+
+            await saveReminders(this.plugin, reminderData);
+
+            await this.refreshEvents();
+            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
+            showMessage(i18n("instanceTimeUpdated") || "实例时间已更新");
+        } catch (err) {
+            console.error('设置实例日期失败:', err);
+            showMessage(i18n("operationFailed"));
+        }
+    }
+
+    private async setInstanceEndDate(originalId: string, instanceDate: string, newDate: string) {
+        const reminderData = await getAllReminders(this.plugin);
+        const originalReminder = reminderData[originalId];
+        if (!originalReminder || !originalReminder.repeat?.enabled) {
+            showMessage(i18n("reminderNotExist"));
+            return;
+        }
+
+        try {
+            if (!originalReminder.repeat.instanceModifications) {
+                originalReminder.repeat.instanceModifications = {};
+            }
+            if (!originalReminder.repeat.instanceModifications[instanceDate]) {
+                originalReminder.repeat.instanceModifications[instanceDate] = {};
+            }
+
+            const modifiedDate = originalReminder.repeat.instanceModifications[instanceDate].date;
+            const startDate = modifiedDate !== undefined && modifiedDate !== null ? modifiedDate : instanceDate;
+            if (startDate && compareDateStrings(newDate, startDate) < 0) {
+                originalReminder.repeat.instanceModifications[instanceDate].endDate = startDate;
+                showMessage(i18n('endDateAdjusted') || '结束日期已自动调整为开始日期');
+            } else {
+                originalReminder.repeat.instanceModifications[instanceDate].endDate = newDate;
+            }
+
+            await saveReminders(this.plugin, reminderData);
+            await this.refreshEvents();
+            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
+            showMessage(i18n("instanceTimeUpdated") || "实例时间已更新");
+        } catch (err) {
+            console.error('设置实例结束日期失败:', err);
+            showMessage(i18n("operationFailed"));
+        }
+    }
+
+    private createQuickDateContextMenuItems(calendarEvent: any, onlyThisInstance: boolean = false): any[] {
+        const items: any[] = [];
+        const todayStr = getLogicalDateString();
+        const tomorrowStr = getRelativeDateString(1);
+        const dayAfterStr = getRelativeDateString(2);
+        const nextWeekStr = getRelativeDateString(7);
+
+        const props = calendarEvent.extendedProps;
+        const startDateStr = props.date || props.originalDate;
+        const endDateStr = props.endDate || props.originalEndDate || startDateStr;
+        const isSpanningTask = !!(startDateStr && endDateStr && endDateStr !== startDateStr);
+        const calendarIcon = "📅";
+        const removeIcon = "❌";
+        const editIcon = "✏️";
+
+        const getOriginalInstanceDate = () => {
+            const parsedInstance = props.isRepeated ? this.parseReminderInstanceId(calendarEvent.id) : null;
+            return parsedInstance?.instanceDate || startDateStr;
+        };
+
+        const applyStartDate = async (newDate: string | null) => {
+            try {
+                if (props.isRepeated && onlyThisInstance) {
+                    await this.setInstanceDate(props.originalId, getOriginalInstanceDate(), newDate);
+                } else {
+                    const targetId = props.isRepeated ? props.originalId : calendarEvent.id;
+                    await this.setReminderBaseDate(targetId, newDate);
+                }
+            } catch (err) {
+                console.error('快速调整开始日期失败:', err);
+                showMessage(i18n("operationFailed"));
+            }
+        };
+
+        const applyEndDate = async (newDate: string) => {
+            try {
+                if (props.isRepeated && onlyThisInstance) {
+                    await this.setInstanceEndDate(props.originalId, getOriginalInstanceDate(), newDate);
+                } else {
+                    const targetId = props.isRepeated ? props.originalId : calendarEvent.id;
+                    await this.setReminderEndDate(targetId, newDate);
+                }
+            } catch (err) {
+                console.error('快速调整结束日期失败:', err);
+                showMessage(i18n("operationFailed"));
+            }
+        };
+
+        const createDateTargetSubmenu = (applyDate: (newDate: string) => Promise<void>) => ([
+            { iconHTML: calendarIcon, label: i18n("moveToToday") || "移至今天", click: () => applyDate(todayStr) },
+            { iconHTML: calendarIcon, label: i18n("moveToTomorrow") || "移至明天", click: () => applyDate(tomorrowStr) },
+            { iconHTML: calendarIcon, label: i18n("moveToDayAfterTomorrow") || "移至后天", click: () => applyDate(dayAfterStr) },
+            { iconHTML: calendarIcon, label: i18n("moveToNextWeek") || "移至下周", click: () => applyDate(nextWeekStr) }
+        ]);
+
+        const editDate = () => {
+            const isInstanceEdit = props.isRepeated && onlyThisInstance;
+            const originalInstanceDate = getOriginalInstanceDate();
+
+            // Reconstruct the reminder object for QuickReminderDialog
+            const reminder = {
+                ...props,
+                id: calendarEvent.id,
+                title: calendarEvent.title,
+                date: startDateStr,
+                endDate: props.endDate || props.originalEndDate,
+            };
+
+            const dlg = new QuickReminderDialog(
+                undefined, undefined, undefined, undefined,
+                {
+                    mode: 'edit',
+                    reminder: isInstanceEdit ? {
+                        ...reminder,
+                        isInstance: true,
+                        originalId: props.originalId,
+                        instanceDate: originalInstanceDate
+                    } : reminder,
+                    isInstanceEdit: isInstanceEdit,
+                    plugin: this.plugin,
+                    dateOnly: true,
+                    onSaved: async (savedReminder) => {
+                        await this.refreshEvents();
+                        window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
+                    }
+                }
+            );
+            dlg.show();
+        };
+
+        if (isSpanningTask) {
+            items.push({
+                iconHTML: calendarIcon,
+                label: i18n("adjustStartDate") || "调整开始日期",
+                submenu: createDateTargetSubmenu(applyStartDate)
+            });
+            items.push({
+                iconHTML: calendarIcon,
+                label: i18n("adjustEndDate") || "调整结束日期",
+                submenu: createDateTargetSubmenu(applyEndDate)
+            });
+            items.push({ iconHTML: removeIcon, label: i18n("clearDate") || "清除日期", click: () => applyStartDate(null) });
+            items.push({ iconHTML: editIcon, label: i18n("editDate") || "编辑日期", click: editDate });
+        } else {
+            items.push({ iconHTML: calendarIcon, label: i18n("moveToToday") || "移至今天", click: () => applyStartDate(todayStr) });
+            items.push({ iconHTML: calendarIcon, label: i18n("moveToTomorrow") || "移至明天", click: () => applyStartDate(tomorrowStr) });
+            items.push({ iconHTML: calendarIcon, label: i18n("moveToDayAfterTomorrow") || "移至后天", click: () => applyStartDate(dayAfterStr) });
+            items.push({ iconHTML: calendarIcon, label: i18n("moveToNextWeek") || "移至下周", click: () => applyStartDate(nextWeekStr) });
+            items.push({ iconHTML: removeIcon, label: i18n("clearDate") || "清除日期", click: () => applyStartDate(null) });
+            items.push({ iconHTML: editIcon, label: i18n("editDate") || "编辑日期", click: editDate });
+        }
+
+        return items;
     }
 
     private getPomodoroSessionFromCalendarEvent(calendarEvent: any): PomodoroSession | null {
