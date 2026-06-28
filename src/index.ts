@@ -186,7 +186,7 @@ export const DEFAULT_SETTINGS = {
     calendarViewMode: 'timeGridWeek',
     dayStartTime: '08:00', // 日历视图一天的起始时间
     todayStartTime: '03:00', // 日常任务/习惯的一天起始时间
-    calendarShowLunar: (window as any).siyuan?.config?.lang === 'zh_CN' ? true : false, // 日历显示农历
+    calendarShowLunar: ((window as any).siyuan?.config?.lang === 'zh_CN' || (window as any).siyuan?.config?.lang === 'zh-CN') ? true : false, // 日历显示农历
     calendarShowHoliday: true, // 是否显示节假日
     calendarShowPomodoro: true, // 是否显示番茄专注时间
     showCalendarEventCheckbox: true, // 是否显示日历事件前的复选框

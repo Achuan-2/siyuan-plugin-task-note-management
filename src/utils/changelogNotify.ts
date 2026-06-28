@@ -29,7 +29,8 @@ export class ChangelogUtils {
         const chineseNotes = normalizedContent.slice(0, dividerStart).trim();
         const englishNotes = normalizedContent.slice(dividerEnd).trim();
 
-        if (this.getCurrentLang() === "zh_CN") {
+        const lang = this.getCurrentLang();
+        if (lang === "zh_CN" || lang === "zh-CN") {
             return chineseNotes || (i18n("noUpdateNotes") || "无更新内容");
         }
 
@@ -38,7 +39,8 @@ export class ChangelogUtils {
     }
 
     private static getChangelogTruncatedNotice(totalVersions: number): string {
-        if (this.getCurrentLang() === "zh_CN") {
+        const lang = this.getCurrentLang();
+        if (lang === "zh_CN" || lang === "zh-CN") {
             return `仅展示最近 ${MAX_DISPLAYED_CHANGELOG_VERSIONS} 个版本的更新日志，共匹配到 ${totalVersions} 个版本。更早内容请查看完整 CHANGELOG。`;
         }
 

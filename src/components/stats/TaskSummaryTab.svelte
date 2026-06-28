@@ -186,7 +186,7 @@
         if (showHabit) Object.keys(stats.habit.byDate).forEach(date => allDates.add(date));
 
         const sortedDates = Array.from(allDates).sort();
-        const locale = (window as any).siyuan?.config?.lang === "zh_CN" ? "zh-CN" : "en-US";
+        const locale = ((window as any).siyuan?.config?.lang === "zh_CN" || (window as any).siyuan?.config?.lang === "zh-CN") ? "zh-CN" : "en-US";
 
         return sortedDates.map(date => {
             const dateObj = new Date(date);
@@ -282,7 +282,7 @@
             const currentView = calendar.view;
             const viewType = currentView.type;
             const startDate = currentView.activeStart;
-            const locale = (window as any).siyuan?.config?.lang === "zh_CN" ? "zh-CN" : "en-US";
+            const locale = ((window as any).siyuan?.config?.lang === "zh_CN" || (window as any).siyuan?.config?.lang === "zh-CN") ? "zh-CN" : "en-US";
             switch (viewType) {
                 case "dayGridMonth":
                     return i18n("yearMonthTemplate")

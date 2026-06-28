@@ -29,7 +29,7 @@
 
     let selectedTerm = '1y'; // 默认选中年付
 
-    $: isZhCN = window.siyuan.config.lang === 'zh_CN';
+    $: isZhCN = window.siyuan.config.lang === 'zh_CN' || window.siyuan.config.lang === 'zh-CN';
 
     $: currentPrices = [
         { term: '7d', label: i18n('vipTrial7Days'), price: i18n('vipTrial') },
