@@ -11505,7 +11505,6 @@ export class CalendarView {
                     <td class="fc-timegrid-slot-lane" style="background-color: var(--b3-theme-background-page); opacity: 0.8; cursor: pointer; border-bottom: 1px solid var(--b3-border-color); vertical-align: middle; text-align: center; font-size: 0.85em; color: var(--b3-theme-on-surface-light); padding: 0;">
                         <div style="display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; height: 100%;">
                             <svg style="width: 12px; height: 12px; fill: var(--b3-theme-on-surface-light);"><use xlink:href="#iconDown"></use></svg>
-                            <span>${i18n('calendarCollapseActiveMsg', { start: topStartLabel, end: topEndLabel }) || `${topStartLabel} - ${topEndLabel} 时段已折叠，点击展开`}</span>
                         </div>
                     </td>
                 `;
@@ -11548,7 +11547,6 @@ export class CalendarView {
                     <td class="fc-timegrid-slot-lane" style="background-color: var(--b3-theme-background-page); opacity: 0.8; cursor: pointer; border-bottom: 1px solid var(--b3-border-color); vertical-align: middle; text-align: center; font-size: 0.85em; color: var(--b3-theme-on-surface-light); padding: 0;">
                         <div style="display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; height: 100%;">
                             <svg style="width: 12px; height: 12px; fill: var(--b3-theme-on-surface-light);"><use xlink:href="#iconDown"></use></svg>
-                            <span>${i18n('calendarCollapseActiveMsg', { start: bottomStartLabel, end: bottomEndLabel }) || `${bottomStartLabel} - ${bottomEndLabel} 时段已折叠，点击展开`}</span>
                         </div>
                     </td>
                 `;
