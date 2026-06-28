@@ -2978,6 +2978,76 @@ export default class ReminderPlugin extends Plugin {
             }
         }
 
+        // 5. 检查父文档继承：如果当前文档没有绑定任务，且父文档是项目（或绑定了项目任务），当前文档的块创建任务要继承父文档的项目
+        if (block.path) {
+            const normalized = block.path.replace(/^\//, '').replace(/\.sy$/, '');
+            const docIds = normalized.split('/').filter(p => p.length >= 5);
+            if (docIds.length > 1) {
+                const currentDocId = docIds[docIds.length - 1];
+                const hasDocTask = Object.values(reminderData).some((r: any) => r.blockId === currentDocId);
+                if (!hasDocTask) {
+                    const projectData = await this.loadProjectData();
+                    const projectList = projectData
+                        ? Object.entries(projectData)
+                            .filter(([key, value]) => !key.startsWith('_') && value && typeof value === 'object')
+                            .map(([key, value]) => {
+                                const project = value as any;
+                                return {
+                                    ...project,
+                                    __projectId: project.id || key
+                                };
+                            })
+                        : [];
+
+                    const parentDocIds = docIds.slice(0, -1).reverse();
+                    for (const parentDocId of parentDocIds) {
+                        // 1. 检查父文档是否有绑定项目任务
+                        const parentReminder = Object.values(reminderData).find((r: any) => r.blockId === parentDocId && r.projectId);
+                        if (parentReminder) {
+                            return {
+                                projectId: (parentReminder as any).projectId,
+                                groupId: (parentReminder as any).customGroupId,
+                                milestoneId: (parentReminder as any).milestoneId,
+                                categoryId: (parentReminder as any).categoryId
+                            };
+                        }
+
+                        // 2. 检查父文档是否是项目主文档
+                        const parentProject = projectList.find((p: any) => p.blockId === parentDocId);
+                        if (parentProject) {
+                            return {
+                                projectId: (parentProject as any).__projectId,
+                                groupId: undefined,
+                                milestoneId: undefined,
+                                categoryId: undefined
+                            };
+                        }
+
+                        // 3. 检查父文档是否是项目分组的绑定文档
+                        for (const p of projectList) {
+                            if (p.customGroups && Array.isArray(p.customGroups)) {
+                                const group = p.customGroups.find((g: any) => g.blockId === parentDocId);
+                                if (group) {
+                                    return {
+                                        projectId: p.__projectId,
+                                        groupId: group.id,
+                                        milestoneId: undefined,
+                                        categoryId: undefined
+                                    };
+                                }
+                            }
+                        }
+
+                        // 如果父文档有绑定任何任务，阻断继承
+                        const parentHasAnyTask = Object.values(reminderData).some((r: any) => r.blockId === parentDocId);
+                        if (parentHasAnyTask) {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
         return { projectId: undefined, groupId: undefined, milestoneId: undefined, categoryId: undefined };
     }
 
