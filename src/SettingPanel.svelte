@@ -849,8 +849,8 @@
                     value: settings.calendarCollapseStartTime,
                     type: 'textinput',
                     title: i18n('calendarCollapseStartTime') || '折叠开始时间',
-                    description: i18n('calendarCollapseStartTimeDesc') || '折叠时段开始时间，例如 24:00 或 00:00',
-                    placeholder: '24:00',
+                    description: i18n('calendarCollapseStartTimeDesc') || '折叠时段开始时间，例如 03:00',
+                    placeholder: '03:00',
                 },
                 {
                     key: 'calendarCollapseEndTime',
