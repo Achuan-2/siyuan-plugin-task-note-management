@@ -186,8 +186,8 @@ export const DEFAULT_SETTINGS = {
     calendarViewMode: 'timeGridWeek',
     dayStartTime: '08:00', // 日历视图一天的起始时间
     todayStartTime: '03:00', // 日常任务/习惯的一天起始时间
-    calendarCollapseTimeRange: false, // 是否折叠非工作时间段
-    calendarCollapseStartTime: '00:00', // 折叠时段开始时间
+    calendarCollapseTimeRange: true, // 是否折叠非工作时间段
+    calendarCollapseStartTime: '03:00', // 折叠时段开始时间
     calendarCollapseEndTime: '08:00', // 折叠时段结束时间
     calendarShowLunar: ((window as any).siyuan?.config?.lang === 'zh_CN' || (window as any).siyuan?.config?.lang === 'zh-CN') ? true : false, // 日历显示农历
     calendarShowHoliday: true, // 是否显示节假日
