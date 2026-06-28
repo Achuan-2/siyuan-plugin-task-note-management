@@ -8335,10 +8335,10 @@ export class ProjectKanbanView {
                             }
 
                             if ((isInTopSortZone || isInBottomSortZone)) {
-                                if (canSort || isStructuralChange) {
-                                    this.handleSortDrop(targetTask, e);
-                                } else if (canBecomeSibling) {
+                                if (canBecomeSibling) {
                                     this.handleBecomeSiblingDrop(this.draggedTask, targetTask, e);
+                                } else if (canSort || isStructuralChange) {
+                                    this.handleSortDrop(targetTask, e);
                                 }
                             } else if (isInParentChildZone) {
                                 if (canSetParentChild) {
