@@ -186,6 +186,9 @@ export const DEFAULT_SETTINGS = {
     calendarViewMode: 'timeGridWeek',
     dayStartTime: '08:00', // 日历视图一天的起始时间
     todayStartTime: '03:00', // 日常任务/习惯的一天起始时间
+    calendarCollapseTimeRange: false, // 是否折叠非工作时间段
+    calendarCollapseStartTime: '00:00', // 折叠时段开始时间
+    calendarCollapseEndTime: '08:00', // 折叠时段结束时间
     calendarShowLunar: ((window as any).siyuan?.config?.lang === 'zh_CN' || (window as any).siyuan?.config?.lang === 'zh-CN') ? true : false, // 日历显示农历
     calendarShowHoliday: true, // 是否显示节假日
     calendarShowPomodoro: true, // 是否显示番茄专注时间
@@ -1836,6 +1839,32 @@ export default class ReminderPlugin extends Plugin {
             } else {
                 settings.todayStartTime = DEFAULT_SETTINGS.todayStartTime as any;
             }
+        }
+        if (typeof settings.calendarCollapseStartTime === 'string') {
+            const raw = settings.calendarCollapseStartTime;
+            const m = raw.match(/^(\d{1,2})(?::(\d{1,2}))?$/);
+            if (m) {
+                const h = Math.max(0, Math.min(24, parseInt(m[1], 10) || 0));
+                const min = Math.max(0, Math.min(59, parseInt(m[2] || '0', 10) || 0));
+                settings.calendarCollapseStartTime = (h < 10 ? '0' : '') + h.toString() + ':' + (min < 10 ? '0' : '') + min.toString();
+            } else {
+                settings.calendarCollapseStartTime = DEFAULT_SETTINGS.calendarCollapseStartTime;
+            }
+        } else {
+            settings.calendarCollapseStartTime = DEFAULT_SETTINGS.calendarCollapseStartTime;
+        }
+        if (typeof settings.calendarCollapseEndTime === 'string') {
+            const raw = settings.calendarCollapseEndTime;
+            const m = raw.match(/^(\d{1,2})(?::(\d{1,2}))?$/);
+            if (m) {
+                const h = Math.max(0, Math.min(24, parseInt(m[1], 10) || 0));
+                const min = Math.max(0, Math.min(59, parseInt(m[2] || '0', 10) || 0));
+                settings.calendarCollapseEndTime = (h < 10 ? '0' : '') + h.toString() + ':' + (min < 10 ? '0' : '') + min.toString();
+            } else {
+                settings.calendarCollapseEndTime = DEFAULT_SETTINGS.calendarCollapseEndTime;
+            }
+        } else {
+            settings.calendarCollapseEndTime = DEFAULT_SETTINGS.calendarCollapseEndTime;
         }
         if (Array.isArray(settings.pomodoroDurationPresets)) {
             const seen = new Set<number>();

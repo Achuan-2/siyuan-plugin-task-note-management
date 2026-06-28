@@ -2266,5 +2266,16 @@
     "webhookTestSuccess": "Webhook 测试成功！",
     "webhookTestFailed": "Webhook 测试失败",
     "showPassword": "显示密码",
-    "hidePassword": "隐藏密码"
+    "hidePassword": "隐藏密码",
+    "calendarCollapseTimeRange": "折叠非工作时间段",
+    "calendarCollapseTimeRangeDesc": "折叠日历视图中的睡眠/非工作时段以节省空间（仅在周视图和日视图生效）",
+    "calendarCollapseStartTime": "折叠开始时间",
+    "calendarCollapseStartTimeDesc": "折叠时间段的开始时间，例如 24:00 或 00:00",
+    "calendarCollapseEndTime": "折叠结束时间",
+    "calendarCollapseEndTimeDesc": "折叠时间段的结束时间，例如 08:00",
+    "calendarCollapseActiveMsg": "${start} - ${end} 时段已折叠，点击展开",
+    "calendarCollapseInactiveMsg": "${start} - ${end} 时段已展开，点击折叠",
+    "dragToAdjustCollapseRange": "拖拽调整隐藏时间段",
+    "clickToCollapseThisPeriod": "点击折叠该时段",
+    "calendarCollapseRangeUpdated": "折叠时间范围已更新为 00:00 - ${time}"
 }

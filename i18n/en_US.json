@@ -2266,5 +2266,16 @@
     "webhookTestSuccess": "Webhook test successful!",
     "webhookTestFailed": "Webhook test failed",
     "showPassword": "Show Password",
-    "hidePassword": "Hide Password"
+    "hidePassword": "Hide Password",
+    "calendarCollapseTimeRange": "Collapse Non-Working Hours",
+    "calendarCollapseTimeRangeDesc": "Collapse specified sleep or non-working hours in the calendar view (week/day views only) to save space",
+    "calendarCollapseStartTime": "Collapse Start Time",
+    "calendarCollapseStartTimeDesc": "Start time of the collapsed period, e.g., 24:00 or 00:00",
+    "calendarCollapseEndTime": "Collapse End Time",
+    "calendarCollapseEndTimeDesc": "End time of the collapsed period, e.g., 08:00",
+    "calendarCollapseActiveMsg": "${start} - ${end} collapsed, click to expand",
+    "calendarCollapseInactiveMsg": "${start} - ${end} expanded, click to collapse",
+    "dragToAdjustCollapseRange": "Drag to adjust hidden time range",
+    "clickToCollapseThisPeriod": "Click to collapse this period",
+    "calendarCollapseRangeUpdated": "Collapse range updated to 00:00 - ${time}"
 }

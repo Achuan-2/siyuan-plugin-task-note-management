@@ -72,11 +72,13 @@
             .fc-col-header-cell.fc-today-custom {
                 background-color: transparent !important;
             }
+
             .fc-today-custom .fc-daygrid-day-frame,
             .fc-today-custom .fc-scrollgrid-sync-inner,
             .fc-today-custom .fc-timegrid-col-frame {
                 border: 2px solid var(--b3-theme-primary) !important;
             }
+
             .fc-today-custom:not(.fc-popover):hover {
                 background-color: var(--b3-theme-primary-lightest) !important;
             }
@@ -85,9 +87,11 @@
             .fc-day-today:not(.fc-today-custom) {
                 background-color: transparent !important;
             }
+
             .fc-list-day-today:not(.fc-list-day-today-custom) {
                 background-color: transparent !important;
             }
+
             .fc-col-header-cell.fc-day-today:not(.fc-today-custom) {
                 background-color: transparent !important;
             }
@@ -157,7 +161,7 @@
                     flex-wrap: nowrap !important;
                     max-width: 100%;
 
-                    > * {
+                    >* {
                         flex-shrink: 0;
                     }
                 }
@@ -174,10 +178,11 @@
                 padding: 0em 0.35em !important;
             }
 
-            .fc-toolbar .fc-button-group > .fc-button {
+            .fc-toolbar .fc-button-group>.fc-button {
                 border-radius: 8px;
             }
-            .fc-toolbar > * > button:not(:first-child) {
+
+            .fc-toolbar>*>button:not(:first-child) {
                 margin-left: 0;
             }
 
@@ -292,8 +297,10 @@
                 display: flex;
                 gap: 2px;
                 align-items: center;
-                padding-left: 18px; /* 与复选框对齐 */
-                flex-shrink: 999; /* 空间不足时优先隐藏 */
+                padding-left: 18px;
+                /* 与复选框对齐 */
+                flex-shrink: 999;
+                /* 空间不足时优先隐藏 */
                 max-height: 1.2em;
                 overflow: hidden;
                 margin-top: 2px;
@@ -324,18 +331,21 @@
                 font-size: 10px;
                 opacity: 0.7;
                 line-height: 1.2;
-                flex-shrink: 999; /* 文档名和备注优先收缩 */
+                flex-shrink: 999;
+                /* 文档名和备注优先收缩 */
                 display: -webkit-box;
                 -webkit-box-orient: vertical;
                 -webkit-line-clamp: 2;
                 overflow: hidden;
                 text-overflow: ellipsis;
                 word-break: break-word;
-                max-height: 2.4em; /* 2 lines * 1.2 line-height */
+                max-height: 2.4em;
+                /* 2 lines * 1.2 line-height */
             }
 
             /* Markdown content styling in notes */
             .reminder-event-note {
+
                 p,
                 ul,
                 ol {
@@ -365,7 +375,8 @@
                 white-space: nowrap;
                 overflow: hidden;
                 text-overflow: ellipsis;
-                flex-shrink: 999; /* 时间优先收缩隐藏 */
+                flex-shrink: 999;
+                /* 时间优先收缩隐藏 */
                 max-height: 1.2em;
             }
 
@@ -461,7 +472,8 @@
 
             .fc-timegrid-event-short .fc-event-title {
                 -webkit-line-clamp: 1;
-                flex-shrink: 1; /* 横向布局时可以收缩 */
+                flex-shrink: 1;
+                /* 横向布局时可以收缩 */
             }
 
             .fc-timegrid-event-short .fc-event-time,
@@ -479,6 +491,7 @@
             .fc-event.completed {
                 opacity: 0.6 !important;
             }
+
             .fc-event.completed:hover {
                 opacity: 1 !important;
             }
@@ -519,9 +532,7 @@
                 }
             }
 
-            .fc-daygrid-day-events .fc-daygrid-event-harness:has(.completed-task-time-event)
-                ~ .fc-daygrid-event-harness:has(.completed-task-time-event)
-                .completed-task-time-event {
+            .fc-daygrid-day-events .fc-daygrid-event-harness:has(.completed-task-time-event)~.fc-daygrid-event-harness:has(.completed-task-time-event) .completed-task-time-event {
                 margin-top: 1px !important;
 
                 &::before {
@@ -604,14 +615,14 @@
             /* 分割任务样式 (Split Tasks Style) */
             .fc-event.reminder-split-block {
                 position: relative;
-                
+
 
                 // 去除分割边缘的圆角并应用锯齿效果 (using mask on pseudo-element for reliable rendering)
                 &.reminder-split-first {
                     border-top-right-radius: 0 !important;
                     border-bottom-right-radius: 0 !important;
                     border-right: none !important; // 移除被分割边缘的直边框
-                    
+
                     .fc-event-main-frame {
                         padding-right: 12px !important;
                     }
@@ -633,12 +644,12 @@
                         z-index: 5;
                     }
                 }
-                
+
                 &.reminder-split-last {
                     border-top-left-radius: 0 !important;
                     border-bottom-left-radius: 0 !important;
                     border-left: none !important; // 移除被分割边缘的直边框
-                    
+
                     .fc-event-main-frame {
                         padding-left: 12px !important;
                     }
@@ -660,12 +671,12 @@
                         z-index: 5;
                     }
                 }
-                
+
                 &.reminder-split-middle {
                     border-radius: 0 !important;
                     border-left: none !important;
                     border-right: none !important;
-                    
+
                     .fc-event-main-frame {
                         padding-left: 12px !important;
                         padding-right: 12px !important;
@@ -708,6 +719,26 @@
             }
         }
     }
+
+    /* 折叠时段相关样式 */
+    .calendar-collapse-axis-grey {
+        transition: background-color 0.15s !important;
+        cursor: pointer !important;
+    }
+
+    .calendar-collapse-axis-hovered {
+        background-color: var(--b3-theme-surface-lighter) !important;
+    }
+
+    .calendar-collapse-drag-handle {
+        background-color: var(--b3-theme-primary) !important;
+        transition: transform 0.15s ease, filter 0.15s ease !important;
+    }
+
+    .calendar-collapse-drag-handle:hover {
+        transform: scale(1.2) !important;
+        filter: brightness(1.15) !important;
+    }
 }
 
 .reminder-calendar-view--tab {
@@ -720,8 +751,8 @@
 
 // Ensure calendar dock fills height
 .dock__item[data-type="calendar_dock"] .fn__flex-1,
-.dock__item[data-type="calendar_dock"] > .fn__flex-column,
-.dock__item[data-type="calendar_dock"] > div {
+.dock__item[data-type="calendar_dock"]>.fn__flex-column,
+.dock__item[data-type="calendar_dock"]>div {
     height: 100%;
     min-height: 100%;
 }

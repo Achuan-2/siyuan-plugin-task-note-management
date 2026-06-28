@@ -838,6 +838,29 @@
                     placeholder: '03:00',
                 },
                 {
+                    key: 'calendarCollapseTimeRange',
+                    value: settings.calendarCollapseTimeRange,
+                    type: 'checkbox',
+                    title: i18n('calendarCollapseTimeRange') || '折叠非工作时间段',
+                    description: i18n('calendarCollapseTimeRangeDesc') || '折叠日历视图中的睡眠/非工作时段以节省空间（仅在周视图和日视图生效）',
+                },
+                {
+                    key: 'calendarCollapseStartTime',
+                    value: settings.calendarCollapseStartTime,
+                    type: 'textinput',
+                    title: i18n('calendarCollapseStartTime') || '折叠开始时间',
+                    description: i18n('calendarCollapseStartTimeDesc') || '折叠时段开始时间，例如 24:00 或 00:00',
+                    placeholder: '24:00',
+                },
+                {
+                    key: 'calendarCollapseEndTime',
+                    value: settings.calendarCollapseEndTime,
+                    type: 'textinput',
+                    title: i18n('calendarCollapseEndTime') || '折叠结束时间',
+                    description: i18n('calendarCollapseEndTimeDesc') || '折叠时段结束时间，例如 08:00',
+                    placeholder: '08:00',
+                },
+                {
                     key: 'showPomodoroInSummary',
                     value: settings.showPomodoroInSummary,
                     type: 'checkbox',
@@ -1907,6 +1930,25 @@
                 } else {
                     newValue = DEFAULT_SETTINGS[key];
                 }
+            }
+        } else if (key === 'calendarCollapseStartTime' || key === 'calendarCollapseEndTime') {
+            // 格式化时间 HH:MM
+            if (typeof value === 'string') {
+                const m = value.match(/^(\d{1,2})(?::(\d{1,2}))?$/);
+                if (m) {
+                    const h = Math.max(0, Math.min(24, parseInt(m[1], 10) || 0));
+                    const min = Math.max(0, Math.min(59, parseInt(m[2] || '0', 10) || 0));
+                    newValue =
+                        (h < 10 ? '0' : '') +
+                        h.toString() +
+                        ':' +
+                        (min < 10 ? '0' : '') +
+                        min.toString();
+                } else {
+                    newValue = DEFAULT_SETTINGS[key];
+                }
+            } else {
+                newValue = DEFAULT_SETTINGS[key];
             }
         } else if (key === 'reminderWebhookUrl' && typeof value === 'string') {
             newValue = value.trim();
