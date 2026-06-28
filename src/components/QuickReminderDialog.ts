@@ -6112,7 +6112,7 @@ export class QuickReminderDialog {
         // 编辑模式应尊重用户显式选择的状态，不做自动覆盖。
         // 重复任务系列也应保留用户显式选择的状态（如长期），实例显示由实例逻辑决定。
         const shouldAutoSetDoingByDate = this.mode !== 'edit' && this.mode !== 'batch_edit';
-        if (shouldAutoSetDoingByDate && date && kanbanStatus !== 'completed' && !(this.repeatConfig && this.repeatConfig.enabled)) {
+        if (shouldAutoSetDoingByDate && date && kanbanStatus !== 'completed' && kanbanStatus !== 'abandoned' && !(this.repeatConfig && this.repeatConfig.enabled)) {
             const today = getLogicalDateString();
             if (compareDateStrings(date, today) <= 0) {
                 const hasDoingStatus = selectableStatuses.some(s => s.id === 'doing');

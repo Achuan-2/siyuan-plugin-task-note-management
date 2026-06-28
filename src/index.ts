@@ -3846,7 +3846,7 @@ export default class ReminderPlugin extends Plugin {
 
             // 筛选今日提醒 - 进行分类和排序
             const todayReminders = allReminders.filter((reminder: any) => {
-                if (reminder.completed) return false;
+                if (reminder.completed || reminder.kanbanStatus === 'abandoned') return false;
                 if (!this.canReminderNotifyOnDate(reminder, today, holidayDataForReminderSkip)) return false;
 
                 // 如果是跨天事件并且已经标记了今日已完成，则不加入今日提醒
@@ -4013,8 +4013,8 @@ export default class ReminderPlugin extends Plugin {
 
                 const reminderObj = reminder as any;
 
-                // 跳过已完成或没有时间的提醒
-                if (reminderObj.completed) continue;
+                // 跳过已完成、已放弃或没有时间的提醒
+                if (reminderObj.completed || reminderObj.kanbanStatus === 'abandoned') continue;
                 if (!this.canReminderNotifyOnDate(reminderObj, today, holidayData)) continue;
 
                 // 如果是跨天事件且今日已完成，跳过其所有通知提醒
@@ -5290,7 +5290,7 @@ export default class ReminderPlugin extends Plugin {
                 try {
                     // 加载所有未完成的任务（使用已更新的缓存）
                     const reminderData = this.reminderDataCache || await this.loadReminderData(true);
-                    const uncompletedReminders = Object.values(reminderData).filter((r: any) => !r.completed);
+                    const uncompletedReminders = Object.values(reminderData).filter((r: any) => !r.completed && r.kanbanStatus !== 'abandoned');
 
                     // 为任务和习惯分别构建移动通知计划快照并比较，分开存储以便区分
                     const currentTaskPlan = this.mobileNotificationPlansCache;
@@ -5391,7 +5391,7 @@ export default class ReminderPlugin extends Plugin {
      */
     public async scheduleMobileNotification(reminder: any, daysLimit: number = 7): Promise<number | undefined> {
         if (!this.isInMobileApp) return;
-        if (!reminder || !reminder.id || reminder.completed) return;
+        if (!reminder || !reminder.id || reminder.completed || reminder.kanbanStatus === 'abandoned') return;
         if (typeof reminder.id === 'string' && reminder.id.startsWith('habit')) return;
 
         // 获取系统通知启用状态
@@ -5423,7 +5423,7 @@ export default class ReminderPlugin extends Plugin {
      */
     public async scheduleAllMobileNotifications(reminder: any, daysLimit: number = 7): Promise<number[]> {
         if (!this.isInMobileApp) return [];
-        if (!reminder || !reminder.id || reminder.completed) return [];
+        if (!reminder || !reminder.id || reminder.completed || reminder.kanbanStatus === 'abandoned') return [];
         if (typeof reminder.id === 'string' && reminder.id.startsWith('habit')) return [];
 
         // 获取系统通知启用状态
@@ -5703,6 +5703,7 @@ export default class ReminderPlugin extends Plugin {
      * @returns 所有未来通知时间的数组，按时间升序排列
      */
     private calculateAllNotificationTimes(reminder: any, daysLimit: number = 0): Date[] {
+        if (!reminder || reminder.completed || reminder.kanbanStatus === 'abandoned') return [];
         const now = new Date();
         const today = getLogicalDateString();
         const holidayData = this.getReminderSkipHolidayDataSnapshot();
@@ -5943,7 +5944,7 @@ export default class ReminderPlugin extends Plugin {
     private buildMobileNotificationPlan(reminders: any[], daysLimit: number = 7): Record<string, string[]> {
         const plan: Record<string, string[]> = {};
         for (const reminder of reminders) {
-            if (!reminder || !reminder.id || reminder.completed) continue;
+            if (!reminder || !reminder.id || reminder.completed || reminder.kanbanStatus === 'abandoned') continue;
             const times = this.calculateAllNotificationTimes(reminder, daysLimit)
                 .map((time) => time.toISOString())
                 .sort();
