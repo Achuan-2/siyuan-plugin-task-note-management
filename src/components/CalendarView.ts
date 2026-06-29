@@ -5,6 +5,7 @@ import multiMonthPlugin from '@fullcalendar/multimonth';
 import listPlugin from '@fullcalendar/list';
 import interactionPlugin from '@fullcalendar/interaction';
 import { colorWithOpacity } from "../utils/uiUtils";
+import { getLuteInstance } from "../utils/luteSingleton";
 import { showMessage, confirm, openTab, Menu, Dialog, Constants, platformUtils } from "siyuan";
 import { refreshSql, getBlockByID, updateBindBlockAtrrs, openBlock, pushMsg } from "../api";
 import { getLocalDateString, getLocalDateTime, getLocalDateTimeString, compareDateStrings, getLogicalDateString, getRelativeDateString, getDayStartAdjustedDate, getLocaleTag } from "../utils/dateUtils";
@@ -361,14 +362,8 @@ export class CalendarView {
             this.showHabits = true;
         }
 
-        // 初始化 Lute
-        try {
-            if ((window as any).Lute) {
-                this.lute = (window as any).Lute.New();
-            }
-        } catch (e) {
-            console.error('初始化 Lute 失败:', e);
-        }
+        // 使用插件全局共享的 Lute 实例，避免重复创建
+        this.lute = getLuteInstance();
 
         this.initUI();
     }

@@ -2,6 +2,7 @@ import { Dialog } from "siyuan";
 import { getFile } from "../api";
 import versionInfo from "../../plugin.json";
 import { i18n } from "../pluginInstance";
+import { renderMarkdown } from "./luteSingleton";
 
 // 更新日志功能的起始版本
 const CHANGELOG_START_VERSION = "6.5.5";
@@ -209,20 +210,8 @@ export class ChangelogUtils {
     }
 
     private static showDialog(version: string, notes: string) {
-        // 使用 window.Lute 解析 Markdown 为 HTML
-        let htmlNotes = notes;
-        try {
-            if ((window as any).Lute) {
-                const lute = (window as any).Lute.New();
-                htmlNotes = lute.Md2HTML(notes);
-            } else {
-                // 回退方案：简单转换换行
-                htmlNotes = notes.replace(/\n/g, '<br>');
-            }
-        } catch (e) {
-            console.error('Lute parse failed:', e);
-            htmlNotes = notes.replace(/\n/g, '<br>');
-        }
+        // 使用插件全局共享的 Lute 实例解析 Markdown 为 HTML
+        const htmlNotes = renderMarkdown(notes);
 
         const contentHtml = `
             <div class="b3-dialog__content" style="padding: 16px; line-height: 1.6; max-height: 70vh; overflow-y: auto;">

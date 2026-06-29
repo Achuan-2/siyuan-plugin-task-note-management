@@ -7,6 +7,7 @@ import { BlockBindingDialog } from "./BlockBindingDialog";
 import { PomodoroTimer } from "./PomodoroTimer";
 import { PomodoroManager } from "../utils/pomodoroManager";
 import { colorWithOpacity } from "../utils/uiUtils";
+import { getLuteInstance } from "../utils/luteSingleton";
 import { showMessage, confirm, Menu, Dialog, platformUtils, getBackend, getFrontend } from "siyuan";
 import { i18n } from "../pluginInstance";
 import { TaskRenderer } from "./render/TaskRenderer";
@@ -114,13 +115,8 @@ export class EisenhowerMatrixView {
         this.settingsUpdatedHandler = () => {
             this.refresh(false);
         };
-        try {
-            if ((window as any).Lute) {
-                this.lute = (window as any).Lute.New();
-            }
-        } catch (e) {
-            console.error('EisenhowerMatrixView: Lute init failed', e);
-        }
+        // 使用插件全局共享的 Lute 实例
+        this.lute = getLuteInstance();
         this.initQuadrants();
 
     }

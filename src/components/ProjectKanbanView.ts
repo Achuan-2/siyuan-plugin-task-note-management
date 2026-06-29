@@ -1,4 +1,5 @@
 import { colorWithOpacity, generateRandomColor } from "../utils/uiUtils";
+import { getLuteInstance } from "../utils/luteSingleton";
 import { showMessage, confirm, Menu, Dialog, Constants, openEmoji, platformUtils } from "siyuan";
 
 
@@ -227,13 +228,8 @@ export class ProjectKanbanView {
         this.categoryManager = CategoryManager.getInstance(this.plugin);
         this.projectManager = ProjectManager.getInstance(this.plugin);
 
-        try {
-            if ((window as any).Lute) {
-                this.lute = (window as any).Lute.New();
-            }
-        } catch (e) {
-            console.error(i18n('luteInitFailed'), e);
-        }
+        // 使用插件全局共享的 Lute 实例
+        this.lute = getLuteInstance();
 
         this.initializeAsync();
     }

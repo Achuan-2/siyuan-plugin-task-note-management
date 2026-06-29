@@ -5,6 +5,7 @@
  * 供侧边栏面板、看板视图、四象限视图等各模块统一调用，以保证整体插件中任务 UI 和交互逻辑的一致性。
  */
 import { colorWithOpacity } from "../../utils/uiUtils";
+import { getLuteInstance } from "../../utils/luteSingleton";
 import { i18n } from "../../pluginInstance";
 import { getLocalDateString, getLocalDateTimeString, compareDateStrings, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../../utils/dateUtils";
 import { getRepeatDescription } from "../../utils/repeatUtils";
@@ -1136,8 +1137,9 @@ export class TaskRenderer {
             const noteEl = document.createElement('div');
             noteEl.className = 'reminder-item__note';
 
-            if (context.lute) {
-                noteEl.innerHTML = context.lute.Md2HTML(task.note);
+            const lute = context.lute ?? getLuteInstance();
+            if (lute) {
+                noteEl.innerHTML = lute.Md2HTML(task.note);
                 const pTags = noteEl.querySelectorAll('p');
                 pTags.forEach(p => {
                     p.style.margin = '0';

@@ -5,6 +5,7 @@
     import { ProjectManager } from "../../utils/projectManager";
     import { generateRepeatInstances } from "@/utils/repeatUtils";
     import { PomodoroRecordManager } from "@/utils/pomodoroRecord";
+    import { getLuteInstance } from "../../utils/luteSingleton";
     import { Dialog, showMessage, platformUtils } from "siyuan";
 
     export let plugin: any;
@@ -127,13 +128,8 @@
         } catch (e) {
             console.warn("初始化番茄记录失败:", e);
         }
-        try {
-            if ((window as any).Lute) {
-                lute = (window as any).Lute.New();
-            }
-        } catch (e) {
-            console.error("初始化 Lute 失败:", e);
-        }
+        // 使用插件全局共享的 Lute 实例
+        lute = getLuteInstance();
         // 加载设置并初始化显示开关
         try {
             const settings = await plugin.loadSettings();

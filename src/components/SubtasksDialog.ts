@@ -10,6 +10,7 @@ import { ProjectManager } from "../utils/projectManager";
 import { getLogicalDateString } from "../utils/dateUtils";
 import { getSortCriterionName, loadSortConfig, saveSortConfig, type SortCriterion } from "../utils/sortConfig";
 import { resolveRepeatReminderTimes, addDaysToDate, getDaysDifference } from "../utils/repeatUtils";
+import { getLuteInstance } from "../utils/luteSingleton";
 
 export class SubtasksDialog {
     private dialog: Dialog;
@@ -57,11 +58,8 @@ export class SubtasksDialog {
         this.categoryManager = CategoryManager.getInstance(this.plugin);
         this.projectManager = ProjectManager.getInstance(this.plugin);
         this.readOnly = !!readOnly;
-        try {
-            this.lute = (window as any).Lute?.New?.();
-        } catch (error) {
-            console.warn('初始化 Markdown 渲染器失败:', error);
-        }
+        // 使用插件全局共享的 Lute 实例
+        this.lute = getLuteInstance();
     }
 
     private getRootElement(): HTMLElement {

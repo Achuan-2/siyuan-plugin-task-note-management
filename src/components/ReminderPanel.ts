@@ -2,6 +2,7 @@ import { showMessage, confirm, Dialog, Menu, Constants, getFrontend, getBackend,
 import { refreshSql, getBlockByID, updateBindBlockAtrrs, openBlock, pushMsg } from "../api";
 import { getLocalDateString, compareDateStrings, getLocalDateTimeString, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../utils/dateUtils";
 import { loadSortConfig, saveSortConfig, getSortCriterionName, SortCriterion, loadFilterConfig, saveFilterConfig } from "../utils/sortConfig";
+import { getLuteInstance } from "../utils/luteSingleton";
 import { SortMenuDialog } from "./SortMenuDialog";
 import { QuickReminderDialog } from "./QuickReminderDialog";
 import { CategoryManager } from "../utils/categoryManager";
@@ -122,13 +123,8 @@ export class ReminderPanel {
         this.categoryManager = CategoryManager.getInstance(this.plugin); // 初始化分类管理器
         this.pomodoroRecordManager = PomodoroRecordManager.getInstance(this.plugin); // Initialization
 
-        try {
-            if ((window as any).Lute) {
-                this.lute = (window as any).Lute.New();
-            }
-        } catch (e) {
-            console.error('初始化 Lute 失败:', e);
-        }
+        // 使用插件全局共享的 Lute 实例
+        this.lute = getLuteInstance();
 
         // 创建事件处理器（忽略由本 panel 发出的事件）
         this.reminderUpdatedHandler = (event?: CustomEvent) => {
