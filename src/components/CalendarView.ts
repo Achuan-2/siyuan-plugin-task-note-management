@@ -97,6 +97,9 @@ export class CalendarView {
     private currentCompletionFilter: string = 'all'; // 当前完成状态过滤
     private isDragging: boolean = false; // 标记是否正在拖动事件
     private refreshPendingDuringDrag: boolean = false; // 标记拖动期间是否有未处理的刷新请求
+    private isRefreshingEvents: boolean = false; // 标记是否正在刷新事件，防止并发执行
+    private refreshPending: boolean = false; // 标记是否有被挂起的刷新请求
+    private refreshPendingForce: boolean = false; // 挂起刷新请求时是否强制刷新
     private allDayDragState: {
         draggedEvent: any;
         targetEvent: { id: string; el: HTMLElement } | null;
@@ -2765,32 +2768,6 @@ export class CalendarView {
 
         document.addEventListener('visibilitychange', handleVisibilityChange);
 
-
-
-        // 使用 MutationObserver 监听容器的显示状态变化
-        const mutationObserver = new MutationObserver((mutations) => {
-            mutations.forEach((mutation) => {
-                if (mutation.type === 'attributes' &&
-                    (mutation.attributeName === 'style' || mutation.attributeName === 'class')) {
-                    if (this.isCalendarVisible()) {
-                        this.debounceResize();
-                    }
-                }
-            });
-        });
-
-        // 监听父级容器的变化
-        let currentElement = this.container.parentElement;
-        while (currentElement) {
-            mutationObserver.observe(currentElement, {
-                attributes: true,
-                attributeFilter: ['style', 'class']
-            });
-            currentElement = currentElement.parentElement;
-            // 只监听几层父级，避免监听过多元素
-            if (currentElement === document.body) break;
-        }
-
         // 清理函数
         const cleanup = () => {
             window.removeEventListener('resize', handleResize);
@@ -2798,7 +2775,6 @@ export class CalendarView {
             if (this.resizeObserver) {
                 this.resizeObserver.disconnect();
             }
-            mutationObserver.disconnect();
             if (this.resizeTimeout) {
                 clearTimeout(this.resizeTimeout);
             }
@@ -2832,8 +2808,8 @@ export class CalendarView {
         this.resizeTimeout = window.setTimeout(() => {
             if (this.calendar && this.isCalendarVisible()) {
                 try {
+                    // 仅更新尺寸即可；调用 render() 容易与 refreshEvents/datesSet 形成渲染循环
                     this.calendar.updateSize();
-                    this.calendar.render();
                 } catch (error) {
                     console.error('重新渲染日历失败:', error);
                 }
@@ -7532,6 +7508,13 @@ export class CalendarView {
             return;
         }
 
+        // 如果当前正在刷新，只标记一个挂起的请求，避免并发执行
+        if (this.isRefreshingEvents) {
+            this.refreshPending = true;
+            this.refreshPendingForce = force;
+            return;
+        }
+
         // 清除之前的刷新超时
         if (this.refreshTimeout) {
             clearTimeout(this.refreshTimeout);
@@ -7543,6 +7526,16 @@ export class CalendarView {
                 this.refreshPendingDuringDrag = true;
                 return;
             }
+
+            // 再次检查，因为 setTimeout 期间可能已经有其他刷新在执行
+            if (this.isRefreshingEvents) {
+                this.refreshPending = true;
+                this.refreshPendingForce = force;
+                return;
+            }
+
+            this.isRefreshingEvents = true;
+
             // 1. 记录当前所有滚动容器的位置 (特别是月视图或时间轴视图中的滚动条)
             const scrollerStates = Array.from(this.container.querySelectorAll('.fc-scroller')).map((el: HTMLElement) => ({
                 el,
@@ -7610,6 +7603,15 @@ export class CalendarView {
                 }
             } catch (error) {
                 console.error('刷新事件失败:', error);
+            } finally {
+                this.isRefreshingEvents = false;
+                const pending = this.refreshPending;
+                const pendingForce = this.refreshPendingForce;
+                this.refreshPending = false;
+                this.refreshPendingForce = false;
+                if (pending) {
+                    this.refreshEvents(pendingForce);
+                }
             }
         }, 100); // 100ms 防抖延迟
     }
