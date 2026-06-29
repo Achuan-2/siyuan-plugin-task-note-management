@@ -80,17 +80,17 @@ export class TaskRenderer {
         switch (priority) {
             case 'high':
                 return {
-                    backgroundColor: colorWithOpacity('var(--b3-card-error-background)', 0.5),
+                    backgroundColor: 'var(--b3-card-error-background)',
                     borderColor: 'var(--b3-card-error-color)'
                 };
             case 'medium':
                 return {
-                    backgroundColor: colorWithOpacity('var(--b3-card-warning-background)', 0.5),
+                    backgroundColor: 'var(--b3-card-warning-background)',
                     borderColor: 'var(--b3-card-warning-color)'
                 };
             case 'low':
                 return {
-                    backgroundColor: colorWithOpacity('var(--b3-card-info-background)', 0.7),
+                    backgroundColor: 'var(--b3-card-info-background)',
                     borderColor: 'var(--b3-card-info-color)'
                 };
             default:
