@@ -4353,6 +4353,18 @@ export class ReminderPanel {
         return false;
     }
 
+    /**
+     * 判断跨天任务在标记“今日已完成”时是否应直接标记为已完成。
+     * 如果是在最后一天（today == endLogical）或已经过期（today > endLogical），
+     * 说明任务已经完成，应直接标记 completed，避免第二天再次出现。
+     */
+    private isSpanningTaskLastDayOrOverdue(reminder: any, today: string): boolean {
+        if (!reminder?.endDate) return false;
+        const endLogical = this.getReminderLogicalDate(reminder.endDate, reminder.endTime || reminder.time);
+        if (!endLogical) return false;
+        return compareDateStrings(today, endLogical) >= 0;
+    }
+
     private renderReminders(reminderData: any) {
         // 先移除旧的分页控件
         const existingControls = this.container.querySelector('.reminder-pagination-controls');
@@ -7999,6 +8011,18 @@ export class ReminderPanel {
 
 
             const targetId = reminder.isSpanningTodayCompletedInstance ? reminder.originalId : reminder.id;
+
+            // 跨天任务：如果在最后一天或已过期，直接标记为已完成，避免第二天再出现
+            if (!reminder.isRepeatInstance) {
+                const target = reminderData[targetId];
+                if (target && this.isSpanningTaskLastDayOrOverdue(target, today)) {
+                    await this.toggleReminder(targetId, true, false, undefined, targetId);
+                    await this.loadReminders();
+                    showMessage(i18n("markedTodayCompleted"), 2000);
+                    return;
+                }
+            }
+
             if (reminder.isRepeatInstance) {
                 // 重复事件实例：更新原始事件的每日完成记录
                 const originalId = reminder.originalId;
