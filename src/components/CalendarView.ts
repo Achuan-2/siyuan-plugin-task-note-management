@@ -2050,20 +2050,20 @@ export class CalendarView {
                 const activeEndStr = info.end.valueOf();
                 const viewType = info.view.type;
 
-                if (this.lastRefreshedStart === activeStartStr &&
-                    this.lastRefreshedEnd === activeEndStr &&
-                    this.lastRefreshedViewType === viewType) {
-                    return; // 没发生实质变化，跳过冗余刷新，防止无限渲染循环
+                // 只有当日期范围或视图类型发生实质变化时，才重新加载事件，防止无限渲染循环
+                if (this.lastRefreshedStart !== activeStartStr ||
+                    this.lastRefreshedEnd !== activeEndStr ||
+                    this.lastRefreshedViewType !== viewType) {
+
+                    this.lastRefreshedStart = activeStartStr;
+                    this.lastRefreshedEnd = activeEndStr;
+                    this.lastRefreshedViewType = viewType;
+
+                    // 当视图的日期范围改变时（包括切换前后时间），刷新事件
+                    this.refreshEvents();
                 }
 
-                this.lastRefreshedStart = activeStartStr;
-                this.lastRefreshedEnd = activeEndStr;
-                this.lastRefreshedViewType = viewType;
-
-                // 当视图的日期范围改变时（包括切换前后时间），刷新事件
-                this.refreshEvents();
-
-                // 更新折叠行显示状态
+                // 每次 FullCalendar 重绘视图时，都需要重新应用/恢复折叠 UI 行与样式，防止其在内部重绘后消失
                 requestAnimationFrame(() => {
                     this.handleCollapseUI();
                 });
