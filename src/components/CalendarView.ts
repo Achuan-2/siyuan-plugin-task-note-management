@@ -3722,13 +3722,6 @@ export class CalendarView {
                 });
             }
 
-            menu.addItem({
-                iconHTML: "⏰",
-                label: i18n("addReminderTime") || "添加提醒时间",
-                click: () => {
-                    this.addCurrentTimeReminder(calendarEvent);
-                }
-            });
         } else {
             menu.addItem({
                 iconHTML: "👁️",
@@ -3778,6 +3771,15 @@ export class CalendarView {
                 iconHTML: "📆",
                 label: i18n("quickReschedule") || "快速调整日期",
                 submenu: this.createQuickDateContextMenuItems(calendarEvent, calendarEvent.extendedProps.isRepeated)
+            });
+
+            // 添加提醒时间
+            menu.addItem({
+                iconHTML: "⏰",
+                label: i18n("addReminderTime") || "添加提醒时间",
+                click: () => {
+                    this.addCurrentTimeReminder(calendarEvent);
+                }
             });
 
             // 添加优先级设置子菜单
