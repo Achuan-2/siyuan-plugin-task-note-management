@@ -7,7 +7,7 @@ import interactionPlugin from '@fullcalendar/interaction';
 import { colorWithOpacity } from "../utils/uiUtils";
 import { getLuteInstance } from "../utils/luteSingleton";
 import { showMessage, confirm, openTab, Menu, Dialog, Constants, platformUtils } from "siyuan";
-import { refreshSql, getBlockByID, updateBindBlockAtrrs, openBlock, pushMsg } from "../api";
+import { refreshSql, getBlockByID, updateBindBlockAtrrs, openBlock, pushMsg, sql } from "../api";
 import { getLocalDateString, getLocalDateTime, getLocalDateTimeString, compareDateStrings, getLogicalDateString, getRelativeDateString, getDayStartAdjustedDate, getLocaleTag } from "../utils/dateUtils";
 import { QuickReminderDialog } from "./QuickReminderDialog";
 import { ProjectSelectorPopup } from "./ProjectSelectorPopup";
@@ -587,9 +587,9 @@ export class CalendarView {
                 viewMode = 'multiMonthYear';
             }
             await this._setViewMode(viewMode as any);
-            this.calendar.changeView(viewMode);
-            this.updateViewButtonStates();
-            this.updatePomodoroButtonVisibility();
+                this.calendar.changeView(viewMode);
+                this.updateViewButtonStates();
+                this.updatePomodoroButtonVisibility();
         });
         if (!this.isDockMode && viewGroup) {
             viewGroup.appendChild(this.yearBtn);
@@ -607,9 +607,9 @@ export class CalendarView {
                 viewMode = 'dayGridMonth';
             }
             await this._setViewMode(viewMode as any);
-            this.calendar.changeView(viewMode);
-            this.updateViewButtonStates();
-            this.updatePomodoroButtonVisibility();
+                this.calendar.changeView(viewMode);
+                this.updateViewButtonStates();
+                this.updatePomodoroButtonVisibility();
         });
         if (!this.isDockMode && viewGroup) {
             viewGroup.appendChild(this.monthBtn);
@@ -629,9 +629,9 @@ export class CalendarView {
                 viewMode = 'listWeek';
             }
             await this._setViewMode(viewMode as any);
-            this.calendar.changeView(viewMode);
-            this.updateViewButtonStates();
-            this.updatePomodoroButtonVisibility();
+                this.calendar.changeView(viewMode);
+                this.updateViewButtonStates();
+                this.updatePomodoroButtonVisibility();
         });
         if (!this.isDockMode && viewGroup) {
             viewGroup.appendChild(this.weekBtn);
@@ -657,9 +657,9 @@ export class CalendarView {
             const startDate = getRelativeDateString(-1);
 
             await this._setViewMode(viewMode as any);
-            this.calendar.changeView(viewMode, startDate);
-            this.updateViewButtonStates();
-            this.updatePomodoroButtonVisibility();
+                this.calendar.changeView(viewMode, startDate);
+                this.updateViewButtonStates();
+                this.updatePomodoroButtonVisibility();
         });
         if (!this.isDockMode && viewGroup) {
             viewGroup.appendChild(this.multiDaysBtn);
@@ -679,9 +679,9 @@ export class CalendarView {
                 viewMode = 'listDay';
             }
             await this._setViewMode(viewMode as any);
-            this.calendar.changeView(viewMode);
-            this.updateViewButtonStates();
-            this.updatePomodoroButtonVisibility();
+                this.calendar.changeView(viewMode);
+                this.updateViewButtonStates();
+                this.updatePomodoroButtonVisibility();
         });
         if (!this.isDockMode && viewGroup) {
             viewGroup.appendChild(this.dayBtn);
@@ -8570,21 +8570,27 @@ export class CalendarView {
                 }
             }
 
-
             // 批量查询文档标题
             const docIdToTitle = new Map<string, string>();
             if (docIdsToQuery.size > 0) {
-                const promises = Array.from(docIdsToQuery).map(async (docId) => {
+                const docIds = Array.from(docIdsToQuery);
+                const batchSize = 100;
+                for (let i = 0; i < docIds.length; i += batchSize) {
+                    const batchIds = docIds.slice(i, i + batchSize);
+                    const sqlScript = `select id, content from blocks where id in (${batchIds.map(id => `'${id}'`).join(',')})`;
                     try {
-                        const docBlock = await getBlockByID(docId);
-                        if (docBlock && docBlock.content) {
-                            docIdToTitle.set(docId, docBlock.content.trim());
+                        const results = await sql(sqlScript);
+                        if (results && Array.isArray(results)) {
+                            for (const row of results) {
+                                if (row && row.id && row.content) {
+                                    docIdToTitle.set(row.id, row.content.trim());
+                                }
+                            }
                         }
                     } catch (err) {
-                        console.warn(`获取文档 ${docId} 的标题失败:`, err);
+                        console.warn(`批量获取文档标题失败 (批次 ${i}-${i + batchSize}):`, err);
                     }
-                });
-                await Promise.all(promises);
+                }
             }
 
             // 应用结果到reminders
@@ -8593,7 +8599,6 @@ export class CalendarView {
 
                 const blockId = reminder.blockId || reminder.id;
                 let docId = reminder.docId;
-
 
                 // 设置文档标题
                 if (docId && docId !== blockId && docIdToTitle.has(docId)) {

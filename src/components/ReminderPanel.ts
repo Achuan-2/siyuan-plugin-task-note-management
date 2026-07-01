@@ -1,5 +1,5 @@
 import { showMessage, confirm, Dialog, Menu, Constants, getFrontend, getBackend, platformUtils } from "siyuan";
-import { refreshSql, getBlockByID, updateBindBlockAtrrs, openBlock, pushMsg } from "../api";
+import { refreshSql, getBlockByID, updateBindBlockAtrrs, openBlock, pushMsg, sql } from "../api";
 import { getLocalDateString, compareDateStrings, getLocalDateTimeString, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../utils/dateUtils";
 import { loadSortConfig, saveSortConfig, getSortCriterionName, SortCriterion, loadFilterConfig, saveFilterConfig } from "../utils/sortConfig";
 import { getLuteInstance } from "../utils/luteSingleton";
@@ -2533,10 +2533,33 @@ export class ReminderPanel {
                     return;
                 }
 
+                if (this.getDocTitleCacheForCurrentTab().has(reminder.docId)) {
+                    return;
+                }
+
                 docIdsToQuery.add(reminder.docId);
             });
 
-            await Promise.all(Array.from(docIdsToQuery).map(docId => this.resolveDocumentTitle(docId)));
+            if (docIdsToQuery.size > 0) {
+                const docIds = Array.from(docIdsToQuery);
+                const batchSize = 100;
+                for (let i = 0; i < docIds.length; i += batchSize) {
+                    const batchIds = docIds.slice(i, i + batchSize);
+                    const sqlScript = `select id, content from blocks where id in (${batchIds.map(id => `'${id}'`).join(',')})`;
+                    try {
+                        const results = await sql(sqlScript);
+                        if (results && Array.isArray(results)) {
+                            for (const row of results) {
+                                if (row && row.id && row.content) {
+                                    this.getDocTitleCacheForCurrentTab().set(row.id, row.content.trim());
+                                }
+                            }
+                        }
+                    } catch (err) {
+                        console.warn(`批量获取文档标题失败 (批次 ${i}-${i + batchSize}):`, err);
+                    }
+                }
+            }
 
             reminders.forEach((reminder) => {
                 if (!this.shouldShowDocumentTitleForReminder(reminder)) return;
