@@ -6107,6 +6107,16 @@ export class QuickReminderDialog {
         let time: string | undefined = timeInput?.value || undefined;
         let endTime: string | undefined = endTimeInput?.value || undefined;
 
+        // 禁止设置没有日期但是有时间的任务
+        if (!date && time) {
+            showMessage(i18n('timeRequiresDate') || '设置时间前请先选择日期');
+            return;
+        }
+        if (!endDate && endTime) {
+            showMessage(i18n('timeRequiresDate') || '设置时间前请先选择日期');
+            return;
+        }
+
         // 自动根据日期更新状态（仅新建模式）：
         // 如果是今天或过去的任务，且未完成，自动设为进行中。
         // 编辑模式应尊重用户显式选择的状态，不做自动覆盖。

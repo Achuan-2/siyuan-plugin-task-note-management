@@ -151,6 +151,7 @@
     "pleaseSelectDate": "请选择提醒日期",
     "pleaseSetStartDateForRepeat": "重复任务需要设置起始日期才能创建",
     "endDateCannotBeEarlier": "结束日期不能早于开始日期",
+    "timeRequiresDate": "设置时间前请先选择日期",
     "endDateAdjusted": "结束日期已自动调整为开始日期",
     "operationFailed": "操作失败，请重试",
     "loadRemindersFailed": "加载任务失败",

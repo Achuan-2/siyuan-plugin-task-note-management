@@ -151,6 +151,7 @@
     "pleaseSelectDate": "Please select reminder date",
     "pleaseSetStartDateForRepeat": "Please set a start date to create a repeating reminder",
     "endDateCannotBeEarlier": "End date cannot be earlier than start date",
+    "timeRequiresDate": "Please select a date before setting a time",
     "endDateAdjusted": "End date has been automatically adjusted to start date",
     "operationFailed": "Operation failed, please try again",
     "loadRemindersFailed": "Failed to load reminders",
