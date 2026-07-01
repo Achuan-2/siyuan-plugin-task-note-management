@@ -745,7 +745,7 @@ export default class ReminderPlugin extends Plugin {
                 const fileNames = (dirData && Array.isArray(dirData)) ? dirData.filter(e => !e.isDir && e.name.endsWith('.json')).map(e => e.name) : [];
                 if (fileNames.length > 0) {
                     const contents = await Promise.all(fileNames.map(name => this.loadData(`${POMODORO_RECORD_DIR}/${name}`)));
-                    
+
                     fileNames.forEach((fileName, index) => {
                         const record = contents[index];
                         if (record && typeof record === 'object') {
@@ -1440,7 +1440,7 @@ export default class ReminderPlugin extends Plugin {
         `);
 
         this.addIcons(`
-            <symbol id="iconstatistic" viewBox="0 0 24 24">
+            <symbol id="iconStatistic" viewBox="0 0 24 24">
                 <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M3 3v16a2 2 0 0 0 2 2h16"/>
                     <path d="M18 17V9"/>
@@ -2617,7 +2617,7 @@ export default class ReminderPlugin extends Plugin {
 
         // 布局就绪后创建日历视图顶栏按钮（桌面端）
         const topBarSettings = await this.loadSettings();
-        if ( topBarSettings.enableCalendarTopBar !== false && !this.calendarTopBarEl) {
+        if (topBarSettings.enableCalendarTopBar !== false && !this.calendarTopBarEl) {
             this.calendarTopBarEl = this.addTopBar({
                 icon: 'iconCalendar',
                 title: i18n('calendarView'),
@@ -4200,7 +4200,7 @@ export default class ReminderPlugin extends Plugin {
 
                             const parsed = this.extractDateAndTime(rt);
                             const hasDate = !!parsed.date;
-                            
+
                             let shouldCheck = false;
                             if (typeof rtItem === 'object' && rtItem.everyDay) {
                                 shouldCheck = !reminderObj.date || today >= reminderObj.date;
@@ -4684,9 +4684,9 @@ export default class ReminderPlugin extends Plugin {
         }
 
         const logicalToday = getLogicalDateString();
-        const incompleteWithDate = reminders.filter((reminder: any) => 
+        const incompleteWithDate = reminders.filter((reminder: any) =>
             !reminder.completed && (
-                this.normalizeReminderDateText(reminder?.date) || 
+                this.normalizeReminderDateText(reminder?.date) ||
                 (reminder.reminderTimes && reminder.reminderTimes.length > 0) ||
                 (typeof reminder.customReminderTime === 'string' && reminder.customReminderTime.trim())
             )
@@ -6594,8 +6594,8 @@ export default class ReminderPlugin extends Plugin {
         }
         const checkIn = habit.checkIns[date];
         checkIn.entries = checkIn.entries || [];
-        checkIn.entries.push({ 
-            emoji: emojiConfig.emoji, 
+        checkIn.entries.push({
+            emoji: emojiConfig.emoji,
             timestamp: now,
             meaning: emojiConfig.meaning,
             group: (emojiConfig.group || '').trim() || undefined
@@ -6607,7 +6607,7 @@ export default class ReminderPlugin extends Plugin {
         habit.updatedAt = now;
 
         await this.saveHabitPartial(habit.id, habit);
-        
+
         if (!options?.silent) {
             showMessage(`${i18n("checkInSuccess")}${emojiConfig.emoji}`);
         }
@@ -6615,7 +6615,7 @@ export default class ReminderPlugin extends Plugin {
         // 尝试同步更新系统通知
         try {
             await this.updateMobileNotification(habit, habit, 7);
-        } catch (e) {}
+        } catch (e) { }
 
         window.dispatchEvent(new CustomEvent('habitUpdated'));
     }
