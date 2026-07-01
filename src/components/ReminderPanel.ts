@@ -458,7 +458,7 @@ export class ReminderPanel {
             // 添加番茄钟统计按钮
             const pomodoroStatsBtn = document.createElement('button');
             pomodoroStatsBtn.className = 'b3-button b3-button--outline';
-            pomodoroStatsBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconstatistic"></use></svg>';
+            pomodoroStatsBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconStatistic"></use></svg>';
             pomodoroStatsBtn.classList.add('ariaLabel'); pomodoroStatsBtn.setAttribute('aria-label', i18n("statsView"));
             pomodoroStatsBtn.addEventListener('click', () => {
                 this.showPomodoroStatsView();
@@ -2873,8 +2873,8 @@ export class ReminderPanel {
                             el.classList.add('reminder-completed');
                             try {
                                 el.style.setProperty('opacity', '0.5', 'important');
-                            } catch (err) {}
-                            
+                            } catch (err) { }
+
                             if (this.isTodayLikeView()) {
                                 this.scheduleCompletionRemoval(r.id);
                             }
@@ -2882,7 +2882,7 @@ export class ReminderPanel {
                             el.classList.remove('reminder-completed');
                             el.style.removeProperty('opacity');
                             el.style.opacity = '';
-                            
+
                             // 移除今日完成时间的文字显示
                             const completedEl = el.querySelector('.reminder-item__completed-time');
                             if (completedEl) completedEl.remove();
@@ -4089,7 +4089,7 @@ export class ReminderPanel {
         yesterdayDate.setDate(yesterdayDate.getDate() - 1);
         const yesterdayStr = getLocalDateString(yesterdayDate);
 
-         const matchesDateFilter = (r: any, df: any): boolean => {
+        const matchesDateFilter = (r: any, df: any): boolean => {
             if (!r.date && !r.endDate) {
                 if (df.type === 'none') return true;
                 if (df.type === 'yesterday') return this.isDatelessReminderActiveOnDate(r, yesterdayStr) && this.canReminderShowOnDate(r, yesterdayStr);
@@ -7802,7 +7802,7 @@ export class ReminderPanel {
                 label: i18n("viewPomodoros") || "查看番茄钟",
                 click: () => this.showPomodoroSessions(reminder)
             });
-            
+
             if (isDeletable) {
                 menu.addItem({
                     iconHTML: "🗑",
@@ -9207,7 +9207,7 @@ export class ReminderPanel {
                             completed: isCompleted
                         };
                         const originalItemStatus = this.getReminderKanbanStatusId(tempSubInst);
-                        
+
                         if (originalItemStatus === originalParentStatus && !isCompleted) {
                             if (!originalTask.repeat) originalTask.repeat = {};
                             if (!originalTask.repeat.instanceModifications) originalTask.repeat.instanceModifications = {};
@@ -9248,7 +9248,7 @@ export class ReminderPanel {
                     const oldStatus = this.getReminderKanbanStatusId(reminder);
                     reminder.completed = false;
                     delete reminder.completedTime;
-                    
+
                     if (newStatus === 'doing') {
                         reminder.kanbanStatus = 'doing';
                     } else {
@@ -9261,7 +9261,7 @@ export class ReminderPanel {
                     for (const did of descIds) {
                         const desc = reminderData[did];
                         if (!desc) continue;
-                        
+
                         const isSubtaskRecurring = desc.isRepeatInstance || (desc.repeat && desc.repeat.enabled);
                         if (!desc.completed && !isSubtaskRecurring && this.getReminderKanbanStatusId(desc) === oldStatus) {
                             desc.completed = false;

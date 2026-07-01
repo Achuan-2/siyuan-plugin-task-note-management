@@ -200,7 +200,7 @@ export class HabitPanel {
         // 统计按钮（统一统计视图）
         const habitStatsCalendarBtn = document.createElement('button');
         habitStatsCalendarBtn.className = 'b3-button b3-button--outline';
-        habitStatsCalendarBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconstatistic"></use></svg>';
+        habitStatsCalendarBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconStatistic"></use></svg>';
         habitStatsCalendarBtn.classList.add('ariaLabel'); habitStatsCalendarBtn.setAttribute('aria-label', i18n("statsView"));
         habitStatsCalendarBtn.addEventListener('click', () => {
             this.showPomodoroStatsView();
@@ -842,11 +842,11 @@ export class HabitPanel {
     private toggleGroupCollapseUI(groupContainer: HTMLElement, isCollapsed: boolean) {
         const collapseIcon = groupContainer.querySelector('.habit-group__collapse-icon') as HTMLElement;
         const groupContent = groupContainer.querySelector('.habit-group__content') as HTMLElement;
-        
+
         if (collapseIcon) {
             collapseIcon.innerHTML = isCollapsed ? '▶' : '▼';
         }
-        
+
         if (groupContent) {
             groupContent.style.display = isCollapsed ? 'none' : '';
         }
@@ -975,22 +975,22 @@ export class HabitPanel {
     private createHabitCard(habit: Habit, date?: string): HTMLElement {
         const card = document.createElement('div');
         card.className = 'habit-card';
-        
+
         // 判断习惯状态
         const isEnded = this.isHabitEnded(habit);
         const isAbandoned = habit.abandoned === true;
         const isInactive = isEnded || isAbandoned;
-        
+
         // 今日已完成或昨日已完成的筛选项，添加透明度
         const isCompletedView = this.currentTab === 'todayCompleted' || this.currentTab === 'yesterdayCompleted';
         if (isCompletedView && !isInactive) {
             card.style.opacity = '0.7';
         }
-        
+
         // 卡片头部：图标、标题
         const header = document.createElement('div');
         header.className = 'habit-card__header';
-        
+
         // 图标 - 使用习惯自定义颜色（支持随机颜色）
         const iconEl = document.createElement('div');
         iconEl.className = 'habit-card__icon';
@@ -1004,7 +1004,7 @@ export class HabitPanel {
             iconEl.style.opacity = '0.6';
         }
         header.appendChild(iconEl);
-        
+
         // 标题
         const title = document.createElement('span');
         title.className = habit.blockId ? 'habit-card__title habit-card__title-link' : 'habit-card__title';
@@ -1054,7 +1054,7 @@ export class HabitPanel {
             });
             header.appendChild(urlIcon);
         }
-        
+
         // 状态标签（已结束/已放弃）
         if (isEnded) {
             const statusBadge = document.createElement('span');
@@ -1067,7 +1067,7 @@ export class HabitPanel {
             statusBadge.textContent = i18n('habitStatusAbandoned') || '已放弃';
             header.appendChild(statusBadge);
         }
-        
+
         card.appendChild(header);
 
         // 打卡信息 - 根据当前tab显示对应日期的数据
@@ -1076,7 +1076,7 @@ export class HabitPanel {
         const isHistoryView = displayDate !== today;
         const isCompletedOnDisplayDate = !isInactive && this.isCompletedOnDate(habit, displayDate);
         const checkIn = habit.checkIns?.[displayDate];
-        
+
         // 已结束和已放弃的习惯不显示进度条
         if (!isInactive) {
             const goalType = this.getHabitGoalType(habit);
@@ -1085,43 +1085,43 @@ export class HabitPanel {
             // 进度条区域
             const progressSection = document.createElement('div');
             progressSection.className = 'habit-card__progress';
-            
+
             const progressHeader = document.createElement('div');
             progressHeader.className = 'habit-card__progress-header';
-            
+
             const progressLabel = document.createElement('span');
             progressLabel.className = 'habit-card__progress-label';
-            
+
             const progressValue = document.createElement('span');
             progressValue.className = 'habit-card__progress-value';
-            
+
             const progressBar = document.createElement('div');
             progressBar.className = 'habit-card__progress-bar';
-            
+
             const progressFill = document.createElement('div');
             progressFill.className = 'habit-card__progress-fill';
-            
+
             const percentage = Math.min(100, (currentProgress / Math.max(1, targetProgress)) * 100);
-            
+
             if (goalType === 'pomodoro') {
-                progressLabel.textContent = isHistoryView 
-                    ? (i18n("historyProgressLabel") || '当日进度') 
+                progressLabel.textContent = isHistoryView
+                    ? (i18n("historyProgressLabel") || '当日进度')
                     : (i18n("todayProgressLabel") || '今日进度');
                 progressValue.textContent = `${this.formatMinutesToHourMinute(currentProgress)}/${this.formatMinutesToHourMinute(targetProgress)}`;
             } else {
                 // 统一显示为 x/target 格式，即使是1次也显示 0/1 或 1/1
-                progressLabel.textContent = isHistoryView 
-                    ? (i18n("historyProgressLabel") || '当日进度') 
+                progressLabel.textContent = isHistoryView
+                    ? (i18n("historyProgressLabel") || '当日进度')
                     : (i18n("todayProgressLabel") || '今日进度');
                 progressValue.textContent = `${currentProgress}/${targetProgress}`;
             }
-            
+
             progressFill.style.width = `${percentage}%`;
             const progressColor = this.getHabitProgressColor(habit);
             if (progressColor && progressColor !== 'var(--b3-theme-primary)') {
                 progressFill.style.background = `linear-gradient(90deg, ${progressColor}, ${progressColor}88)`;
             }
-            
+
             progressHeader.appendChild(progressLabel);
             progressHeader.appendChild(progressValue);
             progressSection.appendChild(progressHeader);
@@ -1133,16 +1133,16 @@ export class HabitPanel {
         // 信息网格区域
         const infoGrid = document.createElement('div');
         infoGrid.className = 'habit-card__info-grid';
-        
+
         // 频率和时间信息合并到一个格子
         const freqTimeItem = document.createElement('div');
         freqTimeItem.className = 'habit-card__info-item habit-card__info-item--full';
-        const timeText = habit.endDate 
+        const timeText = habit.endDate
             ? `${habit.startDate} ~ ${habit.endDate}`
             : `${habit.startDate} ${i18n("timeStart") || '起'}`;
         freqTimeItem.innerHTML = `<span class="habit-card__info-icon">🔄</span><span class="habit-card__info-text">${this.getFrequencyText(habit.frequency)} · ${timeText}</span>`;
         infoGrid.appendChild(freqTimeItem);
-        
+
         // 提醒时间（支持多个）- 已结束和已放弃的习惯不显示
         if (!isInactive) {
             const timesList = isCompletedOnDisplayDate && !isHistoryView
@@ -1156,7 +1156,7 @@ export class HabitPanel {
                 infoGrid.appendChild(reminderItem);
             }
         }
-        
+
         card.appendChild(infoGrid);
 
         // 番茄钟统计
@@ -1183,20 +1183,20 @@ export class HabitPanel {
             const emojiSection = document.createElement('div');
             emojiSection.className = 'habit-card__emoji-section';
             emojiSection.style.cursor = isHistoryView ? 'default' : 'pointer';
-            emojiSection.classList.add('ariaLabel'); emojiSection.setAttribute('aria-label', isHistoryView 
+            emojiSection.classList.add('ariaLabel'); emojiSection.setAttribute('aria-label', isHistoryView
                 ? (i18n("historyCheckInEmoji") || '当日打卡')
                 : (i18n("clickToEditCheckIn") || '点击编辑今日打卡'));
-            
+
             const emojiLabel = document.createElement('div');
             emojiLabel.className = 'habit-card__emoji-label';
-            emojiLabel.textContent = isHistoryView 
+            emojiLabel.textContent = isHistoryView
                 ? (i18n("historyCheckInEmoji") || '当日打卡')
                 : (i18n("todayCheckInEmoji") || '今日打卡');
             emojiSection.appendChild(emojiLabel);
-            
+
             const emojiList = document.createElement('div');
             emojiList.className = 'habit-card__emoji-list';
-            
+
             // 显示指定日期的entries，并显示emoji图标（保留顺序）
             const emojis: string[] = [];
             if (checkIn.entries && checkIn.entries.length > 0) {
@@ -1212,9 +1212,9 @@ export class HabitPanel {
                 emojiEl.classList.add('ariaLabel'); emojiEl.setAttribute('aria-label', emojiStr);
                 emojiList.appendChild(emojiEl);
             });
-            
+
             emojiSection.appendChild(emojiList);
-            
+
             // 只有非历史视图才允许点击编辑
             if (!isHistoryView) {
                 emojiSection.addEventListener('click', (ev) => {
@@ -1231,35 +1231,35 @@ export class HabitPanel {
                     dialog.show();
                 });
             }
-            
+
             card.appendChild(emojiSection);
         }
-        
+
         // 底部操作区：坚持天数 + 打卡按钮
         const footer = document.createElement('div');
         footer.className = 'habit-card__footer';
-        
+
         // 坚持打卡天数
         const checkInDaysCount = Object.keys(habit.checkIns || {}).length;
         const streakEl = document.createElement('div');
         streakEl.className = 'habit-card__streak';
         streakEl.innerHTML = `<span class="habit-card__streak-icon">🔥</span><span>${i18n("persistDays", { count: checkInDaysCount.toString() })}</span>`;
         footer.appendChild(streakEl);
-        
+
         // 打卡按钮 - 已结束和已放弃的习惯不显示
         if (!isInactive) {
             const actionsEl = document.createElement('div');
             actionsEl.className = 'habit-card__actions';
-            
+
             const checkInBtn = document.createElement('button');
             checkInBtn.className = 'habit-card__checkin-btn';
-            
+
             // 判断是否为番茄钟目标类型以及打卡按钮类型
             const goalType = this.getHabitGoalType(habit);
             const isPomodoroGoal = goalType === 'pomodoro';
             // checkInButtonType: 'pomodoro' | 'countup'，默认为 'pomodoro'
             const buttonType = isPomodoroGoal ? (habit.checkInButtonType || 'pomodoro') : 'normal';
-            
+
             if (isPomodoroGoal && buttonType === 'countup') {
                 // 正计时按钮
                 checkInBtn.innerHTML = `<span>⏱️</span><span>正计时</span>`;
@@ -1274,17 +1274,17 @@ export class HabitPanel {
                 // 默认打卡按钮
                 checkInBtn.innerHTML = `<span>✓</span><span>${i18n("checkInBtn")}</span>`;
             }
-            
+
             // 使用习惯自定义颜色（支持随机颜色）
             if (habitColor && habitColor !== 'var(--b3-theme-primary)') {
                 checkInBtn.style.background = `linear-gradient(135deg, ${habitColor}, ${habitColor}dd)`;
                 checkInBtn.style.boxShadow = `0 4px 12px ${habitColor}4d`;
             }
-            
+
             checkInBtn.addEventListener('click', (ev) => {
                 ev.preventDefault();
                 ev.stopPropagation();
-                
+
                 if (isPomodoroGoal && buttonType === 'countup') {
                     // 正计时按钮直接启动正计时
                     this.startPomodoroCountUp(habit);
@@ -1317,7 +1317,7 @@ export class HabitPanel {
                     }
                 }
             });
-            
+
             actionsEl.appendChild(checkInBtn);
             footer.appendChild(actionsEl);
         }
@@ -1619,8 +1619,8 @@ export class HabitPanel {
             if (goalType === "pomodoro") {
                 const targetMinutes = this.getHabitPomodoroTargetMinutes(habit);
                 const settings = await this.plugin.loadSettings();
-                finalDuration = resolveDefaultPomodoroDuration({ 
-                    estimatedPomodoroDuration: targetMinutes 
+                finalDuration = resolveDefaultPomodoroDuration({
+                    estimatedPomodoroDuration: targetMinutes
                 }, settings);
             }
         }
@@ -1867,7 +1867,7 @@ export class HabitPanel {
         // 添加默认的打卡emoji选项
         habit.checkInEmojis.forEach(emojiConfig => {
             const groupName = (emojiConfig.group || '').trim();
-            
+
             // 如果设置了隐藏今天已打卡选项：
             if (habit.hideCheckedToday) {
                 if (groupName) {
@@ -2006,8 +2006,8 @@ export class HabitPanel {
             // Append an entry for this check-in, using custom timestamp if provided
             checkIn.entries = checkIn.entries || [];
             const entry: HabitMemoCheckInEntry = {
-                emoji: emojiConfig.emoji, 
-                timestamp: customTimestamp, 
+                emoji: emojiConfig.emoji,
+                timestamp: customTimestamp,
                 note,
                 meaning: emojiConfig.meaning,
                 group: (emojiConfig.group || '').trim() || undefined
