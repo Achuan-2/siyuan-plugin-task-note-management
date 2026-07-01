@@ -1128,7 +1128,7 @@
     "pasteBlockRefSuccess": "已成功粘贴并解析块信息",
     "pasteBlockRefFailed": "无法从剪贴板内容中解析块信息",
     "readClipboardFailed": "读取剪贴板失败",
-    "calendarSettings": "📅日历设置",
+    "calendarSettings": "📅日历视图设置",
     "sidebarSettings": "🛠侧边栏设置",
     "taskSettings": "📋任务设置",
     "enableReminderDock": "显示任务管理侧栏",

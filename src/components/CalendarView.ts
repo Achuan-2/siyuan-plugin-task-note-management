@@ -1,4 +1,4 @@
-import { Calendar } from '@fullcalendar/core';
+import { Calendar, formatDate, formatRange } from '@fullcalendar/core';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import multiMonthPlugin from '@fullcalendar/multimonth';
@@ -1594,6 +1594,7 @@ export class CalendarView {
                 listYear: { listDayFormat: { weekday: 'short', month: 'numeric', day: 'numeric', omitCommas: true }, listDaySideFormat: false }
             },
             multiMonthMaxColumns: 1, // force a single column
+            titleFormat: (arg: any) => this.formatCalendarTitle(arg),
             headerToolbar: {
                 left: 'prev,myToday,next jumpTo',
                 center: 'title',
@@ -2041,7 +2042,7 @@ export class CalendarView {
                 }
             },
             // 添加视图切换和日期变化的监听
-            datesSet: (info: any) => {
+            datesSet: (_info: any) => {
                 // 当视图的日期范围改变时（包括切换前后时间），刷新事件
                 this.refreshEvents();
 
@@ -2050,16 +2051,7 @@ export class CalendarView {
                     this.handleCollapseUI();
                 });
 
-                // 在周视图标题中追加周数
-                const titleEl = this.container?.querySelector('.fc-toolbar-title');
-                if (titleEl) {
-                    const viewType = info?.view?.type || '';
-                    if (viewType.includes('Week')) {
-                        const weekNum = this.getISOWeekNumber(info.view.activeStart);
-                        const originalTitle = (info.view.title || titleEl.textContent || '').replace(/\s*\(第\d+周\)\s*$/, '') || '';
-                        titleEl.textContent = `${originalTitle} (第${weekNum}周)`;
-                    }
-                }
+
             }
         });
 
@@ -11212,6 +11204,64 @@ export class CalendarView {
         d.setUTCDate(d.getUTCDate() + 4 - dayNum);
         const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
         return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+    }
+
+    /**
+     * 若字符串恰好是同一子串重复两次（如 "ABCABC"），则返回单份子串。
+     * 用于兜底 FullCalendar 标题偶发的重叠渲染。
+     */
+    private dedupeRepeatedString(str: string): string {
+        if (!str || str.length < 2 || str.length % 2 !== 0) {
+            return str;
+        }
+        const half = str.slice(0, str.length / 2);
+        if (half === str.slice(str.length / 2)) {
+            return half;
+        }
+        return str;
+    }
+
+    /**
+     * 自定义日历工具栏标题格式
+     */
+    private formatCalendarTitle(arg: any): string {
+        const viewType = this.calendar?.view?.type || '';
+        const start: Date = arg.start?.marker;
+        const end: Date = arg.end?.marker;
+        const locale = arg.localeCodes?.[0] || 'zh-CN';
+
+        if (!start) {
+            return '';
+        }
+
+        let title = '';
+        if (viewType.includes('Year')) {
+            // 年视图：仅显示年份
+            title = formatDate(start, { year: 'numeric', locale });
+        } else if (viewType === 'dayGridMonth' || viewType === 'listMonth') {
+            // 月视图：仅显示年月
+            title = formatDate(start, { year: 'numeric', month: 'long', locale });
+        } else if (viewType.includes('Day') && !viewType.includes('MultiDays')) {
+            // 单日视图
+            title = formatDate(start, { year: 'numeric', month: 'long', day: 'numeric', locale });
+        } else {
+            // 周/多日视图：显示日期区间
+            title = formatRange(start, end || start, {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                locale,
+                separator: ' – '
+            });
+        }
+
+        // 周视图追加 ISO 周数
+        if (viewType.includes('Week')) {
+            const weekNum = this.getISOWeekNumber(start);
+            title = `${title} (第${weekNum}周)`;
+        }
+
+        return title;
     }
 
     /**
