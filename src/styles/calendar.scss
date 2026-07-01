@@ -765,3 +765,17 @@
     height: 100%;
     min-height: 100%;
 }
+
+/* 修正跨周/跨天连续任务在行末/行首的边框与圆角，使其只在实际首尾天显示 */
+.fc-event:not(.fc-event-start) {
+    border-top-left-radius: 0 !important;
+    border-bottom-left-radius: 0 !important;
+    border-left-width: 0 !important;
+    border-left-color: transparent !important;
+}
+.fc-event:not(.fc-event-end) {
+    border-top-right-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+    border-right-width: 0 !important;
+    border-right-color: transparent !important;
+}
