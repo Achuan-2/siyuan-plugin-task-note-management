@@ -35,7 +35,7 @@ import { HabitStatsDialog } from "./stats/HabitStatsDialog";
 import { HabitDayDialog } from "./HabitDayDialog";
 import { getHabitProgressOnDate, getHabitReminderTimes, getHabitReminderTimesForDate, shouldCheckInOnDate as shouldCheckInOnDateUtil, isHabitActiveOnDate } from "../utils/habitUtils";
 import { HabitGroupManager } from "../utils/habitGroupManager";
-import { normalizeReminderSkipWeekendMode, shouldSkipReminderOnDate, type HolidayData } from "../utils/reminderSkipDate";
+import { normalizeReminderSkipWeekendMode, shouldSkipReminderOnDate, type HolidayData, getReminderSkipWeekendsEffective, getReminderSkipHolidaysEffective } from "../utils/reminderSkipDate";
 import { syncHabitMemoBlock, type HabitMemoCheckInEntry, type HabitMemoEmojiConfig } from "../utils/habitMemoBlockSync";
 export class CalendarView {
     private container: HTMLElement;
@@ -7747,31 +7747,44 @@ export class CalendarView {
                     const isCrossDay = startDateStr && endDateStr && startDateStr !== endDateStr;
 
                     if (isCrossDay) {
-                        const activeBlocks = this.getActiveBlocks(startDateStr, endDateStr, reminder);
-                        if (activeBlocks.length > 1) {
-                            for (let i = 0; i < activeBlocks.length; i++) {
-                                const block = activeBlocks[i];
+                        const hasSkipSettings = getReminderSkipWeekendsEffective(reminder, this.reminderSkipSettings) ||
+                                                getReminderSkipHolidaysEffective(reminder, this.reminderSkipSettings);
+
+                        if (hasSkipSettings) {
+                            const activeBlocks = this.getActiveBlocks(startDateStr, endDateStr, reminder, startDate, endDate);
+                            const hasBefore = startDateStr < startDate;
+                            const hasAfter = endDateStr > endDate;
+
+                            if (activeBlocks.length > 1 || (activeBlocks.length === 1 && (hasBefore || hasAfter))) {
+                                const totalBlocks = activeBlocks.length + (hasBefore ? 1 : 0) + (hasAfter ? 1 : 0);
+                                for (let i = 0; i < activeBlocks.length; i++) {
+                                    const block = activeBlocks[i];
+                                    const splitIndex = i + (hasBefore ? 1 : 0);
+                                    const blockReminder = {
+                                        ...reminder,
+                                        date: block.start,
+                                        endDate: block.end,
+                                        isSplitBlock: true,
+                                        originalDate: reminder.date,
+                                        originalEndDate: reminder.endDate,
+                                        splitIndex: splitIndex,
+                                        splitTotal: totalBlocks
+                                    };
+                                    const uniqueId = `${reminder.id}_block_${splitIndex}`;
+                                    this.addEventToList(events, blockReminder, uniqueId, false, reminder.id);
+                                }
+                            } else if (activeBlocks.length === 1) {
+                                const block = activeBlocks[0];
                                 const blockReminder = {
                                     ...reminder,
                                     date: block.start,
-                                    endDate: block.end,
-                                    isSplitBlock: true,
-                                    originalDate: reminder.date,
-                                    originalEndDate: reminder.endDate,
-                                    splitIndex: i,
-                                    splitTotal: activeBlocks.length
+                                    endDate: block.end
                                 };
-                                const uniqueId = `${reminder.id}_block_${i}`;
-                                this.addEventToList(events, blockReminder, uniqueId, false, reminder.id);
+                                this.addEventToList(events, blockReminder, reminder.id, false);
                             }
-                        } else if (activeBlocks.length === 1) {
-                            const block = activeBlocks[0];
-                            const blockReminder = {
-                                ...reminder,
-                                date: block.start,
-                                endDate: block.end
-                            };
-                            this.addEventToList(events, blockReminder, reminder.id, false);
+                        } else {
+                            // 没有勾选跳过周末或节假日，直接渲染为单个连续块，不进行分割与显示锯齿
+                            this.addEventToList(events, reminder, reminder.id, false);
                         }
                     } else {
                         // Check if the single-day task itself is skipped
@@ -9177,14 +9190,29 @@ export class CalendarView {
     private getActiveBlocks(
         startDateStr: string,
         endDateStr: string,
-        reminder: any
+        reminder: any,
+        viewStartDateStr?: string,
+        viewEndDateStr?: string
     ): Array<{ start: string; end: string }> {
+        let startLimit = startDateStr;
+        if (viewStartDateStr && viewStartDateStr > startLimit) {
+            startLimit = viewStartDateStr;
+        }
+        let endLimit = endDateStr;
+        if (viewEndDateStr && viewEndDateStr < endLimit) {
+            endLimit = viewEndDateStr;
+        }
+
+        if (startLimit > endLimit) {
+            return [];
+        }
+
         const blocks: Array<{ start: string; end: string }> = [];
         let currentBlockStart: string | null = null;
         let currentBlockEnd: string | null = null;
 
-        let currentDate = new Date(startDateStr + 'T00:00:00');
-        const finalDate = new Date(endDateStr + 'T00:00:00');
+        let currentDate = new Date(startLimit + 'T00:00:00');
+        const finalDate = new Date(endLimit + 'T00:00:00');
 
         while (currentDate <= finalDate) {
             const currentDateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
