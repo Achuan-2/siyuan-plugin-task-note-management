@@ -101,6 +101,9 @@ export class CalendarView {
     private isRefreshingEvents: boolean = false; // 标记是否正在刷新事件，防止并发执行
     private refreshPending: boolean = false; // 标记是否有被挂起的刷新请求
     private refreshPendingForce: boolean = false; // 挂起刷新请求时是否强制刷新
+    private lastRefreshedStart: number | null = null;
+    private lastRefreshedEnd: number | null = null;
+    private lastRefreshedViewType: string | null = null;
     private allDayDragState: {
         draggedEvent: any;
         targetEvent: { id: string; el: HTMLElement } | null;
@@ -2042,7 +2045,21 @@ export class CalendarView {
                 }
             },
             // 添加视图切换和日期变化的监听
-            datesSet: (_info: any) => {
+            datesSet: (info: any) => {
+                const activeStartStr = info.start.valueOf();
+                const activeEndStr = info.end.valueOf();
+                const viewType = info.view.type;
+
+                if (this.lastRefreshedStart === activeStartStr &&
+                    this.lastRefreshedEnd === activeEndStr &&
+                    this.lastRefreshedViewType === viewType) {
+                    return; // 没发生实质变化，跳过冗余刷新，防止无限渲染循环
+                }
+
+                this.lastRefreshedStart = activeStartStr;
+                this.lastRefreshedEnd = activeEndStr;
+                this.lastRefreshedViewType = viewType;
+
                 // 当视图的日期范围改变时（包括切换前后时间），刷新事件
                 this.refreshEvents();
 
@@ -2050,8 +2067,6 @@ export class CalendarView {
                 requestAnimationFrame(() => {
                     this.handleCollapseUI();
                 });
-
-
             }
         });
 

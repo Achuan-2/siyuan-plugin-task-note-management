@@ -3656,7 +3656,13 @@ export class ReminderPanel {
             if (!reminder.parentId) return false;
 
             let currentId = reminder.parentId;
+            const visited = new Set<string>();
             while (currentId) {
+                if (visited.has(currentId)) {
+                    console.warn('Cycle detected in task parents:', currentId);
+                    break;
+                }
+                visited.add(currentId);
                 const parent = reminderMap.get(currentId);
                 if (!parent) break;
 
@@ -3677,7 +3683,13 @@ export class ReminderPanel {
             if (!reminder.parentId) return reminder;
 
             let current = reminder;
+            const visited = new Set<string>();
             while (current.parentId) {
+                if (visited.has(current.parentId)) {
+                    console.warn('Cycle detected in task parents:', current.parentId);
+                    break;
+                }
+                visited.add(current.parentId);
                 const parent = reminderMap.get(current.parentId);
                 if (!parent) break;
                 current = parent;
@@ -6434,20 +6446,26 @@ export class ReminderPanel {
         this.currentRemindersCache.forEach(r => reminderMap.set(r.id, r));
 
         let currentId: string | undefined = draggedReminder.parentId;
+        const visited1 = new Set<string>();
         while (currentId) {
             if (currentId === targetReminder.id) {
                 return true; // 目标任务是被拖拽任务的祖先，属于同级排序
             }
+            if (visited1.has(currentId)) break;
+            visited1.add(currentId);
             const current = reminderMap.get(currentId);
             currentId = current?.parentId;
         }
 
         // 检查被拖拽任务是否是目标任务的祖先（这种情况很少见，但也要处理）
         currentId = targetReminder.parentId;
+        const visited2 = new Set<string>();
         while (currentId) {
             if (currentId === draggedReminder.id) {
                 return true; // 被拖拽任务是目标任务的祖先，属于同级排序
             }
+            if (visited2.has(currentId)) break;
+            visited2.add(currentId);
             const current = reminderMap.get(currentId);
             currentId = current?.parentId;
         }
