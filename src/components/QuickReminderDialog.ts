@@ -3881,20 +3881,38 @@ export class QuickReminderDialog {
             const isSpecificNonRepeat = !isRepeatMode && !normalizedItem.everyDay;
             timeInput.type = isSpecificNonRepeat ? 'datetime-local' : 'time';
             timeInput.className = 'b3-text-field';
-            timeInput.style.cssText = 'flex: 1 1 140px;min-width: 150px;';
+            timeInput.style.cssText = 'flex: 1 1 auto; min-width: 0;';
             timeInput.value = isSpecificNonRepeat
                 ? (normalizedItem.time || '')
                 : this.getCustomReminderTimeValue(normalizedItem.time);
             timeInput.placeholder = '开始：';
 
+            const startLabel = document.createElement('span');
+            startLabel.style.cssText = 'font-size: 13px; color: var(--b3-theme-on-surface); opacity: 0.8; white-space: nowrap; flex: 0 0 auto;';
+            startLabel.textContent = i18n("startLabel") || '开始：';
+
+            const startWrapper = document.createElement('div');
+            startWrapper.style.cssText = 'display: flex; align-items: center; gap: 6px; flex: 1 1 180px; min-width: 150px;';
+            startWrapper.appendChild(startLabel);
+            startWrapper.appendChild(timeInput);
+
             const endTimeInput = document.createElement('input');
             endTimeInput.type = isSpecificNonRepeat ? 'datetime-local' : 'time';
             endTimeInput.className = 'b3-text-field';
-            endTimeInput.style.cssText = 'flex: 1 1 140px;min-width: 150px;';
+            endTimeInput.style.cssText = 'flex: 1 1 auto; min-width: 0;';
             endTimeInput.value = normalizedItem.endTime
                 ? (isSpecificNonRepeat ? normalizedItem.endTime : this.getCustomReminderTimeValue(normalizedItem.endTime))
                 : '';
             endTimeInput.placeholder = '结束：';
+
+            const endLabel = document.createElement('span');
+            endLabel.style.cssText = 'font-size: 13px; color: var(--b3-theme-on-surface); opacity: 0.8; white-space: nowrap; flex: 0 0 auto;';
+            endLabel.textContent = i18n("endLabel") || '结束：';
+
+            const endWrapper = document.createElement('div');
+            endWrapper.style.cssText = 'display: flex; align-items: center; gap: 6px; flex: 1 1 180px; min-width: 150px;';
+            endWrapper.appendChild(endLabel);
+            endWrapper.appendChild(endTimeInput);
 
             const noteInput = document.createElement('input');
             noteInput.type = 'text';
@@ -4103,8 +4121,8 @@ export class QuickReminderDialog {
             if (dayWrapper) {
                 row.appendChild(dayWrapper);
             }
-            timeGroup.appendChild(timeInput);
-            timeGroup.appendChild(endTimeInput);
+            timeGroup.appendChild(startWrapper);
+            timeGroup.appendChild(endWrapper);
             timeGroup.appendChild(noteInput);
             row.appendChild(timeGroup);
             row.appendChild(removeBtn);
