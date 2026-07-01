@@ -185,7 +185,6 @@
                 margin-left: 0;
             }
 
-            .fc-event-mirror,
             .fc-highlight {
                 border-color: var(--b3-theme-surface-lighter) !important;
                 background-color: var(--b3-theme-surface-lighter) !important;
@@ -194,6 +193,17 @@
 
                 .fc-event-main {
                     color: var(--b3-theme-on-background) !important;
+                }
+            }
+
+            .fc-event-mirror {
+                border-color: var(--b3-theme-surface-lighter);
+                background-color: var(--b3-theme-surface-lighter);
+                background-color: color-mix(in srgb, var(--b3-theme-surface-lighter), transparent 70%);
+                color: var(--b3-theme-on-background);
+
+                .fc-event-main {
+                    color: var(--b3-theme-on-background);
                 }
             }
 
