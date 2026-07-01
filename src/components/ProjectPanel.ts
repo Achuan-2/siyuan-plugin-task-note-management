@@ -415,7 +415,7 @@ export class ProjectPanel {
             // 添加番茄钟看板按钮
             const pomodoroStatsBtn = document.createElement('button');
             pomodoroStatsBtn.className = 'b3-button b3-button--outline';
-            pomodoroStatsBtn.innerHTML = '📊';
+            pomodoroStatsBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconstatistic"></use></svg>';
             pomodoroStatsBtn.classList.add('ariaLabel'); pomodoroStatsBtn.setAttribute('aria-label', i18n("statsView") || "统计视图");
             pomodoroStatsBtn.addEventListener('click', () => {
                 this.showPomodoroStatsView();

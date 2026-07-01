@@ -200,7 +200,7 @@ export class HabitPanel {
         // 统计按钮（统一统计视图）
         const habitStatsCalendarBtn = document.createElement('button');
         habitStatsCalendarBtn.className = 'b3-button b3-button--outline';
-        habitStatsCalendarBtn.textContent = '📊';
+        habitStatsCalendarBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconstatistic"></use></svg>';
         habitStatsCalendarBtn.classList.add('ariaLabel'); habitStatsCalendarBtn.setAttribute('aria-label', i18n("statsView"));
         habitStatsCalendarBtn.addEventListener('click', () => {
             this.showPomodoroStatsView();
