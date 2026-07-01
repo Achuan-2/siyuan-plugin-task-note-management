@@ -414,7 +414,7 @@
             items: [], // 使用 VipPanel 组件渲染
         },
         {
-            name: i18n('sidebarSettings'),
+            name: i18n('sidebarAndTopbarSettings'),
             items: [
                 {
                     key: 'enableReminderDock',
@@ -443,6 +443,13 @@
                     type: 'checkbox',
                     title: i18n('enableCalendarDock'),
                     description: i18n('enableCalendarDockDesc'),
+                },
+                {
+                    key: 'enableCalendarTopBar',
+                    value: settings.enableCalendarTopBar,
+                    type: 'checkbox',
+                    title: i18n('enableCalendarTopBar'),
+                    description: i18n('enableCalendarTopBarDesc'),
                 },
                 {
                     key: 'enableMobileTaskShortcut',

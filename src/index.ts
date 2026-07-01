@@ -171,6 +171,7 @@ export const DEFAULT_SETTINGS = {
     enableProjectDock: true, // 侧边栏：项目管理
     enableHabitDock: true, // 侧边栏：习惯管理
     enableCalendarDock: true, // 侧边栏：日历视图
+    enableCalendarTopBar: false, // 顶栏：日历视图
     enableMobileTaskShortcut: true, // 手机端显示任务快捷按钮（不包含平板端）
     // 停靠栏徽章显示控制
     enableDockBadge: true, // 是否在停靠栏显示数字徽章
@@ -186,7 +187,7 @@ export const DEFAULT_SETTINGS = {
     calendarViewMode: 'timeGridWeek',
     dayStartTime: '08:00', // 日历视图一天的起始时间
     todayStartTime: '03:00', // 日常任务/习惯的一天起始时间
-    calendarCollapseTimeRange: true, // 是否折叠非工作时间段
+    calendarCollapseTimeRange: false, // 是否折叠非工作时间段
     calendarCollapseStartTime: '03:00', // 折叠时段开始时间
     calendarCollapseEndTime: '08:00', // 折叠时段结束时间
     calendarShowLunar: ((window as any).siyuan?.config?.lang === 'zh_CN' || (window as any).siyuan?.config?.lang === 'zh-CN') ? true : false, // 日历显示农历
@@ -373,6 +374,7 @@ export default class ReminderPlugin extends Plugin {
     private projectDockElement: HTMLElement;
     private taskNoteDOM: TaskNoteDOMManager;
     private mobileTaskShortcut: MobileTaskShortcut | null = null;
+    private calendarTopBarEl: HTMLElement | null = null; // 日历视图顶栏按钮
 
     // ICS 云端同步相关
     // ICS 订阅同步相关
@@ -1491,6 +1493,25 @@ export default class ReminderPlugin extends Plugin {
                 this.toggleDockVisibility('reminder_dock', settings.enableReminderDock !== false);
                 this.toggleDockVisibility('habit_dock', settings.enableHabitDock !== false);
                 this.toggleDockVisibility('calendar_dock', settings.enableCalendarDock !== false);
+
+                // 根据设置动态显示/隐藏日历视图顶栏按钮（桌面端）
+                if (!isMobile) {
+                    if (settings.enableCalendarTopBar !== false) {
+                        if (!this.calendarTopBarEl) {
+                            this.calendarTopBarEl = this.addTopBar({
+                                icon: 'iconCalendar',
+                                title: i18n('calendarView'),
+                                callback: () => this.openCalendarTab(),
+                                position: 'left'
+                            });
+                        } else {
+                            this.calendarTopBarEl.style.display = '';
+                        }
+                    } else if (this.calendarTopBarEl) {
+                        this.calendarTopBarEl.style.display = 'none';
+                    }
+                }
+
                 await this.mobileTaskShortcut?.sync(settings);
                 // 同步刷新徽章（显示/隐藏数字）
                 this.updateBadges();
@@ -2582,6 +2603,17 @@ export default class ReminderPlugin extends Plugin {
 
         // 注册快捷键
         this.registerCommands();
+
+        // 布局就绪后创建日历视图顶栏按钮（桌面端）
+        const topBarSettings = await this.loadSettings();
+        if ( topBarSettings.enableCalendarTopBar !== false && !this.calendarTopBarEl) {
+            this.calendarTopBarEl = this.addTopBar({
+                icon: 'iconCalendar',
+                title: i18n('calendarView'),
+                callback: () => this.openCalendarTab(),
+                position: 'left'
+            });
+        }
 
         // 启动时同步一次番茄习惯自动打卡（处理补录）
         setTimeout(() => {
