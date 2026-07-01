@@ -34,6 +34,7 @@
     import VipPanel from './components/vip/VipPanel.svelte';
     import SubscriptionPanel from './components/icsSubscriptionPanel.svelte';
     import HelpPanel from './components/HelpPanel.svelte';
+    import SettingSubGroup from './components/SettingSubGroup.svelte';
     import { ProjectManager } from './utils/projectManager';
     import { ProjectSelectorPopup } from './components/ProjectSelectorPopup';
 
@@ -390,9 +391,15 @@
         return (settings[volKey] as number) ?? 1;
     }
 
-    interface ISettingGroup {
+    interface ISettingSubGroup {
         name: string;
         items: ISettingItem[];
+    }
+
+    interface ISettingGroup {
+        name: string;
+        items?: ISettingItem[];
+        subGroups?: ISettingSubGroup[];
     }
 
     export const useShell = async (cmd: 'showItemInFolder' | 'openPath', filePath: string) => {
@@ -415,76 +422,96 @@
         },
         {
             name: i18n('sidebarAndTopbarSettings'),
-            items: [
+            subGroups: [
                 {
-                    key: 'enableReminderDock',
-                    value: settings.enableReminderDock,
-                    type: 'checkbox',
-                    title: i18n('enableReminderDock'),
-                    description: i18n('enableReminderDockDesc'),
+                    name: i18n('subGroupSidebar'),
+                    items: [
+                        {
+                            key: 'enableReminderDock',
+                            value: settings.enableReminderDock,
+                            type: 'checkbox',
+                            title: i18n('enableReminderDock'),
+                            description: i18n('enableReminderDockDesc'),
+                        },
+                        {
+                            key: 'enableProjectDock',
+                            value: settings.enableProjectDock,
+                            type: 'checkbox',
+                            title: i18n('enableProjectDock'),
+                            description: i18n('enableProjectDockDesc'),
+                        },
+                        {
+                            key: 'enableHabitDock',
+                            value: settings.enableHabitDock,
+                            type: 'checkbox',
+                            title: i18n('enableHabitDock'),
+                            description: i18n('enableHabitDockDesc'),
+                        },
+                        {
+                            key: 'enableCalendarDock',
+                            value: settings.enableCalendarDock,
+                            type: 'checkbox',
+                            title: i18n('enableCalendarDock'),
+                            description: i18n('enableCalendarDockDesc'),
+                        },
+                    ],
                 },
                 {
-                    key: 'enableProjectDock',
-                    value: settings.enableProjectDock,
-                    type: 'checkbox',
-                    title: i18n('enableProjectDock'),
-                    description: i18n('enableProjectDockDesc'),
+                    name: i18n('subGroupSidebarBadge'),
+                    items: [
+                        {
+                            key: 'enableDockBadge',
+                            value: settings.enableDockBadge,
+                            type: 'checkbox',
+                            title: i18n('enableDockBadge'),
+                            description: i18n('enableDockBadgeDesc'),
+                        },
+                        {
+                            key: 'enableReminderDockBadge',
+                            value: settings.enableReminderDockBadge,
+                            type: 'checkbox',
+                            title: i18n('enableReminderDockBadge'),
+                            description: i18n('enableReminderDockBadgeDesc'),
+                        },
+                        {
+                            key: 'enableProjectDockBadge',
+                            value: settings.enableProjectDockBadge,
+                            type: 'checkbox',
+                            title: i18n('enableProjectDockBadge'),
+                            description: i18n('enableProjectDockBadgeDesc'),
+                        },
+                        {
+                            key: 'enableHabitDockBadge',
+                            value: settings.enableHabitDockBadge,
+                            type: 'checkbox',
+                            title: i18n('enableHabitDockBadge'),
+                            description: i18n('enableHabitDockBadgeDesc'),
+                        },
+                    ],
                 },
                 {
-                    key: 'enableHabitDock',
-                    value: settings.enableHabitDock,
-                    type: 'checkbox',
-                    title: i18n('enableHabitDock'),
-                    description: i18n('enableHabitDockDesc'),
+                    name: i18n('subGroupTopbar'),
+                    items: [
+                        {
+                            key: 'enableCalendarTopBar',
+                            value: settings.enableCalendarTopBar,
+                            type: 'checkbox',
+                            title: i18n('enableCalendarTopBar'),
+                            description: i18n('enableCalendarTopBarDesc'),
+                        },
+                    ],
                 },
                 {
-                    key: 'enableCalendarDock',
-                    value: settings.enableCalendarDock,
-                    type: 'checkbox',
-                    title: i18n('enableCalendarDock'),
-                    description: i18n('enableCalendarDockDesc'),
-                },
-                {
-                    key: 'enableCalendarTopBar',
-                    value: settings.enableCalendarTopBar,
-                    type: 'checkbox',
-                    title: i18n('enableCalendarTopBar'),
-                    description: i18n('enableCalendarTopBarDesc'),
-                },
-                {
-                    key: 'enableMobileTaskShortcut',
-                    value: settings.enableMobileTaskShortcut,
-                    type: 'checkbox',
-                    title: i18n('enableMobileTaskShortcut'),
-                    description: i18n('enableMobileTaskShortcutDesc'),
-                },
-                {
-                    key: 'enableDockBadge',
-                    value: settings.enableDockBadge,
-                    type: 'checkbox',
-                    title: i18n('enableDockBadge'),
-                    description: i18n('enableDockBadgeDesc'),
-                },
-                {
-                    key: 'enableReminderDockBadge',
-                    value: settings.enableReminderDockBadge,
-                    type: 'checkbox',
-                    title: i18n('enableReminderDockBadge'),
-                    description: i18n('enableReminderDockBadgeDesc'),
-                },
-                {
-                    key: 'enableProjectDockBadge',
-                    value: settings.enableProjectDockBadge,
-                    type: 'checkbox',
-                    title: i18n('enableProjectDockBadge'),
-                    description: i18n('enableProjectDockBadgeDesc'),
-                },
-                {
-                    key: 'enableHabitDockBadge',
-                    value: settings.enableHabitDockBadge,
-                    type: 'checkbox',
-                    title: i18n('enableHabitDockBadge'),
-                    description: i18n('enableHabitDockBadgeDesc'),
+                    name: i18n('subGroupMobile'),
+                    items: [
+                        {
+                            key: 'enableMobileTaskShortcut',
+                            value: settings.enableMobileTaskShortcut,
+                            type: 'checkbox',
+                            title: i18n('enableMobileTaskShortcut'),
+                            description: i18n('enableMobileTaskShortcutDesc'),
+                        },
+                    ],
                 },
             ],
         },
@@ -2191,9 +2218,8 @@
     }
 
     function updateGroupItems() {
-        groups = groups.map(group => ({
-            ...group,
-            items: group.items.map(item => {
+        groups = groups.map(group => {
+            const updateItem = (item) => {
                 const updatedItem = {
                     ...item,
                     value: (() => {
@@ -2232,14 +2258,25 @@
                 }
 
                 return updatedItem;
-            }),
-        }));
+            };
+
+            const updatedGroup = { ...group };
+            if (group.items) {
+                updatedGroup.items = group.items.map(updateItem);
+            }
+            if (group.subGroups) {
+                updatedGroup.subGroups = group.subGroups.map(sub => ({
+                    ...sub,
+                    items: sub.items.map(updateItem),
+                }));
+            }
+            return updatedGroup;
+        });
     }
 
     // 根据 icsSyncEnabled 和 icsSyncMethod 控制相关项的显示和隐藏
-    $: filteredGroups = groups.map(group => ({
-        ...group,
-        items: group.items.map(item => {
+    $: filteredGroups = groups.map(group => {
+        const filterItem = (item) => {
             const updated = { ...item } as any;
 
             // 通用同步设置，仅在同步启用时可用
@@ -2288,8 +2325,20 @@
             }
 
             return updated;
-        }),
-    }));
+        };
+
+        const updatedGroup = { ...group } as any;
+        if (group.items) {
+            updatedGroup.items = group.items.map(filterItem);
+        }
+        if (group.subGroups) {
+            updatedGroup.subGroups = group.subGroups.map(sub => ({
+                ...sub,
+                items: sub.items.map(filterItem),
+            }));
+        }
+        return updatedGroup;
+    });
 
     $: normalizedSettingSearchKeyword = settingSearchKeyword.trim().toLowerCase();
 
@@ -2297,17 +2346,32 @@
     $: visibleGroups = filteredGroups
         .map(group => {
             if (!normalizedSettingSearchKeyword) return group;
-            return {
-                ...group,
-                items: group.items.filter(
+            
+            const updatedGroup = { ...group } as any;
+            if (group.items) {
+                updatedGroup.items = group.items.filter(
                     item =>
                         !item.hidden && isSettingItemMatched(item, normalizedSettingSearchKeyword)
-                ),
-            };
+                );
+            }
+            if (group.subGroups) {
+                updatedGroup.subGroups = group.subGroups
+                    .map(sub => ({
+                        ...sub,
+                        items: sub.items.filter(
+                            item =>
+                                !item.hidden && isSettingItemMatched(item, normalizedSettingSearchKeyword)
+                        ),
+                    }))
+                    .filter(sub => sub.items.length > 0);
+            }
+            return updatedGroup;
         })
         .filter(group => {
             if (!normalizedSettingSearchKeyword) return true;
-            return group.items.length > 0;
+            const hasItems = group.items ? group.items.length > 0 : false;
+            const hasSubGroupItems = group.subGroups ? group.subGroups.length > 0 : false;
+            return hasItems || hasSubGroupItems;
         });
 
     // 搜索结果变化时，保证焦点 Tab 始终有效
@@ -2643,251 +2707,503 @@
                 {#if currentGroup?.name === '❓' + i18n('helpDocument')}
                     <HelpPanel />
                 {/if}
-                {#each currentGroup?.items || [] as item (item.key)}
-                    {#if !item.hidden}
-                        {#if item.type === 'custom-audio'}
-                            <!-- 自定义音频选择器 -->
-                            <div class="item-wrap b3-label config__item audio-picker-wrap">
-                                <!-- 顶部：标题 + 上传按钮 -->
-                                <div class="fn__flex-1">
-                                    <span class="title">{item.title}</span>
-                                    {#if item.description}
-                                        <div class="b3-label__text">{item.description}</div>
-                                    {/if}
-                                </div>
-                                <!-- 当前选中的音频显示 + 文件列表 -->
-                                <div class="audio-inline-list" style="width:100%;margin-top:4px">
-                                    {#each [getAudioFilesForKey(item.key)] as audioFilesForKey}
-                                        <!-- 文件列表 -->
-                                        {#if audioFilesForKey.length > 0}
-                                            {#each audioFilesForKey.filter(a => a.path) as audio}
-                                                {@const isSelected =
-                                                    settings.audioSelected?.[item.key] ===
-                                                    audio.path}
-                                                <div
-                                                    class="audio-row {isSelected
-                                                        ? 'audio-row--selected'
-                                                        : ''}"
-                                                    role="button"
-                                                    tabindex="0"
-                                                    on:click={() =>
-                                                        toggleSettingValue(item.key, audio.path)}
-                                                    on:keydown={e => {
-                                                        if (e.key === 'Enter' || e.key === ' ') {
-                                                            e.preventDefault();
-                                                            toggleSettingValue(
-                                                                item.key,
-                                                                audio.path
-                                                            );
-                                                        }
-                                                    }}
-                                                >
-                                                    <div class="audio-row__name" title={audio.name}>
-                                                        <svg
-                                                            viewBox="0 0 24 24"
-                                                            fill="none"
-                                                            stroke="currentColor"
-                                                            stroke-width="2"
-                                                            width="12"
-                                                            height="12"
-                                                            style="flex-shrink:0;opacity:0.5"
-                                                        >
-                                                            <path d="M9 18V5l12-2v13" />
-                                                            <circle cx="6" cy="18" r="3" />
-                                                            <circle cx="18" cy="16" r="3" />
-                                                        </svg>
-                                                        <span>{audio.name}</span>
-                                                        {#if isSelected}
-                                                            <span class="audio-row__badge">
-                                                                {i18n('currentAudio')}
-                                                            </span>
-                                                        {/if}
-                                                    </div>
-                                                    <div class="audio-row__btns">
-                                                        <button
-                                                            class="audio-btn audio-btn--play"
-                                                            title={playingPath === audio.path &&
-                                                            isAudioPlaying
-                                                                ? i18n('audioPause')
-                                                                : i18n('audioPreview')}
-                                                            on:click|stopPropagation={() =>
-                                                                toggleAudio(
-                                                                    audio.path,
-                                                                    getItemVolume(item.key)
-                                                                )}
-                                                        >
-                                                            {#if playingPath === audio.path && isAudioPlaying}
-                                                                <svg
-                                                                    viewBox="0 0 24 24"
-                                                                    fill="currentColor"
-                                                                    stroke="none"
-                                                                    width="11"
-                                                                    height="11"
-                                                                >
-                                                                    <rect
-                                                                        x="5"
-                                                                        y="3"
-                                                                        width="4"
-                                                                        height="18"
-                                                                        rx="1"
-                                                                    />
-                                                                    <rect
-                                                                        x="15"
-                                                                        y="3"
-                                                                        width="4"
-                                                                        height="18"
-                                                                        rx="1"
-                                                                    />
-                                                                </svg>
-                                                            {:else}
-                                                                <svg
-                                                                    viewBox="0 0 24 24"
-                                                                    fill="currentColor"
-                                                                    stroke="none"
-                                                                    width="11"
-                                                                    height="11"
-                                                                >
-                                                                    <polygon
-                                                                        points="5 3 19 12 5 21 5 3"
-                                                                    />
-                                                                </svg>
-                                                            {/if}
-                                                        </button>
-                                                        <!-- 从列表移除 -->
-                                                        <button
-                                                            class="audio-btn audio-btn--delete"
-                                                            title={i18n('removeFromList')}
-                                                            on:click|stopPropagation={() =>
-                                                                deleteAudioFileForKey(
-                                                                    audio.path,
-                                                                    item.key
-                                                                )}
-                                                        >
+                {#if currentGroup?.subGroups}
+                    {#each currentGroup.subGroups as sub}
+                        <SettingSubGroup title={sub.name}>
+                            {#each sub.items as item (item.key)}
+                                {#if !item.hidden}
+                                    {#if item.type === 'custom-audio'}
+                                        <!-- 自定义音频选择器 -->
+                                        <div class="item-wrap b3-label config__item audio-picker-wrap">
+                                            <!-- 顶部：标题 + 上传按钮 -->
+                                            <div class="fn__flex-1">
+                                                <span class="title">{item.title}</span>
+                                                {#if item.description}
+                                                    <div class="b3-label__text">{item.description}</div>
+                                                {/if}
+                                            </div>
+                                            <!-- 当前选中的音频显示 + 文件列表 -->
+                                            <div class="audio-inline-list" style="width:100%;margin-top:4px">
+                                                {#each [getAudioFilesForKey(item.key)] as audioFilesForKey}
+                                                    <!-- 文件列表 -->
+                                                    {#if audioFilesForKey.length > 0}
+                                                        {#each audioFilesForKey.filter(a => a.path) as audio}
+                                                            {@const isSelected =
+                                                                settings.audioSelected?.[item.key] ===
+                                                                audio.path}
+                                                            <div
+                                                                class="audio-row {isSelected
+                                                                    ? 'audio-row--selected'
+                                                                    : ''}"
+                                                                role="button"
+                                                                tabindex="0"
+                                                                on:click={() =>
+                                                                    toggleSettingValue(item.key, audio.path)}
+                                                                on:keydown={e => {
+                                                                    if (e.key === 'Enter' || e.key === ' ') {
+                                                                        e.preventDefault();
+                                                                        toggleSettingValue(
+                                                                            item.key,
+                                                                            audio.path
+                                                                        );
+                                                                    }
+                                                                }}
+                                                            >
+                                                                <div class="audio-row__name" title={audio.name}>
+                                                                    <svg
+                                                                        viewBox="0 0 24 24"
+                                                                        fill="none"
+                                                                        stroke="currentColor"
+                                                                        stroke-width="2"
+                                                                        width="12"
+                                                                        height="12"
+                                                                        style="flex-shrink:0;opacity:0.5"
+                                                                    >
+                                                                        <path d="M9 18V5l12-2v13" />
+                                                                        <circle cx="6" cy="18" r="3" />
+                                                                        <circle cx="18" cy="16" r="3" />
+                                                                    </svg>
+                                                                    <span>{audio.name}</span>
+                                                                    {#if isSelected}
+                                                                        <span class="audio-row__badge">
+                                                                            {i18n('currentAudio')}
+                                                                        </span>
+                                                                    {/if}
+                                                                </div>
+                                                                <div class="audio-row__btns">
+                                                                    <button
+                                                                        class="audio-btn audio-btn--play"
+                                                                        title={playingPath === audio.path &&
+                                                                        isAudioPlaying
+                                                                            ? i18n('audioPause')
+                                                                            : i18n('audioPreview')}
+                                                                        on:click|stopPropagation={() =>
+                                                                            toggleAudio(
+                                                                                audio.path,
+                                                                                getItemVolume(item.key)
+                                                                            )}
+                                                                    >
+                                                                        {#if playingPath === audio.path && isAudioPlaying}
+                                                                            <svg
+                                                                                viewBox="0 0 24 24"
+                                                                                fill="currentColor"
+                                                                                stroke="none"
+                                                                                width="11"
+                                                                                height="11"
+                                                                            >
+                                                                                <rect
+                                                                                    x="5"
+                                                                                    y="3"
+                                                                                    width="4"
+                                                                                    height="18"
+                                                                                    rx="1"
+                                                                                />
+                                                                                <rect
+                                                                                    x="15"
+                                                                                    y="3"
+                                                                                    width="4"
+                                                                                    height="18"
+                                                                                    rx="1"
+                                                                                />
+                                                                            </svg>
+                                                                        {:else}
+                                                                            <svg
+                                                                                viewBox="0 0 24 24"
+                                                                                fill="currentColor"
+                                                                                stroke="none"
+                                                                                width="11"
+                                                                                height="11"
+                                                                            >
+                                                                                <polygon
+                                                                                    points="5 3 19 12 5 21 5 3"
+                                                                                />
+                                                                            </svg>
+                                                                        {/if}
+                                                                    </button>
+                                                                    <!-- 从列表移除 -->
+                                                                    <button
+                                                                        class="audio-btn audio-btn--delete"
+                                                                        title={i18n('removeFromList')}
+                                                                        on:click|stopPropagation={() =>
+                                                                            deleteAudioFileForKey(
+                                                                                audio.path,
+                                                                                item.key
+                                                                            )}
+                                                                    >
+                                                                        <svg
+                                                                            viewBox="0 0 24 24"
+                                                                            fill="none"
+                                                                            stroke="currentColor"
+                                                                            stroke-width="2"
+                                                                            width="11"
+                                                                            height="11"
+                                                                        >
+                                                                            <polyline points="3 6 5 6 21 6" />
+                                                                            <path
+                                                                                d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"
+                                                                            />
+                                                                            <path d="M10 11v6M14 11v6" />
+                                                                        </svg>
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        {/each}
+                                                    {/if}
+                                                    <!-- 上传按钮（始终在列表底部） -->
+                                                    <label
+                                                        class="audio-upload-btn audio-upload-btn--bottom {isUploadingAudio
+                                                            ? 'audio-upload-btn--loading'
+                                                            : ''}"
+                                                        title={i18n('uploadAudioFile')}
+                                                    >
+                                                        {#if isUploadingAudio}
+                                                            <svg
+                                                                class="fn__rotate"
+                                                                viewBox="0 0 24 24"
+                                                                fill="none"
+                                                                stroke="currentColor"
+                                                                stroke-width="2"
+                                                                width="12"
+                                                                height="12"
+                                                            >
+                                                                <path d="M21 12a9 9 0 11-6.219-8.56" />
+                                                            </svg>
+                                                        {:else}
                                                             <svg
                                                                 viewBox="0 0 24 24"
                                                                 fill="none"
                                                                 stroke="currentColor"
                                                                 stroke-width="2"
-                                                                width="11"
-                                                                height="11"
+                                                                width="12"
+                                                                height="12"
                                                             >
-                                                                <polyline points="3 6 5 6 21 6" />
                                                                 <path
-                                                                    d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"
+                                                                    d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"
                                                                 />
-                                                                <path d="M10 11v6M14 11v6" />
+                                                                <polyline points="17 8 12 3 7 8" />
+                                                                <line x1="12" y1="3" x2="12" y2="15" />
                                                             </svg>
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            {/each}
-                                        {/if}
-                                        <!-- 上传按钮（始终在列表底部） -->
-                                        <label
-                                            class="audio-upload-btn audio-upload-btn--bottom {isUploadingAudio
-                                                ? 'audio-upload-btn--loading'
-                                                : ''}"
-                                            title={i18n('uploadAudioFile')}
-                                        >
-                                            {#if isUploadingAudio}
-                                                <svg
-                                                    class="fn__rotate"
-                                                    viewBox="0 0 24 24"
-                                                    fill="none"
-                                                    stroke="currentColor"
-                                                    stroke-width="2"
-                                                    width="12"
-                                                    height="12"
-                                                >
-                                                    <path d="M21 12a9 9 0 11-6.219-8.56" />
-                                                </svg>
-                                            {:else}
-                                                <svg
-                                                    viewBox="0 0 24 24"
-                                                    fill="none"
-                                                    stroke="currentColor"
-                                                    stroke-width="2"
-                                                    width="12"
-                                                    height="12"
-                                                >
-                                                    <path
-                                                        d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"
-                                                    />
-                                                    <polyline points="17 8 12 3 7 8" />
-                                                    <line x1="12" y1="3" x2="12" y2="15" />
-                                                </svg>
-                                            {/if}
-                                            {i18n('uploadAudio')}
-                                            <input
-                                                type="file"
-                                                accept="audio/*,.mp3,.wav,.ogg,.aac,.flac,.m4a"
-                                                multiple
-                                                style="display:none"
-                                                disabled={isUploadingAudio}
-                                                on:change={e => handleAudioUploadInput(e, item.key)}
-                                            />
-                                        </label>
-                                    {/each}
-                                </div>
-                            </div>
-                        {:else}
-                            <!-- 普通设置项 -->
-                            <Form.Wrap
-                                title={item.title}
-                                description={item.description}
-                                direction={item?.direction}
-                            >
-                                {#if item.type === 'project-selector'}
-                                    <div
-                                        class="custom-select"
-                                        style="position: relative; width: 300px;"
-                                    >
-                                        <div style="position: relative;">
-                                            <input
-                                                type="text"
-                                                class="b3-text-field"
-                                                style="cursor: pointer; width: 100%; box-sizing: border-box; padding-right: 28px;"
-                                                readonly
-                                                value={getProjectNameById(
-                                                    settings.unassignedTasksProjectId
-                                                )}
-                                                placeholder={i18n('pleaseSelectProject') ||
-                                                    '请选择项目'}
-                                                on:click={e => toggleDropdown(e, item.key)}
-                                            />
-                                            <svg
-                                                style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 12px; height: 12px; pointer-events: none; opacity: 0.5;"
-                                            >
-                                                <use xlink:href="#iconDown"></use>
-                                            </svg>
-                                        </div>
-                                        {#if activeDropdownKey === item.key}
-                                            <div
-                                                use:mountPopup
-                                                class="b3-menu"
-                                                style="position: absolute; width: 100%; min-width: 300px; z-index: 100; margin-top: 4px; box-shadow: var(--b3-menu-shadow); background: var(--b3-menu-background); border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius);"
-                                            >
-                                                <!-- ProjectSelectorPopup will mount its structure here -->
+                                                        {/if}
+                                                        {i18n('uploadAudio')}
+                                                        <input
+                                                            type="file"
+                                                            accept="audio/*,.mp3,.wav,.ogg,.aac,.flac,.m4a"
+                                                            multiple
+                                                            style="display:none"
+                                                            disabled={isUploadingAudio}
+                                                            on:change={e => handleAudioUploadInput(e, item.key)}
+                                                        />
+                                                    </label>
+                                                {/each}
                                             </div>
+                                        </div>
+                                    {:else}
+                                        <!-- 普通设置项 -->
+                                        <Form.Wrap
+                                            title={item.title}
+                                            description={item.description}
+                                            direction={item?.direction}
+                                        >
+                                            {#if item.type === 'project-selector'}
+                                                <div
+                                                    class="custom-select"
+                                                    style="position: relative; width: 300px;"
+                                                >
+                                                    <div style="position: relative;">
+                                                        <input
+                                                            type="text"
+                                                            class="b3-text-field"
+                                                            style="cursor: pointer; width: 100%; box-sizing: border-box; padding-right: 28px;"
+                                                            readonly
+                                                            value={getProjectNameById(
+                                                                settings.unassignedTasksProjectId
+                                                            )}
+                                                            placeholder={i18n('pleaseSelectProject') ||
+                                                                '请选择项目'}
+                                                            on:click={e => toggleDropdown(e, item.key)}
+                                                        />
+                                                        <svg
+                                                            style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 12px; height: 12px; pointer-events: none; opacity: 0.5;"
+                                                        >
+                                                            <use xlink:href="#iconDown"></use>
+                                                        </svg>
+                                                    </div>
+                                                    {#if activeDropdownKey === item.key}
+                                                        <div
+                                                            use:mountPopup
+                                                            class="b3-menu"
+                                                            style="position: absolute; width: 100%; min-width: 300px; z-index: 100; margin-top: 4px; box-shadow: var(--b3-menu-shadow); background: var(--b3-menu-background); border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius);"
+                                                        >
+                                                            <!-- ProjectSelectorPopup will mount its structure here -->
+                                                        </div>
+                                                    {/if}
+                                                </div>
+                                            {:else}
+                                                <Form.Input
+                                                    type={item.type}
+                                                    key={item.key}
+                                                    value={item.value}
+                                                    placeholder={item?.placeholder}
+                                                    options={item?.options}
+                                                    slider={item?.slider}
+                                                    button={item?.button}
+                                                    disabled={item?.disabled}
+                                                    on:changed={onChanged}
+                                                />
+                                            {/if}
+                                        </Form.Wrap>
+                                    {/if}
+                                {/if}
+                            {/each}
+                        </SettingSubGroup>
+                    {/each}
+                {:else if currentGroup?.items}
+                    {#each currentGroup.items as item (item.key)}
+                        {#if !item.hidden}
+                            {#if item.type === 'custom-audio'}
+                                <!-- 自定义音频选择器 -->
+                                <div class="item-wrap b3-label config__item audio-picker-wrap">
+                                    <!-- 顶部：标题 + 上传按钮 -->
+                                    <div class="fn__flex-1">
+                                        <span class="title">{item.title}</span>
+                                        {#if item.description}
+                                            <div class="b3-label__text">{item.description}</div>
                                         {/if}
                                     </div>
-                                {:else}
-                                    <Form.Input
-                                        type={item.type}
-                                        key={item.key}
-                                        value={item.value}
-                                        placeholder={item?.placeholder}
-                                        options={item?.options}
-                                        slider={item?.slider}
-                                        button={item?.button}
-                                        disabled={item?.disabled}
-                                        on:changed={onChanged}
-                                    />
-                                {/if}
-                            </Form.Wrap>
+                                    <!-- 当前选中的音频显示 + 文件列表 -->
+                                    <div class="audio-inline-list" style="width:100%;margin-top:4px">
+                                        {#each [getAudioFilesForKey(item.key)] as audioFilesForKey}
+                                            <!-- 文件列表 -->
+                                            {#if audioFilesForKey.length > 0}
+                                                {#each audioFilesForKey.filter(a => a.path) as audio}
+                                                    {@const isSelected =
+                                                        settings.audioSelected?.[item.key] ===
+                                                        audio.path}
+                                                    <div
+                                                        class="audio-row {isSelected
+                                                            ? 'audio-row--selected'
+                                                            : ''}"
+                                                        role="button"
+                                                        tabindex="0"
+                                                        on:click={() =>
+                                                            toggleSettingValue(item.key, audio.path)}
+                                                        on:keydown={e => {
+                                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                                e.preventDefault();
+                                                                toggleSettingValue(
+                                                                    item.key,
+                                                                    audio.path
+                                                                );
+                                                            }
+                                                        }}
+                                                    >
+                                                        <div class="audio-row__name" title={audio.name}>
+                                                            <svg
+                                                                viewBox="0 0 24 24"
+                                                                fill="none"
+                                                                stroke="currentColor"
+                                                                stroke-width="2"
+                                                                width="12"
+                                                                height="12"
+                                                                style="flex-shrink:0;opacity:0.5"
+                                                            >
+                                                                <path d="M9 18V5l12-2v13" />
+                                                                <circle cx="6" cy="18" r="3" />
+                                                                <circle cx="18" cy="16" r="3" />
+                                                            </svg>
+                                                            <span>{audio.name}</span>
+                                                            {#if isSelected}
+                                                                <span class="audio-row__badge">
+                                                                    {i18n('currentAudio')}
+                                                                </span>
+                                                            {/if}
+                                                        </div>
+                                                        <div class="audio-row__btns">
+                                                            <button
+                                                                class="audio-btn audio-btn--play"
+                                                                title={playingPath === audio.path &&
+                                                                isAudioPlaying
+                                                                    ? i18n('audioPause')
+                                                                    : i18n('audioPreview')}
+                                                                on:click|stopPropagation={() =>
+                                                                    toggleAudio(
+                                                                        audio.path,
+                                                                        getItemVolume(item.key)
+                                                                    )}
+                                                            >
+                                                                {#if playingPath === audio.path && isAudioPlaying}
+                                                                    <svg
+                                                                        viewBox="0 0 24 24"
+                                                                        fill="currentColor"
+                                                                        stroke="none"
+                                                                        width="11"
+                                                                        height="11"
+                                                                    >
+                                                                        <rect
+                                                                            x="5"
+                                                                            y="3"
+                                                                            width="4"
+                                                                            height="18"
+                                                                            rx="1"
+                                                                        />
+                                                                        <rect
+                                                                            x="15"
+                                                                            y="3"
+                                                                            width="4"
+                                                                            height="18"
+                                                                            rx="1"
+                                                                        />
+                                                                    </svg>
+                                                                {:else}
+                                                                    <svg
+                                                                        viewBox="0 0 24 24"
+                                                                        fill="currentColor"
+                                                                        stroke="none"
+                                                                        width="11"
+                                                                        height="11"
+                                                                    >
+                                                                        <polygon
+                                                                            points="5 3 19 12 5 21 5 3"
+                                                                        />
+                                                                    </svg>
+                                                                {/if}
+                                                            </button>
+                                                            <!-- 从列表移除 -->
+                                                            <button
+                                                                class="audio-btn audio-btn--delete"
+                                                                title={i18n('removeFromList')}
+                                                                on:click|stopPropagation={() =>
+                                                                    deleteAudioFileForKey(
+                                                                        audio.path,
+                                                                        item.key
+                                                                    )}
+                                                            >
+                                                                <svg
+                                                                    viewBox="0 0 24 24"
+                                                                    fill="none"
+                                                                    stroke="currentColor"
+                                                                    stroke-width="2"
+                                                                    width="11"
+                                                                    height="11"
+                                                                >
+                                                                    <polyline points="3 6 5 6 21 6" />
+                                                                    <path
+                                                                        d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"
+                                                                    />
+                                                                    <path d="M10 11v6M14 11v6" />
+                                                                </svg>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                {/each}
+                                            {/if}
+                                            <!-- 上传按钮（始终在列表底部） -->
+                                            <label
+                                                class="audio-upload-btn audio-upload-btn--bottom {isUploadingAudio
+                                                    ? 'audio-upload-btn--loading'
+                                                    : ''}"
+                                                title={i18n('uploadAudioFile')}
+                                            >
+                                                {#if isUploadingAudio}
+                                                    <svg
+                                                        class="fn__rotate"
+                                                        viewBox="0 0 24 24"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        stroke-width="2"
+                                                        width="12"
+                                                        height="12"
+                                                    >
+                                                        <path d="M21 12a9 9 0 11-6.219-8.56" />
+                                                    </svg>
+                                                {:else}
+                                                    <svg
+                                                        viewBox="0 0 24 24"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        stroke-width="2"
+                                                        width="12"
+                                                        height="12"
+                                                    >
+                                                        <path
+                                                            d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"
+                                                        />
+                                                        <polyline points="17 8 12 3 7 8" />
+                                                        <line x1="12" y1="3" x2="12" y2="15" />
+                                                    </svg>
+                                                {/if}
+                                                {i18n('uploadAudio')}
+                                                <input
+                                                    type="file"
+                                                    accept="audio/*,.mp3,.wav,.ogg,.aac,.flac,.m4a"
+                                                    multiple
+                                                    style="display:none"
+                                                    disabled={isUploadingAudio}
+                                                    on:change={e => handleAudioUploadInput(e, item.key)}
+                                                />
+                                            </label>
+                                        {/each}
+                                    </div>
+                                </div>
+                            {:else}
+                                <!-- 普通设置项 -->
+                                <Form.Wrap
+                                    title={item.title}
+                                    description={item.description}
+                                    direction={item?.direction}
+                                >
+                                    {#if item.type === 'project-selector'}
+                                        <div
+                                            class="custom-select"
+                                            style="position: relative; width: 300px;"
+                                        >
+                                            <div style="position: relative;">
+                                                <input
+                                                    type="text"
+                                                    class="b3-text-field"
+                                                    style="cursor: pointer; width: 100%; box-sizing: border-box; padding-right: 28px;"
+                                                    readonly
+                                                    value={getProjectNameById(
+                                                        settings.unassignedTasksProjectId
+                                                    )}
+                                                    placeholder={i18n('pleaseSelectProject') ||
+                                                        '请选择项目'}
+                                                    on:click={e => toggleDropdown(e, item.key)}
+                                                />
+                                                <svg
+                                                    style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 12px; height: 12px; pointer-events: none; opacity: 0.5;"
+                                                >
+                                                    <use xlink:href="#iconDown"></use>
+                                                </svg>
+                                            </div>
+                                            {#if activeDropdownKey === item.key}
+                                                <div
+                                                    use:mountPopup
+                                                    class="b3-menu"
+                                                    style="position: absolute; width: 100%; min-width: 300px; z-index: 100; margin-top: 4px; box-shadow: var(--b3-menu-shadow); background: var(--b3-menu-background); border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius);"
+                                                >
+                                                    <!-- ProjectSelectorPopup will mount its structure here -->
+                                                </div>
+                                            {/if}
+                                        </div>
+                                    {:else}
+                                        <Form.Input
+                                            type={item.type}
+                                            key={item.key}
+                                            value={item.value}
+                                            placeholder={item?.placeholder}
+                                            options={item?.options}
+                                            slider={item?.slider}
+                                            button={item?.button}
+                                            disabled={item?.disabled}
+                                            on:changed={onChanged}
+                                        />
+                                    {/if}
+                                </Form.Wrap>
+                            {/if}
                         {/if}
-                    {/if}
-                {/each}
+                    {/each}
+                {/if}
             </div>
         {/if}
     </div>
