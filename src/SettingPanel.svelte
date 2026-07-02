@@ -501,6 +501,11 @@
                         },
                     ],
                 },
+            ],
+        },
+        {
+            name: i18n('mobileSettings'),
+            subGroups: [
                 {
                     name: i18n('subGroupMobile'),
                     items: [
@@ -517,880 +522,999 @@
         },
         {
             name: i18n('taskSettings') || '📋任务设置',
-            items: [
+            subGroups: [
                 {
-                    key: 'autoDetectDateTime',
-                    value: settings.autoDetectDateTime,
-                    type: 'checkbox',
-                    title: i18n('autoDetectDateTime'),
-                    description: i18n('autoDetectDateTimeDesc'),
+                    name: i18n('subGroupTaskDateDetection'),
+                    items: [
+                        {
+                            key: 'autoDetectDateTime',
+                            value: settings.autoDetectDateTime,
+                            type: 'checkbox',
+                            title: i18n('autoDetectDateTime'),
+                            description: i18n('autoDetectDateTimeDesc'),
+                        },
+                        {
+                            key: 'removeDateAfterDetection',
+                            value: settings.removeDateAfterDetection || 'all',
+                            type: 'select',
+                            title: i18n('removeDateAfterDetection'),
+                            description: i18n('removeDateAfterDetectionDesc'),
+                            options: {
+                                none: i18n('removeNone') || '不去除',
+                                date: i18n('removeDateOnly') || '仅去除日期',
+                                all: i18n('removeDateAndTime') || '去除日期和时间',
+                            },
+                        },
+                        {
+                            key: 'singleDateDefaultRole',
+                            value: settings.singleDateDefaultRole || 'deadline',
+                            type: 'select',
+                            title: i18n('singleDateDefaultRole') || '单日期默认识别为',
+                            description:
+                                i18n('singleDateDefaultRoleDesc') ||
+                                '标题只有一个日期且没有开始/截止关键词时，选择默认填入开始日期还是截止日期。',
+                            options: {
+                                deadline: i18n('singleDateDefaultRoleDeadline') || '截止日期',
+                                start: i18n('singleDateDefaultRoleStart') || '开始日期',
+                            },
+                        },
+                        {
+                            key: 'quickReminderTitlePasteAutoDetect',
+                            value: settings.quickReminderTitlePasteAutoDetect !== false,
+                            type: 'checkbox',
+                            title:
+                                i18n('quickReminderTitlePasteAutoDetect') || '任务编辑弹窗标题粘贴自动识别',
+                            description:
+                                i18n('quickReminderTitlePasteAutoDetectDesc') ||
+                                '开启后，在任务编辑弹窗标题中粘贴文本时自动识别日期时间；仍可在弹窗内临时关闭',
+                        },
+                    ],
                 },
                 {
-                    key: 'removeDateAfterDetection',
-                    value: settings.removeDateAfterDetection || 'all',
-                    type: 'select',
-                    title: i18n('removeDateAfterDetection'),
-                    description: i18n('removeDateAfterDetectionDesc'),
-                    options: {
-                        none: i18n('removeNone') || '不去除',
-                        date: i18n('removeDateOnly') || '仅去除日期',
-                        all: i18n('removeDateAndTime') || '去除日期和时间',
-                    },
+                    name: i18n('subGroupTaskOverdue'),
+                    items: [
+                        {
+                            key: 'treatStartDateOnlyAsOverdue',
+                            value: settings.treatStartDateOnlyAsOverdue,
+                            type: 'checkbox',
+                            title: i18n('treatStartDateOnlyAsOverdue') || '只有开始日期任务默认视为过期',
+                            description:
+                                i18n('treatStartDateOnlyAsOverdueDesc') ||
+                                '开启后，只有开始日期且无截止日期的未完成任务，在当前日期超过开始日期时显示为过期；关闭后显示为已开始天数。',
+                        },
+                    ],
                 },
                 {
-                    key: 'singleDateDefaultRole',
-                    value: settings.singleDateDefaultRole || 'deadline',
-                    type: 'select',
-                    title: i18n('singleDateDefaultRole') || '单日期默认识别为',
-                    description:
-                        i18n('singleDateDefaultRoleDesc') ||
-                        '标题只有一个日期且没有开始/截止关键词时，选择默认填入开始日期还是截止日期。',
-                    options: {
-                        deadline: i18n('singleDateDefaultRoleDeadline') || '截止日期',
-                        start: i18n('singleDateDefaultRoleStart') || '开始日期',
-                    },
+                    name: i18n('subGroupTaskCardStyle'),
+                    items: [
+                        {
+                            key: 'taskPriorityDisplayStyle',
+                            value: settings.taskPriorityDisplayStyle || 'background',
+                            type: 'select',
+                            title: i18n('taskPriorityDisplayStyle') || '任务卡片优先级显示样式',
+                            description:
+                                i18n('taskPriorityDisplayStyleDesc') ||
+                                '选择优先级颜色显示在任务卡片背景上，或仅显示在任务复选框边框上。',
+                            options: {
+                                background: i18n('taskPriorityDisplayStyleBackground') || '背景色显示',
+                                checkboxBorder:
+                                    i18n('taskPriorityDisplayStyleCheckboxBorder') || '复选框边框颜色显示',
+                            },
+                        },
+                        {
+                            key: 'showTaskCardDocumentTitle',
+                            value: settings.showTaskCardDocumentTitle !== false,
+                            type: 'checkbox',
+                            title: i18n('showTaskCardDocumentTitle') || '任务卡片显示文档标题',
+                            description:
+                                i18n('showTaskCardDocumentTitleDesc') ||
+                                '开启后，绑定到非文档块的任务卡片会显示该块所属文档标题。',
+                        },
+                        {
+                            key: 'checkboxActionForSpanningAndDessert',
+                            value: settings.checkboxActionForSpanningAndDessert || 'global',
+                            type: 'select',
+                            title:
+                                i18n('checkboxActionForSpanningAndDessert') ||
+                                '跨天/每日可做任务复选框行为',
+                            description:
+                                i18n('checkboxActionForSpanningAndDessertDesc') ||
+                                '点击复选框时，跨天任务和每日可做任务标记为今日已完成还是整体完成，默认整体完成。',
+                            options: {
+                                global: i18n('checkboxActionGlobal') || '整体完成',
+                                today: i18n('checkboxActionToday') || '今日已完成',
+                            },
+                        },
+                    ],
                 },
                 {
-                    key: 'quickReminderTitlePasteAutoDetect',
-                    value: settings.quickReminderTitlePasteAutoDetect !== false,
-                    type: 'checkbox',
-                    title:
-                        i18n('quickReminderTitlePasteAutoDetect') || '任务编辑弹窗标题粘贴自动识别',
-                    description:
-                        i18n('quickReminderTitlePasteAutoDetectDesc') ||
-                        '开启后，在任务编辑弹窗标题中粘贴文本时自动识别日期时间；仍可在弹窗内临时关闭',
-                },
-                {
-                    key: 'treatStartDateOnlyAsOverdue',
-                    value: settings.treatStartDateOnlyAsOverdue,
-                    type: 'checkbox',
-                    title: i18n('treatStartDateOnlyAsOverdue') || '只有开始日期任务默认视为过期',
-                    description:
-                        i18n('treatStartDateOnlyAsOverdueDesc') ||
-                        '开启后，只有开始日期且无截止日期的未完成任务，在当前日期超过开始日期时显示为过期；关闭后显示为已开始天数。',
-                },
-                {
-                    key: 'taskPriorityDisplayStyle',
-                    value: settings.taskPriorityDisplayStyle || 'background',
-                    type: 'select',
-                    title: i18n('taskPriorityDisplayStyle') || '任务卡片优先级显示样式',
-                    description:
-                        i18n('taskPriorityDisplayStyleDesc') ||
-                        '选择优先级颜色显示在任务卡片背景上，或仅显示在任务复选框边框上。',
-                    options: {
-                        background: i18n('taskPriorityDisplayStyleBackground') || '背景色显示',
-                        checkboxBorder:
-                            i18n('taskPriorityDisplayStyleCheckboxBorder') || '复选框边框颜色显示',
-                    },
-                },
-                {
-                    key: 'showTaskCardDocumentTitle',
-                    value: settings.showTaskCardDocumentTitle !== false,
-                    type: 'checkbox',
-                    title: i18n('showTaskCardDocumentTitle') || '任务卡片显示文档标题',
-                    description:
-                        i18n('showTaskCardDocumentTitleDesc') ||
-                        '开启后，绑定到非文档块的任务卡片会显示该块所属文档标题。',
-                },
-                {
-                    key: 'reminderSkipWeekendMode',
-                    value: getGlobalReminderSkipWeekendMode(settings),
-                    type: 'select',
-                    title: i18n('reminderSkipWeekends') || '任务提醒跳过周末',
-                    description:
-                        i18n('reminderSkipWeekendsDesc') ||
-                        '可选择跳过周六周日、仅周六、仅周日或不跳过；单个任务可在任务编辑弹窗单独覆盖。',
-                    options: {
-                        saturdaySunday:
-                            i18n('reminderSkipWeekendSaturdaySunday') || '跳过周六和周日',
-                        saturday: i18n('reminderSkipWeekendSaturday') || '仅跳过周六',
-                        sunday: i18n('reminderSkipWeekendSunday') || '仅跳过周日',
-                        none: i18n('reminderSkipWeekendNone') || '不跳过',
-                    },
-                },
-                {
-                    key: 'reminderSkipHolidays',
-                    value: settings.reminderSkipHolidays,
-                    type: 'checkbox',
-                    title: i18n('reminderSkipHolidays') || '任务提醒跳过节假日',
-                    description:
-                        i18n('reminderSkipHolidaysDesc') ||
-                        '仅对重复任务，以及同时横跨节假日和非节假日的跨天任务生效；单个任务可在任务编辑弹窗单独覆盖。',
-                },
-                {
-                    key: 'checkboxActionForSpanningAndDessert',
-                    value: settings.checkboxActionForSpanningAndDessert || 'global',
-                    type: 'select',
-                    title:
-                        i18n('checkboxActionForSpanningAndDessert') ||
-                        '跨天/每日可做任务复选框行为',
-                    description:
-                        i18n('checkboxActionForSpanningAndDessertDesc') ||
-                        '点击复选框时，跨天任务和每日可做任务标记为今日已完成还是整体完成，默认整体完成。',
-                    options: {
-                        global: i18n('checkboxActionGlobal') || '整体完成',
-                        today: i18n('checkboxActionToday') || '今日已完成',
-                    },
+                    name: i18n('subGroupTaskReminderRules'),
+                    items: [
+                        {
+                            key: 'reminderSkipWeekendMode',
+                            value: getGlobalReminderSkipWeekendMode(settings),
+                            type: 'select',
+                            title: i18n('reminderSkipWeekends') || '任务提醒跳过周末',
+                            description:
+                                i18n('reminderSkipWeekendsDesc') ||
+                                '可选择跳过周六周日、仅周六、仅周日或不跳过；单个任务可在任务编辑弹窗单独覆盖。',
+                            options: {
+                                saturdaySunday:
+                                    i18n('reminderSkipWeekendSaturdaySunday') || '跳过周六和周日',
+                                saturday: i18n('reminderSkipWeekendSaturday') || '仅跳过周六',
+                                sunday: i18n('reminderSkipWeekendSunday') || '仅跳过周日',
+                                none: i18n('reminderSkipWeekendNone') || '不跳过',
+                            },
+                        },
+                        {
+                            key: 'reminderSkipHolidays',
+                            value: settings.reminderSkipHolidays,
+                            type: 'checkbox',
+                            title: i18n('reminderSkipHolidays') || '任务提醒跳过节假日',
+                            description:
+                                i18n('reminderSkipHolidaysDesc') ||
+                                '仅对重复任务，以及同时横跨节假日和非节假日的跨天任务生效；单个任务可在任务编辑弹窗单独覆盖。',
+                        },
+                    ],
                 },
             ],
         },
         {
             name: i18n('habitCheckinSettings') || '✅习惯打卡设置',
-            items: [
+            subGroups: [
                 {
-                    key: 'habitMemoSyncTemplate',
-                    value: settings.habitMemoSyncTemplate,
-                    type: 'textarea',
-                    title: i18n('habitMemoSyncTemplate') || '同步块模板',
-                    description:
-                        i18n('habitMemoSyncTemplateDesc') ||
-                        '用于习惯打卡同步到块的 Markdown 模板。支持变量：${date}、${time}、${dateTime}、${habitName}、${habitCheckinEmoji}、${habitCheckinMeaning}、${habitMemo}。清空后使用默认模板。',
-                    placeholder: DEFAULT_SETTINGS.habitMemoSyncTemplate,
-                    direction: 'row',
+                    name: i18n('subGroupHabitSync'),
+                    items: [
+                        {
+                            key: 'habitMemoSyncTemplate',
+                            value: settings.habitMemoSyncTemplate,
+                            type: 'textarea',
+                            title: i18n('habitMemoSyncTemplate') || '同步块模板',
+                            description:
+                                i18n('habitMemoSyncTemplateDesc') ||
+                                '用于习惯打卡同步到块的 Markdown 模板。支持变量：${date}、${time}、${dateTime}、${habitName}、${habitCheckinEmoji}、${habitCheckinMeaning}、${habitMemo}。清空后使用默认模板。',
+                            placeholder: DEFAULT_SETTINGS.habitMemoSyncTemplate,
+                            direction: 'row',
+                        },
+                    ],
                 },
             ],
         },
         {
             name: i18n('notificationReminder'),
-            items: [
+            subGroups: [
                 {
-                    key: 'dailyNotificationTime',
-                    value: settings.dailyNotificationTime,
-                    type: 'textinput',
-                    placeholder: '09:00',
-                    title: i18n('dailyNotificationTime'),
-                    description: i18n('dailyNotificationTimeDesc'),
-                },
-                {
-                    key: 'dailyNotificationEnabled',
-                    value: settings.dailyNotificationEnabled,
-                    type: 'checkbox',
-                    title: i18n('dailyNotificationEnabled'),
-                    description: i18n('dailyNotificationEnabledDesc'),
-                },
-                {
-                    key: 'notificationSound',
-                    value: settings.audioSelected?.notificationSound || '',
-                    type: 'custom-audio',
-                    title: i18n('notificationSoundSetting'),
-                    description: i18n('notificationSoundDesc'),
-                },
-                {
-                    key: 'reminderSystemNotification',
-                    value: settings.reminderSystemNotification,
-                    type: 'checkbox',
-                    title: i18n('reminderSystemNotification'),
-                    description: i18n('reminderSystemNotificationDesc'),
-                },
-                {
-                    key: 'showInternalNotification',
-                    value: settings.showInternalNotification,
-                    type: 'checkbox',
-                    title: i18n('showInternalNotification'),
-                    description: i18n('showInternalNotificationDesc'),
-                },
-                {
-                    key: 'reminderWebhookEnabled',
-                    value: settings.reminderWebhookEnabled,
-                    type: 'checkbox',
-                    title: i18n('reminderWebhookEnabled') || '启用 Webhook 通知',
-                    description:
-                        i18n('reminderWebhookEnabledDesc') ||
-                        '任务/习惯提醒触发时，向指定 URL 发送 POST JSON 通知。',
-                },
-                {
-                    key: 'reminderWebhookUrl',
-                    value: settings.reminderWebhookUrl,
-                    type: 'textinput',
-                    placeholder: 'https://example.com/webhook',
-                    title: i18n('reminderWebhookUrl') || 'Webhook 地址',
-                    description:
-                        i18n('reminderWebhookUrlDesc') || '开启 Webhook 通知后对指定URL进行通知。',
-                },
-                {
-                    key: 'testWebhook',
-                    value: '',
-                    type: 'button',
-                    title: i18n('testWebhook') || '测试 Webhook',
-                    description: i18n('testWebhookDesc') || '发送一条测试 Webhook 消息以验证配置。',
-                    button: {
-                        label: i18n('test') || '测试',
-                        callback: async () => {
-                            if (!settings.reminderWebhookUrl) {
-                                await pushErrMsg(
-                                    i18n('webhookUrlRequired') || '请先填写 Webhook 地址'
-                                );
-                                return;
-                            }
-                            await pushMsg(i18n('webhookTesting') || '正在发送测试 Webhook...');
-                            try {
-                                const success = await plugin.sendTestWebhook(
-                                    settings.reminderWebhookUrl,
-                                    settings.reminderWebhookJsonTemplate,
-                                    settings.reminderWebhookJsonType
-                                );
-                                if (success) {
-                                    await pushMsg(
-                                        i18n('webhookTestSuccess') || 'Webhook 测试成功！'
-                                    );
-                                } else {
-                                    await pushErrMsg(
-                                        i18n('webhookTestFailed') || 'Webhook 测试失败'
-                                    );
-                                }
-                            } catch (error: any) {
-                                console.error('Webhook测试异常:', error);
-                                await pushErrMsg(
-                                    (i18n('webhookTestFailed') || 'Webhook 测试失败') +
-                                        ': ' +
-                                        (error.message || String(error))
-                                );
-                            }
+                    name: i18n('subGroupDailySummary'),
+                    items: [
+                        {
+                            key: 'dailyNotificationTime',
+                            value: settings.dailyNotificationTime,
+                            type: 'textinput',
+                            placeholder: '09:00',
+                            title: i18n('dailyNotificationTime'),
+                            description: i18n('dailyNotificationTimeDesc'),
                         },
-                    },
+                        {
+                            key: 'dailyNotificationEnabled',
+                            value: settings.dailyNotificationEnabled,
+                            type: 'checkbox',
+                            title: i18n('dailyNotificationEnabled'),
+                            description: i18n('dailyNotificationEnabledDesc'),
+                        },
+                    ],
                 },
                 {
-                    key: 'reminderWebhookJsonType',
-                    value: settings.reminderWebhookJsonType,
-                    type: 'select',
-                    title: i18n('reminderWebhookJsonType') || 'Webhook JSON 类型',
-                    description:
-                        i18n('reminderWebhookJsonTypeDesc') ||
-                        '选择预设 JSON 格式；选择自定义时可手动编辑 JSON 请求体。',
-                    options: {
-                        feishu: i18n('webhookJsonTypeFeishu') || '飞书',
-                        wecom: i18n('webhookJsonTypeWecom') || '企业微信',
-                        custom: i18n('webhookJsonTypeCustom') || '自定义',
-                    },
+                    name: i18n('subGroupNotificationSound'),
+                    items: [
+                        {
+                            key: 'notificationSound',
+                            value: settings.audioSelected?.notificationSound || '',
+                            type: 'custom-audio',
+                            title: i18n('notificationSoundSetting'),
+                            description: i18n('notificationSoundDesc'),
+                        },
+                    ],
                 },
                 {
-                    key: 'reminderWebhookJsonTemplate',
-                    value: settings.reminderWebhookJsonTemplate,
-                    type: 'textarea',
-                    title: i18n('reminderWebhookJsonTemplate') || 'Webhook JSON 格式',
-                    description:
-                        i18n('reminderWebhookJsonTemplateDesc') ||
-                        '选择自定义时生效。变量: ${title} 和 ${message}；清空后使用默认飞书 text 消息格式。',
-                    direction: 'row',
+                    name: i18n('subGroupNotificationMethod'),
+                    items: [
+                        {
+                            key: 'reminderSystemNotification',
+                            value: settings.reminderSystemNotification,
+                            type: 'checkbox',
+                            title: i18n('reminderSystemNotification'),
+                            description: i18n('reminderSystemNotificationDesc'),
+                        },
+                        {
+                            key: 'showInternalNotification',
+                            value: settings.showInternalNotification,
+                            type: 'checkbox',
+                            title: i18n('showInternalNotification'),
+                            description: i18n('showInternalNotificationDesc'),
+                        },
+                    ],
+                },
+                {
+                    name: i18n('subGroupWebhookNotification'),
+                    items: [
+                        {
+                            key: 'reminderWebhookEnabled',
+                            value: settings.reminderWebhookEnabled,
+                            type: 'checkbox',
+                            title: i18n('reminderWebhookEnabled') || '启用 Webhook 通知',
+                            description:
+                                i18n('reminderWebhookEnabledDesc') ||
+                                '任务/习惯提醒触发时，向指定 URL 发送 POST JSON 通知。',
+                        },
+                        {
+                            key: 'reminderWebhookUrl',
+                            value: settings.reminderWebhookUrl,
+                            type: 'textinput',
+                            placeholder: 'https://example.com/webhook',
+                            title: i18n('reminderWebhookUrl') || 'Webhook 地址',
+                            description:
+                                i18n('reminderWebhookUrlDesc') || '开启 Webhook 通知后对指定URL进行通知。',
+                        },
+                        {
+                            key: 'testWebhook',
+                            value: '',
+                            type: 'button',
+                            title: i18n('testWebhook') || '测试 Webhook',
+                            description: i18n('testWebhookDesc') || '发送一条测试 Webhook 消息以验证配置。',
+                            button: {
+                                label: i18n('test') || '测试',
+                                callback: async () => {
+                                    if (!settings.reminderWebhookUrl) {
+                                        await pushErrMsg(
+                                            i18n('webhookUrlRequired') || '请先填写 Webhook 地址'
+                                        );
+                                        return;
+                                    }
+                                    await pushMsg(i18n('webhookTesting') || '正在发送测试 Webhook...');
+                                    try {
+                                        const success = await plugin.sendTestWebhook(
+                                            settings.reminderWebhookUrl,
+                                            settings.reminderWebhookJsonTemplate,
+                                            settings.reminderWebhookJsonType
+                                        );
+                                        if (success) {
+                                            await pushMsg(
+                                                i18n('webhookTestSuccess') || 'Webhook 测试成功！'
+                                            );
+                                        } else {
+                                            await pushErrMsg(
+                                                i18n('webhookTestFailed') || 'Webhook 测试失败'
+                                            );
+                                        }
+                                    } catch (error: any) {
+                                        console.error('Webhook测试异常:', error);
+                                        await pushErrMsg(
+                                            (i18n('webhookTestFailed') || 'Webhook 测试失败') +
+                                                ': ' +
+                                                (error.message || String(error))
+                                        );
+                                    }
+                                },
+                            },
+                        },
+                        {
+                            key: 'reminderWebhookJsonType',
+                            value: settings.reminderWebhookJsonType,
+                            type: 'select',
+                            title: i18n('reminderWebhookJsonType') || 'Webhook JSON 类型',
+                            description:
+                                i18n('reminderWebhookJsonTypeDesc') ||
+                                '选择预设 JSON 格式；选择自定义时可手动编辑 JSON 请求体。',
+                            options: {
+                                feishu: i18n('webhookJsonTypeFeishu') || '飞书',
+                                wecom: i18n('webhookJsonTypeWecom') || '企业微信',
+                                custom: i18n('webhookJsonTypeCustom') || '自定义',
+                            },
+                        },
+                        {
+                            key: 'reminderWebhookJsonTemplate',
+                            value: settings.reminderWebhookJsonTemplate,
+                            type: 'textarea',
+                            title: i18n('reminderWebhookJsonTemplate') || 'Webhook JSON 格式',
+                            description:
+                                i18n('reminderWebhookJsonTemplateDesc') ||
+                                '选择自定义时生效。变量: ${title} 和 ${message}；清空后使用默认飞书 text 消息格式。',
+                            direction: 'row',
+                        },
+                    ],
                 },
             ],
         },
         {
             name: i18n('calendarSettings'),
-            items: [
+            subGroups: [
                 {
-                    key: 'weekStartDay',
-                    // For select UI, use string values so they match option keys in the DOM
-                    value: String(settings.weekStartDay),
-                    type: 'select',
-                    title: i18n('weekStartDay'),
-                    description: i18n('weekStartDayDesc'),
-                    options: {
-                        0: i18n('sunday'),
-                        1: i18n('monday'),
-                        2: i18n('tuesday'),
-                        3: i18n('wednesday'),
-                        4: i18n('thursday'),
-                        5: i18n('friday'),
-                        6: i18n('saturday'),
-                    },
-                },
-                {
-                    key: 'calendarMultiDaysCount',
-                    value: settings.calendarMultiDaysCount ?? 3,
-                    type: 'number',
-                    title: i18n('calendarMultiDaysCount') || '多天视图天数',
-                    description:
-                        i18n('calendarMultiDaysCountDesc') || '设置多天视图显示的天数，默认为3天',
-                },
-                {
-                    key: 'calendarShowLunar',
-                    value: settings.calendarShowLunar, // Default true
-                    type: 'checkbox',
-                    title: i18n('calendarShowLunar'),
-                    description: i18n('calendarShowLunarDesc'),
-                },
-                {
-                    key: 'calendarShowHoliday',
-                    value: settings.calendarShowHoliday,
-                    type: 'checkbox',
-                    title: i18n('calendarShowHoliday'),
-                    description: i18n('calendarShowHolidayDesc'),
-                },
-
-                {
-                    key: 'calendarHolidayIcsUrl',
-                    value: settings.calendarHolidayIcsUrl,
-                    type: 'textinput',
-                    title: i18n('calendarHolidayIcsUrl'),
-                    description: i18n('calendarHolidayIcsUrlDesc'),
-                },
-                {
-                    key: 'updateHoliday',
-                    value: '',
-                    type: 'button',
-                    title: i18n('updateHoliday'),
-                    description: i18n('updateHolidayDesc'),
-                    button: {
-                        label: i18n('updateHoliday'),
-                        callback: async () => {
-                            await pushMsg(i18n('updatingHoliday'));
-                            const success = await syncHolidays(
-                                plugin,
-                                settings.calendarHolidayIcsUrl
-                            );
-                            if (success) {
-                                await pushMsg(i18n('holidayUpdateSuccess'));
-                                window.dispatchEvent(new CustomEvent('reminderUpdated'));
-                            } else {
-                                await pushErrMsg(i18n('holidayUpdateFailed'));
-                            }
+                    name: i18n('subGroupCalendarDisplay'),
+                    items: [
+                        {
+                            key: 'weekStartDay',
+                            // For select UI, use string values so they match option keys in the DOM
+                            value: String(settings.weekStartDay),
+                            type: 'select',
+                            title: i18n('weekStartDay'),
+                            description: i18n('weekStartDayDesc'),
+                            options: {
+                                0: i18n('sunday'),
+                                1: i18n('monday'),
+                                2: i18n('tuesday'),
+                                3: i18n('wednesday'),
+                                4: i18n('thursday'),
+                                5: i18n('friday'),
+                                6: i18n('saturday'),
+                            },
                         },
-                    },
+                        {
+                            key: 'calendarMultiDaysCount',
+                            value: settings.calendarMultiDaysCount ?? 3,
+                            type: 'number',
+                            title: i18n('calendarMultiDaysCount') || '多天视图天数',
+                            description:
+                                i18n('calendarMultiDaysCountDesc') || '设置多天视图显示的天数，默认为3天',
+                        },
+                        {
+                            key: 'calendarShowLunar',
+                            value: settings.calendarShowLunar, // Default true
+                            type: 'checkbox',
+                            title: i18n('calendarShowLunar'),
+                            description: i18n('calendarShowLunarDesc'),
+                        },
+                        {
+                            key: 'calendarShowHoliday',
+                            value: settings.calendarShowHoliday,
+                            type: 'checkbox',
+                            title: i18n('calendarShowHoliday'),
+                            description: i18n('calendarShowHolidayDesc'),
+                        },
+                        {
+                            key: 'calendarShowCategoryAndProject',
+                            value: settings.calendarShowCategoryAndProject,
+                            type: 'checkbox',
+                            title: i18n('calendarShowCategoryAndProject'),
+                            description: i18n('calendarShowCategoryAndProjectDesc'),
+                        },
+                    ],
                 },
                 {
-                    key: 'calendarShowCategoryAndProject',
-                    value: settings.calendarShowCategoryAndProject,
-                    type: 'checkbox',
-                    title: i18n('calendarShowCategoryAndProject'),
-                    description: i18n('calendarShowCategoryAndProjectDesc'),
+                    name: i18n('subGroupCalendarHoliday'),
+                    items: [
+                        {
+                            key: 'calendarHolidayIcsUrl',
+                            value: settings.calendarHolidayIcsUrl,
+                            type: 'textinput',
+                            title: i18n('calendarHolidayIcsUrl'),
+                            description: i18n('calendarHolidayIcsUrlDesc'),
+                        },
+                        {
+                            key: 'updateHoliday',
+                            value: '',
+                            type: 'button',
+                            title: i18n('updateHoliday'),
+                            description: i18n('updateHolidayDesc'),
+                            button: {
+                                label: i18n('updateHoliday'),
+                                callback: async () => {
+                                    await pushMsg(i18n('updatingHoliday'));
+                                    const success = await syncHolidays(
+                                        plugin,
+                                        settings.calendarHolidayIcsUrl
+                                    );
+                                    if (success) {
+                                        await pushMsg(i18n('holidayUpdateSuccess'));
+                                        window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                                    } else {
+                                        await pushErrMsg(i18n('holidayUpdateFailed'));
+                                    }
+                                },
+                            },
+                        },
+                    ],
                 },
                 {
-                    key: 'dayStartTime',
-                    value: settings.dayStartTime,
-                    type: 'textinput',
-                    title: i18n('dayStartTime'),
-                    description: i18n('dayStartTimeDesc'),
-                    placeholder: '08:00',
-                },
-                {
-                    key: 'todayStartTime',
-                    value: settings.todayStartTime,
-                    type: 'textinput',
-                    title: i18n('todayStart'),
-                    description: i18n('todayStartDesc'),
-                    placeholder: '03:00',
-                },
-                {
-                    key: 'calendarCollapseTimeRange',
-                    value: settings.calendarCollapseTimeRange,
-                    type: 'checkbox',
-                    title: i18n('calendarCollapseTimeRange') || '折叠非工作时间段',
-                    description: i18n('calendarCollapseTimeRangeDesc') || '折叠日历视图中的睡眠/非工作时段以节省空间（仅在周视图和日视图生效）',
-                },
-                {
-                    key: 'calendarCollapseStartTime',
-                    value: settings.calendarCollapseStartTime,
-                    type: 'textinput',
-                    title: i18n('calendarCollapseStartTime') || '折叠开始时间',
-                    description: i18n('calendarCollapseStartTimeDesc') || '折叠时段开始时间，例如 03:00',
-                    placeholder: '03:00',
-                },
-                {
-                    key: 'calendarCollapseEndTime',
-                    value: settings.calendarCollapseEndTime,
-                    type: 'textinput',
-                    title: i18n('calendarCollapseEndTime') || '折叠结束时间',
-                    description: i18n('calendarCollapseEndTimeDesc') || '折叠时段结束时间，例如 08:00',
-                    placeholder: '08:00',
+                    name: i18n('subGroupCalendarTimeRange'),
+                    items: [
+                        {
+                            key: 'dayStartTime',
+                            value: settings.dayStartTime,
+                            type: 'textinput',
+                            title: i18n('dayStartTime'),
+                            description: i18n('dayStartTimeDesc'),
+                            placeholder: '08:00',
+                        },
+                        {
+                            key: 'todayStartTime',
+                            value: settings.todayStartTime,
+                            type: 'textinput',
+                            title: i18n('todayStart'),
+                            description: i18n('todayStartDesc'),
+                            placeholder: '03:00',
+                        },
+                        {
+                            key: 'calendarCollapseTimeRange',
+                            value: settings.calendarCollapseTimeRange,
+                            type: 'checkbox',
+                            title: i18n('calendarCollapseTimeRange') || '折叠非工作时间段',
+                            description: i18n('calendarCollapseTimeRangeDesc') || '折叠日历视图中的睡眠/非工作时段以节省空间（仅在周视图和日视图生效）',
+                        },
+                        {
+                            key: 'calendarCollapseStartTime',
+                            value: settings.calendarCollapseStartTime,
+                            type: 'textinput',
+                            title: i18n('calendarCollapseStartTime') || '折叠开始时间',
+                            description: i18n('calendarCollapseStartTimeDesc') || '折叠时段开始时间，例如 03:00',
+                            placeholder: '03:00',
+                        },
+                        {
+                            key: 'calendarCollapseEndTime',
+                            value: settings.calendarCollapseEndTime,
+                            type: 'textinput',
+                            title: i18n('calendarCollapseEndTime') || '折叠结束时间',
+                            description: i18n('calendarCollapseEndTimeDesc') || '折叠时段结束时间，例如 08:00',
+                            placeholder: '08:00',
+                        },
+                    ],
                 },
             ],
         },
         {
-            name: '🗂️项目设置',
-            items: [
+            name: '🗂️' + (i18n('projectSettings') || '项目设置'),
+            subGroups: [
                 {
-                    key: 'projectKanbanShowCompletedSubtasks',
-                    value: settings.projectKanbanShowCompletedSubtasks,
-                    type: 'checkbox',
-                    title: i18n('showCompletedSubtasks') || '显示已完成子任务',
-                    description:
-                        i18n('projectKanbanShowCompletedSubtasksDesc') ||
-                        '作为所有项目看板的默认值；修改后会同步到现有项目，新建项目也会沿用。单个项目可在看板显示设置中覆盖。',
-                },
-                {
-                    key: 'projectKanbanShowTaskCategories',
-                    value: settings.projectKanbanShowTaskCategories,
-                    type: 'checkbox',
-                    title: i18n('showTaskCategories') || '显示任务分类',
-                    description:
-                        i18n('projectKanbanShowTaskCategoriesDesc') ||
-                        '作为所有项目看板的默认值；修改后会同步到现有项目，新建项目也会沿用。单个项目可在看板显示设置中覆盖。',
-                },
-                {
-                    key: 'projectKanbanClipTitleToOneLine',
-                    value: settings.projectKanbanClipTitleToOneLine,
-                    type: 'checkbox',
-                    title: i18n('clipTitleToOneLine') || '标题限制一行显示',
-                    description:
-                        i18n('projectKanbanClipTitleToOneLineDesc') ||
-                        '作为所有项目看板的默认值；修改后会同步到现有项目，新建项目也会沿用。单个项目可在看板显示设置中覆盖。',
-                },
-                {
-                    key: 'defaultProjectSelectorViewMode',
-                    value: settings.defaultProjectSelectorViewMode,
-                    type: 'select',
-                    title: i18n('defaultProjectSelectorViewMode') || '默认项目列表展示方式',
-                    description:
-                        i18n('defaultProjectSelectorViewModeDesc') ||
-                        '选择项目时（任务编辑弹窗选择项目、日历视图筛选项目等场景），默认以项目状态还是文件夹层级方式展示列表',
-                    options: {
-                        status: i18n('projectSelectorViewModeStatus') || '状态',
-                        folder: i18n('projectSelectorViewModeFolder') || '文件夹',
-                    },
-                },
-                {
-                    key: 'unassignedTasksProjectId',
-                    value: settings.unassignedTasksProjectId,
-                    type: 'project-selector',
-                    title: i18n('unassignedTasksProjectId') || '无项目的任务归属项目',
-                    description:
-                        i18n('unassignedTasksProjectIdDesc') ||
-                        '没有指定项目的任务将默认归属于此项目',
-                    options: {},
-                },
-                {
-                    key: 'openGlobalProjectStatusDialog',
-                    value: '',
-                    type: 'button',
-                    title: i18n('globalKanbanStatuses') || '全局项目默认状态',
-                    description:
-                        i18n('globalKanbanStatusesDesc') ||
-                        '用于配置新建项目默认看板状态。支持自定义名称、图标、颜色与排序。',
-                    button: {
-                        label: i18n('edit') || '编辑',
-                        callback: async () => {
-                            try {
-                                const { GlobalProjectStatusDialog } = await import(
-                                    './components/GlobalProjectStatusDialog'
-                                );
-                                const dialog = new GlobalProjectStatusDialog(plugin, async () => {
-                                    const loadedSettings = await plugin.loadSettings(true);
-                                    settings = { ...loadedSettings };
-                                    updateGroupItems();
-                                });
-                                await dialog.show();
-                            } catch (error) {
-                                console.error('打开全局项目状态配置失败:', error);
-                                await pushErrMsg(
-                                    i18n('openModifyDialogFailed') || '打开配置对话框失败'
-                                );
-                            }
+                    name: i18n('subGroupProjectKanban'),
+                    items: [
+                        {
+                            key: 'projectKanbanShowCompletedSubtasks',
+                            value: settings.projectKanbanShowCompletedSubtasks,
+                            type: 'checkbox',
+                            title: i18n('showCompletedSubtasks') || '显示已完成子任务',
+                            description:
+                                i18n('projectKanbanShowCompletedSubtasksDesc') ||
+                                '作为所有项目看板的默认值；修改后会同步 to 现有项目，新建项目也会沿用。单个项目可在看板显示设置中覆盖。',
                         },
-                    },
+                        {
+                            key: 'projectKanbanShowTaskCategories',
+                            value: settings.projectKanbanShowTaskCategories,
+                            type: 'checkbox',
+                            title: i18n('showTaskCategories') || '显示任务分类',
+                            description:
+                                i18n('projectKanbanShowTaskCategoriesDesc') ||
+                                '作为所有项目看板的默认值；修改后会同步 to 现有项目，新建项目也会沿用。单个项目可在看板显示设置中覆盖。',
+                        },
+                        {
+                            key: 'projectKanbanClipTitleToOneLine',
+                            value: settings.projectKanbanClipTitleToOneLine,
+                            type: 'checkbox',
+                            title: i18n('clipTitleToOneLine') || '标题限制一行显示',
+                            description:
+                                i18n('projectKanbanClipTitleToOneLineDesc') ||
+                                '作为所有项目看板的默认值；修改后会同步 to 现有项目，新建项目也会沿用。单个项目可在看板显示设置中覆盖。',
+                        },
+                    ],
+                },
+                {
+                    name: i18n('subGroupProjectList'),
+                    items: [
+                        {
+                            key: 'defaultProjectSelectorViewMode',
+                            value: settings.defaultProjectSelectorViewMode,
+                            type: 'select',
+                            title: i18n('defaultProjectSelectorViewMode') || '默认项目列表展示方式',
+                            description:
+                                i18n('defaultProjectSelectorViewModeDesc') ||
+                                '选择项目时（任务编辑弹窗选择项目、日历视图筛选项目等场景），默认以项目状态还是文件夹层级方式展示列表',
+                            options: {
+                                status: i18n('projectSelectorViewModeStatus') || '状态',
+                                folder: i18n('projectSelectorViewModeFolder') || '文件夹',
+                            },
+                        },
+                        {
+                            key: 'unassignedTasksProjectId',
+                            value: settings.unassignedTasksProjectId,
+                            type: 'project-selector',
+                            title: i18n('unassignedTasksProjectId') || '无项目的任务归属项目',
+                            description:
+                                i18n('unassignedTasksProjectIdDesc') ||
+                                '没有指定项目的任务将默认归属于此项目',
+                            options: {},
+                        },
+                        {
+                            key: 'openGlobalProjectStatusDialog',
+                            value: '',
+                            type: 'button',
+                            title: i18n('globalKanbanStatuses') || '全局项目默认状态',
+                            description:
+                                i18n('globalKanbanStatusesDesc') ||
+                                '用于配置新建项目默认看板状态。支持自定义名称、图标、颜色与排序。',
+                            button: {
+                                label: i18n('edit') || '编辑',
+                                callback: async () => {
+                                    try {
+                                        const { GlobalProjectStatusDialog } = await import(
+                                            './components/GlobalProjectStatusDialog'
+                                        );
+                                        const dialog = new GlobalProjectStatusDialog(plugin, async () => {
+                                            const loadedSettings = await plugin.loadSettings(true);
+                                            settings = { ...loadedSettings };
+                                            updateGroupItems();
+                                        });
+                                        await dialog.show();
+                                    } catch (error) {
+                                        console.error('打开全局项目状态配置失败:', error);
+                                        await pushErrMsg(
+                                            i18n('openModifyDialogFailed') || '打开配置对话框失败'
+                                        );
+                                    }
+                                },
+                            },
+                        },
+                    ],
                 },
             ],
         },
         {
             name: i18n('summarySettings') || '📋任务摘要设置',
-            items: [
+            subGroups: [
                 {
-                    key: 'showPomodoroInSummary',
-                    value: settings.showPomodoroInSummary,
-                    type: 'checkbox',
-                    title: i18n('showPomodoroInSummary'),
-                    description: i18n('showPomodoroInSummaryDesc'),
-                },
-                {
-                    key: 'showHabitInSummary',
-                    value: settings.showHabitInSummary,
-                    type: 'checkbox',
-                    title: i18n('showHabitInSummary'),
-                    description: i18n('showHabitInSummaryDesc'),
-                },
-                {
-                    key: 'showTaskNotesInSummary',
-                    value: settings.showTaskNotesInSummary,
-                    type: 'checkbox',
-                    title: i18n('showTaskNotesInSummary'),
-                    description: i18n('showTaskNotesInSummaryDesc'),
-                },
-                {
-                    key: 'showHabitNotesInSummary',
-                    value: settings.showHabitNotesInSummary,
-                    type: 'checkbox',
-                    title: i18n('showHabitNotesInSummary'),
-                    description: i18n('showHabitNotesInSummaryDesc'),
+                    name: i18n('subGroupSummaryContent'),
+                    items: [
+                        {
+                            key: 'showPomodoroInSummary',
+                            value: settings.showPomodoroInSummary,
+                            type: 'checkbox',
+                            title: i18n('showPomodoroInSummary'),
+                            description: i18n('showPomodoroInSummaryDesc'),
+                        },
+                        {
+                            key: 'showHabitInSummary',
+                            value: settings.showHabitInSummary,
+                            type: 'checkbox',
+                            title: i18n('showHabitInSummary'),
+                            description: i18n('showHabitInSummaryDesc'),
+                        },
+                        {
+                            key: 'showTaskNotesInSummary',
+                            value: settings.showTaskNotesInSummary,
+                            type: 'checkbox',
+                            title: i18n('showTaskNotesInSummary'),
+                            description: i18n('showTaskNotesInSummaryDesc'),
+                        },
+                        {
+                            key: 'showHabitNotesInSummary',
+                            value: settings.showHabitNotesInSummary,
+                            type: 'checkbox',
+                            title: i18n('showHabitNotesInSummary'),
+                            description: i18n('showHabitNotesInSummaryDesc'),
+                        },
+                    ],
                 },
             ],
         },
         {
             name: '✅' + i18n('taskNoteSettings'),
-            items: [
+            subGroups: [
                 {
-                    key: 'newDocNotebook',
-                    value: settings.newDocNotebook,
-                    type: 'select',
-                    title: i18n('newDocNotebook'),
-                    description: i18n('newDocNotebookDesc'),
-                    options: notebooks.reduce(
-                        (acc, notebook) => {
-                            acc[notebook.id] = notebook.name;
-                            return acc;
+                    name: i18n('subGroupTaskNoteDoc'),
+                    items: [
+                        {
+                            key: 'newDocNotebook',
+                            value: settings.newDocNotebook,
+                            type: 'select',
+                            title: i18n('newDocNotebook'),
+                            description: i18n('newDocNotebookDesc'),
+                            options: notebooks.reduce(
+                                (acc, notebook) => {
+                                    acc[notebook.id] = notebook.name;
+                                    return acc;
+                                },
+                                {} as { [key: string]: string }
+                            ),
                         },
-                        {} as { [key: string]: string }
-                    ),
+                        {
+                            key: 'newDocPath',
+                            value: settings.newDocPath,
+                            type: 'textinput',
+                            title: i18n('newDocPath'),
+                            description: i18n('newDocPathDesc'),
+                        },
+                    ],
                 },
                 {
-                    key: 'newDocPath',
-                    value: settings.newDocPath,
-                    type: 'textinput',
-                    title: i18n('newDocPath'),
-                    description: i18n('newDocPathDesc'),
+                    name: i18n('subGroupTaskNoteHeading'),
+                    items: [
+                        {
+                            key: 'groupDefaultHeadingLevel',
+                            value: settings.groupDefaultHeadingLevel,
+                            type: 'select',
+                            title: i18n('groupDefaultHeadingLevel'),
+                            description: i18n('groupDefaultHeadingLevelDesc'),
+                            options: {
+                                1: '1',
+                                2: '2',
+                                3: '3',
+                                4: '4',
+                                5: '5',
+                                6: '6',
+                            },
+                        },
+                        {
+                            key: 'milestoneDefaultHeadingLevel',
+                            value: settings.milestoneDefaultHeadingLevel,
+                            type: 'select',
+                            title: i18n('milestoneDefaultHeadingLevel'),
+                            description: i18n('milestoneDefaultHeadingLevelDesc'),
+                            options: {
+                                1: '1',
+                                2: '2',
+                                3: '3',
+                                4: '4',
+                                5: '5',
+                                6: '6',
+                            },
+                        },
+                        {
+                            key: 'defaultHeadingLevel',
+                            value: settings.defaultHeadingLevel,
+                            type: 'select',
+                            title: i18n('defaultHeadingLevel'),
+                            description: i18n('defaultHeadingLevelDesc'),
+                            options: {
+                                1: '1',
+                                2: '2',
+                                3: '3',
+                                4: '4',
+                                5: '5',
+                                6: '6',
+                            },
+                        },
+                        {
+                            key: 'defaultHeadingPosition',
+                            value: settings.defaultHeadingPosition,
+                            type: 'select',
+                            title: i18n('defaultHeadingPosition'),
+                            description: i18n('defaultHeadingPositionDesc'),
+                            options: {
+                                prepend: i18n('prepend'),
+                                append: i18n('append'),
+                            },
+                        },
+                    ],
                 },
                 {
-                    key: 'groupDefaultHeadingLevel',
-                    value: settings.groupDefaultHeadingLevel,
-                    type: 'select',
-                    title: i18n('groupDefaultHeadingLevel'),
-                    description: i18n('groupDefaultHeadingLevelDesc'),
-                    options: {
-                        1: '1',
-                        2: '2',
-                        3: '3',
-                        4: '4',
-                        5: '5',
-                        6: '6',
-                    },
-                },
-                {
-                    key: 'milestoneDefaultHeadingLevel',
-                    value: settings.milestoneDefaultHeadingLevel,
-                    type: 'select',
-                    title: i18n('milestoneDefaultHeadingLevel'),
-                    description: i18n('milestoneDefaultHeadingLevelDesc'),
-                    options: {
-                        1: '1',
-                        2: '2',
-                        3: '3',
-                        4: '4',
-                        5: '5',
-                        6: '6',
-                    },
-                },
-                {
-                    key: 'defaultHeadingLevel',
-                    value: settings.defaultHeadingLevel,
-                    type: 'select',
-                    title: i18n('defaultHeadingLevel'),
-                    description: i18n('defaultHeadingLevelDesc'),
-                    options: {
-                        1: '1',
-                        2: '2',
-                        3: '3',
-                        4: '4',
-                        5: '5',
-                        6: '6',
-                    },
-                },
-                {
-                    key: 'defaultHeadingPosition',
-                    value: settings.defaultHeadingPosition,
-                    type: 'select',
-                    title: i18n('defaultHeadingPosition'),
-                    description: i18n('defaultHeadingPositionDesc'),
-                    options: {
-                        prepend: i18n('prepend'),
-                        append: i18n('append'),
-                    },
-                },
-                {
-                    key: 'enableOutlinePrefix',
-                    value: settings.enableOutlinePrefix,
-                    type: 'checkbox',
-                    title: i18n('enableOutlinePrefix'),
-                    description: i18n('enableOutlinePrefixDesc'),
-                },
-                {
-                    key: 'enableTaskListStatusSync',
-                    value: settings.enableTaskListStatusSync,
-                    type: 'checkbox',
-                    title: i18n('enableTaskListStatusSync'),
-                    description: i18n('enableTaskListStatusSyncDesc'),
+                    name: i18n('subGroupTaskNoteSync'),
+                    items: [
+                        {
+                            key: 'enableOutlinePrefix',
+                            value: settings.enableOutlinePrefix,
+                            type: 'checkbox',
+                            title: i18n('enableOutlinePrefix'),
+                            description: i18n('enableOutlinePrefixDesc'),
+                        },
+                        {
+                            key: 'enableTaskListStatusSync',
+                            value: settings.enableTaskListStatusSync,
+                            type: 'checkbox',
+                            title: i18n('enableTaskListStatusSync'),
+                            description: i18n('enableTaskListStatusSyncDesc'),
+                        },
+                    ],
                 },
             ],
         },
         {
             name: i18n('pomodoroSettings'),
-            items: [
+            subGroups: [
                 {
-                    key: 'pomodoroHint',
-                    value: '',
-                    type: 'hint',
-                    title: i18n('pomodoroHintTitle'),
-                    description: i18n('pomodoroHintDesc'),
+                    name: i18n('subGroupPomodoroBasic'),
+                    items: [
+                        {
+                            key: 'pomodoroHint',
+                            value: '',
+                            type: 'hint',
+                            title: i18n('pomodoroHintTitle'),
+                            description: i18n('pomodoroHintDesc'),
+                        },
+                        {
+                            key: 'pomodoroWorkDuration',
+                            value: settings.pomodoroWorkDuration,
+                            type: 'number',
+                            title: i18n('pomodoroWorkDuration'),
+                            description: i18n('pomodoroWorkDurationDesc'),
+                        },
+                        {
+                            key: 'pomodoroBreakDuration',
+                            value: settings.pomodoroBreakDuration,
+                            type: 'number',
+                            title: i18n('pomodoroBreakDuration'),
+                            description: i18n('pomodoroBreakDurationDesc'),
+                        },
+                        {
+                            key: 'pomodoroLongBreakDuration',
+                            value: settings.pomodoroLongBreakDuration,
+                            type: 'number',
+                            title: i18n('pomodoroLongBreakDuration'),
+                            description: i18n('pomodoroLongBreakDurationDesc'),
+                        },
+                        {
+                            key: 'pomodoroLongBreakInterval',
+                            value: settings.pomodoroLongBreakInterval,
+                            type: 'number',
+                            title: i18n('pomodoroLongBreakInterval'),
+                            description: i18n('pomodoroLongBreakIntervalDesc'),
+                        },
+                        {
+                            key: 'pomodoroAutoMode',
+                            value: settings.pomodoroAutoMode,
+                            type: 'checkbox',
+                            title: i18n('pomodoroAutoMode'),
+                            description: i18n('pomodoroAutoModeDesc'),
+                        },
+                        {
+                            key: 'dailyFocusGoal',
+                            value: settings.dailyFocusGoal,
+                            type: 'number',
+                            title: i18n('dailyFocusGoal'),
+                            description: i18n('dailyFocusGoalDesc'),
+                        },
+                    ],
                 },
                 {
-                    key: 'pomodoroWorkDuration',
-                    value: settings.pomodoroWorkDuration,
-                    type: 'number',
-                    title: i18n('pomodoroWorkDuration'),
-                    description: i18n('pomodoroWorkDurationDesc'),
+                    name: i18n('subGroupPomodoroInteraction'),
+                    items: [
+                        {
+                            key: 'pomodoroSystemNotification',
+                            value: settings.pomodoroSystemNotification,
+                            type: 'checkbox',
+                            title: i18n('pomodoroSystemNotification'),
+                            description: i18n('pomodoroSystemNotificationDesc'),
+                        },
+                        {
+                            key: 'pomodoroEndPopupWindow',
+                            value: settings.pomodoroEndPopupWindow,
+                            type: 'checkbox',
+                            title: i18n('pomodoroEndPopupWindow'),
+                            description: i18n('pomodoroEndPopupWindowDesc'),
+                        },
+                        {
+                            key: 'pomodoroCompletionNotePopup',
+                            value: settings.pomodoroCompletionNotePopup,
+                            type: 'checkbox',
+                            title: i18n('pomodoroCompletionNotePopup') || '番茄钟完成后记录备注',
+                            description:
+                                i18n('pomodoroCompletionNotePopupDesc') ||
+                                '专注完成并保存记录后弹出备注窗口',
+                        },
+                        {
+                            key: 'pomodoroDirectStart',
+                            value: settings.pomodoroDirectStart,
+                            type: 'checkbox',
+                            title: i18n('pomodoroDirectStart') || '直接开始番茄钟',
+                            description:
+                                i18n('pomodoroDirectStartDesc') ||
+                                '启用后点击开始番茄钟会直接使用默认时长开始，不再弹出预设子菜单选择',
+                        },
+                    ],
                 },
                 {
-                    key: 'pomodoroBreakDuration',
-                    value: settings.pomodoroBreakDuration,
-                    type: 'number',
-                    title: i18n('pomodoroBreakDuration'),
-                    description: i18n('pomodoroBreakDurationDesc'),
+                    name: i18n('subGroupPomodoroStyle'),
+                    items: [
+                        {
+                            key: 'pomodoroDockPosition',
+                            value: settings.pomodoroDockPosition,
+                            type: 'select',
+                            title: i18n('pomodoroDockPosition'),
+                            description: i18n('pomodoroDockPositionDesc'),
+                            options: {
+                                right: i18n('right'),
+                                left: i18n('left'),
+                                top: i18n('top'),
+                                bottom: i18n('bottom'),
+                            },
+                        },
+                        {
+                            key: 'pomodoroMiniWindowStyle',
+                            value: settings.pomodoroMiniWindowStyle || 'ring',
+                            type: 'select',
+                            title: i18n('pomodoroMiniWindowStyle') || 'Mini窗口样式',
+                            description:
+                                i18n('pomodoroMiniWindowStyleDesc') ||
+                                '设置番茄钟 mini 窗口的样式：圆环、横向进度条或极简进度条',
+                            options: {
+                                ring: i18n('pomodoroMiniWindowStyleRing') || '圆环',
+                                horizontal: i18n('pomodoroMiniWindowStyleHorizontal') || '横向进度条',
+                                minimal: i18n('pomodoroMiniWindowStyleMinimal') || '极简进度条',
+                            },
+                        },
+                        {
+                            key: 'pomodoroGlobalWindow',
+                            value: settings.pomodoroGlobalWindow,
+                            type: 'checkbox',
+                            title: i18n('pomodoroGlobalWindow'),
+                            description: i18n('pomodoroGlobalWindowDesc'),
+                        },
+                    ],
                 },
                 {
-                    key: 'pomodoroLongBreakDuration',
-                    value: settings.pomodoroLongBreakDuration,
-                    type: 'number',
-                    title: i18n('pomodoroLongBreakDuration'),
-                    description: i18n('pomodoroLongBreakDurationDesc'),
-                },
-                {
-                    key: 'pomodoroLongBreakInterval',
-                    value: settings.pomodoroLongBreakInterval,
-                    type: 'number',
-                    title: i18n('pomodoroLongBreakInterval'),
-                    description: i18n('pomodoroLongBreakIntervalDesc'),
-                },
-                {
-                    key: 'pomodoroAutoMode',
-                    value: settings.pomodoroAutoMode,
-                    type: 'checkbox',
-                    title: i18n('pomodoroAutoMode'),
-                    description: i18n('pomodoroAutoModeDesc'),
-                },
-                {
-                    key: 'pomodoroGlobalWindow',
-                    value: settings.pomodoroGlobalWindow,
-                    type: 'checkbox',
-                    title: i18n('pomodoroGlobalWindow'),
-                    description: i18n('pomodoroGlobalWindowDesc'),
-                },
-                {
-                    key: 'pomodoroSystemNotification',
-                    value: settings.pomodoroSystemNotification,
-                    type: 'checkbox',
-                    title: i18n('pomodoroSystemNotification'),
-                    description: i18n('pomodoroSystemNotificationDesc'),
-                },
-                {
-                    key: 'pomodoroEndPopupWindow',
-                    value: settings.pomodoroEndPopupWindow,
-                    type: 'checkbox',
-                    title: i18n('pomodoroEndPopupWindow'),
-                    description: i18n('pomodoroEndPopupWindowDesc'),
-                },
-                {
-                    key: 'pomodoroCompletionNotePopup',
-                    value: settings.pomodoroCompletionNotePopup,
-                    type: 'checkbox',
-                    title: i18n('pomodoroCompletionNotePopup') || '番茄钟完成后记录备注',
-                    description:
-                        i18n('pomodoroCompletionNotePopupDesc') ||
-                        '专注完成并保存记录后弹出备注窗口',
-                },
-                {
-                    key: 'pomodoroDirectStart',
-                    value: settings.pomodoroDirectStart,
-                    type: 'checkbox',
-                    title: i18n('pomodoroDirectStart') || '直接开始番茄钟',
-                    description:
-                        i18n('pomodoroDirectStartDesc') ||
-                        '启用后点击开始番茄钟会直接使用默认时长开始，不再弹出预设子菜单选择',
-                },
-                {
-                    key: 'pomodoroDockPosition',
-                    value: settings.pomodoroDockPosition,
-                    type: 'select',
-                    title: i18n('pomodoroDockPosition'),
-                    description: i18n('pomodoroDockPositionDesc'),
-                    options: {
-                        right: i18n('right'),
-                        left: i18n('left'),
-                        top: i18n('top'),
-                        bottom: i18n('bottom'),
-                    },
-                },
-                {
-                    key: 'pomodoroMiniWindowStyle',
-                    value: settings.pomodoroMiniWindowStyle || 'ring',
-                    type: 'select',
-                    title: i18n('pomodoroMiniWindowStyle') || 'Mini窗口样式',
-                    description:
-                        i18n('pomodoroMiniWindowStyleDesc') ||
-                        '设置番茄钟 mini 窗口的样式：圆环、横向进度条或极简进度条',
-                    options: {
-                        ring: i18n('pomodoroMiniWindowStyleRing') || '圆环',
-                        horizontal: i18n('pomodoroMiniWindowStyleHorizontal') || '横向进度条',
-                        minimal: i18n('pomodoroMiniWindowStyleMinimal') || '极简进度条',
-                    },
-                },
-                {
-                    key: 'dailyFocusGoal',
-                    value: settings.dailyFocusGoal,
-                    type: 'number',
-                    title: i18n('dailyFocusGoal'),
-                    description: i18n('dailyFocusGoalDesc'),
-                },
-                {
-                    key: 'workVolume',
-                    value: settings.workVolume ?? 0.5,
-                    type: 'slider',
-                    title: i18n('workVolume'),
-                    description: i18n('workVolumeDesc'),
-                    slider: {
-                        min: 0,
-                        max: 1,
-                        step: 0.1,
-                    },
-                },
-                {
-                    key: 'pomodoroWorkSound',
-                    value: settings.audioSelected?.pomodoroWorkSound || '',
-                    type: 'custom-audio',
-                    title: i18n('pomodoroWorkSound'),
-                    description: i18n('pomodoroWorkSoundDesc') || '',
-                },
-                {
-                    key: 'breakVolume',
-                    value: settings.breakVolume ?? 0.5,
-                    type: 'slider',
-                    title: i18n('breakVolume'),
-                    description: i18n('breakVolumeDesc'),
-                    slider: {
-                        min: 0,
-                        max: 1,
-                        step: 0.1,
-                    },
-                },
-                {
-                    key: 'pomodoroBreakSound',
-                    value: settings.audioSelected?.pomodoroBreakSound || '',
-                    type: 'custom-audio',
-                    title: i18n('pomodoroBreakSound'),
-                    description: i18n('pomodoroBreakSoundDesc') || '',
-                },
-                {
-                    key: 'longBreakVolume',
-                    value: settings.longBreakVolume ?? 0.5,
-                    type: 'slider',
-                    title: i18n('longBreakVolume'),
-                    description: i18n('longBreakVolumeDesc'),
-                    slider: {
-                        min: 0,
-                        max: 1,
-                        step: 0.1,
-                    },
-                },
-                {
-                    key: 'pomodoroLongBreakSound',
-                    value: settings.audioSelected?.pomodoroLongBreakSound || '',
-                    type: 'custom-audio',
-                    title: i18n('pomodoroLongBreakSound'),
-                    description: i18n('pomodoroLongBreakSoundDesc') || '',
-                },
-                {
-                    key: 'workEndVolume',
-                    value: settings.workEndVolume ?? 1,
-                    type: 'slider',
-                    title: i18n('workEndVolume'),
-                    description: i18n('workEndVolumeDesc'),
-                    slider: { min: 0, max: 1, step: 0.1 },
-                },
-                {
-                    key: 'pomodoroWorkEndSound',
-                    value: settings.audioSelected?.pomodoroWorkEndSound || '',
-                    type: 'custom-audio',
-                    title: i18n('pomodoroWorkEndSound'),
-                    description: i18n('pomodoroWorkEndSoundDesc') || '',
-                },
-                {
-                    key: 'breakEndVolume',
-                    value: settings.breakEndVolume ?? 1,
-                    type: 'slider',
-                    title: i18n('breakEndVolume'),
-                    description: i18n('breakEndVolumeDesc'),
-                    slider: { min: 0, max: 1, step: 0.1 },
-                },
-                {
-                    key: 'pomodoroBreakEndSound',
-                    value: settings.audioSelected?.pomodoroBreakEndSound || '',
-                    type: 'custom-audio',
-                    title: i18n('pomodoroBreakEndSound'),
-                    description: i18n('pomodoroBreakEndSoundDesc') || '',
+                    name: i18n('subGroupPomodoroAudio'),
+                    items: [
+                        {
+                            key: 'workVolume',
+                            value: settings.workVolume ?? 0.5,
+                            type: 'slider',
+                            title: i18n('workVolume'),
+                            description: i18n('workVolumeDesc'),
+                            slider: {
+                                min: 0,
+                                max: 1,
+                                step: 0.1,
+                            },
+                        },
+                        {
+                            key: 'pomodoroWorkSound',
+                            value: settings.audioSelected?.pomodoroWorkSound || '',
+                            type: 'custom-audio',
+                            title: i18n('pomodoroWorkSound'),
+                            description: i18n('pomodoroWorkSoundDesc') || '',
+                        },
+                        {
+                            key: 'breakVolume',
+                            value: settings.breakVolume ?? 0.5,
+                            type: 'slider',
+                            title: i18n('breakVolume'),
+                            description: i18n('breakVolumeDesc'),
+                            slider: {
+                                min: 0,
+                                max: 1,
+                                step: 0.1,
+                            },
+                        },
+                        {
+                            key: 'pomodoroBreakSound',
+                            value: settings.audioSelected?.pomodoroBreakSound || '',
+                            type: 'custom-audio',
+                            title: i18n('pomodoroBreakSound'),
+                            description: i18n('pomodoroBreakSoundDesc') || '',
+                        },
+                        {
+                            key: 'longBreakVolume',
+                            value: settings.longBreakVolume ?? 0.5,
+                            type: 'slider',
+                            title: i18n('longBreakVolume'),
+                            description: i18n('longBreakVolumeDesc'),
+                            slider: {
+                                min: 0,
+                                max: 1,
+                                step: 0.1,
+                            },
+                        },
+                        {
+                            key: 'pomodoroLongBreakSound',
+                            value: settings.audioSelected?.pomodoroLongBreakSound || '',
+                            type: 'custom-audio',
+                            title: i18n('pomodoroLongBreakSound'),
+                            description: i18n('pomodoroLongBreakSoundDesc') || '',
+                        },
+                        {
+                            key: 'workEndVolume',
+                            value: settings.workEndVolume ?? 1,
+                            type: 'slider',
+                            title: i18n('workEndVolume'),
+                            description: i18n('workEndVolumeDesc'),
+                            slider: { min: 0, max: 1, step: 0.1 },
+                        },
+                        {
+                            key: 'pomodoroWorkEndSound',
+                            value: settings.audioSelected?.pomodoroWorkEndSound || '',
+                            type: 'custom-audio',
+                            title: i18n('pomodoroWorkEndSound'),
+                            description: i18n('pomodoroWorkEndSoundDesc') || '',
+                        },
+                        {
+                            key: 'breakEndVolume',
+                            value: settings.breakEndVolume ?? 1,
+                            type: 'slider',
+                            title: i18n('breakEndVolume'),
+                            description: i18n('breakEndVolumeDesc'),
+                            slider: { min: 0, max: 1, step: 0.1 },
+                        },
+                        {
+                            key: 'pomodoroBreakEndSound',
+                            value: settings.audioSelected?.pomodoroBreakEndSound || '',
+                            type: 'custom-audio',
+                            title: i18n('pomodoroBreakEndSound'),
+                            description: i18n('pomodoroBreakEndSoundDesc') || '',
+                        },
+                    ],
                 },
             ],
         },
         {
             name: i18n('randomRestSettings'),
-            items: [
+            subGroups: [
                 {
-                    key: 'randomRestEnabled',
-                    value: settings.randomRestEnabled,
-                    type: 'checkbox',
-                    title: i18n('randomRestEnabled'),
-                    description: i18n('randomRestEnabledDesc'),
+                    name: i18n('subGroupRandomRestBasic'),
+                    items: [
+                        {
+                            key: 'randomRestEnabled',
+                            value: settings.randomRestEnabled,
+                            type: 'checkbox',
+                            title: i18n('randomRestEnabled'),
+                            description: i18n('randomRestEnabledDesc'),
+                        },
+                        {
+                            key: 'randomRestSystemNotification',
+                            value: settings.randomRestSystemNotification,
+                            type: 'checkbox',
+                            title: i18n('randomRestSystemNotification'),
+                            description: i18n('randomRestSystemNotificationDesc'),
+                        },
+                        {
+                            key: 'randomRestPopupWindow',
+                            value: settings.randomRestPopupWindow,
+                            type: 'checkbox',
+                            title: i18n('randomRestPopupWindow'),
+                            description: i18n('randomRestPopupWindowDesc'),
+                        },
+                        {
+                            key: 'randomRestMinInterval',
+                            value: settings.randomRestMinInterval,
+                            type: 'number',
+                            title: i18n('randomRestMinInterval'),
+                            description: i18n('randomRestMinIntervalDesc'),
+                        },
+                        {
+                            key: 'randomRestMaxInterval',
+                            value: settings.randomRestMaxInterval,
+                            type: 'number',
+                            title: i18n('randomRestMaxInterval'),
+                            description: i18n('randomRestMaxIntervalDesc'),
+                        },
+                        {
+                            key: 'randomRestBreakDuration',
+                            value: settings.randomRestBreakDuration,
+                            type: 'number',
+                            title: i18n('randomRestBreakDuration'),
+                            description: i18n('randomRestBreakDurationDesc'),
+                        },
+                    ],
                 },
                 {
-                    key: 'randomRestSystemNotification',
-                    value: settings.randomRestSystemNotification,
-                    type: 'checkbox',
-                    title: i18n('randomRestSystemNotification'),
-                    description: i18n('randomRestSystemNotificationDesc'),
-                },
-                {
-                    key: 'randomRestPopupWindow',
-                    value: settings.randomRestPopupWindow,
-                    type: 'checkbox',
-                    title: i18n('randomRestPopupWindow'),
-                    description: i18n('randomRestPopupWindowDesc'),
-                },
-                {
-                    key: 'randomRestMinInterval',
-                    value: settings.randomRestMinInterval,
-                    type: 'number',
-                    title: i18n('randomRestMinInterval'),
-                    description: i18n('randomRestMinIntervalDesc'),
-                },
-                {
-                    key: 'randomRestMaxInterval',
-                    value: settings.randomRestMaxInterval,
-                    type: 'number',
-                    title: i18n('randomRestMaxInterval'),
-                    description: i18n('randomRestMaxIntervalDesc'),
-                },
-                {
-                    key: 'randomRestBreakDuration',
-                    value: settings.randomRestBreakDuration,
-                    type: 'number',
-                    title: i18n('randomRestBreakDuration'),
-                    description: i18n('randomRestBreakDurationDesc'),
-                },
-                {
-                    key: 'randomRestVolume',
-                    value: settings.randomRestVolume ?? 1,
-                    type: 'slider',
-                    title: i18n('randomRestVolume'),
-                    description: i18n('randomRestVolumeDesc'),
-                    slider: { min: 0, max: 1, step: 0.1 },
-                },
-                {
-                    key: 'randomRestSounds',
-                    value: settings.audioFileLists?.randomRestSounds || [],
-                    type: 'custom-audio',
-                    title: i18n('randomRestSounds'),
-                    description: i18n('randomRestSoundsDesc') || '',
-                },
-                {
-                    key: 'randomRestEndVolume',
-                    value: settings.randomRestEndVolume ?? 1,
-                    type: 'slider',
-                    title: i18n('randomRestEndVolume'),
-                    description: i18n('randomRestEndVolumeDesc'),
-                    slider: { min: 0, max: 1, step: 0.1 },
-                },
-                {
-                    key: 'randomRestEndSound',
-                    value: settings.audioSelected?.randomRestEndSound || '',
-                    type: 'custom-audio',
-                    title: i18n('randomRestEndSound'),
-                    description: i18n('randomRestEndSoundDesc') || '',
+                    name: i18n('subGroupRandomRestAudio'),
+                    items: [
+                        {
+                            key: 'randomRestVolume',
+                            value: settings.randomRestVolume ?? 1,
+                            type: 'slider',
+                            title: i18n('randomRestVolume'),
+                            description: i18n('randomRestVolumeDesc'),
+                            slider: { min: 0, max: 1, step: 0.1 },
+                        },
+                        {
+                            key: 'randomRestSounds',
+                            value: settings.audioFileLists?.randomRestSounds || [],
+                            type: 'custom-audio',
+                            title: i18n('randomRestSounds'),
+                            description: i18n('randomRestSoundsDesc') || '',
+                        },
+                        {
+                            key: 'randomRestEndVolume',
+                            value: settings.randomRestEndVolume ?? 1,
+                            type: 'slider',
+                            title: i18n('randomRestEndVolume'),
+                            description: i18n('randomRestEndVolumeDesc'),
+                            slider: { min: 0, max: 1, step: 0.1 },
+                        },
+                        {
+                            key: 'randomRestEndSound',
+                            value: settings.audioSelected?.randomRestEndSound || '',
+                            type: 'custom-audio',
+                            title: i18n('randomRestEndSound'),
+                            description: i18n('randomRestEndSoundDesc') || '',
+                        },
+                    ],
                 },
             ],
         },
@@ -1400,393 +1524,419 @@
         },
         {
             name: '☁️' + i18n('calendarUpload'),
-            items: [
+            subGroups: [
                 {
-                    key: 'calendarSubscribeHint',
-                    value: '',
-                    type: 'hint',
-                    title: '❓' + i18n('helpDocument'),
-                    description: i18n('calendarSubscribeHintDesc'),
-                },
-                {
-                    key: 'icsSyncHint',
-                    value: '',
-                    type: 'hint',
-                    title: i18n('icsSyncTitle'),
-                    description: i18n('icsSyncDesc'),
-                },
-                {
-                    key: 'icsTaskFilter',
-                    value: settings.icsTaskFilter || 'all',
-                    type: 'select',
-                    title: i18n('icsTaskFilter'),
-                    description: i18n('icsTaskFilterDesc'),
-                    options: {
-                        all: i18n('allTasks'),
-                        completed: i18n('completedTasks'),
-                        uncompleted: i18n('uncompletedTasks'),
-                    },
-                },
-                {
-                    key: 'icsDateFilter',
-                    value: settings.icsDateFilter || 'thisYear',
-                    type: 'select',
-                    title: i18n('icsDateFilter'),
-                    description: i18n('icsDateFilterDesc'),
-                    options: {
-                        thisYear: i18n('icsDateFilterThisYear'),
-                        lastWeek: i18n('icsDateFilterLastWeek'),
-                        lastMonth: i18n('icsDateFilterLastMonth'),
-                        lastHalfYear: i18n('icsDateFilterLastHalfYear'),
-                        all: i18n('icsDateFilterAll'),
-                    },
-                },
-                {
-                    key: 'icsFileName',
-                    value: settings.icsFileName,
-                    type: 'textinput',
-                    title: i18n('icsFileName'),
-                    description: i18n('icsFileNameDesc'),
-                    placeholder: 'reminder-' + (window.Lute?.NewNodeID?.() || 'auto'),
-                },
-                {
-                    key: 'icsSyncMethod',
-                    value: settings.icsSyncMethod,
-                    type: 'select',
-                    title: i18n('icsSyncMethod'),
-                    description: i18n('icsSyncMethodDesc'),
-                    options: {
-                        siyuan: i18n('siyuanServer'),
-                        s3: i18n('s3Storage'),
-                        webdav: i18n('webdavServer'),
-                    },
-                },
-                {
-                    key: 'icsSyncEnabled',
-                    value: settings.icsSyncEnabled,
-                    type: 'checkbox',
-                    title: i18n('icsSyncEnabled'),
-                    description: i18n('icsSyncEnabledDesc'),
-                },
-                {
-                    key: 'icsSyncInterval',
-                    value: settings.icsSyncInterval,
-                    type: 'select',
-                    title: i18n('icsSyncInterval'),
-                    description: i18n('icsSyncIntervalDesc'),
-                    options: {
-                        manual: i18n('manual'),
-                        '15min': i18n('every15Minutes'),
-                        hourly: i18n('everyHour'),
-                        '4hour': i18n('every4Hours'),
-                        '12hour': i18n('every12Hours'),
-                        daily: i18n('everyDay'),
-                        dailyAt: i18n('dailyAt') || '每天指定时间',
-                    },
-                },
-                {
-                    key: 'icsDailySyncTime',
-                    value: settings.icsDailySyncTime || '08:00',
-                    type: 'textinput',
-                    title: i18n('icsDailySyncTime') || '每天同步时间',
-                    description:
-                        i18n('icsDailySyncTimeDesc') || '设置每天几点同步，格式 HH:MM（如 08:00）',
-                    placeholder: '08:00',
-                },
-                {
-                    key: 'icsSilentUpload',
-                    value: settings.icsSilentUpload,
-                    type: 'checkbox',
-                    title: i18n('icsSilentUpload'),
-                    description: i18n('icsSilentUploadDesc'),
-                },
-                {
-                    key: 'uploadIcsToCloud',
-                    value: '',
-                    type: 'button',
-                    title: i18n('uploadIcsToCloud'),
-                    description: i18n('uploadIcsToCloudDesc'),
-                    button: {
-                        label: i18n('generateAndUpload'),
-                        callback: async () => {
-                            await pushMsg(i18n('icsUploading'));
-                            await uploadIcsToCloud(plugin, settings);
-                            settings = settings;
-                            updateGroupItems();
+                    name: i18n('subGroupIcsHelpDocs'),
+                    items: [
+                        {
+                            key: 'calendarSubscribeHint',
+                            value: '',
+                            type: 'hint',
+                            title: '❓' + i18n('helpDocument'),
+                            description: i18n('calendarSubscribeHintDesc'),
                         },
-                    },
-                },
-
-                {
-                    key: 'icsCloudUrl',
-                    value: settings.icsCloudUrl,
-                    type: 'textinput',
-                    title: i18n('icsCloudUrl'),
-                    description: i18n('icsCloudUrlDesc'),
-                    disabled: false,
+                        {
+                            key: 'icsSyncHint',
+                            value: '',
+                            type: 'hint',
+                            title: i18n('icsSyncTitle'),
+                            description: i18n('icsSyncDesc'),
+                        },
+                    ],
                 },
                 {
-                    key: 'icsLastSyncAt',
-                    value: settings.icsLastSyncAt
-                        ? new Date(settings.icsLastSyncAt).toLocaleString()
-                        : '',
-                    type: 'textinput',
-                    title: i18n('icsLastSyncAt'),
-                    description: i18n('icsLastSyncAtDesc'),
-                    disabled: true,
-                },
-                // 思源服务器同步配置
-
-                // S3 同步配置
-                {
-                    key: 's3UseSiyuanConfig',
-                    value: settings.s3UseSiyuanConfig,
-                    type: 'checkbox',
-                    title: i18n('s3UseSiyuanConfig'),
-                    description: i18n('s3UseSiyuanConfigDesc'),
-                },
-                {
-                    key: 's3Bucket',
-                    value: settings.s3Bucket,
-                    type: 'textinput',
-                    title: 'S3 Bucket',
-                    description: i18n('s3BucketDesc'),
-                    placeholder: 'my-bucket',
-                },
-                {
-                    key: 's3Endpoint',
-                    value: settings.s3Endpoint,
-                    type: 'textinput',
-                    title: 'S3 Endpoint',
-                    description: i18n('s3EndpointDesc'),
-                    placeholder: 'oss-cn-shanghai.aliyuncs.com',
+                    name: i18n('subGroupIcsFilter'),
+                    items: [
+                        {
+                            key: 'icsTaskFilter',
+                            value: settings.icsTaskFilter || 'all',
+                            type: 'select',
+                            title: i18n('icsTaskFilter'),
+                            description: i18n('icsTaskFilterDesc'),
+                            options: {
+                                all: i18n('allTasks'),
+                                completed: i18n('completedTasks'),
+                                uncompleted: i18n('uncompletedTasks'),
+                            },
+                        },
+                        {
+                            key: 'icsDateFilter',
+                            value: settings.icsDateFilter || 'thisYear',
+                            type: 'select',
+                            title: i18n('icsDateFilter'),
+                            description: i18n('icsDateFilterDesc'),
+                            options: {
+                                thisYear: i18n('icsDateFilterThisYear'),
+                                lastWeek: i18n('icsDateFilterLastWeek'),
+                                lastMonth: i18n('icsDateFilterLastMonth'),
+                                lastHalfYear: i18n('icsDateFilterLastHalfYear'),
+                                all: i18n('icsDateFilterAll'),
+                            },
+                        },
+                    ],
                 },
                 {
-                    key: 's3Region',
-                    value: settings.s3Region,
-                    type: 'textinput',
-                    title: 'S3 Region',
-                    description: i18n('s3RegionDesc'),
-                    placeholder: 'auto',
-                },
-                {
-                    key: 's3AccessKeyId',
-                    value: settings.s3AccessKeyId,
-                    type: 'textinput',
-                    title: 'S3 Access Key ID',
-                    description: i18n('s3AccessKeyIdDesc'),
-                },
-                {
-                    key: 's3AccessKeySecret',
-                    value: settings.s3AccessKeySecret,
-                    type: 'textinput',
-                    title: 'S3 Access Key Secret',
-                    description: i18n('s3AccessKeySecretDesc'),
-                },
-                {
-                    key: 's3StoragePath',
-                    value: settings.s3StoragePath,
-                    type: 'textinput',
-                    title: i18n('s3StoragePath'),
-                    description: i18n('s3StoragePathDesc'),
-                    placeholder: '/calendar/',
-                },
-                {
-                    key: 's3ForcePathStyle',
-                    value: settings.s3ForcePathStyle,
-                    type: 'select',
-                    title: i18n('s3ForcePathStyle'),
-                    description: i18n('s3ForcePathStyleDesc'),
-                    options: {
-                        true: 'Path-style',
-                        false: 'Virtual hosted style',
-                    },
-                },
-                {
-                    key: 's3TlsVerify',
-                    value: settings.s3TlsVerify,
-                    type: 'select',
-                    title: i18n('s3TlsVerify'),
-                    description: i18n('s3TlsVerifyDesc'),
-                    options: {
-                        true: i18n('enableVerification'),
-                        false: i18n('disableVerification'),
-                    },
-                },
-                {
-                    key: 's3CustomDomain',
-                    value: settings.s3CustomDomain,
-                    type: 'textinput',
-                    title: i18n('s3CustomDomain'),
-                    description: i18n('s3CustomDomainDesc'),
-                    placeholder: 'cdn.example.com',
-                },
-                {
-                    key: 'webdavUrl',
-                    value: settings.webdavUrl,
-                    type: 'textinput',
-                    title: i18n('webdavUrl'),
-                    description: i18n('webdavUrlDesc'),
-                    placeholder: '',
-                },
-                {
-                    key: 'webdavUsername',
-                    value: settings.webdavUsername,
-                    type: 'textinput',
-                    title: i18n('webdavUsername'),
-                    description: i18n('webdavUsernameDesc'),
-                },
-                {
-                    key: 'webdavPassword',
-                    value: settings.webdavPassword,
-                    type: 'password',
-                    title: i18n('webdavPassword'),
-                    description: i18n('webdavPasswordDesc'),
+                    name: i18n('subGroupIcsGenerateUpload'),
+                    items: [
+                        {
+                            key: 'icsFileName',
+                            value: settings.icsFileName,
+                            type: 'textinput',
+                            title: i18n('icsFileName'),
+                            description: i18n('icsFileNameDesc'),
+                            placeholder: 'reminder-' + (window.Lute?.NewNodeID?.() || 'auto'),
+                        },
+                        {
+                            key: 'icsSyncMethod',
+                            value: settings.icsSyncMethod,
+                            type: 'select',
+                            title: i18n('icsSyncMethod'),
+                            description: i18n('icsSyncMethodDesc'),
+                            options: {
+                                siyuan: i18n('siyuanServer'),
+                                s3: i18n('s3Storage'),
+                                webdav: i18n('webdavServer'),
+                            },
+                        },
+                        {
+                            key: 'icsSyncEnabled',
+                            value: settings.icsSyncEnabled,
+                            type: 'checkbox',
+                            title: i18n('icsSyncEnabled'),
+                            description: i18n('icsSyncEnabledDesc'),
+                        },
+                        {
+                            key: 'icsSyncInterval',
+                            value: settings.icsSyncInterval,
+                            type: 'select',
+                            title: i18n('icsSyncInterval'),
+                            description: i18n('icsSyncIntervalDesc'),
+                            options: {
+                                manual: i18n('manual'),
+                                '15min': i18n('every15Minutes'),
+                                hourly: i18n('everyHour'),
+                                '4hour': i18n('every4Hours'),
+                                '12hour': i18n('every12Hours'),
+                                daily: i18n('everyDay'),
+                                dailyAt: i18n('dailyAt') || '每天指定时间',
+                            },
+                        },
+                        {
+                            key: 'icsDailySyncTime',
+                            value: settings.icsDailySyncTime || '08:00',
+                            type: 'textinput',
+                            title: i18n('icsDailySyncTime') || '每天同步时间',
+                            description:
+                                i18n('icsDailySyncTimeDesc') || '设置每天几点同步，格式 HH:MM（如 08:00）',
+                            placeholder: '08:00',
+                        },
+                        {
+                            key: 'icsSilentUpload',
+                            value: settings.icsSilentUpload,
+                            type: 'checkbox',
+                            title: i18n('icsSilentUpload'),
+                            description: i18n('icsSilentUploadDesc'),
+                        },
+                        {
+                            key: 'uploadIcsToCloud',
+                            value: '',
+                            type: 'button',
+                            title: i18n('uploadIcsToCloud'),
+                            description: i18n('uploadIcsToCloudDesc'),
+                            button: {
+                                label: i18n('generateAndUpload'),
+                                callback: async () => {
+                                    await pushMsg(i18n('icsUploading'));
+                                    await uploadIcsToCloud(plugin, settings);
+                                    settings = settings;
+                                    updateGroupItems();
+                                },
+                            },
+                        },
+                        {
+                            key: 'icsCloudUrl',
+                            value: settings.icsCloudUrl,
+                            type: 'textinput',
+                            title: i18n('icsCloudUrl'),
+                            description: i18n('icsCloudUrlDesc'),
+                            disabled: false,
+                        },
+                        {
+                            key: 'icsLastSyncAt',
+                            value: settings.icsLastSyncAt
+                                ? new Date(settings.icsLastSyncAt).toLocaleString()
+                                : '',
+                            type: 'textinput',
+                            title: i18n('icsLastSyncAt'),
+                            description: i18n('icsLastSyncAtDesc'),
+                            disabled: true,
+                        },
+                        {
+                            key: 's3UseSiyuanConfig',
+                            value: settings.s3UseSiyuanConfig,
+                            type: 'checkbox',
+                            title: i18n('s3UseSiyuanConfig'),
+                            description: i18n('s3UseSiyuanConfigDesc'),
+                        },
+                        {
+                            key: 's3Bucket',
+                            value: settings.s3Bucket,
+                            type: 'textinput',
+                            title: 'S3 Bucket',
+                            description: i18n('s3BucketDesc'),
+                            placeholder: 'my-bucket',
+                        },
+                        {
+                            key: 's3Endpoint',
+                            value: settings.s3Endpoint,
+                            type: 'textinput',
+                            title: 'S3 Endpoint',
+                            description: i18n('s3EndpointDesc'),
+                            placeholder: 'oss-cn-shanghai.aliyuncs.com',
+                        },
+                        {
+                            key: 's3Region',
+                            value: settings.s3Region,
+                            type: 'textinput',
+                            title: 'S3 Region',
+                            description: i18n('s3RegionDesc'),
+                            placeholder: 'auto',
+                        },
+                        {
+                            key: 's3AccessKeyId',
+                            value: settings.s3AccessKeyId,
+                            type: 'textinput',
+                            title: 'S3 Access Key ID',
+                            description: i18n('s3AccessKeyIdDesc'),
+                        },
+                        {
+                            key: 's3AccessKeySecret',
+                            value: settings.s3AccessKeySecret,
+                            type: 'textinput',
+                            title: 'S3 Access Key Secret',
+                            description: i18n('s3AccessKeySecretDesc'),
+                        },
+                        {
+                            key: 's3StoragePath',
+                            value: settings.s3StoragePath,
+                            type: 'textinput',
+                            title: i18n('s3StoragePath'),
+                            description: i18n('s3StoragePathDesc'),
+                            placeholder: '/calendar/',
+                        },
+                        {
+                            key: 's3ForcePathStyle',
+                            value: settings.s3ForcePathStyle,
+                            type: 'select',
+                            title: i18n('s3ForcePathStyle'),
+                            description: i18n('s3ForcePathStyleDesc'),
+                            options: {
+                                true: 'Path-style',
+                                false: 'Virtual hosted style',
+                            },
+                        },
+                        {
+                            key: 's3TlsVerify',
+                            value: settings.s3TlsVerify,
+                            type: 'select',
+                            title: i18n('s3TlsVerify'),
+                            description: i18n('s3TlsVerifyDesc'),
+                            options: {
+                                true: i18n('enableVerification'),
+                                false: i18n('disableVerification'),
+                            },
+                        },
+                        {
+                            key: 's3CustomDomain',
+                            value: settings.s3CustomDomain,
+                            type: 'textinput',
+                            title: i18n('s3CustomDomain'),
+                            description: i18n('s3CustomDomainDesc'),
+                            placeholder: 'cdn.example.com',
+                        },
+                        {
+                            key: 'webdavUrl',
+                            value: settings.webdavUrl,
+                            type: 'textinput',
+                            title: i18n('webdavUrl'),
+                            description: i18n('webdavUrlDesc'),
+                            placeholder: '',
+                        },
+                        {
+                            key: 'webdavUsername',
+                            value: settings.webdavUsername,
+                            type: 'textinput',
+                            title: i18n('webdavUsername'),
+                            description: i18n('webdavUsernameDesc'),
+                        },
+                        {
+                            key: 'webdavPassword',
+                            value: settings.webdavPassword,
+                            type: 'password',
+                            title: i18n('webdavPassword'),
+                            description: i18n('webdavPasswordDesc'),
+                        },
+                    ],
                 },
             ],
         },
         {
             name: '📁' + i18n('dataStorageLocation'),
-            items: [
+            subGroups: [
                 {
-                    key: 'dataStorageInfo',
-                    value: 'data/storage/petal/siyuan-plugin-task-note-management',
-                    type: 'hint',
-                    title: i18n('dataStorageLocationTitle'),
-                    description: i18n('dataStorageLocationDesc'),
-                },
-                {
-                    key: 'openDataFolder',
-                    value: '',
-                    type: 'button',
-                    title: i18n('openDataFolder'),
-                    description: i18n('openDataFolderDesc'),
-                    button: {
-                        label: i18n('openFolder'),
-                        callback: async () => {
-                            const path =
-                                window.siyuan.config.system.dataDir +
-                                '/storage/petal/siyuan-plugin-task-note-management';
-                            await useShell('openPath', path);
+                    name: i18n('subGroupDataInfo'),
+                    items: [
+                        {
+                            key: 'dataStorageInfo',
+                            value: 'data/storage/petal/siyuan-plugin-task-note-management',
+                            type: 'hint',
+                            title: i18n('dataStorageLocationTitle'),
+                            description: i18n('dataStorageLocationDesc'),
                         },
-                    },
-                },
-                {
-                    key: 'restoreDefaultSettings',
-                    value: '',
-                    type: 'button',
-                    title: i18n('restoreDefaultSettings') || '恢复默认设置',
-                    description:
-                        i18n('restoreDefaultSettingsDesc') ||
-                        '将插件设置恢复为默认值，不会删除任务、项目、习惯等数据。',
-                    button: {
-                        label: i18n('restoreDefaultValue') || '恢复默认值',
-                        callback: restoreDefaultSettings,
-                    },
-                },
-                {
-                    key: 'deletePluginData',
-                    value: '',
-                    type: 'button',
-                    title: i18n('deletePluginData'),
-                    description: i18n('deletePluginDataDesc'),
-                    button: {
-                        label: i18n('deleteData'),
-                        callback: async () => {
-                            await confirm(
-                                i18n('deletePluginData') || '删除插件数据',
-                                i18n('confirmDeletePluginData') ||
-                                    '确定要删除所有插件数据吗？此操作不可逆！',
-                                async () => {
-                                    const dataDir =
-                                        '/data/storage/petal/siyuan-plugin-task-note-management/';
-                                    const files = [
-                                        SETTINGS_FILE,
-                                        PROJECT_DATA_FILE,
-                                        CATEGORIES_DATA_FILE,
-                                        REMINDER_DATA_FILE,
-                                        HABIT_DATA_FILE,
-                                        NOTIFY_DATA_FILE,
-                                        POMODORO_RECORD_DATA_FILE,
-                                        HABIT_GROUP_DATA_FILE,
-                                        STATUSES_DATA_FILE,
-                                    ];
-                                    let successCount = 0;
-                                    for (const file of files) {
-                                        try {
-                                            await removeFile(dataDir + file);
-                                            successCount++;
-                                        } catch (e) {
-                                            console.error('删除文件失败:', file, e);
-                                        }
-                                    }
-                                    pushErrMsg(
-                                        i18n('dataDeletedCount').replace(
-                                            '${count}',
-                                            String(successCount)
-                                        )
-                                    );
-                                    window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                        {
+                            key: 'openDataFolder',
+                            value: '',
+                            type: 'button',
+                            title: i18n('openDataFolder'),
+                            description: i18n('openDataFolderDesc'),
+                            button: {
+                                label: i18n('openFolder'),
+                                callback: async () => {
+                                    const path =
+                                        window.siyuan.config.system.dataDir +
+                                        '/storage/petal/siyuan-plugin-task-note-management';
+                                    await useShell('openPath', path);
                                 },
-                                async () => {}
-                            );
+                            },
                         },
-                    },
+                        {
+                            key: 'restoreDefaultSettings',
+                            value: '',
+                            type: 'button',
+                            title: i18n('restoreDefaultSettings') || '恢复默认设置',
+                            description:
+                                i18n('restoreDefaultSettingsDesc') ||
+                                '将插件设置恢复为默认值，不会删除任务、项目、习惯等数据。',
+                            button: {
+                                label: i18n('restoreDefaultValue') || '恢复默认值',
+                                callback: restoreDefaultSettings,
+                            },
+                        },
+                        {
+                            key: 'deletePluginData',
+                            value: '',
+                            type: 'button',
+                            title: i18n('deletePluginData'),
+                            description: i18n('deletePluginDataDesc'),
+                            button: {
+                                label: i18n('deleteData'),
+                                callback: async () => {
+                                    await confirm(
+                                        i18n('deletePluginData') || '删除插件数据',
+                                        i18n('confirmDeletePluginData') ||
+                                            '确定要删除所有插件数据吗？此操作不可逆！',
+                                        async () => {
+                                            const dataDir =
+                                                '/data/storage/petal/siyuan-plugin-task-note-management/';
+                                            const files = [
+                                                SETTINGS_FILE,
+                                                PROJECT_DATA_FILE,
+                                                CATEGORIES_DATA_FILE,
+                                                REMINDER_DATA_FILE,
+                                                HABIT_DATA_FILE,
+                                                NOTIFY_DATA_FILE,
+                                                POMODORO_RECORD_DATA_FILE,
+                                                HABIT_GROUP_DATA_FILE,
+                                                STATUSES_DATA_FILE,
+                                            ];
+                                            let successCount = 0;
+                                            for (const file of files) {
+                                                try {
+                                                    await removeFile(dataDir + file);
+                                                    successCount++;
+                                                } catch (e) {
+                                                    console.error('删除文件失败:', file, e);
+                                                }
+                                            }
+                                            pushErrMsg(
+                                                i18n('dataDeletedCount').replace(
+                                                    '${count}',
+                                                    String(successCount)
+                                                )
+                                            );
+                                            window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                                        },
+                                        async () => {}
+                                    );
+                                },
+                            },
+                        },
+                    ],
                 },
             ],
         },
         {
             name: '⬆️' + i18n('exportSettings'),
-            items: [
+            subGroups: [
                 {
-                    key: 'exportIcs',
-                    value: '',
-                    type: 'button',
-                    title: i18n('exportIcs'),
-                    description: i18n('exportIcsDesc'),
-                    button: {
-                        label: i18n('generateIcs'),
-                        callback: async () => {
-                            await exportIcsFile(plugin, true, false, settings.icsTaskFilter as any);
+                    name: i18n('subGroupExportIcs'),
+                    items: [
+                        {
+                            key: 'exportIcs',
+                            value: '',
+                            type: 'button',
+                            title: i18n('exportIcs'),
+                            description: i18n('exportIcsDesc'),
+                            button: {
+                                label: i18n('generateIcs'),
+                                callback: async () => {
+                                    await exportIcsFile(plugin, true, false, settings.icsTaskFilter as any);
+                                },
+                            },
                         },
-                    },
+                    ],
                 },
             ],
         },
         {
             name: '⬇️' + i18n('importSettings'),
-            items: [
+            subGroups: [
                 {
-                    key: 'importIcs',
-                    value: '',
-                    type: 'button',
-                    title: i18n('importIcs'),
-                    description: i18n('importIcsDesc'),
-                    button: {
-                        label: i18n('selectFileToImport'),
-                        callback: async () => {
-                            // 创建文件输入元素
-                            const input = document.createElement('input');
-                            input.type = 'file';
-                            input.accept = '.ics';
-                            input.onchange = async (e: Event) => {
-                                const target = e.target as HTMLInputElement;
-                                const file = target.files?.[0];
-                                if (!file) return;
+                    name: i18n('subGroupImportIcs'),
+                    items: [
+                        {
+                            key: 'importIcs',
+                            value: '',
+                            type: 'button',
+                            title: i18n('importIcs'),
+                            description: i18n('importIcsDesc'),
+                            button: {
+                                label: i18n('selectFileToImport'),
+                                callback: async () => {
+                                    // 创建文件输入元素
+                                    const input = document.createElement('input');
+                                    input.type = 'file';
+                                    input.accept = '.ics';
+                                    input.onchange = async (e: Event) => {
+                                        const target = e.target as HTMLInputElement;
+                                        const file = target.files?.[0];
+                                        if (!file) return;
 
-                                try {
-                                    const content = await file.text();
+                                        try {
+                                            const content = await file.text();
 
-                                    // 显示批量设置对话框
-                                    showImportDialog(content);
-                                } catch (error) {
-                                    console.error('读取文件失败:', error);
-                                    await pushErrMsg(i18n('readFileFailed'));
-                                }
-                            };
-                            input.click();
+                                            // 显示批量设置对话框
+                                            showImportDialog(content);
+                                        } catch (error) {
+                                            console.error('读取文件失败:', error);
+                                            await pushErrMsg(i18n('readFileFailed'));
+                                        }
+                                    };
+                                    input.click();
+                                },
+                            },
                         },
-                    },
+                    ],
                 },
             ],
         },
@@ -1796,20 +1946,25 @@
         },
         {
             name: '❤️' + i18n('donate'),
-            items: [
+            subGroups: [
                 {
-                    key: 'donateInfo',
-                    value: '',
-                    type: 'hint',
-                    title: i18n('donateTitle'),
-                    description: `
-                        <div style="margin-top:12px;">
-                            <img src="plugins/siyuan-plugin-task-note-management/assets/donate.png" alt="donate" style="width:260px; height:auto; border:1px solid var(--b3-border-color);"/>
+                    name: i18n('subGroupDonateInfo'),
+                    items: [
+                        {
+                            key: 'donateInfo',
+                            value: '',
+                            type: 'hint',
+                            title: i18n('donateTitle'),
+                            description: `
+                                <div style="margin-top:12px;">
+                                    <img src="plugins/siyuan-plugin-task-note-management/assets/donate.png" alt="donate" style="width:260px; height:auto; border:1px solid var(--b3-border-color);"/>
 
-                            <p style="margin-top:12px;">Non-Chinese users can transfer money via Wise, Western Union, etc.</p>
-                            <img src="plugins/siyuan-plugin-task-note-management/assets/Alipay.jpg"alt="donate" style="width:260px; height:auto; border:1px solid var(--b3-border-color);"/>
-                        </div>
-                    `,
+                                    <p style="margin-top:12px;">Non-Chinese users can transfer money via Wise, Western Union, etc.</p>
+                                    <img src="plugins/siyuan-plugin-task-note-management/assets/Alipay.jpg"alt="donate" style="width:260px; height:auto; border:1px solid var(--b3-border-color);"/>
+                                </div>
+                            `,
+                        },
+                    ],
                 },
             ],
         },
@@ -2332,10 +2487,12 @@
             updatedGroup.items = group.items.map(filterItem);
         }
         if (group.subGroups) {
-            updatedGroup.subGroups = group.subGroups.map(sub => ({
-                ...sub,
-                items: sub.items.map(filterItem),
-            }));
+            updatedGroup.subGroups = group.subGroups
+                .map(sub => ({
+                    ...sub,
+                    items: sub.items.map(filterItem),
+                }))
+                .filter(sub => sub.items.some(item => !item.hidden));
         }
         return updatedGroup;
     });
