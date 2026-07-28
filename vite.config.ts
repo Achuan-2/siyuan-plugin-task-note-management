@@ -15,14 +15,42 @@ const isDev = env.NODE_ENV === 'development';
 
 const outputDir = isDev ? "dev" : "dist";
 
+// 使用 vendor/fullcalendar（fork 自 fullcalendar-workspace v6.1.21，新增 timegrid hiddenTimeRanges 原生折叠支持）的源码
+const fcPkg = (p: string, f: string) => resolve(__dirname, `vendor/fullcalendar/standard/packages/${p}/src/${f}`);
+
 console.log("isDev=>", isDev);
 console.log("isSrcmap=>", isSrcmap);
 console.log("outputDir=>", outputDir);
 
 export default defineConfig({
     resolve: {
-        alias: {
-            "@": resolve(__dirname, "src"),
+        alias: [
+            // fullcalendar 子路径需先于包名匹配
+            { find: /^@fullcalendar\/core\/internal$/, replacement: fcPkg("core", "internal.ts") },
+            { find: /^@fullcalendar\/core\/preact$/, replacement: fcPkg("core", "preact.ts") },
+            { find: /^@fullcalendar\/daygrid\/internal$/, replacement: fcPkg("daygrid", "internal.ts") },
+            { find: /^@fullcalendar\/core$/, replacement: fcPkg("core", "index.ts") },
+            { find: /^@fullcalendar\/daygrid$/, replacement: fcPkg("daygrid", "index.ts") },
+            { find: /^@fullcalendar\/timegrid$/, replacement: fcPkg("timegrid", "index.ts") },
+            { find: /^@fullcalendar\/interaction$/, replacement: fcPkg("interaction", "index.ts") },
+            { find: /^@fullcalendar\/list$/, replacement: fcPkg("list", "index.ts") },
+            { find: /^@fullcalendar\/multimonth$/, replacement: fcPkg("multimonth", "index.ts") },
+            { find: "@", replacement: resolve(__dirname, "src") },
+        ]
+    },
+
+    // fullcalendar 源码为 classic JSX（显式 import createElement/Fragment）
+    esbuild: {
+        jsxFactory: "createElement",
+        jsxFragment: "Fragment",
+    },
+
+    css: {
+        preprocessorOptions: {
+            scss: {
+                // fullcalendar 源码使用 @import，忽略其弃用警告
+                silenceDeprecations: ["import", "global-builtin", "color-functions", "mixed-decls"],
+            }
         }
     },
 

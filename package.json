@@ -34,6 +34,7 @@
     "glob": "^10.0.0",
     "js-yaml": "^4.1.0",
     "minimist": "^1.2.8",
+    "preact": "~10.12.1",
     "rollup-plugin-livereload": "^2.0.5",
     "sass": "^1.89.2",
     "sass-loader": "^16.0.5",

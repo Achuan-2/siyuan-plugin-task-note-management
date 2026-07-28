@@ -1,0 +1,4 @@
+[submodule "vendor/fullcalendar"]
+	path = vendor/fullcalendar
+	url = https://github.com/Achuan-2/fullcalendar-workspace.git
+	branch = timegrid-hidden-ranges

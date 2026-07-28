@@ -762,6 +762,18 @@
         transform: scale(1.2) !important;
         filter: brightness(1.15) !important;
     }
+
+    /* 原生折叠条（fork 版 FullCalendar 渲染的隐藏时段提示条） */
+    .fc-timegrid-hidden-bar {
+        background-color: var(--b3-theme-surface-lighter);
+        color: var(--b3-theme-on-surface-light);
+        transition: background-color 0.15s;
+    }
+
+    .fc-timegrid-hidden-bar:hover {
+        background-color: var(--b3-list-hover);
+        opacity: 1;
+    }
 }
 
 .TN-reminder-calendar-view--tab {

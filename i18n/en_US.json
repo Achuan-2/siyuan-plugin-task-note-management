@@ -2363,6 +2363,7 @@
     "calendarCollapseInactiveMsg": "${start} - ${end} expanded, click to collapse",
     "dragToAdjustCollapseRange": "Drag to adjust hidden time range",
     "clickToCollapseThisPeriod": "Click to collapse this period",
+    "clickToExpandThisPeriod": "Click to expand this period",
     "calendarCollapseRangeUpdated": "Collapse range updated to 00:00 - ${time}",
     "refreshFailed": "Failed to refresh",
     "invalidDate": "Invalid date",

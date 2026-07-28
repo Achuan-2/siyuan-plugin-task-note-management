@@ -2363,6 +2363,7 @@
     "calendarCollapseInactiveMsg": "${start} - ${end} 时段已展开，点击折叠",
     "dragToAdjustCollapseRange": "拖拽调整隐藏时间段",
     "clickToCollapseThisPeriod": "点击折叠该时段",
+    "clickToExpandThisPeriod": "点击展开该时段",
     "calendarCollapseRangeUpdated": "折叠时间范围已更新为 00:00 - ${time}",
     "refreshFailed": "刷新失败",
     "invalidDate": "无效的日期",
