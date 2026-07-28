@@ -4322,7 +4322,6 @@ export class CalendarView {
         const todayStr = getLogicalDateString();
         const tomorrowStr = getRelativeDateString(1);
         const dayAfterStr = getRelativeDateString(2);
-        const nextWeekStr = getRelativeDateString(7);
 
         const props = calendarEvent.extendedProps;
         const startDateStr = props.date || props.originalDate;
@@ -4336,6 +4335,8 @@ export class CalendarView {
             const parsedInstance = props.isRepeated ? parseReminderInstanceId(calendarEvent.id) : null;
             return parsedInstance?.instanceDate || startDateStr;
         };
+
+        const cleanDateStr = (str?: string) => str ? str.split(' ')[0].split('T')[0] : undefined;
 
         const applyStartDate = async (newDate: string | null) => {
             try {
@@ -4365,12 +4366,16 @@ export class CalendarView {
             }
         };
 
-        const createDateTargetSubmenu = (applyDate: (newDate: string) => Promise<void>) => ([
-            { iconHTML: calendarIcon, label: i18n("moveToToday") || "移至今天", click: () => applyDate(todayStr) },
-            { iconHTML: calendarIcon, label: i18n("moveToTomorrow") || "移至明天", click: () => applyDate(tomorrowStr) },
-            { iconHTML: calendarIcon, label: i18n("moveToDayAfterTomorrow") || "移至后天", click: () => applyDate(dayAfterStr) },
-            { iconHTML: calendarIcon, label: i18n("moveToSevenDaysLater") || "移至7天后", click: () => applyDate(nextWeekStr) }
-        ]);
+        const createDateTargetSubmenu = (applyDate: (newDate: string) => Promise<void>, baseDateStr?: string) => {
+            const targetBaseDate = cleanDateStr(baseDateStr || startDateStr);
+            const nextWeekTargetStr = targetBaseDate ? addDaysToDate(targetBaseDate, 7) : getRelativeDateString(7);
+            return [
+                { iconHTML: calendarIcon, label: i18n("moveToToday") || "移至今天", click: () => applyDate(todayStr) },
+                { iconHTML: calendarIcon, label: i18n("moveToTomorrow") || "移至明天", click: () => applyDate(tomorrowStr) },
+                { iconHTML: calendarIcon, label: i18n("moveToDayAfterTomorrow") || "移至后天", click: () => applyDate(dayAfterStr) },
+                { iconHTML: calendarIcon, label: i18n("moveToSevenDaysLater") || "移至7天后", click: () => applyDate(nextWeekTargetStr) }
+            ];
+        };
 
         const editDate = () => {
             const isInstanceEdit = props.isRepeated && onlyThisInstance;
@@ -4411,16 +4416,18 @@ export class CalendarView {
             items.push({
                 iconHTML: calendarIcon,
                 label: i18n("adjustStartDate") || "调整开始日期",
-                submenu: createDateTargetSubmenu(applyStartDate)
+                submenu: createDateTargetSubmenu(applyStartDate, startDateStr)
             });
             items.push({
                 iconHTML: calendarIcon,
                 label: i18n("adjustEndDate") || "调整结束日期",
-                submenu: createDateTargetSubmenu(applyEndDate)
+                submenu: createDateTargetSubmenu(applyEndDate, endDateStr)
             });
             items.push({ iconHTML: removeIcon, label: i18n("clearDate") || "清除日期", click: () => applyStartDate(null) });
             items.push({ iconHTML: editIcon, label: i18n("editDate") || "编辑日期", click: editDate });
         } else {
+            const taskBaseDate = cleanDateStr(startDateStr);
+            const nextWeekStr = taskBaseDate ? addDaysToDate(taskBaseDate, 7) : getRelativeDateString(7);
             items.push({ iconHTML: calendarIcon, label: i18n("moveToToday") || "移至今天", click: () => applyStartDate(todayStr) });
             items.push({ iconHTML: calendarIcon, label: i18n("moveToTomorrow") || "移至明天", click: () => applyStartDate(tomorrowStr) });
             items.push({ iconHTML: calendarIcon, label: i18n("moveToDayAfterTomorrow") || "移至后天", click: () => applyStartDate(dayAfterStr) });
