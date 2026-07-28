@@ -5886,8 +5886,20 @@ export class ReminderPanel {
                 if (dragEle) {
                     const realBlock = dragEle.closest('.protyle-wysiwyg [data-node-id]:not(.protyle-attr)') ||
                                       dragEle.closest('[data-node-id]:not(.protyle-attr)');
-                    const bid = realBlock?.getAttribute('data-node-id') || dragEle.getAttribute('data-node-id') || (dragEle as any).dataset?.nodeId || (dragEle as any).dataset?.id;
-                    if (bid) {
+                    let bid = realBlock?.getAttribute('data-node-id') || dragEle.getAttribute('data-node-id') || (dragEle as any).dataset?.nodeId;
+                    if (!bid) {
+                        const rawId = (dragEle as any).dataset?.id;
+                        if (rawId && !this.isUuid(rawId)) {
+                            bid = rawId;
+                        }
+                    }
+                    if (!bid) {
+                        const tabInfo = this.resolveTabInfo(dragEle, e);
+                        if (tabInfo.blockId || tabInfo.docId) {
+                            bid = tabInfo.blockId || tabInfo.docId;
+                        }
+                    }
+                    if (bid && !this.isUuid(bid)) {
                         blockIds = [bid];
                     }
                 }
@@ -5943,23 +5955,35 @@ export class ReminderPanel {
                                 const extractId = (item: any) => {
                                     if (item.children && item.children.blockId) return item.children.blockId;
                                     if (item.children && item.children.rootId) return item.children.rootId;
+                                    if (item.children && item.children.docId) return item.children.docId;
                                     if (item.blockId) return item.blockId;
                                     if (item.rootId) return item.rootId;
-                                    return item.id;
+                                    if (item.docId) return item.docId;
+                                    if (item.root_id) return item.root_id;
+                                    if (item.head && item.head.rootId) return item.head.rootId;
+                                    if (item.data && item.data.rootId) return item.data.rootId;
+                                    if (item.data && item.data.blockId) return item.data.blockId;
+                                    if (item.id && !this.isUuid(item.id)) return item.id;
+                                    return null;
                                 };
 
                                 if (Array.isArray(parsed)) {
-                                    blockIds = parsed.map(extractId).filter(id => id);
+                                    blockIds = parsed.map(extractId).filter(id => id && !this.isUuid(id));
                                 } else if (parsed) {
                                     const bid = extractId(parsed);
-                                    if (bid) blockIds = [bid];
+                                    if (bid && !this.isUuid(bid)) blockIds = [bid];
                                 }
 
-                                if (blockIds.length === 0 && typeof parsed === 'string') {
-                                    blockIds = [parsed];
+                                if (blockIds.length === 0 && parsed) {
+                                    const tabItem = Array.isArray(parsed) ? parsed[0] : parsed;
+                                    const tabInfo = this.resolveTabInfo(tabItem, e);
+                                    const resId = tabInfo.blockId || tabInfo.docId;
+                                    if (resId && !this.isUuid(resId)) {
+                                        blockIds = [resId];
+                                    }
                                 }
                             } catch (e) {
-                                blockIds = [data];
+                                // ignore
                             }
                         }
                     }
@@ -5976,12 +6000,18 @@ export class ReminderPanel {
 
                     for (const bid of blockIds) {
                         const { title: optTitle, docId: optDocId } = this.getBlockInfoSync(bid, e);
+                        let realBid = bid;
+                        if (this.isUuid(bid)) {
+                            if (optDocId && !this.isUuid(optDocId)) {
+                                realBid = optDocId;
+                            }
+                        }
                         const optReminderId = window.Lute?.NewNodeID?.() || `reminder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
                         const optReminder: any = {
                             id: optReminderId,
                             title: (optTitle || i18n('unnamedNote') || '未命名任务').trim(),
-                            blockId: bid,
-                            docId: optDocId || null,
+                            blockId: realBid,
+                            docId: (optDocId && !this.isUuid(optDocId)) ? optDocId : (!this.isUuid(realBid) ? realBid : null),
                             date: defaultDate,
                             time: '',
                             kanbanStatus: 'doing',
@@ -6087,9 +6117,112 @@ export class ReminderPanel {
         this.lastDragClientY = null;
     }
 
+    private isUuid(id: string | null | undefined): boolean {
+        if (!id || typeof id !== 'string') return false;
+        return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    }
+
+    private resolveTabInfo(tabIdOrEl: any, dropEvent?: DragEvent): { blockId: string | null, docId: string | null, title: string | null } {
+        let tabId: string | null = typeof tabIdOrEl === 'string' ? tabIdOrEl : null;
+        let tabEl: HTMLElement | null = (tabIdOrEl && typeof tabIdOrEl === 'object' && tabIdOrEl.nodeType === 1) ? (tabIdOrEl as HTMLElement) : null;
+        let blockId: string | null = null;
+        let docId: string | null = null;
+        let title: string | null = null;
+
+        if (tabEl) {
+            tabId = tabEl.getAttribute('data-id') || tabEl.dataset?.id || null;
+            const initDataStr = tabEl.getAttribute('data-initdata');
+            if (initDataStr) {
+                try {
+                    const initData = JSON.parse(initDataStr);
+                    blockId = initData.children?.blockId || initData.blockId || initData.data?.blockId || null;
+                    docId = initData.children?.rootId || initData.rootId || initData.docId || initData.root_id || initData.data?.rootId || initData.data?.docId || null;
+                    title = initData.title || initData.name || null;
+                } catch (e) {
+                    // ignore
+                }
+            }
+            if (!title) {
+                const textEl = tabEl.querySelector('.item__text, .b3-list-item__text') || tabEl;
+                title = (textEl.textContent || textEl.innerText || '').replace(/\s+/g, ' ').trim() || null;
+            }
+        }
+
+        // 从 dropEvent.dataTransfer 尝试提取
+        if ((!blockId || !docId) && dropEvent && dropEvent.dataTransfer) {
+            const dt = dropEvent.dataTransfer;
+            const rawTab = dt.getData(Constants.SIYUAN_DROP_TAB) || dt.getData('application/vnd.siyuan-tab');
+            if (rawTab) {
+                try {
+                    const parsed = JSON.parse(rawTab);
+                    const item = Array.isArray(parsed) ? parsed[0] : parsed;
+                    if (item) {
+                        if (!blockId) blockId = item.children?.blockId || item.blockId || item.data?.blockId || null;
+                        if (!docId) docId = item.children?.rootId || item.rootId || item.docId || item.root_id || item.head?.rootId || item.data?.rootId || item.data?.docId || null;
+                        if (!title) title = item.title || item.name || item.content || null;
+                        if (!tabId && item.id && this.isUuid(item.id)) tabId = item.id;
+                    }
+                } catch (e) {
+                    // ignore
+                }
+            }
+        }
+
+        // 如果 tabId 是 UUID，在 DOM 的工作区 Tab panel 容器中查找
+        if (tabId && this.isUuid(tabId)) {
+            const tabPanels = document.querySelectorAll(`[data-id="${tabId}"]`);
+            for (let i = 0; i < tabPanels.length; i++) {
+                const panel = tabPanels[i] as HTMLElement;
+                // 跳过 tab 栏页签 header 按钮本身
+                if (panel.classList.contains('item') && panel.closest('.layout-tab-bar')) continue;
+
+                const titleEl = panel.querySelector('.protyle-title[data-node-id]') ||
+                                panel.querySelector('.protyle-top .protyle-title[data-node-id]') ||
+                                panel.querySelector('.protyle-wysiwyg[data-doc-id]');
+                if (titleEl) {
+                    const nodeDocId = titleEl.getAttribute('data-node-id') || titleEl.getAttribute('data-doc-id');
+                    if (nodeDocId && !this.isUuid(nodeDocId)) {
+                        if (!docId) docId = nodeDocId;
+                        if (!blockId) blockId = nodeDocId;
+                    }
+                    if (!title) {
+                        const clone = titleEl.cloneNode(true) as HTMLElement;
+                        clone.querySelectorAll('.protyle-attr, .protyle-action, button, svg').forEach(el => el.remove());
+                        title = (clone.textContent || clone.innerText || '').replace(/\s+/g, ' ').trim() || null;
+                    }
+                }
+
+                const protyleEl = panel.querySelector('.protyle');
+                if (protyleEl) {
+                    const rootID = (protyleEl as any)?.protyle?.block?.rootID || (protyleEl as any)?.protyle?.block?.id;
+                    if (rootID && !this.isUuid(rootID)) {
+                        if (!docId) docId = rootID;
+                        if (!blockId) blockId = rootID;
+                    }
+                }
+            }
+        }
+
+        // 如果解出的 blockId 或 docId 依然是 UUID，进行清理
+        if (blockId && this.isUuid(blockId)) {
+            blockId = (docId && !this.isUuid(docId)) ? docId : null;
+        }
+        if (docId && this.isUuid(docId)) {
+            docId = (blockId && !this.isUuid(blockId)) ? blockId : null;
+        }
+
+        return { blockId, docId, title };
+    }
+
     private getBlockInfoSync(blockId: string, dropEvent?: DragEvent): { title: string | null, docId: string | null } {
         let title: string | null = null;
         let docId: string | null = null;
+
+        if (this.isUuid(blockId)) {
+            const tabInfo = this.resolveTabInfo(blockId, dropEvent);
+            if (tabInfo.docId && !this.isUuid(tabInfo.docId)) docId = tabInfo.docId;
+            if (tabInfo.title) title = tabInfo.title;
+        }
 
         let targetEl: HTMLElement | null = null;
         const dragEle = (window as any).siyuan?.dragElement as HTMLElement | undefined;
@@ -6119,25 +6252,28 @@ export class ReminderPanel {
                 clone.querySelectorAll('.protyle-attr, .protyle-action, button, svg').forEach(el => el.remove());
                 const titleInput = clone.querySelector('.title-input, [contenteditable="true"]') || clone;
                 title = (titleInput.textContent || titleInput.innerText || '').replace(/\s+/g, ' ').trim();
-                docId = blockId;
+                if (!docId) docId = blockId;
             } else if (targetEl.classList.contains('b3-list-item')) {
                 const textEl = targetEl.querySelector('.b3-list-item__text');
                 title = (textEl?.textContent || targetEl.innerText || targetEl.textContent || '').replace(/\s+/g, ' ').trim();
-                docId = targetEl.getAttribute('data-node-id') || blockId;
+                if (!docId) docId = targetEl.getAttribute('data-node-id') || blockId;
             } else if (targetEl.classList.contains('item') || targetEl.classList.contains('item--active')) {
                 const textEl = targetEl.querySelector('.item__text');
-                title = (textEl?.textContent || targetEl.innerText || targetEl.textContent || '').replace(/\s+/g, ' ').trim();
-                docId = blockId;
+                if (!title) title = (textEl?.textContent || targetEl.innerText || targetEl.textContent || '').replace(/\s+/g, ' ').trim();
+                if (!docId || this.isUuid(docId)) {
+                    const tabInfo = this.resolveTabInfo(targetEl, dropEvent);
+                    docId = tabInfo.docId || tabInfo.blockId;
+                }
             } else {
                 const clone = targetEl.cloneNode(true) as HTMLElement;
                 clone.querySelectorAll('.protyle-attr, .protyle-action, .block-pomodoro-summary, .block-bind-reminders-btn, .block-bind-reminder-date, .block-project-btn, button, svg').forEach(el => el.remove());
                 const editableEl = clone.querySelector('[contenteditable="true"]') || clone;
-                title = (editableEl.textContent || editableEl.innerText || '').replace(/\s+/g, ' ').trim();
+                if (!title) title = (editableEl.textContent || editableEl.innerText || '').replace(/\s+/g, ' ').trim();
 
                 const protyle = targetEl.closest('.protyle');
                 if (protyle) {
                     const titleEl = protyle.querySelector('.protyle-top .protyle-title[data-node-id]');
-                    docId = titleEl?.getAttribute('data-node-id') || (protyle as any)?.protyle?.block?.rootID || null;
+                    if (!docId) docId = titleEl?.getAttribute('data-node-id') || (protyle as any)?.protyle?.block?.rootID || null;
                 }
                 if (!docId) {
                     docId = targetEl.closest('[data-doc-id]')?.getAttribute('data-doc-id') || null;
@@ -6145,7 +6281,7 @@ export class ReminderPanel {
             }
         }
 
-        if ((!title || !docId) && dropEvent && dropEvent.dataTransfer) {
+        if ((!title || !docId || this.isUuid(docId)) && dropEvent && dropEvent.dataTransfer) {
             const dt = dropEvent.dataTransfer;
             const types = Array.from(dt.types || []);
             for (const type of types) {
@@ -6156,7 +6292,7 @@ export class ReminderPanel {
                         const item = Array.isArray(parsed) ? parsed.find((x: any) => x.id === blockId || x.blockId === blockId) || parsed[0] : parsed;
                         if (item) {
                             if (!title) title = item.content || item.title || item.name || item.label || null;
-                            if (!docId) docId = item.rootId || item.docId || item.root_id || null;
+                            if (!docId || this.isUuid(docId)) docId = item.rootId || item.docId || item.root_id || item.children?.rootId || null;
                         }
                     }
                 } catch (e) {
@@ -6165,12 +6301,20 @@ export class ReminderPanel {
             }
         }
 
+        if (this.isUuid(docId)) docId = null;
+
         return { title, docId };
     }
 
     private async getBlockInfoForDrop(blockId: string, dropEvent?: DragEvent): Promise<{ title: string, docId: string | null }> {
         let title: string | null = null;
         let docId: string | null = null;
+
+        if (this.isUuid(blockId)) {
+            const tabInfo = this.resolveTabInfo(blockId, dropEvent);
+            if (tabInfo.docId && !this.isUuid(tabInfo.docId)) docId = tabInfo.docId;
+            if (tabInfo.title) title = tabInfo.title;
+        }
 
         // 1. 优先尝试从 window.siyuan.dragElement 或前端 DOM 中获取
         let targetEl: HTMLElement | null = null;
@@ -6209,26 +6353,29 @@ export class ReminderPanel {
                 clone.querySelectorAll('.protyle-attr, .protyle-action, button, svg').forEach(el => el.remove());
                 const titleInput = clone.querySelector('.title-input, [contenteditable="true"]') || clone;
                 title = (titleInput.textContent || titleInput.innerText || '').replace(/\s+/g, ' ').trim();
-                docId = blockId;
+                if (!docId) docId = blockId;
             } else if (targetEl.classList.contains('b3-list-item')) {
                 const textEl = targetEl.querySelector('.b3-list-item__text');
                 title = (textEl?.textContent || targetEl.innerText || targetEl.textContent || '').replace(/\s+/g, ' ').trim();
-                docId = targetEl.getAttribute('data-node-id') || blockId;
+                if (!docId) docId = targetEl.getAttribute('data-node-id') || blockId;
             } else if (targetEl.classList.contains('item') || targetEl.classList.contains('item--active')) {
                 const textEl = targetEl.querySelector('.item__text');
-                title = (textEl?.textContent || targetEl.innerText || targetEl.textContent || '').replace(/\s+/g, ' ').trim();
-                docId = blockId;
+                if (!title) title = (textEl?.textContent || targetEl.innerText || targetEl.textContent || '').replace(/\s+/g, ' ').trim();
+                if (!docId || this.isUuid(docId)) {
+                    const tabInfo = this.resolveTabInfo(targetEl, dropEvent);
+                    docId = tabInfo.docId || tabInfo.blockId;
+                }
             } else {
                 // 普通编辑器块：复制节点并清除所有 .protyle-attr 属性栏与挂载按钮，防止把番茄钟/日期属性等误提取为标题
                 const clone = targetEl.cloneNode(true) as HTMLElement;
                 clone.querySelectorAll('.protyle-attr, .protyle-action, .block-pomodoro-summary, .block-bind-reminders-btn, .block-bind-reminder-date, .block-project-btn, button, svg').forEach(el => el.remove());
                 const editableEl = clone.querySelector('[contenteditable="true"]') || clone;
-                title = (editableEl.textContent || editableEl.innerText || '').replace(/\s+/g, ' ').trim();
+                if (!title) title = (editableEl.textContent || editableEl.innerText || '').replace(/\s+/g, ' ').trim();
 
                 const protyle = targetEl.closest('.protyle');
                 if (protyle) {
                     const titleEl = protyle.querySelector('.protyle-top .protyle-title[data-node-id]');
-                    docId = titleEl?.getAttribute('data-node-id') || (protyle as any)?.protyle?.block?.rootID || null;
+                    if (!docId) docId = titleEl?.getAttribute('data-node-id') || (protyle as any)?.protyle?.block?.rootID || null;
                 }
                 if (!docId) {
                     docId = targetEl.closest('[data-doc-id]')?.getAttribute('data-doc-id') || null;
@@ -6237,7 +6384,7 @@ export class ReminderPanel {
         }
 
         // 2. 从 dropEvent.dataTransfer 的 payload 提取
-        if ((!title || !docId) && dropEvent && dropEvent.dataTransfer) {
+        if ((!title || !docId || this.isUuid(docId)) && dropEvent && dropEvent.dataTransfer) {
             const dt = dropEvent.dataTransfer;
             const types = Array.from(dt.types || []);
             for (const type of types) {
@@ -6250,8 +6397,8 @@ export class ReminderPanel {
                             if (!title) {
                                 title = item.content || item.title || item.name || item.label || null;
                             }
-                            if (!docId) {
-                                docId = item.rootId || item.docId || item.root_id || null;
+                            if (!docId || this.isUuid(docId)) {
+                                docId = item.rootId || item.docId || item.root_id || item.children?.rootId || null;
                             }
                         }
                     }
@@ -6262,12 +6409,12 @@ export class ReminderPanel {
         }
 
         // 3. 降级：如果前端 DOM / 拖拽数据未获取到，调用 getBlockByID，但绝对不刷新 SQL 索引
-        if (!title) {
+        if ((!title || !docId) && blockId && !this.isUuid(blockId)) {
             try {
                 const block = await getBlockByID(blockId);
                 if (block) {
-                    title = block.content || null;
-                    if (!docId) {
+                    if (!title) title = block.content || null;
+                    if (!docId || this.isUuid(docId)) {
                         docId = block.root_id || (block.type === 'd' ? block.id : null);
                     }
                 }
@@ -6275,6 +6422,13 @@ export class ReminderPanel {
                 // ignore
             }
         }
+
+        // 4. 如果 docId 为空且 blockId 同样不是 UUID，则 docId 回退为 blockId
+        if (!docId && blockId && !this.isUuid(blockId)) {
+            docId = blockId;
+        }
+
+        if (this.isUuid(docId)) docId = null;
 
         return {
             title: title || i18n('unnamedNote') || '未命名任务',
@@ -6287,6 +6441,13 @@ export class ReminderPanel {
         try {
             const { title: fetchedTitle, docId: fetchedDocId } = await this.getBlockInfoForDrop(blockId, dropEvent);
 
+            let realBlockId = blockId;
+            if (this.isUuid(blockId)) {
+                if (fetchedDocId && !this.isUuid(fetchedDocId)) {
+                    realBlockId = fetchedDocId;
+                }
+            }
+
             const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
             const { defaultDate, defaultEndDate, defaultCategoryId, defaultProjectId, defaultPriority } = await this.getFilterAttributes();
 
@@ -6296,8 +6457,8 @@ export class ReminderPanel {
             let inheritedGroupId: string | undefined = undefined;
             let inheritedMilestoneId: string | undefined = undefined;
             try {
-                if (this.plugin && typeof this.plugin.getInheritedProjectAndGroup === 'function') {
-                    const inherited = await this.plugin.getInheritedProjectAndGroup(blockId);
+                if (this.plugin && typeof this.plugin.getInheritedProjectAndGroup === 'function' && !this.isUuid(realBlockId)) {
+                    const inherited = await this.plugin.getInheritedProjectAndGroup(realBlockId);
                     if (inherited) {
                         inheritedProjectId = inherited.projectId || defaultProjectId;
                         inheritedCategoryId = inherited.categoryId || defaultCategoryId;
@@ -6318,8 +6479,8 @@ export class ReminderPanel {
             const newReminder: any = {
                 id: reminderId,
                 title: title.trim(),
-                blockId: blockId,
-                docId: fetchedDocId || null,
+                blockId: realBlockId,
+                docId: (fetchedDocId && !this.isUuid(fetchedDocId)) ? fetchedDocId : (!this.isUuid(realBlockId) ? realBlockId : null),
                 date: defaultDate || getLogicalDateString(), // 默认为今天
                 endDate: defaultEndDate || undefined,
                 time: '', // 默认不设置时间
