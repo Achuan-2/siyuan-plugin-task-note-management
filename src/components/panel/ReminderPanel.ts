@@ -10183,9 +10183,46 @@ export class ReminderPanel {
     }
 
     /**
-     * 检查提醒是否应该在当前视图中显示
+     * 检查提醒是否应该在当前视图中显示（包含父/祖先任务驱动逻辑）
      */
     private shouldShowInCurrentView(reminder: any): boolean {
+        if (!reminder) return false;
+        if (this.shouldSingleReminderShowInCurrentView(reminder)) {
+            return true;
+        }
+
+        // 如果单体不匹配，但本身在 DOM 中挂载展示，保持展示
+        if (this.remindersContainer.querySelector(`[data-reminder-id="${reminder.id}"]`)) {
+            return true;
+        }
+
+        // 父任务/祖先驱动判断：若其任意祖先满足当前视图筛选条件，或者祖先在 DOM 中显示，则子任务也应当显示
+        if (reminder.parentId) {
+            let currentAncestorId = reminder.parentId;
+            const visited = new Set<string>();
+            while (currentAncestorId && !visited.has(currentAncestorId)) {
+                visited.add(currentAncestorId);
+                const parent = this.allRemindersMap.get(currentAncestorId)
+                    || this.currentRemindersCache.find(r => r.id === currentAncestorId || r.originalId === currentAncestorId);
+                if (parent) {
+                    if (this.shouldSingleReminderShowInCurrentView(parent)) {
+                        return true;
+                    }
+                    currentAncestorId = parent.parentId;
+                } else {
+                    const parentEl = this.remindersContainer.querySelector(`[data-reminder-id="${currentAncestorId}"]`);
+                    if (parentEl) {
+                        return true;
+                    }
+                    break;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private shouldSingleReminderShowInCurrentView(reminder: any): boolean {
         const today = getLogicalDateString();
         const tomorrow = getRelativeDateString(1);
         const future7Days = getRelativeDateString(7);
@@ -10760,27 +10797,58 @@ export class ReminderPanel {
             }
             this.sortReminders(this.currentRemindersCache);
 
-            // 4. 如果任务不满足当前视图筛选条件，且 DOM 中已存在则移除，然后退出
+            // 补齐 parentId（避免编辑保存时丢掉父任务关联，影响视图筛选与层级判断）
+            if (!savedReminder.parentId && oldReminder && oldReminder.parentId) {
+                savedReminder.parentId = oldReminder.parentId;
+            }
+
+            // 4. 如果任务不满足当前视图筛选条件（含父/祖先驱动判定），且 DOM 中已存在则移除，然后退出
             if (!this.shouldShowInCurrentView(savedReminder)) {
                 const existing = this.remindersContainer.querySelector(`[data-reminder-id="${savedReminder.id}"]`);
                 if (existing) existing.remove();
                 return;
             }
 
-            // 5. 如果是新建子任务，确保其父任务在视觉上展开，以便子任务可见
-            if (savedReminder.parentId) {
-                if (!this.userExpandedTasks.has(savedReminder.parentId)) {
-                    this.userExpandedTasks.add(savedReminder.parentId);
-                    this.collapsedTasks.delete(savedReminder.parentId);
-                }
+            // 5. 如果是新建/编辑子任务，确保其所有祖先任务在视觉上展开，以便子任务可见
+            let currentAncestorId = savedReminder.parentId;
+            const visitedAncestors = new Set<string>();
+            while (currentAncestorId && !visitedAncestors.has(currentAncestorId)) {
+                visitedAncestors.add(currentAncestorId);
+                this.userExpandedTasks.add(currentAncestorId);
+                this.collapsedTasks.delete(currentAncestorId);
+                const ancTask = this.allRemindersMap.get(currentAncestorId)
+                    || this.currentRemindersCache.find(r => r.id === currentAncestorId || r.originalId === currentAncestorId);
+                currentAncestorId = ancTask?.parentId;
             }
 
             // 6. 计算任务层级深度 (level)
             let level = 0;
-            let temp = savedReminder;
-            while (temp && temp.parentId && this.allRemindersMap.has(temp.parentId)) {
-                level++;
-                temp = this.allRemindersMap.get(temp.parentId);
+            const parentId = savedReminder.parentId;
+            if (parentId) {
+                const parentEl = this.remindersContainer.querySelector(`[data-reminder-id="${parentId}"]`)
+                    || (this.allRemindersMap.get(parentId)?.originalId ? this.remindersContainer.querySelector(`[data-reminder-id="${this.allRemindersMap.get(parentId).originalId}"]`) : null);
+                if (parentEl) {
+                    const domLevel = parseInt(parentEl.getAttribute('data-level') || '0', 10);
+                    level = domLevel + 1;
+                } else {
+                    let temp = savedReminder;
+                    const visited = new Set<string>();
+                    while (temp && temp.parentId && !visited.has(temp.id)) {
+                        visited.add(temp.id);
+                        level++;
+                        const pId = temp.parentId;
+                        const parentTask = this.allRemindersMap.get(pId)
+                            || this.currentRemindersCache.find(r => r.id === pId || r.originalId === pId);
+                        if (parentTask) {
+                            temp = parentTask;
+                        } else {
+                            break;
+                        }
+                    }
+                    if (level === 0) {
+                        level = 1;
+                    }
+                }
             }
 
             // 7. 预处理异步数据以生成元素（尽可能提供周边语境以准确计算子任务数等）
@@ -10791,14 +10859,17 @@ export class ReminderPanel {
             const today = getLogicalDateString();
             const el = this.createReminderElementOptimized(savedReminder, asyncDataCache, today, level, this.currentRemindersCache);
 
+            const existing = this.remindersContainer.querySelector(`[data-reminder-id="${savedReminder.id}"]`);
+
             // 8. 查找视觉上的插入位置 (DFS 顺序)
             const visualOrderIds = this.getVisualOrderIds(this.currentRemindersCache);
             const myIndex = visualOrderIds.indexOf(savedReminder.id);
 
-            // 如果该任务由于某些原因（如祖先被折叠）不应出现在当前视觉列表中，则移除/不渲染
+            // 如果该任务由于某些原因未在视觉顺序中定位，但 DOM 中原先就存在该任务元素，则优先原地无缝替换
             if (myIndex === -1) {
-                const existing = this.remindersContainer.querySelector(`[data-reminder-id="${savedReminder.id}"]`);
-                if (existing) existing.remove();
+                if (existing) {
+                    existing.replaceWith(el);
+                }
                 return;
             }
 
@@ -10860,19 +10931,19 @@ export class ReminderPanel {
             }
 
             // 9. 执行 DOM 插入或位置校正
-            const existing = this.remindersContainer.querySelector(`[data-reminder-id="${savedReminder.id}"]`);
             if (existing) {
-                // 如果当前位置不正确 (nextElementSibling 与预期的 nextEl 不符)，则重新插入
-                if (existing.nextElementSibling !== nextEl) {
+                // 对于常规修改（父任务与前后关系未改变），优先进行无缝原地替换，绝对避免先 remove 再 insert 造成的瞬间消失
+                const oldParentId = oldReminder?.parentId;
+                const newParentId = savedReminder.parentId;
+                if (oldParentId === newParentId || existing.nextElementSibling === nextEl) {
+                    existing.replaceWith(el);
+                } else {
                     existing.remove();
                     if (nextEl) {
                         this.remindersContainer.insertBefore(el, nextEl);
                     } else {
                         this.remindersContainer.appendChild(el);
                     }
-                } else {
-                    // 位置正确则仅替换内容
-                    existing.replaceWith(el);
                 }
             } else {
                 if (nextEl) {
