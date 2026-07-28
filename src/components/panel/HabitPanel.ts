@@ -2040,6 +2040,9 @@ export class HabitPanel {
             habit.updatedAt = now;
 
             await this.saveHabit(habit);
+            if (this.plugin?.playTaskCompleteSound) {
+                this.plugin.playTaskCompleteSound();
+            }
             if (!options?.silent) {
                 showMessage(`${i18n("checkInSuccess")}${emojiConfig.emoji}` + (note ? ` - ${note}` : ''));
             }

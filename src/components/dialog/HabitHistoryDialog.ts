@@ -1,4 +1,4 @@
-﻿import { Dialog, confirm, showMessage } from "siyuan";
+import { Dialog, confirm, showMessage } from "siyuan";
 import type { Habit, HabitCheckInEmoji } from "../panel/HabitPanel";
 import { getLocalDateTimeString, getLogicalDateString } from "../../utils/dateUtils";
 import { i18n } from "../../pluginInstance";
@@ -341,6 +341,9 @@ export class HabitHistoryDialog {
             this.habit.totalCheckIns = (this.habit.totalCheckIns || 0) + 1;
             this.habit.updatedAt = getLocalDateTimeString(new Date());
             await this.onSave(this.habit);
+            if (this.plugin?.playTaskCompleteSound) {
+                this.plugin.playTaskCompleteSound();
+            }
             showMessage(i18n("retroactiveSuccess"));
             dialog.destroy();
             const containerMain = this.dialog.element.querySelector('#habitHistoryContainer') as HTMLElement;

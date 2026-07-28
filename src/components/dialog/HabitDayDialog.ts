@@ -572,6 +572,9 @@ export class HabitDayDialog {
 
         try {
             await this.onSave(this.habit);
+            if (this.plugin?.playTaskCompleteSound) {
+                this.plugin.playTaskCompleteSound();
+            }
             return true;
         } catch (error) {
             console.warn("自动番茄打卡保存失败:", error);
@@ -826,6 +829,9 @@ export class HabitDayDialog {
             this.habit.totalCheckIns = (this.habit.totalCheckIns || 0) + 1;
             this.habit.updatedAt = getLocalDateTimeString(new Date());
             await this.onSave(this.habit);
+            if (this.plugin?.playTaskCompleteSound) {
+                this.plugin.playTaskCompleteSound();
+            }
             showMessage(i18n("retroactiveSuccess"));
             dialog.destroy();
             const content = this.dialog.element.querySelector(".b3-dialog__content") as HTMLElement;

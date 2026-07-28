@@ -7098,6 +7098,7 @@ export default class ReminderPlugin extends Plugin {
         habit.updatedAt = now;
 
         await this.saveHabitPartial(habit.id, habit);
+        await this.playTaskCompleteSound();
 
         if (!options?.silent) {
             showMessage(`${i18n("checkInSuccess")}${emojiConfig.emoji}`);

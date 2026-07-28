@@ -4915,6 +4915,9 @@ export class CalendarView {
             const habitData = await this.plugin.loadHabitData();
             habitData[habit.id] = habit;
             await this.plugin.saveHabitData(habitData);
+            if (this.plugin?.playTaskCompleteSound) {
+                this.plugin.playTaskCompleteSound();
+            }
             window.dispatchEvent(new CustomEvent('habitUpdated'));
             await this.refreshEvents(true);
             showMessage(`${i18n("checkInSuccess")}${emojiConfig.emoji}` + (note ? ` - ${note}` : ''));
