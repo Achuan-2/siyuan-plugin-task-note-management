@@ -1,3 +1,6 @@
+## v7.0.7 / 20260728
+- 🐛 任务侧栏：文档页签拖入侧栏，绑定的id错误为页签id而不为文档id [#340](https://github.com/Achuan-2/siyuan-plugin-task-note-management/issues/340)
+
 ## v7.0.6 / 20260728
 - 🎨 习惯打卡也添加打卡完成音效
 - 🐛 番茄钟：补录删除番茄钟报错“invalid ID argument ”
