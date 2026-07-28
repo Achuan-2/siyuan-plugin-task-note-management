@@ -233,7 +233,7 @@ export class PomodoroSessionsDialog {
     }
 
     private async syncBlockPomodoroAttrs(blockId: string, count: number, minutes: number): Promise<boolean> {
-        if (!blockId) return false;
+        if (!blockId || !/^\d{14}-[a-zA-Z0-9]{7}$/.test(blockId)) return false;
         try {
             const block = await getBlockByID(blockId);
             if (!block) return false;
@@ -695,15 +695,17 @@ export class PomodoroSessionsDialog {
                 if (!id) continue;
                 const baseId = getSeriesBaseId(id);
 
-                // 候选 1：当前 ID 或 baseId 直接就是块 ID
-                blockIdsToUpdate.add(baseId);
+                // 候选 1：仅当 baseId 符合思源块 ID 格式时才直接当作块 ID
+                if (/^\d{14}-[a-zA-Z0-9]{7}$/.test(baseId)) {
+                    blockIdsToUpdate.add(baseId);
+                }
 
                 // 候选 2：关联的 reminder.blockId 或 rem.docId
                 if (reminderData) {
                     const rem = reminderData[baseId] || reminderData[id];
                     if (rem) {
-                        if (rem.blockId) blockIdsToUpdate.add(rem.blockId);
-                        if (rem.docId) blockIdsToUpdate.add(rem.docId);
+                        if (rem.blockId && /^\d{14}-[a-zA-Z0-9]{7}$/.test(rem.blockId)) blockIdsToUpdate.add(rem.blockId);
+                        if (rem.docId && /^\d{14}-[a-zA-Z0-9]{7}$/.test(rem.docId)) blockIdsToUpdate.add(rem.docId);
                     }
                 }
             }
@@ -1153,23 +1155,34 @@ export class PomodoroSessionsDialog {
     private async syncReminderPomodoroCount() {
         try {
             const reminderData = await this.plugin.loadReminderData();
-            const targetEventId = this.reminderId;
+            const targetEventId = this.getDefaultAddTargetEventId();
+            const getSeriesBaseId = (id: string): string => {
+                const m = id.match(/^(.+)_(\d{4}-\d{2}-\d{2})$/);
+                return m ? m[1] : id;
+            };
+            const baseId = getSeriesBaseId(targetEventId);
             const { count, minutes } = this.getWorkStatsForEventId(targetEventId);
 
-            if (reminderData && reminderData[targetEventId]) {
-                if (reminderData[targetEventId].pomodoroCount !== count) {
-                    reminderData[targetEventId].pomodoroCount = count;
+            if (reminderData && (reminderData[baseId] || reminderData[targetEventId])) {
+                const rem = reminderData[baseId] || reminderData[targetEventId];
+                if (rem.pomodoroCount !== count) {
+                    rem.pomodoroCount = count;
                     await this.plugin.saveReminderData(reminderData);
+                }
+                if (rem.blockId && /^\d{14}-[a-zA-Z0-9]{7}$/.test(rem.blockId)) {
+                    await this.syncBlockPomodoroAttrs(rem.blockId, count, minutes);
                 }
                 return;
             }
 
             const habitData = await this.plugin.loadHabitData?.();
-            if (habitData && habitData[targetEventId]) {
+            if (habitData && (habitData[baseId] || habitData[targetEventId])) {
                 return;
             }
 
-            await this.syncBlockPomodoroAttrs(targetEventId, count, minutes);
+            if (/^\d{14}-[a-zA-Z0-9]{7}$/.test(baseId)) {
+                await this.syncBlockPomodoroAttrs(baseId, count, minutes);
+            }
         } catch (error) {
             console.error("同步番茄钟数量失败:", error);
         }

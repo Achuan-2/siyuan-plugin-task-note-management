@@ -334,6 +334,9 @@ export async function batchUpdateTaskListItemMarker(items: Array<{ id: BlockId; 
 
 // **************************************** Attributes ****************************************
 export async function setBlockAttrs(id: BlockId, attrs: { [key: string]: string }) {
+    if (!id || typeof id !== 'string' || !/^\d{14}-[a-zA-Z0-9]{7}$/.test(id)) {
+        return null;
+    }
     let data = {
         id: id,
         attrs: attrs
@@ -344,6 +347,9 @@ export async function setBlockAttrs(id: BlockId, attrs: { [key: string]: string 
 
 
 export async function getBlockAttrs(id: BlockId): Promise<{ [key: string]: string }> {
+    if (!id || typeof id !== 'string' || !/^\d{14}-[a-zA-Z0-9]{7}$/.test(id)) {
+        return {};
+    }
     let data = {
         id: id
     }
@@ -492,6 +498,9 @@ export async function getHeadingDeleteTransaction(blockId: string): Promise<any>
 }
 
 export async function getBlockByID(blockId: string): Promise<Block> {
+    if (!blockId || typeof blockId !== 'string' || !/^\d{14}-[a-zA-Z0-9]{7}$/.test(blockId)) {
+        return null;
+    }
     // 先flush
     let sqlScript = `select * from blocks where id ='${blockId}'`;
     let data = await sql(sqlScript);
@@ -1081,6 +1090,9 @@ export async function resetDoingAndAbandonedTaskListMarkers(): Promise<number> {
  * @param plugin 插件实例
  */
 export async function updateBindBlockAtrrs(blockId: string, plugin: any, providedReminderData?: any): Promise<void> {
+    if (!blockId || typeof blockId !== 'string' || !/^\d{14}-[a-zA-Z0-9]{7}$/.test(blockId)) {
+        return;
+    }
     try {
         const reminderData = providedReminderData || (plugin && plugin.reminderDataCache) || await plugin.loadReminderData();
 
