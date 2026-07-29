@@ -10191,11 +10191,6 @@ export class ReminderPanel {
             return true;
         }
 
-        // 如果单体不匹配，但本身在 DOM 中挂载展示，保持展示
-        if (this.remindersContainer.querySelector(`[data-reminder-id="${reminder.id}"]`)) {
-            return true;
-        }
-
         // 父任务/祖先驱动判断：若其任意祖先满足当前视图筛选条件，或者祖先在 DOM 中显示，则子任务也应当显示
         if (reminder.parentId) {
             let currentAncestorId = reminder.parentId;
@@ -10865,10 +10860,10 @@ export class ReminderPanel {
             const visualOrderIds = this.getVisualOrderIds(this.currentRemindersCache);
             const myIndex = visualOrderIds.indexOf(savedReminder.id);
 
-            // 如果该任务由于某些原因未在视觉顺序中定位，但 DOM 中原先就存在该任务元素，则优先原地无缝替换
+            // 如果该任务由于某些原因（如已完成或祖先被折叠）未在视觉顺序中定位，则移除 DOM 元素
             if (myIndex === -1) {
                 if (existing) {
-                    existing.replaceWith(el);
+                    existing.remove();
                 }
                 return;
             }
