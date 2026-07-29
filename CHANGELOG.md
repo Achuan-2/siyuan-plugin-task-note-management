@@ -1,3 +1,6 @@
+## v7.0.8 / 20260730
+- 🐛 任务侧栏：完成任务后没有自动刷新
+
 ## v7.0.7 / 20260729
 - 🐛 任务侧栏：文档页签拖入侧栏，绑定的id错误为页签id而不为文档id [#340](https://github.com/Achuan-2/siyuan-plugin-task-note-management/issues/340)
 
