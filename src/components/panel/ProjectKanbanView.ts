@@ -8243,6 +8243,60 @@ export class ProjectKanbanView {
                     openBlock(milestoneInfo.blockId);
                 }
             },
+            onTimeClick: (task: any, e: MouseEvent) => {
+                const isEditable = !task.isSubscribed || (task.subscriptionType === 'caldav' && task.caldavEditable);
+                if (isEditable) {
+                    const isInstanceEdit = !!task.isRepeatInstance;
+                    const getOriginalInstanceDate = () =>
+                        (task.id && task.id.includes('_')) ? task.id.split('_').pop()! : task.date;
+                    const originalInstanceDate = getOriginalInstanceDate();
+                    const dlg = new QuickReminderDialog(
+                        undefined, undefined, undefined, undefined,
+                        {
+                            mode: 'edit',
+                            eventSource: this.kanbanInstanceId,
+                            reminder: isInstanceEdit ? {
+                                ...task,
+                                isInstance: true,
+                                originalId: task.originalId,
+                                instanceDate: originalInstanceDate
+                            } : task,
+                            isInstanceEdit: isInstanceEdit,
+                            plugin: this.plugin,
+                            dateOnly: true,
+                            onSaved: async (savedTask?: any) => {
+                                if (savedTask) {
+                                    if (task.isRepeatInstance && task.originalId) {
+                                        if (this.reminderData && this.reminderData[task.originalId]) {
+                                            const originalReminder = this.reminderData[task.originalId];
+                                            patchRepeatInstanceState(originalReminder, originalInstanceDate, {
+                                                date: savedTask.date,
+                                                time: savedTask.time,
+                                                endDate: savedTask.endDate,
+                                                endTime: savedTask.endTime
+                                            });
+                                        }
+                                    } else if (this.reminderData) {
+                                        const targetId = task.isRepeatInstance ? task.originalId : task.id;
+                                        if (this.reminderData[targetId]) {
+                                            this.reminderData[targetId] = {
+                                                ...this.reminderData[targetId],
+                                                date: savedTask.date,
+                                                time: savedTask.time,
+                                                endDate: savedTask.endDate,
+                                                endTime: savedTask.endTime
+                                            };
+                                        }
+                                    }
+                                }
+                                this.dispatchReminderUpdate(true);
+                                await this.loadTasks();
+                            }
+                        }
+                    );
+                    dlg.show();
+                }
+            },
             setupDragAndDrop: (taskEl: HTMLElement, task: any) => {
                 if (!this.plugin.isInMobileApp) {
                     taskEl.draggable = true;
@@ -9137,9 +9191,9 @@ export class ProjectKanbanView {
 
             const applyStartDate = async (newDate: string | null) => {
                 try {
+                    const reminderData = await this.getReminders();
                     if (targetTask.isRepeatInstance && onlyThisInstance) {
                         const originalInstanceDate = getOriginalInstanceDate();
-                        const reminderData = await getAllReminders(this.plugin);
                         const originalReminder = reminderData[targetTask.originalId];
                         if (!originalReminder) {
                             showMessage(i18n("reminderNotExist"));
@@ -9157,13 +9211,16 @@ export class ProjectKanbanView {
                             patchRepeatInstanceState(originalReminder, originalInstanceDate, patch);
                         }
 
-                        await saveReminders(this.plugin, reminderData);
-                        this.dispatchReminderUpdate(true);
                         await this.loadTasks();
                         showMessage(i18n("instanceTimeUpdated") || "实例时间已更新");
+
+                        saveReminders(this.plugin, reminderData).then(() => {
+                            this.dispatchReminderUpdate(true);
+                        }).catch(err => {
+                            console.error('保存实例日期失败:', err);
+                        });
                     } else {
                         const targetId = targetTask.isRepeatInstance ? targetTask.originalId : targetTask.id;
-                        const reminderData = await getAllReminders(this.plugin);
                         const reminder = reminderData[targetId];
                         if (!reminder) {
                             showMessage(i18n("reminderNotExist"));
@@ -9186,10 +9243,14 @@ export class ProjectKanbanView {
                             }
                         }
 
-                        await saveReminders(this.plugin, reminderData);
-                        this.dispatchReminderUpdate(true);
                         await this.loadTasks();
                         showMessage(i18n("operationSuccessful"));
+
+                        saveReminders(this.plugin, reminderData).then(() => {
+                            this.dispatchReminderUpdate(true);
+                        }).catch(err => {
+                            console.error('保存日期失败:', err);
+                        });
                     }
                 } catch (err) {
                     console.error('快速调整日期失败:', err);
@@ -9199,9 +9260,9 @@ export class ProjectKanbanView {
 
             const applyEndDate = async (newDate: string) => {
                 try {
+                    const reminderData = await this.getReminders();
                     if (targetTask.isRepeatInstance && onlyThisInstance) {
                         const originalInstanceDate = getOriginalInstanceDate();
-                        const reminderData = await getAllReminders(this.plugin);
                         const originalReminder = reminderData[targetTask.originalId];
                         if (!originalReminder) {
                             showMessage(i18n("reminderNotExist"));
@@ -9218,13 +9279,16 @@ export class ProjectKanbanView {
                             setRepeatInstanceOverride(originalReminder, originalInstanceDate, 'endDate', newDate);
                         }
 
-                        await saveReminders(this.plugin, reminderData);
-                        this.dispatchReminderUpdate(true);
                         await this.loadTasks();
                         showMessage(i18n("instanceTimeUpdated") || "实例时间已更新");
+
+                        saveReminders(this.plugin, reminderData).then(() => {
+                            this.dispatchReminderUpdate(true);
+                        }).catch(err => {
+                            console.error('保存实例结束日期失败:', err);
+                        });
                     } else {
                         const targetId = targetTask.isRepeatInstance ? targetTask.originalId : targetTask.id;
-                        const reminderData = await getAllReminders(this.plugin);
                         const reminder = reminderData[targetId];
                         if (!reminder) {
                             showMessage(i18n("reminderNotExist"));
@@ -9239,10 +9303,14 @@ export class ProjectKanbanView {
                             reminder.endDate = newDate;
                         }
 
-                        await saveReminders(this.plugin, reminderData);
-                        this.dispatchReminderUpdate(true);
                         await this.loadTasks();
                         showMessage(i18n("operationSuccessful"));
+
+                        saveReminders(this.plugin, reminderData).then(() => {
+                            this.dispatchReminderUpdate(true);
+                        }).catch(err => {
+                            console.error('保存结束日期失败:', err);
+                        });
                     }
                 } catch (err) {
                     console.error('快速调整结束日期失败:', err);
@@ -9274,7 +9342,32 @@ export class ProjectKanbanView {
                         isInstanceEdit: isInstanceEdit,
                         plugin: this.plugin,
                         dateOnly: true,
-                        onSaved: async () => {
+                        onSaved: async (savedTask?: any) => {
+                            if (savedTask) {
+                                if (targetTask.isRepeatInstance && onlyThisInstance && targetTask.originalId) {
+                                    const originalInstanceDate = getOriginalInstanceDate();
+                                    if (this.reminderData && this.reminderData[targetTask.originalId]) {
+                                        const originalReminder = this.reminderData[targetTask.originalId];
+                                        patchRepeatInstanceState(originalReminder, originalInstanceDate, {
+                                            date: savedTask.date,
+                                            time: savedTask.time,
+                                            endDate: savedTask.endDate,
+                                            endTime: savedTask.endTime
+                                        });
+                                    }
+                                } else if (this.reminderData) {
+                                    const targetId = targetTask.isRepeatInstance ? targetTask.originalId : targetTask.id;
+                                    if (this.reminderData[targetId]) {
+                                        this.reminderData[targetId] = {
+                                            ...this.reminderData[targetId],
+                                            date: savedTask.date,
+                                            time: savedTask.time,
+                                            endDate: savedTask.endDate,
+                                            endTime: savedTask.endTime
+                                        };
+                                    }
+                                }
+                            }
                             this.dispatchReminderUpdate(true);
                             await this.loadTasks();
                         }
@@ -9333,6 +9426,7 @@ export class ProjectKanbanView {
                         task.isRepeatInstance ? task.originalId : task.id,
                         task.date,
                         async () => {
+                            await this.getReminders(true);
                             this.dispatchReminderUpdate(true);
                             await this.loadTasks();
                         }
