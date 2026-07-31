@@ -1919,12 +1919,28 @@ export class PomodoroTimer {
                 </html>
             `;
 
-            this.pomodoroEndWindow.once('ready-to-show', () => {
-                if (this.pomodoroEndWindow) {
-                    this.pomodoroEndWindow.show();
-                    this.pomodoroEndWindow.focus();
-                    this.pomodoroEndWindow.setAlwaysOnTop(true, "screen-saver");
+            let showTimer: any = null;
+            const forceShow = () => {
+                if (showTimer) {
+                    clearTimeout(showTimer);
+                    showTimer = null;
+                }
+                if (this.pomodoroEndWindow && !this.pomodoroEndWindow.isDestroyed()) {
+                    try {
+                        if (!this.pomodoroEndWindow.isVisible()) {
+                            this.pomodoroEndWindow.show();
+                            this.pomodoroEndWindow.focus();
+                            this.pomodoroEndWindow.setAlwaysOnTop(true, "screen-saver");
+                        }
+                    } catch (e) {
+                        console.warn('[PomodoroTimer] 显式显示番茄钟弹窗失败:', e);
+                    }
+                }
+            };
 
+            this.pomodoroEndWindow.once('ready-to-show', () => {
+                forceShow();
+                if (this.pomodoroEndWindow && !this.pomodoroEndWindow.isDestroyed()) {
                     // 延迟将番茄钟BrowserWindow也置顶，确保在弹窗之上
                     setTimeout(() => {
                         if (PomodoroTimer.browserWindowInstance && !PomodoroTimer.browserWindowInstance.isDestroyed()) {
@@ -1939,10 +1955,22 @@ export class PomodoroTimer {
                 }
             });
 
-            this.pomodoroEndWindow.on('closed', () => {
+            // 兜底：300ms 后强制显示窗口，防止 ready-to-show 未触发导致弹窗一直隐藏
+            showTimer = setTimeout(() => {
+                forceShow();
+            }, 300);
+
+            const handleWindowClose = () => {
+                if (showTimer) {
+                    clearTimeout(showTimer);
+                    showTimer = null;
+                }
                 this.pomodoroEndWindow = null;
                 this.stopAllAudio();
-            });
+            };
+
+            this.pomodoroEndWindow.on('close', handleWindowClose);
+            this.pomodoroEndWindow.on('closed', handleWindowClose);
 
             this.pomodoroEndWindow.webContents.on('will-navigate', (e: any) => {
                 e.preventDefault();
@@ -2155,14 +2183,29 @@ export class PomodoroTimer {
                 </html>
             `;
 
+            let showTimer: any = null;
+            const forceShow = () => {
+                if (showTimer) {
+                    clearTimeout(showTimer);
+                    showTimer = null;
+                }
+                if (this.randomRestWindow && !this.randomRestWindow.isDestroyed()) {
+                    try {
+                        if (!this.randomRestWindow.isVisible()) {
+                            this.randomRestWindow.show();
+                            this.randomRestWindow.focus();
+                            this.randomRestWindow.setAlwaysOnTop(true, "screen-saver");
+                        }
+                    } catch (e) {
+                        console.warn('[PomodoroTimer] 显式显示微休息弹窗失败:', e);
+                    }
+                }
+            };
+
             // 监听 ready-to-show 事件后再显示窗口，防止闪烁
             this.randomRestWindow.once('ready-to-show', () => {
-                if (this.randomRestWindow) {
-                    this.randomRestWindow.show();
-                    this.randomRestWindow.focus();
-                    // 强制置顶
-                    this.randomRestWindow.setAlwaysOnTop(true, "screen-saver");
-
+                forceShow();
+                if (this.randomRestWindow && !this.randomRestWindow.isDestroyed()) {
                     // 延迟将番茄钟BrowserWindow也置顶，确保在弹窗之上
                     setTimeout(() => {
                         if (PomodoroTimer.browserWindowInstance && !PomodoroTimer.browserWindowInstance.isDestroyed()) {
@@ -2178,9 +2221,22 @@ export class PomodoroTimer {
                 }
             });
 
-            this.randomRestWindow.on('closed', () => {
+            // 兜底：300ms 后强制显示窗口，防止 ready-to-show 未触发导致弹窗一直隐藏
+            showTimer = setTimeout(() => {
+                forceShow();
+            }, 300);
+
+            const handleWindowClose = () => {
+                if (showTimer) {
+                    clearTimeout(showTimer);
+                    showTimer = null;
+                }
                 this.randomRestWindow = null;
-            });
+                this.stopAllAudio();
+            };
+
+            this.randomRestWindow.on('close', handleWindowClose);
+            this.randomRestWindow.on('closed', handleWindowClose);
 
             // 防止窗口被意外导航
             this.randomRestWindow.webContents.on('will-navigate', (e: any) => {
@@ -2465,12 +2521,17 @@ export class PomodoroTimer {
     private async stopAllAudioInBrowserWindow(): Promise<void> {
         try {
             const win = PomodoroTimer.browserWindowInstance;
-            if (!win || win.isDestroyed && win.isDestroyed()) return;
+            if (!win || (win.isDestroyed && win.isDestroyed())) return;
             const script = `(function(){
                 try {
                     const nodes = Array.from(document.querySelectorAll('[id^="pomodoro-audio-"]'));
                     nodes.forEach(n => {
-                        try { n._userPaused = true; n.pause(); n.currentTime = 0; } catch(e) {}
+                        try {
+                            n.loop = false;
+                            n._userPaused = true;
+                            n.pause();
+                            n.currentTime = 0;
+                        } catch(e) {}
                     });
                 } catch(e) {}
             })()`;
@@ -2557,8 +2618,12 @@ export class PomodoroTimer {
         const isEndAudio = audio === this.workEndAudio || audio === this.breakEndAudio;
         let loop = audio.loop;
         if (isEndAudio) {
-            // 如果开启了结束弹窗，则结束提示音循环播放，直到弹窗被关闭
-            loop = this.settings.pomodoroEndPopupWindow;
+            // 如果开启了结束弹窗，且弹窗（Electron 窗口或思源 Dialog）处于活动状态，则提示音循环播放；若弹窗已被关闭或未成功弹出，则不循环
+            const isWindowActive = !!(
+                (this.pomodoroEndWindow && !this.pomodoroEndWindow.isDestroyed()) ||
+                this.pomodoroEndDialog
+            );
+            loop = !!(this.settings.pomodoroEndPopupWindow && isWindowActive);
         } else if (!isBackgroundAudio) {
             loop = false;
         }
