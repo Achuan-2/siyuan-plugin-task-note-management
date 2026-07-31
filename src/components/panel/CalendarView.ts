@@ -138,6 +138,7 @@ export class CalendarView {
     private colorCache: Map<string, { backgroundColor: string; borderColor: string }> = new Map();
     private subscriptionOrderMap: Map<string, number> = new Map(); // 订阅日历排序缓存
     private lastNavigatedToTodayAt: number = 0; // 记录最后一次点击"今天"的时间
+    private hasScrolledToCurrentTimeOnFirstTimeGrid: boolean = false; // 标记是否已在第一次打开 timeGrid 视图时滚动到当前时间
 
     // 视图按钮引用
     private monthBtn: HTMLButtonElement;
@@ -385,7 +386,31 @@ export class CalendarView {
         // 只在时间网格视图（周/日/多天）中处理全天事件区域
         if (arg.view.type.startsWith('timeGrid')) {
             this.setupAllDayResizer(arg.el);
+            if (!this.hasScrolledToCurrentTimeOnFirstTimeGrid) {
+                this.hasScrolledToCurrentTimeOnFirstTimeGrid = true;
+                this.scrollToCurrentTime();
+            }
         }
+    }
+
+    private scrollToCurrentTime() {
+        if (!this.calendar) return;
+        const now = new Date();
+        const currentMin = now.getHours() * 60 + now.getMinutes();
+        const scrollMin = Math.max(0, currentMin - 30);
+        const hours = String(Math.floor(scrollMin / 60)).padStart(2, '0');
+        const mins = String(scrollMin % 60).padStart(2, '0');
+        const scrollTimeStr = `${hours}:${mins}:00`;
+
+        requestAnimationFrame(() => {
+            setTimeout(() => {
+                try {
+                    this.calendar.scrollToTime(scrollTimeStr);
+                } catch (e) {
+                    // ignore
+                }
+            }, 80);
+        });
     }
 
 
@@ -1651,6 +1676,10 @@ export class CalendarView {
 
                         this.calendar.gotoDate(targetDate);
 
+                        if (this.calendar.view.type.startsWith('timeGrid')) {
+                            this.scrollToCurrentTime();
+                        }
+
                         // 尝试滚动到今天的位置（主要修复 dayGridMonth 不会自动滚动的问题）
                         setTimeout(() => {
                             // 优先查找高亮的今天元素
@@ -1716,7 +1745,11 @@ export class CalendarView {
             selectOverlap: true,
             eventResizableFromStart: true, // 允许从事件顶部拖动调整开始时间
             locale: window.siyuan.config.lang.toLowerCase().replace('_', '-'),
-            scrollTime: dayStartTime, // 日历视图初始滚动位置
+            scrollTime: (initialViewMode && initialViewMode.startsWith('timeGrid')) ? (() => {
+                const now = new Date();
+                const scrollMin = Math.max(0, now.getHours() * 60 + now.getMinutes() - 30);
+                return `${String(Math.floor(scrollMin / 60)).padStart(2, '0')}:${String(scrollMin % 60).padStart(2, '0')}:00`;
+            })() : dayStartTime, // 初始视图为 timeGrid 时默认滚动到当前时间
             firstDay: weekStartDay, // 使用用户设置的周开始日
             slotMinTime: slotMinTimeVal, // 逻辑一天的起始时间
             slotMaxTime: slotMaxTimeVal, // 逻辑一天的结束时间
