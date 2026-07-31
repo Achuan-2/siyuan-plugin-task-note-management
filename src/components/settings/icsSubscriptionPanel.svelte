@@ -542,7 +542,7 @@
                 ...existingProj,
                 id: projectId,
                 folderId: folder.id,
-                title: `🗓 ${name}`,
+                title: `🗓️ ${name}`,
                 isSubscription: true,
                 subscriptionId: subId,
                 status: existingProj.status || 'doing',

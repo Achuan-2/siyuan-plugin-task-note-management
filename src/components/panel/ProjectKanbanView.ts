@@ -4364,7 +4364,7 @@ export class ProjectKanbanView {
             { key: 'priority', label: () => i18n('sortByPriority') || i18n('sortingPriority'), icon: '🎯' },
             { key: 'category', label: () => i18n('sortByCategory') || '分类', icon: '🏷️' },
             { key: 'time', label: () => i18n('sortByTime') || i18n('sortByStartDate') || '按开始日期排序', icon: '🕐' },
-            { key: 'endDate', label: () => i18n('sortByEndDate') || '按结束日期排序', icon: '🗓' },
+            { key: 'endDate', label: () => i18n('sortByEndDate') || '按结束日期排序', icon: '🗓️' },
             { key: 'created', label: () => i18n('sortByCreated'), icon: '📅' },
             { key: 'title', label: () => i18n('sortByTitle') || i18n('sortingTitle'), icon: '📝' },
         ];
@@ -7571,7 +7571,7 @@ export class ProjectKanbanView {
             'long_term': '🤔',
             'completed': '✅',
             'abandoned': '🚫',
-            'incomplete': '🗓'
+            'incomplete': '🗓️'
         };
         // 优先使用 kanbanStatuses 中设置的图标，其次使用默认图标
         groupIcon.textContent = statusConfig?.icon || defaultIcons[status] || '';
@@ -8247,7 +8247,7 @@ export class ProjectKanbanView {
                 if (!this.plugin.isInMobileApp) {
                     taskEl.draggable = true;
                     this.addTaskDragEvents(taskEl, task);
-                    
+
                     taskEl.addEventListener('dragover', (e) => {
                         const isExternalDrag = e.dataTransfer?.types.includes('application/x-reminder') || e.dataTransfer?.types.includes('text/plain');
                         if (this.isDragging && this.draggedElement && this.draggedElement !== taskEl) {
@@ -8439,7 +8439,7 @@ export class ProjectKanbanView {
         };
 
         const taskEl = TaskRenderer.render(task, context, callbacks, level, this.tasks);
-        
+
         taskEl.dataset.taskId = task.id;
         taskEl.dataset.level = level.toString();
         taskEl.dataset.priority = task.priority || 'none';
@@ -8882,7 +8882,7 @@ export class ProjectKanbanView {
 
         // 设置日期
         menu.addItem({
-            iconHTML: "🗓",
+            iconHTML: "🗓️",
             label: i18n('setDate') || '设置日期',
             click: () => this.batchSetDate()
         });
@@ -10644,7 +10644,7 @@ export class ProjectKanbanView {
         const dateFilters = [
 
             { id: 'today', name: i18n('today') || '今日', icon: '📅' },
-            { id: 'tomorrow', name: i18n('tomorrow') || '明日', icon: '🗓️' },
+            { id: 'tomorrow', name: i18n('tomorrow') || '明日', icon: '🗓️️' },
             { id: 'other_date', name: i18n('otherDate'), icon: '📆' },
 
             { id: 'no_date', name: i18n('noDateReminders') || '无日期', icon: '🚫' },

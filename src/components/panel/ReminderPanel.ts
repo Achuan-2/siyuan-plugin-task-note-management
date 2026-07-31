@@ -5885,7 +5885,7 @@ export class ReminderPanel {
                 const dragEle = (window as any).siyuan?.dragElement as HTMLElement | undefined;
                 if (dragEle) {
                     const realBlock = dragEle.closest('.protyle-wysiwyg [data-node-id]:not(.protyle-attr)') ||
-                                      dragEle.closest('[data-node-id]:not(.protyle-attr)');
+                        dragEle.closest('[data-node-id]:not(.protyle-attr)');
                     let bid = realBlock?.getAttribute('data-node-id') || dragEle.getAttribute('data-node-id') || (dragEle as any).dataset?.nodeId;
                     if (!bid) {
                         const rawId = (dragEle as any).dataset?.id;
@@ -6177,8 +6177,8 @@ export class ReminderPanel {
                 if (panel.classList.contains('item') && panel.closest('.layout-tab-bar')) continue;
 
                 const titleEl = panel.querySelector('.protyle-title[data-node-id]') ||
-                                panel.querySelector('.protyle-top .protyle-title[data-node-id]') ||
-                                panel.querySelector('.protyle-wysiwyg[data-doc-id]');
+                    panel.querySelector('.protyle-top .protyle-title[data-node-id]') ||
+                    panel.querySelector('.protyle-wysiwyg[data-doc-id]');
                 if (titleEl) {
                     const nodeDocId = titleEl.getAttribute('data-node-id') || titleEl.getAttribute('data-doc-id');
                     if (nodeDocId && !this.isUuid(nodeDocId)) {
@@ -6228,7 +6228,7 @@ export class ReminderPanel {
         const dragEle = (window as any).siyuan?.dragElement as HTMLElement | undefined;
         if (dragEle) {
             const realBlock = dragEle.closest('.protyle-wysiwyg [data-node-id]:not(.protyle-attr)') ||
-                              dragEle.closest('[data-node-id]:not(.protyle-attr)');
+                dragEle.closest('[data-node-id]:not(.protyle-attr)');
             if (realBlock) {
                 const dragId = realBlock.getAttribute('data-node-id') || (realBlock as HTMLElement).dataset?.nodeId;
                 if (dragId === blockId) targetEl = realBlock as HTMLElement;
@@ -6240,10 +6240,10 @@ export class ReminderPanel {
 
         if (!targetEl) {
             targetEl = (document.querySelector(`.protyle-wysiwyg [data-node-id="${blockId}"]`) ||
-                        document.querySelector(`[data-node-id="${blockId}"]`) ||
-                        document.querySelector(`#navigation [data-node-id="${blockId}"]`) ||
-                        document.querySelector(`.layout-tab-bar [data-id="${blockId}"]`) ||
-                        document.querySelector(`.layout__wnd .item[data-id="${blockId}"]`)) as HTMLElement | null;
+                document.querySelector(`[data-node-id="${blockId}"]`) ||
+                document.querySelector(`#navigation [data-node-id="${blockId}"]`) ||
+                document.querySelector(`.layout-tab-bar [data-id="${blockId}"]`) ||
+                document.querySelector(`.layout__wnd .item[data-id="${blockId}"]`)) as HTMLElement | null;
         }
 
         if (targetEl) {
@@ -6322,7 +6322,7 @@ export class ReminderPanel {
         const dragEle = (window as any).siyuan?.dragElement as HTMLElement | undefined;
         if (dragEle) {
             const realBlock = dragEle.closest('.protyle-wysiwyg [data-node-id]:not(.protyle-attr)') ||
-                              dragEle.closest('[data-node-id]:not(.protyle-attr)');
+                dragEle.closest('[data-node-id]:not(.protyle-attr)');
             if (realBlock) {
                 const dragId = realBlock.getAttribute('data-node-id') || (realBlock as HTMLElement).dataset?.nodeId;
                 if (dragId === blockId) {
@@ -6338,13 +6338,13 @@ export class ReminderPanel {
 
         if (!targetEl) {
             targetEl = (document.querySelector(`.protyle-wysiwyg [data-node-id="${blockId}"]`) ||
-                        document.querySelector(`[data-node-id="${blockId}"]`)) as HTMLElement | null;
+                document.querySelector(`[data-node-id="${blockId}"]`)) as HTMLElement | null;
         }
 
         if (!targetEl) {
             targetEl = (document.querySelector(`#navigation [data-node-id="${blockId}"]`) ||
-                        document.querySelector(`.layout-tab-bar [data-id="${blockId}"]`) ||
-                        document.querySelector(`.layout__wnd .item[data-id="${blockId}"]`)) as HTMLElement | null;
+                document.querySelector(`.layout-tab-bar [data-id="${blockId}"]`) ||
+                document.querySelector(`.layout__wnd .item[data-id="${blockId}"]`)) as HTMLElement | null;
         }
 
         if (targetEl) {
@@ -11406,7 +11406,7 @@ export class ReminderPanel {
         const dayAfterStr = getRelativeDateString(2);
         const nextWeekStr = getRelativeDateString(7);
         menu.addItem({
-            iconHTML: '🗓',
+            iconHTML: '🗓️',
             label: i18n('setDate') || '设置日期',
             submenu: [
                 { iconHTML: '📅', label: i18n('moveToToday') || '移至今天', click: () => this.panelBatchSetDate(todayStr) },
@@ -11414,7 +11414,7 @@ export class ReminderPanel {
                 { iconHTML: '📅', label: i18n('moveToDayAfterTomorrow') || '移至后天', click: () => this.panelBatchSetDate(dayAfterStr) },
                 { iconHTML: '📅', label: i18n('moveToSevenDaysLater') || '移至7天后', click: () => this.panelBatchSetDate(nextWeekStr) },
                 { iconHTML: '❌', label: i18n('clearDate') || '清除日期', click: () => this.panelBatchSetDate(null) },
-                { iconHTML: '🗓', label: i18n('batchSetDate') || '批量设置日期…', click: () => this.panelBatchSetDateDialog() }
+                { iconHTML: '🗓️', label: i18n('batchSetDate') || '批量设置日期…', click: () => this.panelBatchSetDateDialog() }
             ]
         });
 

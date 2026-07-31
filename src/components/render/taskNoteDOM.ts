@@ -1619,7 +1619,7 @@ export class TaskNoteDOMManager {
         const safeReminderId = String(reminderId || "").trim();
         const safeDisplayText = String(displayText || "").trim();
         const safeDisplayType = displayType === "completed" ? "completed" : "schedule";
-        const prefix = safeDisplayType === "completed" ? "✅" : (safeDisplayText.startsWith('⏰') ? '' : '🗓');
+        const prefix = safeDisplayType === "completed" ? "✅" : (safeDisplayText.startsWith('⏰') ? '' : '🗓️');
         const text = safeDisplayText ? (prefix ? `${prefix} ${safeDisplayText}` : safeDisplayText) : prefix;
         const ariaText = safeDisplayType === "completed"
             ? `最近完成时间 ${safeDisplayText}，点击编辑任务日期`

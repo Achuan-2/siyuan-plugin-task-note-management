@@ -658,7 +658,7 @@ export class ProjectPanel {
             { key: 'category', label: () => i18n("sortByCategory") || '分类', icon: '🏷️' },
             { key: 'priority', label: () => i18n("sortByPriority") || '优先级', icon: '🎯' },
             { key: 'time', label: () => i18n("sortByTime") || i18n("sortByStartDate") || '按开始日期排序', icon: '🕐' },
-            { key: 'endDate', label: () => i18n("sortByEndDate") || '按结束日期排序', icon: '🗓' },
+            { key: 'endDate', label: () => i18n("sortByEndDate") || '按结束日期排序', icon: '🗓️' },
             { key: 'created', label: () => i18n("sortByCreated") || '创建时间', icon: '📅' },
             { key: 'title', label: () => i18n("sortByTitle") || '标题', icon: '📝' }
         ];
@@ -3741,11 +3741,11 @@ export class ProjectPanel {
         // 1. 起始和截止日期
         let dateText = '';
         if (project.startDate && project.endDate) {
-            dateText = `🗓${project.startDate}-${project.endDate}`;
+            dateText = `🗓️${project.startDate}-${project.endDate}`;
         } else if (project.startDate) {
-            dateText = `🗓${project.startDate}`;
+            dateText = `🗓️${project.startDate}`;
         } else if (project.endDate) {
-            dateText = `🗓截止:${project.endDate}`;
+            dateText = `🗓️截止:${project.endDate}`;
         }
 
         if (dateText) {

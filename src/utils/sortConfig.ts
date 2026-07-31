@@ -17,10 +17,10 @@ export const AVAILABLE_SORT_METHODS = [
     { key: 'category', label: () => i18n("sortByCategory") || "按分类排序", icon: '🏷️' },
     { key: 'project', label: () => i18n("projectSorting") || "按项目排序", icon: '📁' },
     { key: 'priority', label: () => i18n("sortByPriority"), icon: '🎯' },
-    { key: 'time', label: () => i18n("sortByTime") || i18n("sortByStartDate") || "按开始日期排序", icon: '🗓' },
-    { key: 'endDate', label: () => i18n("sortByEndDate") || "按结束日期排序", icon: '🗓' },
+    { key: 'time', label: () => i18n("sortByTime") || i18n("sortByStartDate") || "按开始日期排序", icon: '🗓️' },
+    { key: 'endDate', label: () => i18n("sortByEndDate") || "按结束日期排序", icon: '🗓️' },
     { key: 'completed', label: () => i18n("sortByCompletedTime") || "按完成时间排序", icon: '✅' },
-    { key: 'created', label: () => i18n("sortByCreated"), icon: '🗓' },
+    { key: 'created', label: () => i18n("sortByCreated"), icon: '🗓️' },
     { key: 'title', label: () => i18n("sortByTitle"), icon: '📜' },
 ];
 
@@ -37,7 +37,7 @@ export const DEFAULT_SORT_CONFIG: SortConfig = {
 export async function loadSortConfig(plugin: Plugin): Promise<SortConfig> {
     try {
         const settings = await (plugin as any).loadSettings();
-        
+
         // 兼容旧版配置：如果存在 sortMethod，转换为新版
         if (settings.sortMethod && !settings.sortCriteria) {
             return {
@@ -46,12 +46,12 @@ export async function loadSortConfig(plugin: Plugin): Promise<SortConfig> {
                 ]
             };
         }
-        
+
         // 使用新版配置
         if (settings.sortCriteria && Array.isArray(settings.sortCriteria) && settings.sortCriteria.length > 0) {
             return { criteria: settings.sortCriteria };
         }
-        
+
         return DEFAULT_SORT_CONFIG;
     } catch (error) {
         console.log('加载排序配置失败，使用默认配置:', error);
@@ -66,13 +66,13 @@ export async function saveSortConfig(plugin: Plugin, criteria: SortCriterion[]):
     try {
         const settings = await (plugin as any).loadSettings();
         settings.sortCriteria = criteria;
-        
+
         // 兼容旧版：同时保存第一个条件到旧字段
         if (criteria.length > 0) {
             settings.sortMethod = criteria[0].method;
             settings.sortOrder = criteria[0].order;
         }
-        
+
         await (plugin as any).saveSettings(settings);
         console.log('排序配置保存成功:', criteria);
 
@@ -113,11 +113,11 @@ export function getSortConfigSummary(config: SortConfig): string {
     if (!config.criteria || config.criteria.length === 0) {
         return i18n("sortBy") || "排序";
     }
-    
+
     if (config.criteria.length === 1) {
         return getSortCriterionName(config.criteria[0]);
     }
-    
+
     // 多个条件时显示第一个 + 数量
     const firstName = getSortMethodName(config.criteria[0].method);
     return `${firstName} +${config.criteria.length - 1}`;

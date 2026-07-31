@@ -990,7 +990,7 @@ export class TaskRenderer {
             const displayTime = task.date ? task.time : (task.endTime || task.time);
             const timeText = this.formatReminderTime(displayDate, displayTime, today, task.endDate, task.endTime, task, context);
             const hasNoDate = !task.date && !task.endDate;
-            timeEl.textContent = (hasNoDate ? '' : '🗓') + timeText;
+            timeEl.textContent = (hasNoDate ? '' : '🗓️') + timeText;
 
             const isEditable = !task.isSubscribed || (task.subscriptionType === 'caldav' && task.caldavEditable);
             if (isEditable) {
@@ -1124,8 +1124,8 @@ export class TaskRenderer {
             }
         } else {
             const currentToday = getLogicalDateString();
-            const canRenderDessertStatus = (context as any).isDailyDessertTaskForDate 
-                ? (context as any).isDailyDessertTaskForDate(task, currentToday) 
+            const canRenderDessertStatus = (context as any).isDailyDessertTaskForDate
+                ? (context as any).isDailyDessertTaskForDate(task, currentToday)
                 : this.isDailyDessertTaskForDate(task, currentToday);
             const canRenderTodayIgnoreStatus = context.canApplyTodayIgnore ? context.canApplyTodayIgnore(task, currentToday) : false;
 
@@ -1365,7 +1365,7 @@ export class TaskRenderer {
             const statusColor = kanbanStatusInfo.color || (project ? project.color : '') || 'var(--b3-theme-primary)';
             const projectStatusInfo = document.createElement('div');
             projectStatusInfo.className = 'reminder-item__project-status';
-            
+
             const hasProject = !!project;
             projectStatusInfo.style.cssText = `
                 display: inline-flex;

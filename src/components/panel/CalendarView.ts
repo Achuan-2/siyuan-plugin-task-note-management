@@ -250,10 +250,10 @@ export class CalendarView {
         const weekStartDay = await this.getWeekStartDay();
         const dayStartTime = await this.getDayStartTime();
         const todayStartTime = await this.getTodayStartTime();
-        
+
         // 只有从设置面板修改/保存，或者首次加载时，或者配置的值真实发生改变时，才重载 UI 的折叠状态。
         // 其余日常刷新（如其他位置发送的广播）需要保留当前 UI 界面的临时展开/收起状态。
-        if (fromSettingPanel || this.lastCalendarCollapseTimeRangeSetting === undefined || 
+        if (fromSettingPanel || this.lastCalendarCollapseTimeRangeSetting === undefined ||
             this.lastCalendarCollapseTimeRangeSetting !== settings.calendarCollapseTimeRange) {
             this.isCollapseTimeRangeTemp = settings.calendarCollapseTimeRange === true;
             this.isTopCollapseTemp = settings.calendarCollapseTimeRange === true;
@@ -602,9 +602,9 @@ export class CalendarView {
                 viewMode = 'multiMonthYear';
             }
             await this._setViewMode(viewMode as any);
-                this.calendar.changeView(viewMode);
-                this.updateViewButtonStates();
-                this.updatePomodoroButtonVisibility();
+            this.calendar.changeView(viewMode);
+            this.updateViewButtonStates();
+            this.updatePomodoroButtonVisibility();
         });
         if (!this.isDockMode && viewGroup) {
             viewGroup.appendChild(this.yearBtn);
@@ -622,9 +622,9 @@ export class CalendarView {
                 viewMode = 'dayGridMonth';
             }
             await this._setViewMode(viewMode as any);
-                this.calendar.changeView(viewMode);
-                this.updateViewButtonStates();
-                this.updatePomodoroButtonVisibility();
+            this.calendar.changeView(viewMode);
+            this.updateViewButtonStates();
+            this.updatePomodoroButtonVisibility();
         });
         if (!this.isDockMode && viewGroup) {
             viewGroup.appendChild(this.monthBtn);
@@ -644,9 +644,9 @@ export class CalendarView {
                 viewMode = 'listWeek';
             }
             await this._setViewMode(viewMode as any);
-                this.calendar.changeView(viewMode);
-                this.updateViewButtonStates();
-                this.updatePomodoroButtonVisibility();
+            this.calendar.changeView(viewMode);
+            this.updateViewButtonStates();
+            this.updatePomodoroButtonVisibility();
         });
         if (!this.isDockMode && viewGroup) {
             viewGroup.appendChild(this.weekBtn);
@@ -672,9 +672,9 @@ export class CalendarView {
             const startDate = getRelativeDateString(-1);
 
             await this._setViewMode(viewMode as any);
-                this.calendar.changeView(viewMode, startDate);
-                this.updateViewButtonStates();
-                this.updatePomodoroButtonVisibility();
+            this.calendar.changeView(viewMode, startDate);
+            this.updateViewButtonStates();
+            this.updatePomodoroButtonVisibility();
         });
         if (!this.isDockMode && viewGroup) {
             viewGroup.appendChild(this.multiDaysBtn);
@@ -694,9 +694,9 @@ export class CalendarView {
                 viewMode = 'listDay';
             }
             await this._setViewMode(viewMode as any);
-                this.calendar.changeView(viewMode);
-                this.updateViewButtonStates();
-                this.updatePomodoroButtonVisibility();
+            this.calendar.changeView(viewMode);
+            this.updateViewButtonStates();
+            this.updatePomodoroButtonVisibility();
         });
         if (!this.isDockMode && viewGroup) {
             viewGroup.appendChild(this.dayBtn);
@@ -3196,7 +3196,7 @@ export class CalendarView {
 
             const emojiConfig = Array.isArray(habit.checkInEmojis)
                 ? habit.checkInEmojis.find((item: any) => item.emoji === entries[checkInIndex].emoji && (!entries[checkInIndex].meaning || item.meaning === entries[checkInIndex].meaning))
-                    || habit.checkInEmojis.find((item: any) => item.emoji === entries[checkInIndex].emoji)
+                || habit.checkInEmojis.find((item: any) => item.emoji === entries[checkInIndex].emoji)
                 : undefined;
             await syncHabitMemoBlock({
                 habit,
@@ -3721,7 +3721,7 @@ export class CalendarView {
                 submenu: this.createHabitCheckInSubmenu(habit, habitDate)
             });
             menu.addItem({
-                iconHTML: "🗓️",
+                iconHTML: "🗓️️",
                 label: i18n("editDayCheckInData") || "编辑当天打卡数据",
                 click: async () => {
                     await this.openHabitDayDialog(calendarEvent.extendedProps.habitId, habitDate);
@@ -3816,9 +3816,9 @@ export class CalendarView {
             const isCrossDay = startDateStr && endDateStr && startDateStr !== endDateStr;
 
             const viewType = this.calendar?.view?.type;
-            const isSingleDayView = viewType === 'timeGridDay' || 
-                                    viewType === 'dayGridDay' || 
-                                    viewType === 'listDay';
+            const isSingleDayView = viewType === 'timeGridDay' ||
+                viewType === 'dayGridDay' ||
+                viewType === 'listDay';
 
             const reminderData = await getAllReminders(this.plugin);
             const reminderId = calendarEvent.extendedProps.originalId || calendarEvent.id;
@@ -4793,7 +4793,7 @@ export class CalendarView {
 
         checkInEmojis.forEach((emojiConfig: any) => {
             const groupName = (emojiConfig.group || '').trim();
-            
+
             if (habit.hideCheckedToday) {
                 if (groupName) {
                     // 如果有分组，只要该分组已打卡，则隐藏
@@ -4900,8 +4900,8 @@ export class CalendarView {
 
             checkIn.entries = checkIn.entries || [];
             const entry: HabitMemoCheckInEntry = {
-                emoji: emojiConfig.emoji, 
-                timestamp: customTimestamp, 
+                emoji: emojiConfig.emoji,
+                timestamp: customTimestamp,
                 note,
                 meaning: emojiConfig.meaning,
                 group: (emojiConfig.group || '').trim() || undefined
@@ -5549,8 +5549,8 @@ export class CalendarView {
             const isHabit = !!props.isHabit;
             const customIcon = isHabit ? props.icon : null;
             const customColor = isHabit ? props.color : null;
-            
-            subIcon.innerHTML = customIcon || (isHabit ? '🌱' : '🗓');
+
+            subIcon.innerHTML = customIcon || (isHabit ? '🌱' : '🗓️');
             subIcon.classList.add('ariaLabel'); subIcon.setAttribute('aria-label', isHabit
                 ? (i18n("habitPanelTitle") || "习惯")
                 : (i18n("subscribedTaskReadOnly") || "订阅任务（只读）"));
@@ -5804,9 +5804,9 @@ export class CalendarView {
                     const isCrossDay = startDateStr && endDateStr && startDateStr !== endDateStr;
 
                     const viewType = this.calendar?.view?.type;
-                    const isSingleDayView = viewType === 'timeGridDay' || 
-                                            viewType === 'dayGridDay' || 
-                                            viewType === 'listDay';
+                    const isSingleDayView = viewType === 'timeGridDay' ||
+                        viewType === 'dayGridDay' ||
+                        viewType === 'listDay';
 
                     const settings = this.reminderSkipSettings || this.plugin?.settings || {};
                     const checkboxAction = settings.checkboxActionForSpanningAndDessert || 'global';
@@ -8008,7 +8008,7 @@ export class CalendarView {
 
                     if (isCrossDay) {
                         const hasSkipSettings = getReminderSkipWeekendsEffective(reminder, this.reminderSkipSettings) ||
-                                                getReminderSkipHolidaysEffective(reminder, this.reminderSkipSettings);
+                            getReminderSkipHolidaysEffective(reminder, this.reminderSkipSettings);
                         const hasIgnoredDates = Array.isArray(reminder.todayIgnored) && reminder.todayIgnored.length > 0;
 
                         if (hasSkipSettings || hasIgnoredDates) {
@@ -8491,7 +8491,7 @@ export class CalendarView {
 
                     // 过去日期：未完成且无打卡记录不显示；有打卡记录则显示（如果开启了始终显示习惯提醒时间，则不跳过，以便显示提醒时间）
                     if (!this.alwaysShowHabitReminderTime && compareDateStrings(dateStr, today) < 0 && !completed && checkedEmojis.length === 0) continue;
-                    
+
                     if (this.currentCompletionFilter === 'completed' && !completed) continue;
                     if (this.currentCompletionFilter === 'incomplete' && completed) continue;
 
@@ -8560,7 +8560,7 @@ export class CalendarView {
 
                         const startTime = new Date(`${dateStr}T${parsed.time}:00`);
                         if (Number.isNaN(startTime.getTime())) return;
-                        
+
                         // 移除对今天过去时间的过滤，始终显示今天的所有提醒，方便补打卡
                         // if (dateStr === today && startTime.getTime() < Date.now()) return;
 
@@ -8995,9 +8995,9 @@ export class CalendarView {
 
     passesCompletionFilter(reminder: any): boolean {
         const viewType = this.calendar?.view?.type;
-        const isSingleDayView = viewType === 'timeGridDay' || 
-                                viewType === 'dayGridDay' || 
-                                viewType === 'listDay';
+        const isSingleDayView = viewType === 'timeGridDay' ||
+            viewType === 'dayGridDay' ||
+            viewType === 'listDay';
 
         let isCompleted = reminder.completed === true;
         if (!isCompleted && isSingleDayView && this.calendar) {
@@ -9249,7 +9249,7 @@ export class CalendarView {
                 const isOpenEndedStartTask = isOpenEndedStartDateTask(reminder, this.plugin?.settings);
                 let startStr = reminder.date || reminder.endDate || activeStart || todayStr;
                 let endStr = reminder.endDate || reminder.date;
-                
+
                 // Dateless tasks OR open-ended start-date tasks (start date set, no end date, treatStartDateOnlyAsOverdue is false):
                 // everyDay reminder time continues until completed or activeEnd
                 if (!hasExplicitTaskDate || isOpenEndedStartTask) {
@@ -9528,9 +9528,9 @@ export class CalendarView {
         let isCompleted = reminder.completed || false;
 
         const viewType = this.calendar?.view?.type;
-        const isSingleDayView = viewType === 'timeGridDay' || 
-                                viewType === 'dayGridDay' || 
-                                viewType === 'listDay';
+        const isSingleDayView = viewType === 'timeGridDay' ||
+            viewType === 'dayGridDay' ||
+            viewType === 'listDay';
 
         const startDateStr = reminder.date || reminder.endDate;
         const endDateStr = reminder.endDate || startDateStr;
@@ -9583,7 +9583,7 @@ export class CalendarView {
             className: classNames,
             editable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable), // ICS订阅只读，CalDAV可写
             startEditable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable), // ICS订阅只读，CalDAV可写
-            durationEditable: (!reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable)) && 
+            durationEditable: (!reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable)) &&
                 (!reminder.isSplitBlock || reminder.splitIndex === 0 || reminder.splitIndex === reminder.splitTotal - 1), // 第一和最后一个分割块允许缩放，中间的不行
             extendedProps: {
                 completed: isCompleted,
@@ -10184,8 +10184,8 @@ export class CalendarView {
                         return this.escapeHtml(`${statusText}（${current}m/${target}m）`);
                     } else {
                         const target = Math.max(1, Number(reminder.target) || 1);
-                        const current = reminder.currentProgress !== undefined 
-                            ? reminder.currentProgress 
+                        const current = reminder.currentProgress !== undefined
+                            ? reminder.currentProgress
                             : (Array.isArray(reminder.checkedEmojis) ? reminder.checkedEmojis.length : 0);
                         return this.escapeHtml(`${statusText}（${current}/${target}）`);
                     }
@@ -11867,7 +11867,7 @@ export class CalendarView {
 
             // 部分折叠时，对仍处于展开状态的段进行置灰，使其可以通过点击重新折叠
             if (relStart > relEnd) {
-                const greyRanges: Array<{start: string, end: string}> = [];
+                const greyRanges: Array<{ start: string, end: string }> = [];
                 if (!this.isTopCollapseTemp) {
                     // 顶部段已展开：置灰时间轴开头的 [todayStartTime, collapseEnd]
                     greyRanges.push({ start: todayStartTime, end: collapseEnd });
@@ -11897,11 +11897,11 @@ export class CalendarView {
      * @param ranges 折叠区间数组；也可传入单一终点字符串（兼容旧调用），此时起点使用设置中的 collapseStart
      * @param currentStartTime 当 ranges 为单一终点字符串时，可选的折叠区间起点覆盖
      */
-    private async styleCollapseAxis(ranges: Array<{start: string, end: string}> | string, currentStartTime?: string) {
+    private async styleCollapseAxis(ranges: Array<{ start: string, end: string }> | string, currentStartTime?: string) {
         const settings = await this.plugin.loadSettings();
         const collapseStartSetting = settings.calendarCollapseStartTime || '00:00';
-        
-        let normalizedRanges: Array<{start: string, end: string}>;
+
+        let normalizedRanges: Array<{ start: string, end: string }>;
         if (typeof ranges === 'string') {
             const start = currentStartTime !== undefined ? currentStartTime : collapseStartSetting;
             normalizedRanges = [{ start, end: ranges }];
@@ -11979,7 +11979,7 @@ export class CalendarView {
 
         const collapseEnd = settings.calendarCollapseEndTime || '08:00';
         const formattedTime = this.formatTimeForSelector(collapseEnd);
-        
+
         const slotsTable = this.container.querySelector('.fc-timegrid-slots table');
         const labelTd = this.container.querySelector(`.fc-timegrid-slots td.fc-timegrid-slot-label[data-time="${formattedTime}"]`) as HTMLElement;
         const slotRow = labelTd ? labelTd.closest('tr') : null;
@@ -11999,7 +11999,7 @@ export class CalendarView {
         if (!this.dragHandleEl) {
             this.dragHandleEl = document.createElement('div');
             this.dragHandleEl.className = 'calendar-collapse-drag-handle';
-            
+
             this.dragHandleEl.style.position = 'absolute';
             this.dragHandleEl.style.width = '24px';
             this.dragHandleEl.style.height = '14px';
@@ -12011,12 +12011,12 @@ export class CalendarView {
             this.dragHandleEl.style.justifyContent = 'center';
             this.dragHandleEl.style.boxShadow = '0 2px 4px rgba(0,0,0,0.15)';
             this.dragHandleEl.style.zIndex = '100';
-            
+
             // 胶囊形三条横线菜单图标
             this.dragHandleEl.innerHTML = `
                 <svg style="width: 10px; height: 10px; fill: currentColor;"><use xlink:href="#iconMenu"></use></svg>
             `;
-            
+
             // 加入提示
             this.dragHandleEl.classList.add('ariaLabel');
             this.dragHandleEl.setAttribute('aria-label', i18n('dragToAdjustCollapseRange') || '拖拽调整隐藏时间段');
@@ -12026,7 +12026,7 @@ export class CalendarView {
                 e.stopPropagation();
                 e.preventDefault();
                 this.isDraggingCollapseEnd = true;
-                
+
                 const startY = e.clientY;
                 // 获取当前网格所有带时间轴标签行的 top 与高度数据
                 const rows = Array.from(this.container.querySelectorAll('.fc-timegrid-slots tbody tr:not(.fc-timegrid-slot-hidden)')) as HTMLElement[];
@@ -12043,12 +12043,12 @@ export class CalendarView {
 
                 const handleMove = (moveEvent: MouseEvent) => {
                     if (!this.isDraggingCollapseEnd) return;
-                    
+
                     const currentY = moveEvent.clientY;
                     // 找出距离当前鼠标 Y 轴最近的行
                     let closestRow = rowCoords[0];
                     let minDiff = Math.abs(rowCoords[0].top - currentY);
-                    
+
                     for (const r of rowCoords) {
                         const diff = Math.abs(r.top - currentY);
                         if (diff < minDiff) {
@@ -12063,7 +12063,7 @@ export class CalendarView {
                         const parentRect = slotsParent.getBoundingClientRect();
                         const rowRect = closestRow.element.getBoundingClientRect();
                         const topPos = rowRect.top - parentRect.top;
-                        
+
                         if (this.dragHandleEl) {
                             this.dragHandleEl.style.top = `${topPos - 7}px`;
                         }
@@ -12103,10 +12103,10 @@ export class CalendarView {
                         window.dispatchEvent(event);
 
                         pushMsg(i18n('calendarCollapseRangeUpdated', { time: finalTime }) || `折叠时间范围已更新为 00:00 - ${finalTime}`);
-                        
+
                         // 仅更新视觉样式和手柄位置，不调用 applyCollapseState 以避免触发 FullCalendar 重绘和误折叠
                         await this.styleCollapseAxis(finalTime);
-                        
+
                         // 更新手柄到最终行位置
                         if (this.dragHandleEl) {
                             const parentRect = slotsParent.getBoundingClientRect();
@@ -12128,7 +12128,7 @@ export class CalendarView {
         const parentRect = slotsParent.getBoundingClientRect();
         const rowRect = slotRow.getBoundingClientRect();
         const topPos = rowRect.top - parentRect.top;
-        
+
         const labelCell = slotRow.querySelector('.fc-timegrid-slot-label') as HTMLElement;
         const labelWidth = labelCell ? labelCell.offsetWidth : 60;
 
