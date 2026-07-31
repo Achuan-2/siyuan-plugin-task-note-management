@@ -29,6 +29,7 @@ import {
 } from "../dataManager/repeatUtils";
 import { getSolarDateLunarString } from "../../utils/lunarUtils";
 import { QuickReminderDialog } from "../dialog/QuickReminderDialog";
+import { buildQuickDateMenuItems, openQuickDateEditDialog } from "../menu/QuickDateMenu";
 import { BlockBindingDialog } from "../dialog/BlockBindingDialog";
 import { getAllReminders, saveReminders, loadSubscriptions, syncSubscription, deleteSubscriptionReminderTask } from '../../utils/icsSubscription';
 import { VipManager } from "../vip/vip";
@@ -8246,55 +8247,43 @@ export class ProjectKanbanView {
             onTimeClick: (task: any, e: MouseEvent) => {
                 const isEditable = !task.isSubscribed || (task.subscriptionType === 'caldav' && task.caldavEditable);
                 if (isEditable) {
-                    const isInstanceEdit = !!task.isRepeatInstance;
                     const getOriginalInstanceDate = () =>
                         (task.id && task.id.includes('_')) ? task.id.split('_').pop()! : task.date;
                     const originalInstanceDate = getOriginalInstanceDate();
-                    const dlg = new QuickReminderDialog(
-                        undefined, undefined, undefined, undefined,
-                        {
-                            mode: 'edit',
-                            eventSource: this.kanbanInstanceId,
-                            reminder: isInstanceEdit ? {
-                                ...task,
-                                isInstance: true,
-                                originalId: task.originalId,
-                                instanceDate: originalInstanceDate
-                            } : task,
-                            isInstanceEdit: isInstanceEdit,
-                            plugin: this.plugin,
-                            dateOnly: true,
-                            onSaved: async (savedTask?: any) => {
-                                if (savedTask) {
-                                    if (task.isRepeatInstance && task.originalId) {
-                                        if (this.reminderData && this.reminderData[task.originalId]) {
-                                            const originalReminder = this.reminderData[task.originalId];
-                                            patchRepeatInstanceState(originalReminder, originalInstanceDate, {
-                                                date: savedTask.date,
-                                                time: savedTask.time,
-                                                endDate: savedTask.endDate,
-                                                endTime: savedTask.endTime
-                                            });
-                                        }
-                                    } else if (this.reminderData) {
-                                        const targetId = task.isRepeatInstance ? task.originalId : task.id;
-                                        if (this.reminderData[targetId]) {
-                                            this.reminderData[targetId] = {
-                                                ...this.reminderData[targetId],
-                                                date: savedTask.date,
-                                                time: savedTask.time,
-                                                endDate: savedTask.endDate,
-                                                endTime: savedTask.endTime
-                                            };
-                                        }
+                    openQuickDateEditDialog({
+                        plugin: this.plugin,
+                        targetTask: task,
+                        onlyThisInstance: !!task.isRepeatInstance,
+                        eventSource: this.kanbanInstanceId,
+                        onSaved: async (savedTask?: any) => {
+                            if (savedTask) {
+                                if (task.isRepeatInstance && task.originalId) {
+                                    if (this.reminderData && this.reminderData[task.originalId]) {
+                                        const originalReminder = this.reminderData[task.originalId];
+                                        patchRepeatInstanceState(originalReminder, originalInstanceDate, {
+                                            date: savedTask.date,
+                                            time: savedTask.time,
+                                            endDate: savedTask.endDate,
+                                            endTime: savedTask.endTime
+                                        });
+                                    }
+                                } else if (this.reminderData) {
+                                    const targetId = task.isRepeatInstance ? task.originalId : task.id;
+                                    if (this.reminderData[targetId]) {
+                                        this.reminderData[targetId] = {
+                                            ...this.reminderData[targetId],
+                                            date: savedTask.date,
+                                            time: savedTask.time,
+                                            endDate: savedTask.endDate,
+                                            endTime: savedTask.endTime
+                                        };
                                     }
                                 }
-                                this.dispatchReminderUpdate(true);
-                                await this.loadTasks();
                             }
+                            this.dispatchReminderUpdate(true);
+                            await this.loadTasks();
                         }
-                    );
-                    dlg.show();
+                    });
                 }
             },
             setupDragAndDrop: (taskEl: HTMLElement, task: any) => {
@@ -9318,86 +9307,43 @@ export class ProjectKanbanView {
                 }
             };
 
-            const createDateTargetSubmenu = (applyDate: (newDate: string) => Promise<void>) => ([
-                { iconHTML: "📅", label: i18n("moveToToday") || "移至今天", click: () => applyDate(todayStr) },
-                { iconHTML: "📅", label: i18n("moveToTomorrow") || "移至明天", click: () => applyDate(tomorrowStr) },
-                { iconHTML: "📅", label: i18n("moveToDayAfterTomorrow") || "移至后天", click: () => applyDate(dayAfterStr) },
-                { iconHTML: "📅", label: i18n("moveToSevenDaysLater") || "移至7天后", click: () => applyDate(nextWeekStr) }
-            ]);
-
-            const editDate = () => {
-                const isInstanceEdit = targetTask.isRepeatInstance && onlyThisInstance;
-                const originalInstanceDate = getOriginalInstanceDate();
-                const dlg = new QuickReminderDialog(
-                    undefined, undefined, undefined, undefined,
-                    {
-                        mode: 'edit',
-                        eventSource: this.kanbanInstanceId,
-                        reminder: isInstanceEdit ? {
-                            ...targetTask,
-                            isInstance: true,
-                            originalId: targetTask.originalId,
-                            instanceDate: originalInstanceDate
-                        } : targetTask,
-                        isInstanceEdit: isInstanceEdit,
-                        plugin: this.plugin,
-                        dateOnly: true,
-                        onSaved: async (savedTask?: any) => {
-                            if (savedTask) {
-                                if (targetTask.isRepeatInstance && onlyThisInstance && targetTask.originalId) {
-                                    const originalInstanceDate = getOriginalInstanceDate();
-                                    if (this.reminderData && this.reminderData[targetTask.originalId]) {
-                                        const originalReminder = this.reminderData[targetTask.originalId];
-                                        patchRepeatInstanceState(originalReminder, originalInstanceDate, {
-                                            date: savedTask.date,
-                                            time: savedTask.time,
-                                            endDate: savedTask.endDate,
-                                            endTime: savedTask.endTime
-                                        });
-                                    }
-                                } else if (this.reminderData) {
-                                    const targetId = targetTask.isRepeatInstance ? targetTask.originalId : targetTask.id;
-                                    if (this.reminderData[targetId]) {
-                                        this.reminderData[targetId] = {
-                                            ...this.reminderData[targetId],
-                                            date: savedTask.date,
-                                            time: savedTask.time,
-                                            endDate: savedTask.endDate,
-                                            endTime: savedTask.endTime
-                                        };
-                                    }
-                                }
+            return buildQuickDateMenuItems({
+                plugin: this.plugin,
+                targetTask,
+                onlyThisInstance,
+                eventSource: this.kanbanInstanceId,
+                onApplyStartDate: applyStartDate,
+                onApplyEndDate: applyEndDate,
+                onSaved: async (savedTask?: any) => {
+                    if (savedTask) {
+                        if (targetTask.isRepeatInstance && onlyThisInstance && targetTask.originalId) {
+                            const originalInstanceDate = getOriginalInstanceDate();
+                            if (this.reminderData && this.reminderData[targetTask.originalId]) {
+                                const originalReminder = this.reminderData[targetTask.originalId];
+                                patchRepeatInstanceState(originalReminder, originalInstanceDate, {
+                                    date: savedTask.date,
+                                    time: savedTask.time,
+                                    endDate: savedTask.endDate,
+                                    endTime: savedTask.endTime
+                                });
                             }
-                            this.dispatchReminderUpdate(true);
-                            await this.loadTasks();
+                        } else if (this.reminderData) {
+                            const targetId = targetTask.isRepeatInstance ? targetTask.originalId : targetTask.id;
+                            if (this.reminderData[targetId]) {
+                                this.reminderData[targetId] = {
+                                    ...this.reminderData[targetId],
+                                    date: savedTask.date,
+                                    time: savedTask.time,
+                                    endDate: savedTask.endDate,
+                                    endTime: savedTask.endTime
+                                };
+                            }
                         }
                     }
-                );
-                dlg.show();
-            };
-
-            if (isSpanningTask) {
-                items.push({
-                    iconHTML: "📅",
-                    label: i18n("adjustStartDate") || "调整开始日期",
-                    submenu: createDateTargetSubmenu(applyStartDate)
-                });
-                items.push({
-                    iconHTML: "📅",
-                    label: i18n("adjustEndDate") || "调整结束日期",
-                    submenu: createDateTargetSubmenu(applyEndDate)
-                });
-                items.push({ iconHTML: "❌", label: i18n('clearDate') || '清除日期', click: () => applyStartDate(null) });
-                items.push({ iconHTML: "✏️", label: i18n("editDate") || "编辑日期", click: editDate });
-            } else {
-                items.push({ iconHTML: "📅", label: i18n("moveToToday") || "移至今天", click: () => applyStartDate(todayStr) });
-                items.push({ iconHTML: "📅", label: i18n("moveToTomorrow") || "移至明天", click: () => applyStartDate(tomorrowStr) });
-                items.push({ iconHTML: "📅", label: i18n("moveToDayAfterTomorrow") || "移至后天", click: () => applyStartDate(dayAfterStr) });
-                items.push({ iconHTML: "📅", label: i18n("moveToSevenDaysLater") || "移至7天后", click: () => applyStartDate(nextWeekStr) });
-                items.push({ iconHTML: "❌", label: i18n('clearDate') || '清除日期', click: () => applyStartDate(null) });
-                items.push({ iconHTML: "✏️", label: i18n("editDate") || "编辑日期", click: editDate });
-            }
-            return items;
+                    this.dispatchReminderUpdate(true);
+                    await this.loadTasks();
+                }
+            });
         };
 
         const isPinned = !!task.pinned;

@@ -5,6 +5,7 @@ import { loadSortConfig, saveSortConfig, getSortCriterionName, SortCriterion, lo
 import { getLuteInstance } from "../../utils/luteSingleton";
 import { SortMenuDialog } from "../dialog/SortMenuDialog";
 import { QuickReminderDialog } from "../dialog/QuickReminderDialog";
+import { buildQuickDateMenuItems, openQuickDateEditDialog } from "../menu/QuickDateMenu";
 import { CategoryManager } from "../dataManager/categoryManager";
 import { CategoryManageDialog } from "../dialog/CategoryManageDialog";
 import { BlockBindingDialog } from "../dialog/BlockBindingDialog";
@@ -1255,65 +1256,23 @@ export class ReminderPanel {
             }
         };
 
-        const createDateTargetSubmenu = (applyDate: (newDate: string) => Promise<void>) => ([
-            { iconHTML: calendarIcon, label: i18n("moveToToday") || "移至今天", click: () => applyDate(todayStr) },
-            { iconHTML: calendarIcon, label: i18n("moveToTomorrow") || "移至明天", click: () => applyDate(tomorrowStr) },
-            { iconHTML: calendarIcon, label: i18n("moveToDayAfterTomorrow") || "移至后天", click: () => applyDate(dayAfterStr) },
-            { iconHTML: calendarIcon, label: i18n("moveToSevenDaysLater") || "移至7天后", click: () => applyDate(nextWeekStr) }
-        ]);
-
-        const editDate = () => {
-            const isInstanceEdit = targetReminder.isRepeatInstance && onlyThisInstance;
-            const originalInstanceDate = getOriginalInstanceDate();
-            const dlg = new QuickReminderDialog(
-                undefined, undefined, undefined, undefined,
-                {
-                    mode: 'edit',
-                    reminder: isInstanceEdit ? {
-                        ...targetReminder,
-                        isInstance: true,
-                        originalId: targetReminder.originalId,
-                        instanceDate: originalInstanceDate
-                    } : targetReminder,
-                    isInstanceEdit: isInstanceEdit,
-                    plugin: this.plugin,
-                    dateOnly: true,
-                    onSaved: async (savedReminder) => {
-                        if (savedReminder && savedReminder.id) {
-                            await this.handleOptimisticSavedReminder(savedReminder);
-                        } else {
-                            await this.loadReminders();
-                        }
-                        window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
-                    }
+        return buildQuickDateMenuItems({
+            plugin: this.plugin,
+            targetTask: targetReminder,
+            onlyThisInstance,
+            eventSource: this.panelId,
+            iconHTML: calendarIcon,
+            onApplyStartDate: applyStartDate,
+            onApplyEndDate: applyEndDate,
+            onSaved: async (savedReminder) => {
+                if (savedReminder && savedReminder.id) {
+                    await this.handleOptimisticSavedReminder(savedReminder);
+                } else {
+                    await this.loadReminders();
                 }
-            );
-            dlg.show();
-        };
-
-        if (isSpanningTask) {
-            items.push({
-                iconHTML: calendarIcon,
-                label: i18n("adjustStartDate") || "调整开始日期",
-                submenu: createDateTargetSubmenu(applyStartDate)
-            });
-            items.push({
-                iconHTML: calendarIcon,
-                label: i18n("adjustEndDate") || "调整结束日期",
-                submenu: createDateTargetSubmenu(applyEndDate)
-            });
-            items.push({ iconHTML: removeIcon, label: i18n("clearDate") || "清除日期", click: () => applyStartDate(null) });
-            items.push({ iconHTML: editIcon, label: i18n("editDate") || "编辑日期", click: editDate });
-        } else {
-            items.push({ iconHTML: calendarIcon, label: i18n("moveToToday") || "移至今天", click: () => applyStartDate(todayStr) });
-            items.push({ iconHTML: calendarIcon, label: i18n("moveToTomorrow") || "移至明天", click: () => applyStartDate(tomorrowStr) });
-            items.push({ iconHTML: calendarIcon, label: i18n("moveToDayAfterTomorrow") || "移至后天", click: () => applyStartDate(dayAfterStr) });
-            items.push({ iconHTML: calendarIcon, label: i18n("moveToSevenDaysLater") || "移至7天后", click: () => applyStartDate(nextWeekStr) });
-            items.push({ iconHTML: removeIcon, label: i18n("clearDate") || "清除日期", click: () => applyStartDate(null) });
-            items.push({ iconHTML: editIcon, label: i18n("editDate") || "编辑日期", click: editDate });
-        }
-
-        return items;
+                window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
+            }
+        });
     }
 
     private isReminderPinned(reminder: any): boolean {
@@ -7988,7 +7947,7 @@ export class ReminderPanel {
             items.push({ iconHTML: "📅", label: i18n("moveToToday") || "移至今天", click: () => apply(todayStr) });
             items.push({ iconHTML: "📅", label: i18n("moveToTomorrow") || "移至明天", click: () => apply(tomorrowStr) });
             items.push({ iconHTML: "📅", label: i18n("moveToDayAfterTomorrow") || "移至后天", click: () => apply(dayAfterStr) });
-            items.push({ iconHTML: "📅", label: i18n("moveToSevenDaysLater") || "移至7天后", click: () => apply(nextWeekStr) });
+            items.push({ iconHTML: "📅", label: i18n("postponeSevenDays") || "推迟7天", click: () => apply(addDaysToDate(targetReminder.date || targetReminder.endDate || todayStr, 7)) });
             items.push({ iconHTML: "❌", label: i18n("clearDate") || "清除日期", click: () => apply(null) });
             items.push({
                 iconHTML: "✏️", label: i18n("editDate") || "编辑日期", click: () => {
@@ -11412,7 +11371,7 @@ export class ReminderPanel {
                 { iconHTML: '📅', label: i18n('moveToToday') || '移至今天', click: () => this.panelBatchSetDate(todayStr) },
                 { iconHTML: '📅', label: i18n('moveToTomorrow') || '移至明天', click: () => this.panelBatchSetDate(tomorrowStr) },
                 { iconHTML: '📅', label: i18n('moveToDayAfterTomorrow') || '移至后天', click: () => this.panelBatchSetDate(dayAfterStr) },
-                { iconHTML: '📅', label: i18n('moveToSevenDaysLater') || '移至7天后', click: () => this.panelBatchSetDate(nextWeekStr) },
+                { iconHTML: '📅', label: i18n('postponeSevenDays') || '推迟7天', click: () => this.panelBatchSetDate(nextWeekStr) },
                 { iconHTML: '❌', label: i18n('clearDate') || '清除日期', click: () => this.panelBatchSetDate(null) },
                 { iconHTML: '🗓️', label: i18n('batchSetDate') || '批量设置日期…', click: () => this.panelBatchSetDateDialog() }
             ]
