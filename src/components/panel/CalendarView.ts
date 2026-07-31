@@ -2087,6 +2087,10 @@ export class CalendarView {
                         targetEl.style.borderColor = 'transparent';
                     }
                 }
+
+                if (info.event.extendedProps?.isHabit && info.event.extendedProps?.completed) {
+                    info.el.style.opacity = '0.6';
+                }
             },
             // 添加视图切换和日期变化的监听
             datesSet: (info: any) => {
@@ -5536,7 +5540,7 @@ export class CalendarView {
         mainFrame.className = 'fc-event-main-frame';
         mainFrame.setAttribute('data-event-id', event.id);
         if (props.isHabit && props.completed) {
-            mainFrame.style.opacity = '0.72';
+            mainFrame.style.opacity = '0.6';
         }
 
         // 顶部行：放置复选框和任务标题（同一行）
@@ -8544,9 +8548,6 @@ export class CalendarView {
                     });
 
                     if (!this.alwaysShowHabitReminderTime && compareDateStrings(dateStr, today) < 0) continue;
-
-                    // 如果习惯在这一天已经完成，则不需要再显示提醒时间
-                    if (completed) continue;
 
                     // 如果设置了不显示提醒时间，则跳过
                     if (!this.showReminderTime) continue;
