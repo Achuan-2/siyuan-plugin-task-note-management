@@ -98,6 +98,9 @@ export class CalendarView {
     private tooltipShowTimeout: number | null = null; // 添加提示框显示延迟控制
     private lastClickTime: number = 0; // 添加双击检测
     private clickTimeout: number | null = null; // 添加单击延迟超时
+    private lastEventClickTime: number = 0; // 事件双击检测
+    private lastEventClickId: string | null = null;
+    private eventClickTimeout: number | null = null;
     private refreshTimeout: number | null = null; // 添加刷新防抖超时
     private readonly calendarViewInstanceId: string = `calendar-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     private currentCompletionFilter: string = 'all'; // 当前完成状态过滤
@@ -6238,12 +6241,65 @@ export class CalendarView {
         }
     }
 
-    private async handleEventClick(info) {
+    private async handleEventClick(info: any) {
         // 如果正在拖动，不触发点击事件
         if (this.isDragging) {
             return;
         }
 
+        const currentTime = Date.now();
+        const eventId = info.event.id;
+        const timeDiff = currentTime - this.lastEventClickTime;
+        const isSameEvent = this.lastEventClickId === eventId;
+
+        if (this.eventClickTimeout) {
+            clearTimeout(this.eventClickTimeout);
+            this.eventClickTimeout = null;
+        }
+
+        if (timeDiff < 400 && isSameEvent) {
+            // 双击：打开编辑弹窗
+            this.lastEventClickTime = 0;
+            this.lastEventClickId = null;
+            await this.openEventEditDialog(info.event);
+        } else {
+            // 单击：设置延迟，防止误触发双击，如果无后续点击则执行单击动作（打开笔记）
+            this.lastEventClickTime = currentTime;
+            this.lastEventClickId = eventId;
+            this.eventClickTimeout = window.setTimeout(async () => {
+                this.lastEventClickTime = 0;
+                this.lastEventClickId = null;
+                this.eventClickTimeout = null;
+                await this.executeSingleClickEventAction(info);
+            }, 250);
+        }
+    }
+
+    private async openEventEditDialog(calendarEvent: any) {
+        if (!calendarEvent) return;
+
+        if (calendarEvent.extendedProps?.type === 'pomodoro') {
+            this.editPomodoroRecordFromCalendar(calendarEvent);
+            return;
+        }
+
+        if (calendarEvent.extendedProps?.isHabit) {
+            const habitId = calendarEvent.extendedProps.habitId;
+            if (habitId) {
+                await this.openHabitEditDialog(habitId);
+            }
+            return;
+        }
+
+        if (calendarEvent.extendedProps?.isRepeated) {
+            await this.showInstanceEditDialog(calendarEvent);
+            return;
+        }
+
+        await this.showTimeEditDialog(calendarEvent);
+    }
+
+    private async executeSingleClickEventAction(info: any) {
         // Pomodoro events should act as read-only in click handler
         // Right-click context menu is available for them
         if (info.event.extendedProps.type === 'pomodoro') {
