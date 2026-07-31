@@ -8191,6 +8191,8 @@ export class CalendarView {
                 if (viewType === 'timeGridDay' || viewType === 'timeGridWeek' || viewType === 'timeGridMultiDays') {
                     const pomodoroManager = this.pomodoroRecordManager;
                     const sessions = await pomodoroManager.getDateRangeSessions(startDate, endDate);
+                    const pomodoroSettings = await this.plugin.getPomodoroSettings?.() || {};
+                    const defaultWorkDuration = Math.max(1, Number(pomodoroSettings.workDuration || 25));
 
                     for (const session of sessions) {
                         // Ensure session has necessary data
@@ -8242,11 +8244,26 @@ export class CalendarView {
                             backgroundColor = colors.backgroundColor;
                         }
 
+                        let sessionStart = session.startTime;
+                        let sessionEnd = session.endTime;
+                        const startMs = new Date(sessionStart).getTime();
+                        const endMs = new Date(sessionEnd).getTime();
+
+                        // 进行中或无结束时长的番茄钟：根据计划时长或全局番茄钟时长计算临时占位截止时间
+                        const planned = Number(session.plannedDuration);
+                        const durationMinutes = (planned && planned > 0) ? planned : defaultWorkDuration;
+
+                        if (session.inProgress || Number.isNaN(endMs) || endMs <= startMs) {
+                            if (!Number.isNaN(startMs)) {
+                                sessionEnd = new Date(startMs + durationMinutes * 60 * 1000).toISOString();
+                            }
+                        }
+
                         const eventObj = {
                             id: `pomodoro-${session.id}`,
                             title: title,
-                            start: session.startTime,
-                            end: session.endTime,
+                            start: sessionStart,
+                            end: sessionEnd,
                             backgroundColor: backgroundColor,
                             borderColor: 'transparent', // Match border to background
                             textColor: 'var(--b3-theme-on-background)',
@@ -8259,7 +8276,7 @@ export class CalendarView {
                                 type: 'pomodoro',
                                 eventId: session.eventId, // Associated Task ID
                                 eventTitle: session.eventTitle,
-                                duration: session.duration,
+                                duration: session.duration > 0 ? session.duration : durationMinutes,
                                 note: session.note || '',
                                 parentId: session.eventId, // Map associated task ID to parentId for easy access
                                 originalSession: session
