@@ -10152,6 +10152,16 @@ export class ReminderPanel {
 
         // 父任务/祖先驱动判断：若其任意祖先满足当前视图筛选条件，或者祖先在 DOM 中显示，则子任务也应当显示
         if (reminder.parentId) {
+            // 当子任务已完成且没有开启“显示已完成子任务”时，不能因祖先匹配而强制在视图中保留显示
+            const today = getLogicalDateString();
+            const isDessert = this.isDailyDessertTaskForDate(reminder, today);
+            const isSpanningToday = reminder.isSpanningTodayCompletedInstance;
+            const isCompleted = !!reminder.completed || isSpanningToday || (isDessert && Array.isArray(reminder.dailyDessertCompleted) && reminder.dailyDessertCompleted.includes(today));
+
+            if (isCompleted && !this.showCompletedSubtasks) {
+                return false;
+            }
+
             let currentAncestorId = reminder.parentId;
             const visited = new Set<string>();
             while (currentAncestorId && !visited.has(currentAncestorId)) {
