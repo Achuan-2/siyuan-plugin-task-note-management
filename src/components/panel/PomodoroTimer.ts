@@ -527,7 +527,7 @@ export class PomodoroTimer {
      * Emoji 跨平台回退字体链（尤其用于 Linux/银河麒麟）
      */
     private getEmojiFontFallbackList(): string {
-        return `"Emojis Additional", "Emojis Reset", BlinkMacSystemFont, Helvetica, "PingFang SC", "Luxi Sans", "DejaVu Sans", Arial, "Microsoft Yahei", "Hiragino Sans GB", "Source Han Sans SC", sans-serif, emojis`;
+        return `"Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", "EmojiOne Color", "Twemoji Mozilla", "Emojis Additional", "Emojis Reset", BlinkMacSystemFont, Helvetica, "PingFang SC", "Luxi Sans", "DejaVu Sans", Arial, "Microsoft Yahei", "Hiragino Sans GB", "Source Han Sans SC", sans-serif, emojis`;
     }
 
     /**
@@ -1193,7 +1193,7 @@ export class PomodoroTimer {
         const message = isWorkEnd
             ? (i18n('pomodoroWorkEndDesc') || '工作时间结束，起来走走喝喝水吧！')
             : (i18n('pomodoroBreakEndDesc') || '休息时间结束，准备开始下一个工作阶段吧！');
-        const icon = isWorkEnd ? '🍅' : '☕';
+        const icon = isWorkEnd ? '🍅' : '🍵';
 
         // 非电脑客户端使用思源内部 Dialog
         if (this.plugin?.isInMobileApp || isBrowser || !hasElectron) {
@@ -1879,6 +1879,7 @@ export class PomodoroTimer {
                             width: 100%;
                         }
                         .icon { 
+                            font-family: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", "EmojiOne Color", "Twemoji Mozilla", ${fontFamily};
                             font-size: 80px; 
                             margin-bottom: 24px; 
                             animation: bounce 2s infinite;
@@ -2101,6 +2102,7 @@ export class PomodoroTimer {
                             width: 100%;
                         }
                         .icon { 
+                            font-family: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", "EmojiOne Color", "Twemoji Mozilla", ${fontFamily};
                             font-size: 80px; 
                             margin-bottom: 24px; 
                             animation: bounce 2s infinite;
@@ -6119,7 +6121,7 @@ export class PomodoroTimer {
                 if (breakTimeLeftMs > 0) {
                     const scheduledTime = new Date(now + breakTimeLeftMs);
                     const breakType = this.isLongBreak ? (i18n('pomodoroLongBreak') || '长时休息') : (i18n('pomodoroBreak') || '短时休息');
-                    const title = `☕ ${breakType}结束！`;
+                    const title = `🍵 ${breakType}结束！`;
                     const eventTitle = this.reminder.title || (i18n('pomodoroFocusDefault') || '番茄专注');
                     const message = `「${eventTitle}」的${breakType}已结束，准备开始下一个专注阶段吧！`;
 
@@ -6285,7 +6287,7 @@ export class PomodoroTimer {
             if (this.systemNotificationEnabled) {
                 const eventTitle = this.reminder.title || (i18n('pomodoroFocusDefault') || '番茄专注');
                 this.showSystemNotification(
-                    `☕ ${breakType}结束！`,
+                    `🍵 ${breakType}结束！`,
                     `「${eventTitle}」的${breakType}已结束，准备开始下一个工作阶段吧！`
                 );
             }
@@ -6310,7 +6312,7 @@ export class PomodoroTimer {
 
             // 检查是否启用自动模式并进入下一阶段
             if (this.autoMode) {
-                showMessage(`☕ ${breakType}${i18n('pomodoroBreakEndAutoWork') || '结束！自动开始下一个工作阶段'}`, 3000);
+                showMessage(`🍵 ${breakType}${i18n('pomodoroBreakEndAutoWork') || '结束！自动开始下一个工作阶段'}`, 3000);
 
                 this.stopForAutoTransition();
                 this.updateDisplay();
@@ -6327,7 +6329,7 @@ export class PomodoroTimer {
                     }, 1000); // 延迟1秒切换
                 }
             } else {
-                showMessage(`☕ ${breakType}${i18n('pomodoroBreakEndAutoWork') || '结束！自动开始下一个工作阶段'}`, 3000);
+                showMessage(`🍵 ${breakType}${i18n('pomodoroBreakEndAutoWork') || '结束！自动开始下一个工作阶段'}`, 3000);
 
                 this.isWorkPhase = true;
                 this.isLongBreak = false;
@@ -6531,7 +6533,7 @@ export class PomodoroTimer {
                 if (this.systemNotificationEnabled) {
                     const eventTitle = this.reminder.title || (i18n('pomodoroFocusDefault') || '番茄专注');
                     this.showSystemNotification(
-                        `☕ ${breakType}结束！`,
+                        `🍵 ${breakType}结束！`,
                         `「${eventTitle}」的${breakType}已结束，准备开始下一个番茄钟吧！`
                     );
                 }
@@ -6539,7 +6541,7 @@ export class PomodoroTimer {
                 // 检查是否启用自动模式
                 if (this.autoMode) {
                     // 只有在系统弹窗关闭时才显示思源笔记弹窗
-                    showMessage(`☕ ${breakType}${i18n('pomodoroBreakEndAutoWork') || '结束！自动开始下一个番茄钟'}`, 3000);
+                    showMessage(`🍵 ${breakType}${i18n('pomodoroBreakEndAutoWork') || '结束！自动开始下一个番茄钟'}`, 3000);
 
                     this.stopForAutoTransition();
                     this.updateDisplay();
@@ -6558,7 +6560,7 @@ export class PomodoroTimer {
                 } else {
                     // 非自动模式：切换到工作阶段（不自动开始）
                     if (!this.systemNotificationEnabled) {
-                        showMessage(`☕ ${breakType}${i18n('pomodoroBreakEndSwitchWork') || '结束！切换到工作时间（不自动开始）'}`, 3000);
+                        showMessage(`🍵 ${breakType}${i18n('pomodoroBreakEndSwitchWork') || '结束！切换到工作时间（不自动开始）'}`, 3000);
                     }
                     this.isWorkPhase = true;
                     this.isLongBreak = false;
