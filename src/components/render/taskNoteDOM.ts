@@ -38,6 +38,13 @@ export class TaskNoteDOMManager {
     private lastMilestoneDateDisplayByBlock: Map<string, MilestoneDateDisplayInfo> = new Map();
     private dialogPreloadTimer: number | null = null;
     private dialogsPreloaded = false;
+    private blockRootIdCache: Map<string, string> = new Map();
+    private docPomodoroSummaryCache: Map<string, {
+        count: number;
+        minutes: number;
+        includeEventIds: string[];
+        cacheVersion: number;
+    }> = new Map();
 
     constructor(plugin: any) {
         this.plugin = plugin;
@@ -96,10 +103,21 @@ export class TaskNoteDOMManager {
         return false;
     }
 
+    public isProtyleVisible(protyle: any): boolean {
+        if (!protyle || !protyle.element) return false;
+        const element = protyle.element as HTMLElement;
+        if (!element.isConnected) return false;
+        if (element.closest(".fn__none")) return false;
+        if (element.offsetWidth === 0 && element.offsetHeight === 0) return false;
+        const style = window.getComputedStyle(element);
+        if (style.display === "none" || style.visibility === "hidden") return false;
+        return true;
+    }
+
     private refreshBoundReminderDateButtonsForAllProtyles() {
         document.querySelectorAll(".protyle").forEach((protyleElement) => {
             const protyle = (protyleElement as any).protyle;
-            if (!protyle?.element) return;
+            if (!protyle?.element || !this.isProtyleVisible(protyle)) return;
             this._scanProtyleForButtons(protyle);
         });
     }
@@ -159,12 +177,11 @@ export class TaskNoteDOMManager {
         this.pomodoroStatsByBaseEventId = new Map();
         this.pomodoroStatsCacheUpdatedAt = 0;
         this.pomodoroStatsLoadingPromise = null;
+        this.docPomodoroSummaryCache.clear();
     }
 
     private async ensurePomodoroStatsCache(force = false): Promise<void> {
-        const cacheTtlMs = 3000;
-        const now = Date.now();
-        if (!force && this.pomodoroStatsCacheUpdatedAt > 0 && now - this.pomodoroStatsCacheUpdatedAt < cacheTtlMs) {
+        if (!force && this.pomodoroStatsCacheUpdatedAt > 0) {
             return;
         }
         if (this.pomodoroStatsLoadingPromise) {
@@ -373,7 +390,7 @@ export class TaskNoteDOMManager {
     public addBreadcrumbButtonsToExistingProtyles() {
         document.querySelectorAll(".protyle").forEach((protyleElement) => {
             const protyle = (protyleElement as any).protyle;
-            if (protyle) {
+            if (protyle && this.isProtyleVisible(protyle)) {
                 this.addBreadcrumbReminderButton(protyle);
                 this.addBlockProjectButtonsToProtyle(protyle);
             }
@@ -605,7 +622,7 @@ export class TaskNoteDOMManager {
 
     public _scanProtyleForButtons(protyle: any) {
         try {
-            if (!protyle || !protyle.element) return;
+            if (!protyle || !protyle.element || !this.isProtyleVisible(protyle)) return;
 
             const selector = `[custom-task-projectid], [custom-bind-reminders], [custom-bind-milestones], [${BLOCK_POMODORO_COUNT_ATTR}], [${BLOCK_POMODORO_MINUTES_ATTR}]`;
             const allBlocks = Array.from(protyle.element.querySelectorAll(selector)) as Element[];
@@ -702,7 +719,7 @@ export class TaskNoteDOMManager {
 
 
     public async addBlockProjectButtonsToProtyle(protyle: any) {
-        if (!protyle || !protyle.element) return;
+        if (!protyle || !protyle.element || !this.isProtyleVisible(protyle)) return;
 
         this._scanProtyleForButtons(protyle);
 
@@ -747,6 +764,7 @@ export class TaskNoteDOMManager {
                     }
 
                     const timer = window.setTimeout(() => {
+                        if (!this.isProtyleVisible(protyle)) return;
                         this._scanProtyleForButtons(protyle);
                     }, 50);
 
@@ -1154,6 +1172,7 @@ export class TaskNoteDOMManager {
         selfPomodoroMinutes: number,
         linkedReminderIds: string[]
     ) {
+        if (!this.isProtyleVisible(protyle)) return;
         const nextTaskId = (this.latestPomodoroSummaryTaskByBlock.get(blockId) || 0) + 1;
         this.latestPomodoroSummaryTaskByBlock.set(blockId, nextTaskId);
         try {
@@ -1235,91 +1254,120 @@ export class TaskNoteDOMManager {
         // 文档块：基于已有番茄数据的 eventId 反向判定是否属于当前文档，极速、准确且脱离 DOM 渲染限制
         const isDocumentBlock = trackedSource.classList.contains("protyle-wysiwyg");
         if (isDocumentBlock) {
-            try {
-                // 1. 获取所有已有番茄数据的 eventId / baseEventId
-                const candidateEventIds = new Set<string>([
-                    ...this.pomodoroStatsByEventId.keys(),
-                    ...this.pomodoroStatsByBaseEventId.keys(),
-                ]);
+            const cachedSummary = this.docPomodoroSummaryCache.get(blockId);
+            if (cachedSummary && cachedSummary.cacheVersion === this.pomodoroStatsCacheUpdatedAt) {
+                mergedCount = cachedSummary.count;
+                mergedMinutes = cachedSummary.minutes;
+                summaryIncludeEventIds = cachedSummary.includeEventIds;
+            } else {
+                try {
+                    // 1. 获取所有已有番茄数据的 eventId / baseEventId
+                    const candidateEventIds = new Set<string>([
+                        ...this.pomodoroStatsByEventId.keys(),
+                        ...this.pomodoroStatsByBaseEventId.keys(),
+                    ]);
 
-                const matchedDocEventIds = new Set<string>();
-                const unknownBlockIdsToQuery = new Map<string, string[]>(); // blockId -> eventIds
+                    const matchedDocEventIds = new Set<string>();
+                    const unknownBlockIdsToQuery = new Map<string, string[]>(); // blockId -> eventIds
 
-                // 辅助：递归判断提醒任务及其父任务链是否归属于当前文档
-                const isTaskInDoc = (rem: any): boolean => {
-                    if (!rem) return false;
-                    if (rem.docId === blockId || rem.blockId === blockId) return true;
-                    let current = rem;
-                    const visited = new Set<string>([rem.id]);
-                    while (current && current.parentId && reminderData) {
-                        const parentBase = getSeriesBaseId(current.parentId);
-                        if (visited.has(parentBase)) break;
-                        visited.add(parentBase);
-                        const parentRem = reminderData[parentBase] || reminderData[current.parentId];
-                        if (!parentRem) break;
-                        if (parentRem.docId === blockId || parentRem.blockId === blockId) return true;
-                        current = parentRem;
-                    }
-                    return false;
-                };
+                    // 辅助：递归判断提醒任务及其父任务链是否归属于当前文档
+                    const isTaskInDoc = (rem: any): boolean => {
+                        if (!rem) return false;
+                        if (rem.docId === blockId || rem.blockId === blockId) return true;
+                        let current = rem;
+                        const visited = new Set<string>([rem.id]);
+                        while (current && current.parentId && reminderData) {
+                            const parentBase = getSeriesBaseId(current.parentId);
+                            if (visited.has(parentBase)) break;
+                            visited.add(parentBase);
+                            const parentRem = reminderData[parentBase] || reminderData[current.parentId];
+                            if (!parentRem) break;
+                            if (parentRem.docId === blockId || parentRem.blockId === blockId) return true;
+                            current = parentRem;
+                        }
+                        return false;
+                    };
 
-                for (const eventId of candidateEventIds) {
-                    if (!eventId) continue;
-                    if (eventId === blockId) {
-                        matchedDocEventIds.add(eventId);
-                        continue;
-                    }
-
-                    const baseId = getSeriesBaseId(eventId);
-                    const rem = reminderData ? (reminderData[baseId] || reminderData[eventId]) : null;
-
-                    if (rem) {
-                        if (isTaskInDoc(rem)) {
+                    for (const eventId of candidateEventIds) {
+                        if (!eventId) continue;
+                        if (eventId === blockId) {
                             matchedDocEventIds.add(eventId);
-                        } else if (rem.blockId) {
-                            // 提醒关联了块 ID，但暂未直接确认 docId 是否为当前文档，搜集块 ID 待 SQL 校验
-                            if (!unknownBlockIdsToQuery.has(rem.blockId)) {
-                                unknownBlockIdsToQuery.set(rem.blockId, []);
-                            }
-                            unknownBlockIdsToQuery.get(rem.blockId)!.push(eventId);
+                            continue;
                         }
-                    } else {
-                        // 非提醒任务（可能是直接在块上打卡的 eventId），搜集以确认是否为该文档下的块
-                        if (!unknownBlockIdsToQuery.has(eventId)) {
-                            unknownBlockIdsToQuery.set(eventId, []);
-                        }
-                        unknownBlockIdsToQuery.get(eventId)!.push(eventId);
-                    }
-                }
 
-                // 2. 如果存在待校验归属的块 ID，只针对这少量块 ID 发起 SQL 查询校验 root_id
-                if (unknownBlockIdsToQuery.size > 0) {
-                    try {
-                        const { sql } = await import("../../api");
-                        const idsStr = Array.from(unknownBlockIdsToQuery.keys()).map(id => `'${id}'`).join(",");
-                        const rows = await sql(`SELECT id, root_id FROM blocks WHERE id IN (${idsStr}) LIMIT -1`);
-                        if (Array.isArray(rows)) {
-                            for (const row of rows) {
-                                if (row && row.root_id === blockId) {
-                                    const evIds = unknownBlockIdsToQuery.get(row.id);
-                                    if (evIds) {
-                                        evIds.forEach(id => matchedDocEventIds.add(id));
+                        const baseId = getSeriesBaseId(eventId);
+                        const rem = reminderData ? (reminderData[baseId] || reminderData[eventId]) : null;
+
+                        if (rem) {
+                            if (isTaskInDoc(rem)) {
+                                matchedDocEventIds.add(eventId);
+                            } else if (rem.blockId) {
+                                const cachedRootId = this.blockRootIdCache.get(rem.blockId);
+                                if (cachedRootId !== undefined) {
+                                    if (cachedRootId === blockId) {
+                                        matchedDocEventIds.add(eventId);
+                                    }
+                                } else {
+                                    if (!unknownBlockIdsToQuery.has(rem.blockId)) {
+                                        unknownBlockIdsToQuery.set(rem.blockId, []);
+                                    }
+                                    unknownBlockIdsToQuery.get(rem.blockId)!.push(eventId);
+                                }
+                            }
+                        } else {
+                            const cachedRootId = this.blockRootIdCache.get(eventId);
+                            if (cachedRootId !== undefined) {
+                                if (cachedRootId === blockId) {
+                                    matchedDocEventIds.add(eventId);
+                                }
+                            } else {
+                                if (!unknownBlockIdsToQuery.has(eventId)) {
+                                    unknownBlockIdsToQuery.set(eventId, []);
+                                }
+                                unknownBlockIdsToQuery.get(eventId)!.push(eventId);
+                            }
+                        }
+                    }
+
+                    // 2. 如果存在待校验归属的块 ID，只针对这少量块 ID 发起 SQL 查询校验 root_id
+                    if (unknownBlockIdsToQuery.size > 0) {
+                        try {
+                            const { sql } = await import("../../api");
+                            const idsStr = Array.from(unknownBlockIdsToQuery.keys()).map(id => `'${id}'`).join(",");
+                            const rows = await sql(`SELECT id, root_id FROM blocks WHERE id IN (${idsStr}) LIMIT -1`);
+                            if (Array.isArray(rows)) {
+                                for (const row of rows) {
+                                    if (row && row.id && row.root_id) {
+                                        this.blockRootIdCache.set(row.id, row.root_id);
+                                        if (row.root_id === blockId) {
+                                            const evIds = unknownBlockIdsToQuery.get(row.id);
+                                            if (evIds) {
+                                                evIds.forEach(id => matchedDocEventIds.add(id));
+                                            }
+                                        }
                                     }
                                 }
                             }
+                        } catch (sqlErr) {
+                            console.warn("校验块 ID 所属文档 SQL 失败:", sqlErr);
                         }
-                    } catch (sqlErr) {
-                        console.warn("校验块 ID 所属文档 SQL 失败:", sqlErr);
                     }
-                }
 
-                // 3. 一次性累加所有归属于当前文档的番茄钟数据
-                const docStats = this.getBoundPomodoroStatsFromCache(Array.from(matchedDocEventIds));
-                mergedCount = Math.max(0, Math.floor(docStats.count));
-                mergedMinutes = Math.max(0, Math.floor(docStats.minutes));
-                summaryIncludeEventIds = Array.from(matchedDocEventIds);
-            } catch (err) {
-                console.warn("文档级反向匹配番茄数据失败:", err);
+                    // 3. 一次性累加所有归属于当前文档的番茄钟数据
+                    const docStats = this.getBoundPomodoroStatsFromCache(Array.from(matchedDocEventIds));
+                    mergedCount = Math.max(0, Math.floor(docStats.count));
+                    mergedMinutes = Math.max(0, Math.floor(docStats.minutes));
+                    summaryIncludeEventIds = Array.from(matchedDocEventIds);
+
+                    this.docPomodoroSummaryCache.set(blockId, {
+                        count: mergedCount,
+                        minutes: mergedMinutes,
+                        includeEventIds: summaryIncludeEventIds,
+                        cacheVersion: this.pomodoroStatsCacheUpdatedAt,
+                    });
+                } catch (err) {
+                    console.warn("文档级反向匹配番茄数据失败:", err);
+                }
             }
         }
 
