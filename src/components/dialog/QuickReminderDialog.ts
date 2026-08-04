@@ -2184,7 +2184,48 @@ export class QuickReminderDialog {
         }, this.tempSubtasks, (updatedSubtasks) => {
             this.tempSubtasks = updatedSubtasks;
             void this.updateSubtasksDisplay();
-        }, undefined, undefined, () => this.getCurrentTitle(), this.readOnly);
+        }, undefined, undefined, () => this.getCurrentTitle(), this.readOnly, () => this.getTempParentTask());
+    }
+
+    private getCurrentProjectId(): string | undefined {
+        const projectSelector = this.dialog?.element?.querySelector('#quickProjectSelector') as HTMLInputElement;
+        return projectSelector?.value || this.defaultProjectId || this.reminder?.projectId;
+    }
+
+    private getCurrentCustomGroupId(): string | null | undefined {
+        const customGroupSelector = this.dialog?.element?.querySelector('#quickCustomGroupSelector') as HTMLSelectElement;
+        return customGroupSelector ? (customGroupSelector.value || null) : (this.defaultCustomGroupId ?? this.reminder?.customGroupId);
+    }
+
+    private getCurrentStatus(): string | undefined {
+        const selectedStatus = this.dialog?.element?.querySelector('#quickStatusSelector .task-status-option.selected') as HTMLElement;
+        return selectedStatus?.getAttribute('data-status-type') || this.defaultStatus || this.reminder?.kanbanStatus;
+    }
+
+    private getCurrentMilestoneId(): string | undefined {
+        const milestoneSelector = this.dialog?.element?.querySelector('#quickMilestoneSelector') as HTMLSelectElement;
+        return milestoneSelector ? (milestoneSelector.value || undefined) : (this.defaultMilestoneId ?? this.reminder?.milestoneId);
+    }
+
+    private getCurrentCategoryId(): string | undefined {
+        return this.selectedCategoryIds.length > 0 ? this.selectedCategoryIds.join(',') : (this.defaultCategoryId ?? this.reminder?.categoryId);
+    }
+
+    private getCurrentPriority(): string | undefined {
+        const selectedPriority = this.dialog?.element?.querySelector('#quickPrioritySelector .priority-option.selected') as HTMLElement;
+        return selectedPriority?.getAttribute('data-priority') || this.defaultPriority || this.reminder?.priority;
+    }
+
+    private getTempParentTask(): any {
+        return {
+            title: this.getCurrentTitle(),
+            projectId: this.getCurrentProjectId(),
+            customGroupId: this.getCurrentCustomGroupId(),
+            kanbanStatus: this.getCurrentStatus(),
+            milestoneId: this.getCurrentMilestoneId(),
+            categoryId: this.getCurrentCategoryId(),
+            priority: this.getCurrentPriority()
+        };
     }
 
     private getCurrentTitle(): string {
@@ -8138,10 +8179,16 @@ export class QuickReminderDialog {
                 // 生成新的子任务 ID
                 const subtaskId = `reminder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
+                const parentIdForSubtask = resolveTempParentId(tempSubtask);
+                const parentReminder = reminderData[parentId];
+                const realParent = reminderData[parentIdForSubtask] || parentReminder;
+                const parentProjectId = realParent?.projectId || parentReminder?.projectId;
+                const parentCustomGroupId = realParent?.customGroupId;
+
                 // 创建子任务对象
                 const subtask: any = {
                     id: subtaskId,
-                    parentId: resolveTempParentId(tempSubtask),
+                    parentId: parentIdForSubtask,
                     blockId: tempSubtask.blockId || null,
                     docId: tempSubtask.docId || null,
                     title: tempSubtask.title || '未命名任务',
@@ -8153,8 +8200,8 @@ export class QuickReminderDialog {
                     completed: tempSubtask.completed || false,
                     priority: tempSubtask.priority || 'none',
                     categoryId: tempSubtask.categoryId || undefined,
-                    projectId: tempSubtask.projectId || undefined,
-                    customGroupId: tempSubtask.customGroupId || undefined,
+                    projectId: tempSubtask.projectId || parentProjectId || undefined,
+                    customGroupId: tempSubtask.customGroupId || parentCustomGroupId || undefined,
                     milestoneId: tempSubtask.milestoneId || undefined,
                     tagIds: tempSubtask.tagIds || undefined,
                     createdAt: nowStr,

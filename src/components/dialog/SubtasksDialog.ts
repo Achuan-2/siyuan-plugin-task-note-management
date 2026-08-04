@@ -28,6 +28,7 @@ export class SubtasksDialog {
     private isModifyAllInstances: boolean = false; // 是否为编辑所有重复实例模式
     private collapsedSubtaskIds: Set<string> = new Set();
     private tempParentName?: string | (() => string);
+    private tempParentTask?: any | (() => any);
     private categoryManager: CategoryManager;
     private projectManager: ProjectManager;
     private milestoneMap: Map<string, any> = new Map();
@@ -43,7 +44,8 @@ export class SubtasksDialog {
         isInstanceEdit?: boolean,
         isModifyAllInstances?: boolean,
         tempParentName?: string | (() => string),
-        readOnly?: boolean
+        readOnly?: boolean,
+        tempParentTask?: any | (() => any)
     ) {
         this.parentId = parentId;
         this.plugin = plugin;
@@ -55,11 +57,17 @@ export class SubtasksDialog {
         this.isInstanceEdit = isInstanceEdit || false;
         this.isModifyAllInstances = isModifyAllInstances || false;
         this.tempParentName = tempParentName;
+        this.tempParentTask = tempParentTask;
         this.categoryManager = CategoryManager.getInstance(this.plugin);
         this.projectManager = ProjectManager.getInstance(this.plugin);
         this.readOnly = !!readOnly;
         // 使用插件全局共享的 Lute 实例
         this.lute = getLuteInstance();
+    }
+
+    private getResolvedTempParentTask(): any | null {
+        if (!this.tempParentTask) return null;
+        return typeof this.tempParentTask === 'function' ? this.tempParentTask() : this.tempParentTask;
     }
 
     private getRootElement(): HTMLElement {
@@ -828,7 +836,16 @@ export class SubtasksDialog {
         const parentIdForNew = parentTaskOverride?.id || (this.isTempMode ? '__TEMP_PARENT__' : this.parentId);
         let parentTask: any = parentTaskOverride || null;
 
-        if (!this.isTempMode && !parentTask) {
+        if (this.isTempMode) {
+            if (!parentTask) {
+                if (parentIdForNew !== '__TEMP_PARENT__') {
+                    parentTask = this.subtasks.find(t => t.id === parentIdForNew) || null;
+                }
+                if (!parentTask) {
+                    parentTask = this.getResolvedTempParentTask();
+                }
+            }
+        } else if (!parentTask) {
             const reminderData = await this.plugin.loadReminderData() || {};
             const { targetParentId } = this.parseInstanceParentId(parentIdForNew);
 
@@ -897,7 +914,7 @@ export class SubtasksDialog {
             skipSave: this.isTempMode, // 临时模式下跳过保存，通过回调返回数据
             tempParentName: this.isTempMode && parentIdForNew === '__TEMP_PARENT__'
                 ? (typeof this.tempParentName === 'function' ? this.tempParentName() : this.tempParentName)
-                : undefined
+                : (parentTask?.title || undefined)
         });
         dialog.show();
     }
