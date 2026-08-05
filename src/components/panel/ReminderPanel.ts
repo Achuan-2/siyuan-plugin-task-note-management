@@ -427,7 +427,7 @@ export class ReminderPanel {
         const actionContainer = document.createElement('div');
         actionContainer.className = 'reminder-panel__actions';
         // 在单独一行时使用 flex 右对齐
-        actionContainer.style.cssText = 'display:flex; justify-content:flex-start; gap:8px; margin-bottom:8px;';
+        actionContainer.style.cssText = 'display:flex; justify-content:flex-start; gap:8px;';
 
         // 添加新建任务按钮
         const newTaskBtn = document.createElement('button');
