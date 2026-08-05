@@ -8501,15 +8501,16 @@ export class PomodoroTimer {
                     // 优先使用保存的正常窗口位置（从吸附/迷你模式恢复时）
                     x = this.normalWindowBounds.x;
                     y = this.normalWindowBounds.y;
-                    if (this.normalWindowBounds.width && this.normalWindowBounds.height) {
-                        winWidth = this.normalWindowBounds.width;
-                        winHeight = this.normalWindowBounds.height;
-                    }
+                    // 只继承位置，固定使用标准尺寸 240x235，避免 High DPI / 阴影边距等 getBounds() 误差累积导致窗口不断变大
+                    winWidth = 240;
+                    winHeight = 235;
                     console.log('[PomodoroTimer] 使用保存的正常窗口位置:', this.normalWindowBounds);
                 } else if (this.inheritedWindowBounds) {
                     // 只继承位置，不继承大小，避免 getBounds() 的阴影/缩放误差累积导致窗口越来越大
                     x = this.inheritedWindowBounds.x;
                     y = this.inheritedWindowBounds.y;
+                    winWidth = 240;
+                    winHeight = 235;
                     console.log('[PomodoroTimer] 使用继承的窗口位置:', this.inheritedWindowBounds);
                 }
             }
@@ -10888,7 +10889,12 @@ document.body.classList.remove('docked-mode');
                     try {
                         pomodoroWindow.setResizable(true);
                         if (this.normalWindowBounds) {
-                            pomodoroWindow.setBounds(this.normalWindowBounds);
+                            pomodoroWindow.setBounds({
+                                x: this.normalWindowBounds.x,
+                                y: this.normalWindowBounds.y,
+                                width: 240,
+                                height: 235
+                            });
                             this.normalWindowBounds = null;
                         } else {
                             pomodoroWindow.setSize(240, 235);
@@ -11129,7 +11135,13 @@ document.body.classList.remove('docked-mode');
                 // 进入迷你模式
                 // 保存当前窗口大小和位置
                 if (!this.normalWindowBounds) {
-                    this.normalWindowBounds = pomodoroWindow.getBounds();
+                    const bounds = pomodoroWindow.getBounds();
+                    this.normalWindowBounds = {
+                        x: bounds.x,
+                        y: bounds.y,
+                        width: 240,
+                        height: 235
+                    };
                 }
 
                 const miniStyle = this.getMiniWindowStyle();
@@ -11217,7 +11229,13 @@ document.body.classList.remove('mini-mode');
             if (!this.isDocked) {
                 // Entering docked mode -> Save current bounds
                 if (!pomodoroWindow.isMaximized()) {
-                    this.normalWindowBounds = pomodoroWindow.getBounds();
+                    const bounds = pomodoroWindow.getBounds();
+                    this.normalWindowBounds = {
+                        x: bounds.x,
+                        y: bounds.y,
+                        width: 240,
+                        height: 235
+                    };
                 }
                 this.isDocked = true;
             } else {
@@ -11375,12 +11393,17 @@ document.body.classList.remove('mini-mode');
         const width = Number(bounds.width);
         const height = Number(bounds.height);
 
+        // 如果传入的 bounds 来自正常窗口（宽度 >= 200 或高度 >= 100），说明不是来自上一次迷你窗口的尺寸，直接使用默认尺寸
+        if (width >= 200 || height >= 100) {
+            return fallback;
+        }
+
         if (style === 'ring') {
             const candidate = width > 0 ? width : (height > 0 ? height : fallback.width);
             if (!Number.isFinite(candidate) || candidate <= 0) {
                 return fallback;
             }
-            const size = Math.max(40, Math.round(candidate));
+            const size = Math.max(40, Math.min(100, Math.round(candidate)));
             return { width: size, height: size };
         }
 
