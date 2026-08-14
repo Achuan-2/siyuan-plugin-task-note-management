@@ -131,7 +131,6 @@ class KernelPluginBridge {
 class KernelPlugin {
     private readonly siyuan: typeof globalThis.siyuan;
     private readonly logger: ILogger;
-    private readonly mcp: IMcp;
 
     private storage = createKernelStorage();
     private bridge = new KernelPluginBridge(this.storage);
@@ -157,14 +156,36 @@ class KernelPlugin {
     constructor() {
         this.siyuan = siyuan;
         this.logger = this.siyuan.logger;
-        this.mcp = this.siyuan.mcp;
 
         this.siyuan.plugin.lifecycle.onload = this.onload.bind(this);
         this.siyuan.plugin.lifecycle.onunload = this.onunload.bind(this);
     }
 
+    private async registerCapability(name: string, config: any, handler: any): Promise<any> {
+        const siyuanAny = this.siyuan as any;
+        if (siyuanAny.agent && typeof siyuanAny.agent.registerCapability === "function") {
+            return await siyuanAny.agent.registerCapability(name, config, handler);
+        }
+        if (siyuanAny.mcp && typeof siyuanAny.mcp.registerTool === "function") {
+            return await siyuanAny.mcp.registerTool(name, config, handler);
+        }
+        throw new Error("Neither siyuan.agent.registerCapability nor siyuan.mcp.registerTool is available");
+    }
+
+    private async unregisterCapability(name: string): Promise<void> {
+        const siyuanAny = this.siyuan as any;
+        if (siyuanAny.agent && typeof siyuanAny.agent.unregisterCapability === "function") {
+            await siyuanAny.agent.unregisterCapability(name);
+            return;
+        }
+        if (siyuanAny.mcp && typeof siyuanAny.mcp.unregisterTool === "function") {
+            await siyuanAny.mcp.unregisterTool(name);
+            return;
+        }
+    }
+
     private async onload(): Promise<void> {
-        await this.logger.info("[kernel] MCP plugin loading");
+        await this.logger.info("[kernel] Agent capability plugin loading");
 
         try {
             // Initialize managers to load data cache
@@ -189,27 +210,27 @@ class KernelPlugin {
             });
 
             for (const tool of this.registry) {
-                const registered = await this.mcp.registerTool(tool.name, tool.config, tool.handler);
+                const registered = await this.registerCapability(tool.name, tool.config, tool.handler);
                 this.registeredToolNames.push(tool.name);
-                await this.logger.debug("[kernel] registered MCP tool:", registered.name);
+                await this.logger.debug("[kernel] registered capability:", registered?.name || tool.name);
             }
 
-            await this.logger.info(`[kernel] registered ${this.registeredToolNames.length} MCP tools`);
+            await this.logger.info(`[kernel] registered ${this.registeredToolNames.length} capabilities`);
         } catch (error: any) {
-            await this.logger.error("[kernel] failed to register MCP tools:", error);
+            await this.logger.error("[kernel] failed to register capabilities:", error);
             throw error;
         }
     }
 
     private async onunload(): Promise<void> {
-        await this.logger.info("[kernel] MCP plugin unloading");
+        await this.logger.info("[kernel] Agent capability plugin unloading");
 
         for (const name of this.registeredToolNames) {
             try {
-                await this.mcp.unregisterTool(name);
-                await this.logger.debug("[kernel] unregistered MCP tool:", name);
+                await this.unregisterCapability(name);
+                await this.logger.debug("[kernel] unregistered capability:", name);
             } catch (error: any) {
-                await this.logger.error(`[kernel] failed to unregister tool ${name}:`, error);
+                await this.logger.error(`[kernel] failed to unregister capability ${name}:`, error);
             }
         }
 
