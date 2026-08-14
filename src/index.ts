@@ -3608,7 +3608,11 @@ export default class ReminderPlugin extends Plugin {
             const dataType = blockElement.getAttribute("data-type");
             if (dataType === "NodeList") {
                 const listItemBlockIds = await this.getListItemBlockIds(blockId);
-                listItemBlockIds.forEach((id) => taskListItemIds.add(id));
+                for (const id of listItemBlockIds) {
+                    if (await isTaskListLikeBlock(id)) {
+                        taskListItemIds.add(id);
+                    }
+                }
                 continue;
             }
 

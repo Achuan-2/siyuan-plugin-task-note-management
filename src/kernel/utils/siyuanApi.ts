@@ -129,12 +129,10 @@ export async function isTaskListLikeBlock(blockId: string): Promise<boolean> {
         const result = await sql(`SELECT type, subtype FROM blocks WHERE id = '${blockId}'`);
         if (result && result.length > 0) {
             const block = result[0];
-            if (block.type === 'i' && block.subtype === 't') {
-                return true;
+            if (block.type === 'i') {
+                return block.subtype === 't';
             }
-            if (block.type !== 'i') {
-                return false;
-            }
+            return false;
         }
 
         const kramdown = (await getBlockKramdown(blockId)).kramdown || '';
@@ -181,10 +179,14 @@ function getTaskListMarkerByReminders(reminders: any[], syncDoingAndAbandoned: b
 async function syncTaskListBlockCompletion(blockId: string, reminders: any[], syncDoingAndAbandoned: boolean = true): Promise<void> {
     const isTaskList = await isTaskListLikeBlock(blockId);
     if (isTaskList) {
-        await batchUpdateTaskListItemMarker([{
-            id: blockId,
-            marker: getTaskListMarkerByReminders(reminders, syncDoingAndAbandoned)
-        }]);
+        try {
+            await batchUpdateTaskListItemMarker([{
+                id: blockId,
+                marker: getTaskListMarkerByReminders(reminders, syncDoingAndAbandoned)
+            }]);
+        } catch (err) {
+            console.warn('同步任务列表块标记失败:', blockId, err);
+        }
         return;
     }
 
@@ -193,11 +195,15 @@ async function syncTaskListBlockCompletion(blockId: string, reminders: any[], sy
         const children = await getChildBlocks(blockId);
         if (children && children.length === 1) {
             const child = children[0];
-            if (child.type === 'i') {
-                await batchUpdateTaskListItemMarker([{
-                    id: child.id,
-                    marker: getTaskListMarkerByReminders(reminders, syncDoingAndAbandoned)
-                }]);
+            if (child && child.id && await isTaskListLikeBlock(child.id)) {
+                try {
+                    await batchUpdateTaskListItemMarker([{
+                        id: child.id,
+                        marker: getTaskListMarkerByReminders(reminders, syncDoingAndAbandoned)
+                    }]);
+                } catch (err) {
+                    console.warn('同步子任务列表块标记失败:', child.id, err);
+                }
             }
         }
     }
