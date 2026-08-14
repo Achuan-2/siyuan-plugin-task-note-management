@@ -5955,6 +5955,7 @@ export class ReminderPanel {
                     // 1. 纯同步极速乐观渲染：0 毫秒延迟，绝不等待任何 SQL 或 API
                     let targetRemObject = targetInfo ? this.currentRemindersCache.find(r => r.id === targetInfo.id) : null;
                     const defaultDate = getLogicalDateString();
+                    const globalDefaultProjectId = this.plugin?.settings?.unassignedTasksProjectId || undefined;
                     const createdOptIds: string[] = [];
 
                     for (const bid of blockIds) {
@@ -5978,6 +5979,7 @@ export class ReminderPanel {
                             createdTime: new Date().toISOString(),
                             completed: false
                         };
+                        if (globalDefaultProjectId) optReminder.projectId = globalDefaultProjectId;
 
                         if (targetInfo && targetRemObject) {
                             if (targetInfo.dropType === 'set-parent') {
@@ -5989,7 +5991,6 @@ export class ReminderPanel {
                                 if (targetRemObject.parentId) {
                                     optReminder.parentId = targetRemObject.parentId;
                                 }
-                                if (targetRemObject.projectId) optReminder.projectId = targetRemObject.projectId;
                                 if (targetRemObject.categoryId) optReminder.categoryId = targetRemObject.categoryId;
                                 optReminder.priority = targetRemObject.priority || 'none';
                             }
@@ -6409,9 +6410,10 @@ export class ReminderPanel {
 
             const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
             const { defaultDate, defaultEndDate, defaultCategoryId, defaultProjectId, defaultPriority } = await this.getFilterAttributes();
+            const globalDefaultProjectId = this.plugin?.settings?.unassignedTasksProjectId || undefined;
 
             // 获取块继承的项目、分组、分类（同块右键新建任务逻辑）
-            let inheritedProjectId = defaultProjectId;
+            let inheritedProjectId = defaultProjectId || globalDefaultProjectId;
             let inheritedCategoryId = defaultCategoryId;
             let inheritedGroupId: string | undefined = undefined;
             let inheritedMilestoneId: string | undefined = undefined;
@@ -6419,7 +6421,7 @@ export class ReminderPanel {
                 if (this.plugin && typeof this.plugin.getInheritedProjectAndGroup === 'function' && !this.isUuid(realBlockId)) {
                     const inherited = await this.plugin.getInheritedProjectAndGroup(realBlockId);
                     if (inherited) {
-                        inheritedProjectId = inherited.projectId || defaultProjectId;
+                        inheritedProjectId = inherited.projectId || defaultProjectId || globalDefaultProjectId;
                         inheritedCategoryId = inherited.categoryId || defaultCategoryId;
                         inheritedGroupId = inherited.groupId;
                         inheritedMilestoneId = inherited.milestoneId;
@@ -6476,7 +6478,6 @@ export class ReminderPanel {
                         if (targetRemObject.parentId) {
                             newReminder.parentId = targetRemObject.parentId;
                         }
-                        if (targetRemObject.projectId) newReminder.projectId = targetRemObject.projectId;
                         if (targetRemObject.categoryId) newReminder.categoryId = targetRemObject.categoryId;
                         newReminder.priority = targetRemObject.priority || 'none';
                     }
