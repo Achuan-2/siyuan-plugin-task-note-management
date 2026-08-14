@@ -2424,13 +2424,28 @@ export default class ReminderPlugin extends Plugin {
 
 
         // 注册日历视图标签页
+        const thisPlugin = this;
+        const destroyCalendarTab = function (this: any) {
+            const calendarView = this._calendarView;
+            if (calendarView && typeof calendarView.destroy === 'function') {
+                calendarView.destroy();
+            }
+            for (const [tabId, view] of thisPlugin.tabViews) {
+                if (view === calendarView) {
+                    thisPlugin.tabViews.delete(tabId);
+                }
+            }
+            this._calendarView = null;
+        };
         this.addTab({
             type: TAB_TYPE,
             init: ((tab) => {
                 const calendarView = new CalendarView(tab.element, this, tab.data);
                 // 保存实例引用用于清理
                 this.tabViews.set(tab.id, calendarView);
-            }) as any
+                tab._calendarView = calendarView;
+            }) as any,
+            destroy: destroyCalendarTab as any
         });
 
         // 注册习惯日历标签页（使用独立类型，避免与任务日历标签页复用）
@@ -2440,7 +2455,9 @@ export default class ReminderPlugin extends Plugin {
                 const calendarView = new CalendarView(tab.element, this, { ...tab.data, showHabitsOnly: true });
                 // 保存实例引用用于清理
                 this.tabViews.set(tab.id, calendarView);
-            }) as any
+                tab._calendarView = calendarView;
+            }) as any,
+            destroy: destroyCalendarTab as any
         });
 
         // 注册四象限视图标签页
