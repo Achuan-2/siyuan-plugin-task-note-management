@@ -7,6 +7,8 @@ const PROJECT_KANBAN_TAB_TYPE = "TN_project_kanban_tab";
 const BLOCK_POMODORO_COUNT_ATTR = "custom-task-pomodoro-count";
 const BLOCK_POMODORO_MINUTES_ATTR = "custom-task-pomodoro-minutes";
 const INSTANCE_EVENT_ID_SUFFIX_REGEX = /^(.*)_\d{4}-\d{2}-\d{2}$/;
+const OUTLINE_PREFIX_DATA_ATTR = "data-task-note-outline-prefix";
+const OUTLINE_PREFIX_OWNED_ATTR = "data-task-note-outline-prefix-owned";
 
 interface PomodoroStats {
     count: number;
@@ -23,7 +25,7 @@ export class TaskNoteDOMManager {
     private plugin: any;
 
     private processingBlockButtons: Set<string> = new Set();
-    private outlinePrefixCache: Map<string, string> = new Map();
+    private outlinePrefixCache: Map<string, string | null> = new Map();
     private protyleObservers: WeakMap<Element, MutationObserver> = new WeakMap();
     private protyleDebounceTimers: WeakMap<Element, number> = new WeakMap();
     private currentHeadingIds: Set<string> = new Set();
@@ -279,22 +281,132 @@ export class TaskNoteDOMManager {
         return { count: attrCount, minutes: attrMinutes };
     }
 
+    private isUpdatingOutlineDOM = false;
+    private outlineFetchPromise: Promise<void> | null = null;
+    private outlineRefreshPending = false;
+    private outlineForceRefreshPending = false;
+
+    private clearAppliedOutlinePrefixes() {
+        const outline = document.querySelector(".file-tree.sy__outline");
+        if (!outline) return;
+
+        this.isUpdatingOutlineDOM = true;
+        try {
+            outline.querySelectorAll(`.b3-list-item__text[${OUTLINE_PREFIX_DATA_ATTR}]`).forEach((element) => {
+                const textElement = element as HTMLElement;
+                const appliedPrefix = textElement.getAttribute(OUTLINE_PREFIX_DATA_ATTR) || "";
+                const isOwnedPrefix = textElement.hasAttribute(OUTLINE_PREFIX_OWNED_ATTR);
+                const currentText = textElement.textContent || "";
+                if (isOwnedPrefix && appliedPrefix && currentText.startsWith(appliedPrefix)) {
+                    textElement.textContent = currentText.slice(appliedPrefix.length);
+                }
+                textElement.removeAttribute(OUTLINE_PREFIX_DATA_ATTR);
+                textElement.removeAttribute(OUTLINE_PREFIX_OWNED_ATTR);
+            });
+        } finally {
+            this.isUpdatingOutlineDOM = false;
+        }
+    }
+
+    public applyCachedOutlinePrefixes(): { hasUncachedBlocks: boolean } {
+        if (this.isUpdatingOutlineDOM) {
+            return { hasUncachedBlocks: false };
+        }
+
+        if (this.plugin.settings?.enableOutlinePrefix === false) {
+            this.clearAppliedOutlinePrefixes();
+            this.outlinePrefixCache.clear();
+            this.currentHeadingIds.clear();
+            return { hasUncachedBlocks: false };
+        }
+
+        const outline = document.querySelector(".file-tree.sy__outline");
+        if (!outline) return { hasUncachedBlocks: false };
+
+        const headingLis = outline.querySelectorAll("li[data-type=\"NodeHeading\"]");
+        if (headingLis.length === 0) return { hasUncachedBlocks: false };
+
+        let hasUncachedBlocks = false;
+        const currentBlockIds: string[] = [];
+
+        this.isUpdatingOutlineDOM = true;
+        try {
+            headingLis.forEach((li) => {
+                const blockId = (li as HTMLElement).getAttribute("data-node-id");
+                if (!blockId) return;
+
+                currentBlockIds.push(blockId);
+
+                if (!this.outlinePrefixCache.has(blockId)) {
+                    hasUncachedBlocks = true;
+                    return;
+                }
+
+                const prefix = this.outlinePrefixCache.get(blockId);
+                const textElement = li.querySelector(".b3-list-item__text") as HTMLElement;
+                if (!textElement) return;
+
+                const currentText = textElement.textContent || "";
+                const appliedPrefix = textElement.getAttribute(OUTLINE_PREFIX_DATA_ATTR) || "";
+                const isOwnedPrefix = textElement.hasAttribute(OUTLINE_PREFIX_OWNED_ATTR);
+                const textWithoutAppliedPrefix = isOwnedPrefix && appliedPrefix && currentText.startsWith(appliedPrefix)
+                    ? currentText.slice(appliedPrefix.length)
+                    : currentText;
+
+                let targetText = textWithoutAppliedPrefix;
+                let ownsTargetPrefix = false;
+                if (prefix) {
+                    // 兼容升级前已写入 DOM、但尚未带标记的前缀，避免重复添加。
+                    targetText = !isOwnedPrefix && currentText.startsWith(prefix)
+                        ? currentText
+                        : prefix + textWithoutAppliedPrefix;
+                    ownsTargetPrefix = targetText !== textWithoutAppliedPrefix;
+                }
+
+                if (currentText !== targetText) {
+                    textElement.textContent = targetText;
+                }
+                if (prefix) {
+                    textElement.setAttribute(OUTLINE_PREFIX_DATA_ATTR, prefix);
+                    if (ownsTargetPrefix) {
+                        textElement.setAttribute(OUTLINE_PREFIX_OWNED_ATTR, "true");
+                    } else {
+                        textElement.removeAttribute(OUTLINE_PREFIX_OWNED_ATTR);
+                    }
+                } else {
+                    textElement.removeAttribute(OUTLINE_PREFIX_DATA_ATTR);
+                    textElement.removeAttribute(OUTLINE_PREFIX_OWNED_ATTR);
+                }
+            });
+        } finally {
+            this.isUpdatingOutlineDOM = false;
+        }
+
+        if (currentBlockIds.length > 0) {
+            this.currentHeadingIds = new Set(currentBlockIds);
+        }
+
+        return { hasUncachedBlocks };
+    }
+
     public initOutlinePrefixObserver() {
         let updateTimeout: number | null = null;
         let lastObservedElement: Element | null = null;
         let currentObserver: MutationObserver | null = null;
 
-        const debouncedUpdate = () => {
+        const debouncedFullUpdate = (delay = 200) => {
             if (updateTimeout) clearTimeout(updateTimeout);
             updateTimeout = window.setTimeout(() => {
                 const outline = document.querySelector(".file-tree.sy__outline");
                 if (!outline) return;
-                this.updateOutlinePrefixes();
-            }, 0);
+                void this.updateOutlinePrefixes();
+            }, delay);
         };
 
         const createObserver = (element: Element) => {
             const observer = new MutationObserver((mutations) => {
+                if (this.isUpdatingOutlineDOM) return;
+
                 const hasSignificantChange = mutations.some((mutation) => {
                     if (mutation.type === "childList") {
                         return mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0;
@@ -307,7 +419,13 @@ export class TaskNoteDOMManager {
                     }
                     return false;
                 });
-                if (hasSignificantChange) debouncedUpdate();
+
+                if (hasSignificantChange) {
+                    const { hasUncachedBlocks } = this.applyCachedOutlinePrefixes();
+                    if (hasUncachedBlocks) {
+                        debouncedFullUpdate(250);
+                    }
+                }
             });
 
             observer.observe(element, {
@@ -323,7 +441,7 @@ export class TaskNoteDOMManager {
         const wsMainHandler = (event: CustomEvent) => {
             const data = event.detail;
             if (data?.cmd === "setAppearance") {
-                debouncedUpdate();
+                debouncedFullUpdate(50);
                 return;
             }
             if (data?.cmd === "transactions" && data.data) {
@@ -339,16 +457,17 @@ export class TaskNoteDOMManager {
                                 if (op.data && "bookmark" in op.data && !op.data.new) {
                                     hasBookmarkUpdate = true;
                                 }
-                                if (hasBookmarkUpdate && this.currentHeadingIds.has(op.id)) {
-                                    shouldUpdate = true;
-                                    break;
+                                if (hasBookmarkUpdate) {
+                                    this.outlinePrefixCache.delete(op.id);
+                                    if (this.currentHeadingIds.has(op.id)) {
+                                        shouldUpdate = true;
+                                    }
                                 }
                             }
                         }
                     }
-                    if (shouldUpdate) break;
                 }
-                if (shouldUpdate) debouncedUpdate();
+                if (shouldUpdate) debouncedFullUpdate(50);
             }
         };
 
@@ -363,7 +482,8 @@ export class TaskNoteDOMManager {
                 lastObservedElement = outlineContainer;
                 if (outlineContainer) {
                     currentObserver = createObserver(outlineContainer);
-                    debouncedUpdate();
+                    const { hasUncachedBlocks } = this.applyCachedOutlinePrefixes();
+                    if (hasUncachedBlocks) debouncedFullUpdate(100);
                 }
             }
         }, 2000);
@@ -373,9 +493,11 @@ export class TaskNoteDOMManager {
             if (outlineContainer && !currentObserver) {
                 lastObservedElement = outlineContainer;
                 currentObserver = createObserver(outlineContainer);
-                debouncedUpdate();
+                const { hasUncachedBlocks } = this.applyCachedOutlinePrefixes();
+                if (hasUncachedBlocks) debouncedFullUpdate(100);
             } else if (outlineContainer) {
-                debouncedUpdate();
+                const { hasUncachedBlocks } = this.applyCachedOutlinePrefixes();
+                if (hasUncachedBlocks) debouncedFullUpdate(100);
             }
         }, 500);
 
@@ -397,10 +519,15 @@ export class TaskNoteDOMManager {
         });
     }
 
-    public async updateOutlinePrefixes() {
+    private async performOutlinePrefixUpdate(force: boolean) {
         try {
-            const settings = await this.plugin.loadSettings();
-            if (!settings.enableOutlinePrefix) return;
+            const settings = this.plugin.settings || await this.plugin.loadSettings();
+            if (!settings?.enableOutlinePrefix) {
+                this.clearAppliedOutlinePrefixes();
+                this.outlinePrefixCache.clear();
+                this.currentHeadingIds.clear();
+                return;
+            }
 
             const outline = document.querySelector(".file-tree.sy__outline");
             if (!outline) return;
@@ -409,78 +536,85 @@ export class TaskNoteDOMManager {
             if (headingLis.length === 0) return;
 
             const blockIds: string[] = [];
-            const liMap = new Map<string, HTMLElement>();
             headingLis.forEach((li) => {
                 const blockId = (li as HTMLElement).getAttribute("data-node-id");
-                if (blockId) {
-                    blockIds.push(blockId);
-                    liMap.set(blockId, li as HTMLElement);
-                }
+                if (blockId) blockIds.push(blockId);
             });
 
             if (blockIds.length === 0) return;
 
             this.currentHeadingIds = new Set(blockIds);
 
-            const { sql } = await import("../../api");
-            const idsStr = blockIds.map((id) => `'${id}'`).join(",");
-            const sqlQuery = `SELECT block_id, value FROM attributes WHERE block_id IN (${idsStr}) AND name = 'bookmark' LIMIT -1`;
-            const attrsResults = await sql(sqlQuery);
+            if (force) {
+                blockIds.forEach((id) => this.outlinePrefixCache.delete(id));
+            }
 
-            const bookmarkMap = new Map<string, string>();
-            if (attrsResults && Array.isArray(attrsResults)) {
-                attrsResults.forEach((row: any) => {
-                    bookmarkMap.set(row.block_id, row.value || "");
+            const uncachedIds = blockIds.filter((id) => !this.outlinePrefixCache.has(id));
+
+            if (uncachedIds.length > 0) {
+                const { sql } = await import("../../api");
+                const idsStr = uncachedIds.map((id) => `'${id}'`).join(",");
+                const sqlQuery = `SELECT block_id, value FROM attributes WHERE block_id IN (${idsStr}) AND name = 'bookmark' LIMIT -1`;
+                const attrsResults = await sql(sqlQuery);
+
+                const bookmarkMap = new Map<string, string>();
+                if (attrsResults && Array.isArray(attrsResults)) {
+                    attrsResults.forEach((row: any) => {
+                        bookmarkMap.set(row.block_id, row.value || "");
+                    });
+                }
+
+                uncachedIds.forEach((blockId) => {
+                    const bookmark = bookmarkMap.get(blockId);
+                    let prefix: string | null = null;
+                    if (bookmark === "✅") {
+                        prefix = "✅ ";
+                    } else if (bookmark === "⏰") {
+                        prefix = "⏰ ";
+                    }
+                    this.outlinePrefixCache.set(blockId, prefix);
                 });
             }
 
-            blockIds.forEach((blockId) => {
-                const li = liMap.get(blockId);
-                if (!li) return;
+            const { hasUncachedBlocks } = this.applyCachedOutlinePrefixes();
+            if (hasUncachedBlocks) {
+                // SQL 返回期间大纲可能已切换；确保再按最新 DOM 补刷一次。
+                this.outlineRefreshPending = true;
+            }
 
-                const textElement = li.querySelector(".b3-list-item__text") as HTMLElement;
-                if (!textElement) return;
-
-                const hasAttribute = bookmarkMap.has(blockId);
-                const isManaged = this.outlinePrefixCache.has(blockId);
-
-                if (!hasAttribute && !isManaged) {
-                    return;
-                }
-
-                const bookmark = hasAttribute ? (bookmarkMap.get(blockId) || "") : "";
-
-                let prefix = "";
-                if (bookmark === "✅") {
-                    prefix = "✅ ";
-                } else if (bookmark === "⏰") {
-                    prefix = "⏰ ";
-                }
-
-                if (!hasAttribute) {
-                    this.outlinePrefixCache.delete(blockId);
-                } else {
-                    this.outlinePrefixCache.set(blockId, prefix);
-                }
-
-                const currentText = textElement.textContent || "";
-                const textWithoutPrefix = currentText.replace(/^[✅⏰]\s*/, "");
-                const targetText = prefix + textWithoutPrefix;
-
-                if (currentText !== targetText) {
-                    textElement.textContent = targetText;
-                }
-            });
-
-            const currentBlockIdSet = new Set(blockIds);
             for (const cachedId of this.outlinePrefixCache.keys()) {
-                if (!currentBlockIdSet.has(cachedId)) {
+                if (!this.currentHeadingIds.has(cachedId)) {
                     this.outlinePrefixCache.delete(cachedId);
                 }
             }
         } catch (error) {
             console.error("[大纲前缀] 更新失败:", error);
         }
+    }
+
+    public async updateOutlinePrefixes(force = false) {
+        this.outlineRefreshPending = true;
+        if (force) this.outlineForceRefreshPending = true;
+
+        if (this.outlineFetchPromise) {
+            await this.outlineFetchPromise;
+            return;
+        }
+
+        this.outlineFetchPromise = (async () => {
+            try {
+                while (this.outlineRefreshPending) {
+                    const shouldForce = this.outlineForceRefreshPending;
+                    this.outlineRefreshPending = false;
+                    this.outlineForceRefreshPending = false;
+                    await this.performOutlinePrefixUpdate(shouldForce);
+                }
+            } finally {
+                this.outlineFetchPromise = null;
+            }
+        })();
+
+        await this.outlineFetchPromise;
     }
 
     public async addBreadcrumbReminderButton(protyle: any) {
