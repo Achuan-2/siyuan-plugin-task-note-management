@@ -5766,8 +5766,8 @@ export class ReminderPanel {
                             const targetRem = reminderData[targetInfo.id] || this.currentRemindersCache.find(r => r.id === targetInfo.id);
                             if (targetRem) {
                                 if (targetInfo.dropType === 'set-parent') {
-                                    // 设为目标的子任务
-                                    const parentId = targetRem.isRepeatInstance ? targetRem.originalId : targetRem.id;
+                                    // 重复实例使用实例 ID，使普通任务只属于当前这一次，而不是整个循环模板
+                                    const parentId = targetRem.id;
                                     if (!this.wouldCreateCycle(taskId, parentId)) {
                                         reminder.parentId = parentId;
                                         if (targetRem.projectId) reminder.projectId = targetRem.projectId;
@@ -5983,7 +5983,8 @@ export class ReminderPanel {
 
                         if (targetInfo && targetRemObject) {
                             if (targetInfo.dropType === 'set-parent') {
-                                const pId = targetRemObject.isRepeatInstance ? targetRemObject.originalId : targetRemObject.id;
+                                // 重复实例使用实例 ID，使新任务只属于当前这一次
+                                const pId = targetRemObject.id;
                                 optReminder.parentId = pId;
                                 if (targetRemObject.projectId) optReminder.projectId = targetRemObject.projectId;
                                 if (targetRemObject.categoryId) optReminder.categoryId = targetRemObject.categoryId;
@@ -6468,7 +6469,8 @@ export class ReminderPanel {
                 targetRemObject = this.currentRemindersCache.find(r => r.id === targetInfo.id);
                 if (targetRemObject) {
                     if (targetInfo.dropType === 'set-parent') {
-                        const parentId = targetRemObject.isRepeatInstance ? targetRemObject.originalId : targetRemObject.id;
+                        // 重复实例使用实例 ID，使新任务只属于当前这一次
+                        const parentId = targetRemObject.id;
                         newReminder.parentId = parentId;
                         if (targetRemObject.projectId) newReminder.projectId = targetRemObject.projectId;
                         if (targetRemObject.categoryId) newReminder.categoryId = targetRemObject.categoryId;
@@ -7070,14 +7072,18 @@ export class ReminderPanel {
         try {
             const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
 
-            // 获取原始ID（处理重复实例的情况）
+            // 子任务若为重复实例，仍修改其原始任务记录；父任务则保留当前渲染实例 ID，
+            // 这样普通任务拖到重复实例后只会成为该实例的单次子任务。
             const childId = childReminder.isRepeatInstance ? childReminder.originalId : childReminder.id;
-            const parentId = parentReminder.isRepeatInstance ? parentReminder.originalId : parentReminder.id;
+            const parentId = parentReminder.id;
+            const storedParentId = ((parentReminder.isRepeatInstance || parentReminder.isSpanningTodayCompletedInstance) && parentReminder.originalId)
+                ? parentReminder.originalId
+                : parentId;
 
             if (!reminderData[childId]) {
                 throw new Error('子任务不存在');
             }
-            if (!reminderData[parentId]) {
+            if (!reminderData[storedParentId]) {
                 throw new Error('父任务不存在');
             }
 
@@ -7085,8 +7091,9 @@ export class ReminderPanel {
             reminderData[childId].parentId = parentId;
 
             // 如果父任务有 projectId，则自动赋值给子任务
-            if (reminderData[parentId].projectId) {
-                reminderData[childId].projectId = reminderData[parentId].projectId;
+            const parentProjectId = parentReminder.projectId || reminderData[storedParentId].projectId;
+            if (parentProjectId) {
+                reminderData[childId].projectId = parentProjectId;
             }
 
             await saveReminders(this.plugin, reminderData);
