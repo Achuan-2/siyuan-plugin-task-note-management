@@ -31,7 +31,8 @@ export class MobileTaskShortcut {
     private dragging = false;
     private longPressTimer: number | null = null;
     private dragOffset = { x: 0, y: 0 };
-    private dockState: DockState = null;
+    private dockState: DockState = "right";
+    private lastPositionSetting: string | null = null;
 
     private tabContainers: Map<TabId, HTMLElement> = new Map();
     private panels: Map<TabId, ReminderPanel | ProjectPanel | HabitPanel | CalendarView> = new Map();
@@ -64,23 +65,33 @@ export class MobileTaskShortcut {
         ];
     }
 
-    private restorePosition() {
+    private restorePosition(settings?: any) {
         const button = this.button;
         if (!button) return;
         try {
             const saved = localStorage.getItem(POSITION_STORAGE_KEY);
-            if (!saved) return;
-            const pos: SavedPosition = JSON.parse(saved);
-            const btnW = button.offsetWidth;
-            const btnH = button.offsetHeight;
-            let left = Math.max(0, Math.min(pos.left, window.innerWidth - btnW));
-            let top = Math.max(0, Math.min(pos.top, window.innerHeight - btnH));
-            button.style.left = `${left}px`;
-            button.style.top = `${top}px`;
-            button.style.right = "auto";
-            button.style.bottom = "auto";
-            this.dockState = pos.dock || null;
-            this.applyDock();
+            const btnW = button.offsetWidth || 52;
+            const btnH = button.offsetHeight || 52;
+            const defaultDock: DockState = settings?.mobileTaskShortcutPosition === "left" ? "left" : "right";
+
+            if (saved) {
+                const pos: SavedPosition = JSON.parse(saved);
+                let left = Math.max(-btnW / 2, Math.min(pos.left, window.innerWidth - btnW / 2));
+                let top = Math.max(0, Math.min(pos.top, window.innerHeight - btnH));
+                button.style.left = `${left}px`;
+                button.style.top = `${top}px`;
+                button.style.right = "auto";
+                button.style.bottom = "auto";
+                this.dockState = pos.dock !== undefined ? pos.dock : defaultDock;
+                this.applyDock();
+            } else {
+                const defaultTop = Math.max(0, window.innerHeight - 72 - btnH);
+                button.style.top = `${defaultTop}px`;
+                button.style.bottom = "auto";
+                button.style.right = "auto";
+                this.dockState = defaultDock;
+                this.applyDock();
+            }
         } catch (_) { /* ignore */ }
     }
 
@@ -104,9 +115,16 @@ export class MobileTaskShortcut {
         if (!button) return;
 
         const rect = button.getBoundingClientRect();
+        const btnW = rect.width || button.offsetWidth || 52;
+        const btnH = rect.height || button.offsetHeight || 52;
+        const currentTop = rect.top > 0 ? rect.top : (window.innerHeight - 72 - btnH);
+        const clampedTop = Math.max(0, Math.min(currentTop, window.innerHeight - btnH));
+
         if (this.dockState === "left") {
-            button.style.left = `${-rect.width / 2}px`;
-            button.style.top = `${rect.top}px`;
+            button.style.left = `${-btnW / 2}px`;
+            button.style.top = `${clampedTop}px`;
+            button.style.right = "auto";
+            button.style.bottom = "auto";
             button.classList.add("mobile-task-shortcut--docked-left");
             button.classList.remove("mobile-task-shortcut--docked-right");
             if (badge) {
@@ -114,8 +132,10 @@ export class MobileTaskShortcut {
                 badge.style.right = "-4px";
             }
         } else if (this.dockState === "right") {
-            button.style.left = `${window.innerWidth - rect.width / 2}px`;
-            button.style.top = `${rect.top}px`;
+            button.style.left = `${window.innerWidth - btnW / 2}px`;
+            button.style.top = `${clampedTop}px`;
+            button.style.right = "auto";
+            button.style.bottom = "auto";
             button.classList.add("mobile-task-shortcut--docked-right");
             button.classList.remove("mobile-task-shortcut--docked-left");
             if (badge) {
@@ -136,7 +156,7 @@ export class MobileTaskShortcut {
         if (!button) return;
         const rect = button.getBoundingClientRect();
         const halfW = rect.width / 2;
-        const threshold = halfW;
+        const threshold = Math.max(halfW, 60);
 
         if (rect.left < threshold) {
             this.dockState = "left";
@@ -157,9 +177,11 @@ export class MobileTaskShortcut {
         if (this.dockState === "left") {
             button.style.left = "0px";
             button.style.top = `${rect.top}px`;
+            button.style.right = "auto";
         } else if (this.dockState === "right") {
             button.style.left = `${window.innerWidth - rect.width}px`;
             button.style.top = `${rect.top}px`;
+            button.style.right = "auto";
         }
         button.classList.remove("mobile-task-shortcut--docked-left", "mobile-task-shortcut--docked-right");
         const badge = this.badge;
@@ -169,7 +191,7 @@ export class MobileTaskShortcut {
         }
     }
 
-    private ensureButton() {
+    private ensureButton(settings?: any) {
         if (this.button?.isConnected) return;
 
         const button = document.createElement("button");
@@ -275,15 +297,14 @@ export class MobileTaskShortcut {
             }
             event.preventDefault();
             event.stopPropagation();
-            this.expandButton();
-            this.openDialog();
+            this.toggleDialog();
         });
 
         document.body.appendChild(button);
         this.button = button;
         this.badge = button.querySelector(".mobile-task-shortcut__badge") as HTMLElement;
 
-        this.restorePosition();
+        this.restorePosition(settings);
     }
 
     private removeButton(destroyDialog: boolean = true) {
@@ -294,9 +315,7 @@ export class MobileTaskShortcut {
         this.dragging = false;
 
         if (destroyDialog && this.dialog) {
-            const dialog = this.dialog;
-            this.dialog = null;
-            dialog.destroy();
+            this.closeDialog();
         }
 
         this.destroyPanels();
@@ -318,6 +337,28 @@ export class MobileTaskShortcut {
         this.tabContainers.clear();
         this.tabButtons.clear();
         this.activeTab = "task";
+    }
+
+    private toggleDialog() {
+        if (this.dialog) {
+            this.closeDialog();
+        } else {
+            this.expandButton();
+            this.openDialog();
+        }
+    }
+
+    private closeDialog() {
+        if (!this.dialog) return;
+        const dialog = this.dialog;
+        this.dialog = null;
+        try {
+            dialog.destroy();
+        } catch (e) {
+            console.warn("关闭快捷弹窗失败:", e);
+        }
+        this.destroyPanels();
+        this.applyDock();
     }
 
     private openDialog() {
@@ -426,7 +467,7 @@ export class MobileTaskShortcut {
             switch (tabId) {
                 case "task": {
                     const panel = new ReminderPanel(container, this.plugin, () => {
-                        this.dialog?.destroy();
+                        this.closeDialog();
                     });
                     this.panels.set(tabId, panel);
                     break;
@@ -461,7 +502,23 @@ export class MobileTaskShortcut {
             return;
         }
 
-        this.ensureButton();
+        const prevPosSetting = this.lastPositionSetting;
+        const newPosSetting = (resolvedSettings?.mobileTaskShortcutPosition === "left") ? "left" : "right";
+        this.lastPositionSetting = newPosSetting;
+
+        if (this.button?.isConnected) {
+            if (prevPosSetting !== null && prevPosSetting !== newPosSetting) {
+                // 用户在设置中修改了默认停靠位置，重置为设置指定的靠边半显位置
+                localStorage.removeItem(POSITION_STORAGE_KEY);
+                this.dockState = newPosSetting;
+                this.applyDock();
+                this.savePosition();
+            } else {
+                this.restorePosition(resolvedSettings);
+            }
+        } else {
+            this.ensureButton(resolvedSettings);
+        }
         await this.refreshBadge();
     }
 

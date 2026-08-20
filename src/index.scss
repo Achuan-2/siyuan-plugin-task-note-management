@@ -1773,7 +1773,7 @@
 
 .mobile-task-shortcut {
     position: fixed;
-    left: calc(16px + env(safe-area-inset-left));
+    right: -26px;
     bottom: calc(72px + env(safe-area-inset-bottom));
     width: 52px;
     height: 52px;
@@ -1786,7 +1786,7 @@
     align-items: center;
     justify-content: center;
     padding: 0;
-    z-index: 99;
+    z-index: 100000;
     cursor: pointer;
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;

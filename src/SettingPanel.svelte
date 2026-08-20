@@ -517,6 +517,17 @@
                             title: i18n('enableMobileTaskShortcut'),
                             description: i18n('enableMobileTaskShortcutDesc'),
                         },
+                        {
+                            key: 'mobileTaskShortcutPosition',
+                            value: settings.mobileTaskShortcutPosition || 'right',
+                            type: 'select',
+                            title: i18n('mobileTaskShortcutPosition') || '快捷按钮默认位置',
+                            description: i18n('mobileTaskShortcutPositionDesc') || '设置手机端任务快捷按钮的默认停靠位置（靠右或靠左贴边半显）',
+                            options: {
+                                right: i18n('mobileTaskShortcutPosRight') || '右侧（靠边半显）',
+                                left: i18n('mobileTaskShortcutPosLeft') || '左侧（靠边半显）',
+                            },
+                        },
                     ],
                 },
             ],

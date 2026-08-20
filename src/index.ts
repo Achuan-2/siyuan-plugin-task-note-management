@@ -1884,6 +1884,9 @@ export default class ReminderPlugin extends Plugin {
                 settings.dailyNotificationTime = DEFAULT_SETTINGS.dailyNotificationTime as any;
             }
         }
+        if (settings.mobileTaskShortcutPosition !== 'left' && settings.mobileTaskShortcutPosition !== 'right') {
+            settings.mobileTaskShortcutPosition = 'right';
+        }
         settings.reminderWebhookEnabled = settings.reminderWebhookEnabled === true;
         settings.reminderWebhookUrl = typeof settings.reminderWebhookUrl === 'string'
             ? settings.reminderWebhookUrl.trim()
