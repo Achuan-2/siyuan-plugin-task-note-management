@@ -1,6 +1,7 @@
 import type { ReminderManager } from "../../components/dataManager/reminderManager";
 import type { CategoryManager } from "../../components/dataManager/categoryManager";
 import type { ProjectManager } from "../../components/dataManager/projectManager";
+import type { ReminderTime } from "../../types/reminder";
 import type { ToolDefinition } from "./common";
 import {
     getBlockByID,
@@ -26,10 +27,28 @@ import {
     assertOptionalNumber,
     assertArray,
     assertOptionalObject,
+    ValidationError,
 } from "../utils/validation";
 
 const TASK_ACTIONS = ["search_task", "get_task", "create_task", "update_task", "delete_task", "list_categories"] as const;
 type TaskAction = typeof TASK_ACTIONS[number];
+
+const REMINDER_TIME_ENTRY_SCHEMA = {
+    type: "object",
+    description: "一条额外提醒。time 可为 HH:MM，或带日期的 YYYY-MM-DDTHH:MM（例如提前一天提醒）",
+    properties: {
+        time: { type: "string", description: "提醒时刻，格式 HH:MM 或 YYYY-MM-DDTHH:MM" },
+        endTime: { type: "string", description: "提醒结束时刻，可选；格式同 time" },
+        note: { type: "string", description: "本次提醒的附加备注，可选" },
+    },
+    required: ["time"],
+};
+
+const REMINDER_TIMES_SCHEMA = {
+    type: "array",
+    description: "额外提醒时间列表。传 [] 可在 update_task 中清除全部额外提醒",
+    items: REMINDER_TIME_ENTRY_SCHEMA,
+};
 
 export function createTaskTool(
     reminderManager: ReminderManager,
@@ -39,8 +58,8 @@ export function createTaskTool(
     return {
         name: "task",
         config: {
-            title: "任务管理",
-            description: "任务管理操作。Actions: search_task(关键词/id/多条件搜索), get_task(获取单个任务详情), create_task(创建任务), update_task(批量更新任务), delete_task(删除任务), list_categories(列出分类)。",
+            title: "任务与提醒管理",
+            description: "任务与提醒管理操作。任务的 time 会在任务时刻提醒，reminderTimes 可设置一个或多个额外提醒。Actions: search_task(关键词/id/多条件搜索), get_task(获取单个任务详情), create_task(创建任务或提醒), update_task(批量更新任务或提醒), delete_task(删除任务), list_categories(列出分类)。",
             inputSchema: {
                 type: "object",
                 properties: {
@@ -61,7 +80,8 @@ export function createTaskTool(
                     // create / update
                     title: { type: "string", description: "任务标题" },
                     note: { type: "string", description: "备注" },
-                    time: { type: "string", description: "开始时间 HH:MM" },
+                    time: { type: "string", description: "任务开始时间 HH:MM；设置后会在该时刻提醒" },
+                    reminderTimes: REMINDER_TIMES_SCHEMA,
                     endDate: { type: "string", description: "结束日期 YYYY-MM-DD" },
                     endTime: { type: "string", description: "结束时间 HH:MM" },
                     categoryId: { type: "string", description: "分类 ID" },
@@ -84,6 +104,7 @@ export function createTaskTool(
                                 note: { type: "string", description: "子任务备注" },
                                 date: { type: "string", description: "子任务日期 YYYY-MM-DD" },
                                 time: { type: "string", description: "子任务时间 HH:MM" },
+                                reminderTimes: REMINDER_TIMES_SCHEMA,
                                 endDate: { type: "string", description: "子任务结束日期 YYYY-MM-DD" },
                                 endTime: { type: "string", description: "子任务结束时间 HH:MM" },
                                 priority: { type: "string", enum: ["high", "medium", "low", "none"] },
@@ -136,6 +157,7 @@ export function createTaskTool(
                                 note: { type: "string" },
                                 date: { type: "string" },
                                 time: { type: "string" },
+                                reminderTimes: REMINDER_TIMES_SCHEMA,
                                 endDate: { type: "string" },
                                 endTime: { type: "string" },
                                 priority: { type: "string", enum: ["high", "medium", "low", "none"] },
@@ -336,6 +358,7 @@ export function createTaskTool(
                         date,
                         note: assertOptionalString(input.note, "note"),
                         time: assertOptionalTimeString(input.time, "time"),
+                        reminderTimes: parseReminderTimes(input.reminderTimes, "reminderTimes"),
                         endDate: assertOptionalDateString(input.endDate, "endDate"),
                         endTime: assertOptionalTimeString(input.endTime, "endTime"),
                         priority: assertOptionalEnum(input.priority, "priority", ["high", "medium", "low", "none"]),
@@ -415,6 +438,7 @@ export function createTaskTool(
                                 date: subDate,
                                 note: assertOptionalString(subtask.note, "subtasks[].note"),
                                 time: assertOptionalTimeString(subtask.time, "subtasks[].time"),
+                                reminderTimes: parseReminderTimes(subtask.reminderTimes, "subtasks[].reminderTimes"),
                                 endDate: assertOptionalDateString(subtask.endDate, "subtasks[].endDate"),
                                 endTime: assertOptionalTimeString(subtask.endTime, "subtasks[].endTime"),
                                 priority: assertOptionalEnum(subtask.priority, "subtasks[].priority", ["high", "medium", "low", "none"]),
@@ -515,6 +539,7 @@ export function createTaskTool(
                             note: assertOptionalString(update.note, "updates[].note"),
                             date: assertOptionalDateString(update.date, "updates[].date"),
                             time: assertOptionalTimeString(update.time, "updates[].time"),
+                            reminderTimes: parseReminderTimes(update.reminderTimes, "updates[].reminderTimes"),
                             endDate: assertOptionalDateString(update.endDate, "updates[].endDate"),
                             endTime: assertOptionalTimeString(update.endTime, "updates[].endTime"),
                             priority: assertOptionalEnum(update.priority, "updates[].priority", ["high", "medium", "low", "none"]),
@@ -581,6 +606,33 @@ export function createTaskTool(
 
 function assertEnum<T extends string>(value: unknown, field: string, allowed: readonly T[]): T {
     return assertOptionalEnum(value, field, allowed) as T;
+}
+
+function assertReminderTimeString(value: unknown, field: string): string {
+    const str = assertString(value, field);
+    if (!/^(?:\d{4}-\d{2}-\d{2}T)?\d{2}:\d{2}$/.test(str)) {
+        throw new ValidationError(`字段 ${field} 必须是 HH:MM 或 YYYY-MM-DDTHH:MM 格式的时间字符串`);
+    }
+    return str;
+}
+
+function parseReminderTimes(value: unknown, field: string): ReminderTime[] | undefined {
+    if (value === undefined || value === null) {
+        return undefined;
+    }
+
+    const items = assertArray<unknown>(value, field);
+    return items.map((item, index) => {
+        const itemField = `${field}[${index}]`;
+        const entry = assertOptionalObject(item, itemField)!;
+        return {
+            time: assertReminderTimeString(entry.time, `${itemField}.time`),
+            endTime: entry.endTime === undefined
+                ? undefined
+                : assertReminderTimeString(entry.endTime, `${itemField}.endTime`),
+            note: assertOptionalString(entry.note, `${itemField}.note`),
+        };
+    });
 }
 
 function cleanObject<T>(obj: T): T {

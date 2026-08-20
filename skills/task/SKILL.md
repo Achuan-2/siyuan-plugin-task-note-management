@@ -1,6 +1,6 @@
 ---
 name: task
-description: 用于在思源任务笔记管理插件中管理任务和分类的 MCP 工具。
+description: 用于在思源任务笔记管理插件中管理任务、任务提醒和分类的 MCP 工具。
 ---
 
 # 任务管理技能 (task)
@@ -28,9 +28,14 @@ description: 用于在思源任务笔记管理插件中管理任务和分类的 
 ### 3. `create_task`
 创建新任务。
 - **title** (字符串, 必填): 任务标题。
-- **date** (字符串, 必填): 任务日期 `YYYY-MM-DD`。可以传入 `""`（空字符串）以创建无日期任务。
+- **date** (字符串, 可选): 任务日期 `YYYY-MM-DD`。省略或传入 `""`（空字符串）可创建无日期任务。
 - **note** (字符串, 可选): 备注信息。
-- **time** (字符串, 可选): 开始时间 `HH:MM`。
+- **time** (字符串, 可选): 开始时间 `HH:MM`；设置后会在任务开始时刻提醒。
+- **reminderTimes** (对象数组, 可选): 一个或多个额外提醒时间。每项包含：
+  - **time** (字符串, 必填): 提醒时刻。使用 `HH:MM` 表示任务日期范围内的该时刻；使用 `YYYY-MM-DDTHH:MM` 表示绝对提醒日期和时刻，可用于提前一天等场景。
+  - **endTime** (字符串, 可选): 提醒结束时刻，格式同 `time`。
+  - **note** (字符串, 可选): 仅用于本次提醒的附加备注。
+  - 在 `update_task` 中传入空数组 `[]` 可清除全部额外提醒。
 - **endDate** (字符串, 可选): 结束日期 `YYYY-MM-DD`。
 - **endTime** (字符串, 可选): 结束时间 `HH:MM`。
 - **priority** (字符串, 可选): 优先级 (`"high"`, `"medium"`, `"low"`, `"none"`)。
@@ -60,48 +65,19 @@ description: 用于在思源任务笔记管理插件中管理任务和分类的 
   - **reminderSkipHolidays** (布尔值, 可选): 是否跳过法定节假日。
 - **subtasks** (对象数组, 可选): 要一并创建的子任务列表。创建时会自动绑定其 `parentId` 为当前创建的主任务 ID。每个子任务项支持的属性有：
   - **title** (字符串, 必填): 子任务标题。
-  - 以及上面支持的其他可选参数 (备注、日期、时间、优先级、绑定的块 ID、网页链接、看板状态、自定义进度条、绑定的习惯 ID 及打卡设置等)。
+  - 以及上面支持的其他可选参数 (备注、日期、时间、额外提醒时间、优先级、绑定的块 ID、网页链接、看板状态、自定义进度条、绑定的习惯 ID 及打卡设置等)。
 
 ### 4. `update_task`
 批量修改更新任务。
 - **updates** (对象数组, 必填): 更新项列表。每个对象必须包含：
   - **id** (字符串, 必填): 要修改的任务 ID。
-  - 其他在 `create` 中支持的可选参数 (包含 `blockId`, `url`, `kanbanStatus`, `customProgress`, `linkedHabitId` 及打卡设置, `repeat` 对象等)。
+  - 其他在 `create_task` 中支持的可选参数 (包含 `reminderTimes`, `blockId`, `url`, `kanbanStatus`, `customProgress`, `linkedHabitId` 及打卡设置, `repeat` 对象等)。
 
 ### 5. `delete_task`
 删除任务.
 - **id** (字符串, 必填): 任务 ID。
 
 ### 6. `list_categories`
-列出所有任务分类。
-- （无参数）Emoji。
-- **repeat** (对象, 可选): 重复周期性任务配置。**注意：如果启用了重复配置（enabled 为 true），但是开始日期 date 传入了 ""（空字符串），系统会自动将其默认设置为今日本地日期。** 属性如下：
-  - **enabled** (布尔值, 必填): 是否启用。
-  - **type** (字符串, 必填): 重复类型，支持 `"daily"` (每日), `"weekly"` (每周), `"monthly"` (每月), `"yearly"` (每年), `"custom"` (自定义), `"ebbinghaus"` (艾宾浩斯), `"lunar-monthly"` (农历每月), `"lunar-yearly"` (农历每年)。
-  - **interval** (数字, 可选): 重复周期间隔。
-  - **weekDays** (数字数组, 可选): 每周的哪几天 (0-6, 0为周日)。
-  - **monthDays** (数字数组, 可选): 每月的哪几天 (1-31)。
-  - **monthlyRepeatMode** (字符串, 可选): 每月重复类型 (`"date"` 按日期 / `"week"` 按星期)。
-  - **endDate** (字符串, 可选): 重复截止日期 `YYYY-MM-DD`。
-  - **endType** (字符串, 必填): 结束条件，支持 `"never"` (从不结束), `"date"` (截止到特定日期), `"count"` (限次数)。
-  - **endCount** (数字, 可选): 限制重复的总次数。
-  - **reminderSkipWeekendMode** (字符串, 可选): 跳过周末选项 (`"none"`, `"skip"`, `"only_weekend"`)。
-  - **reminderSkipHolidays** (布尔值, 可选): 是否跳过法定节假日。
-- **subtasks** (对象数组, 可选): 要一并创建的子任务列表。创建时会自动绑定其 `parentId` 为当前创建的主任务 ID。每个子任务项支持的属性有：
-  - **title** (字符串, 必填): 子任务标题。
-  - 以及上面支持的其他可选参数 (备注、日期、时间、优先级、绑定的块 ID、网页链接、看板状态、自定义进度条、绑定的习惯 ID 及打卡设置等)。
-
-### 3. `update_task`
-批量修改更新任务。
-- **updates** (对象数组, 必填): 更新项列表。每个对象必须包含：
-  - **id** (字符串, 必填): 要修改的任务 ID。
-  - 其他在 `create` 中支持的可选参数 (包含 `blockId`, `url`, `kanbanStatus`, `customProgress`, `linkedHabitId` 及打卡设置, `repeat` 对象等)。
-
-### 4. `delete_task`
-删除任务。
-- **id** (字符串, 必填): 任务 ID。
-
-### 5. `list_categories`
 列出所有任务分类。
 - （无参数）
 
@@ -123,6 +99,26 @@ description: 用于在思源任务笔记管理插件中管理任务和分类的 
   "date": "2026-07-11",
   "priority": "high",
   "note": "将 task、project、habit、stats 技能翻译为中文版"
+}
+```
+
+### 创建任务并设置多个提醒
+```json
+{
+  "action": "create_task",
+  "title": "提交周报",
+  "date": "2026-07-11",
+  "time": "17:00",
+  "reminderTimes": [
+    {
+      "time": "2026-07-10T17:00",
+      "note": "提前一天准备材料"
+    },
+    {
+      "time": "16:30",
+      "note": "提交前再次检查"
+    }
+  ]
 }
 ```
 

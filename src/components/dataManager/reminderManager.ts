@@ -1,4 +1,4 @@
-import type { ReminderItem, ReminderData } from "../../types/reminder";
+import type { ReminderItem, ReminderData, ReminderTime } from "../../types/reminder";
 import { getEnvironmentSafeAllReminders, cleanReminderItem } from "../../utils/reminderLoadUtils";
 import { ReminderTaskLogic } from "../../utils/reminderTaskLogic";
 import { getLogicalDateString } from "../../utils/dateUtils";
@@ -19,6 +19,7 @@ export interface CreateReminderInput {
     note?: string;
     date?: string;
     time?: string;
+    reminderTimes?: ReminderTime[];
     endDate?: string;
     endTime?: string;
     priority?: "high" | "medium" | "low" | "none";
@@ -45,6 +46,7 @@ export interface UpdateReminderInput {
     note?: string;
     date?: string;
     time?: string;
+    reminderTimes?: ReminderTime[];
     endDate?: string;
     endTime?: string;
     priority?: "high" | "medium" | "low" | "none";
@@ -261,6 +263,7 @@ export class ReminderManager {
             if (update.note !== undefined) patched.note = update.note;
             if (update.date !== undefined) patched.date = update.date;
             if (update.time !== undefined) patched.time = update.time;
+            if (update.reminderTimes !== undefined) patched.reminderTimes = update.reminderTimes;
             if (update.endDate !== undefined) patched.endDate = update.endDate;
             if (update.endTime !== undefined) patched.endTime = update.endTime;
             if (update.priority !== undefined) patched.priority = update.priority;
