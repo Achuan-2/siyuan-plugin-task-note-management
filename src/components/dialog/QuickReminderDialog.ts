@@ -8322,29 +8322,25 @@ export class QuickReminderDialog {
             let parentTask = reminderData[parentId];
             let instanceDate: string | undefined;
 
-            // 特殊处理：如果父任务ID是重复实例（形式为 reminder_originalId_date）
-            if (!parentTask && parentId.startsWith('reminder_')) {
-                const lastUnderscoreIndex = parentId.lastIndexOf('_');
-                if (lastUnderscoreIndex !== -1) {
-                    const potentialDate = parentId.substring(lastUnderscoreIndex + 1);
-                    // 检查最后一部分是否为 YYYY-MM-DD 格式
-                    if (/^\d{4}-\d{2}-\d{2}$/.test(potentialDate)) {
-                        const originalId = parentId.substring(0, lastUnderscoreIndex);
-                        const originalTask = reminderData[originalId];
-                        if (originalTask) {
-                            instanceDate = potentialDate;
-                            // 构造虚拟的实例对象用于显示
-                            const instanceState = getRepeatInstanceState(originalTask, instanceDate) || {};
-                            parentTask = {
-                                ...originalTask,
-                                ...instanceState,
-                                title: instanceState.title || originalTask.title || '(无标题)',
-                                isInstance: true,
-                                instanceDate: instanceDate,
-                                originalId: originalId
-                            };
-                        }
-                    }
+            // 重复实例只存在于运行时列表中，需要从实例 ID 解析并读取原始任务。
+            // 不能依赖 "reminder_" 前缀，思源任务 ID 通常是节点 ID。
+            const parsedParentInstance = !parentTask ? parseReminderInstanceId(parentId) : null;
+            if (parsedParentInstance) {
+                const originalTask = reminderData[parsedParentInstance.originalId];
+                if (originalTask) {
+                    instanceDate = parsedParentInstance.instanceDate;
+                    // 构造虚拟的实例对象用于显示
+                    const instanceState = getRepeatInstanceState(originalTask, instanceDate) || {};
+                    parentTask = {
+                        ...originalTask,
+                        ...instanceState,
+                        id: parentId,
+                        title: instanceState.title || originalTask.title || '(无标题)',
+                        isInstance: true,
+                        isRepeatInstance: true,
+                        instanceDate,
+                        originalId: parsedParentInstance.originalId
+                    };
                 }
             }
 
@@ -8704,30 +8700,24 @@ export class QuickReminderDialog {
             let isInstanceEdit = false;
             let instanceDate = "";
 
-            // 特殊处理：如果父任务ID是重复实例（形式为 reminder_originalId_date）
-            if (!parentTask && parentId.startsWith('reminder_')) {
-                const lastUnderscoreIndex = parentId.lastIndexOf('_');
-                if (lastUnderscoreIndex !== -1) {
-                    const potentialDate = parentId.substring(lastUnderscoreIndex + 1);
-                    // 检查最后一部分是否为 YYYY-MM-DD 格式
-                    if (/^\d{4}-\d{2}-\d{2}$/.test(potentialDate)) {
-                        const originalId = parentId.substring(0, lastUnderscoreIndex);
-                        const originalTask = reminderData[originalId];
-                        if (originalTask) {
-                            isInstanceEdit = true;
-                            instanceDate = potentialDate;
-                            // 构造虚拟的实例对象
-                            const instanceState = getRepeatInstanceState(originalTask, instanceDate) || {};
-                            parentTask = {
-                                ...originalTask,
-                                ...instanceState,
-                                id: parentId,
-                                isInstance: true,
-                                instanceDate: instanceDate,
-                                originalId: originalId
-                            };
-                        }
-                    }
+            // 重复实例只存在于运行时列表中，需要从实例 ID 解析并读取原始任务。
+            const parsedParentInstance = !parentTask ? parseReminderInstanceId(parentId) : null;
+            if (parsedParentInstance) {
+                const originalTask = reminderData[parsedParentInstance.originalId];
+                if (originalTask) {
+                    isInstanceEdit = true;
+                    instanceDate = parsedParentInstance.instanceDate;
+                    // 构造虚拟的实例对象
+                    const instanceState = getRepeatInstanceState(originalTask, instanceDate) || {};
+                    parentTask = {
+                        ...originalTask,
+                        ...instanceState,
+                        id: parentId,
+                        isInstance: true,
+                        isRepeatInstance: true,
+                        instanceDate,
+                        originalId: parsedParentInstance.originalId
+                    };
                 }
             }
 
