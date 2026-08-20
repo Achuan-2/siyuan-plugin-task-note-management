@@ -240,8 +240,7 @@
             width: 60px !important;
             height: 60px !important;
             border-radius: 50% !important;
-            border: 2px solid rgba(255, 255, 255, 0.3) !important;
-            backdrop-filter: blur(8px) !important;
+            border: 2px solid var(--b3-theme-border) !important;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2) !important;
 
             .pomodoro-minimized-view,
@@ -262,7 +261,7 @@
                 left: 2px;
                 right: 2px;
                 bottom: 2px;
-                background: rgba(255, 255, 255, 0.9);
+                background: var(--b3-theme-surface) !important;
             }
 
             .pomodoro-minimized-icon {
@@ -287,10 +286,10 @@
             }
 
             .b3-theme-dark & {
-                border-color: rgba(255, 255, 255, 0.2) !important;
+                border-color: var(--b3-theme-border) !important;
 
                 .pomodoro-minimized-overlay {
-                    background: rgba(30, 30, 30, 0.9);
+                    background: var(--b3-theme-surface) !important;
                 }
             }
         }
@@ -299,12 +298,12 @@
             width: 150px !important;
             height: 42px !important;
             border-radius: 10px !important;
-            backdrop-filter: blur(8px) !important;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
 
             .pomodoro-minimized-card {
                 border-radius: 10px;
                 border: 1px solid var(--b3-theme-border);
+                background: var(--b3-theme-surface);
                 padding: 3px 8px;
                 gap: 6px;
             }
@@ -519,11 +518,10 @@
             z-index: 1001;
             opacity: 0;
             transition: opacity 0.3s ease;
-            background: rgba(var(--b3-theme-background-rgb), 0.9) !important;
-            backdrop-filter: blur(10px) !important;
+            background: var(--b3-theme-background) !important;
             padding: 20px 40px !important;
             border-radius: 0 !important;
-            border-bottom: 2px solid rgba(255, 255, 255, 0.1) !important;
+            border-bottom: 2px solid var(--b3-theme-border) !important;
             justify-content: center !important;
 
             // 悬浮时显示
@@ -552,16 +550,15 @@
             font-size: 24px !important;
             padding: 16px 24px !important;
             border-radius: 12px !important;
-            background: rgba(255, 255, 255, 0.1) !important;
-            border: 2px solid rgba(255, 255, 255, 0.2) !important;
-            backdrop-filter: blur(8px) !important;
+            background: var(--b3-theme-surface) !important;
+            border: 2px solid var(--b3-theme-border) !important;
             transition: all 0.3s ease !important;
             min-width: 80px !important;
             min-height: 60px !important;
 
             &:hover {
-                background: rgba(255, 255, 255, 0.2) !important;
-                border-color: rgba(255, 255, 255, 0.4) !important;
+                background: var(--b3-theme-surface-lighter) !important;
+                border-color: var(--b3-theme-primary) !important;
                 transform: scale(1.05) !important;
             }
         }
@@ -583,9 +580,8 @@
             font-size: 5vh !important;
             margin-bottom: 5vh !important;
             padding: 2vh 4vw !important;
-            background: rgba(255, 255, 255, 0.1) !important;
+            background: var(--b3-theme-surface) !important;
             border: 2px solid var(--b3-table-border-color) !important;
-            backdrop-filter: blur(10px) !important;
             border-radius: 12px !important;
             font-family: var(--b3-font-family) !important;
         }
@@ -688,8 +684,8 @@
             transform: translateX(-50%) !important;
             width: 50% !important;
             max-width: 1000px !important;
-            border: 2px solid rgba(255, 255, 255, 0.2) !important;
-            backdrop-filter: blur(10px) !important;
+            background: var(--b3-theme-surface) !important;
+            border: 2px solid var(--b3-theme-border) !important;
             border-radius: 20px !important;
             padding: 20px 40px !important;
             opacity: 1 !important;
@@ -880,8 +876,9 @@
     position: fixed;
     top: 30px;
     right: 30px;
-    background: rgba(255, 255, 255, 0.1);
-    border: 2px solid rgba(255, 255, 255, 0.3);
+    background: var(--b3-theme-surface);
+    border: 2px solid var(--b3-theme-border);
+    color: var(--b3-theme-on-surface);
     cursor: pointer;
     padding: 12px 20px;
     border-radius: 8px;
@@ -889,11 +886,10 @@
     font-weight: 600;
     z-index: 10001;
     transition: all 0.3s ease;
-    backdrop-filter: blur(8px);
 
     &:hover {
-        background: rgba(255, 255, 255, 0.2);
-        border-color: rgba(255, 255, 255, 0.5);
+        background: var(--b3-theme-surface-lighter);
+        border-color: var(--b3-theme-primary);
     }
 
     @media (max-width: 768px) {

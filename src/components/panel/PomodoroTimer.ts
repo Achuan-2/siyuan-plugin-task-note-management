@@ -137,11 +137,15 @@ export class PomodoroTimer {
     private isDocked: boolean = false; // BrowserWindow 吸附模式状态
     private isAlwaysOnTopPinned: boolean = true; // BrowserWindow 是否置顶
     private normalWindowBounds: { x: number; y: number; width: number; height: number } | null = null; // 保存正常窗口位置和大小
+    private miniWindowBounds: { x: number; y: number; width: number; height: number } | null = null; // 保存迷你窗口位置和大小
+    private domNormalPosition: { left: number; top: number } | null = null; // 保存 DOM 正常窗口位置
+    private domMiniPosition: { left: number; top: number } | null = null; // 保存 DOM 迷你窗口位置
     private inheritedWindowBounds: { x: number; y: number; width: number; height: number } | null = null; // 继承的窗口位置信息
     private scheduledNotificationIds: number[] = []; // 已调度的移动端通知ID列表
     private blockPomodoroMetricCache: { blockId: string; count: number; minutes: number } | null = null;
     private volumeSyncTimeout: number = null; // BrowserWindow 音量同步防抖定时器
     private volumeSaveTimeout: number = null; // 音量设置保存防抖定时器
+    private domResizeListener: (() => void) | null = null; // DOM 悬浮窗口 resize 监听器
 
     private static async isWindowFromWorkspace(win: any, workspaceDir: string): Promise<boolean> {
         if (!workspaceDir) {
@@ -347,6 +351,16 @@ export class PomodoroTimer {
             this.normalWindowBounds = inheritState.normalWindowBounds;
             console.log('[PomodoroTimer] 继承保存的正常窗口位置:', this.normalWindowBounds);
         }
+        if (inheritState.miniWindowBounds) {
+            this.miniWindowBounds = inheritState.miniWindowBounds;
+            console.log('[PomodoroTimer] 继承保存的迷你窗口位置:', this.miniWindowBounds);
+        }
+        if (inheritState.domNormalPosition) {
+            this.domNormalPosition = inheritState.domNormalPosition;
+        }
+        if (inheritState.domMiniPosition) {
+            this.domMiniPosition = inheritState.domMiniPosition;
+        }
     }
 
     /**
@@ -420,6 +434,9 @@ export class PomodoroTimer {
             isMiniMode: this.isMiniMode, // 新增：迷你模式状态
             isPinned: this.isAlwaysOnTopPinned, // 是否置顶
             normalWindowBounds: this.normalWindowBounds, // 新增：保存的正常窗口位置
+            miniWindowBounds: this.miniWindowBounds, // 新增：保存的迷你窗口位置
+            domNormalPosition: this.domNormalPosition, // 新增：DOM 正常窗口位置
+            domMiniPosition: this.domMiniPosition, // 新增：DOM 迷你窗口位置
             randomRestNextTriggerTime: this.randomRestNextTriggerTime, // 新增：记录下次随机休息时间
             isBackgroundAudioMuted: this.isBackgroundAudioMuted,
             workVolume: this.workVolume,
@@ -2711,6 +2728,10 @@ export class PomodoroTimer {
         // 创建番茄钟容器
         this.container = document.createElement('div');
         this.container.className = 'pomodoro-timer-window';
+        const isMobile = this.plugin?.isInMobileApp || (typeof getFrontend === 'function' && getFrontend().endsWith('mobile'));
+        if (isMobile) {
+            this.container.classList.add('is-mobile');
+        }
 
         // 根据模式应用不同样式
         if (this.isTabMode && targetContainer) {
@@ -2738,7 +2759,6 @@ export class PomodoroTimer {
                 box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
                 z-index: 11;
                 user-select: none;
-                backdrop-filter: blur(16px);
                 transition: transform 0.2s ease, opacity 0.2s ease;
                 overflow: hidden;
                 font-family: ${this.getPomodoroDomFontFamilyCss()};
@@ -2851,7 +2871,6 @@ export class PomodoroTimer {
             border: 1px solid var(--b3-theme-border);
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            backdrop-filter: blur(8px);
             z-index: 1000;
             display: none;
             flex-direction: column;
@@ -3222,8 +3241,8 @@ export class PomodoroTimer {
         this.startPauseBtn = document.createElement('button');
         this.startPauseBtn.className = 'circle-control-btn';
         this.startPauseBtn.style.cssText = `
-            background: rgba(255, 255, 255, 0.9);
-            border: none;
+            background: var(--b3-theme-surface);
+            border: 1px solid var(--b3-theme-border);
             cursor: pointer;
             font-size: 18px;
             color: var(--b3-theme-on-surface);
@@ -3241,7 +3260,6 @@ export class PomodoroTimer {
             transform: translate(-50%, -50%);
             opacity: 0;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-            backdrop-filter: blur(4px);
         `;
         this.startPauseBtn.innerHTML = '▶️';
         this.startPauseBtn.addEventListener('click', () => this.toggleTimer());
@@ -3249,8 +3267,8 @@ export class PomodoroTimer {
         this.stopBtn = document.createElement('button');
         this.stopBtn.className = 'circle-control-btn';
         this.stopBtn.style.cssText = `
-            background: rgba(255, 255, 255, 0.9);
-            border: none;
+            background: var(--b3-theme-surface);
+            border: 1px solid var(--b3-theme-border);
             cursor: pointer;
             font-size: 14px;
             color: var(--b3-theme-on-surface);
@@ -3268,7 +3286,6 @@ export class PomodoroTimer {
             transform: translate(-50%, -50%) translateX(16px);
             opacity: 0;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-            backdrop-filter: blur(4px);
         `;
         this.stopBtn.innerHTML = '⏹';
         this.stopBtn.addEventListener('click', () => this.resetTimer());
@@ -3783,6 +3800,14 @@ export class PomodoroTimer {
             // 悬浮窗口模式：添加到body并启用拖拽
             this.makeDraggable(header);
             document.body.appendChild(this.container);
+
+            if (this.domResizeListener) {
+                window.removeEventListener('resize', this.domResizeListener);
+            }
+            this.domResizeListener = () => {
+                this.ensureDomContainerWithinBounds();
+            };
+            window.addEventListener('resize', this.domResizeListener);
         }
 
         // 更新显示
@@ -3806,7 +3831,6 @@ export class PomodoroTimer {
             align-items: center;
             gap: 8px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            backdrop-filter: blur(8px);
             z-index: 1000;
             white-space: nowrap;
             min-width: 120px;
@@ -4400,10 +4424,84 @@ export class PomodoroTimer {
         }
     }
 
+    /**
+     * 自动调整 DOM 模式下悬浮窗口的位置，确保其在视口/屏幕范围内，避免缩小再放大或窗口改变时超出屏幕
+     */
+    private ensureDomContainerWithinBounds(margin: number = 0) {
+        if (this.isTabMode || this.isFullscreen || this.isDocked || !this.container || typeof (this.container as any).webContents !== 'undefined') {
+            return;
+        }
+
+        const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+        const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+
+        if (viewportWidth <= 0 || viewportHeight <= 0) return;
+
+        const rect = this.container.getBoundingClientRect();
+        const width = this.container.offsetWidth || rect.width || (this.isMinimized ? 60 : 240);
+        const height = this.container.offsetHeight || rect.height || (this.isMinimized ? 60 : 235);
+
+        const maxLeft = Math.max(0, viewportWidth - width - margin);
+        const maxTop = Math.max(0, viewportHeight - height - margin);
+        const minLeft = Math.min(margin, maxLeft);
+        const minTop = Math.min(margin, maxTop);
+
+        const hasExplicitLeft = Boolean(this.container.style.left && this.container.style.left !== 'auto');
+        const hasExplicitTop = Boolean(this.container.style.top && this.container.style.top !== 'auto');
+
+        if (hasExplicitLeft || hasExplicitTop) {
+            let currentLeft = hasExplicitLeft ? parseFloat(this.container.style.left) : rect.left;
+            let currentTop = hasExplicitTop ? parseFloat(this.container.style.top) : rect.top;
+
+            if (isNaN(currentLeft)) currentLeft = rect.left;
+            if (isNaN(currentTop)) currentTop = rect.top;
+
+            const clampedLeft = Math.max(minLeft, Math.min(currentLeft, maxLeft));
+            const clampedTop = Math.max(minTop, Math.min(currentTop, maxTop));
+
+            if (clampedLeft !== currentLeft || clampedTop !== currentTop) {
+                this.container.style.left = `${clampedLeft}px`;
+                this.container.style.top = `${clampedTop}px`;
+                this.container.style.right = 'auto';
+                this.container.style.bottom = 'auto';
+            }
+        } else {
+            // 没有显式设置 left/top（使用默认的 bottom/right 定位）
+            // 检查 rect 是否超出屏幕边界（比如窗口变小或内容放大）
+            if (rect.right > viewportWidth || rect.bottom > viewportHeight || rect.left < 0 || rect.top < 0) {
+                const clampedLeft = Math.max(minLeft, Math.min(rect.left, maxLeft));
+                const clampedTop = Math.max(minTop, Math.min(rect.top, maxTop));
+                this.container.style.left = `${clampedLeft}px`;
+                this.container.style.top = `${clampedTop}px`;
+                this.container.style.right = 'auto';
+                this.container.style.bottom = 'auto';
+            }
+        }
+    }
+
     private minimize() {
+        // 保存进入 mini 模式前的正常窗口位置
+        const hasLeft = Boolean(this.container.style.left && this.container.style.left !== 'auto');
+        const hasTop = Boolean(this.container.style.top && this.container.style.top !== 'auto');
+        if (hasLeft || hasTop) {
+            const currentLeft = hasLeft ? parseFloat(this.container.style.left) : this.container.getBoundingClientRect().left;
+            const currentTop = hasTop ? parseFloat(this.container.style.top) : this.container.getBoundingClientRect().top;
+            if (!isNaN(currentLeft) && !isNaN(currentTop)) {
+                this.domNormalPosition = { left: currentLeft, top: currentTop };
+            }
+        }
+
         this.isMinimized = true;
         this.applyDomMinimizedStyle();
         const miniStyle = this.getMiniWindowStyle();
+
+        // 如果之前有保存过 mini 模式位置，恢复到该位置
+        if (this.domMiniPosition) {
+            this.container.style.left = this.domMiniPosition.left + 'px';
+            this.container.style.top = this.domMiniPosition.top + 'px';
+            this.container.style.right = 'auto';
+            this.container.style.bottom = 'auto';
+        }
 
         // 添加最小化动画类
         if (miniStyle === 'ring') {
@@ -4413,20 +4511,42 @@ export class PomodoroTimer {
                 this.container.classList.remove('minimizing');
                 this.container.classList.add('minimized');
                 this.updateMinimizedDisplay();
+                this.ensureDomContainerWithinBounds();
             }, 300);
         } else {
             this.container.classList.add('minimized');
             this.updateMinimizedDisplay();
+            this.ensureDomContainerWithinBounds();
         }
     }
 
     private restore() {
+        // 在退出 mini 模式前，保存当前的 mini 位置
+        const hasLeft = Boolean(this.container.style.left && this.container.style.left !== 'auto');
+        const hasTop = Boolean(this.container.style.top && this.container.style.top !== 'auto');
+        if (hasLeft || hasTop) {
+            const currentLeft = hasLeft ? parseFloat(this.container.style.left) : this.container.getBoundingClientRect().left;
+            const currentTop = hasTop ? parseFloat(this.container.style.top) : this.container.getBoundingClientRect().top;
+            if (!isNaN(currentLeft) && !isNaN(currentTop)) {
+                this.domMiniPosition = { left: currentLeft, top: currentTop };
+            }
+        }
+
         this.isMinimized = false;
+
+        // 如果之前有保存过 normal 窗口位置，恢复到该位置
+        if (this.domNormalPosition) {
+            this.container.style.left = this.domNormalPosition.left + 'px';
+            this.container.style.top = this.domNormalPosition.top + 'px';
+            this.container.style.right = 'auto';
+            this.container.style.bottom = 'auto';
+        }
 
         // 添加展开动画类
         this.container.classList.remove('minimized');
         this.container.classList.remove('minimized-style-ring', 'minimized-style-horizontal', 'minimized-style-minimal');
         this.hideSwitchMenu(true);
+        this.ensureDomContainerWithinBounds();
 
         setTimeout(() => {
             // 恢复时不显示统计数据
@@ -4434,6 +4554,7 @@ export class PomodoroTimer {
             // this.statsContainer.style.display = 'none';
             // this.expandToggleBtn.innerHTML = '📈';
             // this.expandToggleBtn.title = '展开';
+            this.ensureDomContainerWithinBounds();
             this.updateDisplay();
         }, 300);
     }
@@ -4692,6 +4813,12 @@ export class PomodoroTimer {
             this.container.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
             this.container.style.pointerEvents = 'auto';
 
+            if (this.isMinimized) {
+                this.domMiniPosition = { left: currentX, top: currentY };
+            } else {
+                this.domNormalPosition = { left: currentX, top: currentY };
+            }
+
             document.removeEventListener('mousemove', drag);
             document.removeEventListener('mouseup', stopDrag);
             clearTouchDragTimer();
@@ -4703,6 +4830,12 @@ export class PomodoroTimer {
             isTouchDragging = false;
             this.container.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
             this.container.style.pointerEvents = 'auto';
+
+            if (this.isMinimized) {
+                this.domMiniPosition = { left: currentX, top: currentY };
+            } else {
+                this.domNormalPosition = { left: currentX, top: currentY };
+            }
 
             document.removeEventListener('touchmove', dragTouch);
             document.removeEventListener('touchend', stopTouchDrag);
@@ -5109,15 +5242,18 @@ export class PomodoroTimer {
             this.expandToggleBtn.innerHTML = '📉';
             this.expandToggleBtn.title = i18n('collapse') || '折叠';
             this.container.style.height = 'auto';
+            this.ensureDomContainerWithinBounds();
         } else {
             this.statsContainer.style.display = 'none';
             this.expandToggleBtn.innerHTML = '📈';
             this.expandToggleBtn.title = i18n('expand') || '展开';
             this.container.style.height = 'auto';
+            this.ensureDomContainerWithinBounds();
         }
 
         if (this.isExpanded) {
             this.updateStatsDisplay();
+            setTimeout(() => this.ensureDomContainerWithinBounds(), 50);
         }
     }
 
@@ -7389,6 +7525,11 @@ export class PomodoroTimer {
             this.container.parentNode.removeChild(this.container);
         }
 
+        if (this.domResizeListener) {
+            window.removeEventListener('resize', this.domResizeListener);
+            this.domResizeListener = null;
+        }
+
         // 清理 pending 设置
         this.pendingSettings = null;
     }
@@ -8241,6 +8382,8 @@ export class PomodoroTimer {
         }
 
         this.removeEscapeKeyListener();
+        this.ensureDomContainerWithinBounds();
+        setTimeout(() => this.ensureDomContainerWithinBounds(), 100);
         showMessage(i18n('exitFullscreenMode') || '已退出全屏模式', 1500);
     }
 
@@ -8661,8 +8804,31 @@ export class PomodoroTimer {
                         } catch (e) { }
                     }
                 });
+
+                pomodoroWindow.removeAllListeners('moved');
+                pomodoroWindow.on('moved', () => {
+                    if (!pomodoroWindow || pomodoroWindow.isDestroyed() || this.isDocked) return;
+                    try {
+                        const bounds = pomodoroWindow.getBounds();
+                        if (this.isMiniMode) {
+                            this.miniWindowBounds = {
+                                x: bounds.x,
+                                y: bounds.y,
+                                width: bounds.width,
+                                height: bounds.height
+                            };
+                        } else {
+                            this.normalWindowBounds = {
+                                x: bounds.x,
+                                y: bounds.y,
+                                width: 240,
+                                height: 235
+                            };
+                        }
+                    } catch (e) { }
+                });
             } catch (err) {
-                console.warn('[PomodoroTimer] Failed to register window focus/always-on-top listeners:', err);
+                console.warn('[PomodoroTimer] Failed to register window focus/always-on-top/moved listeners:', err);
             }
 
             ipcMain?.on(actionChannel, actionHandler);
@@ -11134,21 +11300,26 @@ document.body.classList.remove('docked-mode');
             if (this.isMiniMode) {
                 // 进入迷你模式
                 // 保存当前窗口大小和位置
-                if (!this.normalWindowBounds) {
-                    const bounds = pomodoroWindow.getBounds();
-                    this.normalWindowBounds = {
-                        x: bounds.x,
-                        y: bounds.y,
-                        width: 240,
-                        height: 235
-                    };
-                }
+                const bounds = pomodoroWindow.getBounds();
+                this.normalWindowBounds = {
+                    x: bounds.x,
+                    y: bounds.y,
+                    width: 240,
+                    height: 235
+                };
 
                 const miniStyle = this.getMiniWindowStyle();
                 const miniBoundsSource = (miniStyle === 'ring' || miniStyle === 'horizontal' || miniStyle === 'minimal')
                     ? null
                     : pomodoroWindow.getBounds();
                 this.applyMiniWindowBounds(pomodoroWindow, miniBoundsSource);
+
+                // 如果之前有保存过 miniWindowBounds，恢复到该位置
+                if (this.miniWindowBounds) {
+                    pomodoroWindow.setPosition(this.miniWindowBounds.x, this.miniWindowBounds.y);
+                }
+
+                this.adjustBrowserWindowBounds(pomodoroWindow);
 
                 // 添加迷你模式样式
                 pomodoroWindow.webContents.executeJavaScript(`
@@ -11157,38 +11328,61 @@ document.body.classList.remove('docked-mode');
 `).catch((e: any) => console.error(e));
             } else {
                 // 退出迷你模式
-                // 获取当前 mini 模式窗口位置
+                // 保存当前 mini 模式窗口位置
                 const currentBounds = pomodoroWindow.getBounds();
+                this.miniWindowBounds = {
+                    x: currentBounds.x,
+                    y: currentBounds.y,
+                    width: currentBounds.width,
+                    height: currentBounds.height
+                };
 
                 // 正常模式的窗口大小
                 const normalWidth = 240;
                 const normalHeight = 235;
 
+                // 优先使用之前保存的正常窗口位置；若无则以 mini 模式窗口中心为基准
+                let newX = this.normalWindowBounds ? this.normalWindowBounds.x : (currentBounds.x + (currentBounds.width - normalWidth) / 2);
+                let newY = this.normalWindowBounds ? this.normalWindowBounds.y : (currentBounds.y + (currentBounds.height - normalHeight) / 2);
+
                 // 获取屏幕尺寸以进行边界检查
-                let screenWidth = 1920;
-                let screenHeight = 1080;
+                let minX = 0;
+                let minY = 0;
+                let maxX = 1920 - normalWidth;
+                let maxY = 1080 - normalHeight;
+
                 try {
                     const electronReq = (window as any).require;
                     const remote = electronReq?.('@electron/remote') || electronReq?.('electron')?.remote;
                     const screen = remote?.screen || electronReq?.('electron')?.screen;
-                    if (screen && screen.getPrimaryDisplay) {
-                        const primaryDisplay = screen.getPrimaryDisplay();
-                        screenWidth = primaryDisplay.workAreaSize.width;
-                        screenHeight = primaryDisplay.workAreaSize.height;
+                    if (screen) {
+                        const targetDisplay = screen.getDisplayMatching
+                            ? screen.getDisplayMatching({ x: newX, y: newY, width: normalWidth, height: normalHeight })
+                            : (screen.getDisplayNearestPoint
+                                ? screen.getDisplayNearestPoint({
+                                    x: Math.round(newX + normalWidth / 2),
+                                    y: Math.round(newY + normalHeight / 2)
+                                })
+                                : screen.getPrimaryDisplay?.());
+
+                        if (targetDisplay && targetDisplay.workArea) {
+                            const wa = targetDisplay.workArea;
+                            minX = wa.x;
+                            minY = wa.y;
+                            maxX = Math.max(minX, wa.x + wa.width - normalWidth);
+                            maxY = Math.max(minY, wa.y + wa.height - normalHeight);
+                        }
                     }
                 } catch (e) {
-                    // 如果无法获取屏幕尺寸，使用窗口大小作为备选
-                    screenWidth = window.screen.availWidth || 1920;
-                    screenHeight = window.screen.availHeight || 1080;
+                    const availWidth = window.screen.availWidth || 1920;
+                    const availHeight = window.screen.availHeight || 1080;
+                    maxX = Math.max(0, availWidth - normalWidth);
+                    maxY = Math.max(0, availHeight - normalHeight);
                 }
 
-                // 计算正常模式窗口的位置（以 mini 模式窗口中心为基准）
-                let newX = currentBounds.x + (currentBounds.width - normalWidth) / 2;
-                let newY = currentBounds.y + (currentBounds.height - normalHeight) / 2;
-
                 // 确保窗口不超出屏幕边界
-                newX = Math.max(0, Math.min(newX, screenWidth - normalWidth));
-                newY = Math.max(0, Math.min(newY, screenHeight - normalHeight));
+                newX = Math.max(minX, Math.min(newX, maxX));
+                newY = Math.max(minY, Math.min(newY, maxY));
 
                 // 设置窗口大小和位置
                 pomodoroWindow.setBounds({
@@ -11197,9 +11391,6 @@ document.body.classList.remove('docked-mode');
                     width: normalWidth,
                     height: normalHeight
                 });
-
-                // 清除保存的正常窗口位置，因为我们使用 mini 模式的位置
-                this.normalWindowBounds = null;
 
                 pomodoroWindow.setResizable(true);
                 pomodoroWindow.setAspectRatio(0); // 取消比例限制
@@ -11214,6 +11405,43 @@ document.body.classList.remove('mini-mode');
             setTimeout(() => this.updateBrowserWindowDisplay(pomodoroWindow), 100);
         } catch (error) {
             console.error('[PomodoroTimer] toggleBrowserWindowMiniMode error:', error);
+        }
+    }
+
+    private adjustBrowserWindowBounds(pomodoroWindow: any) {
+        if (!pomodoroWindow || pomodoroWindow.isDestroyed() || this.isDocked) return;
+        try {
+            const bounds = pomodoroWindow.getBounds();
+            const electronReq = (window as any).require;
+            const remote = electronReq?.('@electron/remote') || electronReq?.('electron')?.remote;
+            const screen = remote?.screen || electronReq?.('electron')?.screen;
+            if (screen) {
+                const targetDisplay = screen.getDisplayMatching
+                    ? screen.getDisplayMatching(bounds)
+                    : (screen.getDisplayNearestPoint
+                        ? screen.getDisplayNearestPoint({
+                            x: Math.round(bounds.x + bounds.width / 2),
+                            y: Math.round(bounds.y + bounds.height / 2)
+                        })
+                        : screen.getPrimaryDisplay?.());
+
+                if (targetDisplay && targetDisplay.workArea) {
+                    const wa = targetDisplay.workArea;
+                    const minX = wa.x;
+                    const minY = wa.y;
+                    const maxX = Math.max(minX, wa.x + wa.width - bounds.width);
+                    const maxY = Math.max(minY, wa.y + wa.height - bounds.height);
+
+                    const clampedX = Math.max(minX, Math.min(bounds.x, maxX));
+                    const clampedY = Math.max(minY, Math.min(bounds.y, maxY));
+
+                    if (clampedX !== bounds.x || clampedY !== bounds.y) {
+                        pomodoroWindow.setPosition(Math.round(clampedX), Math.round(clampedY));
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('[PomodoroTimer] adjustBrowserWindowBounds error:', e);
         }
     }
 
