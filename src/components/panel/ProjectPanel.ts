@@ -355,6 +355,7 @@ export class ProjectPanel {
                     border-radius: 6px;
                     cursor: pointer;
                     user-select: none;
+                    transition: background-color 0.2s ease;
                 }
                 .project-panel .project-list > .project-group:first-child > .reminder-section-header {
                     margin-top: 0;
@@ -376,6 +377,9 @@ export class ProjectPanel {
                     height: 14px;
                     color: var(--b3-theme-on-surface-light);
                     transition: transform 0.15s ease;
+                }
+                .project-panel .reminder-section-header[data-collapsed="true"] {
+                    background: var(--b3-theme-surface);
                 }
                 .project-panel .reminder-section-header[data-collapsed="true"] .reminder-section-header__arrow {
                     transform: rotate(-90deg);

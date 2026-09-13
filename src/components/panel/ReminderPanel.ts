@@ -408,6 +408,7 @@ export class ReminderPanel {
                         border-radius: 6px;
                         cursor: pointer;
                         user-select: none;
+                        transition: background-color 0.2s ease;
                     }
                     .reminder-panel .reminder-section-header:first-child {
                         margin-top: 0;
@@ -428,6 +429,7 @@ export class ReminderPanel {
                         transition: transform 0.15s ease;
                     }
                     .reminder-panel .reminder-section-header[data-collapsed="true"] {
+                        background: var(--b3-theme-surface);
                         border-radius: 6px;
                     }
                     .reminder-panel .reminder-section-header[data-collapsed="true"] .reminder-section-header__arrow {
