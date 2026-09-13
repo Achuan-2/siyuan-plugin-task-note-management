@@ -1991,7 +1991,13 @@ export class ProjectPanel {
         });
 
         menu.addItem({
-            iconHTML: "📊",
+            icon: "iconCopy",
+            label: i18n("copyProjectKanbanMarkdownLink") || "复制项目看板 Markdown 链接",
+            click: () => this.copyProjectKanbanMarkdownLink(project)
+        });
+
+        menu.addItem({
+            icon: "iconTNStatistic",
             label: i18n("viewStatsMenuItem") || "查看统计",
             click: () => showProjectStatsDialog(this.plugin, project, this.reminderDataCache)
         });
@@ -2230,6 +2236,31 @@ export class ProjectPanel {
         } catch (error) {
             console.error('复制块引用失败:', error);
             showMessage(i18n("copyBlockRefFailed") || i18n("copyFailed") || "复制块引用失败");
+        }
+    }
+
+    private async copyProjectKanbanMarkdownLink(project: any) {
+        try {
+            const projectId = String(project?.id || '').trim();
+            if (!projectId || !this.plugin?.name) {
+                throw new Error('缺少项目 ID 或插件名称');
+            }
+
+            const title = String(project?.title || i18n("unnamedProject") || '未命名项目')
+                .replace(/\s+/g, ' ')
+                .trim();
+            const linkText = title
+                .replace(/\\/g, '\\\\')
+                .replace(/\[/g, '\\[')
+                .replace(/\]/g, '\\]');
+            const url = new URL(`siyuan://plugins/${encodeURIComponent(this.plugin.name)}/project-kanban`);
+            url.searchParams.set('projectId', projectId);
+
+            await platformUtils.writeText(`[${linkText}](${url.href})`);
+            showMessage(i18n("projectKanbanMarkdownLinkCopied") || "项目看板 Markdown 链接已复制到剪贴板");
+        } catch (error) {
+            console.error('复制项目看板 Markdown 链接失败:', error);
+            showMessage(i18n("copyProjectKanbanMarkdownLinkFailed") || i18n("copyFailed") || "复制项目看板 Markdown 链接失败");
         }
     }
 
