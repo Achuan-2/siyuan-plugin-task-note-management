@@ -5839,20 +5839,39 @@ export class ReminderPanel {
                 e.preventDefault();
                 const dt = e.dataTransfer;
                 let blockIds: string[] = [];
+                const gutterType = types.find(t => t.startsWith(Constants.SIYUAN_DROP_GUTTER) || t.includes('siyuan-gutter'));
 
-                // 优先直接从 window.siyuan.dragElement 获取（当前 DOM 块拖拽 100% 匹配，0 毫秒延迟）
+                // 思源把实际选中块 ID 编码在 gutter MIME 类型中；优先读取这里，避免把
+                // window.siyuan.dragElement 指向的编辑器容器 data-node-id 误当成拖动块 ID。
+                if (gutterType) {
+                    const meta = gutterType.replace(Constants.SIYUAN_DROP_GUTTER, '');
+                    const info = meta.split('\u200b');
+                    if (info.length >= 3) {
+                        blockIds = this.extractSiYuanBlockIds(info[2]);
+                    }
+                }
+
+                // 非 gutter 拖拽或 MIME 信息缺失时再从 window.siyuan.dragElement 获取。
                 const dragEle = (window as any).siyuan?.dragElement as HTMLElement | undefined;
-                if (dragEle) {
-                    const realBlock = dragEle.closest('.protyle-wysiwyg [data-node-id]:not(.protyle-attr)') ||
-                        dragEle.closest('[data-node-id]:not(.protyle-attr)');
-                    let bid = realBlock?.getAttribute('data-node-id') || dragEle.getAttribute('data-node-id') || (dragEle as any).dataset?.nodeId;
-                    if (!bid) {
+                if (blockIds.length === 0 && dragEle) {
+                    const isEditorContainer = dragEle.classList.contains('protyle-wysiwyg');
+                    if (isEditorContainer) {
+                        blockIds = Array.from(dragEle.querySelectorAll<HTMLElement>('.protyle-wysiwyg--select[data-node-id]'))
+                            .flatMap(element => this.extractSiYuanBlockIds(element.dataset.nodeId));
+                    }
+
+                    const realBlock = blockIds.length === 0
+                        ? dragEle.closest('.protyle-wysiwyg [data-node-id]:not(.protyle-attr)') ||
+                            (!isEditorContainer ? dragEle.closest('[data-node-id]:not(.protyle-attr)') : null)
+                        : null;
+                    let bid = realBlock?.getAttribute('data-node-id');
+                    if (!bid && !isEditorContainer) {
                         const rawId = (dragEle as any).dataset?.id;
                         if (rawId && !this.isUuid(rawId)) {
                             bid = rawId;
                         }
                     }
-                    if (!bid) {
+                    if (!bid && !isEditorContainer) {
                         const tabInfo = this.resolveTabInfo(dragEle, e);
                         if (tabInfo.blockId || tabInfo.docId) {
                             bid = tabInfo.blockId || tabInfo.docId;
@@ -5865,7 +5884,6 @@ export class ReminderPanel {
 
                 // 解析拖拽数据 (若 dragElement 未能拿到)
                 if (blockIds.length === 0 && dt) {
-                    const gutterType = types.find(t => t.startsWith(Constants.SIYUAN_DROP_GUTTER) || t.includes('siyuan-gutter'));
                     if (gutterType) {
                         const data = dt.getData(gutterType) || dt.getData(Constants.SIYUAN_DROP_GUTTER);
                         if (data) {
@@ -5874,20 +5892,7 @@ export class ReminderPanel {
                                 if (Array.isArray(parsed)) blockIds = parsed.map(item => item.id);
                                 else if (parsed && parsed.id) blockIds = [parsed.id];
                             } catch (e) {
-                                const meta = gutterType.replace(Constants.SIYUAN_DROP_GUTTER, '');
-                                const info = meta.split('\u200b');
-                                if (info && info.length >= 3) {
-                                    const idStr = info[2];
-                                    if (idStr) blockIds = idStr.split(',').map(id => id.trim()).filter(id => id && id !== '/');
-                                }
-                            }
-                        } else {
-                            // 尝试从类型字符串解析
-                            const meta = gutterType.replace(Constants.SIYUAN_DROP_GUTTER, '');
-                            const info = meta.split('\u200b');
-                            if (info && info.length >= 3) {
-                                const idStr = info[2];
-                                if (idStr) blockIds = idStr.split(',').map(id => id.trim()).filter(id => id && id !== '/');
+                                blockIds = this.extractSiYuanBlockIds(data);
                             }
                         }
                     } else if (types.includes(Constants.SIYUAN_DROP_FILE) || types.includes('application/vnd.siyuan-file')) {
@@ -5947,6 +5952,8 @@ export class ReminderPanel {
                         }
                     }
                 }
+
+                blockIds = [...new Set(blockIds.flatMap(id => this.extractSiYuanBlockIds(id)))];
 
                 console.log('🚀 [TaskNote Drag] 3. resolved blockIds =', blockIds);
 
@@ -6081,6 +6088,12 @@ export class ReminderPanel {
     private isUuid(id: string | null | undefined): boolean {
         if (!id || typeof id !== 'string') return false;
         return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    }
+
+    private extractSiYuanBlockIds(value: unknown): string[] {
+        if (typeof value !== 'string' || !value) return [];
+        const matches = value.match(/\b\d{14}-[a-z0-9]{7}\b/gi) || [];
+        return [...new Set(matches)];
     }
 
     private resolveTabInfo(tabIdOrEl: any, dropEvent?: DragEvent): { blockId: string | null, docId: string | null, title: string | null } {

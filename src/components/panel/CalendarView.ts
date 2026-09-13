@@ -2412,26 +2412,22 @@ export class CalendarView {
                 // 1. 处理思源内部拖拽 (Gutter, File, Tab)
                 const gutterType = types.find(t => t.startsWith(Constants.SIYUAN_DROP_GUTTER));
                 if (gutterType) {
+                    // 思源 1d9589e363 起将 data 改为合法 JSON，但实际选中块 ID 仍编码在 MIME 类型中。
+                    // 始终优先解析 MIME，避免 JSON.parse 成功后因 payload 不含 id 而丢失拖动块。
+                    const meta = gutterType.replace(Constants.SIYUAN_DROP_GUTTER, '');
+                    const info = meta.split('\u200b');
+                    if (info.length >= 3) {
+                        blockIds = this.extractSiYuanBlockIds(info[2]);
+                    }
+
                     const data = dt.getData(gutterType) || dt.getData(Constants.SIYUAN_DROP_GUTTER);
-                    if (data) {
+                    if (blockIds.length === 0 && data) {
                         try {
                             const parsed = JSON.parse(data);
                             if (Array.isArray(parsed)) blockIds = parsed.map(item => item.id);
                             else if (parsed && parsed.id) blockIds = [parsed.id];
                         } catch (e) {
-                            const meta = gutterType.replace(Constants.SIYUAN_DROP_GUTTER, '');
-                            const info = meta.split('\u200b');
-                            if (info && info.length >= 3) {
-                                const idStr = info[2];
-                                if (idStr) blockIds = idStr.split(',').map(id => id.trim()).filter(id => id && id !== '/');
-                            }
-                        }
-                    } else {
-                        const meta = gutterType.replace(Constants.SIYUAN_DROP_GUTTER, '');
-                        const info = meta.split('\u200b');
-                        if (info && info.length >= 3) {
-                            const idStr = info[2];
-                            if (idStr) blockIds = idStr.split(',').map(id => id.trim()).filter(id => id && id !== '/');
+                            blockIds = this.extractSiYuanBlockIds(data);
                         }
                     }
                 } else if (types.includes(Constants.SIYUAN_DROP_FILE)) {
@@ -2478,6 +2474,8 @@ export class CalendarView {
                         }
                     }
                 }
+
+                blockIds = [...new Set(blockIds.flatMap(id => this.extractSiYuanBlockIds(id)))];
 
                 // 2. 处理已有提醒拖拽 (提醒面板拖入)
                 let reminderId = '';
@@ -2556,53 +2554,62 @@ export class CalendarView {
                     startDate = new Date(`${dateStr}T00:00:00`);
                     isAllDay = true;
                 } else if (inTimeGrid) {
-                    // 计算时间：基于 slat 行的实测位置（与 FullCalendar 原生 slatCoords 一致，
-                    // 折叠的行高度为 0/折叠条，天然不影响映射），行下标即时间轴序号。
+                    // 基于实际 slat 的 data-time 计算落点时间。不能使用行下标推算：缩放时间刻度
+                    // 或折叠非工作时段后，DOM 行号与实际时间不再是一一对应关系。
                     const todayStartTime = await this.getTodayStartTime();
                     const slotRows = Array.from(this.container.querySelectorAll('.fc-timegrid-slots tbody tr[data-time]')) as HTMLElement[];
                     const slotDurationOpt = this.calendar ? (this.calendar.getOption('slotDuration') as any) : null;
-                    const slotDurMin = slotDurationOpt && slotDurationOpt.milliseconds ? slotDurationOpt.milliseconds / 60000 : 15;
+                    const parsedSlotDuration = typeof slotDurationOpt === 'string'
+                        ? this.parseDuration(slotDurationOpt)
+                        : (slotDurationOpt?.milliseconds ? slotDurationOpt.milliseconds / 60000 : 0);
+                    const slotDurMin = parsedSlotDuration > 0 ? parsedSlotDuration : 15;
                     const slotMinMin = this.parseDuration(todayStartTime);
+                    const slotMaxMin = this.parseDuration(this.calculateSlotMaxTime(todayStartTime));
+
+                    const getTimelineMinutes = (time: string | null | undefined): number | null => {
+                        if (!time || !/^\d{1,2}:\d{2}/.test(time)) return null;
+                        let minutes = this.parseDuration(time);
+                        // FullCalendar 在跨午夜部分可能把 24:00 之后重新格式化为 00:00。
+                        while (minutes < slotMinMin) minutes += 24 * 60;
+                        return minutes;
+                    };
 
                     let m: number | null = null;
-                    for (let i = 0; i < slotRows.length; i++) {
-                        const r = slotRows[i].getBoundingClientRect();
+                    const hiddenBar = elAtPoint?.closest('.fc-timegrid-hidden-bar') as HTMLElement | null;
+                    if (hiddenBar) {
+                        // 落在折叠条上时使用折叠区间结束时间，即下方第一个可见时间。
+                        m = getTimelineMinutes(hiddenBar.dataset.end || hiddenBar.dataset.start);
+                    }
+
+                    let nearestMinutes: number | null = null;
+                    let nearestDistance = Infinity;
+                    for (const slotRow of slotRows) {
+                        const r = slotRow.getBoundingClientRect();
+                        if (r.height <= 0) continue;
+                        const rowStartMinutes = getTimelineMinutes(slotRow.dataset.time);
+                        if (rowStartMinutes === null) continue;
+
                         if (pointY >= r.top && pointY < r.bottom) {
-                            if (slotRows[i].classList.contains('fc-timegrid-slot-hidden')) {
-                                // 落在折叠条上：使用该折叠区之后第一个可见行的起始时间
-                                for (let j = i + 1; j < slotRows.length; j++) {
-                                    if (!slotRows[j].classList.contains('fc-timegrid-slot-hidden')) {
-                                        m = slotMinMin + j * slotDurMin;
-                                        break;
-                                    }
-                                }
-                                if (m === null) {
-                                    // 回退：使用该折叠区之前最后一个可见行的结束时间
-                                    for (let j = i - 1; j >= 0; j--) {
-                                        if (!slotRows[j].classList.contains('fc-timegrid-slot-hidden')) {
-                                            m = slotMinMin + (j + 1) * slotDurMin;
-                                            break;
-                                        }
-                                    }
-                                }
-                            } else {
+                            if (!hiddenBar) {
                                 const frac = r.height > 0 ? (pointY - r.top) / r.height : 0;
-                                m = slotMinMin + (i + frac) * slotDurMin;
+                                m = rowStartMinutes + frac * slotDurMin;
                             }
                             break;
+                        }
+
+                        const distance = pointY < r.top ? r.top - pointY : pointY - r.bottom;
+                        if (distance < nearestDistance) {
+                            nearestDistance = distance;
+                            nearestMinutes = rowStartMinutes + (pointY >= r.bottom ? slotDurMin : 0);
                         }
                     }
 
                     if (m === null) {
-                        // 回退：落在所有行之外（如表格边缘 padding），按当天列的相对纵向位置线性映射
-                        const dayCol = dateEl;
-                        const rect = dayCol.getBoundingClientRect();
-                        const y = e.clientY - rect.top;
-                        const slotMax = this.parseDuration(this.calculateSlotMaxTime(todayStartTime));
-                        const totalMinutes = Math.max(1, slotMax - slotMinMin);
-                        const clampedY = Math.max(0, Math.min(rect.height, y));
-                        m = slotMinMin + Math.round((clampedY / rect.height) * totalMinutes);
+                        // 表格边缘或折叠间隙：使用纵向距离最近的真实时间槽边界。
+                        m = nearestMinutes ?? slotMinMin;
                     }
+
+                    m = Math.max(slotMinMin, Math.min(slotMaxMin - 5, m));
 
                     startDate = new Date(`${dateStr}T00:00:00`);
                     // 吸附到5分钟步长，避免出现如 19:03 之类的时间
@@ -3101,6 +3108,12 @@ export class CalendarView {
                 (item.endTime || '') === (other.endTime || '') &&
                 (item.note || '') === (other.note || '');
         });
+    }
+
+    private extractSiYuanBlockIds(value: unknown): string[] {
+        if (typeof value !== 'string' || !value) return [];
+        const matches = value.match(/\b\d{14}-[a-z0-9]{7}\b/gi) || [];
+        return [...new Set(matches)];
     }
 
     private async updateHabitReminderTimeEvent(info: any) {

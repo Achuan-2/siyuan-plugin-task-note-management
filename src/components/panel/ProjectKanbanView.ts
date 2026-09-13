@@ -13859,6 +13859,12 @@ export class ProjectKanbanView {
      * 触发reminderUpdated事件，带源标识
      * @param skipSelfUpdate 是否跳过自己的更新（默认true）
      */
+    private extractSiYuanBlockIds(value: unknown): string[] {
+        if (typeof value !== 'string' || !value) return [];
+        const matches = value.match(/\b\d{14}-[a-z0-9]{7}\b/gi) || [];
+        return [...new Set(matches)];
+    }
+
     private async handleDrop(event: DragEvent, status: string, customGroupId: string | null = null, options?: { targetTask?: any, insertBefore?: boolean }) {
         event.preventDefault();
         event.stopPropagation();
@@ -13881,8 +13887,16 @@ export class ProjectKanbanView {
 
         const gutterType = types.find(t => t.startsWith(Constants.SIYUAN_DROP_GUTTER));
         if (gutterType) {
+            // 思源 1d9589e363 起将 data 改为合法 JSON，但实际选中块 ID 仍编码在 MIME 类型中。
+            // 始终优先解析 MIME，避免 JSON.parse 成功后因 payload 不含 id 而丢失拖动块。
+            const meta = gutterType.replace(Constants.SIYUAN_DROP_GUTTER, '');
+            const info = meta.split('\u200b'); // ZWSP
+            if (info.length >= 3) {
+                blockIds = this.extractSiYuanBlockIds(info[2]);
+            }
+
             const data = dt.getData(gutterType) || dt.getData(Constants.SIYUAN_DROP_GUTTER);
-            if (data) {
+            if (blockIds.length === 0 && data) {
                 try {
                     const parsed = JSON.parse(data);
                     if (Array.isArray(parsed)) {
@@ -13891,27 +13905,9 @@ export class ProjectKanbanView {
                         blockIds = [parsed.id];
                     }
                 } catch (e) {
-                    // Try parsing from the type string itself as fallback
-                    const meta = gutterType.replace(Constants.SIYUAN_DROP_GUTTER, '');
-                    const info = meta.split('\u200b'); // ZWSP
-                    if (info && info.length >= 3) {
-                        const blockIdStr = info[2];
-                        if (blockIdStr) {
-                            blockIds = blockIdStr.split(',').map(id => id.trim()).filter(id => id && id !== '/');
-                        }
-                    }
+                    blockIds = this.extractSiYuanBlockIds(data);
                     if (blockIds.length === 0) {
                         console.error('Parse SIYUAN_DROP_GUTTER failed', e);
-                    }
-                }
-            } else {
-                // No data but type matches, try parsing from the type string
-                const meta = gutterType.replace(Constants.SIYUAN_DROP_GUTTER, '');
-                const info = meta.split('\u200b'); // ZWSP
-                if (info && info.length >= 3) {
-                    const blockIdStr = info[2];
-                    if (blockIdStr) {
-                        blockIds = blockIdStr.split(',').map(id => id.trim()).filter(id => id && id !== '/');
                     }
                 }
             }
@@ -13965,6 +13961,8 @@ export class ProjectKanbanView {
                 }
             }
         }
+
+        blockIds = [...new Set(blockIds.flatMap(id => this.extractSiYuanBlockIds(id)))];
 
         if (blockIds.length > 0) {
             // Calculate sort order if dropping onto a target task
