@@ -101,8 +101,9 @@ class PomodoroStatsView {
 
     private formatTimelineHour(valueHours: number): string {
         const totalMinutes = Math.round(valueHours * 60 + this.getLogicalTimelineStartMinutes());
-        const hours = Math.floor(totalMinutes / 60);
-        const minutes = totalMinutes % 60;
+        const normalizedMinutes = ((totalMinutes % 1440) + 1440) % 1440;
+        const hours = Math.floor(normalizedMinutes / 60);
+        const minutes = normalizedMinutes % 60;
         return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
     }
 
@@ -115,9 +116,12 @@ class PomodoroStatsView {
     private getHeatmapCalendarLayout(containerWidth: number) {
         const isCompact = containerWidth <= 720;
         const isNarrow = containerWidth <= 480;
+        const left = isCompact ? 24 : 40;
+        const right = isCompact ? 8 : 20;
+        const cellSize = Math.max(4, Math.min(13, Math.floor((containerWidth - left - right) / 53)));
         return {
-            left: isCompact ? 24 : 40,
-            right: isCompact ? 8 : 20,
+            left,
+            cellSize,
             monthNameMap: isNarrow
                 ? ['1月', '', '3月', '', '5月', '', '7月', '', '9月', '', '11月', '']
                 : 'ZH',
@@ -1333,9 +1337,7 @@ class PomodoroStatsView {
                 calendar: {
                     top: 50,
                     left: heatmapLayout.left,
-                    right: heatmapLayout.right,
-                    bottom: 60,
-                    cellSize: 13,
+                    cellSize: [heatmapLayout.cellSize, heatmapLayout.cellSize],
                     range: this.currentYear,
                     itemStyle: {
                         borderWidth: 2,
@@ -1376,7 +1378,7 @@ class PomodoroStatsView {
                     chart.setOption({
                         calendar: {
                             left: heatmapLayout.left,
-                            right: heatmapLayout.right,
+                            cellSize: [heatmapLayout.cellSize, heatmapLayout.cellSize],
                             monthLabel: {
                                 nameMap: heatmapLayout.monthNameMap,
                                 fontSize: heatmapLayout.monthFontSize

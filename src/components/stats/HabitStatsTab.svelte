@@ -1335,6 +1335,8 @@ $: if (logPage < 1) logPage = 1;
 
     .stats-nav {
         display: flex;
+        flex: 0 0 auto;
+        align-items: center;
         gap: 8px;
         border-bottom: 1px solid var(--b3-border-color);
         padding-bottom: 10px;

@@ -1039,6 +1039,30 @@
             border: 0;
             border-radius: 0;
             background: transparent;
+            overflow-x: auto;
+            overflow-y: hidden;
+            scrollbar-width: thin;
+            -webkit-overflow-scrolling: touch;
+
+            &::-webkit-scrollbar {
+                height: 6px;
+            }
+
+            &::-webkit-scrollbar-track {
+                background: var(--b3-theme-surface-lighter);
+                border-radius: 3px;
+            }
+
+            &::-webkit-scrollbar-thumb {
+                background: var(--b3-theme-primary-lighter);
+                border-radius: 3px;
+            }
+
+            .echarts-heatmap-chart {
+                min-width: 600px;
+                height: 200px;
+                min-height: 200px;
+            }
         }
     }
 
