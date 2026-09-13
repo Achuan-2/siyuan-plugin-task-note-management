@@ -1488,6 +1488,36 @@ export default class ReminderPlugin extends Plugin {
         await this.categoryManager.initialize();
         await ProjectManager.getInstance(this).initialize();
 
+        // 处理文档中的项目看板链接：siyuan://plugins/<插件名>/project-kanban?projectId=<项目ID>
+        const handleOpenSiYuanUrlPlugin = (event: CustomEvent<{ url: string }>) => {
+            try {
+                const url = new URL(event.detail?.url || '');
+                const pathSegments = url.pathname
+                    .split('/')
+                    .filter(Boolean)
+                    .map(segment => decodeURIComponent(segment));
+                if (pathSegments[0] !== this.name || pathSegments[1] !== 'project-kanban') {
+                    return;
+                }
+
+                const projectId = (url.searchParams.get('projectId') || '').trim();
+                const project = projectId
+                    ? ProjectManager.getInstance(this).getProjectById(projectId)
+                    : undefined;
+                if (!project) {
+                    showMessage(i18n('projectNotExist') || '项目记录不存在');
+                    return;
+                }
+
+                this.openProjectKanbanTab(project.id, project.name || i18n('unnamedProject') || '未命名项目');
+            } catch (error) {
+                console.error('打开项目看板链接失败:', error);
+                showMessage(i18n('openProjectKanbanFailed') || '打开项目看板失败');
+            }
+        };
+        this.eventBus.on('open-siyuan-url-plugin', handleOpenSiYuanUrlPlugin);
+        this.addCleanup(() => this.eventBus.off('open-siyuan-url-plugin', handleOpenSiYuanUrlPlugin));
+
         // 监听来自内核的更新通知以触发前端数据重载及UI更新
         if (this.kernel?.rpc) {
             const onDataUpdated = async (params: any) => {
