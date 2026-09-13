@@ -1965,69 +1965,8 @@ export class ReminderPanel {
         }
     }
 
-    private getReminderProgressInfo(reminder: any): { shouldShow: boolean; percent: number } {
-        const customPercent = this.normalizeCustomProgress(reminder?.customProgress);
-        if (customPercent !== undefined) {
-            if (reminder?.completed) {
-                return { shouldShow: true, percent: 100 };
-            }
-            return { shouldShow: true, percent: customPercent };
-        }
-
-        const allChildren: any[] = [];
-        this.allRemindersMap.forEach((r: any) => {
-            if (r.parentId === reminder?.id) allChildren.push(r);
-        });
-
-        if (allChildren.length === 0) {
-            return { shouldShow: false, percent: 0 };
-        }
-
-        const completedCount = allChildren.filter(c => c.completed).length;
-        return { shouldShow: true, percent: Math.round((completedCount / allChildren.length) * 100) };
-    }
-
     private updateParentTaskProgressDom(parentId: string): void {
-        const parentEl = this.remindersContainer.querySelector(`[data-reminder-id="${parentId}"]`) as HTMLElement | null;
-        if (!parentEl) return;
-        const parentReminder = this.allRemindersMap.get(parentId);
-
-        const existing = parentEl.querySelector('.reminder-progress-container') as HTMLElement | null;
-        if (!parentReminder) {
-            if (existing) existing.remove();
-            return;
-        }
-
-        const { shouldShow, percent } = this.getReminderProgressInfo(parentReminder);
-        if (!shouldShow) {
-            if (existing) existing.remove();
-            return;
-        }
-
-        let progressContainer = existing;
-        if (!progressContainer) {
-            progressContainer = document.createElement('div');
-            progressContainer.className = 'reminder-progress-container';
-
-            const progressWrap = document.createElement('div');
-            progressWrap.className = 'reminder-progress-wrap';
-
-            const progressBar = document.createElement('div');
-            progressBar.className = 'reminder-progress-bar';
-            progressWrap.appendChild(progressBar);
-
-            const percentLabel = document.createElement('div');
-            percentLabel.className = 'reminder-progress-text';
-
-            progressContainer.appendChild(progressWrap);
-            progressContainer.appendChild(percentLabel);
-            parentEl.appendChild(progressContainer);
-        }
-
-        const progressBarEl = progressContainer.querySelector('.reminder-progress-bar') as HTMLElement | null;
-        const percentLabelEl = progressContainer.querySelector('.reminder-progress-text') as HTMLElement | null;
-        if (progressBarEl) progressBarEl.style.width = `${percent}%`;
-        if (percentLabelEl) percentLabelEl.textContent = `${percent}%`;
+        this.updateParentProgressBar(parentId);
     }
 
     private updateAncestorProgressBars(changedReminderIds: string[]): void {

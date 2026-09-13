@@ -5,10 +5,13 @@
  * 供侧边栏面板、看板视图、四象限视图等各模块统一调用，以保证整体插件中任务 UI 和交互逻辑的一致性。
  */
 import { colorWithOpacity } from "../../utils/uiUtils";
+import { updateBindBlockAtrrs } from "../../api";
 import { getLuteInstance } from "../../utils/luteSingleton";
 import { i18n } from "../../pluginInstance";
+import { showMessage } from "siyuan";
 import { getLocalDateString, getLocalDateTimeString, compareDateStrings, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../../utils/dateUtils";
-import { getRepeatDescription } from "../dataManager/repeatUtils";
+import { getRepeatDescription, getRepeatInstanceOriginalKey, parseReminderInstanceId, patchRepeatInstanceState } from "../dataManager/repeatUtils";
+import { getAllReminders, saveReminders } from "../../utils/icsSubscription";
 import { getSolarDateLunarString } from "../../utils/lunarUtils";
 import { shouldTreatStartDateOnlyAsOverdue, isOpenEndedStartDateTask } from "../../utils/startDateOverdue";
 import { getReminderSkipWeekendsEffective, getReminderSkipHolidaysEffective, shouldSkipReminderOnDate } from "../../utils/reminderSkipDate";
@@ -79,6 +82,53 @@ export interface TaskRenderCallbacks {
 export class TaskRenderer {
     // 缓存插件资源图片的 blob URL，避免每次渲染都重新异步加载导致闪烁
     private static assetBlobCache = new Map<string, string>();
+    // 所有视图共用一条保存队列，避免多个任务同时写入时相互覆盖。
+    private static customProgressSaveQueue: Promise<void> = Promise.resolve();
+
+    private static saveCustomProgress(task: any, context: TaskRenderContext, percent: number): void {
+        task.customProgress = percent;
+        // 新建任务对话框中的临时子任务尚未落盘，直接修改共享对象即可。
+        if (task.isTempSubtask) return;
+
+        this.customProgressSaveQueue = this.customProgressSaveQueue
+            .catch(() => undefined)
+            .then(async () => {
+                try {
+                    const reminderData = await getAllReminders(context.plugin);
+                    const taskId = task.id || task.instanceId;
+                    const isRepeatInstance = !!(task.isRepeatInstance || task.isRepeatedInstance);
+                    const parsedInstance = isRepeatInstance ? parseReminderInstanceId(taskId) : null;
+                    const originalId = task.originalId || parsedInstance?.originalId;
+                    const instanceDate = getRepeatInstanceOriginalKey(task) || parsedInstance?.instanceDate;
+
+                    if (isRepeatInstance && originalId && instanceDate) {
+                        const originalReminder = reminderData[originalId];
+                        if (!originalReminder) throw new Error(`原始重复任务不存在: ${originalId}`);
+                        patchRepeatInstanceState(originalReminder, instanceDate, { customProgress: percent });
+                    } else {
+                        const storedTask = reminderData[taskId];
+                        if (!storedTask) throw new Error(`任务不存在: ${taskId}`);
+                        storedTask.customProgress = percent;
+                        storedTask.updatedAt = new Date().toISOString();
+                    }
+
+                    await saveReminders(context.plugin, reminderData);
+                    if (task.blockId) {
+                        try {
+                            await updateBindBlockAtrrs(task.blockId, context.plugin);
+                        } catch (error) {
+                            console.warn('同步自定义进度到绑定块属性失败:', task.blockId, error);
+                        }
+                    }
+
+                    window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                } catch (error) {
+                    console.error('更新自定义进度失败:', error);
+                    showMessage(i18n("updateReminderFailed") || "更新任务失败", 3000, "error");
+                    window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                }
+            });
+    }
 
     public static async preloadNoteImages(note: string): Promise<void> {
         if (!note) return;
@@ -562,7 +612,11 @@ export class TaskRenderer {
     /**
      * 计算并渲染进度条
      */
-    public static renderProgressBar(task: any, context: TaskRenderContext, infoEl: HTMLElement): void {
+    public static renderProgressBar(
+        task: any,
+        context: TaskRenderContext,
+        infoEl: HTMLElement
+    ): void {
         let percent = 0;
         let shouldShow = false;
 
@@ -595,7 +649,7 @@ export class TaskRenderer {
             progressBarWrap.className = 'reminder-progress-wrap reminder-item__progress-wrap';
             progressBarWrap.style.cssText = `
                 flex: 1;
-                height: 4px;
+                height: 6px;
                 background-color: var(--b3-theme-surface-lighter);
                 border-radius: 2px;
                 overflow: hidden;
@@ -612,6 +666,30 @@ export class TaskRenderer {
             `;
             progressBarWrap.appendChild(progressBar);
 
+            let customProgressHandle: HTMLSpanElement | null = null;
+            if (customPercent !== undefined) {
+                progressBarWrap.style.position = 'relative';
+                progressBarWrap.style.overflow = 'visible';
+                customProgressHandle = document.createElement('span');
+                customProgressHandle.className = 'reminder-progress-custom-handle';
+                customProgressHandle.style.cssText = `
+                    position: absolute;
+                    top: 50%;
+                    left: clamp(5px, ${percent}%, calc(100% - 5px));
+                    width: 10px;
+                    height: 10px;
+                    box-sizing: border-box;
+                    border: 2px solid var(--b3-theme-primary);
+                    border-radius: 50%;
+                    background-color: var(--b3-theme-background);
+                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.24);
+                    transform: translate(-50%, -50%);
+                    pointer-events: none;
+                    z-index: 2;
+                `;
+                progressBarWrap.appendChild(customProgressHandle);
+            }
+
             const percentLabel = document.createElement('span');
             percentLabel.className = 'reminder-progress-text reminder-item__progress-text';
             percentLabel.style.cssText = `
@@ -627,6 +705,113 @@ export class TaskRenderer {
             progressContainer.appendChild(progressBarWrap);
             progressContainer.appendChild(percentLabel);
             infoEl.appendChild(progressContainer);
+
+            const canEditCustomProgress = customPercent !== undefined && !task.completed;
+            if (canEditCustomProgress) {
+                progressContainer.classList.add('reminder-progress-container--editable');
+                progressBarWrap.classList.add('reminder-progress-wrap--editable');
+                progressBarWrap.tabIndex = 0;
+                progressBarWrap.setAttribute('role', 'slider');
+                progressBarWrap.setAttribute('aria-valuemin', '0');
+                progressBarWrap.setAttribute('aria-valuemax', '100');
+                progressBarWrap.setAttribute('aria-valuenow', String(percent));
+                progressBarWrap.setAttribute('aria-label', i18n("customProgress") || "自定义进度");
+                progressBarWrap.title = `${i18n("customProgress") || "自定义进度"}：${percent}%`;
+                progressBarWrap.style.cursor = 'ew-resize';
+                progressBarWrap.style.touchAction = 'none';
+
+                let dragging = false;
+                let dragStartPercent = percent;
+
+                const previewProgress = (nextPercent: number) => {
+                    percent = Math.max(0, Math.min(100, Math.round(nextPercent)));
+                    progressBar.style.width = `${percent}%`;
+                    if (customProgressHandle) {
+                        customProgressHandle.style.left = `clamp(5px, ${percent}%, calc(100% - 5px))`;
+                    }
+                    percentLabel.textContent = `${percent}%`;
+                    progressBarWrap.setAttribute('aria-valuenow', String(percent));
+                    progressBarWrap.title = `${i18n("customProgress") || "自定义进度"}：${percent}%`;
+                };
+
+                const previewFromPointer = (event: PointerEvent) => {
+                    const rect = progressBarWrap.getBoundingClientRect();
+                    if (rect.width <= 0) return;
+                    previewProgress(((event.clientX - rect.left) / rect.width) * 100);
+                };
+
+                progressBarWrap.addEventListener('pointerdown', (event: PointerEvent) => {
+                    if (event.button !== 0) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    dragging = true;
+                    dragStartPercent = percent;
+                    progressBar.style.transition = 'none';
+                    progressBarWrap.setPointerCapture(event.pointerId);
+                    previewFromPointer(event);
+                });
+
+                progressBarWrap.addEventListener('pointermove', (event: PointerEvent) => {
+                    if (!dragging) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    previewFromPointer(event);
+                });
+
+                progressBarWrap.addEventListener('pointerup', (event: PointerEvent) => {
+                    if (!dragging) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    previewFromPointer(event);
+                    dragging = false;
+                    progressBar.style.transition = '';
+                    if (progressBarWrap.hasPointerCapture(event.pointerId)) {
+                        progressBarWrap.releasePointerCapture(event.pointerId);
+                    }
+                    if (percent !== dragStartPercent) {
+                        this.saveCustomProgress(task, context, percent);
+                    }
+                });
+
+                progressBarWrap.addEventListener('pointercancel', (event: PointerEvent) => {
+                    if (!dragging) return;
+                    event.stopPropagation();
+                    dragging = false;
+                    progressBar.style.transition = '';
+                    previewProgress(dragStartPercent);
+                });
+
+                progressBarWrap.addEventListener('keydown', (event: KeyboardEvent) => {
+                    let nextPercent: number | undefined;
+                    if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') nextPercent = percent - 1;
+                    if (event.key === 'ArrowRight' || event.key === 'ArrowUp') nextPercent = percent + 1;
+                    if (event.key === 'PageDown') nextPercent = percent - 10;
+                    if (event.key === 'PageUp') nextPercent = percent + 10;
+                    if (event.key === 'Home') nextPercent = 0;
+                    if (event.key === 'End') nextPercent = 100;
+                    if (nextPercent === undefined) return;
+
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const oldPercent = percent;
+                    previewProgress(nextPercent);
+                    if (percent !== oldPercent) {
+                        this.saveCustomProgress(task, context, percent);
+                    }
+                });
+
+                progressBarWrap.addEventListener('click', event => event.stopPropagation());
+                progressBarWrap.addEventListener('dblclick', event => event.stopPropagation());
+                progressBarWrap.addEventListener('dragstart', event => event.preventDefault());
+                progressBarWrap.addEventListener('focus', () => {
+                    progressBarWrap.style.outline = '2px solid var(--b3-theme-primary-light)';
+                    progressBarWrap.style.outlineOffset = '2px';
+                });
+                progressBarWrap.addEventListener('blur', () => {
+                    progressBarWrap.style.outline = '';
+                    progressBarWrap.style.outlineOffset = '';
+                });
+            }
         }
     }
 
