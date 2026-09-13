@@ -2557,7 +2557,8 @@ export class CalendarView {
                     // 基于实际 slat 的 data-time 计算落点时间。不能使用行下标推算：缩放时间刻度
                     // 或折叠非工作时段后，DOM 行号与实际时间不再是一一对应关系。
                     const todayStartTime = await this.getTodayStartTime();
-                    const slotRows = Array.from(this.container.querySelectorAll('.fc-timegrid-slots tbody tr[data-time]')) as HTMLElement[];
+                    // FullCalendar 将 data-time 放在行内的 td.fc-timegrid-slot 上，而不是 tr 上。
+                    const slotRows = Array.from(this.container.querySelectorAll('.fc-timegrid-slots tbody tr')) as HTMLElement[];
                     const slotDurationOpt = this.calendar ? (this.calendar.getOption('slotDuration') as any) : null;
                     const parsedSlotDuration = typeof slotDurationOpt === 'string'
                         ? this.parseDuration(slotDurationOpt)
@@ -2586,7 +2587,8 @@ export class CalendarView {
                     for (const slotRow of slotRows) {
                         const r = slotRow.getBoundingClientRect();
                         if (r.height <= 0) continue;
-                        const rowStartMinutes = getTimelineMinutes(slotRow.dataset.time);
+                        const timeCell = slotRow.querySelector<HTMLElement>('.fc-timegrid-slot[data-time]');
+                        const rowStartMinutes = getTimelineMinutes(timeCell?.dataset.time);
                         if (rowStartMinutes === null) continue;
 
                         if (pointY >= r.top && pointY < r.bottom) {
