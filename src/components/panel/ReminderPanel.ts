@@ -92,6 +92,8 @@ export class ReminderPanel {
     private loadTimeoutId: number | null = null;
     private completionRemovalTimers: Map<string, number> = new Map();
     private reminderSkipHolidayData: HolidayData = {};
+    // 今日视图分组的折叠状态（仅当前面板会话内保留）
+    private collapsedTodayGroups: Set<'today' | 'daily' | 'completed' | 'ignored'> = new Set();
 
     // 侧栏多选模式
     private isMultiSelectMode: boolean = false;
@@ -342,6 +344,7 @@ export class ReminderPanel {
             const el = this.remindersContainer.querySelector(`[data-reminder-id="${reminderId}"]`) as HTMLElement | null;
             if (el) el.remove();
             this.currentRemindersCache = this.currentRemindersCache.filter(r => r.id !== reminderId);
+            this.updateTodayGroupCounts();
         }, 300);
         this.completionRemovalTimers.set(reminderId, timerId);
     }
@@ -383,14 +386,56 @@ export class ReminderPanel {
 
         // 注入拖拽时的全局样式（确保 drag 状态下透明度生效）
         try {
-            if (!document.getElementById('reminder-panel-drag-style')) {
-                const style = document.createElement('style');
+            let style = document.getElementById('reminder-panel-drag-style') as HTMLStyleElement | null;
+            if (!style) {
+                style = document.createElement('style');
                 style.id = 'reminder-panel-drag-style';
-                style.textContent = `
+                document.head.appendChild(style);
+            }
+            style.textContent = `
                     .reminder-item.dragging { opacity: 0.5 !important; }
                     .reminder-item.reminder-completed { opacity: 0.5 !important; }
                     .reminder-list.drag-over-active {
                         box-shadow: inset 0 0 0 2px var(--b3-theme-primary);
+                    }
+                    .reminder-panel .reminder-section-header {
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                        margin: 10px 0 8px;
+                        padding: 8px 10px;
+                        color: var(--b3-theme-on-surface);
+                        background: var(--b3-theme-surface-lighter);
+                        border-radius: 6px;
+                        cursor: pointer;
+                        user-select: none;
+                    }
+                    .reminder-panel .reminder-section-header:first-child {
+                        margin-top: 0;
+                    }
+                    .reminder-panel .reminder-section-header__title {
+                        min-width: 0;
+                        font-weight: 600;
+                    }
+                    .reminder-panel .reminder-section-header__count {
+                        margin-left: auto;
+                        color: var(--b3-theme-on-surface-light);
+                        font-size: 12px;
+                    }
+                    .reminder-panel .reminder-section-header__arrow {
+                        width: 14px;
+                        height: 14px;
+                        color: var(--b3-theme-on-surface-light);
+                        transition: transform 0.15s ease;
+                    }
+                    .reminder-panel .reminder-section-header[data-collapsed="true"] {
+                        border-radius: 6px;
+                    }
+                    .reminder-panel .reminder-section-header[data-collapsed="true"] .reminder-section-header__arrow {
+                        transform: rotate(-90deg);
+                    }
+                    .reminder-panel .reminder-item.reminder-section-item[hidden] {
+                        display: none !important;
                     }
                     @supports (-webkit-touch-callout: none) {
                         .reminder-panel .reminder-item {
@@ -399,9 +444,7 @@ export class ReminderPanel {
                             -webkit-touch-callout: none;
                         }
                     }
-                `;
-                document.head.appendChild(style);
-            }
+            `;
         } catch (e) {
             // ignore
         }
@@ -2593,6 +2636,142 @@ export class ReminderPanel {
         return asyncDataCache;
     }
 
+    private createTodayGroupHeader(group: 'today' | 'daily' | 'completed' | 'ignored', count: number): HTMLElement {
+        const header = document.createElement('div');
+        const headerIds = {
+            today: 'today-tasks-section',
+            daily: 'daily-dessert-separator',
+            completed: 'today-completed-section',
+            ignored: 'daily-dessert-separator'
+        } as const;
+        header.id = headerIds[group];
+        header.className = 'reminder-section-header';
+        header.dataset.reminderGroup = group;
+        header.dataset.collapsed = String(this.collapsedTodayGroups.has(group));
+        header.setAttribute('role', 'button');
+        header.setAttribute('tabindex', '0');
+        header.setAttribute('aria-expanded', String(!this.collapsedTodayGroups.has(group)));
+
+        const titles = {
+            today: i18n('todayReminders') || '今日任务',
+            daily: i18n('dailyAvailable') || '每日可做',
+            completed: i18n('completedReminders') || '已完成任务',
+            ignored: i18n('todayIgnored') || '今日忽略'
+        };
+        const title = titles[group];
+        header.innerHTML = `
+            <span class="reminder-section-header__title">${title}</span>
+            <span class="reminder-section-header__count">${count}</span>
+            <svg class="reminder-section-header__arrow" aria-hidden="true"><use xlink:href="#iconDown"></use></svg>
+        `;
+
+        const toggleGroup = () => {
+            const shouldCollapse = !this.collapsedTodayGroups.has(group);
+            if (shouldCollapse) {
+                this.collapsedTodayGroups.add(group);
+            } else {
+                this.collapsedTodayGroups.delete(group);
+            }
+            header.dataset.collapsed = String(shouldCollapse);
+            header.setAttribute('aria-expanded', String(!shouldCollapse));
+            this.remindersContainer
+                .querySelectorAll<HTMLElement>(`.reminder-section-item[data-reminder-group="${group}"]`)
+                .forEach(item => item.hidden = shouldCollapse);
+        };
+
+        header.addEventListener('click', toggleGroup);
+        header.addEventListener('keydown', (event: KeyboardEvent) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                toggleGroup();
+            }
+        });
+
+        return header;
+    }
+
+    private getReminderTodayGroup(reminder: any, reminders: any[], today: string): 'today' | 'daily' {
+        const reminderMap = new Map(reminders.map(item => [item.id, item]));
+        let root = reminder;
+        const visited = new Set<string>();
+        while (root?.parentId && !visited.has(root.parentId)) {
+            visited.add(root.parentId);
+            const parent = reminderMap.get(root.parentId);
+            if (!parent) break;
+            root = parent;
+        }
+        return this.isDailyDessertTaskForDate(root, today) && !!root.isAvailableToday ? 'daily' : 'today';
+    }
+
+    private getTodayCompletedGroup(reminder: any, reminders: any[], today: string): 'completed' | 'ignored' {
+        const reminderMap = new Map(reminders.map(item => [item.id, item]));
+        let root = reminder;
+        const visited = new Set<string>();
+        while (root?.parentId && !visited.has(root.parentId)) {
+            visited.add(root.parentId);
+            const parent = reminderMap.get(root.parentId);
+            if (!parent) break;
+            root = parent;
+        }
+
+        const isIgnoredToday = this.hasTodayIgnoreMark(root, today);
+        if (!isIgnoredToday) return 'completed';
+        if (root.isAvailableToday) {
+            const dailyCompleted = Array.isArray(root.dailyDessertCompleted) ? root.dailyDessertCompleted : [];
+            return dailyCompleted.includes(today) ? 'completed' : 'ignored';
+        }
+        if (this.canApplyTodayIgnore(root, today) && !this.hasDailyCompletionMark(root, today)) {
+            return 'ignored';
+        }
+        return 'completed';
+    }
+
+    private ensureTodayGroupHeader(group: 'today' | 'daily' | 'completed' | 'ignored'): HTMLElement | null {
+        if (!this.isTodayLikeView() && this.currentTab !== 'todayCompleted') return null;
+        const selectors = {
+            today: '#today-tasks-section',
+            daily: '#daily-dessert-separator',
+            completed: '#today-completed-section',
+            ignored: '#daily-dessert-separator'
+        } as const;
+        const selector = selectors[group];
+        const existing = this.remindersContainer.querySelector(selector) as HTMLElement | null;
+        if (existing) return existing;
+
+        const header = this.createTodayGroupHeader(group, 0);
+        if (group === 'today' || group === 'completed') {
+            const bottomHeader = this.remindersContainer.querySelector('#daily-dessert-separator');
+            if (bottomHeader) {
+                this.remindersContainer.insertBefore(header, bottomHeader);
+            } else {
+                this.remindersContainer.prepend(header);
+            }
+        } else {
+            this.remindersContainer.appendChild(header);
+        }
+        return header;
+    }
+
+    private updateTodayGroupCounts(): void {
+        const groups = this.isTodayLikeView()
+            ? (['today', 'daily'] as const)
+            : this.currentTab === 'todayCompleted'
+                ? (['completed', 'ignored'] as const)
+                : [];
+        groups.forEach(group => {
+            const headerSelector = (group === 'daily' || group === 'ignored')
+                ? '#daily-dessert-separator'
+                : group === 'completed'
+                    ? '#today-completed-section'
+                    : '#today-tasks-section';
+            const count = this.remindersContainer.querySelectorAll(
+                `.reminder-section-item[data-reminder-group="${group}"][data-level="0"]`
+            ).length;
+            const countElement = this.remindersContainer.querySelector(`${headerSelector} .reminder-section-header__count`);
+            if (countElement) countElement.textContent = String(count);
+        });
+    }
+
     /**
      * 迭代式渲染提醒任务，使用队列避免递归深度限制
      * @param reminders 要渲染的任务列表
@@ -2613,6 +2792,17 @@ export class ReminderPanel {
         // 注意：如果某个任务的父任务不在当前可见列表中，也应当将其视为顶级（例如祖先被过滤掉的情况）
         const topLevelReminders = reminders.filter(r => !r.parentId || !reminders.some(p => p.id === r.parentId));
         topLevelReminders.forEach(reminder => renderQueue.push({ reminder, level: 0 }));
+        const isTodayTaskGroupedView = this.isTodayLikeView();
+        const isTodayCompletedGroupedView = this.currentTab === 'todayCompleted';
+        const sectionCounts = topLevelReminders.reduce((counts, item) => {
+            if (isTodayTaskGroupedView) {
+                counts[this.getReminderTodayGroup(item, reminders, today)]++;
+            } else if (isTodayCompletedGroupedView) {
+                counts[this.getTodayCompletedGroup(item, reminders, today)]++;
+            }
+            return counts;
+        }, { today: 0, daily: 0, completed: 0, ignored: 0 });
+        let activeGroup: 'today' | 'daily' | 'completed' | 'ignored' | null = null;
 
         // 处理渲染队列
         while (renderQueue.length > 0) {
@@ -2624,77 +2814,22 @@ export class ReminderPanel {
 
                 // 添加到文档片段
 
-                // 检查是否需要插入分隔符 (Daily Dessert Separator)
-                // 我们假设 renderQueue 按照顺序处理 (topLevelReminders 是有序的)
-                // 如果当前任务是第一个 Daily Dessert，且前面有非 Dessert 任务，插入分隔符
-                // 但是 topLevelReminders 可能是乱序进入 queue? No, sorted before loop.
-                // Wait, reminders passed to this function ARE sorted by sortReminders().
-                // And sortReminders puts desserts at bottom.
-                // So checking transition is enough.
-
-                // 只有 top-level 任务需要分隔符。
-                if (level === 0 && (this.isTodayLikeView() || this.currentTab === 'todayCompleted')) {
-                    // 定义分组类型：0-普通任务, 1-订阅任务, 2-底部任务(每日可做/今日忽略)
-                    const getGroupType = (item: any) => {
-                        let isBottomGroup = false;
-                        if (this.isTodayLikeView()) {
-                            isBottomGroup = this.isDailyDessertTaskForDate(item, today) && !!item.isAvailableToday;
-                        } else if (this.currentTab === 'todayCompleted') {
-                            const isIgnoredToday = this.hasTodayIgnoreMark(item, today);
-                            if (isIgnoredToday) {
-                                if (item.isAvailableToday) {
-                                    const dailyCompleted = Array.isArray(item.dailyDessertCompleted) ? item.dailyDessertCompleted : [];
-                                    isBottomGroup = !dailyCompleted.includes(today);
-                                } else if (this.canApplyTodayIgnore(item, today)) {
-                                    isBottomGroup = !this.hasDailyCompletionMark(item, today);
-                                }
-                            }
+                // 今日类视图和“今日已完成”视图使用一致的分组 Header。
+                if (isTodayTaskGroupedView || isTodayCompletedGroupedView) {
+                    if (level === 0) {
+                        const nextGroup = isTodayTaskGroupedView
+                            ? this.getReminderTodayGroup(reminder, reminders, today)
+                            : this.getTodayCompletedGroup(reminder, reminders, today);
+                        if (nextGroup !== activeGroup) {
+                            activeGroup = nextGroup;
+                            fragment.appendChild(this.createTodayGroupHeader(nextGroup, sectionCounts[nextGroup] || 0));
                         }
+                    }
 
-                        if (isBottomGroup) return 2;
-                        if (item.isSubscribed) return 1;
-                        return 0;
-                    };
-
-                    const currentType = getGroupType(reminder);
-                    const prevIndex = topLevelReminders.indexOf(reminder) - 1;
-                    const prevType = prevIndex >= 0 ? getGroupType(topLevelReminders[prevIndex]) : -1;
-
-                    // 当类型发生变化且当前不是普通任务时，插入对应的分隔符
-                    if (currentType > 0 && currentType !== prevType) {
-                        let separatorText = '';
-                        let separatorId = '';
-
-                        if (currentType === 1) { // 订阅日历
-                            separatorText = i18n('subscribedTask');
-                            separatorId = 'subscribed-tasks-separator';
-                        } else if (currentType === 2) { // 每日可做/今日忽略
-                            separatorText = this.currentTab === 'todayCompleted' ? i18n('todayIgnored') : i18n('dailyAvailable');
-                            separatorId = 'daily-dessert-separator';
-                        }
-
-                        if (separatorText && !fragment.querySelector('#' + separatorId)) {
-                            const separator = document.createElement('div');
-                            separator.id = separatorId;
-                            separator.className = `reminder-separator ${separatorId}`;
-                            separator.innerHTML = `<span style="padding:0 8px;">${separatorText}</span>`;
-                            separator.style.cssText = `
-                                display: flex; 
-                                align-items: center; 
-                                justify-content: center; 
-                                margin: 16px 0 8px 0; 
-                                font-size: 12px; 
-                                color: var(--b3-theme-on-surface-light);
-                                opacity: 0.8;
-                            `;
-
-                            // 添加左右横线装饰
-                            const lineStyle = 'flex: 1; height: 1px; background: var(--b3-theme-surface-lighter);';
-                            separator.insertAdjacentHTML('afterbegin', `<div style="${lineStyle}"></div>`);
-                            separator.insertAdjacentHTML('beforeend', `<div style="${lineStyle}"></div>`);
-
-                            fragment.appendChild(separator);
-                        }
+                    if (activeGroup) {
+                        element.classList.add('reminder-section-item');
+                        element.dataset.reminderGroup = activeGroup;
+                        element.hidden = this.collapsedTodayGroups.has(activeGroup);
                     }
                 }
 
@@ -2990,7 +3125,16 @@ export class ReminderPanel {
             }
         };
 
-        return TaskRenderer.render(reminder, context, callbacks, level, allVisibleReminders);
+        const element = TaskRenderer.render(reminder, context, callbacks, level, allVisibleReminders);
+        if (this.isTodayLikeView() || this.currentTab === 'todayCompleted') {
+            const group = this.isTodayLikeView()
+                ? this.getReminderTodayGroup(reminder, allVisibleReminders, today)
+                : this.getTodayCompletedGroup(reminder, allVisibleReminders, today);
+            element.classList.add('reminder-section-item');
+            element.dataset.reminderGroup = group;
+            element.hidden = this.collapsedTodayGroups.has(group);
+        }
+        return element;
     }
 
     /**
@@ -10809,19 +10953,28 @@ export class ReminderPanel {
                 }
             }
 
-            if (this.isTodayLikeView()) {
-                const isSavedDessert = this.isDailyDessertTaskForDate(savedReminder, today);
+            if ((this.isTodayLikeView() || this.currentTab === 'todayCompleted') && !savedReminder.parentId) {
+                const savedGroup = this.isTodayLikeView()
+                    ? this.getReminderTodayGroup(savedReminder, this.currentRemindersCache, today)
+                    : this.getTodayCompletedGroup(savedReminder, this.currentRemindersCache, today);
+                this.ensureTodayGroupHeader(savedGroup);
+            }
+
+            if (this.isTodayLikeView() || this.currentTab === 'todayCompleted') {
+                const savedGroup = this.isTodayLikeView()
+                    ? this.getReminderTodayGroup(savedReminder, this.currentRemindersCache, today)
+                    : this.getTodayCompletedGroup(savedReminder, this.currentRemindersCache, today);
+                const isBottomGroup = savedGroup === 'daily' || savedGroup === 'ignored';
                 const separator = this.remindersContainer.querySelector('#daily-dessert-separator') as HTMLElement;
                 if (separator) {
-                    if (!isSavedDessert) {
-                        // 普通任务：必须在分隔符上方
+                    if (!isBottomGroup) {
+                        // 上方分组任务必须在下方分组 Header 之前
                         let shouldInsertBeforeSeparator = false;
                         if (!nextEl) {
                             shouldInsertBeforeSeparator = true;
                         } else {
-                            const nextId = nextEl.getAttribute('data-reminder-id');
-                            const nextReminder = nextId ? this.allRemindersMap.get(nextId) : null;
-                            if (nextReminder && nextReminder.isAvailableToday && this.isDailyDessertTaskForDate(nextReminder, today)) {
+                            const nextGroup = (nextEl as HTMLElement).dataset.reminderGroup;
+                            if (nextGroup === 'daily' || nextGroup === 'ignored') {
                                 shouldInsertBeforeSeparator = true;
                             }
                         }
@@ -10885,16 +11038,16 @@ export class ReminderPanel {
                     }
                     if (prevEl) {
                         // 8.6 针对每日可做任务修正 prevEl
-                        if (this.isTodayLikeView()) {
-                            const isSavedDessert = this.isDailyDessertTaskForDate(savedReminder, today);
-                            if (isSavedDessert) {
+                        if (this.isTodayLikeView() || this.currentTab === 'todayCompleted') {
+                            const savedGroup = this.isTodayLikeView()
+                                ? this.getReminderTodayGroup(savedReminder, this.currentRemindersCache, today)
+                                : this.getTodayCompletedGroup(savedReminder, this.currentRemindersCache, today);
+                            if (savedGroup === 'daily' || savedGroup === 'ignored') {
                                 const separator = this.remindersContainer.querySelector('#daily-dessert-separator') as HTMLElement;
                                 if (separator) {
-                                    const prevId = prevEl.getAttribute('data-reminder-id');
-                                    const prevReminder = prevId ? this.allRemindersMap.get(prevId) : null;
-                                    const isPrevDessert = prevReminder && prevReminder.isAvailableToday && this.isDailyDessertTaskForDate(prevReminder, today);
-                                    if (!isPrevDessert) {
-                                        // 如果前一个是普通任务，而我是每日可做，则我应该在分隔符之后
+                                    const prevGroup = prevEl.dataset.reminderGroup;
+                                    if (prevGroup !== 'daily' && prevGroup !== 'ignored') {
+                                        // 下方分组任务应插入对应 Header 之后
                                         prevEl = separator;
                                     }
                                 }
@@ -10916,6 +11069,8 @@ export class ReminderPanel {
                     }
                 }
             }
+
+            this.updateTodayGroupCounts();
 
             // 10. 清理空状态
             const emptyState = this.remindersContainer.querySelector('.reminder-empty, .empty-state');
