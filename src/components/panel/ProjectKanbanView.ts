@@ -737,6 +737,7 @@ export class ProjectKanbanView {
         });
 
         window.addEventListener('reminderSettingsUpdated', async () => {
+            await this.checkVip();
             await this.queueLoadTasks();
         });
 
