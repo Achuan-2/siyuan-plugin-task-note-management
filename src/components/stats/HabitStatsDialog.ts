@@ -1488,9 +1488,37 @@ export class HabitStatsDialog {
         return color;
     }
 
+    private getTimeAxisInterval(containerWidth: number): number {
+        if (containerWidth <= 420) return 6;
+        if (containerWidth <= 720) return 4;
+        return 2;
+    }
+
+    private observeTimeChartResize(chart: EChartsType, container: HTMLElement) {
+        let currentInterval = this.getTimeAxisInterval(container.clientWidth);
+        const resizeObserver = new ResizeObserver(() => {
+            if (!chart || chart.isDisposed()) return;
+
+            const nextInterval = this.getTimeAxisInterval(container.clientWidth);
+            if (nextInterval !== currentInterval) {
+                currentInterval = nextInterval;
+                chart.setOption({
+                    xAxis: {
+                        interval: currentInterval
+                    }
+                });
+            }
+            chart.resize();
+        });
+        resizeObserver.observe(container);
+        this.resizeObservers.push(resizeObserver);
+    }
+
     private renderWeekTimeChart(container: HTMLElement) {
         const chart = init(container);
         this.chartInstances.push(chart);
+        const timeAxisInterval = this.getTimeAxisInterval(container.clientWidth);
+        const isCompactLayout = container.clientWidth <= 720;
 
         const now = new Date();
         const weekStart = this.getWeekStart(now);
@@ -1557,18 +1585,20 @@ export class HabitStatsDialog {
                 formatter: (name: string) => `${name} ${this.getEmojiMeaning(name)}`
             },
             grid: {
-                left: 80,
-                right: 40,
+                left: isCompactLayout ? 8 : 80,
+                right: isCompactLayout ? 8 : 40,
                 top: 60,
-                bottom: 60
+                bottom: 60,
+                containLabel: isCompactLayout
             },
             xAxis: {
                 type: 'value',
                 name: i18n("habitTimeAxisLabel"),
                 min: 0,
                 max: 24,
-                interval: 2,
+                interval: timeAxisInterval,
                 axisLabel: {
+                    hideOverlap: true,
                     formatter: (value: number) => `${Math.floor(value)}:00`
                 }
             },
@@ -1598,18 +1628,13 @@ export class HabitStatsDialog {
         chart.setOption(option);
 
         // 响应式
-        const resizeObserver = new ResizeObserver(() => {
-            if (chart && !chart.isDisposed()) {
-                chart.resize();
-            }
-        });
-        resizeObserver.observe(container);
-        this.resizeObservers.push(resizeObserver);
+        this.observeTimeChartResize(chart, container);
     }
 
     private renderMonthTimeChart(container: HTMLElement) {
         const chart = init(container);
         this.chartInstances.push(chart);
+        const timeAxisInterval = this.getTimeAxisInterval(container.clientWidth);
 
         const now = new Date();
         const targetMonth = new Date(now.getFullYear(), now.getMonth() + this.timeViewOffset, 1);
@@ -1747,8 +1772,9 @@ export class HabitStatsDialog {
                 type: 'value',
                 min: 0,
                 max: 24,
-                interval: 2,
+                interval: timeAxisInterval,
                 axisLabel: {
+                    hideOverlap: true,
                     formatter: (value: number) => `${value}:00`
                 },
                 name: i18n("habitTimeAxisLabel"),
@@ -1772,18 +1798,13 @@ export class HabitStatsDialog {
         chart.setOption(option);
 
         // 响应式
-        const resizeObserver = new ResizeObserver(() => {
-            if (chart && !chart.isDisposed()) {
-                chart.resize();
-            }
-        });
-        resizeObserver.observe(container);
-        this.resizeObservers.push(resizeObserver);
+        this.observeTimeChartResize(chart, container);
     }
 
     private renderYearTimeChart(container: HTMLElement) {
         const chart = init(container);
         this.chartInstances.push(chart);
+        const timeAxisInterval = this.getTimeAxisInterval(container.clientWidth);
 
         const now = new Date();
         const targetYear = now.getFullYear() + this.timeViewOffset;
@@ -1920,8 +1941,9 @@ export class HabitStatsDialog {
                 type: 'value',
                 min: 0,
                 max: 24,
-                interval: 2,
+                interval: timeAxisInterval,
                 axisLabel: {
+                    hideOverlap: true,
                     formatter: (value: number) => `${value}:00`
                 },
                 name: i18n("habitTimeAxisLabel"),
@@ -1945,13 +1967,7 @@ export class HabitStatsDialog {
         chart.setOption(option);
 
         // 响应式
-        const resizeObserver = new ResizeObserver(() => {
-            if (chart && !chart.isDisposed()) {
-                chart.resize();
-            }
-        });
-        resizeObserver.observe(container);
-        this.resizeObservers.push(resizeObserver);
+        this.observeTimeChartResize(chart, container);
     }
 
     private generateColors(count: number): string[] {
