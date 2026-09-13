@@ -2,7 +2,7 @@ import { showMessage, Dialog, Menu, confirm, getBackend, getFrontend } from "siy
 import { openBlock, pushMsg } from "../../api";
 import { getLocalDateTimeString, getLogicalDateString, getRelativeDateString } from "../../utils/dateUtils";
 import { HabitGroupManager } from "../dataManager/habitGroupManager";
-import { i18n } from "../../pluginInstance";
+import { i18n, getPluginInstance } from "../../pluginInstance";
 import { HabitEditDialog } from "../dialog/HabitEditDialog";
 import { HabitStatsDialog } from "../stats/HabitStatsDialog";
 import { HabitGroupManageDialog } from "../dialog/HabitGroupManageDialog";
@@ -1245,16 +1245,17 @@ export class HabitPanel {
         const pomodoroStats = this.getHabitPomodoroStats(habit.id);
         if (pomodoroStats.totalCount > 0 || pomodoroStats.totalFocusMinutes > 0) {
             const pomodoroSection = document.createElement('div');
-            pomodoroSection.style.cssText = 'margin-top:0; margin-bottom:12px; font-size:12px;';
+            pomodoroSection.style.cssText = 'display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; column-gap:4px; row-gap:2px; margin-top:0; margin-bottom:12px; font-size:12px;';
             pomodoroSection.style.color = 'var(--b3-theme-on-surface-light)';
             pomodoroSection.innerHTML = `
-                <div class="ariaLabel" aria-label="总计番茄钟: ${pomodoroStats.totalCount}">
-                    <span>系列: 🍅 ${pomodoroStats.totalCount}</span>
-                    <span style="margin-left:8px; opacity:0.9;">⏱ ${this.formatPomodoroFocusTime(pomodoroStats.totalFocusMinutes)}</span>
-                </div>
-                <div class="ariaLabel" aria-label="今日番茄钟: ${pomodoroStats.todayCount}" style="margin-top:4px; opacity:0.95;">
+                <div class="ariaLabel" aria-label="今日番茄钟: ${pomodoroStats.todayCount}" style="white-space:nowrap; opacity:0.95;">
                     <span>今日: 🍅 ${pomodoroStats.todayCount}</span>
-                    <span style="margin-left:8px; opacity:0.9;">⏱ ${this.formatPomodoroFocusTime(pomodoroStats.todayFocusMinutes)}</span>
+                    <span style="margin-left:4px; opacity:0.9;">⏱ ${this.formatPomodoroFocusTime(pomodoroStats.todayFocusMinutes)}</span>
+                </div>
+                <span aria-hidden="true" style="flex:1 1 0; min-width:0;"></span>
+                <div class="ariaLabel" aria-label="总计番茄钟: ${pomodoroStats.totalCount}" style="white-space:nowrap;">
+                    <span>系列: 🍅 ${pomodoroStats.totalCount}</span>
+                    <span style="margin-left:4px; opacity:0.9;">⏱ ${this.formatPomodoroFocusTime(pomodoroStats.totalFocusMinutes)}</span>
                 </div>
             `;
             card.appendChild(pomodoroSection);
@@ -1452,6 +1453,7 @@ export class HabitPanel {
 
 
     private async renderCompletedHabitsSection(excludeIds?: Set<string>) {
+        const completedGroupId = '__today_completed__';
         const today = getLogicalDateString();
         const habitData = await this.plugin.loadHabitData();
         const habits: Habit[] = Object.values(habitData || {});
@@ -1467,35 +1469,65 @@ export class HabitPanel {
 
         // 如果没有已打卡习惯，移除已有的已打卡区并返回
         if (completedHabits.length === 0) {
-            const existing = this.habitsContainer.querySelector('.habit-completed-section');
+            const existing = this.habitsContainer.querySelector('.habit-group--completed');
             if (existing) existing.remove();
             return;
         }
 
         // 移除已有的已打卡区（防止重复追加）
-        const existingSection = this.habitsContainer.querySelector('.habit-completed-section');
+        const existingSection = this.habitsContainer.querySelector('.habit-group--completed');
         if (existingSection) {
             existingSection.remove();
         }
 
-        const separator = document.createElement('div');
-        separator.className = 'habit-completed-section';
+        const groupContainer = document.createElement('div');
+        groupContainer.className = 'habit-group habit-group--completed';
 
-        const completedTitle = document.createElement('div');
-        completedTitle.className = 'habit-completed-section__title';
-        completedTitle.innerHTML = `<span>✓</span><span>${i18n("todayCheckedSection")} (${completedHabits.length})</span>`;
+        const isCollapsed = this.collapsedGroups.has(completedGroupId);
 
-        separator.appendChild(completedTitle);
+        const groupHeader = document.createElement('div');
+        groupHeader.className = 'habit-group__header';
+        groupHeader.setAttribute('aria-expanded', String(!isCollapsed));
+
+        const collapseIcon = document.createElement('span');
+        collapseIcon.className = 'habit-group__collapse-icon';
+        collapseIcon.innerHTML = `<svg aria-hidden="true" style="width:12px;height:12px;margin:0;"><use xlink:href="#${isCollapsed ? 'iconRight' : 'iconDown'}"></use></svg>`;
+
+        const groupTitle = document.createElement('span');
+        groupTitle.className = 'habit-group__title';
+        groupTitle.innerHTML = `${i18n("todayCheckedSection")}<span class="habit-group__count">${completedHabits.length}</span>`;
+
+        groupHeader.appendChild(collapseIcon);
+        groupHeader.appendChild(groupTitle);
+        groupHeader.addEventListener('click', () => {
+            const currentlyCollapsed = this.collapsedGroups.has(completedGroupId);
+            if (currentlyCollapsed) {
+                this.collapsedGroups.delete(completedGroupId);
+            } else {
+                this.collapsedGroups.add(completedGroupId);
+            }
+            this.saveCollapseStates();
+            this.toggleGroupCollapseUI(groupContainer, !currentlyCollapsed);
+        });
+
+        groupContainer.appendChild(groupHeader);
+
+        const groupContent = document.createElement('div');
+        groupContent.className = 'habit-group__content';
+        if (isCollapsed) {
+            groupContent.style.display = 'none';
+        }
 
         const sortedCompleted = this.sortHabitsInGroup(completedHabits);
         // 已打卡区域始终显示今日数据
         sortedCompleted.forEach(habit => {
             const habitCard = this.createHabitCard(habit, today);
             habitCard.style.opacity = '0.7';
-            separator.appendChild(habitCard);
+            groupContent.appendChild(habitCard);
         });
 
-        this.habitsContainer.appendChild(separator);
+        groupContainer.appendChild(groupContent);
+        this.habitsContainer.appendChild(groupContainer);
     }
 
     // 显示拖拽位置指示（简单使用元素的 borderTop/bottom）
@@ -1987,12 +2019,14 @@ export class HabitPanel {
         return submenu;
     }
 
-    private async checkInHabit(
+    public static async checkInHabit(
         habit: Habit,
         emojiConfig: HabitCheckInEmoji,
+        plugin?: any,
         options?: { skipPromptNote?: boolean; silent?: boolean }
-    ) {
+    ): Promise<boolean> {
         try {
+            const currentPlugin = plugin || getPluginInstance();
             const today = getLogicalDateString();
             const now = getLocalDateTimeString(new Date());
 
@@ -2083,7 +2117,7 @@ export class HabitPanel {
 
                 // 如果用户取消了，直接返回，不保存打卡
                 if (cancelled) {
-                    return;
+                    return false;
                 }
             }
 
@@ -2110,21 +2144,128 @@ export class HabitPanel {
             habit.totalCheckIns = (habit.totalCheckIns || 0) + 1;
             habit.updatedAt = now;
 
-            await this.saveHabit(habit);
-            if (this.plugin?.playTaskCompleteSound) {
-                this.plugin.playTaskCompleteSound();
+            await HabitPanel.saveHabitDirectly(habit, currentPlugin);
+            if (currentPlugin?.playTaskCompleteSound) {
+                currentPlugin.playTaskCompleteSound();
             }
             if (!options?.silent) {
                 showMessage(`${i18n("checkInSuccess")}${emojiConfig.emoji}` + (note ? ` - ${note}` : ''));
             }
-            this.loadHabits();
+            return true;
         } catch (error) {
             console.error('checkIn failed:', error);
             showMessage(i18n("checkInFailed"), 3000, 'error');
+            return false;
         }
     }
 
-    private cloneHabit(habit: Habit | null | undefined): Habit | undefined {
+    public static async handleHabitCheckIn(
+        habit: Habit,
+        triggerElement?: HTMLElement,
+        onSuccess?: () => void,
+        plugin?: any
+    ): Promise<void> {
+        const currentPlugin = plugin || getPluginInstance();
+        const emojiList: HabitCheckInEmoji[] = (habit.checkInEmojis && habit.checkInEmojis.length > 0)
+            ? habit.checkInEmojis
+            : [{ emoji: '✅', meaning: i18n("checkInSuccess") || '完成', promptNote: false, countsAsSuccess: true }];
+
+        const today = getLogicalDateString();
+        const todayCheckIn = habit.checkIns?.[today];
+        const checkedGroupsToday = new Set<string>();
+        const checkedEmojisToday = new Set<string>();
+
+        const emojiToGroups = new Map<string, Set<string>>();
+        emojiList.forEach(cfg => {
+            const g = (cfg.group || '').trim();
+            if (g) {
+                if (!emojiToGroups.has(cfg.emoji)) emojiToGroups.set(cfg.emoji, new Set());
+                emojiToGroups.get(cfg.emoji)!.add(g);
+            }
+        });
+
+        if (todayCheckIn) {
+            const entries = todayCheckIn.entries || [];
+            if (entries.length > 0) {
+                entries.forEach(entry => {
+                    checkedEmojisToday.add(entry.emoji);
+                    const g = (entry.group || '').trim();
+                    if (g) {
+                        checkedGroupsToday.add(g);
+                    } else {
+                        const groups = emojiToGroups.get(entry.emoji);
+                        if (groups) groups.forEach(pg => checkedGroupsToday.add(pg));
+                    }
+                });
+            } else if (todayCheckIn.status) {
+                todayCheckIn.status.forEach(emoji => {
+                    checkedEmojisToday.add(emoji);
+                    const groups = emojiToGroups.get(emoji);
+                    if (groups) groups.forEach(pg => checkedGroupsToday.add(pg));
+                });
+            }
+        }
+
+        let availableEmojis = emojiList;
+        if (habit.hideCheckedToday) {
+            availableEmojis = emojiList.filter(emojiConfig => {
+                const groupName = (emojiConfig.group || '').trim();
+                if (groupName) {
+                    return !checkedGroupsToday.has(groupName);
+                }
+                return !checkedEmojisToday.has(emojiConfig.emoji);
+            });
+        }
+
+        // 如果全部已被隐藏，但用户主动点击打卡，则退回显示全部选项
+        const candidateEmojis = availableEmojis.length > 0 ? availableEmojis : emojiList;
+
+        if (candidateEmojis.length === 1) {
+            const success = await HabitPanel.checkInHabit(habit, candidateEmojis[0], currentPlugin);
+            if (success && onSuccess) {
+                onSuccess();
+            }
+            return;
+        }
+
+        // 多个选项时弹出菜单供用户选择
+        const menu = new Menu('habitNotificationCheckInMenu');
+        candidateEmojis.forEach(emojiConfig => {
+            menu.addItem({
+                label: `${emojiConfig.emoji} ${emojiConfig.meaning}`,
+                click: async () => {
+                    const success = await HabitPanel.checkInHabit(habit, emojiConfig, currentPlugin);
+                    if (success && onSuccess) {
+                        onSuccess();
+                    }
+                }
+            });
+        });
+
+        if (triggerElement) {
+            const rect = triggerElement.getBoundingClientRect();
+            const menuX = rect.left;
+            const menuY = rect.top - 4;
+            const maxX = window.innerWidth - 200;
+            const maxY = window.innerHeight - 200;
+            menu.open({ x: Math.min(menuX, maxX), y: Math.max(0, Math.min(menuY, maxY)) });
+        } else {
+            menu.open({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+        }
+    }
+
+    private async checkInHabit(
+        habit: Habit,
+        emojiConfig: HabitCheckInEmoji,
+        options?: { skipPromptNote?: boolean; silent?: boolean }
+    ) {
+        const success = await HabitPanel.checkInHabit(habit, emojiConfig, this.plugin, options);
+        if (success) {
+            this.loadHabits();
+        }
+    }
+
+    public static cloneHabitData(habit: Habit | null | undefined): Habit | undefined {
         if (!habit) return undefined;
         try {
             return JSON.parse(JSON.stringify(habit));
@@ -2133,31 +2274,37 @@ export class HabitPanel {
         }
     }
 
-    private async saveHabit(habit: Habit, oldHabit?: Habit) {
-        const habitData = await this.plugin.loadHabitData();
-        const previousHabit = this.cloneHabit(oldHabit) || this.cloneHabit(habitData[habit.id]);
+    private cloneHabit(habit: Habit | null | undefined): Habit | undefined {
+        return HabitPanel.cloneHabitData(habit);
+    }
+
+    public static async saveHabitDirectly(habit: Habit, plugin?: any, oldHabit?: Habit) {
+        const currentPlugin = plugin || getPluginInstance();
+        if (!currentPlugin) return;
+        const habitData = await currentPlugin.loadHabitData();
+        const previousHabit = oldHabit ? HabitPanel.cloneHabitData(oldHabit) : (habitData[habit.id] ? HabitPanel.cloneHabitData(habitData[habit.id]) : undefined);
 
         // 使用 saveHabitPartial 进行增量保存，避免每次重刷所有习惯的打卡子文件
         if (previousHabit?.id && previousHabit.id !== habit.id) {
             // 如果 ID 发生了变更，则仍使用全量保存以处理旧数据的清理
             delete habitData[previousHabit.id];
             try {
-                if (this.plugin && typeof this.plugin.cancelMobileNotification === 'function') {
-                    await this.plugin.cancelMobileNotification(previousHabit.id);
+                if (typeof currentPlugin.cancelMobileNotification === 'function') {
+                    await currentPlugin.cancelMobileNotification(previousHabit.id);
                 }
             } catch (e) {
                 console.warn('清理旧习惯ID的移动端通知失败:', e);
             }
             habitData[habit.id] = habit;
-            await this.plugin.saveHabitData(habitData);
+            await currentPlugin.saveHabitData(habitData);
         } else {
             // 普通更新（包括打卡），使用部分保存以提高性能
-            await this.plugin.saveHabitPartial(habit.id, habit);
+            await currentPlugin.saveHabitPartial(habit.id, habit);
         }
         // 同步更新移动端系统通知（限制7天）
         try {
-            if (this.plugin && typeof this.plugin.updateMobileNotification === 'function') {
-                await this.plugin.updateMobileNotification(habit, previousHabit, 7);
+            if (typeof currentPlugin.updateMobileNotification === 'function') {
+                await currentPlugin.updateMobileNotification(habit, previousHabit, 7);
             }
         } catch (e) {
             console.warn('更新习惯移动端通知失败:', e);
@@ -2165,6 +2312,10 @@ export class HabitPanel {
 
         window.dispatchEvent(new CustomEvent('habitUpdated'));
         window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'habitPanel' } }));
+    }
+
+    private async saveHabit(habit: Habit, oldHabit?: Habit) {
+        await HabitPanel.saveHabitDirectly(habit, this.plugin, oldHabit);
     }
 
     private async deleteHabit(habitId: string) {
