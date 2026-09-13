@@ -914,11 +914,18 @@ export class HabitPanel {
     }
 
     private toggleGroupCollapseUI(groupContainer: HTMLElement, isCollapsed: boolean) {
-        const collapseIcon = groupContainer.querySelector('.habit-group__collapse-icon') as HTMLElement;
+        const groupHeader = groupContainer.querySelector('.habit-group__header') as HTMLElement;
+        const collapseIconUse = groupContainer.querySelector('.habit-group__collapse-icon use') as SVGUseElement;
         const groupContent = groupContainer.querySelector('.habit-group__content') as HTMLElement;
 
-        if (collapseIcon) {
-            collapseIcon.innerHTML = isCollapsed ? '▶' : '▼';
+        if (groupHeader) {
+            groupHeader.setAttribute('aria-expanded', String(!isCollapsed));
+        }
+
+        if (collapseIconUse) {
+            const iconHref = isCollapsed ? '#iconRight' : '#iconDown';
+            collapseIconUse.setAttribute('href', iconHref);
+            collapseIconUse.setAttribute('xlink:href', iconHref);
         }
 
         if (groupContent) {
@@ -937,10 +944,11 @@ export class HabitPanel {
         const group = groupId === 'none' ? null : this.groupManager.getGroupById(groupId);
         const groupName = group ? group.name : i18n("noneGroupName");
         const isCollapsed = this.collapsedGroups.has(groupId);
+        groupHeader.setAttribute('aria-expanded', String(!isCollapsed));
 
         const collapseIcon = document.createElement('span');
         collapseIcon.className = 'habit-group__collapse-icon';
-        collapseIcon.innerHTML = isCollapsed ? '▶' : '▼';
+        collapseIcon.innerHTML = `<svg aria-hidden="true" style="width:12px;height:12px;margin:0;"><use xlink:href="#${isCollapsed ? 'iconRight' : 'iconDown'}"></use></svg>`;
 
         const groupTitle = document.createElement('span');
         groupTitle.className = 'habit-group__title';
