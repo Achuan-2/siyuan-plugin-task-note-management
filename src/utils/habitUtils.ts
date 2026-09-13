@@ -4,6 +4,8 @@ export type HabitFrequencyType = "daily" | "weekly" | "monthly" | "yearly" | "eb
 
 export type HabitMemoSyncMode = "none" | "checkin" | "note";
 
+export type HabitCheckInDaysMode = "streak" | "total";
+
 export interface HabitFrequencyLike {
     type?: HabitFrequencyType;
     interval?: number;
@@ -247,6 +249,84 @@ export function isHabitCompletedOnDate(
 ): boolean {
     const { current, target } = getHabitProgressOnDate(habit, date, options);
     return current >= target;
+}
+
+export function isHabitCheckInDayComplete(
+    habit: Habit,
+    date: string,
+    options?: {
+        getPomodoroFocusMinutes?: (habitId: string, logicalDate: string) => number;
+    }
+): boolean {
+    if (getHabitGoalType(habit) === "pomodoro") {
+        return isHabitCompletedOnDate(habit, date, options);
+    }
+
+    const checkIn = habit.checkIns?.[date];
+    if (!checkIn) return false;
+
+    const emojis = Array.isArray(checkIn.entries) && checkIn.entries.length > 0
+        ? checkIn.entries.map(entry => entry.emoji).filter(Boolean)
+        : (checkIn.status || []).filter(Boolean);
+    const successCount = emojis.length > 0
+        ? emojis.filter(emoji => {
+            const config = habit.checkInEmojis?.find(item => item.emoji === emoji);
+            return config ? config.countsAsSuccess !== false : true;
+        }).length
+        : Math.max(0, Number(checkIn.count) || 0);
+
+    return successCount >= Math.max(1, Number(habit.target) || 1);
+}
+
+function getPreviousDateString(date: string): string {
+    const [year, month, day] = date.split('-').map(Number);
+    const value = new Date(Date.UTC(year, month - 1, day));
+    value.setUTCDate(value.getUTCDate() - 1);
+    return [
+        value.getUTCFullYear(),
+        String(value.getUTCMonth() + 1).padStart(2, '0'),
+        String(value.getUTCDate()).padStart(2, '0')
+    ].join('-');
+}
+
+export function getHabitCompletedDaysCount(
+    habit: Habit,
+    options?: {
+        getPomodoroFocusMinutes?: (habitId: string, logicalDate: string) => number;
+    }
+): number {
+    return Object.keys(habit?.checkIns || {}).filter(date =>
+        isHabitCheckInDayComplete(habit, date, options)
+    ).length;
+}
+
+export function getHabitStreakDays(
+    habit: Habit,
+    asOfDate: string,
+    options?: {
+        getPomodoroFocusMinutes?: (habitId: string, logicalDate: string) => number;
+    }
+): number {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(asOfDate)) return 0;
+
+    const startDate = habit?.startDate || asOfDate;
+    let cursor = habit?.endDate && habit.endDate < asOfDate ? habit.endDate : asOfDate;
+    if (cursor < startDate) return 0;
+
+    let streak = 0;
+    while (cursor >= startDate) {
+        if (isHabitActiveOnDate(habit, cursor) && shouldCheckInOnDate(habit, cursor)) {
+            if (isHabitCheckInDayComplete(habit, cursor, options)) {
+                streak++;
+            } else if (cursor !== asOfDate) {
+                break;
+            }
+            // 今天仍有时间完成，因此今天未打卡暂不打断此前的连续记录。
+        }
+        cursor = getPreviousDateString(cursor);
+    }
+
+    return streak;
 }
 
 function normalizeHabitReminderTimes(

@@ -250,6 +250,7 @@ export const DEFAULT_SETTINGS = {
     habitPanelSortKey: 'priority',
     habitPanelSortOrder: 'desc',
     habitPanelSelectedGroups: [] as string[],
+    habitPanelCheckInDaysMode: 'total' as 'total' | 'streak',
     // 日历上传：ICS云端同步配置
     icsSyncInterval: 'daily', // 'manual' | '15min' | 'hourly' | '4hour' | '12hour' | 'daily' | 'dailyAt'
     icsDailySyncTime: '08:00', // 每天同步时间点（当 syncInterval 为 'dailyAt' 时使用），格式 HH:MM

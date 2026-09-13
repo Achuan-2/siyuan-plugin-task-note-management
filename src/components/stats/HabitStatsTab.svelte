@@ -17,7 +17,10 @@ import {
 } from "../../utils/linkedHabitPomodoro";
 import {
     getHabitGoalType as getHabitGoalTypeUtil,
+    getHabitCompletedDaysCount,
     getHabitPomodoroTargetMinutes as getHabitPomodoroTargetMinutesUtil,
+    getHabitStreakDays,
+    isHabitCheckInDayComplete,
     formatHabitReminderTimeDisplay,
     shouldCheckInOnDate as shouldCheckInOnDateUtil,
     getHabitReminderTimes
@@ -270,33 +273,6 @@ function buildGroupedSections(input: Habit[]): HabitGroupSection[] {
     return sections;
 }
 
-function getSuccessCheckInCount(habit: Habit, dateStr: string): number {
-    const checkIn = habit.checkIns?.[dateStr];
-    if (!checkIn) return 0;
-
-    const emojis: string[] = [];
-    if (checkIn.entries && checkIn.entries.length > 0) {
-        checkIn.entries.forEach(entry => {
-            if (entry.emoji) emojis.push(entry.emoji);
-        });
-    } else if (checkIn.status && checkIn.status.length > 0) {
-        checkIn.status.forEach(emoji => {
-            if (emoji) emojis.push(emoji);
-        });
-    }
-
-    const successFromEmoji = emojis.filter(emoji => {
-        const config = habit.checkInEmojis?.find(item => item.emoji === emoji);
-        return config ? config.countsAsSuccess !== false : true;
-    }).length;
-
-    // 兼容旧数据：只有在没有 status/entries 且有 count 时才使用 count
-    if (emojis.length === 0 && typeof checkIn.count === "number" && checkIn.count > 0) {
-        return checkIn.count;
-    }
-    return successFromEmoji;
-}
-
 function getHabitGoalType(habit: Habit): "count" | "pomodoro" {
     return getHabitGoalTypeUtil(habit);
 }
@@ -527,13 +503,10 @@ function getHabitDateRangeText(habit: Habit): string {
 }
 
 function isCheckInComplete(habit: Habit, dateStr: string): boolean {
-    if (getHabitGoalType(habit) === "pomodoro") {
-        const target = getHabitPomodoroTargetMinutes(habit);
-        const current = getHabitPomodoroFocusMinutes(habit, dateStr);
-        return current >= target;
-    }
-    const target = habit.target || 1;
-    return getSuccessCheckInCount(habit, dateStr) >= target;
+    return isHabitCheckInDayComplete(habit, dateStr, {
+        getPomodoroFocusMinutes: (habitId, logicalDate) =>
+            habitId === habit.id ? getHabitPomodoroFocusMinutes(habit, logicalDate) : 0
+    });
 }
 
 function countTotalCheckIns(habit: Habit): number {
@@ -555,30 +528,17 @@ function countTotalCheckIns(habit: Habit): number {
 }
 
 function calculateStreak(habit: Habit): number {
-    const completedDates = Object.keys(habit.checkIns || {})
-        .filter(dateStr => isCheckInComplete(habit, dateStr))
-        .sort();
-
-    if (completedDates.length === 0) return 0;
-
-    const completedSet = new Set(completedDates);
-    let streak = 0;
-    let current = new Date();
-    current.setHours(0, 0, 0, 0);
-
-    while (true) {
-        const key = getDateKey(current);
-        if (!completedSet.has(key)) break;
-        streak++;
-        current = addDays(current, -1);
-    }
-
-    return streak;
+    return getHabitStreakDays(habit, getLogicalDateString(), {
+        getPomodoroFocusMinutes: (habitId, logicalDate) =>
+            habitId === habit.id ? getHabitPomodoroFocusMinutes(habit, logicalDate) : 0
+    });
 }
 
 function getOverviewStats(habit: Habit, _revision: number): HabitOverviewStats {
-    const checkInDays = Object.keys(habit.checkIns || {})
-        .filter(dateStr => isCheckInComplete(habit, dateStr)).length;
+    const checkInDays = getHabitCompletedDaysCount(habit, {
+        getPomodoroFocusMinutes: (habitId, logicalDate) =>
+            habitId === habit.id ? getHabitPomodoroFocusMinutes(habit, logicalDate) : 0
+    });
     const today = getLogicalDateString();
     let todayPomodoro = 0;
     let totalPomodoro = 0;

@@ -22,10 +22,13 @@ import {
 } from "../../utils/linkedHabitPomodoro";
 import {
     Habit,
+    type HabitCheckInDaysMode,
     HabitEmojiConfig as HabitCheckInEmoji,
     getHabitGoalType as getHabitGoalTypeUtil,
+    getHabitCompletedDaysCount,
     getHabitPomodoroTargetMinutes as getHabitPomodoroTargetMinutesUtil,
     getHabitProgressOnDate as getHabitProgressOnDateUtil,
+    getHabitStreakDays,
     formatHabitReminderTimeDisplay,
     getHabitReminderTimesForDate,
     getTodayHabitBuckets,
@@ -54,6 +57,7 @@ export class HabitPanel {
     private selectedGroups: string[] = [];
     private currentSearchQuery: string = '';
     private showCompletedHabitsInTodayPending: boolean = true;
+    private checkInDaysMode: HabitCheckInDaysMode = 'total';
     private groupManager: HabitGroupManager;
     private habitUpdatedHandler: () => void;
     private reminderUpdatedHandler: () => void;
@@ -133,6 +137,7 @@ export class HabitPanel {
             if (typeof settings.habitPanelShowCompletedInTodayPending === 'boolean') {
                 this.showCompletedHabitsInTodayPending = settings.habitPanelShowCompletedInTodayPending;
             }
+            this.checkInDaysMode = settings.habitPanelCheckInDaysMode === 'streak' ? 'streak' : 'total';
         } catch (error) {
             console.error('恢复习惯面板设置失败:', error);
         }
@@ -143,6 +148,7 @@ export class HabitPanel {
             const settings = await this.plugin.loadSettings();
             settings.habitPanelSelectedGroups = this.selectedGroups;
             settings.habitPanelShowCompletedInTodayPending = this.showCompletedHabitsInTodayPending;
+            settings.habitPanelCheckInDaysMode = this.checkInDaysMode;
             await this.plugin.saveSettings(settings);
         } catch (error) {
             console.error('保存习惯面板设置失败:', error);
@@ -189,7 +195,6 @@ export class HabitPanel {
                     margin: 10px 0 8px;
                     padding: 8px 10px;
                     color: var(--b3-theme-on-surface);
-                    background: var(--b3-theme-surface-lighter);
                     border-radius: 6px;
                     cursor: pointer;
                     user-select: none;
@@ -451,6 +456,30 @@ export class HabitPanel {
                             void this.savePanelSettings();
                             void this.loadHabits();
                         }
+                    },
+                    {
+                        icon: 'iconCalendar',
+                        label: i18n("habitCheckInDaysDisplay") || "打卡天数显示",
+                        submenu: [
+                            {
+                                icon: this.checkInDaysMode === 'streak' ? 'iconSelect' : '',
+                                label: i18n("habitShowStreakDays") || "连续天数",
+                                click: () => {
+                                    this.checkInDaysMode = 'streak';
+                                    void this.savePanelSettings();
+                                    void this.loadHabits();
+                                }
+                            },
+                            {
+                                icon: this.checkInDaysMode === 'total' ? 'iconSelect' : '',
+                                label: i18n("habitShowTotalCheckInDays") || "已打卡天数",
+                                click: () => {
+                                    this.checkInDaysMode = 'total';
+                                    void this.savePanelSettings();
+                                    void this.loadHabits();
+                                }
+                            }
+                        ]
                     }
                 ]
             });
@@ -1389,11 +1418,22 @@ export class HabitPanel {
         const footer = document.createElement('div');
         footer.className = 'habit-card__footer';
 
-        // 坚持打卡天数
-        const checkInDaysCount = Object.keys(habit.checkIns || {}).length;
+        // 根据习惯设置显示连续打卡天数或累计达标天数
+        const checkInDaysMode = this.checkInDaysMode;
+        const completionOptions = {
+            getPomodoroFocusMinutes: (habitId: string, logicalDate: string) =>
+                this.getHabitFocusMinutesByDate(habitId, logicalDate)
+        };
+        const checkInDaysCount = checkInDaysMode === 'streak'
+            ? getHabitStreakDays(habit, today, completionOptions)
+            : getHabitCompletedDaysCount(habit, completionOptions);
         const streakEl = document.createElement('div');
         streakEl.className = 'habit-card__streak';
-        streakEl.innerHTML = `<span class="habit-card__streak-icon">🔥</span><span>${i18n("persistDays", { count: checkInDaysCount.toString() })}</span>`;
+        const checkInDaysIcon = checkInDaysMode === 'streak' ? '🔥' : '✅';
+        const checkInDaysText = checkInDaysMode === 'streak'
+            ? i18n("habitStreakDays", { count: checkInDaysCount.toString() })
+            : i18n("habitTotalCheckInDays", { count: checkInDaysCount.toString() });
+        streakEl.innerHTML = `<span class="habit-card__streak-icon">${checkInDaysIcon}</span><span>${checkInDaysText}</span>`;
         footer.appendChild(streakEl);
 
         // 打卡按钮 - 已结束和已放弃的习惯不显示

@@ -352,7 +352,6 @@ export class ProjectPanel {
                     margin: 10px 0 8px;
                     padding: 8px 10px;
                     color: var(--b3-theme-on-surface);
-                    background: var(--b3-theme-surface-lighter);
                     border-radius: 6px;
                     cursor: pointer;
                     user-select: none;
