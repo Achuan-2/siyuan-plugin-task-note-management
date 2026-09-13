@@ -49,13 +49,16 @@ export class HabitPanel {
     private habitsContainer: HTMLElement;
     private filterSelect: HTMLSelectElement;
     private groupFilterButton: HTMLButtonElement;
+    private searchInput: HTMLInputElement;
     private currentTab: string = 'today';
     private selectedGroups: string[] = [];
+    private currentSearchQuery: string = '';
     private showCompletedHabitsInTodayPending: boolean = true;
     private groupManager: HabitGroupManager;
     private habitUpdatedHandler: () => void;
     private reminderUpdatedHandler: () => void;
     private loadHabitsTimer: any = null;
+    private searchTimer: number | undefined;
     private collapsedGroups: Set<string> = new Set();
     // 拖拽状态
     private draggingHabitId: string | null = null;
@@ -108,6 +111,9 @@ export class HabitPanel {
         this.saveCollapseStates();
         if (this.loadHabitsTimer) {
             clearTimeout(this.loadHabitsTimer);
+        }
+        if (this.searchTimer) {
+            window.clearTimeout(this.searchTimer);
         }
         if (this.habitUpdatedHandler) {
             window.removeEventListener('habitUpdated', this.habitUpdatedHandler);
@@ -296,6 +302,34 @@ export class HabitPanel {
         controls.appendChild(this.groupFilterButton);
 
         header.appendChild(controls);
+
+        // 搜索框（与任务面板保持一致，支持空格分词搜索）
+        const searchContainer = document.createElement('div');
+        searchContainer.className = 'habit-search';
+        searchContainer.style.cssText = `
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        `;
+
+        this.searchInput = document.createElement('input');
+        this.searchInput.className = 'b3-text-field';
+        this.searchInput.type = 'search';
+        this.searchInput.placeholder = i18n("searchHabits") || "搜索习惯...";
+        this.searchInput.style.cssText = 'flex: 1; min-width: 0;';
+        this.searchInput.addEventListener('input', () => {
+            this.currentSearchQuery = this.searchInput.value.trim();
+
+            if (this.searchTimer) {
+                window.clearTimeout(this.searchTimer);
+            }
+            this.searchTimer = window.setTimeout(() => {
+                void this.loadHabits();
+            }, 300);
+        });
+
+        searchContainer.appendChild(this.searchInput);
+        header.appendChild(searchContainer);
         this.container.appendChild(header);
 
         // 习惯列表容器
@@ -410,6 +444,7 @@ export class HabitPanel {
             // 应用筛选
             let filteredHabits = this.applyFilter(habits);
             filteredHabits = this.applyGroupFilter(filteredHabits);
+            filteredHabits = this.applySearchFilter(filteredHabits);
 
             this.renderHabits(filteredHabits);
 
@@ -791,6 +826,32 @@ export class HabitPanel {
         return habits.filter(habit => {
             const groupId = habit.groupId || 'none';
             return this.selectedGroups.includes(groupId);
+        });
+    }
+
+    private applySearchFilter(habits: Habit[]): Habit[] {
+        if (!this.currentSearchQuery) {
+            return habits;
+        }
+
+        const searchTerms = this.currentSearchQuery
+            .toLowerCase()
+            .split(/\s+/)
+            .filter(Boolean);
+
+        return habits.filter(habit => {
+            const groupName = habit.groupId
+                ? this.groupManager.getGroupById(habit.groupId)?.name || ''
+                : i18n("noneGroupName");
+            const searchableText = [
+                habit.title || '',
+                habit.note || '',
+                habit.url || '',
+                groupName,
+                habit.groupId || ''
+            ].join(' ').toLowerCase();
+
+            return searchTerms.every(term => searchableText.includes(term));
         });
     }
 
@@ -1388,6 +1449,8 @@ export class HabitPanel {
         const habits: Habit[] = Object.values(habitData || {});
 
         let completedHabits = habits.filter(h => this.isCompletedOnDate(h, today));
+        completedHabits = this.applyGroupFilter(completedHabits);
+        completedHabits = this.applySearchFilter(completedHabits);
 
         // 排除已经在主区渲染的习惯，防止重复
         if (excludeIds && excludeIds.size > 0) {
