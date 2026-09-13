@@ -1,4 +1,4 @@
-import { Dialog, showMessage } from "siyuan";
+import { Dialog, getFrontend, showMessage } from "siyuan";
 
 type StatsTab = "pomodoro" | "task" | "habit" | "summary" | "project";
 
@@ -13,11 +13,12 @@ export async function showStatsDialog(plugin: any, initialTab: StatsTab = "pomod
         return;
     }
 
+    const isMobile = plugin?.isInMobileApp || getFrontend().endsWith("mobile");
     const dialog = new Dialog({
         title: "📊 统计视图",
         content: '<div id="showStatsViewContainer" style="height:100%;padding: 8px 16px 16px;box-sizing:border-box;"></div>',
         width: "min(1000px,95%)",
-        height: "80vh"
+        height: isMobile ? "100%" : "80vh"
     });
 
     activeDialog = dialog;

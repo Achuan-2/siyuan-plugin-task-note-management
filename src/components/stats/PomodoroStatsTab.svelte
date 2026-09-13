@@ -106,6 +106,25 @@ class PomodoroStatsView {
         return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
     }
 
+    private getTimelineAxisInterval(containerWidth: number): number {
+        if (containerWidth <= 420) return 6;
+        if (containerWidth <= 720) return 4;
+        return 2;
+    }
+
+    private getHeatmapCalendarLayout(containerWidth: number) {
+        const isCompact = containerWidth <= 720;
+        const isNarrow = containerWidth <= 480;
+        return {
+            left: isCompact ? 24 : 40,
+            right: isCompact ? 8 : 20,
+            monthNameMap: isNarrow
+                ? ['1月', '', '3月', '', '5月', '', '7月', '', '9月', '', '11月', '']
+                : 'ZH',
+            monthFontSize: isCompact ? 10 : 11
+        };
+    }
+
     private createContent(): string {
         return `
             <div class="pomodoro-stats-view">
@@ -1241,6 +1260,7 @@ class PomodoroStatsView {
 
             // 初始化echarts实例
             const chart = init(chartElement);
+            let heatmapLayout = this.getHeatmapCalendarLayout(chartElement.clientWidth);
 
             // 准备热力图数据
             const startDate = new Date(this.currentYear, 0, 1);
@@ -1312,8 +1332,8 @@ class PomodoroStatsView {
                 },
                 calendar: {
                     top: 50,
-                    left: 40,
-                    right: 20,
+                    left: heatmapLayout.left,
+                    right: heatmapLayout.right,
                     bottom: 60,
                     cellSize: 13,
                     range: this.currentYear,
@@ -1324,8 +1344,8 @@ class PomodoroStatsView {
                     },
                     yearLabel: { show: false },
                     monthLabel: {
-                        nameMap: 'ZH',
-                        fontSize: 11
+                        nameMap: heatmapLayout.monthNameMap,
+                        fontSize: heatmapLayout.monthFontSize
                     },
                     dayLabel: {
                         firstDay: 1,
@@ -1352,6 +1372,17 @@ class PomodoroStatsView {
             // 响应式调整
             const resizeObserver = new ResizeObserver(() => {
                 if (chart && !chart.isDisposed()) {
+                    heatmapLayout = this.getHeatmapCalendarLayout(chartElement.clientWidth);
+                    chart.setOption({
+                        calendar: {
+                            left: heatmapLayout.left,
+                            right: heatmapLayout.right,
+                            monthLabel: {
+                                nameMap: heatmapLayout.monthNameMap,
+                                fontSize: heatmapLayout.monthFontSize
+                            }
+                        }
+                    });
                     chart.resize();
                 }
             });
@@ -1381,6 +1412,7 @@ class PomodoroStatsView {
 
             // 初始化echarts实例
             const chart = init(chartElement);
+            let timelineAxisInterval = this.getTimelineAxisInterval(chartElement.clientWidth);
 
             // 准备时间线数据
             const dates = timelineData.map(d => d.date);
@@ -1557,8 +1589,9 @@ class PomodoroStatsView {
                     type: 'value',
                     min: 0,
                     max: 24,
-                    interval: 2,
+                    interval: timelineAxisInterval,
                     axisLabel: {
+                        hideOverlap: true,
                         formatter: (value) => {
                             return this.formatTimelineHour(value);
                         }
@@ -1589,6 +1622,15 @@ class PomodoroStatsView {
             // 响应式调整
             const resizeObserver = new ResizeObserver(() => {
                 if (chart && !chart.isDisposed()) {
+                    const nextInterval = this.getTimelineAxisInterval(chartElement.clientWidth);
+                    if (nextInterval !== timelineAxisInterval) {
+                        timelineAxisInterval = nextInterval;
+                        chart.setOption({
+                            xAxis: {
+                                interval: timelineAxisInterval
+                            }
+                        });
+                    }
                     chart.resize();
                 }
             });

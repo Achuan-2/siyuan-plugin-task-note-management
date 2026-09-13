@@ -1338,10 +1338,29 @@ $: if (logPage < 1) logPage = 1;
         gap: 8px;
         border-bottom: 1px solid var(--b3-border-color);
         padding-bottom: 10px;
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: thin;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .stats-nav::-webkit-scrollbar {
+        height: 6px;
+    }
+
+    .stats-nav::-webkit-scrollbar-track {
+        background: var(--b3-theme-surface-lighter);
+        border-radius: 3px;
+    }
+
+    .stats-nav::-webkit-scrollbar-thumb {
+        background: var(--b3-theme-primary-lighter);
+        border-radius: 3px;
     }
 
     .stats-nav button {
+        flex: 0 0 auto;
         border: 1px solid var(--b3-border-color);
         background: var(--b3-theme-surface);
         color: var(--b3-theme-on-surface);

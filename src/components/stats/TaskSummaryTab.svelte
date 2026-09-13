@@ -2296,4 +2296,106 @@
         font-size: 13px;
         color: var(--b3-theme-on-surface);
     }
+
+    @media (max-width: 768px) {
+        .task-summary-root {
+            height: auto;
+            min-height: 100%;
+            overflow: visible;
+        }
+
+        .task-summary-toolbar {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .filter-buttons,
+        .action-buttons,
+        .task-summary-settings {
+            width: 100%;
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            overflow-y: hidden;
+            padding-bottom: 6px;
+            scrollbar-width: thin;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .filter-buttons::-webkit-scrollbar,
+        .action-buttons::-webkit-scrollbar,
+        .task-summary-settings::-webkit-scrollbar {
+            height: 6px;
+        }
+
+        .filter-buttons::-webkit-scrollbar-track,
+        .action-buttons::-webkit-scrollbar-track,
+        .task-summary-settings::-webkit-scrollbar-track {
+            background: var(--b3-theme-surface-lighter);
+            border-radius: 3px;
+        }
+
+        .filter-buttons::-webkit-scrollbar-thumb,
+        .action-buttons::-webkit-scrollbar-thumb,
+        .task-summary-settings::-webkit-scrollbar-thumb {
+            background: var(--b3-theme-primary-lighter);
+            border-radius: 3px;
+        }
+
+        .filter-btn,
+        .action-btn,
+        .switch-label {
+            flex: 0 0 auto;
+            white-space: nowrap;
+        }
+
+        .custom-date-picker {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 8px;
+            padding: 10px;
+        }
+
+        .date-inputs {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr);
+            gap: 8px;
+        }
+
+        .date-separator {
+            display: none;
+        }
+
+        .date-field input[type="date"] {
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .apply-btn {
+            width: 100%;
+        }
+
+        .task-summary-info-cards {
+            grid-template-columns: minmax(0, 1fr);
+            gap: 8px;
+        }
+
+        .task-summary-content {
+            flex: none;
+            overflow-y: visible;
+            padding-right: 0;
+        }
+
+        .summary-stat-row,
+        .task-project-group,
+        .task-group-list {
+            margin-left: 0;
+            padding-left: 0;
+        }
+
+        .task-item,
+        .task-body,
+        .task-line {
+            min-width: 0;
+        }
+    }
 </style>
