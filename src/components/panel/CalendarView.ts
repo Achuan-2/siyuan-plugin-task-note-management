@@ -5632,6 +5632,16 @@ export class CalendarView {
             titleEl.innerHTML = event.title;
         }
 
+        // 实际打卡时间事件在标题前显示本次打卡 emoji，左侧仍保留习惯自身图标
+        if (props.type === 'habitCheckInTime' && props.checkInEmoji) {
+            const checkInEmoji = document.createElement('span');
+            checkInEmoji.className = 'habit-check-in-emoji';
+            checkInEmoji.textContent = props.checkInEmoji;
+            checkInEmoji.classList.add('ariaLabel');
+            checkInEmoji.setAttribute('aria-label', i18n("habitCheckinLabel") || "打卡");
+            titleEl.prepend(checkInEmoji, document.createTextNode(' '));
+        }
+
         // 重复图标 (移动到标题前)
         if (props.isRepeated || props.repeat?.enabled) {
             const repeatIcon = document.createElement('span');
