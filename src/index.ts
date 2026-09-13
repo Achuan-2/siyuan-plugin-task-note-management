@@ -2456,28 +2456,52 @@ export default class ReminderPlugin extends Plugin {
             }
             this._calendarView = null;
         };
+        const mountCalendarTab = (tab: any, showHabitsOnly: boolean) => {
+            const existingView = tab._calendarView;
+            // 当前插件实例已接管的页签无需重复挂载；热重载留下的旧实例不在新 tabViews 中。
+            if (existingView && this.tabViews.get(tab.id) === existingView) {
+                return;
+            }
+
+            // 思源热重载会保留 Custom 页签，但旧插件 onunload 已清空其中的日历内容。
+            // 新插件实例需要主动接管该页签，并把生命周期回调更新为当前实例的闭包。
+            tab.element.innerHTML = '';
+            const calendarView = new CalendarView(tab.element, this, showHabitsOnly
+                ? { ...tab.data, showHabitsOnly: true }
+                : tab.data);
+            this.tabViews.set(tab.id, calendarView);
+            tab._calendarView = calendarView;
+            tab.destroy = destroyCalendarTab;
+        };
+        const initTaskCalendarTab = (tab: any) => mountCalendarTab(tab, false);
+        const initHabitCalendarTab = (tab: any) => mountCalendarTab(tab, true);
+
         this.addTab({
             type: TAB_TYPE,
-            init: ((tab) => {
-                const calendarView = new CalendarView(tab.element, this, tab.data);
-                // 保存实例引用用于清理
-                this.tabViews.set(tab.id, calendarView);
-                tab._calendarView = calendarView;
-            }) as any,
+            init: initTaskCalendarTab as any,
             destroy: destroyCalendarTab as any
         });
 
         // 注册习惯日历标签页（使用独立类型，避免与任务日历标签页复用）
         this.addTab({
             type: HABIT_TAB_TYPE,
-            init: ((tab) => {
-                const calendarView = new CalendarView(tab.element, this, { ...tab.data, showHabitsOnly: true });
-                // 保存实例引用用于清理
-                this.tabViews.set(tab.id, calendarView);
-                tab._calendarView = calendarView;
-            }) as any,
+            init: initHabitCalendarTab as any,
             destroy: destroyCalendarTab as any
         });
+
+        // 插件代码热重载时，思源会保留已经打开的 Custom 页签对象，但不会重新调用新模型的 init。
+        // 主动重新挂载并更新回调，避免旧实例清空容器后页签永久空白。
+        if (!isMobile) {
+            const openedTabs = this.getOpenedTab();
+            (openedTabs[TAB_TYPE] || []).forEach((tab: any) => {
+                tab.init = initTaskCalendarTab;
+                mountCalendarTab(tab, false);
+            });
+            (openedTabs[HABIT_TAB_TYPE] || []).forEach((tab: any) => {
+                tab.init = initHabitCalendarTab;
+                mountCalendarTab(tab, true);
+            });
+        }
 
         // 注册四象限视图标签页
         this.addTab({
