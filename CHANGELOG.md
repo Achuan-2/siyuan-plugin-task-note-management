@@ -1,8 +1,30 @@
-## v7.0.16 / 20260913
-- 🐛 浏览器端：修复下载节假日日历 CORS 导致的一直提示下载 ([#351](https://github.com/Achuan-2/siyuan-plugin-task-note-management/issues/351))
-- 🐛 修复拖动任务到侧栏，无法创建任务
+## v7.1.0 / 20260913
+- 🎨 任务侧栏：任务设置自定义进度条时，可直接拖动调整进度条的进度
+- 🎨 任务侧栏：每日可做和今日忽略分组显示
+- 🎨 项目侧栏：项目右键支持复制项目看板Markdown链接，可以将项目看板链接存放在思源文档或者外部应用快捷打开
+- 🎨 习惯侧栏支持设置打卡天数显示是连续天数还是已打卡天数
 - 🎨 习惯日历视图：添加显示设置按钮，支持自定义习惯相关显示设置
 - 🎨 习惯日历视图：习惯实际打卡标题前显示习惯打卡emoji
+- 🎨 习惯日历视图：添加习惯统计视图查看按钮
+- 🎨 统计视图：优化手机端显示
+- 🎨 统计视图：任务统计从统计时长改为统计任务数
+- 🐛 浏览器端：修复下载节假日日历 CORS 导致的一直提示下载 ([#351](https://github.com/Achuan-2/siyuan-plugin-task-note-management/issues/351))
+- 🐛 修复拖动任务到侧栏，无法创建任务
+
+---
+
+- 🎨 Task sidebar: custom progress bars in task settings can now be adjusted directly by dragging
+- 🎨 Task sidebar: grouped "Available Today" and "Ignored Today" tasks separately
+- 🎨 Project sidebar: added a right-click option to copy a project's Kanban Markdown link, allowing it to be saved in a SiYuan document or an external app for quick access
+- 🎨 Habit sidebar: added an option to display either the current streak or the total number of check-in days
+- 🎨 Habit calendar view: added a display settings button for customizing habit-related display options
+- 🎨 Habit calendar view: display the habit check-in emoji before actual check-in event titles
+- 🎨 Habit calendar view: added a button to open the habit statistics view
+- 🎨 Statistics view: optimized the mobile layout
+- 🎨 Statistics view: changed task statistics from tracked duration to task count
+- 🐛 Browser: fixed repeated download prompts caused by CORS errors when downloading holiday calendars ([#351](https://github.com/Achuan-2/siyuan-plugin-task-note-management/issues/351))
+- 🐛 Fixed an issue where dragging a task to the sidebar failed to create the task
+
 
 
 
