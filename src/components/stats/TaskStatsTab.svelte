@@ -25,9 +25,19 @@ type TaskSession = {
     projectId?: string;
     categoryId?: string;
     startTime?: string;
-    duration: number;
     completed: boolean;
     type: 'task';
+};
+
+type TaskTimelineDay = {
+    date: string;
+    sessions: Array<{
+        type: 'task';
+        title: string;
+        count: number;
+        startPercent: number;
+        widthPercent: number;
+    }>;
 };
 
 // 注册 ECharts 组件
@@ -102,9 +112,32 @@ class TaskStatsView {
 
     private formatTimelineHour(valueHours: number): string {
         const totalMinutes = Math.round(valueHours * 60 + this.getLogicalTimelineStartMinutes());
-        const hours = Math.floor(totalMinutes / 60);
-        const minutes = totalMinutes % 60;
+        const normalizedMinutes = ((totalMinutes % 1440) + 1440) % 1440;
+        const hours = Math.floor(normalizedMinutes / 60);
+        const minutes = normalizedMinutes % 60;
         return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+    }
+
+    private getTimelineAxisInterval(containerWidth: number): number {
+        if (containerWidth <= 420) return 6;
+        if (containerWidth <= 720) return 4;
+        return 2;
+    }
+
+    private getHeatmapCalendarLayout(containerWidth: number) {
+        const isCompact = containerWidth <= 720;
+        const isNarrow = containerWidth <= 480;
+        const left = isCompact ? 24 : 40;
+        const right = isCompact ? 8 : 20;
+        const cellSize = Math.max(4, Math.min(13, Math.floor((containerWidth - left - right) / 53)));
+        return {
+            left,
+            cellSize,
+            monthNameMap: isNarrow
+                ? ['1月', '', '3月', '', '5月', '', '7月', '', '9月', '', '11月', '']
+                : 'ZH',
+            monthFontSize: isCompact ? 10 : 11
+        };
     }
 
     private createContent(): string {
@@ -173,9 +206,9 @@ class TaskStatsView {
     }
 
     private renderOverview(): string {
-        const todayTime = this.getTodayTaskTime();
-        const weekTime = this.getWeekTaskTime();
-        const totalTime = this.getTotalTaskTime();
+        const todayCount = this.getTodayTaskCount();
+        const weekCount = this.getWeekTaskCount();
+        const totalCount = this.getTotalTaskCount();
 
         return `
             <div class="overview-container">
@@ -184,8 +217,7 @@ class TaskStatsView {
                         <div class="card-icon">🌅</div>
                         <div class="card-content">
                             <div class="card-title">${i18n("todayTask")}</div>
-                            <div class="card-value">${this.formatTime(todayTime)}</div>
-                            <div class="card-subtitle">${this.getTodayTaskCount()}${i18n("taskCountUnit")}</div>
+                            <div class="card-value">${todayCount}${i18n("taskCountUnit")}</div>
                         </div>
                     </div>
                     
@@ -193,8 +225,7 @@ class TaskStatsView {
                         <div class="card-icon">📅</div>
                         <div class="card-content">
                             <div class="card-title">${i18n("weekTask")}</div>
-                            <div class="card-value">${this.formatTime(weekTime)}</div>
-                            <div class="card-subtitle">${this.getWeekTaskCount()}${i18n("taskCountUnit")}</div>
+                            <div class="card-value">${weekCount}${i18n("taskCountUnit")}</div>
                         </div>
                     </div>
                     
@@ -202,8 +233,7 @@ class TaskStatsView {
                         <div class="card-icon">🏆</div>
                         <div class="card-content">
                             <div class="card-title">${i18n("totalTask")}</div>
-                            <div class="card-value">${this.formatTime(totalTime)}</div>
-                            <div class="card-subtitle">${this.getTotalTaskCount()}${i18n("taskCountUnit")}</div>
+                            <div class="card-value">${totalCount}${i18n("taskCountUnit")}</div>
                         </div>
                     </div>
                 </div>
@@ -374,18 +404,19 @@ class TaskStatsView {
     }
 
     private renderTodayProgress(): string {
-        const todayTime = this.getTodayTaskTime();
-        const todayCount = this.getTodayTaskCount();
+        const todaySessions = this.getSessionsForRange(getLogicalDateString(), getLogicalDateString());
+        const todayCount = todaySessions.length;
+        const completedCount = todaySessions.filter(session => session.completed).length;
 
         return `
             <div class="progress-info">
                 <div class="progress-item">
-                    <span class="progress-label">${i18n("completedTasks")}</span>
+                    <span class="progress-label">${i18n("taskCount")}</span>
                     <span class="progress-value">${todayCount}</span>
                 </div>
                 <div class="progress-item">
-                    <span class="progress-label">${i18n("taskTime")}</span>
-                    <span class="progress-value">${this.formatTime(todayTime)}</span>
+                    <span class="progress-label">${i18n("completedTasks")}</span>
+                    <span class="progress-value">${completedCount}</span>
                 </div>
             </div>
         `;
@@ -393,7 +424,7 @@ class TaskStatsView {
 
     private renderRecentTrend(): string {
         const last7Days = this.getLast7DaysData();
-        const maxTime = Math.max(...last7Days.map(d => d.value));
+        const maxCount = Math.max(...last7Days.map(d => d.value));
         const minHeight = 3; // 最小高度15%，确保可见性
         const maxHeight = 85; // 最大高度85%，留出空间显示标签
 
@@ -401,7 +432,7 @@ class TaskStatsView {
             <div class="trend-chart">
                 ${last7Days.map(day => {
             let height;
-            if (maxTime === 0) {
+            if (maxCount === 0) {
                 // 所有数据都为0时，显示最小高度
                 height = minHeight;
             } else if (day.value === 0) {
@@ -409,7 +440,7 @@ class TaskStatsView {
                 height = minHeight;
             } else {
                 // 按比例计算高度，确保在最小和最大高度之间
-                const ratio = day.value / maxTime;
+                const ratio = day.value / maxCount;
                 height = minHeight + (maxHeight - minHeight) * ratio;
             }
 
@@ -417,7 +448,7 @@ class TaskStatsView {
                         <div class="trend-day">
                             <div class="trend-bar" style="height: ${height}%"></div>
                             <div class="trend-label">${day.label}</div>
-                            <div class="trend-value">${this.formatTime(day.value)}</div>
+                            <div class="trend-value">${day.value}</div>
                         </div>
                     `;
         }).join('')}
@@ -427,7 +458,7 @@ class TaskStatsView {
 
     private renderTaskCategoryChart(): string {
         const stats = this.getTaskCategoryStats();
-        const total = Object.values(stats).reduce((sum: number, value: any) => sum + value.time, 0);
+        const total = Object.values(stats).reduce((sum, value) => sum + value.count, 0);
 
         if (total === 0) {
             return `<div class="no-data">${i18n("noData")}</div>`;
@@ -460,7 +491,6 @@ class TaskStatsView {
                     <div class="record-meta">
                         <span class="record-date">${dateStr}</span>
                         <span class="record-time">${timeStr}</span>
-                        <span class="record-duration">${session.duration}${i18n("minutes")}</span>
                         ${session.completed ? '<span class=\"record-completed\">\u2705</span>' : ''}
                     </div>
                 </div>
@@ -495,7 +525,7 @@ class TaskStatsView {
                             <div class="chart-bar-container">
                                 <div class="chart-bar" style="height: ${height}%"></div>
                                 <div class="chart-label">${item.label}</div>
-                                <div class="chart-value">${this.formatTime(item.value)}</div>
+                                <div class="chart-value">${item.value}</div>
                             </div>
                         `;
         }).join('')}
@@ -566,38 +596,6 @@ class TaskStatsView {
         }
     }
 
-    private formatTime(minutes: number): string {
-        const hours = Math.floor(minutes / 60);
-        const mins = Math.floor(minutes % 60);
-
-        if (hours > 0) {
-            return `${hours}h ${mins}m`;
-        } else {
-            return `${mins}m`;
-        }
-    }
-
-    private getTotalTaskTime(): number {
-        let totalTime = 0;
-        Object.values(this.reminderData || {}).forEach((reminder: any) => {
-            const session = this.buildTaskSession(reminder, reminder?.id);
-            if (session) {
-                totalTime += session.duration;
-            }
-        });
-        return totalTime;
-    }
-
-    private getTodayTaskTime(): number {
-        const dateStr = getLogicalDateString();
-        return this.getSessionsForRange(dateStr, dateStr).reduce((sum, s) => sum + s.duration, 0);
-    }
-
-    private getWeekTaskTime(): number {
-        const range = this.getWeekRange(0);
-        return this.getSessionsForRange(range.start, range.end).reduce((sum, s) => sum + s.duration, 0);
-    }
-
     private getTodayTaskCount(): number {
         const dateStr = getLogicalDateString();
         return this.getSessionsForRange(dateStr, dateStr).length;
@@ -620,8 +618,7 @@ class TaskStatsView {
             const date = new Date(today);
             date.setDate(today.getDate() - i);
             const dateStr = getLocalDateString(date);
-            const value = this.getSessionsForRange(dateStr, dateStr)
-                .reduce((sum, s) => sum + s.duration, 0);
+            const value = this.getSessionsForRange(dateStr, dateStr).length;
 
             data.push({
                 label: i === 0 ? i18n("today") : date.toLocaleDateString(getLocaleTag(), { weekday: 'short' }),
@@ -632,7 +629,7 @@ class TaskStatsView {
         return data;
     }
 
-    private getTaskCategoryStats(): Record<string, { time: number, count: number }> {
+    private getTaskCategoryStats(): Record<string, { count: number, completedCount: number }> {
         let sessions: TaskSession[] = [];
 
         if (!this.isReady) {
@@ -657,17 +654,17 @@ class TaskStatsView {
                 sessions = this.getSessionsForRange(getLogicalDateString(), getLogicalDateString());
         }
 
-        const stats: Record<string, { time: number, count: number }> = {};
+        const stats: Record<string, { count: number, completedCount: number }> = {};
 
         sessions.forEach(session => {
             const labels = this.getDetailGroupLabels(session);
             labels.forEach(label => {
                 if (!stats[label]) {
-                    stats[label] = { time: 0, count: 0 };
+                    stats[label] = { count: 0, completedCount: 0 };
                 }
-                stats[label].time += session.duration;
+                stats[label].count++;
                 if (session.completed) {
-                    stats[label].count++;
+                    stats[label].completedCount++;
                 }
             });
         });
@@ -733,8 +730,7 @@ class TaskStatsView {
             const date = new Date(start);
             date.setDate(start.getDate() + i);
             const dateStr = getLocalDateString(date);
-            const value = this.getSessionsForRange(dateStr, dateStr)
-                .reduce((sum, s) => sum + s.duration, 0);
+            const value = this.getSessionsForRange(dateStr, dateStr).length;
 
             data.push({
                 label: date.toLocaleDateString(getLocaleTag(), { weekday: 'short' }),
@@ -755,12 +751,11 @@ class TaskStatsView {
         for (let day = 1; day <= daysInMonth; day++) {
             const date = new Date(startDate.getFullYear(), startDate.getMonth(), day);
             const dateStr = getLocalDateString(date);
-            const time = this.getSessionsForRange(dateStr, dateStr)
-                .reduce((sum, s) => sum + s.duration, 0);
+            const count = this.getSessionsForRange(dateStr, dateStr).length;
 
             data.push({
                 label: day.toString(),
-                value: time
+                value: count
             });
         }
 
@@ -776,26 +771,25 @@ class TaskStatsView {
         );
 
         months.forEach((month, index) => {
-            let monthlyTime = 0;
+            let monthlyCount = 0;
             const daysInMonth = new Date(year, index + 1, 0).getDate();
 
             for (let day = 1; day <= daysInMonth; day++) {
                 const date = new Date(year, index, day);
                 const dateStr = getLocalDateString(date);
-                monthlyTime += this.getSessionsForRange(dateStr, dateStr)
-                    .reduce((sum, s) => sum + s.duration, 0);
+                monthlyCount += this.getSessionsForRange(dateStr, dateStr).length;
             }
 
             data.push({
                 label: month,
-                value: monthlyTime
+                value: monthlyCount
             });
         });
 
         return data;
     }
 
-    private getTimelineData(): Array<{ date: string, sessions: Array<{ type: string, title: string, duration: number, startPercent: number, widthPercent: number }> }> {
+    private getTimelineData(): TaskTimelineDay[] {
         const data = [];
         const today = new Date(`${getLogicalDateString()}T00:00:00`);
 
@@ -829,21 +823,20 @@ class TaskStatsView {
         return data;
     }
 
-    private getTimelineDataForDate(date: Date): { date: string, sessions: Array<{ type: string, title: string, duration: number, startPercent: number, widthPercent: number }> } {
+    private getTimelineDataForDate(date: Date): TaskTimelineDay {
         const dateStr = getLocalDateString(date);
         const sessions = this.getSessionsForRange(dateStr, dateStr).filter(s => s.startTime);
 
         const timelineSessions = sessions.map(session => {
             const startTime = new Date(session.startTime as string);
             const startPercent = this.getTimelineStartPercent(startTime);
-            const widthPercent = session.duration / (24 * 60) * 100;
 
             return {
-                type: session.type,
+                type: session.type as 'task',
                 title: session.eventTitle,
-                duration: session.duration,
+                count: 1,
                 startPercent,
-                widthPercent
+                widthPercent: 0
             };
         });
 
@@ -853,7 +846,7 @@ class TaskStatsView {
         };
     }
 
-    private getAverageTimelineDataForMonth(): { date: string, sessions: Array<{ type: string, title: string, duration: number, startPercent: number, widthPercent: number }> } {
+    private getAverageTimelineDataForMonth(): TaskTimelineDay {
         const range = this.getMonthRange(this.currentMonthOffset);
         const targetDate = new Date(range.start + 'T00:00:00');
         const daysInMonth = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0).getDate();
@@ -873,24 +866,8 @@ class TaskStatsView {
                 const startMinutes = startTime.getHours() * 60 + startTime.getMinutes();
                 const dayStartMinutes = this.getLogicalTimelineStartMinutes();
                 const adjustedStartMinutes = (startMinutes - dayStartMinutes + 1440) % 1440;
-                const duration = session.duration;
-
-                let remainingDuration = duration;
-                let currentHour = Math.floor(adjustedStartMinutes / 60);
-                let currentMinute = adjustedStartMinutes % 60;
-                let minutesCovered = 0;
-
-                while (remainingDuration > 0 && minutesCovered < 24 * 60) {
-                    const minutesLeftInHour = 60 - currentMinute;
-                    const durationInThisHour = Math.min(remainingDuration, minutesLeftInHour);
-
-                    hourlyStats[currentHour] += durationInThisHour;
-                    remainingDuration -= durationInThisHour;
-                    minutesCovered += durationInThisHour;
-
-                    currentHour = (currentHour + 1) % 24;
-                    currentMinute = 0;
-                }
+                const currentHour = Math.floor(adjustedStartMinutes / 60);
+                hourlyStats[currentHour]++;
             });
 
             if (hasData) {
@@ -901,15 +878,16 @@ class TaskStatsView {
         const sessions = [];
         if (totalDays > 0) {
             for (let hour = 0; hour < 24; hour++) {
-                const avgDuration = hourlyStats[hour] / totalDays;
-                if (avgDuration > 1) {
+                const averageCount = hourlyStats[hour] / totalDays;
+                if (averageCount > 0) {
                     const startPercent = (hour * 60) / (24 * 60) * 100;
                     const widthPercent = 60 / (24 * 60) * 100;
+                    const hourRange = `${this.formatTimelineHour(hour)}-${this.formatTimelineHour(hour + 1)}`;
 
                     sessions.push({
                         type: 'task',
-                        title: `${hour}:00-${hour + 1}:00 ${i18n("avgTaskHourTitle", { hour: `${hour}:00-${hour + 1}:00`, duration: avgDuration.toFixed(1) })}`,
-                        duration: Math.round(avgDuration),
+                        title: `${hourRange} ${i18n("taskCount")}: ${averageCount.toFixed(1)}`,
+                        count: averageCount,
                         startPercent,
                         widthPercent
                     });
@@ -924,7 +902,7 @@ class TaskStatsView {
         };
     }
 
-    private getAverageTimelineDataForYear(): { date: string, sessions: Array<{ type: string, title: string, duration: number, startPercent: number, widthPercent: number }> } {
+    private getAverageTimelineDataForYear(): TaskTimelineDay {
         const range = this.getYearRange(this.currentYearOffset);
         const year = parseInt(range.start.split('-')[0], 10);
 
@@ -945,24 +923,8 @@ class TaskStatsView {
                     const startMinutes = startTime.getHours() * 60 + startTime.getMinutes();
                     const dayStartMinutes = this.getLogicalTimelineStartMinutes();
                     const adjustedStartMinutes = (startMinutes - dayStartMinutes + 1440) % 1440;
-                    const duration = session.duration;
-
-                    let remainingDuration = duration;
-                    let currentHour = Math.floor(adjustedStartMinutes / 60);
-                    let currentMinute = adjustedStartMinutes % 60;
-                    let minutesCovered = 0;
-
-                    while (remainingDuration > 0 && minutesCovered < 24 * 60) {
-                        const minutesLeftInHour = 60 - currentMinute;
-                        const durationInThisHour = Math.min(remainingDuration, minutesLeftInHour);
-
-                        hourlyStats[currentHour] += durationInThisHour;
-                        remainingDuration -= durationInThisHour;
-                        minutesCovered += durationInThisHour;
-
-                        currentHour = (currentHour + 1) % 24;
-                        currentMinute = 0;
-                    }
+                    const currentHour = Math.floor(adjustedStartMinutes / 60);
+                    hourlyStats[currentHour]++;
                 });
 
                 if (hasData) {
@@ -974,15 +936,16 @@ class TaskStatsView {
         const sessions = [];
         if (totalDays > 0) {
             for (let hour = 0; hour < 24; hour++) {
-                const avgDuration = hourlyStats[hour] / totalDays;
-                if (avgDuration > 1) {
+                const averageCount = hourlyStats[hour] / totalDays;
+                if (averageCount > 0) {
                     const startPercent = (hour * 60) / (24 * 60) * 100;
                     const widthPercent = 60 / (24 * 60) * 100;
+                    const hourRange = `${this.formatTimelineHour(hour)}-${this.formatTimelineHour(hour + 1)}`;
 
                     sessions.push({
                         type: 'task',
-                        title: `${hour}:00-${hour + 1}:00 ${i18n("avgTaskHourTitle", { hour: `${hour}:00-${hour + 1}:00`, duration: avgDuration.toFixed(1) })}`,
-                        duration: Math.round(avgDuration),
+                        title: `${hourRange} ${i18n("taskCount")}: ${averageCount.toFixed(1)}`,
+                        count: averageCount,
                         startPercent,
                         widthPercent
                     });
@@ -996,25 +959,24 @@ class TaskStatsView {
         };
     }
 
-    private getHeatmapData(year: number): Array<{ date: string, time: number, level: number }> {
+    private getHeatmapData(year: number): Array<{ date: string, count: number, level: number }> {
         const data = [];
         const startDate = new Date(year, 0, 1);
         const endDate = new Date(year, 11, 31);
 
         for (let date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
             const dateStr = getLocalDateString(date);
-            const time = this.getSessionsForRange(dateStr, dateStr)
-                .reduce((sum, s) => sum + s.duration, 0);
+            const count = this.getSessionsForRange(dateStr, dateStr).length;
 
             let level = 0;
-            if (time > 0) level = 1;
-            if (time > 60) level = 2;
-            if (time > 120) level = 3;
-            if (time > 240) level = 4;
+            if (count > 0) level = 1;
+            if (count > 2) level = 2;
+            if (count > 5) level = 3;
+            if (count > 10) level = 4;
 
             data.push({
                 date: dateStr,
-                time,
+                count,
                 level
             });
         }
@@ -1026,16 +988,15 @@ class TaskStatsView {
         if (!reminder || !reminder.date) {
             return null;
         }
-        const timing = this.getTaskTiming(reminder);
-        const sessionDate = timing.startTime ? getLogicalDateString(timing.startTime) : reminder.date;
+        const startTime = this.getTaskStartTime(reminder);
+        const sessionDate = startTime ? getLogicalDateString(startTime) : reminder.date;
         return {
             id: sessionId,
             date: sessionDate,
             eventTitle: reminder.title || i18n("unnamedNote"),
             projectId: reminder.projectId || undefined,
             categoryId: reminder.categoryId || undefined,
-            startTime: timing.startTime ? timing.startTime.toISOString() : undefined,
-            duration: timing.duration,
+            startTime: startTime ? startTime.toISOString() : undefined,
             completed: !!reminder.completed,
             type: 'task'
         };
@@ -1075,29 +1036,13 @@ class TaskStatsView {
         }
     }
 
-    private getTaskTiming(reminder: any): { startTime?: Date; duration: number } {
+    private getTaskStartTime(reminder: any): Date | undefined {
         if (!reminder?.date || !reminder?.time) {
-            return { duration: 0 };
+            return undefined;
         }
 
         const startTime = new Date(`${reminder.date}T${reminder.time}:00`);
-        let endTime: Date | null = null;
-
-        if (reminder.endDate && reminder.endTime) {
-            endTime = new Date(`${reminder.endDate}T${reminder.endTime}:00`);
-        } else if (reminder.endTime) {
-            endTime = new Date(`${reminder.date}T${reminder.endTime}:00`);
-        } else {
-            endTime = new Date(startTime);
-            endTime.setMinutes(endTime.getMinutes() + 30);
-            if (endTime.getDate() !== startTime.getDate()) {
-                endTime.setDate(startTime.getDate());
-                endTime.setHours(23, 59, 0, 0);
-            }
-        }
-
-        const duration = Math.max(0, Math.round((endTime.getTime() - startTime.getTime()) / 60000));
-        return { startTime, duration };
+        return Number.isNaN(startTime.getTime()) ? undefined : startTime;
     }
 
     private isDateInRange(date: string, startDate: string, endDate: string): boolean {
@@ -1230,7 +1175,7 @@ class TaskStatsView {
             }
 
             const stats = this.getTaskCategoryStats();
-            const total = Object.values(stats).reduce((sum: number, value: any) => sum + value.time, 0);
+            const total = Object.values(stats).reduce((sum, value) => sum + value.count, 0);
 
             if (total === 0) return;
 
@@ -1240,8 +1185,8 @@ class TaskStatsView {
             // 准备数据
             const data = Object.entries(stats).map(([category, data]: [string, any], index) => ({
                 name: category,
-                value: data.time,
-                count: data.count,
+                value: data.count,
+                completedCount: data.completedCount,
                 itemStyle: {
                     color: this.getTaskColor(index)
                 }
@@ -1262,16 +1207,16 @@ class TaskStatsView {
                     trigger: 'item',
                     formatter: (params: any) => {
                         const percentage = ((params.value / total) * 100).toFixed(1);
-                        const timeStr = this.formatTime(params.value);
-                        const countStr = data.find(d => d.name === params.name)?.count || 0;
+                        const item = data.find(d => d.name === params.name);
+                        const completedCount = item?.completedCount || 0;
                         return `
                             <div style="padding: 8px;">
                                 <div style="margin-bottom: 4px;">
                                     <span style="display: inline-block; width: 10px; height: 10px; background-color: ${params.color}; border-radius: 50%; margin-right: 8px;"></span>
                                     <strong>${params.name}</strong>
                                 </div>
-                                <div style="margin-bottom: 2px;">${i18n("taskTimeColon")}${timeStr}</div>
-                                <div style="margin-bottom: 2px;">${i18n("completedTaskCountColon")}${countStr}${i18n("taskCountUnit")}</div>
+                                <div style="margin-bottom: 2px;">${i18n("taskCount")}: ${params.value}${i18n("taskCountUnit")}</div>
+                                <div style="margin-bottom: 2px;">${i18n("completedTaskCountColon")}${completedCount}${i18n("taskCountUnit")}</div>
                                 <div>${i18n("proportionOf")}${percentage}%</div>
                             </div>
                         `;
@@ -1285,15 +1230,14 @@ class TaskStatsView {
                     formatter: (name: string) => {
                         const item = data.find(d => d.name === name);
                         if (item) {
-                            const timeStr = this.formatTime(item.value);
-                            return `${name} (${timeStr})`;
+                            return `${name} (${item.value}${i18n("taskCountUnit")})`;
                         }
                         return name;
                     }
                 },
                 series: [
                     {
-                        name: i18n("taskTime"),
+                        name: i18n("taskCount"),
                         type: 'pie',
                         radius: ['40%', '70%'],
                         center: ['50%', '45%'],
@@ -1363,6 +1307,7 @@ class TaskStatsView {
             const chart = init(chartElement);
 
             // 准备热力图数据
+            let heatmapLayout = this.getHeatmapCalendarLayout(chartElement.clientWidth);
             const startDate = new Date(this.currentYear, 0, 1);
             const endDate = new Date(this.currentYear, 11, 31);
 
@@ -1375,10 +1320,10 @@ class TaskStatsView {
 
                 // 查找对应的数据
                 const dayData = heatmapData.find(d => d.date === localDateStr);
-                const time = dayData ? dayData.time : 0;
+                const count = dayData ? dayData.count : 0;
 
                 dateList.push(localDateStr);
-                dataList.push([localDateStr, time]);
+                dataList.push([localDateStr, count]);
             }
 
             // 计算最大值用于颜色映射
@@ -1387,7 +1332,7 @@ class TaskStatsView {
             // 配置选项 - GitHub风格热力图
             const option = {
                 title: {
-                    text: `${this.currentYear}${i18n("year")}${i18n("taskTime")}${i18n("yearlyHeatmap")}`,
+                    text: `${this.currentYear}${i18n("year")}${i18n("taskCount")}${i18n("yearlyHeatmap")}`,
                     left: 'center',
                     top: 10,
                     textStyle: {
@@ -1404,17 +1349,16 @@ class TaskStatsView {
                             month: 'long',
                             day: 'numeric'
                         });
-                        const time = params.data[1];
-                        if (time === 0) {
+                        const count = params.data[1];
+                        if (count === 0) {
                             return `${dateStr}<br/>${i18n("noTaskRecord")}`;
                         }
-                        const timeStr = this.formatTime(time);
-                        return `${dateStr}<br/>${i18n("taskTimeColon")}${timeStr}`;
+                        return `${dateStr}<br/>${i18n("taskCount")}: ${count}${i18n("taskCountUnit")}`;
                     }
                 },
                 visualMap: {
                     min: 0,
-                    max: maxValue || 240,
+                    max: maxValue || 1,
                     calculable: false,
                     hoverLink: false,
                     orient: 'horizontal',
@@ -1432,10 +1376,8 @@ class TaskStatsView {
                 },
                 calendar: {
                     top: 50,
-                    left: 40,
-                    right: 20,
-                    bottom: 60,
-                    cellSize: 13,
+                    left: heatmapLayout.left,
+                    cellSize: [heatmapLayout.cellSize, heatmapLayout.cellSize],
                     range: this.currentYear,
                     itemStyle: {
                         borderWidth: 2,
@@ -1444,8 +1386,8 @@ class TaskStatsView {
                     },
                     yearLabel: { show: false },
                     monthLabel: {
-                        nameMap: 'ZH',
-                        fontSize: 11
+                        nameMap: heatmapLayout.monthNameMap,
+                        fontSize: heatmapLayout.monthFontSize
                     },
                     dayLabel: {
                         firstDay: 1,
@@ -1472,6 +1414,20 @@ class TaskStatsView {
             // 响应式调整
             const resizeObserver = new ResizeObserver(() => {
                 if (chart && !chart.isDisposed()) {
+                    const nextLayout = this.getHeatmapCalendarLayout(chartElement.clientWidth);
+                    if (nextLayout.cellSize !== heatmapLayout.cellSize || nextLayout.left !== heatmapLayout.left) {
+                        heatmapLayout = nextLayout;
+                        chart.setOption({
+                            calendar: {
+                                left: heatmapLayout.left,
+                                cellSize: [heatmapLayout.cellSize, heatmapLayout.cellSize],
+                                monthLabel: {
+                                    nameMap: heatmapLayout.monthNameMap,
+                                    fontSize: heatmapLayout.monthFontSize
+                                }
+                            }
+                        });
+                    }
                     chart.resize();
                 }
             });
@@ -1501,6 +1457,7 @@ class TaskStatsView {
 
             // 初始化echarts实例
             const chart = init(chartElement);
+            let timelineAxisInterval = this.getTimelineAxisInterval(chartElement.clientWidth);
 
             // 准备时间线数据
             const dates = timelineData.map(d => d.date);
@@ -1517,14 +1474,14 @@ class TaskStatsView {
                 dayData.sessions.forEach(session => {
                     const startHour = session.startPercent / 100 * 24;
                     const endHour = startHour + (session.widthPercent / 100 * 24);
-                    const avgDuration = session.duration;
+                    const averageCount = session.count;
 
                     data.push([
                         startHour,  // x轴：开始时间
                         0,          // y轴：固定为0（只有一行）
                         endHour,    // 结束时间
                         session.title,
-                        avgDuration
+                        averageCount
                     ]);
                 });
 
@@ -1535,14 +1492,14 @@ class TaskStatsView {
                         renderItem: (params, api) => {
                             const start = api.value(0);
                             const end = api.value(2);
-                            const duration = api.value(4);
+                            const count = api.value(4);
                             const y = api.coord([0, 0])[1];
                             const startX = api.coord([start, 0])[0];
                             const endX = api.coord([end, 0])[0];
 
-                            // 根据平均任务时长调整颜色深度和高度
-                            const maxDuration = Math.max(...data.map(d => d[4]));
-                            const intensity = duration / maxDuration;
+                            // 根据该时段的平均任务数量调整颜色深度和高度
+                            const maxCount = Math.max(...data.map(d => d[4]));
+                            const intensity = count / maxCount;
                             const height = 30 + intensity * 20; // 基础高度30px，最大增加20px
                             const opacity = 0.6 + intensity * 0.4; // 透明度从0.6到1.0
 
@@ -1563,11 +1520,11 @@ class TaskStatsView {
                         data: data,
                         tooltip: {
                             formatter: (params) => {
-                                const duration = params.value[4];
+                                const count = params.value[4];
                                 const title = params.value[3];
                                 const startTime = this.formatTimelineHour(params.value[0]);
 
-                                return `${title}<br/>${i18n("timeSegmentColon")}${startTime}<br/>${i18n("avgDurationColon")}${duration}${i18n("minutes")}`;
+                                return `${title}<br/>${i18n("timeSegmentColon")}${startTime}<br/>${i18n("taskCount")}: ${Number(count).toFixed(1)}${i18n("taskCountUnit")}`;
                             }
                         }
                     });
@@ -1576,7 +1533,7 @@ class TaskStatsView {
                 // 原有的多天数据处理逻辑
                 const sessionTypes = ['task'];
                 const typeNames = {
-                    'task': i18n("taskTime")
+                    'task': i18n("taskCount")
                 };
                 const typeColors = {
                     'task': '#4CAF50'
@@ -1588,16 +1545,15 @@ class TaskStatsView {
                     timelineData.forEach((dayData, dayIndex) => {
                         dayData.sessions.forEach(session => {
                             if (session.type === type) {
-                                // 计算开始时间和结束时间（以小时为单位）
+                                // 将每个任务作为时间点显示
                                 const startHour = session.startPercent / 100 * 24;
-                                const endHour = startHour + (session.widthPercent / 100 * 24);
 
                                 data.push([
                                     startHour,  // x轴：开始时间
                                     dayIndex,   // y轴：日期索引
-                                    endHour,    // 结束时间
+                                    startHour,
                                     session.title,
-                                    session.duration
+                                    session.count
                                 ]);
                             }
                         });
@@ -1609,18 +1565,16 @@ class TaskStatsView {
                             type: 'custom',
                             renderItem: (params, api) => {
                                 const start = api.value(0);
-                                const end = api.value(2);
                                 const y = api.coord([0, api.value(1)])[1];
                                 const startX = api.coord([start, 0])[0];
-                                const endX = api.coord([end, 0])[0];
                                 const height = 20;
 
                                 return {
                                     type: 'rect',
                                     shape: {
-                                        x: startX,
+                                        x: startX - 4,
                                         y: y - height / 2,
-                                        width: endX - startX,
+                                        width: 8,
                                         height: height
                                     },
                                     style: {
@@ -1632,11 +1586,11 @@ class TaskStatsView {
                             data: data,
                             tooltip: {
                                 formatter: (params) => {
-                                    const duration = params.value[4];
+                                    const count = params.value[4];
                                     const title = params.value[3];
                                     const startTime = this.formatTimelineHour(params.value[0]);
 
-                                    return `${title}<br/>${i18n("startTimeColon")}${startTime}<br/>${i18n("durationColon")}${duration}${i18n("minutes")}`;
+                                    return `${title}<br/>${i18n("startTimeColon")}${startTime}<br/>${i18n("taskCount")}: ${count}${i18n("taskCountUnit")}`;
                                 }
                             }
                         });
@@ -1673,8 +1627,9 @@ class TaskStatsView {
                     type: 'value',
                     min: 0,
                     max: 24,
-                    interval: 2,
+                    interval: timelineAxisInterval,
                     axisLabel: {
+                        hideOverlap: true,
                         formatter: (value) => {
                             return this.formatTimelineHour(value);
                         }
@@ -1705,6 +1660,15 @@ class TaskStatsView {
             // 响应式调整
             const resizeObserver = new ResizeObserver(() => {
                 if (chart && !chart.isDisposed()) {
+                    const nextInterval = this.getTimelineAxisInterval(chartElement.clientWidth);
+                    if (nextInterval !== timelineAxisInterval) {
+                        timelineAxisInterval = nextInterval;
+                        chart.setOption({
+                            xAxis: {
+                                interval: timelineAxisInterval
+                            }
+                        });
+                    }
                     chart.resize();
                 }
             });
