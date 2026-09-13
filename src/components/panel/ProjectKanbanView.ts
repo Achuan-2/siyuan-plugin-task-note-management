@@ -1672,7 +1672,7 @@ export class ProjectKanbanView {
             const menu = new Menu("project-kanban-more-menu");
 
             menu.addItem({
-                iconHTML: "📊",
+                icon: "iconTNStatistic",
                 label: i18n('viewStatsMenuItem') || "查看统计",
                 click: () => {
                     const project = this.project || this.projectManager.getProjectById(this.projectId) || { id: this.projectId, title: '看板项目' };
