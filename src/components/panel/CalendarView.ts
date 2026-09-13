@@ -5661,8 +5661,8 @@ export class CalendarView {
 
         mainFrame.appendChild(topRow);
 
-        // 无论是习惯日历模式还是任务日历模式，只在习惯打卡事件上显示对应的打卡 emoji
-        if (props.type === 'habitCheckInTime') {
+        // 月视图已在习惯标题前显示打卡 emoji，不再额外占用一行重复显示
+        if (props.type === 'habitCheckInTime' && eventInfo.view?.type !== 'dayGridMonth') {
             const checkInEmoji = props.checkInEmoji;
             if (checkInEmoji) {
                 const checkInLine = document.createElement('div');

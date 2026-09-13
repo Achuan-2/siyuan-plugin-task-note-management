@@ -2,6 +2,7 @@
 - 🐛 浏览器端：修复下载节假日日历 CORS 导致的一直提示下载 ([#351](https://github.com/Achuan-2/siyuan-plugin-task-note-management/issues/351))
 - 🐛 修复拖动任务到侧栏，无法创建任务
 - 🎨 习惯日历视图：添加显示设置按钮，支持自定义习惯相关显示设置
+- 🎨 习惯日历视图：习惯实际打卡标题前显示习惯打卡emoji
 
 
 
