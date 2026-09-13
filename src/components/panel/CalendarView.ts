@@ -1580,6 +1580,18 @@ export class CalendarView {
             toolbar.appendChild(habitToolbarActions);
             habitToolbarActions.appendChild(refreshBtn);
             habitToolbarActions.appendChild(displaySettingsContainer);
+
+            const habitStatsBtn = document.createElement('button');
+            habitStatsBtn.className = 'b3-button b3-button--outline';
+            habitStatsBtn.style.padding = '6px';
+            habitStatsBtn.innerHTML = '<svg class="b3-button__icon" style="margin-right: 0;"><use xlink:href="#iconTNStatistic"></use></svg>';
+            habitStatsBtn.classList.add('ariaLabel');
+            habitStatsBtn.setAttribute('aria-label', i18n("habitStats") || "习惯统计");
+            habitStatsBtn.addEventListener('click', () => {
+                showStatsDialog(this.plugin, 'habit');
+            });
+            habitToolbarActions.appendChild(habitStatsBtn);
+
             const openTaskCalendarBtn = document.createElement('button');
             openTaskCalendarBtn.className = 'b3-button b3-button--outline';
             openTaskCalendarBtn.style.padding = '6px';
