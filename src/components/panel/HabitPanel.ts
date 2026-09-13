@@ -2,7 +2,7 @@ import { showMessage, Dialog, Menu, confirm, getBackend, getFrontend } from "siy
 import { openBlock, pushMsg } from "../../api";
 import { getLocalDateTimeString, getLogicalDateString, getRelativeDateString } from "../../utils/dateUtils";
 import { HabitGroupManager } from "../dataManager/habitGroupManager";
-import { i18n, getPluginInstance } from "../../pluginInstance";
+import { i18n } from "../../pluginInstance";
 import { HabitEditDialog } from "../dialog/HabitEditDialog";
 import { HabitStatsDialog } from "../stats/HabitStatsDialog";
 import { HabitGroupManageDialog } from "../dialog/HabitGroupManageDialog";
@@ -172,6 +172,53 @@ export class HabitPanel {
     private initUI() {
         this.container.classList.add('habit-panel');
         this.container.innerHTML = '';
+
+        // 与任务侧栏的“今日任务 / 每日可做”分组头保持一致
+        try {
+            let style = document.getElementById('habit-panel-section-header-style') as HTMLStyleElement | null;
+            if (!style) {
+                style = document.createElement('style');
+                style.id = 'habit-panel-section-header-style';
+                document.head.appendChild(style);
+            }
+            style.textContent = `
+                .habit-panel .reminder-section-header {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    margin: 10px 0 8px;
+                    padding: 8px 10px;
+                    color: var(--b3-theme-on-surface);
+                    background: var(--b3-theme-surface-lighter);
+                    border-radius: 6px;
+                    cursor: pointer;
+                    user-select: none;
+                }
+                .habit-panel .habit-list > .habit-group:first-child > .reminder-section-header {
+                    margin-top: 0;
+                }
+                .habit-panel .reminder-section-header__title {
+                    min-width: 0;
+                    font-weight: 600;
+                }
+                .habit-panel .reminder-section-header__count {
+                    margin-left: auto;
+                    color: var(--b3-theme-on-surface-light);
+                    font-size: 12px;
+                }
+                .habit-panel .reminder-section-header__arrow {
+                    width: 14px;
+                    height: 14px;
+                    color: var(--b3-theme-on-surface-light);
+                    transition: transform 0.15s ease;
+                }
+                .habit-panel .reminder-section-header[data-collapsed="true"] .reminder-section-header__arrow {
+                    transform: rotate(-90deg);
+                }
+            `;
+        } catch (error) {
+            console.warn('注入习惯分组头样式失败:', error);
+        }
 
         // 标题部分
         const header = document.createElement('div');
@@ -914,18 +961,12 @@ export class HabitPanel {
     }
 
     private toggleGroupCollapseUI(groupContainer: HTMLElement, isCollapsed: boolean) {
-        const groupHeader = groupContainer.querySelector('.habit-group__header') as HTMLElement;
-        const collapseIconUse = groupContainer.querySelector('.habit-group__collapse-icon use') as SVGUseElement;
+        const groupHeader = groupContainer.querySelector('.reminder-section-header') as HTMLElement;
         const groupContent = groupContainer.querySelector('.habit-group__content') as HTMLElement;
 
         if (groupHeader) {
+            groupHeader.dataset.collapsed = String(isCollapsed);
             groupHeader.setAttribute('aria-expanded', String(!isCollapsed));
-        }
-
-        if (collapseIconUse) {
-            const iconHref = isCollapsed ? '#iconRight' : '#iconDown';
-            collapseIconUse.setAttribute('href', iconHref);
-            collapseIconUse.setAttribute('xlink:href', iconHref);
         }
 
         if (groupContent) {
@@ -933,41 +974,67 @@ export class HabitPanel {
         }
     }
 
-    private renderGroup(groupId: string, habits: Habit[]) {
-        const groupContainer = document.createElement('div');
-        groupContainer.className = 'habit-group';
-
-        // 分组头部
+    private createGroupHeader(
+        groupContainer: HTMLElement,
+        groupId: string,
+        title: string,
+        count: number,
+        isCollapsed: boolean
+    ): HTMLElement {
         const groupHeader = document.createElement('div');
-        groupHeader.className = 'habit-group__header';
-
-        const group = groupId === 'none' ? null : this.groupManager.getGroupById(groupId);
-        const groupName = group ? group.name : i18n("noneGroupName");
-        const isCollapsed = this.collapsedGroups.has(groupId);
+        groupHeader.className = 'reminder-section-header';
+        groupHeader.dataset.collapsed = String(isCollapsed);
+        groupHeader.setAttribute('role', 'button');
+        groupHeader.setAttribute('tabindex', '0');
         groupHeader.setAttribute('aria-expanded', String(!isCollapsed));
 
-        const collapseIcon = document.createElement('span');
-        collapseIcon.className = 'habit-group__collapse-icon';
-        collapseIcon.innerHTML = `<svg aria-hidden="true" style="width:12px;height:12px;margin:0;"><use xlink:href="#${isCollapsed ? 'iconRight' : 'iconDown'}"></use></svg>`;
-
         const groupTitle = document.createElement('span');
-        groupTitle.className = 'habit-group__title';
-        groupTitle.innerHTML = `${groupName}<span class="habit-group__count">${habits.length}</span>`;
+        groupTitle.className = 'reminder-section-header__title';
+        groupTitle.textContent = title;
 
-        groupHeader.appendChild(collapseIcon);
+        const groupCount = document.createElement('span');
+        groupCount.className = 'reminder-section-header__count';
+        groupCount.textContent = String(count);
+
+        const collapseIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        collapseIcon.classList.add('reminder-section-header__arrow');
+        collapseIcon.setAttribute('aria-hidden', 'true');
+        collapseIcon.innerHTML = '<use xlink:href="#iconDown"></use>';
+
         groupHeader.appendChild(groupTitle);
+        groupHeader.appendChild(groupCount);
+        groupHeader.appendChild(collapseIcon);
 
-        groupHeader.addEventListener('click', () => {
-            const isCollapsed = this.collapsedGroups.has(groupId);
-            if (isCollapsed) {
+        const toggleGroup = () => {
+            const currentlyCollapsed = this.collapsedGroups.has(groupId);
+            if (currentlyCollapsed) {
                 this.collapsedGroups.delete(groupId);
             } else {
                 this.collapsedGroups.add(groupId);
             }
             this.saveCollapseStates();
-            // 只更新当前分组的 UI，不刷新整个列表
-            this.toggleGroupCollapseUI(groupContainer, !isCollapsed);
+            this.toggleGroupCollapseUI(groupContainer, !currentlyCollapsed);
+        };
+
+        groupHeader.addEventListener('click', toggleGroup);
+        groupHeader.addEventListener('keydown', (event: KeyboardEvent) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                toggleGroup();
+            }
         });
+
+        return groupHeader;
+    }
+
+    private renderGroup(groupId: string, habits: Habit[]) {
+        const groupContainer = document.createElement('div');
+        groupContainer.className = 'habit-group';
+
+        const group = groupId === 'none' ? null : this.groupManager.getGroupById(groupId);
+        const groupName = group ? group.name : i18n("noneGroupName");
+        const isCollapsed = this.collapsedGroups.has(groupId);
+        const groupHeader = this.createGroupHeader(groupContainer, groupId, groupName, habits.length, isCollapsed);
 
         groupContainer.appendChild(groupHeader);
 
@@ -1485,30 +1552,13 @@ export class HabitPanel {
 
         const isCollapsed = this.collapsedGroups.has(completedGroupId);
 
-        const groupHeader = document.createElement('div');
-        groupHeader.className = 'habit-group__header';
-        groupHeader.setAttribute('aria-expanded', String(!isCollapsed));
-
-        const collapseIcon = document.createElement('span');
-        collapseIcon.className = 'habit-group__collapse-icon';
-        collapseIcon.innerHTML = `<svg aria-hidden="true" style="width:12px;height:12px;margin:0;"><use xlink:href="#${isCollapsed ? 'iconRight' : 'iconDown'}"></use></svg>`;
-
-        const groupTitle = document.createElement('span');
-        groupTitle.className = 'habit-group__title';
-        groupTitle.innerHTML = `${i18n("todayCheckedSection")}<span class="habit-group__count">${completedHabits.length}</span>`;
-
-        groupHeader.appendChild(collapseIcon);
-        groupHeader.appendChild(groupTitle);
-        groupHeader.addEventListener('click', () => {
-            const currentlyCollapsed = this.collapsedGroups.has(completedGroupId);
-            if (currentlyCollapsed) {
-                this.collapsedGroups.delete(completedGroupId);
-            } else {
-                this.collapsedGroups.add(completedGroupId);
-            }
-            this.saveCollapseStates();
-            this.toggleGroupCollapseUI(groupContainer, !currentlyCollapsed);
-        });
+        const groupHeader = this.createGroupHeader(
+            groupContainer,
+            completedGroupId,
+            i18n("todayCheckedSection"),
+            completedHabits.length,
+            isCollapsed
+        );
 
         groupContainer.appendChild(groupHeader);
 

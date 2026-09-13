@@ -336,6 +336,56 @@ export class ProjectPanel {
         this.container.classList.add('project-panel');
         this.container.innerHTML = '';
 
+        // 与任务、习惯侧栏的分组头保持一致
+        try {
+            let style = document.getElementById('project-panel-section-header-style') as HTMLStyleElement | null;
+            if (!style) {
+                style = document.createElement('style');
+                style.id = 'project-panel-section-header-style';
+                document.head.appendChild(style);
+            }
+            style.textContent = `
+                .project-panel .reminder-section-header {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    margin: 10px 0 8px;
+                    padding: 8px 10px;
+                    color: var(--b3-theme-on-surface);
+                    background: var(--b3-theme-surface-lighter);
+                    border-radius: 6px;
+                    cursor: pointer;
+                    user-select: none;
+                }
+                .project-panel .project-list > .project-group:first-child > .reminder-section-header {
+                    margin-top: 0;
+                }
+                .project-panel .reminder-section-header__title {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    min-width: 0;
+                    font-weight: 600;
+                }
+                .project-panel .reminder-section-header__count {
+                    margin-left: auto;
+                    color: var(--b3-theme-on-surface-light);
+                    font-size: 12px;
+                }
+                .project-panel .reminder-section-header__arrow {
+                    width: 14px;
+                    height: 14px;
+                    color: var(--b3-theme-on-surface-light);
+                    transition: transform 0.15s ease;
+                }
+                .project-panel .reminder-section-header[data-collapsed="true"] .reminder-section-header__arrow {
+                    transform: rotate(-90deg);
+                }
+            `;
+        } catch (error) {
+            console.warn('注入项目状态分组头样式失败:', error);
+        }
+
         // 标题部分
         const header = document.createElement('div');
         header.className = 'project-header';
@@ -2954,57 +3004,41 @@ export class ProjectPanel {
         const statusId = status.id || 'unknown';
         const statusName = status.name || statusId;
         const statusIcon = status.icon || '';
+        const collapsed = !!this.groupCollapsedState[statusId];
 
         const groupWrapper = document.createElement('div');
         groupWrapper.className = 'project-group';
         groupWrapper.dataset.statusId = statusId;
 
         const header = document.createElement('div');
-        header.className = 'project-group__header';
-        // make header sticky so it stays at top while scrolling within the panel
-        // compute top offset based on the main header height to avoid overlapping
-
-        header.style.cssText = `display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 6px;   z-index:3; background: var(--b3-theme-surface); border-bottom: 1px solid rgba(0,0,0,0.04);`;
-
-        const left = document.createElement('div');
-        left.style.cssText = 'display:flex; align-items:center; gap:8px;';
-
-        const iconSpan = document.createElement('span');
-        iconSpan.className = 'project-group__icon';
-        iconSpan.textContent = statusIcon;
-        left.appendChild(iconSpan);
+        header.className = 'project-group__header reminder-section-header';
+        header.dataset.collapsed = String(collapsed);
+        header.setAttribute('role', 'button');
+        header.setAttribute('tabindex', '0');
+        header.setAttribute('aria-expanded', String(!collapsed));
 
         const titleSpan = document.createElement('span');
-        titleSpan.className = 'project-group__title';
-        titleSpan.textContent = `${statusName} (${projects.length})`;
-        left.appendChild(titleSpan);
+        titleSpan.className = 'project-group__title reminder-section-header__title';
+        if (statusIcon) {
+            const iconSpan = document.createElement('span');
+            iconSpan.className = 'project-group__icon';
+            iconSpan.textContent = statusIcon;
+            titleSpan.appendChild(iconSpan);
+        }
+        titleSpan.appendChild(document.createTextNode(statusName));
 
-        header.appendChild(left);
+        const countSpan = document.createElement('span');
+        countSpan.className = 'reminder-section-header__count';
+        countSpan.textContent = String(projects.length);
 
-        const right = document.createElement('div');
-        right.style.cssText = 'display:flex; align-items:center; gap:8px;';
+        const toggleIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        toggleIcon.classList.add('project-group__toggle-icon', 'reminder-section-header__arrow');
+        toggleIcon.setAttribute('aria-hidden', 'true');
+        toggleIcon.innerHTML = '<use xlink:href="#iconDown"></use>';
 
-        // toggle button as chevron icon on the right
-        const toggleBtn = document.createElement('button');
-        toggleBtn.className = 'b3-button b3-button--tiny b3-button--outline project-group__toggle';
-        toggleBtn.classList.add('ariaLabel'); toggleBtn.setAttribute('aria-label', this.groupCollapsedState[statusId] ? '展开该分组' : '折叠该分组');
-        toggleBtn.style.display = 'inline-flex';
-        toggleBtn.style.alignItems = 'center';
-        toggleBtn.style.justifyContent = 'center';
-        toggleBtn.style.width = '28px';
-        toggleBtn.style.height = '28px';
-        toggleBtn.style.padding = '0';
-
-        toggleBtn.innerHTML = `<svg class="project-group__toggle-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-
-        // initial rotation based on collapsed state
-        const collapsed = !!this.groupCollapsedState[statusId];
-        const iconEl = toggleBtn.querySelector('.project-group__toggle-icon') as HTMLElement;
-        if (iconEl) iconEl.style.transform = collapsed ? 'rotate(-180deg)' : 'rotate(0deg)';
-
-        right.appendChild(toggleBtn);
-
-        header.appendChild(right);
+        header.appendChild(titleSpan);
+        header.appendChild(countSpan);
+        header.appendChild(toggleIcon);
 
         groupWrapper.appendChild(header);
 
@@ -3022,18 +3056,25 @@ export class ProjectPanel {
             listContainer.appendChild(projectEl);
         });
 
-        toggleBtn.addEventListener('click', () => {
+        const toggleGroup = () => {
             const isCollapsedNow = !!this.groupCollapsedState[statusId];
             this.groupCollapsedState[statusId] = !isCollapsedNow;
+            const isCollapsed = this.groupCollapsedState[statusId];
+            header.dataset.collapsed = String(isCollapsed);
+            header.setAttribute('aria-expanded', String(!isCollapsed));
 
-            if (this.groupCollapsedState[statusId]) {
+            if (isCollapsed) {
                 listContainer.style.display = 'none';
-                if (iconEl) iconEl.style.transform = 'rotate(-180deg)';
-                toggleBtn.classList.add('ariaLabel'); toggleBtn.setAttribute('aria-label', '展开该分组');
             } else {
                 listContainer.style.display = 'flex';
-                if (iconEl) iconEl.style.transform = 'rotate(0deg)';
-                toggleBtn.classList.add('ariaLabel'); toggleBtn.setAttribute('aria-label', '折叠该分组');
+            }
+        };
+
+        header.addEventListener('click', toggleGroup);
+        header.addEventListener('keydown', (event: KeyboardEvent) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                toggleGroup();
             }
         });
 
