@@ -1318,18 +1318,20 @@ export class CalendarView {
         }));
 
         // 习惯打卡时间显示开关
-        displaySettingsDropdown.appendChild(createSwitchItem(i18n("showHabitCheckInTime") || "显示习惯实际打卡时间", this.showHabitCheckInTime, async (checked) => {
+        const showHabitCheckInTimeItem = createSwitchItem(i18n("showHabitCheckInTime") || "显示习惯实际打卡时间", this.showHabitCheckInTime, async (checked) => {
             this.showHabitCheckInTime = checked;
             await this.calendarConfigManager.setShowHabitCheckInTime(checked);
             await this.refreshEvents();
-        }));
+        });
+        displaySettingsDropdown.appendChild(showHabitCheckInTimeItem);
 
         // 始终显示习惯提醒时间开关
-        displaySettingsDropdown.appendChild(createSwitchItem(i18n("alwaysShowHabitReminderTime") || "日历视图始终显示习惯提醒时间", this.alwaysShowHabitReminderTime, async (checked) => {
+        const alwaysShowHabitReminderTimeItem = createSwitchItem(i18n("alwaysShowHabitReminderTime") || "日历视图始终显示习惯提醒时间", this.alwaysShowHabitReminderTime, async (checked) => {
             this.alwaysShowHabitReminderTime = checked;
             await this.calendarConfigManager.setAlwaysShowHabitReminderTime(checked);
             await this.refreshEvents();
-        }));
+        });
+        displaySettingsDropdown.appendChild(alwaysShowHabitReminderTimeItem);
 
         // 任务样式设置（无复选框 / 有复选框）
         const taskStyleLabel = document.createElement('div');
@@ -1470,6 +1472,17 @@ export class CalendarView {
         this.darkOpacityValueEl = darkValueEl;
         displaySettingsDropdown.appendChild(darkOpacityItem);
 
+        // 习惯日历只展示与习惯相关的显示设置，避免混入任务专用选项
+        if (this.openedFromHabitPanel) {
+            statusLabel.innerText = i18n("habitCheckIn") || "习惯打卡情况";
+            displaySettingsDropdown.replaceChildren(
+                statusLabel,
+                statusGroup,
+                showHabitCheckInTimeItem,
+                alwaysShowHabitReminderTimeItem
+            );
+        }
+
         displaySettingsContainer.appendChild(displaySettingsDropdown);
         if (!this.isDockMode) {
             filterGroup.appendChild(displaySettingsContainer);
@@ -1566,6 +1579,7 @@ export class CalendarView {
             habitToolbarActions.style.gap = '8px';
             toolbar.appendChild(habitToolbarActions);
             habitToolbarActions.appendChild(refreshBtn);
+            habitToolbarActions.appendChild(displaySettingsContainer);
             const openTaskCalendarBtn = document.createElement('button');
             openTaskCalendarBtn.className = 'b3-button b3-button--outline';
             openTaskCalendarBtn.style.padding = '6px';
