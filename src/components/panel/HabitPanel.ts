@@ -1407,7 +1407,6 @@ export class HabitPanel {
                         today,
                         async (updatedHabit) => {
                             await this.saveHabit(updatedHabit);
-                            this.loadHabits();
                         },
                         this.plugin
                     );
@@ -2353,10 +2352,7 @@ export class HabitPanel {
         emojiConfig: HabitCheckInEmoji,
         options?: { skipPromptNote?: boolean; silent?: boolean }
     ) {
-        const success = await HabitPanel.checkInHabit(habit, emojiConfig, this.plugin, options);
-        if (success) {
-            this.loadHabits();
-        }
+        await HabitPanel.checkInHabit(habit, emojiConfig, this.plugin, options);
     }
 
     public static cloneHabitData(habit: Habit | null | undefined): Habit | undefined {
@@ -2434,7 +2430,6 @@ export class HabitPanel {
                 console.warn('删除习惯打卡文件失败:', e);
             }
             showMessage(i18n("deleteSuccess"));
-            this.loadHabits();
 
             window.dispatchEvent(new CustomEvent('habitUpdated'));
             window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'habitPanel' } }));
@@ -2449,7 +2444,6 @@ export class HabitPanel {
     private async showNewHabitDialog() {
         const dialog = new HabitEditDialog(null, async (habit) => {
             await this.saveHabit(habit);
-            this.loadHabits();
         }, this.plugin);
         await dialog.show();
     }
@@ -2458,7 +2452,6 @@ export class HabitPanel {
         const oldHabitSnapshot = this.cloneHabit(habit);
         const dialog = new HabitEditDialog(habit, async (updatedHabit) => {
             await this.saveHabit(updatedHabit, oldHabitSnapshot);
-            this.loadHabits();
         }, this.plugin);
         await dialog.show();
     }
@@ -2484,7 +2477,6 @@ export class HabitPanel {
     private showHabitStats(habit: Habit) {
         const dialog = new HabitStatsDialog(habit, async (updatedHabit) => {
             await this.saveHabit(updatedHabit);
-            this.loadHabits();
         }, this.plugin);
         dialog.show();
     }
@@ -2586,9 +2578,6 @@ export class HabitPanel {
 
             // 保存到数据库
             await this.saveHabit(habit);
-
-            // 刷新显示
-            this.loadHabits();
         });
         dialog.show();
     }
