@@ -1231,7 +1231,7 @@ export class TaskRenderer {
                 width: fit-content;
             `;
 
-            const estimatedLine = task.estimatedPomodoroDuration ? `<span class="ariaLabel" aria-label='${i18n('estimatedPomodoro') || "预计番茄"}'>${i18n('estimated') || "预计"}: ${task.estimatedPomodoroDuration}</span>` : '';
+            const estimatedLine = !task.isRepeatInstance && task.estimatedPomodoroDuration ? `<span class="ariaLabel" aria-label='${i18n('estimatedPomodoro') || "预计番茄"}'>${i18n('estimated') || "预计"}: ${task.estimatedPomodoroDuration}</span>` : '';
             let totalLine = '';
             let todayLine = '';
 
@@ -1242,6 +1242,9 @@ export class TaskRenderer {
 
                 const repeatingFocusText = repeatingFocus > 0 ? ` ⏱ ${this.formatMinutesToString(repeatingFocus)}` : '';
                 const instanceFocusText = focusTime > 0 ? ` ⏱ ${this.formatMinutesToString(focusTime)}` : '';
+                const instanceEstimatedText = task.estimatedPomodoroDuration
+                    ? `<span class="ariaLabel" aria-label='${i18n('estimatedPomodoro') || "预计番茄"}'>（${i18n('estimated') || "预计"}：${task.estimatedPomodoroDuration}）</span>`
+                    : '';
 
                 totalLine = `<div style="margin-top:${estimatedLine ? '6px' : '0'}; font-size:12px;">
                     <div class="ariaLabel" aria-label="${i18n('seriesTotalTomatoTitle') || "系列累计番茄钟: "}${repeatingTotal}">
@@ -1250,7 +1253,7 @@ export class TaskRenderer {
                     </div>
                     <div class="ariaLabel" aria-label="${i18n('instanceTomatoTitle') || "本实例番茄钟: "}${instanceCount}" style="margin-top:4px; opacity:0.95;">
                         <span>${i18n('currentInstance') || "本次"}: 🍅 ${instanceCount}</span>
-                        <span style="margin-left:8px; opacity:0.9;">${instanceFocusText}</span>
+                        <span style="margin-left:8px; opacity:0.9;">${instanceFocusText}${instanceEstimatedText}</span>
                     </div>
                  </div>`;
             } else {
