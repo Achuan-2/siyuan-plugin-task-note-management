@@ -520,7 +520,7 @@ export async function importIcsFile(
         const { merged, stats } = mergeImportedEvents(existingReminders, events, options, defaultKanbanStatus);
 
         // 5. 保存合并后的数据
-        await plugin.saveData('reminder.json', merged);
+        await plugin.saveReminderData(merged);
 
         // 6. 触发更新事件
         window.dispatchEvent(new CustomEvent('reminderUpdated'));

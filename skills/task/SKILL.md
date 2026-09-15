@@ -5,6 +5,13 @@ description: 用于在思源任务笔记管理插件中管理任务、任务提�
 
 # 任务管理技能 (task)
 
+## 并发写入说明
+
+- MCP 创建、更新、删除任务与插件界面保存共用同一条内核写入队列；写入时会基于最新任务数据执行，避免双方互相覆盖整个任务文件。
+- 界面与 MCP 修改不同任务或同一任务的不同字段时会自动合并；如果双方同时修改同一字段，界面保存会中止并提示冲突，不会静默覆盖 MCP 的新值。
+- 修改或删除既有任务前，建议先用 `get_task` 读取任务，并把返回的 `updatedAt` 作为 `expectedUpdatedAt` 一并提交；旧任务没有 `updatedAt` 时使用 `createdAt`。如果用户已在界面修改过该任务，操作会被拒绝，从而避免 AI 用旧数据覆盖用户的新修改。
+- 若工具返回“父任务已不存在或已被修改”等并发变化错误，应先用 `get_task` 或 `search_task` 重新读取最新数据，再决定是否重试，不能直接重复提交旧参数。
+
 ### 1. `search_task`
 根据关键字、ID、项目、日期等条件搜索任务。
 > 注意：为了节省 token 消耗，如果在搜索中指定了日期过滤（如传入了 `date`），`repeat.instances` 字段在搜索结果中将仅保留该日期范围的实例数据；如果不指定日期过滤，则会完全隐藏 `repeat.instances` 字段。要获取非查询日期的完整实例详情，请使用 `get_task` 接口。
@@ -74,11 +81,13 @@ description: 用于在思源任务笔记管理插件中管理任务、任务提�
 批量修改更新任务。
 - **updates** (对象数组, 必填): 更新项列表。每个对象必须包含：
   - **id** (字符串, 必填): 要修改的任务 ID。
+  - **expectedUpdatedAt** (字符串, 可选但推荐): 最近一次 `get_task`/`search_task` 返回的 `updatedAt`；旧任务没有该字段时使用 `createdAt`。任务已被其他操作修改时，本次更新会被拒绝。
   - 其他在 `create_task` 中支持的可更新参数 (包含 `reminderTimes`, `blockId`, `url`, `kanbanStatus`, `customProgress`, `linkedHabitId` 及打卡设置, `repeat` 对象等；不包含仅用于创建的 `parentId` 和 `tasks`)。
 
 ### 6. `delete_task`
 删除任务.
 - **id** (字符串, 必填): 任务 ID。
+- **expectedUpdatedAt** (字符串, 可选但推荐): 最近读取到的 `updatedAt`；旧任务没有该字段时使用 `createdAt`。任务已被其他操作修改时拒绝删除。
 
 ### 7. `list_categories`
 列出所有任务分类。
