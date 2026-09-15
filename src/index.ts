@@ -35,7 +35,7 @@ import { ProjectKanbanView } from "./components/panel/ProjectKanbanView";
 import { PomodoroManager } from "./components/dataManager/pomodoroManager";
 import SettingPanelComponent from "./SettingPanel.svelte";
 import { exportIcsFile } from "./utils/icsExport";
-import { getFile, sendNotification, cancelNotification, pushErrMsg, pushMsg, isInMobileApp, batchUpdateTaskListItemMarker, isTaskListLikeBlock, forwardProxy, type TaskListItemMarker } from "./api";
+import { getFile, sendNotification, cancelNotification, pushErrMsg, pushMsg, isInMobileApp, forwardProxy } from "./api";
 import { resolveAudioPath, playTaskCompleteSound as playTaskCompleteSoundUtil, playNotificationSound as playNotificationSoundUtil, getNotificationSound as getNotificationSoundUtil } from "./utils/audioUtils";
 import { showVipDialog } from "./components/vip/VipDialog";
 import { performDataMigration } from "./components/dataManager/dataMigration";
@@ -3592,14 +3592,6 @@ export default class ReminderPlugin extends Plugin {
             });
         }
 
-        if (this.shouldShowTaskListStatusMenu(blockElements)) {
-            detail.menu.addItem({
-                iconHTML: "✅",
-                label: i18n("taskListStatusMenu") || "任务状态设置",
-                submenu: this.createTaskListStatusSubmenu(blockElements)
-            });
-        }
-
         // 添加查看绑定任务菜单项（仅当选中单个块且有custom-bind-reminders属性时显示）
         if (blockElements.length === 1) {
             const blockElement = blockElements[0];
@@ -3640,90 +3632,6 @@ export default class ReminderPlugin extends Plugin {
             return blockElement.querySelector('[data-type="NodeList"]') !== null;
         }
         return false;
-    }
-
-    private isTaskListElement(blockElement: HTMLElement): boolean {
-        const dataType = blockElement?.getAttribute("data-type");
-        if (dataType === "NodeList") {
-            return blockElement.getAttribute("data-subtype") === "t";
-        }
-        if (dataType === "NodeListItem") {
-            return blockElement.getAttribute("data-subtype") === "t"
-                || blockElement.querySelector(':scope > .protyle-action--task') !== null;
-        }
-        return false;
-    }
-
-    private shouldShowTaskListStatusMenu(blockElements: HTMLElement[]): boolean {
-        return blockElements.some((blockElement) => this.isTaskListElement(blockElement));
-    }
-
-    private createTaskListStatusSubmenu(blockElements: HTMLElement[]): any[] {
-        const statusOptions: Array<{ label: string; marker: TaskListItemMarker; iconHTML: string }> = [
-            { label: i18n("taskListStatusInProgress") || "进行中", marker: "/", iconHTML: "" },
-            { label: i18n("taskListStatusAbandoned") || "放弃", marker: "-", iconHTML: "" },
-            { label: i18n("taskListStatusCompleted") || "已完成", marker: "x", iconHTML: "" }
-        ];
-
-        return statusOptions.map((option) => ({
-            iconHTML: option.iconHTML,
-            label: option.label,
-            click: async () => {
-                await this.updateTaskListStatusForBlocks(blockElements, option.marker, option.label);
-            }
-        }));
-    }
-
-    private async updateTaskListStatusForBlocks(blockElements: HTMLElement[], marker: TaskListItemMarker, statusLabel: string): Promise<void> {
-        try {
-            const blockIds = await this.getTaskListStatusTargetIds(blockElements);
-            if (blockIds.length === 0) {
-                showMessage(i18n("taskListStatusTargetNotFound") || "未找到可更新状态的任务列表项", 3000, "info");
-                return;
-            }
-
-            await batchUpdateTaskListItemMarker(blockIds.map((id) => ({ id, marker })));
-            showMessage(
-                i18n("taskListStatusUpdated", {
-                    status: statusLabel,
-                    count: blockIds.length.toString()
-                }) || `已将 ${blockIds.length} 个任务设置为${statusLabel}`,
-                3000
-            );
-        } catch (error) {
-            console.error("更新任务列表状态失败:", error);
-            showMessage(
-                i18n("taskListStatusUpdateFailed", { status: statusLabel }) || `设置任务状态失败：${statusLabel}`,
-                3000,
-                "error"
-            );
-        }
-    }
-
-    private async getTaskListStatusTargetIds(blockElements: HTMLElement[]): Promise<string[]> {
-        const taskListItemIds = new Set<string>();
-
-        for (const blockElement of blockElements) {
-            const blockId = blockElement?.getAttribute("data-node-id");
-            if (!blockId) continue;
-
-            const dataType = blockElement.getAttribute("data-type");
-            if (dataType === "NodeList") {
-                const listItemBlockIds = await this.getListItemBlockIds(blockId);
-                for (const id of listItemBlockIds) {
-                    if (await isTaskListLikeBlock(id)) {
-                        taskListItemIds.add(id);
-                    }
-                }
-                continue;
-            }
-
-            if (await isTaskListLikeBlock(blockId)) {
-                taskListItemIds.add(blockId);
-            }
-        }
-
-        return Array.from(taskListItemIds);
     }
 
     private async buildPomodoroReminderFromBlock(blockId: string): Promise<any | null> {
