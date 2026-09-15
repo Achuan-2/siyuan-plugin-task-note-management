@@ -26,7 +26,7 @@ description: 用于在思源任务笔记管理插件中管理任务、任务提�
 - **date** (字符串, 可选): 指定重复任务实例的具体日期 `YYYY-MM-DD`。
 
 ### 3. `create_task`
-创建新任务。
+创建单个新任务。传入已有任务的 `parentId` 时，新任务会作为该任务的子任务创建。
 - **title** (字符串, 必填): 任务标题。
 - **date** (字符串, 可选): 任务日期 `YYYY-MM-DD`。省略或传入 `""`（空字符串）可创建无日期任务。
 - **note** (字符串, 可选): 备注信息。
@@ -41,6 +41,7 @@ description: 用于在思源任务笔记管理插件中管理任务、任务提�
 - **priority** (字符串, 可选): 优先级 (`"high"`, `"medium"`, `"low"`, `"none"`)。
 - **projectId** (字符串, 可选): 项目 ID。
 - **categoryId** (字符串, 可选): 分类 ID。
+- **parentId** (字符串, 可选): 已有父任务的 ID。传入后会创建单个子任务；支持普通任务 ID 和 `任务ID_YYYY-MM-DD` 格式的重复任务实例 ID。父任务不存在或属于订阅任务时不会创建。
 - **completed** (布尔值, 可选): 是否完成，默认为 `false`。
 - **blockId** (字符串, 可选): 绑定的思源块 ID。设置后会自动获取并关联文档 ID，并在思源中同步块属性与书签。
 - **url** (字符串, 可选): 网页链接。
@@ -63,21 +64,23 @@ description: 用于在思源任务笔记管理插件中管理任务、任务提�
   - **endCount** (数字, 可选): 限制重复的总次数。
   - **reminderSkipWeekendMode** (字符串, 可选): 跳过周末选项 (`"none"`, `"skip"`, `"only_weekend"`)。
   - **reminderSkipHolidays** (布尔值, 可选): 是否跳过法定节假日。
-- **subtasks** (对象数组, 可选): 要一并创建的子任务列表。创建时会自动绑定其 `parentId` 为当前创建的主任务 ID。每个子任务项支持的属性有：
-  - **title** (字符串, 必填): 子任务标题。
-  - 以及上面支持的其他可选参数 (备注、日期、时间、额外提醒时间、优先级、绑定的块 ID、网页链接、看板状态、自定义进度条、绑定的习惯 ID 及打卡设置等)。
+### 4. `create_tasks`
+批量创建任务或批量给已有任务创建同级子任务。
+- **tasks** (对象数组, 必填): 要创建的任务列表，不能为空。每项都必须包含 `title`，并支持 `create_task` 的任务数据属性，例如日期、时间、额外提醒、优先级、项目、分类、重复设置、绑定块、网页链接、看板状态、自定义进度和习惯联动等；不在列表项中嵌套 `parentId` 或其他任务列表。
+- **parentId** (字符串, 可选): 不传时批量创建普通任务；传入已有任务 ID 时，`tasks` 中的所有任务都会成为该任务的同级子任务。支持重复任务实例 ID；子任务省略日期时会继承该实例日期。
+- **projectId** (字符串, 可选): 所有列表项的公共默认项目。任务项自己的 `projectId` 优先；两处都省略且传入了 `parentId` 时，继承父任务项目。
 
-### 4. `update_task`
+### 5. `update_task`
 批量修改更新任务。
 - **updates** (对象数组, 必填): 更新项列表。每个对象必须包含：
   - **id** (字符串, 必填): 要修改的任务 ID。
-  - 其他在 `create_task` 中支持的可选参数 (包含 `reminderTimes`, `blockId`, `url`, `kanbanStatus`, `customProgress`, `linkedHabitId` 及打卡设置, `repeat` 对象等)。
+  - 其他在 `create_task` 中支持的可更新参数 (包含 `reminderTimes`, `blockId`, `url`, `kanbanStatus`, `customProgress`, `linkedHabitId` 及打卡设置, `repeat` 对象等；不包含仅用于创建的 `parentId` 和 `tasks`)。
 
-### 5. `delete_task`
+### 6. `delete_task`
 删除任务.
 - **id** (字符串, 必填): 任务 ID。
 
-### 6. `list_categories`
+### 7. `list_categories`
 列出所有任务分类。
 - （无参数）
 
@@ -122,20 +125,51 @@ description: 用于在思源任务笔记管理插件中管理任务、任务提�
 }
 ```
 
-### 同时创建任务与多个子任务（可不填日期）
+### 给已有任务创建子任务
 ```json
 {
   "action": "create_task",
-  "title": "准备技术方案设计",
-  "subtasks": [
+  "title": "补充接口测试",
+  "parentId": "reminder_已有主任务ID"
+}
+```
+
+### 批量创建普通任务
+```json
+{
+  "action": "create_tasks",
+  "tasks": [
     {
-      "title": "编写架构设计草稿",
-      "date": "2026-07-11",
+      "title": "梳理接口输入",
       "priority": "high"
     },
     {
-      "title": "与前端开发团队对齐接口",
+      "title": "补充接口测试",
       "date": "2026-07-12"
+    },
+    {
+      "title": "更新使用文档"
+    }
+  ]
+}
+```
+
+### 给已有任务批量创建同级子任务
+```json
+{
+  "action": "create_tasks",
+  "parentId": "reminder_已有主任务ID",
+  "tasks": [
+    {
+      "title": "梳理接口输入",
+      "priority": "high"
+    },
+    {
+      "title": "补充接口测试",
+      "date": "2026-07-12"
+    },
+    {
+      "title": "更新使用文档"
     }
   ]
 }
