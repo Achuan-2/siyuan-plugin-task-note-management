@@ -16,7 +16,6 @@ export interface ReminderItem {
     note?: string;       // 新增备注字段
     completed: boolean;  // 是否已完成
     createdAt: string;   // 创建时间
-    updatedAt?: string;  // 最近更新时间
     notified?: boolean;
     kanbanStatus?: string;  // 任务类型：长期、短期或进行中
     url?: string;        // 网页链接，可选

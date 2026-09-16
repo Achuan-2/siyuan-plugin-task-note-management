@@ -134,7 +134,6 @@ export function createTaskTool(
                     endTime: { type: "string", description: "结束时间 HH:MM" },
                     categoryId: { type: "string", description: "分类 ID" },
                     parentId: { type: "string", description: "已有父任务 ID。create_task 中创建单个子任务；create_tasks 中批量创建子任务。可传普通任务 ID 或重复任务实例 ID" },
-                    expectedUpdatedAt: { type: "string", description: "delete_task 可选：从最近一次 get_task/search_task 结果取得的 updatedAt（旧任务没有时使用 createdAt）。值不匹配时拒绝删除，避免覆盖界面并发修改" },
                     blockId: { type: "string", description: "绑定的思源块 ID，可选" },
                     url: { type: "string", description: "网页链接，可选" },
                     kanbanStatus: { type: "string", description: "看板状态，可选" },
@@ -179,7 +178,6 @@ export function createTaskTool(
                             type: "object",
                             properties: {
                                 id: { type: "string" },
-                                expectedUpdatedAt: { type: "string", description: "可选并发校验值：使用最近读取结果的 updatedAt；旧任务没有 updatedAt 时使用 createdAt" },
                                 title: { type: "string" },
                                 note: { type: "string" },
                                 date: { type: "string" },
@@ -297,7 +295,7 @@ export function createTaskTool(
                 defaultDate?: string,
                 fieldName = "tasks"
             ) => {
-                const preparedTasks: Array<{ input: any; blockId?: string; projectId?: string }> = [];
+                const createdTasks: any[] = [];
                 for (const item of items) {
                     const itemField = `${fieldName}[]`;
                     const title = assertString(item.title, `${itemField}.title`);
@@ -344,42 +342,32 @@ export function createTaskTool(
                         ? completedInput
                         : (kanbanStatus === 'completed' ? true : undefined);
 
-                    preparedTasks.push({
-                        input: {
-                            title,
-                            date,
-                            note: assertOptionalString(item.note, `${itemField}.note`),
-                            time: assertOptionalTimeString(item.time, `${itemField}.time`),
-                            reminderTimes: parseReminderTimes(item.reminderTimes, `${itemField}.reminderTimes`),
-                            endDate: assertOptionalDateString(item.endDate, `${itemField}.endDate`),
-                            endTime: assertOptionalTimeString(item.endTime, `${itemField}.endTime`),
-                            priority: assertOptionalEnum(item.priority, `${itemField}.priority`, ["high", "medium", "low", "none"]),
-                            projectId,
-                            categoryId,
-                            completed,
-                            parentId: targetParentId,
-                            repeat: assertOptionalObject(item.repeat, `${itemField}.repeat`),
-                            blockId,
-                            docId,
-                            url: assertOptionalString(item.url, `${itemField}.url`),
-                            kanbanStatus,
-                            customProgress: parseCustomProgress(item.customProgress, `${itemField}.customProgress`),
-                            linkedHabitId: assertOptionalString(item.linkedHabitId, `${itemField}.linkedHabitId`),
-                            linkedHabitSyncPomodoroToday: assertOptionalBoolean(item.linkedHabitSyncPomodoroToday, `${itemField}.linkedHabitSyncPomodoroToday`),
-                            linkedHabitAutoCheckInOnComplete: assertOptionalBoolean(item.linkedHabitAutoCheckInOnComplete, `${itemField}.linkedHabitAutoCheckInOnComplete`),
-                            linkedHabitAutoCheckInOptionKey: assertOptionalString(item.linkedHabitAutoCheckInOptionKey, `${itemField}.linkedHabitAutoCheckInOptionKey`),
-                            linkedHabitAutoCheckInEmoji: assertOptionalString(item.linkedHabitAutoCheckInEmoji, `${itemField}.linkedHabitAutoCheckInEmoji`),
-                        },
-                        blockId,
+                    const task = await reminderManager.createReminder({
+                        title,
+                        date,
+                        note: assertOptionalString(item.note, `${itemField}.note`),
+                        time: assertOptionalTimeString(item.time, `${itemField}.time`),
+                        reminderTimes: parseReminderTimes(item.reminderTimes, `${itemField}.reminderTimes`),
+                        endDate: assertOptionalDateString(item.endDate, `${itemField}.endDate`),
+                        endTime: assertOptionalTimeString(item.endTime, `${itemField}.endTime`),
+                        priority: assertOptionalEnum(item.priority, `${itemField}.priority`, ["high", "medium", "low", "none"]),
                         projectId,
+                        categoryId,
+                        completed,
+                        parentId: targetParentId,
+                        repeat: assertOptionalObject(item.repeat, `${itemField}.repeat`),
+                        blockId,
+                        docId,
+                        url: assertOptionalString(item.url, `${itemField}.url`),
+                        kanbanStatus,
+                        customProgress: parseCustomProgress(item.customProgress, `${itemField}.customProgress`),
+                        linkedHabitId: assertOptionalString(item.linkedHabitId, `${itemField}.linkedHabitId`),
+                        linkedHabitSyncPomodoroToday: assertOptionalBoolean(item.linkedHabitSyncPomodoroToday, `${itemField}.linkedHabitSyncPomodoroToday`),
+                        linkedHabitAutoCheckInOnComplete: assertOptionalBoolean(item.linkedHabitAutoCheckInOnComplete, `${itemField}.linkedHabitAutoCheckInOnComplete`),
+                        linkedHabitAutoCheckInOptionKey: assertOptionalString(item.linkedHabitAutoCheckInOptionKey, `${itemField}.linkedHabitAutoCheckInOptionKey`),
+                        linkedHabitAutoCheckInEmoji: assertOptionalString(item.linkedHabitAutoCheckInEmoji, `${itemField}.linkedHabitAutoCheckInEmoji`),
                     });
-                }
 
-                const createdTasks = await reminderManager.createReminders(
-                    preparedTasks.map((prepared) => prepared.input),
-                );
-
-                for (const { blockId, projectId } of preparedTasks) {
                     if (blockId) {
                         try {
                             if (projectId) {
@@ -392,6 +380,7 @@ export function createTaskTool(
                             console.warn('同步批量创建任务的绑定块属性失败:', error);
                         }
                     }
+                    createdTasks.push(task);
                 }
                 return createdTasks;
             };
@@ -606,7 +595,6 @@ export function createTaskTool(
                     const updates = assertArray(input.updates, "updates") as any[];
                     const normalized: any[] = [];
                     const plugin = (reminderManager as any).plugin;
-                    await reminderManager.reload();
 
                     for (const update of updates) {
                         assertDefined(update.id, "updates[].id");
@@ -656,7 +644,6 @@ export function createTaskTool(
 
                         const normalizedUpdate: any = {
                             id,
-                            expectedUpdatedAt: assertOptionalString(update.expectedUpdatedAt, "updates[].expectedUpdatedAt"),
                             title: assertOptionalString(update.title, "updates[].title"),
                             note: assertOptionalString(update.note, "updates[].note"),
                             date: assertOptionalDateString(update.date, "updates[].date"),
@@ -710,8 +697,7 @@ export function createTaskTool(
 
                 case "delete_task": {
                     const id = assertString(input.id, "id");
-                    const expectedUpdatedAt = assertOptionalString(input.expectedUpdatedAt, "expectedUpdatedAt");
-                    const success = await reminderManager.deleteReminder(id, expectedUpdatedAt);
+                    const success = await reminderManager.deleteReminder(id);
                     return successResponse({ success });
                 }
 

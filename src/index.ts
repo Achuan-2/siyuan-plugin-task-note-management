@@ -64,7 +64,6 @@ import { ChangelogUtils } from "./utils/changelogNotify";
 import { createPomodoroStartSubmenu as createSharedPomodoroStartSubmenu } from "./utils/pomodoroPresets";
 import { normalizeReminderSkipWeekendMode, shouldSkipReminderOnDate, type HolidayData } from "./utils/reminderSkipDate";
 import { DEFAULT_HABIT_MEMO_SYNC_TEMPLATE } from "./utils/habitMemoTemplate";
-import { cloneReminderData } from "./utils/reminderDataConcurrency";
 
 
 export const SETTINGS_FILE = "reminder-settings.json";
@@ -403,8 +402,6 @@ export default class ReminderPlugin extends Plugin {
     private preserveStandalonePomodoroOnUnload: boolean = false;
 
     private reminderDataCache: any = null;
-    private reminderDataBaselines = new WeakMap<object, any>();
-    private reminderSaveQueue: Promise<void> = Promise.resolve();
     private projectDataCache: any = null;
     private statusDataCache: any = null;
     private categoriesDataCache: any = null;
@@ -469,12 +466,10 @@ export default class ReminderPlugin extends Plugin {
         if (update || !this.reminderDataCache) {
             try {
                 const data = await this.loadData(REMINDER_DATA_FILE);
-                this.reminderDataCache = data && typeof data === 'object' ? data : {};
-                this.reminderDataBaselines.set(this.reminderDataCache, cloneReminderData(this.reminderDataCache));
+                this.reminderDataCache = data || {};
             } catch (error) {
                 console.error('Failed to load reminder data:', error);
                 this.reminderDataCache = {};
-                this.reminderDataBaselines.set(this.reminderDataCache, {});
             }
         }
         return this.reminderDataCache;
@@ -491,43 +486,8 @@ export default class ReminderPlugin extends Plugin {
                 }
             }
         }
-        const desired = cloneReminderData(data);
-        const operation = this.reminderSaveQueue
-            .catch(() => undefined)
-            .then(async () => {
-                const base = this.reminderDataBaselines.get(data)
-                    || cloneReminderData(this.reminderDataCache || {});
-
-                try {
-                    let saved = desired;
-                    if (this.kernel?.state?.code === 2 && this.kernel?.rpc?.call) {
-                        saved = await this.kernel.rpc.call['merge-reminder-data']({ base, desired });
-                    } else {
-                        // 内核未运行时 MCP 也不可用，直接保存不会与 MCP 并发。
-                        await this.saveData(REMINDER_DATA_FILE, desired);
-                    }
-
-                    if (data && typeof data === 'object') {
-                        Object.keys(data).forEach((key) => delete data[key]);
-                        Object.assign(data, cloneReminderData(saved));
-                    }
-                    this.reminderDataCache = data && typeof data === 'object' ? data : cloneReminderData(saved);
-                    if (this.reminderDataCache && typeof this.reminderDataCache === 'object') {
-                        this.reminderDataBaselines.set(this.reminderDataCache, cloneReminderData(saved));
-                    }
-                } catch (error) {
-                    await this.loadReminderData(true);
-                    window.dispatchEvent(new CustomEvent('reminderUpdated'));
-                    const message = error instanceof Error ? error.message : String(error);
-                    if (message.includes('任务数据已被其他操作修改')) {
-                        showMessage('任务已被 AI 或其他窗口修改，本次保存未覆盖新数据，请重新操作', 5000, 'error');
-                    }
-                    throw error;
-                }
-            });
-
-        this.reminderSaveQueue = operation.then(() => undefined, () => undefined);
-        return operation;
+        this.reminderDataCache = data;
+        await this.saveData(REMINDER_DATA_FILE, data);
     }
 
     /**

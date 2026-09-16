@@ -152,7 +152,6 @@ class KernelPlugin {
 
     private registry: ToolDefinition[] = [];
     private registeredToolNames: string[] = [];
-    private registeredRpcMethods: string[] = [];
 
     constructor() {
         this.siyuan = siyuan;
@@ -199,12 +198,6 @@ class KernelPlugin {
                 this.pomodoroManager.initialize(),
             ]);
 
-            const mergeReminderDataMethod = "merge-reminder-data";
-            await this.siyuan.rpc.bind(mergeReminderDataMethod, async (payload: any) => {
-                return this.reminderManager.mergeReminderData(payload?.base || {}, payload?.desired || {});
-            });
-            this.registeredRpcMethods.push(mergeReminderDataMethod);
-
             this.registry = createMcpRegistry({
                 reminderManager: this.reminderManager,
                 projectManager: this.projectManager,
@@ -242,15 +235,6 @@ class KernelPlugin {
         }
 
         this.registeredToolNames = [];
-
-        for (const name of this.registeredRpcMethods) {
-            try {
-                await this.siyuan.rpc.unbind(name);
-            } catch (error: any) {
-                await this.logger.error(`[kernel] failed to unregister RPC method ${name}:`, error);
-            }
-        }
-        this.registeredRpcMethods = [];
     }
 }
 
