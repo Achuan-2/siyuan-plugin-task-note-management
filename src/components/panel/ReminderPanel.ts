@@ -3098,7 +3098,7 @@ export class ReminderPanel {
                         isInstanceEdit: isInstanceEdit,
                         onSaved: async (savedReminder) => {
                             if (savedReminder && savedReminder.id) {
-                                await this.handleOptimisticSavedReminder(savedReminder);
+                                await this.handleOptimisticNoteSaved(savedReminder);
                             } else {
                                 await this.loadReminders();
                             }
@@ -10770,6 +10770,72 @@ export class ReminderPanel {
             console.error('显示新建任务对话框失败:', error);
             showMessage(i18n("openNewTaskDialogFailed"));
         }
+    }
+
+    /**
+     * 原地更新备注，避免备注这种不影响排序和筛选的修改触发整列表重绘。
+     */
+    private async handleOptimisticNoteSaved(savedReminder: any) {
+        if (!savedReminder || typeof savedReminder !== 'object' || !savedReminder.id) return;
+
+        const existing = this.remindersContainer.querySelector(`[data-reminder-id="${savedReminder.id}"]`) as HTMLElement | null;
+        if (!existing) {
+            await this.handleOptimisticSavedReminder(savedReminder);
+            return;
+        }
+
+        const cacheIndex = this.currentRemindersCache.findIndex(item => item.id === savedReminder.id);
+        const currentReminder = cacheIndex >= 0
+            ? this.currentRemindersCache[cacheIndex]
+            : this.allRemindersMap.get(savedReminder.id);
+        const updatedReminder = { ...currentReminder, ...savedReminder };
+
+        if (cacheIndex >= 0) {
+            this.currentRemindersCache[cacheIndex] = updatedReminder;
+        }
+        this.allRemindersMap.set(savedReminder.id, updatedReminder);
+
+        const parsed = parseReminderInstanceId(savedReminder.id);
+        const isRepeatInstance = !!savedReminder.isRepeatInstance || !!savedReminder.isInstance || parsed !== null;
+        const targetId = savedReminder.originalId || parsed?.originalId || savedReminder.id;
+        const instanceDate = savedReminder.instanceDate || parsed?.instanceDate;
+
+        if (isRepeatInstance && targetId && instanceDate) {
+            let cachedTarget = this.optimisticUpdatesCache?.get(targetId);
+            if (!cachedTarget) {
+                const originalReminder = this.originalRemindersCache?.[targetId] || this.allRemindersMap.get(targetId);
+                if (originalReminder) {
+                    cachedTarget = JSON.parse(JSON.stringify(originalReminder));
+                }
+            }
+            if (cachedTarget) {
+                patchRepeatInstanceState(cachedTarget, instanceDate, { note: savedReminder.note });
+                this.optimisticUpdatesCache?.set(targetId, cachedTarget);
+            }
+        } else {
+            this.optimisticUpdatesCache?.set(targetId, { ...updatedReminder, id: targetId });
+            if (this.originalRemindersCache) {
+                this.originalRemindersCache[targetId] = updatedReminder;
+            }
+        }
+
+        const level = Number.parseInt(existing.dataset.level || '0', 10) || 0;
+        const replacement = this.createReminderElementOptimized(
+            updatedReminder,
+            this.asyncDataCache,
+            getLogicalDateString(),
+            level,
+            this.currentRemindersCache
+        );
+
+        if (existing.classList.contains('reminder-section-item')) {
+            replacement.classList.add('reminder-section-item');
+        }
+        if (existing.dataset.reminderGroup) {
+            replacement.dataset.reminderGroup = existing.dataset.reminderGroup;
+        }
+        replacement.hidden = existing.hidden;
+        existing.replaceWith(replacement);
     }
 
     /**
