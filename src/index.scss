@@ -1221,6 +1221,123 @@
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
+.habit-week-navigation {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    margin-bottom: 8px;
+}
+
+.habit-week-navigation__button {
+    flex: none;
+    padding: 3px 6px;
+    border: 1px solid var(--b3-border-color);
+    border-radius: 5px;
+    background: var(--b3-theme-surface);
+    color: var(--b3-theme-on-surface);
+    cursor: pointer;
+    font: inherit;
+    font-size: 11px;
+}
+
+.habit-week-navigation__button:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.habit-week-navigation__range {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: 12px;
+}
+
+.habit-card__week {
+    margin: 6px 0 8px;
+}
+
+.habit-card__week-days {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 3px;
+}
+
+.habit-card__week-day {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    min-height: 48px;
+    padding: 2px 0;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: var(--b3-theme-surface-lighter);
+    color: var(--b3-theme-on-surface);
+    cursor: pointer;
+    font: inherit;
+    line-height: 1.2;
+}
+
+.habit-card__week-day--done {
+    background: color-mix(in srgb, var(--habit-color) 28%, var(--b3-theme-surface));
+}
+
+.habit-card__week-day--not-required {
+    opacity: 0.5;
+}
+
+.habit-card__week-day--today {
+    border-color: var(--b3-theme-primary);
+}
+
+.habit-card__week-day:hover,
+.habit-card__week-day:focus-visible {
+    border-color: var(--b3-theme-primary);
+    opacity: 1;
+}
+
+.habit-card__week-weekday {
+    color: var(--b3-theme-on-surface-light);
+    font-size: 10px;
+}
+
+.habit-card__week-date {
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.habit-card__week-status {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    align-content: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 14px;
+    gap: 0 1px;
+    font-size: 11px;
+    line-height: 1;
+}
+
+.habit-card__week-status--few {
+    font-size: 13px;
+}
+
+.habit-card__week-status--medium {
+    font-size: 11px;
+}
+
+.habit-card__week-status--many {
+    font-size: 9px;
+}
+
+.habit-card__week-status > span {
+    flex: none;
+}
+
 /* 底部操作区 */
 .habit-card__footer {
     display: flex;

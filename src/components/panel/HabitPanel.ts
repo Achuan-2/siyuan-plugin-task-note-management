@@ -1,6 +1,6 @@
 import { showMessage, Dialog, Menu, confirm, getBackend, getFrontend } from "siyuan";
 import { openBlock, pushMsg } from "../../api";
-import { getLocalDateTimeString, getLogicalDateString, getRelativeDateString } from "../../utils/dateUtils";
+import { getLocalDateString, getLocalDateTimeString, getLogicalDateString, getRelativeDateString } from "../../utils/dateUtils";
 import { HabitGroupManager } from "../dataManager/habitGroupManager";
 import { i18n } from "../../pluginInstance";
 import { HabitEditDialog } from "../dialog/HabitEditDialog";
@@ -26,6 +26,7 @@ import {
     HabitEmojiConfig as HabitCheckInEmoji,
     getHabitGoalType as getHabitGoalTypeUtil,
     getHabitCompletedDaysCount,
+    isHabitCheckInDayComplete,
     getHabitPomodoroTargetMinutes as getHabitPomodoroTargetMinutesUtil,
     getHabitProgressOnDate as getHabitProgressOnDateUtil,
     getHabitStreakDays,
@@ -57,6 +58,9 @@ export class HabitPanel {
     private selectedGroups: string[] = [];
     private currentSearchQuery: string = '';
     private showCompletedHabitsInTodayPending: boolean = true;
+    private showWeekCheckIns: boolean = false;
+    private weekStartDay: number = 1;
+    private weekOffset: number = 0;
     private checkInDaysMode: HabitCheckInDaysMode = 'total';
     private groupManager: HabitGroupManager;
     private habitUpdatedHandler: () => void;
@@ -138,6 +142,9 @@ export class HabitPanel {
                 this.showCompletedHabitsInTodayPending = settings.habitPanelShowCompletedInTodayPending;
             }
             this.checkInDaysMode = settings.habitPanelCheckInDaysMode === 'streak' ? 'streak' : 'total';
+            this.showWeekCheckIns = settings.habitPanelShowWeekCheckIns === true;
+            this.weekStartDay = Number.isInteger(settings.weekStartDay) && settings.weekStartDay >= 0 && settings.weekStartDay <= 6
+                ? settings.weekStartDay : 1;
         } catch (error) {
             console.error('恢复习惯面板设置失败:', error);
         }
@@ -149,6 +156,7 @@ export class HabitPanel {
             settings.habitPanelSelectedGroups = this.selectedGroups;
             settings.habitPanelShowCompletedInTodayPending = this.showCompletedHabitsInTodayPending;
             settings.habitPanelCheckInDaysMode = this.checkInDaysMode;
+            settings.habitPanelShowWeekCheckIns = this.showWeekCheckIns;
             await this.plugin.saveSettings(settings);
         } catch (error) {
             console.error('保存习惯面板设置失败:', error);
@@ -457,6 +465,15 @@ export class HabitPanel {
                         label: i18n("showTodayPendingCompletedHabits") || "今日待打卡显示已完成习惯",
                         click: () => {
                             this.showCompletedHabitsInTodayPending = !this.showCompletedHabitsInTodayPending;
+                            void this.savePanelSettings();
+                            void this.loadHabits();
+                        }
+                    },
+                    {
+                        icon: this.showWeekCheckIns ? 'iconSelect' : '',
+                        label: i18n("habitShowWeekCheckIns") || "侧栏显示一周打卡",
+                        click: () => {
+                            this.showWeekCheckIns = !this.showWeekCheckIns;
                             void this.savePanelSettings();
                             void this.loadHabits();
                         }
@@ -937,11 +954,17 @@ export class HabitPanel {
 
     private renderHabits(habits: Habit[]) {
         this.habitsContainer.innerHTML = '';
+        if (this.showWeekCheckIns) {
+            this.habitsContainer.appendChild(this.createWeekNavigation());
+        }
 
         // 如果没有习惯，根据当前 tab 决定是否继续渲染已打卡区
         if (habits.length === 0) {
             if (this.currentTab !== 'today' || !this.showCompletedHabitsInTodayPending) {
-                this.habitsContainer.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--b3-theme-on-surface-light);">${i18n("noHabits")}</div>`;
+                const empty = document.createElement('div');
+                empty.style.cssText = 'padding: 20px; text-align: center; color: var(--b3-theme-on-surface-light);';
+                empty.textContent = i18n('noHabits');
+                this.habitsContainer.appendChild(empty);
                 return;
             }
             // 否则（today 且主区无待打卡习惯）继续渲染已打卡区
@@ -1341,6 +1364,10 @@ export class HabitPanel {
 
         card.appendChild(infoGrid);
 
+        if (this.showWeekCheckIns) {
+            card.appendChild(this.createWeekCheckIns(habit, today));
+        }
+
         // 番茄钟统计
         const pomodoroStats = this.getHabitPomodoroStats(habit.id);
         if (pomodoroStats.totalCount > 0 || pomodoroStats.totalFocusMinutes > 0) {
@@ -1361,8 +1388,8 @@ export class HabitPanel {
             card.appendChild(pomodoroSection);
         }
 
-        // 打卡 emoji 显示（根据当前视图显示对应日期的打卡记录）
-        if (checkIn && ((checkIn.entries && checkIn.entries.length > 0) || (checkIn.status && checkIn.status.length > 0))) {
+        // 周打卡已包含当天记录，避免在卡片上重复显示。
+        if (!this.showWeekCheckIns && checkIn && ((checkIn.entries && checkIn.entries.length > 0) || (checkIn.status && checkIn.status.length > 0))) {
             const emojiSection = document.createElement('div');
             emojiSection.className = 'habit-card__emoji-section';
             emojiSection.style.cursor = isHistoryView ? 'default' : 'pointer';
@@ -1524,6 +1551,138 @@ export class HabitPanel {
         });
 
         return card;
+    }
+
+    private getWeekStartDate(): Date {
+        const today = new Date(`${getLogicalDateString()}T12:00:00`);
+        today.setDate(today.getDate() - (today.getDay() - this.weekStartDay + 7) % 7 + this.weekOffset * 7);
+        return today;
+    }
+
+    private createWeekNavigation(): HTMLElement {
+        const navigation = document.createElement('div');
+        navigation.className = 'habit-week-navigation';
+        const start = this.getWeekStartDate();
+        const end = new Date(start);
+        end.setDate(start.getDate() + 6);
+
+        const previous = document.createElement('button');
+        previous.type = 'button';
+        previous.className = 'habit-week-navigation__button';
+        previous.textContent = '◀';
+        previous.setAttribute('aria-label', i18n('habitPreviousWeek'));
+        previous.addEventListener('click', () => {
+            this.weekOffset--;
+            void this.loadHabits();
+        });
+
+        const range = document.createElement('span');
+        range.className = 'habit-week-navigation__range';
+        range.textContent = `${start.getMonth() + 1}.${start.getDate()} – ${end.getMonth() + 1}.${end.getDate()}`;
+        range.title = `${getLocalDateString(start)} – ${getLocalDateString(end)}`;
+
+        const current = document.createElement('button');
+        current.type = 'button';
+        current.className = 'habit-week-navigation__button';
+        current.textContent = i18n('habitCurrentWeek');
+        current.disabled = this.weekOffset === 0;
+        current.addEventListener('click', () => {
+            this.weekOffset = 0;
+            void this.loadHabits();
+        });
+
+        const next = document.createElement('button');
+        next.type = 'button';
+        next.className = 'habit-week-navigation__button';
+        next.textContent = '▶';
+        next.setAttribute('aria-label', i18n('habitNextWeek'));
+        next.addEventListener('click', () => {
+            this.weekOffset++;
+            void this.loadHabits();
+        });
+
+        navigation.append(previous, range, current, next);
+        return navigation;
+    }
+
+    private createWeekCheckIns(habit: Habit, today: string): HTMLElement {
+        const week = document.createElement('div');
+        week.className = 'habit-card__week';
+        const weekDays = document.createElement('div');
+        weekDays.className = 'habit-card__week-days';
+        const weekStart = this.getWeekStartDate();
+        const weekdayNames = i18n('weekdayNames').split(',');
+
+        for (let offset = 0; offset < 7; offset++) {
+            const day = new Date(weekStart);
+            day.setDate(weekStart.getDate() + offset);
+            const date = getLocalDateString(day);
+            const required = isHabitActiveOnDate(habit, date) && shouldCheckInOnDate(habit, date);
+            const completed = isHabitCheckInDayComplete(habit, date, {
+                getPomodoroFocusMinutes: (habitId, logicalDate) => this.getHabitFocusMinutesByDate(habitId, logicalDate)
+            });
+            const checkIn = habit.checkIns?.[date];
+            const emojis = checkIn?.entries?.length
+                ? checkIn.entries.map(entry => entry.emoji).filter(Boolean)
+                : checkIn?.status?.filter(Boolean) || [];
+            const count = Math.max(emojis.length, checkIn?.count || 0);
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'habit-card__week-day';
+            if (!required) button.classList.add('habit-card__week-day--not-required');
+            if (completed) button.classList.add('habit-card__week-day--done');
+            if (date === today) button.classList.add('habit-card__week-day--today');
+            button.style.setProperty('--habit-color', this.getHabitProgressColor(habit));
+
+            const weekday = document.createElement('span');
+            weekday.className = 'habit-card__week-weekday';
+            weekday.textContent = weekdayNames[day.getDay()] || String(day.getDay());
+            const dayNumber = document.createElement('span');
+            dayNumber.className = 'habit-card__week-date';
+            dayNumber.textContent = String(day.getDate());
+            const status = document.createElement('span');
+            status.className = 'habit-card__week-status';
+            // 旧数据可能只有 count，缺少逐条 emoji；沿用统计页的回退图标。
+            const displayedEmojis = emojis.length > 0
+                ? emojis
+                : Array.from({ length: Math.min(count, 8) }, () => habit.autoCheckInEmoji || '🍅');
+            if (displayedEmojis.length > 0) {
+                if (displayedEmojis.length <= 4) status.classList.add('habit-card__week-status--few');
+                else if (displayedEmojis.length <= 8) status.classList.add('habit-card__week-status--medium');
+                else status.classList.add('habit-card__week-status--many');
+                displayedEmojis.forEach(emoji => {
+                    const item = document.createElement('span');
+                    item.textContent = emoji;
+                    status.appendChild(item);
+                });
+                if (count > displayedEmojis.length) {
+                    const remainder = document.createElement('span');
+                    remainder.textContent = `+${count - displayedEmojis.length}`;
+                    status.appendChild(remainder);
+                }
+            } else {
+                status.textContent = completed ? '✓' : '·';
+            }
+            button.append(weekday, dayNumber, status);
+
+            const checkInState = completed ? i18n('habitWeekCompleted')
+                : count > 0 ? i18n('habitWeekIncomplete')
+                    : required ? i18n('habitWeekMissing') : i18n('habitWeekNotRequired');
+            const description = `${date} ${weekdayNames[day.getDay()] || ''}：${checkInState}${count > 0 ? ` (${count}) ${emojis.join(' ')}` : ''}`;
+            button.title = description;
+            button.setAttribute('aria-label', description);
+            button.addEventListener('click', (event) => {
+                event.stopPropagation();
+                const dialog = new HabitDayDialog(this.cloneHabit(habit)!, date, async (updatedHabit) => {
+                    await this.saveHabit(updatedHabit);
+                }, this.plugin);
+                dialog.show();
+            });
+            weekDays.appendChild(button);
+        }
+
+        week.appendChild(weekDays);
+        return week;
     }
 
     private getFrequencyText(frequency: Habit['frequency']): string {
