@@ -659,6 +659,20 @@ function parseNaturalDateTimeInner(text: string): ParseResult {
         const result = results[0];
         const parsedDate = result.start.date();
 
+        // chrono 对未限定周次的星期几会选最近的一天，可能落在过去；任务标题默认指下一次对应的星期几。
+        // “上周/本周/这周/下周”有明确周次，保留 chrono 的结果。
+        const weekdayWithoutWeek = /^(?:周|星期|礼拜)[一二三四五六日天]/.test(result.text)
+            && !/[上下本这]/.test(processedText.charAt(result.index - 1))
+            && result.start.isCertain('weekday')
+            && !result.start.isCertain('day');
+        if (weekdayWithoutWeek) {
+            const today = getDayStartAdjustedDate(new Date());
+            const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+            if (parsedDate < todayStart) {
+                parsedDate.setDate(parsedDate.getDate() + 7);
+            }
+        }
+
         // 格式化日期，使用本地时间避免时区导致日期跳变
         const year = parsedDate.getFullYear();
         const month = (parsedDate.getMonth() + 1).toString().padStart(2, '0');
@@ -666,7 +680,7 @@ function parseNaturalDateTimeInner(text: string): ParseResult {
         const date = `${year}-${month}-${day}`;
 
         // 检查是否包含明确的日期/时间信息
-        const hasDate = result.start.isCertain('year') || result.start.isCertain('month') || result.start.isCertain('day');
+        const hasDate = result.start.isCertain('year') || result.start.isCertain('month') || result.start.isCertain('day') || result.start.isCertain('weekday');
         const hasTime = result.start.isCertain('hour') && result.start.isCertain('minute');
         let time = undefined;
 
