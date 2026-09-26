@@ -6179,6 +6179,15 @@ export class CalendarView {
             }
         }
 
+        // 全天任务先显示未完成项，同一完成状态内沿用原有排序
+        if (a.allDay && !isSubA && !isSubB && !isHabitA && !isHabitB) {
+            const completedA = a.extendedProps?.completed === true;
+            const completedB = b.extendedProps?.completed === true;
+            if (completedA !== completedB) {
+                return completedA ? 1 : -1;
+            }
+        }
+
         // 1. 优先根据优先级排序
         const priorityMap: { [key: string]: number } = {
             'high': 0,
@@ -6231,6 +6240,7 @@ export class CalendarView {
 
             // 构造新列表并确定被拖拽任务的新位置
             let newList: any[] = [];
+            let draggedPriority: string | null = null;
             if (state.targetEvent) {
                 const targetId = state.targetEvent.id;
                 const targetIndex = otherEvents.findIndex(e => e.id === targetId);
@@ -6243,8 +6253,7 @@ export class CalendarView {
                     // 使被拖拽的任务优先级与它落点周围的任务一致
                     const neighbor = otherEvents[targetIndex];
                     if (neighbor) {
-                        const newPriority = neighbor.extendedProps?.priority || 'none';
-                        draggedEvent.setExtendedProp('priority', newPriority);
+                        draggedPriority = neighbor.extendedProps?.priority || 'none';
                     }
                 } else {
                     newList = [...otherEvents, draggedEvent];
@@ -6262,7 +6271,9 @@ export class CalendarView {
                 const reminder = reminderData[templateId];
                 if (!reminder) continue;
 
-                const priority = event.extendedProps?.priority || 'none';
+                const priority = event.id === draggedId && draggedPriority !== null
+                    ? draggedPriority
+                    : event.extendedProps?.priority || 'none';
                 if (priority !== currentPriority) {
                     currentPriority = priority;
                     prioritySort = 0;
