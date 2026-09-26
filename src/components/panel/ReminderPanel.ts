@@ -5797,6 +5797,9 @@ export class ReminderPanel {
                     targetInfo = { id: targetId, isBefore: dropType === 'before', dropType };
                 }
             }
+            const dailyHeader = (e.target as HTMLElement).closest('.reminder-section-header[data-reminder-group="daily"]');
+            const dropAsDaily = this.isTodayLikeView() && (!!dailyHeader ||
+                (targetElement?.dataset.reminderGroup === 'daily' && targetInfo?.dropType !== 'set-parent'));
 
             // 处理内部拖拽 (application/x-reminder)
             if (!this.isDragging && !this.draggedElement && e.dataTransfer?.types.includes('application/x-reminder')) {
@@ -5842,6 +5845,16 @@ export class ReminderPanel {
 
                         if (defaultCategoryId && reminder.categoryId !== defaultCategoryId) {
                             reminder.categoryId = defaultCategoryId;
+                            changed = true;
+                        }
+
+                        if (dropAsDaily) {
+                            reminder.isAvailableToday = true;
+                            delete reminder.date;
+                            delete reminder.endDate;
+                            delete reminder.time;
+                            delete reminder.endTime;
+                            if (dailyHeader) delete reminder.parentId;
                             changed = true;
                         }
 
@@ -6063,13 +6076,14 @@ export class ReminderPanel {
                             title: (optTitle || i18n('unnamedNote') || '未命名任务').trim(),
                             blockId: realBid,
                             docId: (optDocId && !this.isUuid(optDocId)) ? optDocId : (!this.isUuid(realBid) ? realBid : null),
-                            date: defaultDate,
+                            date: dropAsDaily ? undefined : defaultDate,
                             time: '',
                             kanbanStatus: 'doing',
                             createdAt: new Date().toISOString(),
                             createdTime: new Date().toISOString(),
                             completed: false
                         };
+                        if (dropAsDaily) optReminder.isAvailableToday = true;
                         if (globalDefaultProjectId) optReminder.projectId = globalDefaultProjectId;
 
                         if (targetInfo && targetRemObject) {
@@ -6106,7 +6120,7 @@ export class ReminderPanel {
                         console.log('🚀 [TaskNote Drag] 5. background persistence task started...');
                         try {
                             for (const bid of blockIds) {
-                                await this.addItemByBlockId(bid, targetInfo, e);
+                                await this.addItemByBlockId(bid, targetInfo, e, dropAsDaily);
                             }
                         } finally {
                             // 真正落盘完成后，清除乐观缓存锁
@@ -6494,7 +6508,7 @@ export class ReminderPanel {
         };
     }
 
-    private async addItemByBlockId(blockId: string, targetInfo?: { id: string, isBefore: boolean, dropType?: 'before' | 'after' | 'set-parent' }, dropEvent?: DragEvent) {
+    private async addItemByBlockId(blockId: string, targetInfo?: { id: string, isBefore: boolean, dropType?: 'before' | 'after' | 'set-parent' }, dropEvent?: DragEvent, dropAsDaily: boolean = false) {
         const itemStart = performance.now();
         try {
             const { title: fetchedTitle, docId: fetchedDocId } = await this.getBlockInfoForDrop(blockId, dropEvent);
@@ -6540,8 +6554,8 @@ export class ReminderPanel {
                 title: title.trim(),
                 blockId: realBlockId,
                 docId: (fetchedDocId && !this.isUuid(fetchedDocId)) ? fetchedDocId : (!this.isUuid(realBlockId) ? realBlockId : null),
-                date: defaultDate || getLogicalDateString(), // 默认为今天
-                endDate: defaultEndDate || undefined,
+                date: dropAsDaily ? undefined : (defaultDate || getLogicalDateString()), // 默认为今天
+                endDate: dropAsDaily ? undefined : (defaultEndDate || undefined),
                 time: '', // 默认不设置时间
                 categoryId: inheritedCategoryId,
                 projectId: inheritedProjectId,
@@ -6551,6 +6565,7 @@ export class ReminderPanel {
                 createdTime: new Date().toISOString(),
                 completed: false
             };
+            if (dropAsDaily) newReminder.isAvailableToday = true;
             if (inheritedGroupId) newReminder.customGroupId = inheritedGroupId;
             if (inheritedMilestoneId) newReminder.milestoneId = inheritedMilestoneId;
 
