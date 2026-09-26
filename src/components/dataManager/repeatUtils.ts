@@ -2,7 +2,7 @@ import { RepeatConfig, RepeatInstanceState } from '../dialog/RepeatSettingsDialo
 import { compareDateStrings, getLocalDateTimeString } from '../../utils/dateUtils';
 import { i18n } from '../../pluginInstance';
 import { solarToLunar, formatLunarMonth, formatLunarDay } from '../../utils/lunarUtils';
-import { normalizeReminderSkipWeekendMode, type ReminderSkipWeekendMode, shouldSkipReminderOnDate } from '../../utils/reminderSkipDate';
+import { normalizeReminderSkipWeekendMode, type HolidayData, type ReminderSkipWeekendMode, shouldSkipReminderOnDate } from '../../utils/reminderSkipDate';
 
 export interface RepeatInstance {
     title?: string; // 实例标题（可选，覆盖原始标题）
@@ -466,7 +466,8 @@ export function generateRepeatInstances(
     reminder: any,
     startDate: string,
     endDate: string,
-    maxInstances: number = 100
+    maxInstances: number = 100,
+    options: { settings?: any; holidayData?: HolidayData } = {}
 ): RepeatInstance[] {
     if (!reminder.repeat?.enabled || !reminder.repeat.type) {
         return [];
@@ -501,6 +502,24 @@ export function generateRepeatInstances(
     const repeatEndDate = hasEndDate ? new Date(repeatConfig.endDate + 'T23:59:59') : null;
 
     const generatedInstanceKeys = new Set<string>();
+    const resolveOccurrenceDate = (originalDate: string, state?: RepeatInstanceState): string | null => {
+        if (state?.deleted || state?.date === null) return null;
+        if (repeatConfig.skippedDateAction !== 'postpone' || hasInstanceField(state, 'date')) {
+            return originalDate;
+        }
+
+        // 实例 ID 始终使用原周期日期；仅移动显示和提醒日期，不改变后续周期的基准。
+        // 一年内仍没有可用日时停止查找，避免异常配置导致无限循环。
+        const skipCandidate = { ...reminder, ...state, repeat: repeatConfig, isRepeatedInstance: true };
+        let candidateDate = originalDate;
+        for (let day = 0; day < 366; day++) {
+            if (!shouldSkipReminderOnDate(skipCandidate, candidateDate, options.settings, options.holidayData)) {
+                return candidateDate;
+            }
+            candidateDate = addDaysToDate(candidateDate, 1);
+        }
+        return null;
+    };
     const buildInstance = (originalDateKey: string, occurrenceDateStr: string, state?: RepeatInstanceState): RepeatInstance | null => {
         if (state?.deleted || state?.date === null) {
             return null;
@@ -576,27 +595,24 @@ export function generateRepeatInstances(
     while (currentDate <= endDateObj && instanceCount < maxInstances) {
         const currentDateStr = getLocalDateString(currentDate); // 使用本地日期字符串
 
-        // 检查是否在生成范围内
-        if (compareDateStrings(currentDateStr, startDate) >= 0) {
-            // 检查重复结束条件
-            if (hasEndDate && repeatEndDate && currentDate > repeatEndDate) {
-                break;
-            }
-            if (hasEndCount && instanceCount >= repeatConfig.endCount) {
-                break;
-            }
+        // 结束条件仍按原周期日期判断，顺延不会改变下一个周期。
+        if (hasEndDate && repeatEndDate && currentDate > repeatEndDate) {
+            break;
+        }
+        if (hasEndCount && instanceCount >= repeatConfig.endCount) {
+            break;
+        }
 
-            // 检查是否符合重复规则且不在排除列表中
-            // 对于农历重复，originalDate 可以为空
-            if (shouldGenerateInstance(currentDate, reminder.date || startDate, repeatConfig) &&
-                !excludeDates.includes(currentDateStr)) {
-
-                // 检查是否有针对此实例的修改
-                const state = instancesMap[currentDateStr];
+        // 先按重复规则确定原周期，再判断顺延后的发生日是否落在查询范围。
+        if (shouldGenerateInstance(currentDate, reminder.date || startDate, repeatConfig) &&
+            !excludeDates.includes(currentDateStr)) {
+            const state = instancesMap[currentDateStr];
+            const occurrenceDate = resolveOccurrenceDate(currentDateStr, state);
+            if (occurrenceDate &&
+                compareDateStrings(occurrenceDate, startDate) >= 0 &&
+                compareDateStrings(occurrenceDate, endDate) <= 0) {
                 generatedInstanceKeys.add(currentDateStr);
-
-                // 如果实例状态标记为 deleted，表示用户选择“清除日期/移除此实例”，因此跳过生成该实例
-                const instance = buildInstance(currentDateStr, currentDateStr, state);
+                const instance = buildInstance(currentDateStr, occurrenceDate, state);
                 if (instance) {
                     instances.push(instance);
                     instanceCount++;
@@ -685,7 +701,7 @@ export function generateRepeatInstancesWithFutureGuarantee(
         const rangeEndDate = getLocalDateString(monthEnd);
         const maxInstances = monthsToAdd * 50;
 
-        repeatInstances = generateRepeatInstances(reminder, rangeStartDate, rangeEndDate, maxInstances)
+        repeatInstances = generateRepeatInstances(reminder, rangeStartDate, rangeEndDate, maxInstances, { settings, holidayData })
             .filter(instance => !shouldSkipReminderOnDate(instance, instance.date, settings, holidayData));
 
         hasUncompletedFutureInstance = repeatInstances.some(instance => {

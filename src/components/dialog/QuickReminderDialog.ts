@@ -1056,7 +1056,7 @@ export class QuickReminderDialog {
         const durationInput = this.dialog?.element?.querySelector('#quickDurationDays') as HTMLInputElement | null;
         const spannedLabel = this.dialog?.element?.querySelector('#quickSpannedDaysLabel') as HTMLElement | null;
         const weekendModeSelect = this.dialog?.element?.querySelector('#quickReminderSkipWeekendMode') as HTMLSelectElement | null;
-        const holidaysInput = this.dialog?.element?.querySelector('#quickReminderSkipHolidays') as HTMLInputElement | null;
+        const holidaysSelect = this.dialog?.element?.querySelector('#quickReminderSkipHolidays') as HTMLSelectElement | null;
 
         if (!durationInput) return;
 
@@ -1075,7 +1075,7 @@ export class QuickReminderDialog {
         }
 
         const weekendMode = weekendModeSelect ? (weekendModeSelect.value as ReminderSkipWeekendMode) : 'none';
-        const skipHolidays = holidaysInput ? holidaysInput.checked : false;
+        const skipHolidays = holidaysSelect?.value === 'true';
 
         const totalDays = this.getDurationInclusive(startDate, endDate);
 
@@ -1369,6 +1369,7 @@ export class QuickReminderDialog {
             delete normalized.reminderSkipWeekendMode;
             delete normalized.reminderSkipWeekends;
             delete normalized.reminderSkipHolidays;
+            delete normalized.skippedDateAction;
             return normalized;
         }
 
@@ -1434,11 +1435,11 @@ export class QuickReminderDialog {
     private updateReminderSkipDateControls(): void {
         const row = this.dialog?.element?.querySelector('#quickReminderSkipDateRow') as HTMLElement | null;
         const weekendModeSelect = this.dialog?.element?.querySelector('#quickReminderSkipWeekendMode') as HTMLSelectElement | null;
-        const holidaysInput = this.dialog?.element?.querySelector('#quickReminderSkipHolidays') as HTMLInputElement | null;
+        const holidaysSelect = this.dialog?.element?.querySelector('#quickReminderSkipHolidays') as HTMLSelectElement | null;
         const dateInput = this.dialog?.element?.querySelector('#quickReminderDate') as HTMLInputElement | null;
         const endDateInput = this.dialog?.element?.querySelector('#quickReminderEndDate') as HTMLInputElement | null;
         const startDateOnlyOverdueCheckbox = this.dialog?.element?.querySelector('#quickStartDateOnlyOverdue') as HTMLInputElement | null;
-        if (!row || !weekendModeSelect || !holidaysInput) return;
+        if (!row || !weekendModeSelect || !holidaysSelect) return;
 
         const controlReminder = this.getReminderForSkipDateControls();
         const startDateVisible = !dateInput || dateInput.style.display !== 'none';
@@ -1455,11 +1456,11 @@ export class QuickReminderDialog {
         const showHolidays = !isRepeatTask && (showSkipForStartDateOnly || shouldShowReminderSkipHolidaysControl(controlReminder, startDate, endDate, this.reminderSkipHolidayData));
 
         const weekendsLabel = weekendModeSelect.closest('label') as HTMLElement | null;
-        const holidaysLabel = holidaysInput.closest('label') as HTMLElement | null;
+        const holidaysLabel = holidaysSelect.closest('label') as HTMLElement | null;
         if (weekendsLabel) weekendsLabel.style.display = showWeekends ? 'flex' : 'none';
         if (holidaysLabel) holidaysLabel.style.display = showHolidays ? 'flex' : 'none';
         weekendModeSelect.disabled = !showWeekends;
-        holidaysInput.disabled = !showHolidays;
+        holidaysSelect.disabled = !showHolidays;
 
         const shouldShowRow = showWeekends || showHolidays;
         row.hidden = !shouldShowRow;
@@ -1468,7 +1469,7 @@ export class QuickReminderDialog {
             weekendModeSelect.value = this.getReminderSkipWeekendModeEffectiveValue(controlReminder);
         }
         if (!showHolidays) {
-            holidaysInput.checked = this.getReminderSkipHolidaysEffectiveValue(controlReminder);
+            holidaysSelect.value = String(this.getReminderSkipHolidaysEffectiveValue(controlReminder));
         }
         this.updateDurationAndSpannedDays();
     }
@@ -1486,7 +1487,7 @@ export class QuickReminderDialog {
         }
 
         const weekendModeSelect = this.dialog?.element?.querySelector('#quickReminderSkipWeekendMode') as HTMLSelectElement | null;
-        const holidaysCheckbox = this.dialog?.element?.querySelector('#quickReminderSkipHolidays') as HTMLInputElement | null;
+        const holidaysSelect = this.dialog?.element?.querySelector('#quickReminderSkipHolidays') as HTMLSelectElement | null;
         const row = this.dialog?.element?.querySelector('#quickReminderSkipDateRow') as HTMLElement | null;
         const isControlActive = (control: HTMLInputElement | HTMLSelectElement | null): control is HTMLInputElement | HTMLSelectElement => {
             if (!control || control.disabled || row?.hidden) return false;
@@ -1510,8 +1511,8 @@ export class QuickReminderDialog {
             delete target.reminderSkipWeekendMode;
         }
 
-        if (isControlActive(holidaysCheckbox)) {
-            const override = getReminderSkipHolidaysOverrideValue(holidaysCheckbox.checked, this.plugin?.settings);
+        if (isControlActive(holidaysSelect)) {
+            const override = getReminderSkipHolidaysOverrideValue(holidaysSelect.value === 'true', this.plugin?.settings);
             if (override === undefined) {
                 delete target.reminderSkipHolidays;
             } else {
@@ -1767,9 +1768,9 @@ export class QuickReminderDialog {
             skipWeekendModeSelect.value = this.getReminderSkipWeekendModeEffectiveValue(this.reminder);
         }
 
-        const skipHolidaysInput = this.dialog.element.querySelector('#quickReminderSkipHolidays') as HTMLInputElement;
-        if (skipHolidaysInput) {
-            skipHolidaysInput.checked = this.getReminderSkipHolidaysEffectiveValue(this.reminder);
+        const skipHolidaysSelect = this.dialog.element.querySelector('#quickReminderSkipHolidays') as HTMLSelectElement;
+        if (skipHolidaysSelect) {
+            skipHolidaysSelect.value = String(this.getReminderSkipHolidaysEffectiveValue(this.reminder));
         }
         this.updateReminderSkipDateControls();
 
@@ -3106,10 +3107,12 @@ export class QuickReminderDialog {
                                             ${this.createReminderSkipWeekendModeOptions()}
                                         </select>
                                     </label>
-                                    <label class="b3-checkbox" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                        <input type="checkbox" class="b3-switch" id="quickReminderSkipHolidays" ${this.getReminderSkipHolidaysEffectiveValue() ? 'checked' : ''}>
-                                        <span class="b3-checkbox__graphic"></span>
-                                        <span class="b3-checkbox__label" style="font-size: 13px;">${i18n('reminderSkipHolidaysTask') || '任务提醒跳过节假日'}</span>
+                                    <label style="display: flex; align-items: center; gap: 8px;">
+                                        <span style="font-size: 13px;">${i18n('reminderSkipHolidaysTask') || '任务提醒跳过节假日'}</span>
+                                        <select id="quickReminderSkipHolidays" class="b3-select" style="min-width: 138px;">
+                                            <option value="true" ${this.getReminderSkipHolidaysEffectiveValue() ? 'selected' : ''}>${i18n('reminderSkipHolidaysYes') || '跳过节假日'}</option>
+                                            <option value="false" ${!this.getReminderSkipHolidaysEffectiveValue() ? 'selected' : ''}>${i18n('reminderSkipWeekendNone') || '不跳过'}</option>
+                                        </select>
                                     </label>
                                 </div>
                             </div>
@@ -5310,9 +5313,9 @@ export class QuickReminderDialog {
             if (!startDateInput.value) return;
 
             const skipWeekendModeSelect = this.dialog.element.querySelector('#quickReminderSkipWeekendMode') as HTMLSelectElement | null;
-            const skipHolidaysInput = this.dialog.element.querySelector('#quickReminderSkipHolidays') as HTMLInputElement | null;
+            const skipHolidaysSelect = this.dialog.element.querySelector('#quickReminderSkipHolidays') as HTMLSelectElement | null;
             const weekendMode = skipWeekendModeSelect ? (skipWeekendModeSelect.value as ReminderSkipWeekendMode) : 'none';
-            const skipHolidays = skipHolidaysInput ? skipHolidaysInput.checked : false;
+            const skipHolidays = skipHolidaysSelect?.value === 'true';
 
             // 如果任务已有开始和结束日期，修改开始日期时保持当前持续天数并平移结束日期
             if (endDateInput && endDateInput.value && durationInput && !this.isApplyingNaturalLanguageResult) {
@@ -5353,9 +5356,9 @@ export class QuickReminderDialog {
             this.durationManuallyChanged = true;
             if (startDateInput && startDateInput.value && endDateInput) {
                 const skipWeekendModeSelect = this.dialog.element.querySelector('#quickReminderSkipWeekendMode') as HTMLSelectElement | null;
-                const skipHolidaysInput = this.dialog.element.querySelector('#quickReminderSkipHolidays') as HTMLInputElement | null;
+                const skipHolidaysSelect = this.dialog.element.querySelector('#quickReminderSkipHolidays') as HTMLSelectElement | null;
                 const weekendMode = skipWeekendModeSelect ? (skipWeekendModeSelect.value as ReminderSkipWeekendMode) : 'none';
-                const skipHolidays = skipHolidaysInput ? skipHolidaysInput.checked : false;
+                const skipHolidays = skipHolidaysSelect?.value === 'true';
 
                 if (weekendMode !== 'none' || skipHolidays) {
                     endDateInput.value = this.calculateEndDateFromWorkingDays(startDateInput.value, val, weekendMode, skipHolidays);
@@ -5393,11 +5396,11 @@ export class QuickReminderDialog {
         });
 
         const skipWeekendModeSelect = this.dialog.element.querySelector('#quickReminderSkipWeekendMode') as HTMLSelectElement;
-        const skipHolidaysInput = this.dialog.element.querySelector('#quickReminderSkipHolidays') as HTMLInputElement;
+        const skipHolidaysSelect = this.dialog.element.querySelector('#quickReminderSkipHolidays') as HTMLSelectElement;
         skipWeekendModeSelect?.addEventListener('change', () => {
             this.updateDurationAndSpannedDays();
         });
-        skipHolidaysInput?.addEventListener('change', () => {
+        skipHolidaysSelect?.addEventListener('change', () => {
             this.updateDurationAndSpannedDays();
         });
 
@@ -7883,7 +7886,10 @@ export class QuickReminderDialog {
                         }
 
                         // 生成从任务开始日期到今天的所有实例
-                        const instances = generateRepeatInstances(reminder, date, today, maxInstances);
+                        const instances = generateRepeatInstances(reminder, date, today, maxInstances, {
+                            settings: this.plugin?.settings,
+                            holidayData: this.reminderSkipHolidayData
+                        });
 
                         // 将所有早于今天的实例标记为已完成
                         const pastInstances: string[] = [];
@@ -8475,7 +8481,10 @@ export class QuickReminderDialog {
 
         try {
             const maxInstances = Math.max(getDaysDifference(rangeStart, rangeEnd) + sortedKeys.length + 10, 100);
-            const historicalInstances = generateRepeatInstances(originalReminder, rangeStart, rangeEnd, maxInstances);
+            const historicalInstances = generateRepeatInstances(originalReminder, rangeStart, rangeEnd, maxInstances, {
+                settings: this.plugin?.settings,
+                holidayData: this.reminderSkipHolidayData
+            });
             historicalInstances.forEach((instance: any) => {
                 const originalKey = this.getRepeatInstanceOriginalDateKey(instance);
                 if (originalKey && candidateKeys.has(originalKey)) {

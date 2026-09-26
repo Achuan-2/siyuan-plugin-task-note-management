@@ -4302,7 +4302,10 @@ export default class ReminderPlugin extends Plugin {
 
                 // 如果有重复设置，生成重复事件实例
                 if (reminder.repeat?.enabled) {
-                    const repeatInstances = generateRepeatInstances(reminder, today, today);
+                    const repeatInstances = generateRepeatInstances(reminder, today, today, 100, {
+                        settings: this.settings,
+                        holidayData: holidayDataForReminderSkip
+                    });
                     repeatInstances.forEach(instance => {
                         // 为生成的实例创建独立的呈现对象（包含 instance 级别的修改）
                         // generateRepeatInstances 已经合并了 instances 中的覆盖字段和完成状态
@@ -4593,7 +4596,10 @@ export default class ReminderPlugin extends Plugin {
                     }
                 } else {
                     // 处理重复提醒
-                    let instances = generateRepeatInstances(reminderObj, today, today);
+                    let instances = generateRepeatInstances(reminderObj, today, today, 100, {
+                        settings: this.settings,
+                        holidayData
+                    });
 
                     // 额外处理：如果存在 repeat.instances，将那些被修改后日期为今天的实例也加入检查。
                     // 情形：原始实例键（例如 2025-12-01）被修改为另一个日期（例如 2025-12-05），当今天为 2025-12-05 时
@@ -6337,7 +6343,10 @@ export default class ReminderPlugin extends Plugin {
             const instanceStartDate = addDaysToDate(today, -repeatWindow.lookBackDays);
             const instanceEndDate = addDaysToDate(scanEndDate, repeatWindow.lookAheadDays);
             const rangeDays = Math.max(getDaysDifference(instanceStartDate, instanceEndDate) + 1, 1);
-            const instances = generateRepeatInstances(reminder, instanceStartDate, instanceEndDate, Math.max(rangeDays * 2, 500));
+            const instances = generateRepeatInstances(reminder, instanceStartDate, instanceEndDate, Math.max(rangeDays * 2, 500), {
+                settings: this.settings,
+                holidayData
+            });
             const futureTimes: Date[] = [];
             const minRepeatInstanceDates = daysLimit > 0 ? 2 : 0;
             const includedRepeatInstanceKeys = new Set<string>();

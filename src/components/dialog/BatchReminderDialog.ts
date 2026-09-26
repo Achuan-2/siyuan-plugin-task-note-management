@@ -1610,6 +1610,7 @@ class SmartBatchDialog {
             this.showLoadingDialog(loadingMessage);
 
             const reminderData = await this.plugin.loadReminderData();
+            const holidayData = await this.plugin.loadHolidayData();
 
             let successCount = 0;
             let failureCount = 0;
@@ -1713,7 +1714,10 @@ class SmartBatchDialog {
                     }
 
                     // 生成从任务开始日期到今天的所有实例
-                    const instances = generateRepeatInstances(reminder, setting.date, today, maxInstances);
+                    const instances = generateRepeatInstances(reminder, setting.date, today, maxInstances, {
+                        settings: this.plugin?.settings,
+                        holidayData
+                    });
 
                     // 将所有早于今天的实例标记为已完成
                     for (const instance of instances) {

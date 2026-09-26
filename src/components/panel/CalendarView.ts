@@ -8180,7 +8180,10 @@ export class CalendarView {
                     this.addReminderTimeEventsToList(events, reminder, reminder.id, false);
                 } else if (this.showRepeatTasks) {
                     // Generate repeat event instances
-                    let repeatInstances = generateRepeatInstances(reminder, startDate, endDate)
+                    let repeatInstances = generateRepeatInstances(reminder, startDate, endDate, 100, {
+                        settings: this.reminderSkipSettings || this.plugin?.settings,
+                        holidayData: this.holidays as HolidayData
+                    })
                         .filter(instance => this.shouldDisplayRepeatInstance(instance, reminder));
 
                     const isOriginalAbandoned = this.isAbandonedReminder(reminder);

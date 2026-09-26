@@ -671,12 +671,16 @@
                         },
                         {
                             key: 'reminderSkipHolidays',
-                            value: settings.reminderSkipHolidays,
-                            type: 'checkbox',
+                            value: String(settings.reminderSkipHolidays === true),
+                            type: 'select',
                             title: i18n('reminderSkipHolidays') || '任务提醒跳过节假日',
                             description:
                                 i18n('reminderSkipHolidaysDesc') ||
                                 '仅对重复任务，以及同时横跨节假日和非节假日的跨天任务生效；单个任务可在任务编辑弹窗单独覆盖。',
+                            options: {
+                                true: i18n('reminderSkipHolidaysYes') || '跳过节假日',
+                                false: i18n('reminderSkipWeekendNone') || '不跳过',
+                            },
                         },
                     ],
                 },
@@ -2151,7 +2155,7 @@
             const parsed = parseInt(value, 10);
             newValue = isNaN(parsed) ? 3 : Math.max(1, Math.min(14, parsed));
         } else if (
-            (key === 's3ForcePathStyle' || key === 's3TlsVerify') &&
+            (key === 's3ForcePathStyle' || key === 's3TlsVerify' || key === 'reminderSkipHolidays') &&
             typeof value === 'string'
         ) {
             newValue = value === 'true';

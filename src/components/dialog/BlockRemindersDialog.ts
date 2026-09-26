@@ -7,6 +7,7 @@ import { i18n } from "../../pluginInstance";
 import { TaskRenderer } from "../render/TaskRenderer";
 import { PomodoroRecordManager } from "../dataManager/pomodoroRecord";
 import { resolveRepeatReminderTimes, addDaysToDate, getDaysDifference, generateRepeatInstancesWithFutureGuarantee, getRepeatInstanceOriginalKey, isRepeatInstanceCompleted, getRepeatInstanceCompletedTime, setRepeatInstanceCompletion } from "../dataManager/repeatUtils";
+import type { HolidayData } from "../../utils/reminderSkipDate";
 
 /**
  * 块绑定任务查看对话框
@@ -23,6 +24,7 @@ export class BlockRemindersDialog {
     private milestoneMap: Map<string, any> = new Map();
     private projectDataMap: Map<string, any> = new Map();
     private reminderUpdatedHandler: (event: CustomEvent) => void;
+    private holidayData: HolidayData = {};
 
     constructor(blockId: string, plugin: any) {
         this.blockId = blockId;
@@ -55,6 +57,7 @@ export class BlockRemindersDialog {
 
             // 获取提醒数据
             const reminderData = await this.plugin.loadReminderData();
+            this.holidayData = await this.plugin.loadHolidayData();
             this.allRemindersMap = new Map(Object.entries(reminderData || {}));
             const reminders = this.resolveBoundReminders(reminderData, reminderIds);
 
@@ -79,6 +82,7 @@ export class BlockRemindersDialog {
             // 监听提醒更新事件
             this.reminderUpdatedHandler = async () => {
                 const updatedReminderData = await this.plugin.loadReminderData();
+                this.holidayData = await this.plugin.loadHolidayData();
                 this.allRemindersMap = new Map(Object.entries(updatedReminderData || {}));
                 await this.buildMilestoneMap();
                 const updatedReminderIds = await getBlockReminderIds(this.blockId);
@@ -162,7 +166,9 @@ export class BlockRemindersDialog {
                     try {
                         repeatInstances = generateRepeatInstancesWithFutureGuarantee(reminder, today, {
                             isLunarRepeat,
-                            startDate: reminder.date || today
+                            startDate: reminder.date || today,
+                            settings: this.plugin?.settings,
+                            holidayData: this.holidayData
                         });
                     } catch (e) {
                         console.error('Failed to generate repeat instances in BlockRemindersDialog:', e);

@@ -4160,7 +4160,10 @@ export class ProjectKanbanView {
 
                 let repeatInstances: any[] = [];
                 try {
-                    repeatInstances = generateRepeatInstances(r, rangeStart, rangeEnd)
+                    repeatInstances = generateRepeatInstances(r, rangeStart, rangeEnd, 100, {
+                        settings,
+                        holidayData
+                    })
                         .filter((instance: any) => !shouldSkipReminderOnDate(
                             { ...r, ...instance, repeat: r.repeat },
                             this.getTaskLogicalDate(instance.date, instance.time) || instance.date,

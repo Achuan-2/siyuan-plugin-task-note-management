@@ -7,6 +7,7 @@ import { QuickReminderDialog } from "./QuickReminderDialog";
 import { TaskRenderer } from "../render/TaskRenderer";
 import { generateRepeatInstancesWithFutureGuarantee, getRepeatInstanceOriginalKey, setRepeatInstanceCompletion, deleteRepeatInstanceState, addDaysToDate, getDaysDifference, resolveRepeatReminderTimes } from "../dataManager/repeatUtils";
 import { i18n } from "../../pluginInstance";
+import type { HolidayData } from "../../utils/reminderSkipDate";
 
 export class DocumentReminderDialog {
     private dialog: Dialog;
@@ -16,6 +17,7 @@ export class DocumentReminderDialog {
     private projectManager?: ProjectManager;
     private projectDataMap: Map<string, any> = new Map();
     private plugin?: any;
+    private holidayData: HolidayData = {};
 
     // 筛选和排序状态
     private currentFilter: 'all' | 'completed' | 'uncompleted' = 'all';
@@ -222,6 +224,7 @@ export class DocumentReminderDialog {
 
             // 获取所有提醒数据
             const reminderData = await this.plugin.loadReminderData();
+            this.holidayData = await this.plugin.loadHolidayData();
             if (!reminderData || typeof reminderData !== 'object') {
                 this.remindersContainer.innerHTML = `<div class="doc-reminder-empty">${i18n("noReminders")}</div>`;
                 this.countDisplay.textContent = `0 ${i18n("remindersCount")}`;
@@ -274,7 +277,7 @@ export class DocumentReminderDialog {
                 (reminder.blockId && reminder.blockId.startsWith(this.documentId));
 
             if (belongsToDocument) {
-                if (reminder.repeat?.enabled) {
+                if (reminder.repeat?.enabled && reminder.repeat.skippedDateAction !== 'postpone') {
                     const instanceDateVal = reminder.date;
                     const defaultEndDate = reminder.endDate && reminder.date
                         ? addDaysToDate(instanceDateVal, getDaysDifference(reminder.date, reminder.endDate))
@@ -302,9 +305,13 @@ export class DocumentReminderDialog {
                     const today = getLogicalDateString();
                     const isLunarRepeat = reminder.repeat.type === 'lunar-monthly' || reminder.repeat.type === 'lunar-yearly';
 
-                    const instances = generateRepeatInstancesWithFutureGuarantee(reminder, today, { isLunarRepeat });
+                    const instances = generateRepeatInstancesWithFutureGuarantee(reminder, today, {
+                        isLunarRepeat,
+                        settings: this.plugin?.settings,
+                        holidayData: this.holidayData
+                    });
                     instances.forEach(instance => {
-                        if (instance.date !== reminder.date) {
+                        if (reminder.repeat.skippedDateAction === 'postpone' || instance.date !== reminder.date) {
                             const originalKey = getRepeatInstanceOriginalKey(instance);
                             const isInstanceCompleted = instance.completed ?? false;
 
