@@ -60,7 +60,6 @@ export class HabitPanel {
     private showCompletedHabitsInTodayPending: boolean = true;
     private showWeekCheckIns: boolean = false;
     private weekStartDay: number = 1;
-    private weekOffset: number = 0;
     private checkInDaysMode: HabitCheckInDaysMode = 'total';
     private groupManager: HabitGroupManager;
     private habitUpdatedHandler: () => void;
@@ -954,9 +953,6 @@ export class HabitPanel {
 
     private renderHabits(habits: Habit[]) {
         this.habitsContainer.innerHTML = '';
-        if (this.showWeekCheckIns) {
-            this.habitsContainer.appendChild(this.createWeekNavigation());
-        }
 
         // 如果没有习惯，根据当前 tab 决定是否继续渲染已打卡区
         if (habits.length === 0) {
@@ -1555,54 +1551,8 @@ export class HabitPanel {
 
     private getWeekStartDate(): Date {
         const today = new Date(`${getLogicalDateString()}T12:00:00`);
-        today.setDate(today.getDate() - (today.getDay() - this.weekStartDay + 7) % 7 + this.weekOffset * 7);
+        today.setDate(today.getDate() - (today.getDay() - this.weekStartDay + 7) % 7);
         return today;
-    }
-
-    private createWeekNavigation(): HTMLElement {
-        const navigation = document.createElement('div');
-        navigation.className = 'habit-week-navigation';
-        const start = this.getWeekStartDate();
-        const end = new Date(start);
-        end.setDate(start.getDate() + 6);
-
-        const previous = document.createElement('button');
-        previous.type = 'button';
-        previous.className = 'habit-week-navigation__button';
-        previous.textContent = '◀';
-        previous.setAttribute('aria-label', i18n('habitPreviousWeek'));
-        previous.addEventListener('click', () => {
-            this.weekOffset--;
-            void this.loadHabits();
-        });
-
-        const range = document.createElement('span');
-        range.className = 'habit-week-navigation__range';
-        range.textContent = `${start.getMonth() + 1}.${start.getDate()} – ${end.getMonth() + 1}.${end.getDate()}`;
-        range.title = `${getLocalDateString(start)} – ${getLocalDateString(end)}`;
-
-        const current = document.createElement('button');
-        current.type = 'button';
-        current.className = 'habit-week-navigation__button';
-        current.textContent = i18n('habitCurrentWeek');
-        current.disabled = this.weekOffset === 0;
-        current.addEventListener('click', () => {
-            this.weekOffset = 0;
-            void this.loadHabits();
-        });
-
-        const next = document.createElement('button');
-        next.type = 'button';
-        next.className = 'habit-week-navigation__button';
-        next.textContent = '▶';
-        next.setAttribute('aria-label', i18n('habitNextWeek'));
-        next.addEventListener('click', () => {
-            this.weekOffset++;
-            void this.loadHabits();
-        });
-
-        navigation.append(previous, range, current, next);
-        return navigation;
     }
 
     private createWeekCheckIns(habit: Habit, today: string): HTMLElement {
