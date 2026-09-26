@@ -6390,6 +6390,40 @@ export default class ReminderPlugin extends Plugin {
                 }
             }
 
+            // 已过发生日的实例不会进入上面的生成窗口，但仍可能设置了未来的指定日期提醒。
+            // 从实例修改记录补充这些时间，完成或删除实例后不再排入系统通知。
+            for (const [originalDate, state] of Object.entries(reminder.repeat?.instances || {})) {
+                const instanceState = state as any;
+                if (!instanceState || instanceState.deleted || instanceState.date === null ||
+                    instanceState.completed || reminder.dailyCompletions?.[originalDate] ||
+                    !Array.isArray(instanceState.reminderTimes)) continue;
+
+                const instanceDate = instanceState.date || originalDate;
+                const instanceEndDate = instanceState.endDate !== undefined
+                    ? instanceState.endDate
+                    : (reminder.endDate && reminder.date
+                        ? addDaysToDate(instanceDate, getDaysDifference(reminder.date, reminder.endDate))
+                        : undefined);
+                const resolvedTimes = resolveRepeatReminderTimes(
+                    instanceState.reminderTimes,
+                    instanceDate,
+                    instanceEndDate,
+                    reminder.date,
+                    reminder.endDate
+                );
+                if (!resolvedTimes) continue;
+
+                const instanceReminder = { ...reminder, ...instanceState };
+                for (const entry of resolvedTimes) {
+                    const parsed = this.extractDateAndTime(entry.time);
+                    if (!parsed.date || !parsed.time || !this.canReminderNotifyOnDate(instanceReminder, parsed.date, holidayData)) continue;
+                    const dateTime = new Date(`${parsed.date}T${parsed.time}`);
+                    if (isNaN(dateTime.getTime()) || dateTime.getTime() <= now.getTime() - 60000) continue;
+                    if (limitDate && dateTime.getTime() > limitDate.getTime()) continue;
+                    futureTimes.push(dateTime);
+                }
+            }
+
             futureTimes.sort((a, b) => a.getTime() - b.getTime());
             const dedupSet = new Set<number>();
             const deduped: Date[] = [];

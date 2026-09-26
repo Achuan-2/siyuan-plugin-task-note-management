@@ -4921,25 +4921,24 @@ export class QuickReminderDialog {
 
             daySelect.addEventListener('change', () => {
                 beforeWrapper.style.display = daySelect?.value === 'before' ? 'flex' : 'none';
+                const previousTime = timeInput.value;
+                const previousEndTime = endTimeInput.value;
                 // 切换"指定日期"(datetime-local)和其他(time)
                 if (daySelect?.value === 'specific') {
+                    const today = getLogicalDateString();
+                    const defaultDate = date && date > today ? date : today;
+                    const toDateTime = (value: string) => value.includes('T')
+                        ? value
+                        : (value ? `${defaultDate}T${value}` : '');
                     timeInput.type = 'datetime-local';
                     endTimeInput.type = 'datetime-local';
-                    if (!timeInput.value.includes('T') && timeInput.value && date) {
-                        timeInput.value = `${date}T${timeInput.value}`;
-                    }
-                    if (!endTimeInput.value.includes('T') && endTimeInput.value && date) {
-                        endTimeInput.value = `${date}T${endTimeInput.value}`;
-                    }
+                    timeInput.value = toDateTime(previousTime);
+                    endTimeInput.value = toDateTime(previousEndTime);
                 } else {
                     timeInput.type = 'time';
                     endTimeInput.type = 'time';
-                    if (timeInput.value.includes('T')) {
-                        timeInput.value = this.getCustomReminderTimeValue(timeInput.value);
-                    }
-                    if (endTimeInput.value.includes('T')) {
-                        endTimeInput.value = this.getCustomReminderTimeValue(endTimeInput.value);
-                    }
+                    timeInput.value = this.getCustomReminderTimeValue(previousTime);
+                    endTimeInput.value = this.getCustomReminderTimeValue(previousEndTime);
                 }
                 this.customTimes[index] = this.buildCustomTimeItem(
                     timeInput.value || '',
