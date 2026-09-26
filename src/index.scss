@@ -1222,39 +1222,6 @@
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
-.habit-week-navigation {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 4px;
-    margin-bottom: 8px;
-}
-
-.habit-week-navigation__button {
-    flex: none;
-    padding: 3px 6px;
-    border: 1px solid var(--b3-border-color);
-    border-radius: 5px;
-    background: var(--b3-theme-surface);
-    color: var(--b3-theme-on-surface);
-    cursor: pointer;
-    font: inherit;
-    font-size: 11px;
-}
-
-.habit-week-navigation__button:disabled {
-    opacity: 0.5;
-    cursor: default;
-}
-
-.habit-week-navigation__range {
-    min-width: 0;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    font-size: 12px;
-}
-
 .habit-card__week {
     margin: 6px 0 8px;
 }
