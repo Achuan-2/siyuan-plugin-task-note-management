@@ -741,8 +741,8 @@ export class PomodoroTimer {
     }
 
     private async initComponents(container?: HTMLElement, orphanedWindow?: any) {
-        await this.recordManager.initialize();
-        await this.initAudio();
+        // 统计记录与音频互不依赖，并行准备，避免文件读取串行拖慢窗口创建。
+        await Promise.all([this.recordManager.initialize(), this.initAudio()]);
 
         if (orphanedWindow) {
             // If recovering, we already have the window (orphanedWindow).
@@ -756,79 +756,23 @@ export class PomodoroTimer {
     }
 
     private async initAudio() {
-
-        // 初始化工作背景音
-        if (this.settings.workSound) {
-            try {
-                const resolved = await resolveAudioPath(this.settings.workSound);
-                this.workAudio = new Audio(resolved);
-                this.workAudio.loop = true;
-                this.workAudio.volume = this.isBackgroundAudioMuted ? 0 : this.workVolume;
-                this.workAudio.preload = 'auto';
-            } catch (error) {
-                console.warn('无法加载工作背景音:', error);
-            }
-        }
-
-        // 初始化短时休息背景音
-        if (this.settings.breakSound) {
-            try {
-                const resolved = await resolveAudioPath(this.settings.breakSound);
-                this.breakAudio = new Audio(resolved);
-                this.breakAudio.loop = true;
-                this.breakAudio.volume = this.isBackgroundAudioMuted ? 0 : this.breakVolume;
-                this.breakAudio.preload = 'auto';
-            } catch (error) {
-                console.warn('无法加载短时休息背景音:', error);
-            }
-        }
-
-        // 初始化长时休息背景音
-        if (this.settings.longBreakSound) {
-            try {
-                const resolved = await resolveAudioPath(this.settings.longBreakSound);
-                this.longBreakAudio = new Audio(resolved);
-                this.longBreakAudio.loop = true;
-                this.longBreakAudio.volume = this.isBackgroundAudioMuted ? 0 : this.longBreakVolume;
-                this.longBreakAudio.preload = 'auto';
-            } catch (error) {
-                console.warn('无法加载长时休息背景音:', error);
-            }
-        }
-
-        // 初始化工作结束提示音（音量不受静音影响）
-        if (this.settings.workEndSound) {
-            try {
-                const resolved = await resolveAudioPath(this.settings.workEndSound);
-                this.workEndAudio = new Audio(resolved);
-                this.workEndAudio.volume = this.workEndVolume;
-                this.workEndAudio.preload = 'auto';
-            } catch (error) {
-                console.warn('无法加载工作结束提示音:', error);
-            }
-        }
-
-        // 初始化休息结束提示音（音量不受静音影响）
-        if (this.settings.breakEndSound) {
-            try {
-                const resolved = await resolveAudioPath(this.settings.breakEndSound);
-                this.breakEndAudio = new Audio(resolved);
-                this.breakEndAudio.volume = this.breakEndVolume;
-                this.breakEndAudio.preload = 'auto';
-            } catch (error) {
-                console.warn('无法加载休息结束提示音:', error);
-            }
-        }
-
-        // 初始化随机微休息
-        if (this.randomRestEnabled && this.settings.randomRestSounds) {
-            await this.initRandomRestSounds();
-        }
-
-        // 初始化随机微休息结束声音
-        if (this.randomRestEnabled && this.settings.randomRestEndSound) {
-            await this.initRandomRestEndSound();
-        }
+        const randomRestSoundsInitialization = this.randomRestEnabled && this.settings.randomRestSounds
+            ? this.initRandomRestSounds() : Promise.resolve();
+        const randomRestEndSoundInitialization = this.randomRestEnabled && this.settings.randomRestEndSound
+            ? this.initRandomRestEndSound() : Promise.resolve();
+        const [workAudio, breakAudio, longBreakAudio, workEndAudio, breakEndAudio] = await Promise.all([
+            this.createPreloadedAudio(this.settings.workSound, this.isBackgroundAudioMuted ? 0 : this.workVolume, true, '工作背景音'),
+            this.createPreloadedAudio(this.settings.breakSound, this.isBackgroundAudioMuted ? 0 : this.breakVolume, true, '短时休息背景音'),
+            this.createPreloadedAudio(this.settings.longBreakSound, this.isBackgroundAudioMuted ? 0 : this.longBreakVolume, true, '长时休息背景音'),
+            this.createPreloadedAudio(this.settings.workEndSound, this.workEndVolume, false, '工作结束提示音'),
+            this.createPreloadedAudio(this.settings.breakEndSound, this.breakEndVolume, false, '休息结束提示音')
+        ]);
+        await Promise.all([randomRestSoundsInitialization, randomRestEndSoundInitialization]);
+        this.workAudio = workAudio;
+        this.breakAudio = breakAudio;
+        this.longBreakAudio = longBreakAudio;
+        this.workEndAudio = workEndAudio;
+        this.breakEndAudio = breakEndAudio;
 
         // 额外预加载 AudioContext 音频 Buffer (同时支持桌面端与移动端)
         if (this.workAudio) void this.preloadAudioBuffer(this.workAudio.src);
@@ -842,6 +786,20 @@ export class PomodoroTimer {
             });
         }
         if (this.randomRestEndSound) void this.preloadAudioBuffer(this.randomRestEndSound.src);
+    }
+
+    private async createPreloadedAudio(path: string, volume: number, loop: boolean, label: string): Promise<HTMLAudioElement | null> {
+        if (!path) return null;
+        try {
+            const audio = new Audio(await resolveAudioPath(path));
+            audio.loop = loop;
+            audio.volume = volume;
+            audio.preload = 'auto';
+            return audio;
+        } catch (error) {
+            console.warn(`无法加载${label}:`, error);
+            return null;
+        }
     }
 
     private attachAudioUnlockListeners() {
@@ -8763,12 +8721,10 @@ export class PomodoroTimer {
                 PomodoroTimer.browserWindowTimer = this;
                 this.container = pomodoroWindow;
 
-                // 重新生成并加载HTML内容
-                await this.updateBrowserWindowContent(pomodoroWindow);
-
-                // 显示窗口
+                // 先显示已有窗口；内容刷新可能涉及页面重载和字体加载。
                 pomodoroWindow.show();
                 pomodoroWindow.focus();
+                await this.updateBrowserWindowContent(pomodoroWindow);
 
                 return;
             }
