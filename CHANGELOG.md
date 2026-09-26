@@ -1,8 +1,23 @@
+## v7.1.2 / 20260926
+
+- 🎨 mcp：支持批量新建任务，以及给已有任务新建子任务
+- 🎨 任务侧栏：编辑备注原地更新
+- 🎨 任务侧栏：支持便捷创建每日可做任务：如果拖动块到每日可做header，或者每日可做任务的上下方，则变为每日可做
+- 🎨 番茄钟：电脑端番茄钟全局窗口打开速度优化
+- 🎨 日历视图：任务排序优化，已完成的全天任务放在未完成全天任务下方
+- 🎨 日期识别优化：输入“周一做xxx”，会自动判断未来最近的周一日期
+- 🎨 习惯侧栏支持设置显示一周打卡情况
+- 🎨 任务编辑：重复实例跳过日期支持选择顺延/跳过
+- 🎨 习惯编辑：已放弃的习惯复选框放在结束日期后
+
+
 ## v7.1.1 / 20260915
+
 - 🎨 优化任务列表显示，适配思源v3.8.4，插件不再修改任务列表样式
 - 🔥 移除任务列表项右键菜单添加的「任务状态设置」，思源v3.8.4官方已支持
 
 ## v7.1.0 / 20260913
+
 - 🎨 任务侧栏：任务设置自定义进度条时，可直接拖动调整进度条的进度
 - 🎨 任务侧栏：每日可做和今日忽略分组显示
 - 🎨 项目侧栏：项目右键支持复制项目看板Markdown链接，可以将项目看板链接存放在思源文档或者外部应用快捷打开
@@ -29,10 +44,8 @@
 - 🐛 Browser: fixed repeated download prompts caused by CORS errors when downloading holiday calendars ([#351](https://github.com/Achuan-2/siyuan-plugin-task-note-management/issues/351))
 - 🐛 Fixed an issue where dragging a task to the sidebar failed to create the task
 
-
-
-
 ## v7.0.15 / 20260903
+
 - 🎨 日历视图: 支持不显示习惯实际打卡时间
 - 🎨 国外用户接入Waffo Pancake支付
 - 🐛 修复项目看板新建任务，同时填写任务备注，任务备注没有被保存，需要重新编辑再填写备注
@@ -40,14 +53,15 @@
 - 🌐 i18n 优化
 
 ---
+
 - 🎨 Calendar view: supports hiding the actual habit check-in time
 - 🎨 Integrated Waffo Pancake payment for overseas users
 - 🐛 Fixed issue where task remarks entered when creating a task on the project board were not saved, requiring editing again to fill in remarks
 - 🐛 Fixed issue where the Pomodoro timer's work sound sometimes did not play
 - 🌐 i18n optimization
 
-
 ## v7.0.14 / 20260826
+
 - 🐛 浏览器端无法使用webhook
 
 ## v7.0.13 / 20260823
@@ -60,22 +74,26 @@
 - 🐛 重复实例右键创建子任务，父任务会错误显示不存在
 
 ## v7.0.12 / 20260814
+
 - 🎨 注册MCP适配思源v3.8.0
 - 🐛 任务侧栏：拖动块到任务侧栏，会错误跟随拖动时的上方任务添加对应项目，而不是添加默认项目
 - 🐛 关闭日历页签，日历任务信息悬浮窗依然显示
 - 🐛 如果将无序列表加入到侧边栏，会出现block is not a task list item v3.8.0-alpha.3的提示，提示块类型并非任务块。
 
 ## v7.0.11 / 20260804
+
 - 🐛 文档番茄钟会不断sql调用问题
 - 🐛 新建任务的同时新建子任务，子任务没有继承父任务项目
 
 ## v7.0.10 / 20260802
+
 - 🐛 任务侧栏：子任务完成后没自动移出今日任务列表
 
 ## v7.0.9 / 20260731
+
 - 🎨 日历视图：习惯打卡完成后不立即隐藏习惯提醒时间
   - 未勾选“始终显示习惯提醒时间”：当天打卡完成后提醒时间保持显示，在第二天（即日期变为过去日期 dateStr < today 时）才会隐藏。
-  -  勾选“始终显示习惯提醒时间”：无论当天还是过去的习惯打卡完成，均始终保留显示该提醒时间。
+  - 勾选“始终显示习惯提醒时间”：无论当天还是过去的习惯打卡完成，均始终保留显示该提醒时间。
 - 🎨 日历视图：任务双击打开编辑弹窗
 - 🎨 日历视图：第一次打开时间轴视图，默认要滚动到当前时间
 - 🎨 日历视图：进行中的番茄钟时长优化，使用预计时长
@@ -83,16 +101,18 @@
 - 🐛 项目看板：快速调整日期后没有及时更新
 
 ## v7.0.8 / 20260730
+
 - 🐛 任务侧栏：完成任务后没有自动刷新
 
 ## v7.0.7 / 20260729
+
 - 🐛 任务侧栏：文档页签拖入侧栏，绑定的id错误为页签id而不为文档id [#340](https://github.com/Achuan-2/siyuan-plugin-task-note-management/issues/340)
 
 ## v7.0.6 / 20260728
+
 - 🎨 习惯打卡也添加打卡完成音效
 - 🐛 番茄钟：补录删除番茄钟报错“invalid ID argument ”
 - 🐛 日历视图：折叠非工作时段后，第一次打开日历时间段错位
-
 
 ## v7.0.5 / 20260724
 
