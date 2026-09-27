@@ -20,6 +20,7 @@ import { PomodoroManager } from "../dataManager/pomodoroManager";
 import { PomodoroRecordManager } from "../dataManager/pomodoroRecord"; // Add import
 import { getSolarDateLunarString, getNextLunarMonthlyDate, getNextLunarYearlyDate } from "../../utils/lunarUtils";
 import { getAllReminders, saveReminders } from "../../utils/icsSubscription";
+import { createCompletedRemindersForDeletion, showDeleteRepeatTaskDialog } from "../../utils/repeatTaskDeletion";
 import { isEventPast } from "../../utils/icsImport";
 import { PasteTaskDialog } from "../dialog/PasteTaskDialog";
 import LoadingDialog from '../dialog/LoadingDialog.svelte';
@@ -9135,6 +9136,10 @@ export class ReminderPanel {
     }
 
     private async deleteReminder(reminder: any) {
+        if (reminder.isRepeatInstance || reminder.repeat?.enabled) {
+            await this.deleteOriginalReminder(reminder.isRepeatInstance ? reminder.originalId : reminder.id);
+            return;
+        }
         const targetId = reminder.isSpanningTodayCompletedInstance ? reminder.originalId : reminder.id;
         const initialBlockId = reminder.blockId;
         try {
@@ -9224,12 +9229,12 @@ export class ReminderPanel {
         return index;
     }
 
-    private async performDeleteReminder(reminderId: string, preloadedReminderData?: any, preloadedChildrenIndex?: Map<string, string[]>, initialBlockId?: string) {
+    private async performDeleteReminder(reminderId: string, preloadedReminderData?: any, preloadedChildrenIndex?: Map<string, string[]>, initialBlockId?: string, keepCompletedInstances: boolean = false) {
         if (this.isDeleting) return;
         this.isDeleting = true;
 
         try {
-            const reminderData = preloadedReminderData || await getAllReminders(this.plugin, undefined, false, 'sidebar');
+            const reminderData = preloadedReminderData || await getAllReminders(this.plugin, undefined, true, 'sidebar');
 
             const parsed = parseReminderInstanceId(reminderId);
             const baseId = parsed ? parsed.originalId : (reminderId.includes('_') ? reminderId.split('_')[0] : reminderId);
@@ -9264,6 +9269,16 @@ export class ReminderPanel {
 
             // 预收集实例键，避免嵌套循环
             const instanceKeysByBaseId = this.buildInstanceKeysIndex(reminderData);
+            const deletionIds = new Set(toDelete);
+            for (const id of toDelete) {
+                for (const instanceKey of instanceKeysByBaseId.get(id) || []) deletionIds.add(instanceKey);
+            }
+            const completedReminders = keepCompletedInstances
+                ? createCompletedRemindersForDeletion(reminderData, deletionIds, {
+                    settings: this.plugin?.settings,
+                    holidayData: this.reminderSkipHolidayData
+                })
+                : {};
 
             // 收集批量异步任务
             const notificationIds: string[] = [];
@@ -9308,6 +9323,7 @@ export class ReminderPanel {
             }
 
             if (deletedCount > 0) {
+                Object.assign(reminderData, completedReminders);
                 await saveReminders(this.plugin, reminderData);
 
                 // 批量取消移动端通知
@@ -9337,7 +9353,11 @@ export class ReminderPanel {
                 ));
 
                 // 局部更新DOM：移除被删除的任务及其子任务
-                this.removeReminderFromDOM(reminderId, Array.from(toDelete));
+                if (keepCompletedInstances) {
+                    await this.loadReminders(true);
+                } else {
+                    this.removeReminderFromDOM(reminderId, Array.from(toDelete));
+                }
 
                 // 如果有父任务且在当前视图中，局部更新父任务进度条
                 if (parentId) {
@@ -9356,6 +9376,7 @@ export class ReminderPanel {
         } catch (error) {
             console.error('删除提醒失败:', error);
             showMessage(i18n("deleteReminderFailed"));
+            if (keepCompletedInstances) await this.loadReminders(true);
         } finally {
             this.isDeleting = false;
         }
@@ -10116,16 +10137,15 @@ export class ReminderPanel {
             }
 
             const childrenIndex = this.buildChildrenIndex(reminderData);
-            const hasDescendants = this.hasDescendantsUsingIndex(originalId, childrenIndex);
-            const extra = hasDescendants ? '（包括子任务）' : '';
-
-            await confirm(
-                i18n("deleteReminder"),
-                `${i18n("confirmDelete", { title: originalReminder.title })}${extra}`,
-                () => {
-                    this.performDeleteReminder(originalId, reminderData, childrenIndex);
-                }
-            );
+            const descendantIds = this.collectDescendantIds(originalId, childrenIndex);
+            showDeleteRepeatTaskDialog({
+                title: originalReminder.title,
+                description: descendantIds.length > 0
+                    ? i18n('includesNSubtasks', { count: String(descendantIds.length) })
+                    : undefined,
+                // 用户确认时重读数据，避免弹窗期间新增的完成记录被覆盖。
+                onConfirm: keepCompletedInstances => this.performDeleteReminder(originalId, undefined, undefined, originalReminder.blockId, keepCompletedInstances)
+            });
         } catch (error) {
             console.error('获取原始提醒失败:', error);
             showMessage(i18n("deleteReminderFailed"));

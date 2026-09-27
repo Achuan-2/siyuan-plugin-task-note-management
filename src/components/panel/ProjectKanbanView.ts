@@ -24,9 +24,11 @@ import {
     setRepeatInstanceCompletion,
     setRepeatInstanceOverride,
     patchRepeatInstanceState,
+    parseReminderInstanceId,
     getRepeatInstanceState,
     getInstanceField
 } from "../dataManager/repeatUtils";
+import { createCompletedRemindersForDeletion, showDeleteRepeatTaskDialog } from "../../utils/repeatTaskDeletion";
 import { getSolarDateLunarString } from "../../utils/lunarUtils";
 import { QuickReminderDialog } from "../dialog/QuickReminderDialog";
 import { buildQuickDateMenuItems, openQuickDateEditDialog } from "../menu/QuickDateMenu";
@@ -11484,6 +11486,7 @@ export class ProjectKanbanView {
     }
 
     private async deleteTask(task: any) {
+        const isRecurring = task.isRepeatInstance || task.repeat?.enabled;
         // 对于周期实例，删除原始周期事件（所有实例）
         const taskToDelete = task.isRepeatInstance ?
             { ...task, id: task.originalId, isRepeatInstance: false } : task;
@@ -11492,124 +11495,153 @@ export class ProjectKanbanView {
         let confirmMessage = task.isRepeatInstance ?
             i18n('confirmDeleteRepeat', { title: task.title }) :
             i18n('confirmDeleteTask', { title: task.title });
+        let descendantDescription: string | undefined;
         try {
             const reminderDataForPreview = await this.getReminders();
             const descendantIdsPreview = this.getAllDescendantIds(taskToDelete.id, reminderDataForPreview);
             if (descendantIdsPreview.length > 0) {
-                confirmMessage += `\n\n${i18n('includesNSubtasks', { count: String(descendantIdsPreview.length) })}`;
+                descendantDescription = i18n('includesNSubtasks', { count: String(descendantIdsPreview.length) });
+                confirmMessage += `\n\n${descendantDescription}`;
             }
         } catch (err) {
             // 无法读取数据时，仍然显示通用提示
         }
 
-        confirm(
-            i18n('deleteTask'),
-            confirmMessage,
-            async () => {
-                // --- Optimistic UI Update ---
-                const parentIdsToRefresh = new Set<string>();
-                try {
-                    const idsToRemove = new Set<string>();
+        const performDelete = async (keepCompletedInstances: boolean = false) => {
+            // --- Optimistic UI Update ---
+            const parentIdsToRefresh = new Set<string>();
+            try {
+                const idsToRemove = new Set<string>();
 
-                    // 1. Identify main tasks to remove
-                    if (task.isRepeatInstance) {
-                        // If deleting all instances of a recurring task, find all instances in the current view
-                        const originalId = task.originalId;
-                        this.tasks.forEach(t => {
-                            if (t.id === originalId || t.originalId === originalId) {
-                                idsToRemove.add(t.id);
-                            }
-                        });
-                    } else {
-                        idsToRemove.add(taskToDelete.id);
-                    }
-
-                    // 2. Identify descendants (using local cache)
-                    const initialTargets = Array.from(idsToRemove);
-                    for (const parentId of initialTargets) {
-                        const descendantIds = this.getAllDescendantIds(parentId, this.tasks);
-                        descendantIds.forEach(id => idsToRemove.add(id));
-                    }
-
-                    idsToRemove.forEach(id => {
-                        const currentTask = this.tasks.find(t => t.id === id);
-                        if (currentTask?.parentId && !idsToRemove.has(currentTask.parentId)) {
-                            parentIdsToRefresh.add(currentTask.parentId);
+                // 1. Identify main tasks to remove
+                if (isRecurring) {
+                    // If deleting all instances of a recurring task, find all instances in the current view
+                    const originalId = taskToDelete.id;
+                    this.tasks.forEach(t => {
+                        if (t.id === originalId || t.originalId === originalId) {
+                            idsToRemove.add(t.id);
                         }
                     });
-
-                    // 3. Remove from DOM and local cache
-                    idsToRemove.forEach(id => {
-                        const el = this.container.querySelector(`[data-task-id="${id}"]`);
-                        if (el) el.remove();
-                    });
-
-                    this.tasks = this.tasks.filter(t => !idsToRemove.has(t.id));
-
-                    parentIdsToRefresh.forEach(parentId => {
-                        this.refreshTaskTreeAround(parentId);
-                    });
-
-                } catch (e) {
-                    console.error("Optimistic UI update failed:", e);
+                } else {
+                    idsToRemove.add(taskToDelete.id);
                 }
-                // -----------------------------
 
-                try {
-                    // 重读数据以确保删除时数据为最新
-                    const reminderData = await this.getReminders();
-
-                    // 获取所有后代任务ID（递归）
-                    const descendantIds = this.getAllDescendantIds(taskToDelete.id, reminderData);
-
-                    const tasksToDelete = [taskToDelete.id, ...descendantIds];
-                    const boundIdsToUpdate = new Set<string>();
-
-                    // 删除并收集需要更新的绑定块ID
-                    for (const taskId of tasksToDelete) {
-                        const t = reminderData[taskId];
-                        if (t) {
-                            // 收集绑定了块或文档的ID
-                            if (t.blockId || t.docId) {
-                                boundIdsToUpdate.add(t.blockId || t.docId);
-                            }
-                            // 取消移动端通知
-                            await this.plugin.cancelMobileNotification(taskId);
-                            if (t.isSubscribed) {
-                                await deleteSubscriptionReminderTask(this.plugin, t);
-                            }
-                            // 删除数据项
-                            delete reminderData[taskId];
-                        }
-                    }
-
-                    // 先保存数据
-                    await saveReminders(this.plugin, reminderData);
-
-                    // 保存后再批量更新块的书签状态（忽略错误）
-                    for (const boundId of boundIdsToUpdate) {
-                        try {
-                            await updateBindBlockAtrrs(boundId, this.plugin);
-                        } catch (err) {
-                            console.warn(`更新已删除任务属性失败: `, boundId, err);
-                        }
-                    }
-
-                    // 触发更新事件
-                    this.dispatchReminderUpdate(true);
-
-                    // 当前看板会忽略同源事件，需要主动刷新一次以更新折叠、计数和分页等衍生状态
-                    await this.queueLoadTasks();
-
-                    // showMessage("任务已删除");
-                } catch (error) {
-                    console.error('删除任务失败:', error);
-                    showMessage("删除任务失败");
-                    // Keep UI consistent or facilitate retry by reloading
-                    await this.loadTasks();
+                // 2. Identify descendants (using local cache)
+                const initialTargets = Array.from(idsToRemove);
+                for (const parentId of initialTargets) {
+                    const descendantIds = this.getAllDescendantIds(parentId, this.tasks);
+                    descendantIds.forEach(id => idsToRemove.add(id));
                 }
+                if (keepCompletedInstances) {
+                    this.tasks.forEach(t => {
+                        if (t.completed) idsToRemove.delete(t.id);
+                    });
+                }
+
+                idsToRemove.forEach(id => {
+                    const currentTask = this.tasks.find(t => t.id === id);
+                    if (currentTask?.parentId && !idsToRemove.has(currentTask.parentId)) {
+                        parentIdsToRefresh.add(currentTask.parentId);
+                    }
+                });
+
+                // 3. Remove from DOM and local cache
+                idsToRemove.forEach(id => {
+                    const el = this.container.querySelector(`[data-task-id="${id}"]`);
+                    if (el) el.remove();
+                });
+
+                this.tasks = this.tasks.filter(t => !idsToRemove.has(t.id));
+
+                parentIdsToRefresh.forEach(parentId => {
+                    this.refreshTaskTreeAround(parentId);
+                });
+
+            } catch (e) {
+                console.error("Optimistic UI update failed:", e);
             }
-        );
+            // -----------------------------
+
+            try {
+                // 重读数据以确保删除时数据为最新
+                const reminderData = { ...await this.getReminders(true) };
+
+                // 获取所有后代任务ID（递归）
+                const descendantIds = this.getAllDescendantIds(taskToDelete.id, reminderData);
+
+                const tasksToDelete = new Set([taskToDelete.id, ...descendantIds]);
+                // 一并处理单独存储的实例，避免系列删除后留下未完成记录。
+                for (const id of Object.keys(reminderData)) {
+                    const originalId = parseReminderInstanceId(id)?.originalId;
+                    if (originalId && tasksToDelete.has(originalId)) tasksToDelete.add(id);
+                }
+                const completedReminders = keepCompletedInstances
+                    ? createCompletedRemindersForDeletion(reminderData, tasksToDelete, {
+                        settings: this.reminderSkipSettings || this.plugin?.settings,
+                        holidayData: this.reminderSkipHolidayData
+                    })
+                    : {};
+                const boundIdsToUpdate = new Set<string>();
+
+                // 删除并收集需要更新的绑定块ID
+                for (const taskId of tasksToDelete) {
+                    const t = reminderData[taskId];
+                    if (t) {
+                        // 收集绑定了块或文档的ID
+                        if (t.blockId || t.docId) {
+                            boundIdsToUpdate.add(t.blockId || t.docId);
+                        }
+                        Object.values(t.repeat?.instances || {}).forEach((state: any) => {
+                            if (state?.blockId || state?.docId) boundIdsToUpdate.add(state.blockId || state.docId);
+                        });
+                        // 取消移动端通知
+                        await this.plugin.cancelMobileNotification(taskId);
+                        if (t.isSubscribed) {
+                            await deleteSubscriptionReminderTask(this.plugin, t);
+                        }
+                        // 删除数据项
+                        delete reminderData[taskId];
+                    }
+                }
+
+                // 先保存数据
+                Object.assign(reminderData, completedReminders);
+                await saveReminders(this.plugin, reminderData);
+                this.reminderData = null;
+
+                // 保存后再批量更新块的书签状态（忽略错误）
+                for (const boundId of boundIdsToUpdate) {
+                    try {
+                        await updateBindBlockAtrrs(boundId, this.plugin);
+                    } catch (err) {
+                        console.warn(`更新已删除任务属性失败: `, boundId, err);
+                    }
+                }
+
+                // 触发更新事件
+                this.dispatchReminderUpdate(true);
+
+                // 当前看板会忽略同源事件，需要主动刷新一次以更新折叠、计数和分页等衍生状态
+                await this.queueLoadTasks();
+
+                // showMessage("任务已删除");
+            } catch (error) {
+                console.error('删除任务失败:', error);
+                showMessage("删除任务失败");
+                // Keep UI consistent or facilitate retry by reloading
+                await this.getReminders(true);
+                await this.loadTasks();
+            }
+        };
+        if (isRecurring) {
+            showDeleteRepeatTaskDialog({
+                title: task.title,
+                description: descendantDescription,
+                onConfirm: performDelete
+            });
+        } else {
+            confirm(i18n('deleteTask'), confirmMessage, () => { void performDelete(); });
+        }
     }
 
     private createPomodoroStartSubmenu(task: any): any[] {

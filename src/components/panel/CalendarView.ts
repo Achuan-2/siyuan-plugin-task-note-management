@@ -14,6 +14,7 @@ import { buildQuickDateMenuItems, openQuickDateEditDialog } from "../menu/QuickD
 import { ProjectSelectorPopup } from "../dialog/ProjectSelectorPopup";
 import { CategoryManager, Category } from "../dataManager/categoryManager";
 import { confirmDialog } from "../../libs/dialog";
+import { createCompletedInstanceReminders, showDeleteRepeatTaskDialog } from "../../utils/repeatTaskDeletion";
 import { showAddTaskReminderTimeDialog } from "../dialog/AddTaskReminderTimeDialog";
 import { ProjectManager } from "../dataManager/projectManager";
 import { StatusManager } from "../dataManager/statusManager";
@@ -5329,19 +5330,15 @@ export class CalendarView {
     }
 
     private async deleteEvent(calendarEvent: any) {
-
-
-        // 对于重复事件实例，删除的是整个系列
-        if (calendarEvent.extendedProps.isRepeated) {
-            await confirm(
-                i18n("deleteAllInstances"),
-                i18n("confirmDelete", { title: calendarEvent.title }),
-                () => {
-                    this.performDeleteEvent(calendarEvent.extendedProps.originalId);
-                }
-            );
+        const actualId = calendarEvent.id.includes('_block_') ? calendarEvent.id.split('_block_')[0] : calendarEvent.id;
+        const props = calendarEvent.extendedProps;
+        if (props.isRepeated || props.repeat?.enabled) {
+            const reminderId = props.isRepeated ? props.originalId : actualId;
+            showDeleteRepeatTaskDialog({
+                title: calendarEvent.title,
+                onConfirm: keepCompletedInstances => this.performDeleteEvent(reminderId, keepCompletedInstances)
+            });
         } else {
-            const actualId = calendarEvent.id.includes('_block_') ? calendarEvent.id.split('_block_')[0] : calendarEvent.id;
             await confirm(
                 i18n("deleteReminder"),
                 i18n("confirmDelete", { title: calendarEvent.title }),
@@ -5352,9 +5349,14 @@ export class CalendarView {
         }
     }
 
-    private async performDeleteEvent(reminderId: string) {
+    private async performDeleteEvent(reminderId: string, keepCompletedInstances: boolean = false) {
         // 1. 立即从日历 UI 中移除 (Optimistic UI)
         this.calendar.getEvents().forEach(event => {
+            if (keepCompletedInstances && event.extendedProps.completed &&
+                (event.extendedProps.originalId === reminderId ||
+                    event.extendedProps.eventId?.startsWith(`${reminderId}_`))) {
+                return;
+            }
             if (event.id === reminderId || event.extendedProps.originalId === reminderId) {
                 event.remove();
             }
@@ -5370,13 +5372,19 @@ export class CalendarView {
         });
 
         // 2. 后台处理数据保存和同步
-        (async () => {
+        await (async () => {
             try {
                 const reminderData = await getAllReminders(this.plugin);
 
                 if (reminderData[reminderId]) {
                     const reminder = reminderData[reminderId];
-                    const blockId = reminder.blockId;
+                    const completedReminders = keepCompletedInstances
+                        ? createCompletedInstanceReminders(reminder, {
+                            settings: this.reminderSkipSettings || this.plugin?.settings,
+                            holidayData: this.holidays as HolidayData
+                        })
+                        : {};
+                    const blockIds = new Set<string>([reminder.blockId, ...Object.values(completedReminders).map(instance => instance.blockId)].filter(Boolean));
                     // 取消移动端通知
                     await this.plugin.cancelMobileNotification(reminderId);
                     if (reminder.isSubscribed && reminder.subscriptionType === 'caldav') {
@@ -5384,15 +5392,19 @@ export class CalendarView {
                         await deleteSubscriptionReminderTask(this.plugin, reminder);
                     }
                     delete reminderData[reminderId];
+                    Object.assign(reminderData, completedReminders);
                     // 保存数据到存储
                     await saveReminders(this.plugin, reminderData);
+                    if (keepCompletedInstances) {
+                        await this.refreshEvents();
+                    }
                     // 保存成功后再通知，确保其它日历实例刷新时读取到最新数据
                     window.dispatchEvent(new CustomEvent('reminderUpdated', {
                         detail: { source: 'calendar', instanceId: this.calendarViewInstanceId }
                     }));
 
                     // 后台更新块属性
-                    if (blockId) {
+                    for (const blockId of blockIds) {
                         try {
                             await updateBindBlockAtrrs(blockId, this.plugin);
                         } catch (err) {
