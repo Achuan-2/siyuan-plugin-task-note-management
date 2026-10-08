@@ -46,7 +46,9 @@ export function createHabitTool(habitManager: HabitManager): ToolDefinition {
                     // create / update
                     title: { type: "string", description: "习惯名称" },
                     target: { type: "number", description: "目标数量" },
-                    goalType: { type: "string", enum: ["count", "pomodoro"], description: "目标类型" },
+                    goalType: { type: "string", enum: ["count", "pomodoro", "either"], description: "目标类型：次数、番茄时长或任一达标" },
+                    pomodoroTargetHours: { type: "number", description: "番茄目标小时数" },
+                    pomodoroTargetMinutes: { type: "number", description: "番茄目标分钟数" },
                     frequency: {
                         type: "object",
                         description: "频率设置",
@@ -111,7 +113,9 @@ export function createHabitTool(habitManager: HabitManager): ToolDefinition {
                     const habit = await habitManager.createHabit({
                         title: assertString(input.title, "title"),
                         target: assertNumber(input.target, "target"),
-                        goalType: assertEnum(input.goalType, "goalType", ["count", "pomodoro"]),
+                        goalType: assertEnum(input.goalType, "goalType", ["count", "pomodoro", "either"]),
+                        pomodoroTargetHours: assertOptionalNumber(input.pomodoroTargetHours, "pomodoroTargetHours"),
+                        pomodoroTargetMinutes: assertOptionalNumber(input.pomodoroTargetMinutes, "pomodoroTargetMinutes"),
                         frequency: assertObject(input.frequency, "frequency") as any,
                         startDate: assertDateString(input.startDate, "startDate"),
                         endDate: assertOptionalDateString(input.endDate, "endDate"),
@@ -126,7 +130,9 @@ export function createHabitTool(habitManager: HabitManager): ToolDefinition {
                     const habit = await habitManager.updateHabit(id, {
                         title: assertOptionalString(input.title, "title"),
                         target: assertOptionalNumber(input.target, "target"),
-                        goalType: assertOptionalEnum(input.goalType, "goalType", ["count", "pomodoro"]),
+                        goalType: assertOptionalEnum(input.goalType, "goalType", ["count", "pomodoro", "either"]),
+                        pomodoroTargetHours: assertOptionalNumber(input.pomodoroTargetHours, "pomodoroTargetHours"),
+                        pomodoroTargetMinutes: assertOptionalNumber(input.pomodoroTargetMinutes, "pomodoroTargetMinutes"),
                         frequency: assertOptionalObject(input.frequency, "frequency") as any,
                         startDate: assertOptionalDateString(input.startDate, "startDate"),
                         endDate: assertOptionalDateString(input.endDate, "endDate"),

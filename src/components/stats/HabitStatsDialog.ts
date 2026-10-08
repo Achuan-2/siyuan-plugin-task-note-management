@@ -1,5 +1,5 @@
 ﻿import { Dialog } from "siyuan";
-import type { Habit } from "../panel/HabitPanel";
+import { isHabitCheckInDayComplete, type Habit } from "../../utils/habitUtils";
 import { HabitDayDialog } from "../dialog/HabitDayDialog";
 import { PomodoroRecordManager } from "../dataManager/pomodoroRecord";
 import {
@@ -384,41 +384,9 @@ export class HabitStatsDialog {
      * @returns true表示达标，false表示未达标或未打卡
      */
     private isCheckInComplete(dateStr: string): boolean {
-        if (this.getHabitGoalType(this.habit) === "pomodoro") {
-            const target = this.getHabitPomodoroTargetMinutes(this.habit);
-            const current = this.getHabitPomodoroFocusMinutes(this.habit, dateStr);
-            return current >= target;
-        }
-
-        const checkIn = this.habit.checkIns?.[dateStr];
-        if (!checkIn) return false;
-
-        // 获取当天所有打卡的emoji
-        const emojis: string[] = [];
-        if (checkIn.entries && checkIn.entries.length > 0) {
-            // 使用新格式的entries
-            checkIn.entries.forEach(entry => {
-                if (entry.emoji) emojis.push(entry.emoji);
-            });
-        } else if (checkIn.status && checkIn.status.length > 0) {
-            // 使用旧格式的status
-            emojis.push(...checkIn.status);
-        }
-
-        // 过滤出认为是成功打卡的emoji
-        const successEmojis = emojis.filter(emoji => {
-            const emojiConfig = this.habit.checkInEmojis?.find(e => e.emoji === emoji);
-            // 如果找不到配置或countsAsSuccess未定义，默认认为是成功打卡
-            return emojiConfig ? (emojiConfig.countsAsSuccess !== false) : true;
+        return isHabitCheckInDayComplete(this.habit, dateStr, {
+            getPomodoroFocusMinutes: (_, date) => this.getHabitPomodoroFocusMinutes(this.habit, date)
         });
-
-        let successCount = successEmojis.length;
-        // 兼容旧数据：只有在没有 status/entries 且有 count 时才使用 count
-        if (emojis.length === 0 && typeof checkIn.count === "number" && checkIn.count > 0) {
-            successCount = checkIn.count;
-        }
-        const target = this.habit.target || 1;
-        return successCount >= target;
     }
 
     private isHabitWithinDateRange(habit: Habit, dateStr: string): boolean {
@@ -492,18 +460,6 @@ export class HabitStatsDialog {
             default:
                 return true;
         }
-    }
-
-    private getHabitGoalType(habit: Habit): "count" | "pomodoro" {
-        return habit.goalType === "pomodoro" ? "pomodoro" : "count";
-    }
-
-    private getHabitPomodoroTargetMinutes(habit: Habit): number {
-        const hours = Math.max(0, Number((habit as any).pomodoroTargetHours) || 0);
-        const minutes = Math.max(0, Number((habit as any).pomodoroTargetMinutes) || 0);
-        const total = (hours * 60) + minutes;
-        if (total > 0) return total;
-        return Math.max(1, Number(habit.target) || 1);
     }
 
     private getHabitPomodoroFocusMinutes(habit: Habit, dateStr: string): number {

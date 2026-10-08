@@ -1,4 +1,4 @@
-export type HabitGoalType = "count" | "pomodoro";
+export type HabitGoalType = "count" | "pomodoro" | "either";
 
 export type HabitFrequencyType = "daily" | "weekly" | "monthly" | "yearly" | "ebbinghaus" | "custom";
 
@@ -126,7 +126,11 @@ export interface Habit extends HabitLike {
 }
 
 export function getHabitGoalType(habit: HabitLike): HabitGoalType {
-    return habit?.goalType === "pomodoro" ? "pomodoro" : "count";
+    return habit?.goalType === "either" ? "either" : habit?.goalType === "pomodoro" ? "pomodoro" : "count";
+}
+
+export function hasHabitPomodoroGoal(habit: HabitLike): boolean {
+    return getHabitGoalType(habit) !== "count";
 }
 
 export function getHabitPomodoroTargetMinutes(habit: HabitLike): number {
@@ -134,6 +138,8 @@ export function getHabitPomodoroTargetMinutes(habit: HabitLike): number {
     const minutes = Math.max(0, Number(habit?.pomodoroTargetMinutes) || 0);
     const total = (hours * 60) + minutes;
     if (total > 0) return total;
+    // 组合目标的 target 保存次数，不能作为番茄分钟数的回退值。
+    if (getHabitGoalType(habit) === "either") return 30;
     return Math.max(1, Number(habit?.target) || 1);
 }
 
@@ -218,26 +224,36 @@ export function shouldCheckInOnDate(habit: HabitLike, date: string): boolean {
     }
 }
 
+export interface HabitProgress {
+    current: number;
+    target: number;
+    count: { current: number; target: number };
+    pomodoro: { current: number; target: number };
+}
+
 export function getHabitProgressOnDate(
     habit: HabitLike,
     date: string,
     options?: {
         getPomodoroFocusMinutes?: (habitId: string, logicalDate: string) => number;
     }
-): { current: number; target: number } {
-    if (getHabitGoalType(habit) === "pomodoro") {
-        const target = getHabitPomodoroTargetMinutes(habit);
-        const habitId = habit?.id || "";
-        const current = habitId && options?.getPomodoroFocusMinutes
-            ? (options.getPomodoroFocusMinutes(habitId, date) || 0)
-            : 0;
-        return { current, target };
+): HabitProgress {
+    const goalType = getHabitGoalType(habit);
+    const count = {
+        current: goalType === "either" ? getHabitSuccessfulCheckInCount(habit as Habit, date) : (habit?.checkIns?.[date]?.count || 0),
+        target: Math.max(1, Number(habit?.target) || 1)
+    };
+    const pomodoro = {
+        current: hasHabitPomodoroGoal(habit) && habit?.id && options?.getPomodoroFocusMinutes
+            ? (options.getPomodoroFocusMinutes(habit.id, date) || 0) : 0,
+        target: getHabitPomodoroTargetMinutes(habit)
+    };
+    if (goalType === "either") {
+        // 使用较高的达标比例；两项不足的进度不能相加成为完成。
+        return { current: Math.max(count.current / count.target, pomodoro.current / pomodoro.target), target: 1, count, pomodoro };
     }
-
-    const checkIn = habit?.checkIns?.[date];
-    const current = checkIn?.count || 0;
-    const target = Math.max(1, Number(habit?.target) || 1);
-    return { current, target };
+    const progress = goalType === "pomodoro" ? pomodoro : count;
+    return { ...progress, count, pomodoro };
 }
 
 export function isHabitCompletedOnDate(
@@ -258,12 +274,16 @@ export function isHabitCheckInDayComplete(
         getPomodoroFocusMinutes?: (habitId: string, logicalDate: string) => number;
     }
 ): boolean {
-    if (getHabitGoalType(habit) === "pomodoro") {
+    if (hasHabitPomodoroGoal(habit)) {
         return isHabitCompletedOnDate(habit, date, options);
     }
 
-    const checkIn = habit.checkIns?.[date];
-    if (!checkIn) return false;
+    return getHabitSuccessfulCheckInCount(habit, date) >= Math.max(1, Number(habit.target) || 1);
+}
+
+function getHabitSuccessfulCheckInCount(habit: Habit, date: string): number {
+    const checkIn = habit?.checkIns?.[date];
+    if (!checkIn) return 0;
 
     const emojis = Array.isArray(checkIn.entries) && checkIn.entries.length > 0
         ? checkIn.entries.map(entry => entry.emoji).filter(Boolean)
@@ -275,7 +295,7 @@ export function isHabitCheckInDayComplete(
         }).length
         : Math.max(0, Number(checkIn.count) || 0);
 
-    return successCount >= Math.max(1, Number(habit.target) || 1);
+    return successCount;
 }
 
 function getPreviousDateString(date: string): string {

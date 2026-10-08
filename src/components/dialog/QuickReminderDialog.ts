@@ -6330,7 +6330,7 @@ export class QuickReminderDialog {
             if (!habit) return;
 
             const goalType = getHabitGoalType(habit);
-            if (goalType === 'pomodoro') {
+            if (goalType !== 'count') {
                 syncPomodoroCheckbox.checked = true;
                 autoCheckInCheckbox.checked = false;
             } else {

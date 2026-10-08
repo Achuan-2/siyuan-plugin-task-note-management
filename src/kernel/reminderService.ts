@@ -12,7 +12,7 @@ import { generateRepeatInstances, getRepeatInstanceOriginalKey, getRepeatInstanc
 import { getLocalDateString, getLogicalDateString, getLocalTimeString, setDayStartTime, setSingleDateDefaultRole } from '../utils/dateUtils';
 import { shouldSkipReminderOnDate, type HolidayData } from '../utils/reminderSkipDate';
 import { shouldTreatStartDateOnlyAsOverdue } from '../utils/startDateOverdue';
-import { getHabitReminderTimesForDate, getHabitGoalType, shouldCheckInOnDate, isHabitCompletedOnDate } from '../utils/habitUtils';
+import { getHabitReminderTimesForDate, hasHabitPomodoroGoal, shouldCheckInOnDate, isHabitCompletedOnDate } from '../utils/habitUtils';
 import { buildLinkedHabitPomodoroData, getLinkedTaskPomodoroStatsByDate } from '../utils/linkedHabitPomodoro';
 import zhCN from '../../i18n/zh_CN.json';
 import en from '../../i18n/en.json';
@@ -338,7 +338,7 @@ export class KernelReminderService {
         const result: Record<string, WebhookNotification> = {};
         this.activeHabitIds.clear();
         const habits = await this.storage.loadData(HABIT_DATA_FILE, true) || {};
-        const hasPomodoroHabit = Object.values(habits).some((habit: any) => getHabitGoalType(habit) === 'pomodoro');
+        const hasPomodoroHabit = Object.values(habits).some((habit: any) => hasHabitPomodoroGoal(habit));
         const record = hasPomodoroHabit ? await this.storage.loadData(`pomodoroRecords/${date}.json`, true) : null;
         const sessions = Array.isArray(record?.sessions) ? record.sessions.filter((session: any) => !session.inProgress) : [];
         const linkedStats = buildLinkedHabitPomodoroData(tasks, { [date]: { sessions } }).statsByHabit;

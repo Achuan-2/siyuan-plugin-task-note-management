@@ -74,6 +74,41 @@ test('关闭 Webhook 时，内核仍统一生成任务和习惯事件并推送�
     front.frontend.stop();
 });
 
+for (const [count, minutes, notify] of [[2, 0, false], [0, 20, false], [1, 10, true]]) {
+    test(`组合目标提醒：${count} 次、${minutes} 分钟${notify ? '仍提醒' : '不再提醒'}`, async t => {
+        const date = '2026-10-08';
+        const f = fixture(t, {
+            'reminder.json': {},
+            'habit.json': { habit: { id: 'habit', title: '复习', startDate: '2026-10-01',
+                frequency: { type: 'daily' }, goalType: 'either', target: 2, pomodoroTargetMinutes: 20,
+                reminderTimes: ['09:30'] } },
+            'habitCheckin/habit.json': { checkIns: { [date]: { count, status: Array(count).fill('✅') } } },
+            [`pomodoroRecords/${date}.json`]: { sessions: [{ eventId: 'habit', type: 'work', duration: minutes }] }
+        });
+        const front = f.receiver('desktop');
+        front.frontend.start();
+        await front.frontend.recover(); await flush();
+        assert.equal(front.shown.length, notify ? 1 : 0);
+        front.frontend.stop();
+    });
+}
+
+test('仅有组合目标的习惯也读取绑定任务番茄时长，达标后不提醒', async t => {
+    const date = '2026-10-08';
+    const f = fixture(t, {
+        'reminder.json': { task: { id: 'task', linkedHabitId: 'habit', linkedHabitSyncPomodoroToday: true } },
+        'habit.json': { habit: { id: 'habit', title: '复习', startDate: '2026-10-01',
+            frequency: { type: 'daily' }, goalType: 'either', target: 2, pomodoroTargetMinutes: 20,
+            reminderTimes: ['09:30'] } },
+        [`pomodoroRecords/${date}.json`]: { sessions: [{ eventId: 'task', type: 'work', duration: 20 }] }
+    });
+    const front = f.receiver('desktop');
+    front.frontend.start();
+    await front.frontend.recover(); await flush();
+    assert.equal(front.shown.length, 0);
+    front.frontend.stop();
+});
+
 test('两个窗口同时补取及接收广播，只允许一个窗口显示，每条事件独立领取', async t => {
     const f = fixture(t, { 'reminder.json': {
         a: { id: 'a', date: '2026-10-08', time: '09:30', title: '任务 A' },

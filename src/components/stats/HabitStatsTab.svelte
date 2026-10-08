@@ -1,6 +1,6 @@
 <script lang="ts">
 import { onMount, tick } from "svelte";
-import type { Habit } from "../panel/HabitPanel";
+import type { Habit } from "../../utils/habitUtils";
 import { HabitDayDialog } from "../dialog/HabitDayDialog";
 import { HabitStatsDialog } from "./HabitStatsDialog";
 import { HabitEditDialog } from "../dialog/HabitEditDialog";
@@ -273,7 +273,7 @@ function buildGroupedSections(input: Habit[]): HabitGroupSection[] {
     return sections;
 }
 
-function getHabitGoalType(habit: Habit): "count" | "pomodoro" {
+function getHabitGoalType(habit: Habit) {
     return getHabitGoalTypeUtil(habit);
 }
 

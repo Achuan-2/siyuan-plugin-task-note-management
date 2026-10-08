@@ -52,7 +52,7 @@ import { getDockItemSelector, setDockBadgeByType as applyDockBadgeByType } from 
 import {
     Habit,
     HabitEmojiConfig,
-    getHabitGoalType,
+    hasHabitPomodoroGoal,
     getHabitPomodoroTargetMinutes,
     getHabitReminderTimesForDate,
     getTodayHabitBuckets,
@@ -5721,7 +5721,7 @@ export default class ReminderPlugin extends Plugin {
             }
 
             // 2. 番茄目标型习惯触发一次同步检查（会在 sync 内判断是否开启自动打卡）
-            if (getHabitGoalType(habit) === 'pomodoro') {
+            if (hasHabitPomodoroGoal(habit)) {
                 await this.syncHabitPomodoroAutoCheckIns(habitData, habitId);
             }
         } catch (error) {
@@ -5756,7 +5756,7 @@ export default class ReminderPlugin extends Plugin {
         for (const habit of habitsToProcess) {
             if (!habit || !habit.id) continue;
             // 仅对番茄目标型习惯自动补录
-            if (getHabitGoalType(habit) !== 'pomodoro') continue;
+            if (!hasHabitPomodoroGoal(habit)) continue;
             // 仅在开启「番茄达标自动打卡」时执行
             if (!habit.autoCheckInAfterPomodoro) continue;
 

@@ -36,7 +36,8 @@ import { createPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
 import { HabitEditDialog } from "../dialog/HabitEditDialog";
 import { HabitStatsDialog } from "../stats/HabitStatsDialog";
 import { HabitDayDialog } from "../dialog/HabitDayDialog";
-import { getHabitProgressOnDate, getHabitReminderTimes, getHabitReminderTimesForDate, shouldCheckInOnDate as shouldCheckInOnDateUtil, isHabitActiveOnDate } from "../../utils/habitUtils";
+import { getHabitGoalType, hasHabitPomodoroGoal, getHabitProgressOnDate, getHabitReminderTimes, getHabitReminderTimesForDate, shouldCheckInOnDate as shouldCheckInOnDateUtil, isHabitActiveOnDate } from "../../utils/habitUtils";
+import { buildLinkedHabitPomodoroData, getLinkedTaskPomodoroStatsByDate, type LinkedTaskPomodoroDayStats } from "../../utils/linkedHabitPomodoro";
 import { HabitGroupManager } from "../dataManager/habitGroupManager";
 import { normalizeReminderSkipWeekendMode, shouldSkipReminderOnDate, type HolidayData, getReminderSkipWeekendsEffective, getReminderSkipHolidaysEffective } from "../../utils/reminderSkipDate";
 import { syncHabitMemoBlock, type HabitMemoCheckInEntry, type HabitMemoEmojiConfig } from "../dataManager/habitMemoBlockSync";
@@ -159,6 +160,7 @@ export class CalendarView {
     // 使用全局番茄钟管理器
     private pomodoroManager: PomodoroManager = PomodoroManager.getInstance();
     private pomodoroRecordManager: PomodoroRecordManager;
+    private linkedHabitPomodoroStats = new Map<string, Map<string, LinkedTaskPomodoroDayStats>>();
     private lute: any; // Markdown 渲染器
 
     // Dock 和 Tab 独立的视图配置代理方法
@@ -8555,15 +8557,21 @@ export class CalendarView {
         const progress = getHabitProgressOnDate(habit, date, {
             getPomodoroFocusMinutes: (habitId: string, logicalDate: string) => {
                 const manager = PomodoroRecordManager.getInstance(this.plugin);
-                return manager.getEventFocusTime(habitId, logicalDate) || 0;
+                const direct = manager.getEventFocusTime(habitId, logicalDate) || 0;
+                const linked = getLinkedTaskPomodoroStatsByDate(this.linkedHabitPomodoroStats, habitId, logicalDate).focusMinutes;
+                return direct + linked;
             }
         });
-        const goalType = habit?.goalType === "pomodoro" ? "pomodoro" : "count";
+        const goalType = getHabitGoalType(habit);
         return {
             current: progress.current,
             target: progress.target,
             completed: progress.current >= progress.target,
-            goalType
+            goalType,
+            countProgress: progress.count.current,
+            countTarget: progress.count.target,
+            pomodoroProgress: progress.pomodoro.current,
+            pomodoroTarget: progress.pomodoro.target
         };
     }
 
@@ -8679,6 +8687,18 @@ export class CalendarView {
             const habitData = await this.plugin.loadHabitData();
             const habits = await this.getOrderedHabitsForCalendar(Object.values(habitData || {}) as any[]);
             if (!habits.length) return;
+            if (habits.some(habit => hasHabitPomodoroGoal(habit))) {
+                await this.pomodoroRecordManager.initialize();
+                await this.pomodoroRecordManager.refreshData();
+                const reminderData = (await this.plugin.loadReminderData()) || {};
+                this.linkedHabitPomodoroStats = buildLinkedHabitPomodoroData(
+                    reminderData,
+                    this.pomodoroRecordManager.getSaveData() || {},
+                    session => this.pomodoroRecordManager.calculateSessionCount(session)
+                ).statsByHabit;
+            } else {
+                this.linkedHabitPomodoroStats.clear();
+            }
             const today = getLogicalDateString();
             const habitOrderMap = new Map<string, number>();
             habits.forEach((habit, index) => {
@@ -8738,6 +8758,10 @@ export class CalendarView {
                                 target: progressInfo.target,
                                 currentProgress: progressInfo.current,
                                 goalType: progressInfo.goalType,
+                                countProgress: progressInfo.countProgress,
+                                countTarget: progressInfo.countTarget,
+                                pomodoroProgress: progressInfo.pomodoroProgress,
+                                pomodoroTarget: progressInfo.pomodoroTarget,
                                 frequency: habit.frequency,
                                 habitOrder: habitOrderMap.get(habit.id) ?? Number.MAX_SAFE_INTEGER
                             }
@@ -8786,6 +8810,10 @@ export class CalendarView {
                                 target: progressInfo.target,
                                 currentProgress: progressInfo.current,
                                 goalType: progressInfo.goalType,
+                                countProgress: progressInfo.countProgress,
+                                countTarget: progressInfo.countTarget,
+                                pomodoroProgress: progressInfo.pomodoroProgress,
+                                pomodoroTarget: progressInfo.pomodoroTarget,
                                 frequency: habit.frequency,
                                 habitOrder: habitOrderMap.get(habit.id) ?? Number.MAX_SAFE_INTEGER,
                                 time: entry.time,
@@ -8853,6 +8881,10 @@ export class CalendarView {
                                 target: progressInfo.target,
                                 currentProgress: progressInfo.current,
                                 goalType: progressInfo.goalType,
+                                countProgress: progressInfo.countProgress,
+                                countTarget: progressInfo.countTarget,
+                                pomodoroProgress: progressInfo.pomodoroProgress,
+                                pomodoroTarget: progressInfo.pomodoroTarget,
                                 frequency: habit.frequency,
                                 habitOrder: habitOrderMap.get(habit.id) ?? Number.MAX_SAFE_INTEGER,
                                 reminderAt: entry.time,
@@ -10425,7 +10457,14 @@ export class CalendarView {
                 `<span style="opacity: 0.8;">${reminder.completed ? '✅' : '⏳'}</span>`,
                 `<span>${(() => {
                     const statusText = reminder.completed ? (i18n("completed") || "已完成") : (i18n("uncompleted") || "未完成");
-                    if (reminder.goalType === 'pomodoro') {
+                    if (reminder.goalType === 'either') {
+                        return this.escapeHtml(`${statusText}（${i18n("habitEitherProgress", {
+                            count: String(reminder.countProgress || 0),
+                            countTarget: String(reminder.countTarget || 1),
+                            duration: `${reminder.pomodoroProgress || 0}m`,
+                            durationTarget: `${reminder.pomodoroTarget || 0}m`
+                        })}）`);
+                    } else if (reminder.goalType === 'pomodoro') {
                         const current = reminder.currentProgress || 0;
                         const target = reminder.target || 0;
                         return this.escapeHtml(`${statusText}（${current}m/${target}m）`);

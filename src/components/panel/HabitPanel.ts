@@ -25,6 +25,7 @@ import {
     type HabitCheckInDaysMode,
     HabitEmojiConfig as HabitCheckInEmoji,
     getHabitGoalType as getHabitGoalTypeUtil,
+    hasHabitPomodoroGoal,
     getHabitCompletedDaysCount,
     isHabitCheckInDayComplete,
     getHabitPomodoroTargetMinutes as getHabitPomodoroTargetMinutesUtil,
@@ -870,7 +871,7 @@ export class HabitPanel {
         });
     }
 
-    private getHabitGoalType(habit: Habit): 'count' | 'pomodoro' {
+    private getHabitGoalType(habit: Habit) {
         return getHabitGoalTypeUtil(habit);
     }
 
@@ -886,7 +887,7 @@ export class HabitPanel {
         return 'var(--b3-theme-primary)';
     }
 
-    private getHabitProgressOnDate(habit: Habit, date: string): { current: number; target: number } {
+    private getHabitProgressOnDate(habit: Habit, date: string) {
         return getHabitProgressOnDateUtil(habit, date, {
             getPomodoroFocusMinutes: (habitId, logicalDate) => this.getHabitFocusMinutesByDate(habitId, logicalDate)
         });
@@ -1281,7 +1282,8 @@ export class HabitPanel {
         // 已结束和已放弃的习惯不显示进度条
         if (!isInactive) {
             const goalType = this.getHabitGoalType(habit);
-            const { current: currentProgress, target: targetProgress } = this.getHabitProgressOnDate(habit, displayDate);
+            const progress = this.getHabitProgressOnDate(habit, displayDate);
+            const { current: currentProgress, target: targetProgress } = progress;
 
             // 进度条区域
             const progressSection = document.createElement('div');
@@ -1304,7 +1306,15 @@ export class HabitPanel {
 
             const percentage = Math.min(100, (currentProgress / Math.max(1, targetProgress)) * 100);
 
-            if (goalType === 'pomodoro') {
+            if (goalType === 'either') {
+                progressLabel.textContent = isHistoryView ? i18n("historyProgressLabel") : i18n("todayProgressLabel");
+                progressValue.textContent = i18n("habitEitherProgress", {
+                    count: String(progress.count.current),
+                    countTarget: String(progress.count.target),
+                    duration: this.formatMinutesToHourMinute(progress.pomodoro.current),
+                    durationTarget: this.formatMinutesToHourMinute(progress.pomodoro.target)
+                });
+            } else if (goalType === 'pomodoro') {
                 progressLabel.textContent = isHistoryView
                     ? (i18n("historyProgressLabel") || '当日进度')
                     : (i18n("todayProgressLabel") || '今日进度');
@@ -1535,6 +1545,19 @@ export class HabitPanel {
             });
 
             actionsEl.appendChild(checkInBtn);
+            if (goalType === 'either') {
+                const timerBtn = document.createElement('button');
+                timerBtn.className = 'habit-card__checkin-btn';
+                const countUp = habit.checkInButtonType === 'countup';
+                timerBtn.innerHTML = countUp ? '<span>⏱️</span><span>正计时</span>' : '<span>🍅</span><span>番茄钟</span>';
+                timerBtn.addEventListener('click', event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    if (countUp) this.startPomodoroCountUp(habit);
+                    else this.startPomodoro(habit);
+                });
+                actionsEl.appendChild(timerBtn);
+            }
             footer.appendChild(actionsEl);
         }
         card.appendChild(footer);
@@ -1912,8 +1935,7 @@ export class HabitPanel {
     }
 
     private createPomodoroStartSubmenu(habit: Habit): any[] {
-        const goalType = this.getHabitGoalType(habit);
-        const pomodoroGoalMinutes = goalType === 'pomodoro' ? this.getHabitPomodoroTargetMinutes(habit) : undefined;
+        const pomodoroGoalMinutes = hasHabitPomodoroGoal(habit) ? this.getHabitPomodoroTargetMinutes(habit) : undefined;
         const sourceForMenu = pomodoroGoalMinutes
             ? { ...habit, estimatedPomodoroDuration: pomodoroGoalMinutes }
             : habit;
@@ -1933,8 +1955,7 @@ export class HabitPanel {
         // 默认时长优化：若未指定，且习惯有番茄目标，在目标小于全局时长时优先使用目标时长
         let finalDuration = workDurationOverride;
         if (!finalDuration) {
-            const goalType = this.getHabitGoalType(habit);
-            if (goalType === "pomodoro") {
+            if (hasHabitPomodoroGoal(habit)) {
                 const targetMinutes = this.getHabitPomodoroTargetMinutes(habit);
                 const settings = await this.plugin.loadSettings();
                 finalDuration = resolveDefaultPomodoroDuration({

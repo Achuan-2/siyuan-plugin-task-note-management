@@ -1,6 +1,6 @@
 import { Dialog, showMessage, platformUtils, openEmoji } from "siyuan";
 import { getBlockByID, getBlockDOM } from "../../api";
-import { Habit } from "../panel/HabitPanel";
+import type { Habit } from "../../utils/habitUtils";
 import { getLocalDateTimeString, getLogicalDateString } from "../../utils/dateUtils";
 import { HabitGroupManager } from "../dataManager/habitGroupManager";
 import { i18n } from "../../pluginInstance";
@@ -8,7 +8,7 @@ import { HabitCheckInEmojiDialog } from "./HabitCheckInEmojiDialog";
 import { PomodoroRecordManager } from "../dataManager/pomodoroRecord";
 import { PomodoroSessionsDialog } from "./PomodoroSessionsDialog";
 import { generateRandomColor } from "../../utils/uiUtils";
-import type { HabitMemoSyncMode } from "../../utils/habitUtils";
+import { getHabitGoalType, type HabitMemoSyncMode } from "../../utils/habitUtils";
 
 export class HabitEditDialog {
     private dialog: Dialog;
@@ -150,7 +150,7 @@ export class HabitEditDialog {
         colorGroup.appendChild(colorRow);
         form.appendChild(colorGroup);
 
-        // 打卡目标设置（按次数/按番茄）
+        // 打卡目标设置（次数、番茄时长或任一达标）
         const goalGroup = document.createElement('div');
         goalGroup.style.cssText = 'display: flex; flex-direction: column; gap: 8px;';
 
@@ -163,10 +163,11 @@ export class HabitEditDialog {
         goalTypeSelect.name = 'goalType';
         goalTypeSelect.className = 'b3-select';
         goalTypeSelect.innerHTML = `
-            <option value="count">按打卡次数</option>
-            <option value="pomodoro">按番茄时长</option>
+            <option value="count">${i18n("habitGoalCount")}</option>
+            <option value="pomodoro">${i18n("habitGoalPomodoro")}</option>
+            <option value="either">${i18n("habitGoalEither")}</option>
         `;
-        const initialGoalType: 'count' | 'pomodoro' = this.habit?.goalType === 'pomodoro' ? 'pomodoro' : 'count';
+        const initialGoalType = getHabitGoalType(this.habit);
         goalTypeSelect.value = initialGoalType;
         goalGroup.appendChild(goalTypeSelect);
 
@@ -178,7 +179,7 @@ export class HabitEditDialog {
         countTargetInput.name = 'target';
         countTargetInput.className = 'b3-text-field';
         countTargetInput.style.cssText = 'width: 120px;';
-        countTargetInput.value = String(Math.max(1, this.habit?.target || 1));
+        countTargetInput.value = String(initialGoalType === 'pomodoro' ? 1 : Math.max(1, this.habit?.target || 1));
         const countTargetSuffix = document.createElement('span');
         countTargetSuffix.textContent = '次';
         countTargetWrap.appendChild(countTargetInput);
@@ -303,12 +304,16 @@ export class HabitEditDialog {
         pomodoroWrap.appendChild(checkInButtonTypeRow);
 
         goalGroup.appendChild(pomodoroWrap);
+        const eitherGoalHint = document.createElement('div');
+        eitherGoalHint.textContent = i18n("habitGoalEitherHint");
+        eitherGoalHint.style.cssText = 'font-size:12px; color:var(--b3-theme-on-surface-light);';
+        goalGroup.appendChild(eitherGoalHint);
         form.appendChild(goalGroup);
 
         const updateGoalTypeUI = () => {
-            const isPomodoroGoal = goalTypeSelect.value === 'pomodoro';
-            countTargetWrap.style.display = isPomodoroGoal ? 'none' : 'flex';
-            pomodoroWrap.style.display = isPomodoroGoal ? 'flex' : 'none';
+            countTargetWrap.style.display = goalTypeSelect.value === 'pomodoro' ? 'none' : 'flex';
+            pomodoroWrap.style.display = goalTypeSelect.value !== 'count' ? 'flex' : 'none';
+            eitherGoalHint.style.display = goalTypeSelect.value === 'either' ? 'block' : 'none';
         };
         updateGoalTypeUI();
         goalTypeSelect.addEventListener('change', updateGoalTypeUI);
@@ -598,7 +603,7 @@ export class HabitEditDialog {
         editCheckInBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconSettings"></use></svg>${i18n("editCheckInOptions")}`;
         editCheckInBtn.addEventListener('click', () => {
             const titleInput = form.querySelector('input[name="title"]') as HTMLInputElement | null;
-            const goalType = ((form.querySelector('select[name="goalType"]') as HTMLSelectElement | null)?.value === 'pomodoro') ? 'pomodoro' : 'count';
+            const goalType = getHabitGoalType({ goalType: (form.querySelector('select[name="goalType"]') as HTMLSelectElement | null)?.value as Habit['goalType'] });
             const targetValue = parseInt((form.querySelector('input[name="target"]') as HTMLInputElement | null)?.value || '1') || 1;
             const pomodoroHours = Math.max(0, parseInt((form.querySelector('input[name="pomodoroTargetHours"]') as HTMLInputElement | null)?.value || '0') || 0);
             const pomodoroMinutes = Math.max(0, parseInt((form.querySelector('input[name="pomodoroTargetMinutes"]') as HTMLInputElement | null)?.value || '0') || 0);
@@ -1177,7 +1182,8 @@ export class HabitEditDialog {
         });
         const rawUrlVal = ((formData.get('url') as string) || '').trim();
         const url = rawUrlVal || undefined;
-        const goalType = (formData.get('goalType') as string) === 'pomodoro' ? 'pomodoro' : 'count';
+        const goalType = getHabitGoalType({ goalType: formData.get('goalType') as Habit['goalType'] });
+        const hasPomodoroGoal = goalType !== 'count';
         const targetCount = Math.max(1, parseInt(formData.get('target') as string) || 1);
         const pomodoroTargetHours = Math.max(0, parseInt((formData.get('pomodoroTargetHours') as string) || '0') || 0);
         const pomodoroTargetMinutesRaw = Math.max(0, parseInt((formData.get('pomodoroTargetMinutes') as string) || '0') || 0);
@@ -1186,7 +1192,7 @@ export class HabitEditDialog {
         const normalizedPomodoroHours = pomodoroTargetHours + pomodoroCarryHours;
         const pomodoroTotalMinutes = normalizedPomodoroHours * 60 + pomodoroTargetMinutes;
 
-        if (goalType === 'pomodoro' && pomodoroTotalMinutes <= 0) {
+        if (hasPomodoroGoal && pomodoroTotalMinutes <= 0) {
             showMessage('番茄目标时长需要大于 0 分钟', 3000, 'error');
             return;
         }
@@ -1199,11 +1205,11 @@ export class HabitEditDialog {
             // note: (formData.get('note') as string)?.trim() || undefined, // 移除全局备注
             target: goalType === 'pomodoro' ? Math.max(1, pomodoroTotalMinutes) : targetCount,
             goalType,
-            pomodoroTargetHours: goalType === 'pomodoro' ? normalizedPomodoroHours : undefined,
-            pomodoroTargetMinutes: goalType === 'pomodoro' ? pomodoroTargetMinutes : undefined,
-            autoCheckInAfterPomodoro: goalType === 'pomodoro' ? formData.get('autoCheckInAfterPomodoro') === 'on' : false,
-            autoCheckInEmoji: goalType === 'pomodoro' ? ((formData.get('autoCheckInEmoji') as string) || undefined) : undefined,
-            checkInButtonType: goalType === 'pomodoro' ? ((formData.get('checkInButtonType') as 'pomodoro' | 'countup') || 'pomodoro') : undefined,
+            pomodoroTargetHours: hasPomodoroGoal ? normalizedPomodoroHours : undefined,
+            pomodoroTargetMinutes: hasPomodoroGoal ? pomodoroTargetMinutes : undefined,
+            autoCheckInAfterPomodoro: hasPomodoroGoal ? formData.get('autoCheckInAfterPomodoro') === 'on' : false,
+            autoCheckInEmoji: hasPomodoroGoal ? ((formData.get('autoCheckInEmoji') as string) || undefined) : undefined,
+            checkInButtonType: hasPomodoroGoal ? ((formData.get('checkInButtonType') as 'pomodoro' | 'countup') || 'pomodoro') : undefined,
             frequency: {
                 type: frequencyType
             },

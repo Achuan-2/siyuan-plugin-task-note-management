@@ -1,9 +1,11 @@
-import type { Habit, HabitCheckIn, HabitCheckInEntry, HabitEmojiConfig } from "../../utils/habitUtils";
+import type { Habit, HabitCheckIn, HabitCheckInEntry, HabitEmojiConfig, HabitGoalType } from "../../utils/habitUtils";
 
 export interface CreateHabitInput {
     title: string;
     target?: number;
-    goalType?: "count" | "pomodoro";
+    goalType?: HabitGoalType;
+    pomodoroTargetHours?: number;
+    pomodoroTargetMinutes?: number;
     frequency?: {
         type: "daily" | "weekly" | "monthly" | "yearly" | "ebbinghaus" | "custom";
         interval?: number;
@@ -21,7 +23,9 @@ export interface CreateHabitInput {
 export interface UpdateHabitInput {
     title?: string;
     target?: number;
-    goalType?: "count" | "pomodoro";
+    goalType?: HabitGoalType;
+    pomodoroTargetHours?: number;
+    pomodoroTargetMinutes?: number;
     frequency?: {
         type: "daily" | "weekly" | "monthly" | "yearly" | "ebbinghaus" | "custom";
         interval?: number;
@@ -189,6 +193,8 @@ export class HabitManager {
             title,
             target: input.target ?? 1,
             goalType: input.goalType ?? "count",
+            pomodoroTargetHours: input.pomodoroTargetHours,
+            pomodoroTargetMinutes: input.pomodoroTargetMinutes,
             frequency: input.frequency ?? { type: "daily" },
             startDate,
             icon: input.icon ?? "✨",
@@ -218,6 +224,8 @@ export class HabitManager {
         if (input.title !== undefined) updated.title = input.title;
         if (input.target !== undefined) updated.target = input.target;
         if (input.goalType !== undefined) updated.goalType = input.goalType;
+        if (input.pomodoroTargetHours !== undefined) updated.pomodoroTargetHours = input.pomodoroTargetHours;
+        if (input.pomodoroTargetMinutes !== undefined) updated.pomodoroTargetMinutes = input.pomodoroTargetMinutes;
         if (input.frequency !== undefined) updated.frequency = input.frequency;
         if (input.startDate !== undefined) updated.startDate = input.startDate;
         if (input.endDate !== undefined) updated.endDate = input.endDate;
