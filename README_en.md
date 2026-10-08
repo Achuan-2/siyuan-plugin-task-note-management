@@ -177,15 +177,6 @@ Notes should not exist merely for copying and storing. They should exist for cre
 - **Pomodoro timer**: On desktop, a global floating Pomodoro window can run outside SiYuan Notes. Supports Pomodoro focus for tasks and arbitrary blocks, Pomodoro statistics, and calendar display of Pomodoro data.
 - **Habit tracking**: List the habits you want to cultivate, support recurring reminders, support goal types based on either check-in count or Pomodoro duration, and provide data statistics.
 
-## Background reminder scheduling
-
-The SiYuan kernel owns the only Croner reminder schedule. It generates task, habit and daily summary events, sends Webhooks and pushes events to the frontend through RPC. Frontends only display notifications, play sounds and handle action buttons; disabling Webhook does not disable desktop reminders. Plans update on data changes and calendar/logical day boundaries, with no idle reminder-data polling.
-
-Frontend startup, kernel readiness and page focus recover current-minute reminders and today's undisplayed daily summary. The kernel coordinates claims and acknowledgments across windows to avoid duplicate desktop notifications. Recurrence, instance overrides, habit completion checks and existing mobile native scheduled notifications are retained.
-
-Enable Webhook in settings and configure its URL and message template to receive task, habit and daily summary notifications even with all SiYuan pages closed. Test Webhook also runs through the kernel. Docker requires the SiYuan service and plugin kernel to stay running, an accessible Webhook endpoint and the correct timezone, for example `TZ=Asia/Shanghai`. Desktop system notifications still require a running client.
-
-Failed deliveries use one-shot Croner jobs to retry after 30 seconds for up to five minutes. Persisted delivery records prevent duplicate notifications after restart and resume unexpired retries. Notifications cannot be sent while SiYuan is stopped. Live background updates require the kernel storage watcher; where watching is unavailable, frontend changes can request a refresh, but new edits cannot be detected immediately with all pages closed.
 
 ## ❤️ Acknowledgments
 
