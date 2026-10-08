@@ -219,6 +219,7 @@ export const DEFAULT_SETTINGS = {
     calendarShowLunar: ((window as any).siyuan?.config?.lang === 'zh_CN' || (window as any).siyuan?.config?.lang === 'zh-CN') ? true : false, // 日历显示农历
     calendarShowHoliday: true, // 是否显示节假日
     calendarShowPomodoro: true, // 是否显示番茄专注时间
+    calendarShowPomodoroDuration: false, // 是否在全天区域置顶显示每日总专注时长
     calendarAlwaysShowHabitReminderTime: false, // 日历视图是否始终显示习惯提醒时间
     calendarShowHabitCheckInTime: false, // 日历视图是否显示习惯打卡时间
     showCalendarEventCheckbox: true, // 是否显示日历事件前的复选框

@@ -63,6 +63,7 @@ export class CalendarView {
     private showLunar: boolean = true; // 是否显示农历
     private showHoliday: boolean = true; // 是否显示节假日
     private showPomodoro: boolean = true; // 是否显示番茄专注时间
+    private showPomodoroDuration: boolean = false; // 是否置顶显示每日总专注时长
     private showPomodoroBreakTime: boolean = true; // 是否显示番茄钟休息时间，默认显示
     private pomodoroUseTaskColor: boolean = false; // 番茄钟工作时间是否使用任务上色方式
     private showCrossDayTasks: boolean = true; // 是否显示跨天任务
@@ -229,6 +230,7 @@ export class CalendarView {
             this.alwaysShowHabitReminderTime = this.calendarConfigManager.getAlwaysShowHabitReminderTime();
             this.showHabitCheckInTime = this.calendarConfigManager.getShowHabitCheckInTime();
             this.showPomodoro = this.calendarConfigManager.getShowPomodoro();
+            this.showPomodoroDuration = this.calendarConfigManager.getShowPomodoroDuration();
             this.showPomodoroBreakTime = this.calendarConfigManager.getShowPomodoroBreakTime();
             this.pomodoroUseTaskColor = this.calendarConfigManager.getPomodoroUseTaskColor();
             this.showCompletedTaskTime = this.calendarConfigManager.getShowCompletedTaskTime();
@@ -286,6 +288,7 @@ export class CalendarView {
         this.calendar.setOption('slotMaxTime', this.calculateSlotMaxTime(todayStartTime));
         this.calendar.setOption('hiddenTimeRanges', hiddenTimeRanges);
         this.calendar.setOption('eventMaxStack', this.eventMaxStack);
+        this.calendar.setOption('eventOrderStrict', this.showPomodoroDuration && !this.openedFromHabitPanel);
 
         // 滚动目标：用户设置的日历视图起始时间（dayStartTime）。
         // 折叠由原生 hiddenTimeRanges 实现后，时间->坐标映射始终一致，直接滚动即可。
@@ -519,6 +522,7 @@ export class CalendarView {
         this.showLunar = this.calendarConfigManager.getShowLunar();
         this.showHoliday = settings.calendarShowHoliday !== false;
         this.showPomodoro = this.calendarConfigManager.getShowPomodoro(); // Use config manager for pomodoro state
+        this.showPomodoroDuration = this.calendarConfigManager.getShowPomodoroDuration();
         this.showPomodoroBreakTime = this.calendarConfigManager.getShowPomodoroBreakTime(); // 加载番茄钟休息时间显示设置
         this.pomodoroUseTaskColor = this.calendarConfigManager.getPomodoroUseTaskColor(); // 加载番茄钟工作时间上色设置
         this.showCrossDayTasks = this.calendarConfigManager.getShowCrossDayTasks();
@@ -1265,6 +1269,14 @@ export class CalendarView {
         }));
 
         // 番茄专注设置
+        displaySettingsDropdown.appendChild(createSwitchItem(i18n("showPomodoroDuration") || "显示番茄钟总专注时长", this.showPomodoroDuration, async (checked) => {
+            this.showPomodoroDuration = checked;
+            await this.calendarConfigManager.setShowPomodoroDuration(checked);
+            // 严格遵守排序，避免跨天任务为了紧凑布局挤到统计行之前。
+            this.calendar.setOption('eventOrderStrict', checked);
+            await this.refreshEvents();
+        }));
+
         displaySettingsDropdown.appendChild(createSwitchItem(i18n("showPomodoroRecords") || "显示番茄专注", this.showPomodoro, async (checked) => {
             this.showPomodoro = checked;
             await this.calendarConfigManager.setShowPomodoro(checked);
@@ -1827,6 +1839,7 @@ export class CalendarView {
                 return classNames;
             },
             eventOrder: (a: any, b: any) => this.compareEventsForOrder(a, b),
+            eventOrderStrict: this.showPomodoroDuration && !this.openedFromHabitPanel,
             displayEventTime: true,
             // Custom Lunar Date and Holiday Rendering using DidMount hooks to preserve default behavior
             dayCellDidMount: (arg) => {
@@ -2081,29 +2094,6 @@ export class CalendarView {
                     }
                 }
 
-                info.el.addEventListener('contextmenu', (e) => {
-                    e.preventDefault();
-                    this.showEventContextMenu(e, info.event).catch((err) => {
-                        console.error('显示事件右键菜单失败:', err);
-                    });
-                });
-
-                // 改进的鼠标悬浮事件监听器 - 添加延迟显示
-                info.el.addEventListener('mouseenter', (e) => {
-                    this.handleEventMouseEnter(e, info.event);
-                });
-
-                info.el.addEventListener('mouseleave', () => {
-                    this.handleEventMouseLeave();
-                });
-
-                // 鼠标移动时更新提示框位置
-                info.el.addEventListener('mousemove', (e) => {
-                    if (this.tooltip && this.tooltip.style.display !== 'none' && this.tooltip.style.opacity === '1') {
-                        this.updateTooltipPosition(e);
-                    }
-                });
-
                 // Modern UI Style: Pale background, thick left border, dark text
                 const targetEl = info.el.querySelector('.fc-daygrid-event') as HTMLElement || info.el as HTMLElement;
 
@@ -2161,6 +2151,35 @@ export class CalendarView {
                         targetEl.style.borderColor = 'transparent';
                     }
                 }
+
+                // 统计行沿用番茄钟事件的主题颜色和透明度，只展示数据。
+                if (info.event.extendedProps?.type === 'pomodoroDailySummary') {
+                    info.el.title = info.event.title;
+                    return;
+                }
+
+                info.el.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    this.showEventContextMenu(e, info.event).catch((err) => {
+                        console.error('显示事件右键菜单失败:', err);
+                    });
+                });
+
+                // 改进的鼠标悬浮事件监听器 - 添加延迟显示
+                info.el.addEventListener('mouseenter', (e) => {
+                    this.handleEventMouseEnter(e, info.event);
+                });
+
+                info.el.addEventListener('mouseleave', () => {
+                    this.handleEventMouseLeave();
+                });
+
+                // 鼠标移动时更新提示框位置
+                info.el.addEventListener('mousemove', (e) => {
+                    if (this.tooltip && this.tooltip.style.display !== 'none' && this.tooltip.style.opacity === '1') {
+                        this.updateTooltipPosition(e);
+                    }
+                });
 
                 if (info.event.extendedProps?.isHabit && info.event.extendedProps?.completed) {
                     info.el.style.opacity = '0.6';
@@ -5456,6 +5475,13 @@ export class CalendarView {
     private renderEventContent(eventInfo) {
         const { event, timeText } = eventInfo;
         const props = event.extendedProps;
+        if (props.type === 'pomodoroDailySummary') {
+            const summary = document.createElement('div');
+            summary.className = 'fc-event-main-frame pomodoro-daily-summary-content';
+            summary.textContent = `🍅 ${event.title}`;
+            return { domNodes: [summary] };
+        }
+
         const isEmptySelectionMirror = eventInfo.isMirror === true &&
             eventInfo.isDragging !== true &&
             eventInfo.isResizing !== true &&
@@ -6134,6 +6160,11 @@ export class CalendarView {
         // 完成的任务时间按完成时间排序并集中放置在最后
         const typeA = a.extendedProps?.type;
         const typeB = b.extendedProps?.type;
+        if (typeA === 'pomodoroDailySummary' || typeB === 'pomodoroDailySummary') {
+            if (typeA !== typeB) {
+                return typeA === 'pomodoroDailySummary' ? -1 : 1;
+            }
+        }
         if (typeA === 'completedTaskTime' && typeB === 'completedTaskTime') {
             const timeA = a.extendedProps?.completedTime || '';
             const timeB = b.extendedProps?.completedTime || '';
@@ -6244,7 +6275,8 @@ export class CalendarView {
 
             // 获取该日期所有的全天事件（排除当前正在拖拽的）
             const otherEvents = this.calendar.getEvents().filter(e => {
-                return e.allDay && getLocalDateString(e.start) === targetDate && e.id !== draggedId;
+                return e.allDay && getLocalDateString(e.start) === targetDate && e.id !== draggedId &&
+                    e.extendedProps?.type !== 'pomodoroDailySummary';
             });
 
             // 按当前展示顺序排序
@@ -6326,6 +6358,8 @@ export class CalendarView {
     }
 
     private async handleEventClick(info: any) {
+        if (info.event.extendedProps?.type === 'pomodoroDailySummary') return;
+
         // 如果正在拖动，不触发点击事件
         if (this.isDragging) {
             return;
@@ -7939,7 +7973,7 @@ export class CalendarView {
 
             try {
                 // 刷新番茄数据以确保统计准确
-                if (this.showTasks && this.showPomodoro) {
+                if ((this.showTasks && this.showPomodoro) || (this.showPomodoroDuration && !this.openedFromHabitPanel)) {
                     await this.pomodoroRecordManager.refreshData();
                 }
 
@@ -8010,6 +8044,31 @@ export class CalendarView {
         }, 100); // 100ms 防抖延迟
     }
 
+    private getDailyPomodoroSummaryEvents(startDate: string, endDate: string) {
+        const events = [];
+        // 使用记录所属的逻辑日期，与番茄钟统计页保持一致；activeEnd 为不含当天的边界。
+        for (let date = startDate; date < endDate; date = addDaysToDate(date, 1)) {
+            const duration = this.pomodoroRecordManager.getDateSessions(date)
+                .filter(session => session.type === 'work' && !session.inProgress)
+                .reduce((total, session) => total + Math.max(0, Math.round(Number(session.duration) || 0)), 0);
+            events.push({
+                id: `pomodoro-daily-summary-${date}`,
+                title: `${i18n('totalFocusDurationTitle')}${this.pomodoroRecordManager.formatTime(duration)}`,
+                start: date,
+                allDay: true,
+                editable: false,
+                startEditable: false,
+                durationEditable: false,
+                classNames: ['pomodoro-event', 'pomodoro-daily-summary-event'],
+                backgroundColor: '#f23145',
+                borderColor: 'transparent',
+                textColor: 'var(--b3-theme-on-background)',
+                extendedProps: { type: 'pomodoroDailySummary', duration }
+            });
+        }
+        return events;
+    }
+
     private async getEvents(force: boolean = false) {
         try {
             try {
@@ -8049,6 +8108,11 @@ export class CalendarView {
                 const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
                 startDate = getLocalDateString(monthStart);
                 endDate = getLocalDateString(monthEnd);
+            }
+
+            // 每日总时长独立于任务筛选和专注时间线开关，包含当天的全部工作记录。
+            if (this.showPomodoroDuration && !this.openedFromHabitPanel) {
+                events.push(...this.getDailyPomodoroSummaryEvents(startDate, endDate));
             }
 
             // 获取项目数据用于分类过滤继承

@@ -12,6 +12,7 @@ export interface CalendarConfig {
     dockViewType: 'timeline' | 'kanban' | 'list';
     showLunar: boolean;
     showPomodoro: boolean;
+    showPomodoroDuration: boolean; // 在全天区域置顶显示每日总专注时长
     showPomodoroBreakTime: boolean; // 显示番茄钟休息时间
     pomodoroUseTaskColor: boolean; // 番茄钟工作时间使用任务上色方式
     completionFilter: 'all' | 'completed' | 'incomplete';
@@ -53,6 +54,7 @@ export class CalendarConfigManager {
             dockViewType: 'timeline', // Dock 默认视图类型
             showLunar: true, // 默认显示农历
             showPomodoro: true, // 默认显示番茄专注时间
+            showPomodoroDuration: false, // 默认不显示每日总专注时长
             showPomodoroBreakTime: true, // 默认显示番茄钟休息时间
             pomodoroUseTaskColor: false, // 默认不使用任务上色方式
             completionFilter: 'all', // 默认显示全部状态
@@ -101,6 +103,7 @@ export class CalendarConfigManager {
             settings.calendarDockViewType = this.config.dockViewType;
             settings.calendarShowLunar = this.config.showLunar;
             settings.calendarShowPomodoro = this.config.showPomodoro;
+            settings.calendarShowPomodoroDuration = this.config.showPomodoroDuration;
             settings.calendarShowPomodoroBreakTime = this.config.showPomodoroBreakTime;
             settings.calendarPomodoroUseTaskColor = this.config.pomodoroUseTaskColor;
             settings.calendarCompletionFilter = this.config.completionFilter;
@@ -173,6 +176,7 @@ export class CalendarConfigManager {
                 dockViewType: settings.calendarDockViewType || 'timeline',
                 showLunar: settings.calendarShowLunar !== false, // 默认为 true
                 showPomodoro: settings.calendarShowPomodoro !== false, // 默认为 true
+                showPomodoroDuration: settings.calendarShowPomodoroDuration === true,
                 showPomodoroBreakTime: settings.calendarShowPomodoroBreakTime !== false, // 默认为 true
                 pomodoroUseTaskColor: settings.calendarPomodoroUseTaskColor === true, // 默认为 false
                 completionFilter: (settings.calendarCompletionFilter as any) || 'all',
@@ -208,6 +212,7 @@ export class CalendarConfigManager {
                 dockViewType: 'timeline',
                 showLunar: true,
                 showPomodoro: true,
+                showPomodoroDuration: false,
                 showPomodoroBreakTime: true,
                 pomodoroUseTaskColor: false,
                 completionFilter: 'all',
@@ -312,6 +317,15 @@ export class CalendarConfigManager {
 
     public getShowPomodoro(): boolean {
         return this.config.showPomodoro;
+    }
+
+    public async setShowPomodoroDuration(show: boolean) {
+        this.config.showPomodoroDuration = show;
+        await this.saveConfig();
+    }
+
+    public getShowPomodoroDuration(): boolean {
+        return this.config.showPomodoroDuration === true;
     }
 
     public async setShowPomodoroBreakTime(show: boolean) {

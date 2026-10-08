@@ -520,6 +520,21 @@
             }
 
             /* Pomodoro Event Styles */
+            .pomodoro-daily-summary-event {
+                border: none !important;
+                border-radius: 3px;
+                box-shadow: none !important;
+                cursor: default;
+
+                .pomodoro-daily-summary-content {
+                    padding: 3px 4px;
+                    font-weight: 600;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                }
+            }
+
             .pomodoro-event {
                 border: none !important;
                 border-left: none !important;
