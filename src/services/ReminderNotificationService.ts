@@ -2,8 +2,9 @@ import { Dialog, showMessage } from "siyuan";
 import type ReminderPlugin from "../index";
 import { sendNotification } from "../api";
 import { HabitPanel } from "../components/panel/HabitPanel";
+import { HabitDayDialog } from "../components/dialog/HabitDayDialog";
 import { i18n } from "../pluginInstance";
-import { getLocalDateTimeString } from "../utils/dateUtils";
+import { getLocalDateTimeString, getLogicalDateString } from "../utils/dateUtils";
 import {
     generateRepeatInstances, getRepeatInstanceOriginalKey, getRepeatInstanceState,
     getInstanceField, setRepeatInstanceCompletion
@@ -29,7 +30,7 @@ interface NotificationAction {
 
 // 只依赖通知操作需要的插件能力，番茄钟入口通过回调注入。
 type NotificationHost = Pick<ReminderPlugin,
-    'isInMobileApp' | 'loadHabitData' | 'loadReminderData' | 'saveReminderData' |
+    'isInMobileApp' | 'loadHabitData' | 'saveHabitPartial' | 'loadReminderData' | 'saveReminderData' |
     'updateMobileNotification' | 'playTaskCompleteSound'>;
 
 /** 管理系统通知、兼容操作框和按钮操作，不负责到期提醒的扫描与调度。 */
@@ -74,7 +75,15 @@ export class ReminderNotificationService {
                 const habits = await this.plugin.loadHabitData(true);
                 const habit = habits[reminderInfo.id];
                 if (!habit || habit.abandoned) return;
-                await HabitPanel.handleHabitCheckIn(habit, undefined, undefined, this.plugin);
+                const dialog = new HabitDayDialog(
+                    HabitPanel.cloneHabitData(habit)!,
+                    getLogicalDateString(),
+                    async updatedHabit => {
+                        await HabitPanel.saveHabitDirectly(updatedHabit, this.plugin);
+                    },
+                    this.plugin
+                );
+                dialog.openAddEntryDialog();
                 return;
             }
 

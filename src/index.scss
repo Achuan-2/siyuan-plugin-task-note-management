@@ -1306,6 +1306,23 @@
     flex: none;
 }
 
+.habit-day-dialog__week {
+    flex-shrink: 0;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--b3-border-color);
+
+    .habit-card__week-day {
+        min-height: 64px;
+        gap: 4px;
+    }
+
+    .habit-day-dialog__week-day--selected {
+        border-color: var(--b3-theme-primary);
+        box-shadow: inset 0 0 0 1px var(--b3-theme-primary);
+        opacity: 1;
+    }
+}
+
 /* 底部操作区 */
 .habit-card__footer {
     display: flex;

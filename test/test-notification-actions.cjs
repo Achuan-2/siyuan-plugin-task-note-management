@@ -13,7 +13,7 @@ const compiled = ts.transpileModule(source, {
 const repeatSource = ts.transpileModule(fs.readFileSync(path.join(root, 'src/components/dataManager/repeatUtils.ts'), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 }
 }).outputText;
-const dates = { getLocalDateString: () => '2026-10-08', getLocalDateTimeString: () => '2026-10-08 09:30:00' };
+const dates = { getLocalDateString: () => '2026-10-08', getLogicalDateString: () => '2026-10-08', getLocalDateTimeString: () => '2026-10-08 09:30:00' };
 const repeat = { exports: {} };
 new Function('require', 'module', 'exports', repeatSource)(
     name => name === '../../utils/dateUtils' ? dates : name === '../../pluginInstance' ? { i18n: () => '' }
@@ -40,11 +40,22 @@ function fixture(data = {}, platform = 'win32', version = '42.0.0') {
     };
     const exports = {};
     const checks = [];
+    const savedHabits = [];
     const dependencies = {
         siyuan: { showMessage() {}, Dialog: class {} },
         '../api': { updateBindBlockAtrrs: async () => {} },
         '../pluginInstance': { i18n: () => '' },
-        '../components/panel/HabitPanel': { HabitPanel: { handleHabitCheckIn: async habit => checks.push(habit) } },
+        '../components/panel/HabitPanel': { HabitPanel: {
+            cloneHabitData: habit => JSON.parse(JSON.stringify(habit)),
+            saveHabitDirectly: async (habit, plugin) => savedHabits.push({ habit, plugin })
+        } },
+        '../components/dialog/HabitDayDialog': { HabitDayDialog: class {
+            constructor(habit, date, onSave, plugin) {
+                this.check = { habit, date, onSave, plugin };
+            }
+            openAddEntryDialog() { checks.push(this.check); }
+            show() { assert.fail('通知打卡应直接打开添加弹窗'); }
+        } },
         '../utils/dateUtils': dates,
         '../components/dataManager/repeatUtils': repeat.exports
     };
@@ -63,7 +74,7 @@ function fixture(data = {}, platform = 'win32', version = '42.0.0') {
     const harness = new exports.ReminderNotificationService(host, async task => { harness.started = task; }, () => {});
     harness.focusWindow = () => {};
     harness.showActions = info => { harness.dialog = info; };
-    return { harness, notices, checks, host, dependencies };
+    return { harness, notices, checks, savedHabits, host, dependencies };
 }
 
 test('普通任务完成联动子任务、更新时间和进度，重复点击不再保存', async () => {
@@ -110,14 +121,31 @@ test('删除的任务或实例不能从旧通知中启动或完成', async () =>
     assert.equal(harness.started, undefined);
 });
 
-test('习惯通知通过已有打卡入口使用最新习惯，已放弃习惯不打卡', async () => {
+test('习惯通知直接打开添加打卡弹窗，保存前不写入并使用当前逻辑日期', async () => {
     const habit = { id: 'habit', checkInEmojis: [{ emoji: '✅', promptNote: true }] };
+    const { harness, checks, savedHabits, host } = fixture({ habit });
+    await harness.handleAction({ id: 'habit', notificationKind: 'habit', date: '2026-10-07' }, 'checkIn');
+    assert.equal(checks.length, 1);
+    assert.deepEqual(checks[0].habit, habit);
+    assert.notEqual(checks[0].habit, habit);
+    assert.equal(checks[0].date, '2026-10-08');
+    assert.equal(checks[0].plugin, host);
+    assert.equal(savedHabits.length, 0);
+    checks[0].habit.checkIns = { '2026-10-08': { count: 2, status: ['✅', '⭐'] } };
+    assert.equal(habit.checkIns, undefined);
+    await checks[0].onSave(checks[0].habit);
+    assert.equal(savedHabits.length, 1);
+    assert.equal(savedHabits[0].habit, checks[0].habit);
+    assert.equal(savedHabits[0].plugin, host);
+});
+
+test('已放弃或已删除的习惯不会从旧通知打开打卡弹窗', async () => {
+    const habit = { id: 'habit' };
     const { harness, checks } = fixture({ habit });
-    await harness.handleAction({ id: 'habit', notificationKind: 'habit' }, 'checkIn');
-    assert.equal(checks[0], habit);
     habit.abandoned = true;
     await harness.handleAction({ id: 'habit', notificationKind: 'habit' }, 'checkIn');
-    assert.equal(checks.length, 1);
+    await harness.handleAction({ id: 'missing', notificationKind: 'habit' }, 'checkIn');
+    assert.equal(checks.length, 0);
 });
 
 test('原生通知按钮分别路由任务操作，兼容新旧事件参数并防止重复执行', async () => {
@@ -135,6 +163,18 @@ test('原生通知按钮分别路由任务操作，兼容新旧事件参数并�
     const { harness, notices } = fixture();
     await harness.show('习惯', '内容', { id: 'habit', notificationKind: 'habit' });
     assert.equal(notices[0].options.actions.length, 1);
+});
+
+test('点击系统通知的习惯打卡按钮只打开一次添加弹窗', async () => {
+    const { harness, notices, checks, savedHabits } = fixture({ habit: { id: 'habit' } });
+    await harness.show('习惯', '内容', { id: 'habit', notificationKind: 'habit' });
+    notices[0].handlers.action({ actionIndex: 0 });
+    notices[0].handlers.click();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(checks.length, 1);
+    assert.equal(checks[0].habit.id, 'habit');
+    assert.equal(savedHabits.length, 0);
+    assert.equal(notices[0].closed, true);
 });
 
 test('旧版 Windows 使用浏览器通知，点击后显示操作框', async () => {
