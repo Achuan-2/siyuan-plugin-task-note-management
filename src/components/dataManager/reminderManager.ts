@@ -71,8 +71,7 @@ const REMINDER_DATA_FILE = "reminder.json";
 export class ReminderManager {
     private static instance: ReminderManager;
     private plugin: any;
-    private reminders: ReminderData = {};
-    private initialized = false;
+    private mutationQueue: Promise<void> = Promise.resolve();
 
     private constructor(plugin: any) {
         this.plugin = plugin;
@@ -89,51 +88,57 @@ export class ReminderManager {
     }
 
     async initialize(): Promise<void> {
-        if (this.initialized) return;
         await this.loadReminders();
-        this.initialized = true;
     }
 
     private async loadReminders(): Promise<ReminderData> {
         const data = await this.plugin.loadData(REMINDER_DATA_FILE);
-        this.reminders = data && typeof data === "object" ? data : {};
-        return this.reminders;
+        if (data == null) return {};
+        if (typeof data !== "object" || Array.isArray(data)) {
+            throw new Error("reminder.json 数据格式无效，已取消任务操作");
+        }
+        return data;
     }
 
-    /** 强制从文件重新加载任务数据，清除内存缓存 */
+    /** 保留原有调用接口；任务数据不再使用长期内存缓存。 */
     public async reload(): Promise<void> {
         await this.loadReminders();
-        this.initialized = true;
     }
 
-    private async saveReminders(): Promise<void> {
-        if (this.reminders && typeof this.reminders === 'object') {
-            for (const key of Object.keys(this.reminders)) {
-                if (this.reminders[key]) {
-                    cleanReminderItem(this.reminders[key]);
-                }
+    /** 串行执行内核任务写操作，并在执行时读取最新数据，避免旧快照覆盖面板修改。 */
+    private runMutation<T>(operation: (reminders: ReminderData) => Promise<T>): Promise<T> {
+        const pending = this.mutationQueue.then(async () => {
+            const reminders = await this.loadReminders();
+            return operation(reminders);
+        });
+        // 单次失败仍返回给调用方，但不阻断后续操作。
+        this.mutationQueue = pending.then(() => undefined, () => undefined);
+        return pending;
+    }
+
+    private async saveReminders(reminders: ReminderData): Promise<void> {
+        for (const key of Object.keys(reminders)) {
+            if (reminders[key]) {
+                cleanReminderItem(reminders[key]);
             }
         }
-        await this.plugin.saveData(REMINDER_DATA_FILE, this.reminders);
+        await this.plugin.saveData(REMINDER_DATA_FILE, reminders);
     }
 
     async getAllReminders(): Promise<ReminderData> {
-        await this.initialize();
-        return { ...this.reminders };
+        return this.loadReminders();
     }
 
     async getReminderById(id: string): Promise<ReminderItem | undefined> {
-        await this.initialize();
-        return this.reminders[id];
+        const reminders = await this.loadReminders();
+        return reminders[id];
     }
 
     async reminderExists(id: string): Promise<boolean> {
-        await this.initialize();
-        return !!this.reminders[id];
+        return !!(await this.getReminderById(id));
     }
 
     async searchReminders(options: SearchReminderOptions = {}): Promise<ReminderItem[]> {
-        await this.initialize();
         
         let results: ReminderItem[];
 
@@ -189,7 +194,7 @@ export class ReminderManager {
             });
             results = combined;
         } else {
-            results = Object.values(this.reminders);
+            results = Object.values(await this.loadReminders());
         }
 
         if (options.id) {
@@ -226,85 +231,83 @@ export class ReminderManager {
     }
 
     async createReminder(input: CreateReminderInput): Promise<ReminderItem> {
-        await this.initialize();
-        const title = input.title;
-        const date = input.date ?? "";
+        return this.runMutation(async (reminders) => {
+            const now = new Date().toISOString();
+            const id = `reminder_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+            const reminder: ReminderItem = {
+                ...input,
+                id,
+                date: input.date ?? "",
+                completed: input.completed ?? false,
+                createdAt: now,
+            };
 
-        const now = new Date().toISOString();
-        const id = `reminder_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-
-        const reminder: ReminderItem = {
-            id,
-            title,
-            date,
-            completed: false,
-            createdAt: now,
-            ...input,
-        };
-
-        this.reminders[id] = reminder;
-        await this.saveReminders();
-        return reminder;
+            reminders[id] = reminder;
+            await this.saveReminders(reminders);
+            return reminder;
+        });
     }
 
     async updateReminders(updates: UpdateReminderInput[]): Promise<ReminderItem[]> {
-        await this.initialize();
-        const updated: ReminderItem[] = [];
+        return this.runMutation(async (reminders) => {
+            const updated: ReminderItem[] = [];
 
-        for (const update of updates) {
-            const id = update.id;
-            const existing = this.reminders[id];
-            if (!existing) {
-                continue;
+            for (const update of updates) {
+                const id = update.id;
+                const existing = reminders[id];
+                if (!existing) {
+                    continue;
+                }
+
+                const patched: ReminderItem = { ...existing };
+                if (update.title !== undefined) patched.title = update.title;
+                if (update.note !== undefined) patched.note = update.note;
+                if (update.date !== undefined) patched.date = update.date;
+                if (update.time !== undefined) patched.time = update.time;
+                if (update.reminderTimes !== undefined) patched.reminderTimes = update.reminderTimes;
+                if (update.endDate !== undefined) patched.endDate = update.endDate;
+                if (update.endTime !== undefined) patched.endTime = update.endTime;
+                if (update.priority !== undefined) patched.priority = update.priority;
+                if (update.projectId !== undefined) patched.projectId = update.projectId;
+                if (update.categoryId !== undefined) patched.categoryId = update.categoryId;
+                if (update.completed !== undefined) patched.completed = update.completed;
+                if (update.kanbanStatus !== undefined) patched.kanbanStatus = update.kanbanStatus;
+                if (update.url !== undefined) patched.url = update.url;
+                if (update.repeat !== undefined) patched.repeat = update.repeat;
+                if (update.blockId !== undefined) patched.blockId = update.blockId;
+                if (update.docId !== undefined) patched.docId = update.docId;
+                if (update.customProgress !== undefined) patched.customProgress = update.customProgress;
+                if (update.linkedHabitId !== undefined) patched.linkedHabitId = update.linkedHabitId;
+                if (update.linkedHabitSyncPomodoroToday !== undefined) patched.linkedHabitSyncPomodoroToday = update.linkedHabitSyncPomodoroToday;
+                if (update.linkedHabitAutoCheckInOnComplete !== undefined) patched.linkedHabitAutoCheckInOnComplete = update.linkedHabitAutoCheckInOnComplete;
+                if (update.linkedHabitAutoCheckInOptionKey !== undefined) patched.linkedHabitAutoCheckInOptionKey = update.linkedHabitAutoCheckInOptionKey;
+                if (update.linkedHabitAutoCheckInEmoji !== undefined) patched.linkedHabitAutoCheckInEmoji = update.linkedHabitAutoCheckInEmoji;
+
+                reminders[id] = patched;
+                updated.push(patched);
             }
 
-            const patched: ReminderItem = { ...existing };
-            if (update.title !== undefined) patched.title = update.title;
-            if (update.note !== undefined) patched.note = update.note;
-            if (update.date !== undefined) patched.date = update.date;
-            if (update.time !== undefined) patched.time = update.time;
-            if (update.reminderTimes !== undefined) patched.reminderTimes = update.reminderTimes;
-            if (update.endDate !== undefined) patched.endDate = update.endDate;
-            if (update.endTime !== undefined) patched.endTime = update.endTime;
-            if (update.priority !== undefined) patched.priority = update.priority;
-            if (update.projectId !== undefined) patched.projectId = update.projectId;
-            if (update.categoryId !== undefined) patched.categoryId = update.categoryId;
-            if (update.completed !== undefined) patched.completed = update.completed;
-            if (update.kanbanStatus !== undefined) patched.kanbanStatus = update.kanbanStatus;
-            if (update.url !== undefined) patched.url = update.url;
-            if (update.repeat !== undefined) patched.repeat = update.repeat;
-            if (update.blockId !== undefined) patched.blockId = update.blockId;
-            if (update.docId !== undefined) patched.docId = update.docId;
-            if (update.customProgress !== undefined) patched.customProgress = update.customProgress;
-            if (update.linkedHabitId !== undefined) patched.linkedHabitId = update.linkedHabitId;
-            if (update.linkedHabitSyncPomodoroToday !== undefined) patched.linkedHabitSyncPomodoroToday = update.linkedHabitSyncPomodoroToday;
-            if (update.linkedHabitAutoCheckInOnComplete !== undefined) patched.linkedHabitAutoCheckInOnComplete = update.linkedHabitAutoCheckInOnComplete;
-            if (update.linkedHabitAutoCheckInOptionKey !== undefined) patched.linkedHabitAutoCheckInOptionKey = update.linkedHabitAutoCheckInOptionKey;
-            if (update.linkedHabitAutoCheckInEmoji !== undefined) patched.linkedHabitAutoCheckInEmoji = update.linkedHabitAutoCheckInEmoji;
-
-            this.reminders[id] = patched;
-            updated.push(patched);
-        }
-
-        if (updated.length > 0) {
-            await this.saveReminders();
-        }
-        return updated;
+            if (updated.length > 0) {
+                await this.saveReminders(reminders);
+            }
+            return updated;
+        });
     }
 
     async deleteReminder(id: string): Promise<boolean> {
-        await this.initialize();
-        if (!this.reminders[id]) {
-            return false;
-        }
-        delete this.reminders[id];
-        await this.saveReminders();
-        return true;
+        return this.runMutation(async (reminders) => {
+            if (!reminders[id]) {
+                return false;
+            }
+            delete reminders[id];
+            await this.saveReminders(reminders);
+            return true;
+        });
     }
 
     async getRemindersByProject(projectId: string): Promise<ReminderItem[]> {
-        await this.initialize();
-        return Object.values(this.reminders).filter((r) => r.projectId === projectId);
+        const reminders = await this.loadReminders();
+        return Object.values(reminders).filter((r) => r.projectId === projectId);
     }
 
     async getUndoneRemindersByProject(projectId: string): Promise<ReminderItem[]> {

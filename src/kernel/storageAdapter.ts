@@ -1,4 +1,5 @@
 import type { IStorage, IDataObject } from "siyuan/kernel";
+import { REMINDER_DATA_FILE } from "./constants";
 
 export interface KernelStorage {
     loadData(path: string): Promise<any>;
@@ -20,9 +21,12 @@ export function createKernelStorage(): KernelStorage {
                 }
                 return JSON.parse(text);
             } catch (error: any) {
-                if (error?.message?.includes("not exist") || error?.message?.includes("does not exist")) {
+                const message = String(error?.message || error);
+                if (/not exist|no such file|cannot find the file/i.test(message)) {
                     return null;
                 }
+                // 读取提醒失败时必须终止操作，不能把损坏或不可读的数据当成空文件覆盖。
+                if (path === REMINDER_DATA_FILE) throw error;
                 console.warn(`[kernel] loadData failed for ${path}:`, error);
                 return null;
             }
