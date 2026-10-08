@@ -3,7 +3,7 @@ const { test } = require('node:test');
 const { createKernelLoader } = require('./helpers/kernel-loader.cjs');
 const load = createKernelLoader();
 const { WEBHOOK_JSON_TEMPLATES: templates, inferReminderWebhookJsonType: inferType, buildWebhookPayload } = load('src/services/webhookPayload.ts');
-const { KernelWebhookScheduler, sendKernelWebhook } = load('src/kernel/webhookScheduler.ts');
+const { KernelReminderService, sendKernelWebhook } = load('src/kernel/reminderService.ts');
 
 test('共用 Payload 支持旧企业微信设置、飞书与含特殊字符的自定义模板', () => {
     const legacy = templates.wecom.replace('"msgtype"', '"msgType"');
@@ -43,7 +43,7 @@ test('测试 Webhook 使用与自动通知相同的内核传输，可测试尚�
         requests.push(JSON.parse(options.body));
         return { ok: true, json: async () => ({ code: 0, data: { status: 200, body: '{"errcode":0}' } }) };
     } };
-    const scheduler = new KernelWebhookScheduler({}, client, {});
+    const scheduler = new KernelReminderService({}, client, {});
     assert.equal(await scheduler.testWebhook({ url: 'https://example.invalid/webhook', template: '', jsonType: 'wecom' }), true);
     assert.equal(JSON.parse(requests[0].payload).msgtype, 'text');
     await assert.rejects(scheduler.testWebhook({ url: 'https://example.invalid/webhook', template: '{invalid', jsonType: 'custom' }), /invalid template/);

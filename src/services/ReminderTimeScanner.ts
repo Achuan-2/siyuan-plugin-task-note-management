@@ -10,7 +10,7 @@ export interface ReminderTimeScannerHost {
     showTimeReminder(reminder: any, triggerField?: 'time' | 'reminderTimes', triggeredTime?: string): Promise<void>;
 }
 
-/** 前端系统通知与内核 Webhook 共用同一套到期规则，各自管理发送记录。 */
+/** 由内核统一判断到期规则，供生成调度计划和实际提醒事件使用。 */
 export class ReminderTimeScanner {
     constructor(private readonly host: ReminderTimeScannerHost, private readonly translate: (key: string) => string) { }
 
@@ -18,7 +18,8 @@ export class ReminderTimeScanner {
         return !shouldSkipReminderOnDate(reminder, date, this.host.settings, holidayData);
     }
 
-    public async check(reminderData: any, today: string, currentTime: string, holidayData: HolidayData = {}) {
+    /** null 表示生成当天计划，使用相同规则收集所有到期时间，不触发真实通知。 */
+    public async check(reminderData: any, today: string, currentTime: string | null, holidayData: HolidayData = {}) {
         try {
             for (const reminder of Object.values(reminderData)) {
                 if (!reminder || typeof reminder !== 'object') continue;
@@ -92,10 +93,10 @@ export class ReminderTimeScanner {
 
                             if (shouldCheck) {
                                 const notifyKey = `${reminderObj.id}_${today}_${rt}_reminderTimes`;
-                                const currentNum = this.timeStringToNumber(currentTime);
+                                const currentNum = currentTime === null ? null : this.timeStringToNumber(currentTime);
                                 const reminderNum = this.timeStringToNumber(rt);
                                 // 只检测当前分钟，不检测过期提醒
-                                if (!this.host.notifiedReminders.has(notifyKey) && currentNum === reminderNum) {
+                                if (!this.host.notifiedReminders.has(notifyKey) && (currentNum === null || currentNum === reminderNum)) {
                                     // 二次检查持久化记录
                                     if (await this.host.hasReminderNotified(notifyKey)) {
                                         this.host.notifiedReminders.set(notifyKey, true);
@@ -210,12 +211,12 @@ export class ReminderTimeScanner {
                                 const parsed = this.extractDateAndTime(rt);
                                 if (parsed.date && parsed.date !== today) continue;
 
-                                const currentNum = this.timeStringToNumber(currentTime);
+                                const currentNum = currentTime === null ? null : this.timeStringToNumber(currentTime);
                                 const reminderNum = this.timeStringToNumber(rt);
 
                                 // 只检测当前分钟，不检测过期提醒
                                 const notifyKey = `${instanceId}_${today}_${rt}_reminderTimes`;
-                                if (!this.host.notifiedReminders.has(notifyKey) && currentNum === reminderNum) {
+                                if (!this.host.notifiedReminders.has(notifyKey) && (currentNum === null || currentNum === reminderNum)) {
                                     // 二次检查持久化记录
                                     if (await this.host.hasReminderNotified(notifyKey)) {
                                         this.host.notifiedReminders.set(notifyKey, true);
@@ -288,11 +289,11 @@ export class ReminderTimeScanner {
                                     const parsed = this.extractDateAndTime(rt);
                                     if (parsed.date && parsed.date !== today) continue;
 
-                                    const currentNum = this.timeStringToNumber(currentTime);
+                                    const currentNum = currentTime === null ? null : this.timeStringToNumber(currentTime);
                                     const reminderNum = this.timeStringToNumber(rt);
 
                                     const notifyKey = `${instanceId}_${today}_${rt}_reminderTimes`;
-                                    if (!this.host.notifiedReminders.has(notifyKey) && currentNum === reminderNum) {
+                                    if (!this.host.notifiedReminders.has(notifyKey) && (currentNum === null || currentNum === reminderNum)) {
                                         if (await this.host.hasReminderNotified(notifyKey)) {
                                             this.host.notifiedReminders.set(notifyKey, true);
                                         } else {
@@ -319,7 +320,7 @@ export class ReminderTimeScanner {
         }
     }
 
-    private shouldNotifyNow(reminder: any, today: string, currentTime: string, timeField: 'time' = 'time'): boolean {
+    private shouldNotifyNow(reminder: any, today: string, currentTime: string | null, timeField: 'time' = 'time'): boolean {
         // 不在此处强制检查日期，调用方负责判断提醒是否在当天或范围内。
 
         // 必须有时间字段
@@ -341,6 +342,7 @@ export class ReminderTimeScanner {
             return false;
         }
 
+        if (currentTime === null) return true;
         const currentTimeNumber = this.timeStringToNumber(currentTime);
         const reminderTimeNumber = this.timeStringToNumber(rawReminderTime);
         // 只检测当前分钟的提醒，不检测过期提醒（精确匹配）

@@ -7,7 +7,8 @@ const { createKernelLoader } = require('./helpers/kernel-loader.cjs');
 
 const clone = value => value == null ? value : JSON.parse(JSON.stringify(value));
 const load = createKernelLoader();
-const { KernelWebhookScheduler, WEBHOOK_STATE_FILE } = load('src/kernel/webhookScheduler.ts');
+const { KernelReminderService, WEBHOOK_STATE_FILE } = load('src/kernel/reminderService.ts');
+const { FRONTEND_REMINDER_STATE_FILE } = load('src/kernel/frontendReminderDelivery.ts');
 
 function fixture(extra = {}) {
     const files = {
@@ -23,7 +24,8 @@ function fixture(extra = {}) {
     let failure = false;
     const storage = {
         async loadData(filename) { return clone(files[filename]); },
-        async saveData(filename, data) { files[filename] = clone(data); }
+        async saveData(filename, data) { files[filename] = clone(data); },
+        async readDir() { return []; }
     };
     const client = {
         async fetch(url, options) {
@@ -37,7 +39,7 @@ function fixture(extra = {}) {
         }
     };
     const logger = { info: async () => {}, error: async () => {}, warn: async message => warnings.push(message) };
-    const scheduler = new KernelWebhookScheduler(storage, client, logger);
+    const scheduler = new KernelReminderService(storage, client, logger);
     return { scheduler, files, requests, warnings, storage, client, logger, setFailure(value) { failure = value; } };
 }
 
@@ -51,7 +53,7 @@ test('没有 window/document 的内核独立发送，重复扫描和重启均不
     assert.equal(f.requests[0].timeout, 8000);
     assert.match(f.requests[0].payload.text.content, /09:30 到点任务/);
     await f.scheduler.check(now());
-    const restarted = new KernelWebhookScheduler(f.storage, f.client, f.logger);
+    const restarted = new KernelReminderService(f.storage, f.client, f.logger);
     await restarted.check(now());
     assert.equal(f.requests.length, 1);
     assert.equal(Object.keys(f.files[WEBHOOK_STATE_FILE].sent).length, 1);
@@ -64,7 +66,7 @@ test('失败通知跨分钟、重启后重试，成功后才标记已发送', as
     assert.equal(Object.keys(f.files[WEBHOOK_STATE_FILE].sent).length, 0);
     assert.equal(Object.keys(f.files[WEBHOOK_STATE_FILE].pending).length, 1);
     f.setFailure(false);
-    const restarted = new KernelWebhookScheduler(f.storage, f.client, f.logger);
+    const restarted = new KernelReminderService(f.storage, f.client, f.logger);
     await restarted.check(new Date('2026-10-08T09:31:10'));
     assert.equal(f.requests.length, 2);
     assert.equal(Object.keys(f.files[WEBHOOK_STATE_FILE].pending).length, 0);
@@ -154,16 +156,16 @@ test('并发扫描共用当前扫描，卸载会清理所有定时器', async ()
     assert.equal(f.requests.length, 1);
     await f.scheduler.start();
     await f.scheduler.stop();
-    assert.equal(f.scheduler.timer, null);
-    assert.equal(f.scheduler.initialTimer, null);
+    assert.equal(f.scheduler.cron.jobs.size, 0);
+    assert.equal(f.scheduler.cron.changeTimer, null);
 });
 
 test('订阅日历任务也会提醒，禁用的订阅不读取任务', async () => {
     const f = fixture({
         'reminder.json': {},
-        'ics_subscriptions.json': { subscriptions: { calendar: { id: 'calendar', enabled: true }, disabled: { id: 'disabled', enabled: false } } },
-        'subscribe/calendar.json': { event: { id: 'event', title: '订阅日历', date: '2026-10-08', time: '09:30' } },
-        'subscribe/disabled.json': { ignored: { id: 'ignored', title: '禁用订阅', date: '2026-10-08', time: '09:30' } }
+        'ics-subscriptions.json': { subscriptions: { calendar: { id: 'calendar', enabled: true }, disabled: { id: 'disabled', enabled: false } } },
+        'Subscribe/calendar.json': { event: { id: 'event', title: '订阅日历', date: '2026-10-08', time: '09:30' } },
+        'Subscribe/disabled.json': { ignored: { id: 'ignored', title: '禁用订阅', date: '2026-10-08', time: '09:30' } }
     });
     await f.scheduler.check(now());
     assert.equal(f.requests.length, 1);
@@ -195,7 +197,7 @@ test('关键文件读取失败会终止扫描，不能当成空记录重复发�
     const f = fixture();
     const read = f.storage.loadData;
     f.storage.loadData = async (filename, strict) => {
-        if (filename === WEBHOOK_STATE_FILE) {
+        if (filename === FRONTEND_REMINDER_STATE_FILE) {
             assert.equal(strict, true);
             throw new Error('state unreadable');
         }
@@ -225,15 +227,16 @@ test('内核生命周期注册测试 RPC 并启动调度；管理工具失败不
     }).outputText;
     new Function('require', 'exports', 'siyuan', compiled)(name => {
         if (name === './kernel/storageAdapter') return { createKernelStorage: () => f.storage };
-        if (name === './kernel/webhookScheduler') return { KernelWebhookScheduler };
+        if (name === './kernel/reminderService') return { KernelReminderService };
         if (name === './kernel/constants') return load('src/kernel/constants.ts');
         if (name === './kernel/tools/index') return { createMcpRegistry: () => [] };
         return new Proxy({}, { get: () => FailingManager });
     }, {}, siyuan);
     try {
         await lifecycle.onload();
-        assert.ok(messages.some(message => message.includes('Webhook reminder scheduler started')));
+        assert.ok(messages.some(message => message.includes('Reminder scheduler started')));
         assert.ok(rpc.has('test-webhook'));
+        assert.ok(rpc.has('refresh-reminder-schedule'));
         assert.equal(await rpc.get('test-webhook')({ url: 'https://example.invalid/webhook', jsonType: 'wecom' }), true);
         assert.equal(f.requests.length, 1);
     } finally {

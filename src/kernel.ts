@@ -12,7 +12,7 @@ import { PomodoroManager } from "./components/dataManager/pomodoroRecord";
 import { SummaryManager } from "./components/dataManager/summaryManager";
 import { createMcpRegistry, type ToolDefinition } from "./kernel/tools/index";
 import { STATUSES_DATA_FILE } from "./kernel/constants";
-import { KernelWebhookScheduler } from "./kernel/webhookScheduler";
+import { KernelReminderService } from "./kernel/reminderService";
 
 class KernelPluginBridge {
     private storage: KernelStorage;
@@ -89,11 +89,12 @@ class KernelPluginBridge {
     }
 
     async loadSubscriptionData(): Promise<any> {
-        return this.loadData("ics_subscriptions.json");
+        return await this.loadData("ics-subscriptions.json") || await this.loadData("ics_subscriptions.json");
     }
 
     async loadSubscriptionTasks(subscriptionId: string): Promise<any> {
-        return this.loadData(`subscribe/${subscriptionId}.json`);
+        return await this.loadData(`Subscribe/${subscriptionId}.json`)
+            || await this.loadData(`subscribe/${subscriptionId}.json`);
     }
 
     async loadPomodoroRecords(force: boolean = false): Promise<any> {
@@ -153,12 +154,12 @@ class KernelPlugin {
 
     private registry: ToolDefinition[] = [];
     private registeredToolNames: string[] = [];
-    private webhookScheduler: KernelWebhookScheduler;
+    private reminderService: KernelReminderService;
 
     constructor() {
         this.siyuan = siyuan;
         this.logger = this.siyuan.logger;
-        this.webhookScheduler = new KernelWebhookScheduler(this.storage, this.siyuan.client, this.logger);
+        this.reminderService = new KernelReminderService(this.storage, this.siyuan.client, this.logger, this.siyuan);
 
         this.siyuan.plugin.lifecycle.onload = this.onload.bind(this);
         this.siyuan.plugin.lifecycle.onunload = this.onunload.bind(this);
@@ -189,8 +190,13 @@ class KernelPlugin {
 
     private async onload(): Promise<void> {
         await this.logger.info("[kernel] Agent capability plugin loading");
-        await this.siyuan.rpc.bind('test-webhook', options => this.webhookScheduler.testWebhook(options));
-        await this.webhookScheduler.start();
+        await this.siyuan.rpc.bind('test-webhook', options => this.reminderService.testWebhook(options));
+        await this.siyuan.rpc.bind('refresh-reminder-schedule', () => this.reminderService.notifyChanged());
+        await this.siyuan.rpc.bind('get-reminder-events', () => this.reminderService.getFrontendEvents());
+        await this.siyuan.rpc.bind('claim-reminder-event', ({ key, owner }) => this.reminderService.claimFrontendEvent(key, owner));
+        await this.siyuan.rpc.bind('ack-reminder-event', ({ key, owner }) => this.reminderService.acknowledgeFrontendEvent(key, owner));
+        await this.siyuan.rpc.bind('release-reminder-event', ({ key, owner }) => this.reminderService.releaseFrontendEvent(key, owner));
+        await this.reminderService.start();
 
         try {
             // Initialize managers to load data cache
@@ -229,8 +235,12 @@ class KernelPlugin {
 
     private async onunload(): Promise<void> {
         await this.logger.info("[kernel] Agent capability plugin unloading");
-        await this.webhookScheduler.stop();
+        await this.reminderService.stop();
         await this.siyuan.rpc.unbind('test-webhook');
+        await this.siyuan.rpc.unbind('refresh-reminder-schedule');
+        for (const method of ['get-reminder-events', 'claim-reminder-event', 'ack-reminder-event', 'release-reminder-event']) {
+            await this.siyuan.rpc.unbind(method);
+        }
 
         for (const name of this.registeredToolNames) {
             try {
