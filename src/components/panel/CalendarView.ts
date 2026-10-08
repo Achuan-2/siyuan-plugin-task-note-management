@@ -8645,6 +8645,41 @@ export class CalendarView {
                     if (this.currentCompletionFilter === 'completed' && !completed) continue;
                     if (this.currentCompletionFilter === 'incomplete' && completed) continue;
 
+                    const reminderTimes = getHabitReminderTimesForDate(habit, dateStr);
+                    // 无提醒时间的习惯作为全天事件显示，不受提醒时间显示开关影响。
+                    if (!reminderTimes.length) {
+                        events.push({
+                            id: `habit-${habit.id}-${dateStr}`,
+                            title: habit.title || i18n("unnamedTask"),
+                            start: dateStr,
+                            allDay: true,
+                            display: 'block',
+                            backgroundColor: completed ? 'rgba(46, 125, 50, 0.62)' : '#43a047',
+                            borderColor: completed ? '#1b5e20' : '#2e7d32',
+                            textColor: 'var(--b3-theme-on-background)',
+                            className: `habit-calendar-event${completed ? ' completed' : ''}`,
+                            editable: false,
+                            startEditable: false,
+                            durationEditable: false,
+                            extendedProps: {
+                                type: 'habit',
+                                isHabit: true,
+                                habitId: habit.id,
+                                icon: habit.icon,
+                                color: habit.color,
+                                date: dateStr,
+                                completed,
+                                checkedEmojis,
+                                note: habit.note || '',
+                                target: progressInfo.target,
+                                currentProgress: progressInfo.current,
+                                goalType: progressInfo.goalType,
+                                frequency: habit.frequency,
+                                habitOrder: habitOrderMap.get(habit.id) ?? Number.MAX_SAFE_INTEGER
+                            }
+                        });
+                    }
+
                     const checkInTimeEntries = this.showHabitCheckInTime
                         ? this.getHabitCheckInTimeEntriesOnDate(habit, dateStr)
                         : [];
@@ -8700,7 +8735,6 @@ export class CalendarView {
                     // 如果设置了不显示提醒时间，则跳过
                     if (!this.showReminderTime) continue;
 
-                    const reminderTimes = getHabitReminderTimesForDate(habit, dateStr);
                     if (!reminderTimes.length) continue;
 
                     reminderTimes.forEach((entry, index) => {
