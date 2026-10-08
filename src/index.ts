@@ -106,7 +106,7 @@ export type ReminderWebhookJsonType = (typeof WEBHOOK_JSON_TYPES)[number];
 
 export const WEBHOOK_JSON_TEMPLATES: Record<Exclude<ReminderWebhookJsonType, 'custom'>, string> = {
     feishu: '{\n    "msg_type": "text",\n    "content": {\n        "text": "${title}\\n${message}"\n    }\n}',
-    wecom: '{\n    "msgType": "text",\n    "text": {\n        "content": "${title}\\n${message}"\n    }\n}',
+    wecom: '{\n    "msgtype": "text",\n    "text": {\n        "content": "${title}\\n${message}"\n    }\n}',
 };
 
 const DEFAULT_WEBHOOK_JSON_TYPE: ReminderWebhookJsonType = 'feishu';
@@ -128,7 +128,10 @@ function inferReminderWebhookJsonType(jsonTemplate: string): ReminderWebhookJson
     if (!normalizedTemplate || normalizedTemplate === normalizeWebhookTemplateText(WEBHOOK_JSON_TEMPLATES.feishu)) {
         return 'feishu';
     }
-    if (normalizedTemplate === normalizeWebhookTemplateText(WEBHOOK_JSON_TEMPLATES.wecom)) {
+    // 兼容没有保存 JSON 类型、仍使用旧版企业微信预设的设置。
+    const legacyWecomTemplate = WEBHOOK_JSON_TEMPLATES.wecom.replace('"msgtype"', '"msgType"');
+    if (normalizedTemplate === normalizeWebhookTemplateText(WEBHOOK_JSON_TEMPLATES.wecom)
+        || normalizedTemplate === normalizeWebhookTemplateText(legacyWecomTemplate)) {
         return 'wecom';
     }
     return 'custom';
@@ -142,6 +145,23 @@ function resolveReminderWebhookJsonTemplate(jsonType: unknown, customTemplate: u
     return typeof customTemplate === 'string' && customTemplate.trim()
         ? customTemplate
         : WEBHOOK_JSON_TEMPLATES.feishu;
+}
+
+function assertWebhookResponse(body: string): void {
+    let result: unknown;
+    try {
+        result = JSON.parse(body);
+    } catch {
+        // 自定义 Webhook 可能返回空响应或纯文本，仍以 HTTP 状态判断成功。
+        return;
+    }
+
+    if (!result || typeof result !== 'object' || !('errcode' in result)) return;
+    const { errcode, errmsg } = result as { errcode: unknown; errmsg?: unknown };
+    if ((typeof errcode === 'number' || typeof errcode === 'string') && Number(errcode) !== 0) {
+        const detail = typeof errmsg === 'string' && errmsg ? `: ${errmsg}` : '';
+        throw new Error(`Webhook errcode ${errcode}${detail}`);
+    }
 }
 
 export interface BoundReminderDateDisplayInfo {
@@ -2262,6 +2282,7 @@ export default class ReminderPlugin extends Plugin {
             if (response.status < 200 || response.status >= 300) {
                 throw new Error(`HTTP ${response.status}`);
             }
+            assertWebhookResponse(response.body);
             return;
         }
 
@@ -2280,6 +2301,8 @@ export default class ReminderPlugin extends Plugin {
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}`);
             }
+            // 企业微信等接口即使 HTTP 为 200，也可能通过 errcode 拒绝消息。
+            assertWebhookResponse(await response.text());
         } finally {
             window.clearTimeout(timeout);
         }
