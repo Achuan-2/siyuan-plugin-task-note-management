@@ -1,6 +1,6 @@
 /// <reference types="siyuan/kernel" />
 
-import type { IMcp, ILogger, IStorage, IRpc } from "siyuan/kernel";
+import type { ILogger, ISiyuan } from "siyuan/kernel";
 import { createKernelStorage, type KernelStorage } from "./kernel/storageAdapter";
 import { ReminderManager } from "./components/dataManager/reminderManager";
 import { ProjectManager } from "./components/dataManager/projectManager";
@@ -12,6 +12,7 @@ import { PomodoroManager } from "./components/dataManager/pomodoroRecord";
 import { SummaryManager } from "./components/dataManager/summaryManager";
 import { createMcpRegistry, type ToolDefinition } from "./kernel/tools/index";
 import { STATUSES_DATA_FILE } from "./kernel/constants";
+import { KernelWebhookScheduler } from "./kernel/webhookScheduler";
 
 class KernelPluginBridge {
     private storage: KernelStorage;
@@ -129,7 +130,7 @@ class KernelPluginBridge {
 }
 
 class KernelPlugin {
-    private readonly siyuan: typeof globalThis.siyuan;
+    private readonly siyuan: ISiyuan;
     private readonly logger: ILogger;
 
     private storage = createKernelStorage();
@@ -152,10 +153,12 @@ class KernelPlugin {
 
     private registry: ToolDefinition[] = [];
     private registeredToolNames: string[] = [];
+    private webhookScheduler: KernelWebhookScheduler;
 
     constructor() {
         this.siyuan = siyuan;
         this.logger = this.siyuan.logger;
+        this.webhookScheduler = new KernelWebhookScheduler(this.storage, this.siyuan.client, this.logger);
 
         this.siyuan.plugin.lifecycle.onload = this.onload.bind(this);
         this.siyuan.plugin.lifecycle.onunload = this.onunload.bind(this);
@@ -186,6 +189,8 @@ class KernelPlugin {
 
     private async onload(): Promise<void> {
         await this.logger.info("[kernel] Agent capability plugin loading");
+        await this.siyuan.rpc.bind('test-webhook', options => this.webhookScheduler.testWebhook(options));
+        await this.webhookScheduler.start();
 
         try {
             // Initialize managers to load data cache
@@ -218,12 +223,14 @@ class KernelPlugin {
             await this.logger.info(`[kernel] registered ${this.registeredToolNames.length} capabilities`);
         } catch (error: any) {
             await this.logger.error("[kernel] failed to register capabilities:", error);
-            throw error;
+            // 工具初始化失败不应终止已启动的后台提醒服务。
         }
     }
 
     private async onunload(): Promise<void> {
         await this.logger.info("[kernel] Agent capability plugin unloading");
+        await this.webhookScheduler.stop();
+        await this.siyuan.rpc.unbind('test-webhook');
 
         for (const name of this.registeredToolNames) {
             try {

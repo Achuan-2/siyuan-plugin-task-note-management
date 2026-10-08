@@ -798,7 +798,7 @@
                             title: i18n('reminderWebhookEnabled') || '启用 Webhook 通知',
                             description:
                                 i18n('reminderWebhookEnabledDesc') ||
-                                '任务/习惯提醒触发时，向指定 URL 发送 POST JSON 通知。',
+                                '由思源内核后台发送任务、习惯和每日汇总 Webhook，无需打开页面。思源服务需保持运行。',
                         },
                         {
                             key: 'reminderWebhookUrl',

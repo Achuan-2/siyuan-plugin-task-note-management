@@ -1,125 +1,50 @@
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
-const ts = require('typescript');
+const { test } = require('node:test');
+const { createKernelLoader } = require('./helpers/kernel-loader.cjs');
+const load = createKernelLoader();
+const { WEBHOOK_JSON_TEMPLATES: templates, inferReminderWebhookJsonType: inferType, buildWebhookPayload } = load('src/services/webhookPayload.ts');
+const { KernelWebhookScheduler, sendKernelWebhook } = load('src/kernel/webhookScheduler.ts');
 
-// 只加载实际 Webhook 代码，避免在 Node 测试中初始化思源 UI 和插件生命周期。
-const source = fs.readFileSync(path.join(__dirname, '../src/index.ts'), 'utf8');
-const ast = ts.createSourceFile('index.ts', source, ts.ScriptTarget.Latest, true);
-const declarations = new Set([
-    'STORAGE_NAME', 'WEBHOOK_JSON_TYPES', 'WEBHOOK_JSON_TEMPLATES', 'DEFAULT_WEBHOOK_JSON_TYPE',
-    'isReminderWebhookJsonType', 'normalizeReminderWebhookJsonType', 'normalizeWebhookTemplateText',
-    'inferReminderWebhookJsonType', 'resolveReminderWebhookJsonTemplate', 'assertWebhookResponse'
-]);
-const methods = new Set([
-    'buildWebhookReminderInfo', 'replaceWebhookTemplateVariables', 'renderWebhookTemplateAsJsonText',
-    'buildDefaultWebhookPayload', 'buildWebhookPayload', 'sendWebhookRequest',
-    'sendReminderWebhookNotification', 'sendTestWebhook'
-]);
-const definitions = ast.statements.filter((node) => {
-    if (ts.isVariableStatement(node)) {
-        return node.declarationList.declarations.some((item) => declarations.has(item.name.getText(ast)));
-    }
-    return ts.isFunctionDeclaration(node) && declarations.has(node.name?.text);
-});
-const pluginClass = ast.statements.find((node) => ts.isClassDeclaration(node) && node.name?.text === 'ReminderPlugin');
-const webhookMethods = pluginClass.members.filter((node) => methods.has(node.name?.getText(ast)));
-assert.equal(definitions.length, declarations.size, '应加载所有 Webhook 声明');
-assert.equal(webhookMethods.length, methods.size, '应加载所有 Webhook 方法');
-
-const compiled = ts.transpileModule([
-    ...definitions.map((node) => node.getText(ast)),
-    `class WebhookHarness { ${webhookMethods.map((node) => node.getText(ast)).join('\n')} }`,
-    'exports.WebhookHarness = WebhookHarness;',
-    'exports.inferType = inferReminderWebhookJsonType;',
-].join('\n'), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 }
-}).outputText;
-
-let frontend = 'desktop';
-let responseStatus = 200;
-let responseBody = '{"errcode":0,"errmsg":"ok"}';
-const requests = [];
-const warnings = [];
-const moduleExports = {};
-new Function('exports', 'getFrontend', 'forwardProxy', 'fetch', 'window', 'i18n', 'console', compiled)(
-    moduleExports,
-    () => frontend,
-    async (url, method, payload) => {
-        requests.push({ route: 'proxy', url, method, payload: JSON.parse(payload) });
-        return { status: responseStatus, body: responseBody };
-    },
-    async (url, options) => {
-        requests.push({ route: 'direct', url, method: options.method, payload: JSON.parse(options.body) });
-        return {
-            ok: responseStatus >= 200 && responseStatus < 300,
-            status: responseStatus,
-            text: async () => responseBody
-        };
-    },
-    { setTimeout, clearTimeout },
-    () => '',
-    { warn: (...args) => warnings.push(args), error: () => {} }
-);
-
-async function main() {
-    const { WebhookHarness, WEBHOOK_JSON_TEMPLATES: templates, inferType } = moduleExports;
-    const plugin = new WebhookHarness();
-    const url = 'https://example.invalid/webhook';
-    const legacyTemplate = templates.wecom.replace('"msgtype"', '"msgType"');
-    assert.equal(inferType(legacyTemplate), 'wecom', '旧版预设应仍识别为企业微信');
+test('共用 Payload 支持旧企业微信设置、飞书与含特殊字符的自定义模板', () => {
+    const legacy = templates.wecom.replace('"msgtype"', '"msgType"');
+    assert.equal(inferType(legacy), 'wecom');
     assert.equal(inferType(templates.wecom), 'wecom');
     assert.equal(inferType('{"custom":true}'), 'custom');
-
     const message = '带有 "引号"、换行\n和反斜杠 \\ 的消息';
-    const payload = plugin.buildWebhookPayload('标题', message, 'test', '', legacyTemplate, 'wecom');
-    assert.deepEqual(payload, { msgtype: 'text', text: { content: `标题\n${message}` } });
-    assert.deepEqual(plugin.buildWebhookPayload('标题', message, 'test', '', templates.feishu, 'feishu'), {
-        msg_type: 'text', content: { text: `标题\n${message}` }
+    assert.deepEqual(buildWebhookPayload('标题', message, 'test', '', legacy, 'wecom'), {
+        msgtype: 'text', text: { content: '标题\n' + message }
     });
+    assert.deepEqual(buildWebhookPayload('标题', message, 'test', '', templates.feishu, 'feishu'), {
+        msg_type: 'text', content: { text: '标题\n' + message }
+    });
+    assert.deepEqual(buildWebhookPayload('标题', message, 'test', '', '{"message":"${message}"}', 'custom'), { message });
+});
 
-    for (frontend of ['desktop', 'browser-desktop', 'browser-mobile']) {
-        responseStatus = 200;
-        responseBody = '{"errcode":0,"errmsg":"ok"}';
-        assert.equal(await plugin.sendTestWebhook(url, legacyTemplate, 'wecom'), true);
-        assert.equal(requests.at(-1).route, frontend === 'desktop' ? 'direct' : 'proxy');
-        assert.equal(requests.at(-1).payload.msgtype, 'text');
-        assert.equal(requests.at(-1).payload.msgType, undefined);
-
-        for (const code of [40008, '93000']) {
-            responseBody = JSON.stringify({ errcode: code, errmsg: 'invalid message type' });
-            await assert.rejects(plugin.sendTestWebhook(url, '', 'wecom'), new RegExp(`${code}.*invalid message type`));
-        }
-
-        plugin.loadSettings = async () => ({
-            reminderWebhookEnabled: true,
-            reminderWebhookUrl: url,
-            reminderWebhookJsonType: 'wecom',
-            reminderWebhookJsonTemplate: legacyTemplate
-        });
-        const warningCount = warnings.length;
-        await plugin.sendReminderWebhookNotification('提醒', '任务到期');
-        assert.equal(warnings.length, warningCount + 1, '实际提醒同样应记录业务失败');
-        assert.equal(requests.at(-1).payload.msgtype, 'text');
-
-        responseBody = '{"errcode":0,"errmsg":"ok"}';
-        await plugin.sendReminderWebhookNotification('提醒', '任务到期');
-        assert.equal(warnings.length, warningCount + 1);
-
-        responseStatus = 403;
-        await assert.rejects(plugin.sendTestWebhook(url, '', 'wecom'), /HTTP 403/);
-        responseStatus = 200;
-        for (responseBody of ['', 'ok', '{"accepted":true}']) {
-            assert.equal(await plugin.sendTestWebhook(url, '{"message":"${message}"}', 'custom'), true);
-        }
-        responseStatus = 204;
-        responseBody = '';
-        assert.equal(await plugin.sendTestWebhook(url, '{}', 'custom'), true);
+test('内核传输检查代理 HTTP、目标 HTTP 及 Webhook 业务状态码', async () => {
+    const url = 'https://example.invalid/webhook';
+    const client = response => ({ fetch: async () => response });
+    const proxy = (status, body) => ({ ok: true, json: async () => ({ code: 0, data: { status, body } }) });
+    await assert.rejects(sendKernelWebhook(client({ ok: false, status: 403 }), url, {}), /HTTP 403/);
+    await assert.rejects(sendKernelWebhook(client(proxy(500, '')), url, {}), /HTTP 500/);
+    for (const code of [40008, '93000']) {
+        await assert.rejects(sendKernelWebhook(client(proxy(200, JSON.stringify({ errcode: code, errmsg: 'invalid message type' }))), url, {}), /invalid message type/);
     }
-    console.log('Webhook payload, legacy settings, direct/proxy responses and reminder behavior OK');
-}
+    for (const body of ['', 'ok', '{"accepted":true}', '{"errcode":0}']) {
+        await sendKernelWebhook(client(proxy(200, body)), url, {});
+    }
+    await sendKernelWebhook(client(proxy(204, '')), url, {});
+    await assert.rejects(sendKernelWebhook(client(proxy(200, '')), 'file:///tmp/webhook', {}), /HTTP or HTTPS/);
+});
 
-main().catch((error) => {
-    console.error(error);
-    process.exitCode = 1;
+test('测试 Webhook 使用与自动通知相同的内核传输，可测试尚未保存的配置', async () => {
+    const requests = [];
+    const client = { async fetch(path, options) {
+        assert.equal(path, '/api/network/forwardProxy');
+        requests.push(JSON.parse(options.body));
+        return { ok: true, json: async () => ({ code: 0, data: { status: 200, body: '{"errcode":0}' } }) };
+    } };
+    const scheduler = new KernelWebhookScheduler({}, client, {});
+    assert.equal(await scheduler.testWebhook({ url: 'https://example.invalid/webhook', template: '', jsonType: 'wecom' }), true);
+    assert.equal(JSON.parse(requests[0].payload).msgtype, 'text');
+    await assert.rejects(scheduler.testWebhook({ url: 'https://example.invalid/webhook', template: '{invalid', jsonType: 'custom' }), /invalid template/);
 });
