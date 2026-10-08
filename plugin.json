@@ -5,29 +5,13 @@
   "version": "7.1.3",
   "minAppVersion": "3.7.0",
   "kernels": [
-    "windows",
-    "linux",
-    "darwin",
-    "docker",
-    "ios",
-    "android",
-    "harmony"
+    "all"
   ],
   "backends": [
-    "windows",
-    "linux",
-    "darwin",
-    "docker",
-    "ios",
-    "android",
-    "harmony"
+    "all"
   ],
   "frontends": [
-    "desktop",
-    "mobile",
-    "browser-desktop",
-    "browser-mobile",
-    "desktop-window"
+    "all"
   ],
   "disabledInPublish": true,
   "displayName": {
