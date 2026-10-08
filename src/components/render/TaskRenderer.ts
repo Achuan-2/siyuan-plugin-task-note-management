@@ -1366,111 +1366,8 @@ export class TaskRenderer {
         }
 
         // 备注信息 (HTML / Markdown)
-        if (task.note) {
-            const noteEl = document.createElement('div');
-            noteEl.className = 'reminder-item__note';
-
-            const lute = context.lute ?? getLuteInstance();
-            if (lute) {
-                noteEl.innerHTML = lute.Md2HTML(task.note);
-                const pTags = noteEl.querySelectorAll('p');
-                pTags.forEach(p => {
-                    p.style.margin = '0';
-                    p.style.lineHeight = 'inherit';
-                });
-                const listTags = noteEl.querySelectorAll('ul, ol');
-                listTags.forEach(list => {
-                    (list as HTMLElement).style.margin = '0';
-                    (list as HTMLElement).style.paddingLeft = '20px';
-                });
-                const liTags = noteEl.querySelectorAll('li');
-                liTags.forEach(li => {
-                    (li as HTMLElement).style.margin = '0';
-                });
-                const quoteTags = noteEl.querySelectorAll('blockquote');
-                quoteTags.forEach(quote => {
-                    (quote as HTMLElement).style.margin = '0';
-                    (quote as HTMLElement).style.paddingLeft = '10px';
-                    (quote as HTMLElement).style.borderLeft = '2px solid var(--b3-theme-on-surface-light)';
-                    (quote as HTMLElement).style.opacity = '0.8';
-                });
-                const imgTags = noteEl.querySelectorAll('img');
-                imgTags.forEach(img => {
-                    // Optimize image display in notes: automatic small thumbnail layout
-                    img.style.setProperty('max-width', '150px', 'important');
-                    img.style.setProperty('max-height', '60px', 'important');
-                    img.style.setProperty('width', 'auto', 'important');
-                    img.style.setProperty('height', 'auto', 'important');
-                    img.style.setProperty('object-fit', 'contain', 'important');
-                    img.style.setProperty('border-radius', '4px', 'important');
-                    img.style.setProperty('display', 'inline-block', 'important');
-                    img.style.setProperty('vertical-align', 'middle', 'important');
-                    img.style.setProperty('margin', '4px 8px 4px 0', 'important');
-                    img.style.setProperty('border', '1px solid var(--b3-border-color)', 'important');
-                    img.style.setProperty('background-color', 'var(--b3-theme-surface)', 'important');
-
-                    // 对屏幕外的图片使用懒加载，减少首次渲染压力
-                    img.loading = 'lazy';
-                    img.decoding = 'async';
-
-                    const src = img.getAttribute('src');
-                    if (src && src.startsWith('/data/storage/petal/siyuan-plugin-task-note-management/assets/')) {
-                        const cachedUrl = TaskRenderer.getAssetBlobUrl(src);
-                        if (cachedUrl) {
-                            img.src = cachedUrl;
-                        } else {
-                            import('../../api').then(({ getFileBlob }) => {
-                                getFileBlob(src).then(blob => {
-                                    if (blob) {
-                                        const url = URL.createObjectURL(blob);
-                                        TaskRenderer.assetBlobCache.set(src, url);
-                                        img.src = url;
-                                    }
-                                });
-                            });
-                        }
-                    }
-                });
-            } else {
-                noteEl.textContent = task.note;
-            }
-
-            noteEl.style.cssText = `
-                font-size: 12px;
-                margin-top: 4px;
-                line-height: 1.5;
-                max-height: 3em;
-                overflow: hidden;
-                display: -webkit-box;
-                -webkit-line-clamp: 2;
-                -webkit-box-orient: vertical;
-                word-break: break-all;
-                cursor: pointer;
-                border-radius: 4px;
-                padding: 0 4px; 
-                margin-left: -4px;
-                transition: background-color 0.2s, color 0.2s;
-                position: relative;
-            `;
-
-            // If the note contains images, adjust container styles to display them completely
-            const hasImages = noteEl.querySelector('img') !== null;
-            if (hasImages) {
-                noteEl.style.maxHeight = 'none';
-                noteEl.style.display = 'block';
-                noteEl.style.webkitLineClamp = 'unset';
-            }
-
-            noteEl.addEventListener('click', (e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                if (callbacks.onNoteClick) {
-                    callbacks.onNoteClick(task, e);
-                }
-            });
-
-            infoEl.appendChild(noteEl);
-        }
+        const noteEl = this.createNoteElement(task, context, callbacks.onNoteClick);
+        if (noteEl) infoEl.appendChild(noteEl);
 
         // 项目名称 (使用预处理的 projectCache)
         const showProjectBadge = context.showProjectBadge !== false;
@@ -1835,6 +1732,94 @@ export class TaskRenderer {
         return taskEl;
     }
 
+
+    /** 与完整卡片共用备注渲染，供侧栏局部更新时保留卡片节点和交互状态。 */
+    public static createNoteElement(task: any, context: TaskRenderContext, onNoteClick?: (task: any, event: Event) => void): HTMLElement | null {
+        if (!task.note) return null;
+        const noteEl = document.createElement('div');
+        noteEl.className = 'reminder-item__note';
+        const lute = context.lute ?? getLuteInstance();
+        if (lute) {
+            noteEl.innerHTML = lute.Md2HTML(task.note);
+            noteEl.querySelectorAll('p').forEach(p => {
+                p.style.margin = '0';
+                p.style.lineHeight = 'inherit';
+            });
+            noteEl.querySelectorAll<HTMLElement>('ul, ol').forEach(list => {
+                list.style.margin = '0';
+                list.style.paddingLeft = '20px';
+            });
+            noteEl.querySelectorAll<HTMLElement>('li').forEach(li => li.style.margin = '0');
+            noteEl.querySelectorAll<HTMLElement>('blockquote').forEach(quote => {
+                quote.style.margin = '0';
+                quote.style.paddingLeft = '10px';
+                quote.style.borderLeft = '2px solid var(--b3-theme-on-surface-light)';
+                quote.style.opacity = '0.8';
+            });
+            noteEl.querySelectorAll('img').forEach(img => {
+                img.style.setProperty('max-width', '150px', 'important');
+                img.style.setProperty('max-height', '60px', 'important');
+                img.style.setProperty('width', 'auto', 'important');
+                img.style.setProperty('height', 'auto', 'important');
+                img.style.setProperty('object-fit', 'contain', 'important');
+                img.style.setProperty('border-radius', '4px', 'important');
+                img.style.setProperty('display', 'inline-block', 'important');
+                img.style.setProperty('vertical-align', 'middle', 'important');
+                img.style.setProperty('margin', '4px 8px 4px 0', 'important');
+                img.style.setProperty('border', '1px solid var(--b3-border-color)', 'important');
+                img.style.setProperty('background-color', 'var(--b3-theme-surface)', 'important');
+                img.loading = 'lazy';
+                img.decoding = 'async';
+                const src = img.getAttribute('src');
+                if (src && src.startsWith('/data/storage/petal/siyuan-plugin-task-note-management/assets/')) {
+                    const cachedUrl = TaskRenderer.getAssetBlobUrl(src);
+                    if (cachedUrl) {
+                        img.src = cachedUrl;
+                    } else {
+                        import('../../api').then(({ getFileBlob }) => {
+                            getFileBlob(src).then(blob => {
+                                if (blob) {
+                                    const url = URL.createObjectURL(blob);
+                                    TaskRenderer.assetBlobCache.set(src, url);
+                                    img.src = url;
+                                }
+                            });
+                        });
+                    }
+                }
+            });
+        } else {
+            noteEl.textContent = task.note;
+        }
+        noteEl.style.cssText = `
+            font-size: 12px;
+            margin-top: 4px;
+            line-height: 1.5;
+            max-height: 3em;
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            word-break: break-all;
+            cursor: pointer;
+            border-radius: 4px;
+            padding: 0 4px;
+            margin-left: -4px;
+            transition: background-color 0.2s, color 0.2s;
+            position: relative;
+        `;
+        if (noteEl.querySelector('img')) {
+            noteEl.style.maxHeight = 'none';
+            noteEl.style.display = 'block';
+            noteEl.style.webkitLineClamp = 'unset';
+        }
+        noteEl.addEventListener('click', event => {
+            event.stopPropagation();
+            event.preventDefault();
+            onNoteClick?.(task, event);
+        });
+        return noteEl;
+    }
 
     private static getReminderTimeEntries(reminder: any): Array<{ time: string; endTime?: string; note?: string; everyDay?: boolean; overrides?: any }> {
         const entries: Array<{ time: string; endTime?: string; note?: string; everyDay?: boolean; overrides?: any }> = [];
