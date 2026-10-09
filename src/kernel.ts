@@ -191,6 +191,10 @@ class KernelPlugin {
     private async onload(): Promise<void> {
         await this.logger.info("[kernel] Agent capability plugin loading");
         await this.siyuan.rpc.bind('test-webhook', options => this.reminderService.testWebhook(options));
+        await this.siyuan.rpc.bind('test-email', options => this.reminderService.testEmail(options));
+        await this.siyuan.rpc.bind('get-smtp-email-events', () => this.reminderService.getDesktopEmailEvents());
+        await this.siyuan.rpc.bind('claim-smtp-email', ({ key, owner }) => this.reminderService.claimDesktopEmail(key, owner));
+        await this.siyuan.rpc.bind('finish-smtp-email', ({ key, owner, sent }) => this.reminderService.finishDesktopEmail(key, owner, sent));
         await this.siyuan.rpc.bind('refresh-reminder-schedule', () => this.reminderService.notifyChanged());
         await this.siyuan.rpc.bind('get-reminder-events', () => this.reminderService.getFrontendEvents());
         await this.siyuan.rpc.bind('claim-reminder-event', ({ key, owner }) => this.reminderService.claimFrontendEvent(key, owner));
@@ -237,6 +241,10 @@ class KernelPlugin {
         await this.logger.info("[kernel] Agent capability plugin unloading");
         await this.reminderService.stop();
         await this.siyuan.rpc.unbind('test-webhook');
+        await this.siyuan.rpc.unbind('test-email');
+        for (const method of ['get-smtp-email-events', 'claim-smtp-email', 'finish-smtp-email']) {
+            await this.siyuan.rpc.unbind(method);
+        }
         await this.siyuan.rpc.unbind('refresh-reminder-schedule');
         for (const method of ['get-reminder-events', 'claim-reminder-event', 'ack-reminder-event', 'release-reminder-event']) {
             await this.siyuan.rpc.unbind(method);

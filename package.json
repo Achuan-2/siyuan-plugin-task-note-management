@@ -8,15 +8,17 @@
   "author": "frostime",
   "license": "MIT",
   "scripts": {
-    "dev": "concurrently \"pnpm dev:app\" \"pnpm dev:kernel\"",
+    "dev": "concurrently \"pnpm dev:app\" \"pnpm dev:kernel\" \"pnpm dev:smtp\"",
     "dev:app": "cross-env NODE_ENV=development VITE_SOURCEMAP=inline vite build --watch",
     "dev:kernel": "cross-env NODE_ENV=development vite build --watch --config vite.kernel.config.ts",
-    "build": "pnpm build:kernel && cross-env NODE_ENV=production vite build",
+    "dev:smtp": "cross-env NODE_ENV=development vite build --watch --config vite.smtp.config.ts",
+    "build": "pnpm build:kernel && pnpm build:smtp && cross-env NODE_ENV=production vite build",
+    "build:smtp": "cross-env NODE_ENV=production vite build --config vite.smtp.config.ts",
     "build:kernel": "cross-env NODE_ENV=production vite build --config vite.kernel.config.ts",
     "make-link": "node --no-warnings ./scripts/make_dev_link.js",
     "make-link-win": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/elevate.ps1 -scriptPath ./scripts/make_dev_link.js",
     "update-version": "node --no-warnings ./scripts/update_version.js",
-    "make-install": "vite build && node --no-warnings ./scripts/make_install.js"
+    "make-install": "pnpm run build && node --no-warnings ./scripts/make_install.js"
   },
   "devDependencies": {
     "@fullcalendar/core": "^6.1.20",
@@ -28,6 +30,7 @@
     "@sveltejs/vite-plugin-svelte": "^3.1.0",
     "@tsconfig/svelte": "^4.0.1",
     "@types/node": "^20.3.0",
+    "@types/nodemailer": "^8.0.2",
     "concurrently": "^9.1.2",
     "cross-env": "^7.0.3",
     "fast-glob": "^3.2.12",
@@ -62,6 +65,7 @@
     "ical.js": "^2.2.1",
     "ics": "^3.8.1",
     "lunar-typescript": "^1.8.2",
-    "node-ical": "^0.22.1"
+    "node-ical": "^0.22.1",
+    "nodemailer": "^10.0.16"
   }
 }

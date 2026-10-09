@@ -272,6 +272,7 @@ test('内核生命周期注册测试 RPC 并启动调度；管理工具失败不
         await lifecycle.onload();
         assert.ok(messages.some(message => message.includes('Reminder scheduler started')));
         assert.ok(rpc.has('test-webhook'));
+        assert.ok(rpc.has('test-email'));
         assert.ok(rpc.has('refresh-reminder-schedule'));
         assert.equal(await rpc.get('test-webhook')({ url: 'https://example.invalid/webhook', jsonType: 'wecom' }), true);
         assert.equal(f.requests.length, 1);

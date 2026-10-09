@@ -11,11 +11,15 @@ test('内核构建产物没有页面也能启动 Croner、响应文件变更并�
     const flush = async () => { for (let i = 0; i < 300; i++) await Promise.resolve(); };
     const files = {
         'reminder-settings.json': JSON.stringify({ reminderWebhookEnabled: true,
-            reminderWebhookUrl: 'https://example.invalid', reminderWebhookJsonType: 'wecom' }),
+            reminderWebhookUrl: 'https://example.invalid', reminderWebhookJsonType: 'wecom',
+            reminderEmailEnabled: true, reminderEmailTransport: 'api', reminderEmailProvider: 'custom',
+            reminderEmailApiUrl: 'https://mail.example.invalid/emails', reminderEmailApiKey: 'test-key',
+            reminderEmailFrom: 'sender@example.com', reminderEmailTo: 'recipient@example.com' }),
         'reminder.json': JSON.stringify({ task: { id: 'task', date: '2026-10-08', time: '09:30', title: '无页面任务' } })
     };
     const rpc = new Map(), watched = new Set(), errors = [], broadcasts = [];
     let sends = 0;
+    const emails = [];
     const original = global.siyuan;
     const runtime = {
         plugin: { lifecycle: {} }, event: { handler: null },
@@ -28,9 +32,14 @@ test('内核构建产物没有页面也能启动 Croner、响应文件变更并�
             list: async () => [], remove: async filename => { delete files[filename]; },
             watcher: { add: async path => watched.add(path), remove: async path => watched.delete(path) }
         },
-        client: { fetch: async url => {
+        client: { fetch: async (url, options) => {
             if (url === '/api/system/getConf') return { json: async () => ({}) };
             assert.equal(url, '/api/network/forwardProxy');
+            const request = JSON.parse(options.body);
+            if (request.url === 'https://mail.example.invalid/emails') {
+                emails.push(JSON.parse(request.payload));
+                return { ok: true, json: async () => ({ code: 0, data: { status: 200, body: '{"id":"email-1"}' } }) };
+            }
             sends++;
             return { ok: true, json: async () => ({ code: 0, data: { status: 200, body: '{}' } }) };
         } },
@@ -45,9 +54,12 @@ test('内核构建产物没有页面也能启动 Croner、响应文件变更并�
         await runtime.plugin.lifecycle.onload();
         assert.ok(watched.has('.'));
         assert.ok(rpc.has('refresh-reminder-schedule'));
+        assert.ok(rpc.has('test-email'));
         assert.equal(sends, 0);
         t.mock.timers.tick(30_000); await flush();
         assert.equal(sends, 1);
+        assert.equal(emails.length, 1);
+        assert.match(emails[0].text, /无页面任务/);
         const event = broadcasts.find(item => item.method === 'reminder-due').params.events[0];
         const snapshot = await rpc.get('get-reminder-events')();
         assert.equal(snapshot.events[0].key, event.key);
@@ -61,6 +73,8 @@ test('内核构建产物没有页面也能启动 Croner、响应文件变更并�
         t.mock.timers.tick(30_000); await flush();
         t.mock.timers.tick(29_750); await flush();
         assert.equal(sends, 2);
+        assert.equal(emails.length, 2);
+        assert.match(emails[1].text, /修改时间/);
         assert.equal(errors.length, 0);
     } finally {
         await runtime.plugin.lifecycle.onunload();
@@ -71,4 +85,5 @@ test('内核构建产物没有页面也能启动 Croner、响应文件变更并�
     assert.equal(runtime.event.handler, null);
     t.mock.timers.tick(60_000); await flush();
     assert.equal(sends, 2);
+    assert.equal(emails.length, 2);
 });

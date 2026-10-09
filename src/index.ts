@@ -45,7 +45,9 @@ import { addDaysToDate, generateRepeatInstances, getDaysDifference, getRelativeR
 import { ReminderNotificationService, type ReminderNotificationInfo } from "./services/ReminderNotificationService";
 import { FrontendReminderService } from "./services/FrontendReminderService";
 import { ReminderEventPresenter } from "./services/ReminderEventPresenter";
+import { DesktopEmailService } from "./services/DesktopEmailService";
 import { WEBHOOK_JSON_TEMPLATES, DEFAULT_WEBHOOK_JSON_TYPE, normalizeReminderWebhookJsonType, inferReminderWebhookJsonType } from "./services/webhookPayload";
+import { DEFAULT_EMAIL_SETTINGS, normalizeEmailSettings, type EmailSettings } from "./services/emailNotification";
 export { WEBHOOK_JSON_TYPES, WEBHOOK_JSON_TEMPLATES } from "./services/webhookPayload";
 export type { ReminderWebhookJsonType } from "./services/webhookPayload";
 import { getDockItemSelector, setDockBadgeByType as applyDockBadgeByType } from "./utils/addDockBadge";
@@ -273,6 +275,7 @@ export const DEFAULT_SETTINGS = {
     reminderWebhookUrl: '', // Webhook 通知 URL
     reminderWebhookJsonType: DEFAULT_WEBHOOK_JSON_TYPE, // Webhook JSON 格式类型：feishu | wecom | custom
     reminderWebhookJsonTemplate: WEBHOOK_JSON_TEMPLATES.feishu, // Webhook 自定义 JSON 请求体模板
+    ...DEFAULT_EMAIL_SETTINGS,
     dailyNotificationTime: '08:00', // 新增：每日通知时间，默认08:00
     dailyNotificationEnabled: false, // 新增：是否启用每日统一通知
     randomRestEnabled: false,
@@ -360,6 +363,8 @@ export default class ReminderPlugin extends Plugin {
     // ICS 云端同步相关
     // ICS 订阅同步相关
     private frontendReminders: FrontendReminderService | null = null;
+    private desktopEmails: DesktopEmailService | null = null;
+    private desktopSmtpSender: { send(settings: EmailSettings, title: string, message: string): Promise<void>; close(): void } | null = null;
     private currentLogicalDate: string = '';
 
     // 缓存上一次的番茄钟设置，用于比较变更
@@ -1891,6 +1896,7 @@ export default class ReminderPlugin extends Plugin {
             settings.mobileTaskShortcutBadgeMode = 'separate';
         }
         settings.reminderWebhookEnabled = settings.reminderWebhookEnabled === true;
+        Object.assign(settings, normalizeEmailSettings({ ...settings, reminderEmailTransport: data.reminderEmailTransport }));
         settings.reminderWebhookUrl = typeof settings.reminderWebhookUrl === 'string'
             ? settings.reminderWebhookUrl.trim()
             : '';
@@ -2085,6 +2091,34 @@ export default class ReminderPlugin extends Plugin {
             title: i18n('testWebhookTitle') || 'Webhook 测试',
             message: i18n('testWebhookMessage') || '这是一条来自思源笔记任务管理插件的测试 Webhook 消息。'
         });
+    }
+
+    public async sendTestEmail(settings: Partial<EmailSettings>): Promise<boolean> {
+        const normalized = normalizeEmailSettings(settings);
+        if (normalized.reminderEmailTransport === 'smtp') {
+            await this.getDesktopSmtpSender().send(normalized, i18n('testEmailTitle'), i18n('testEmailMessage'));
+            return true;
+        }
+        return await this.kernel.rpc.call['test-email']({
+            ...normalized,
+            title: i18n('testEmailTitle'), message: i18n('testEmailMessage')
+        });
+    }
+
+    private getDesktopSmtpSender() {
+        const nodeRequire = (window as any).require;
+        const dataDir = (window as any).siyuan?.config?.system?.dataDir;
+        if (this.isInMobileApp || typeof nodeRequire !== 'function' || !dataDir) throw new Error('emailSmtpDesktopOnly');
+        if (!this.desktopSmtpSender) {
+            const modulePath = nodeRequire('path').join(dataDir, 'plugins', this.name, 'desktop-smtp.cjs');
+            try {
+                // 插件重载后读取新版本的单文件 SMTP 模块。
+                if (nodeRequire.cache) delete nodeRequire.cache[nodeRequire.resolve(modulePath)];
+                const { DesktopSmtpSender } = nodeRequire(modulePath);
+                this.desktopSmtpSender = new DesktopSmtpSender();
+            } catch { throw new Error('emailSmtpModuleMissing'); }
+        }
+        return this.desktopSmtpSender;
     }
 
     // 获取通知声音设置
@@ -3902,12 +3936,16 @@ export default class ReminderPlugin extends Plugin {
         const refresh = () => {
             void this.kernel.rpc.call['refresh-reminder-schedule']().catch(() => {});
             void this.frontendReminders?.recover();
+            void this.desktopEmails?.recover();
         };
         const events = ['reminderUpdated', 'habitUpdated', 'calendarConfigUpdated'];
         for (const event of events) window.addEventListener(event, refresh);
         const resume = () => { if (document.visibilityState === 'visible') refresh(); };
         const onKernelState = (event: CustomEvent) => {
-            if (event.detail?.code === 2) void this.frontendReminders?.recover();
+            if (event.detail?.code === 2) {
+                void this.frontendReminders?.recover();
+                void this.desktopEmails?.recover();
+            }
         };
         document.addEventListener('visibilitychange', resume);
         window.addEventListener('focus', refresh);
@@ -3917,7 +3955,22 @@ export default class ReminderPlugin extends Plugin {
             document.removeEventListener('visibilitychange', resume);
             window.removeEventListener('focus', refresh);
             this.eventBus.off('kernel-plugin-state-change', onKernelState);
+            this.desktopEmails?.stop();
+            this.desktopEmails = null;
+            this.desktopSmtpSender?.close();
+            this.desktopSmtpSender = null;
         });
+        this.desktopEmails = new DesktopEmailService({
+            owner: this.instanceId,
+            canSend: () => !this.isInMobileApp && typeof (window as any).require === 'function',
+            bind: (method, handler) => this.kernel.rpc.bind(method, handler),
+            unbind: (method, handler) => this.kernel.rpc.unbind(method, handler),
+            call: (method, params) => params === undefined ? this.kernel.rpc.call[method]() : this.kernel.rpc.call[method](params),
+            send: (settings, title, message) => this.getDesktopSmtpSender().send(settings, title, message),
+            close: () => this.desktopSmtpSender?.close(),
+            onError: () => console.warn('桌面端 SMTP 邮件发送失败，内核将安排重试')
+        });
+        this.desktopEmails.start();
         this.frontendReminders.start();
     }
 

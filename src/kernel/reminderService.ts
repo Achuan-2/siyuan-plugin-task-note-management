@@ -8,6 +8,7 @@ import { KernelReminderWatcher } from './reminderWatcher';
 import { KernelFrontendReminderDelivery } from './frontendReminderDelivery';
 import { REMINDER_DUE_METHOD, REMINDER_DAY_METHOD, type ReminderDueEvent, type ReminderEventSnapshot } from '../services/reminderEvents';
 import { buildWebhookPayload, buildWebhookReminderInfo, assertWebhookResponse, inferReminderWebhookJsonType } from '../services/webhookPayload';
+import { sendKernelEmail, normalizeEmailSettings, SMTP_EMAIL_DUE_METHOD, type EmailSettings } from '../services/emailNotification';
 import { generateRepeatInstances, getRepeatInstanceOriginalKey, getRepeatInstanceState } from '../components/dataManager/repeatUtils';
 import { getLocalDateString, getLogicalDateString, getLocalTimeString, setDayStartTime, setSingleDateDefaultRole } from '../utils/dateUtils';
 import { shouldSkipReminderOnDate, type HolidayData } from '../utils/reminderSkipDate';
@@ -18,10 +19,11 @@ import zhCN from '../../i18n/zh_CN.json';
 import en from '../../i18n/en.json';
 
 export const WEBHOOK_STATE_FILE = 'kernel-webhook-notify.json';
+export const EMAIL_STATE_FILE = 'kernel-email-notify.json';
 const RETRY_INTERVAL_MS = 30_000;
 const RETRY_WINDOW_MS = 5 * 60_000;
 
-interface WebhookNotification {
+interface ExternalNotification {
     title: string;
     message: string;
     event: string;
@@ -29,11 +31,19 @@ interface WebhookNotification {
     reminders?: any[];
     createdAt: number;
     nextAttemptAt?: number;
+    desktopWakeAt?: number;
+    desktopClaim?: { owner: string; until: number };
 }
-interface WebhookState {
+interface NotificationDeliveryState {
     sent: Record<string, number>;
-    pending: Record<string, WebhookNotification>;
+    pending: Record<string, ExternalNotification>;
     expired?: Record<string, number>;
+}
+interface ExternalNotificationChannel {
+    name: 'Webhook' | 'Email';
+    stateFile: string;
+    desktop?: boolean;
+    send?(notification: ExternalNotification, key: string, now: Date): Promise<void>;
 }
 
 /** 通过内核代理发送，Docker 不依赖页面 fetch，也不会受浏览器跨域限制影响。 */
@@ -54,13 +64,13 @@ export async function sendKernelWebhook(client: IClient, url: string, payload: a
     assertWebhookResponse(result.data.body || '');
 }
 
-/** 唯一的到期调度服务：内核计算提醒，分别交给前端展示及 Webhook 发送。 */
+/** 唯一的到期调度服务：内核计算提醒，分别交给前端、Webhook 和邮箱通道。 */
 export class KernelReminderService {
     private readonly cron: ReminderCronService;
     private watcher: KernelReminderWatcher | null = null;
     private started = false;
     private activeCheck: Promise<void> | null = null;
-    private state: WebhookState | null = null;
+    private channelStates = new Map<string, NotificationDeliveryState>();
     private language = 'zh_CN';
     private activeHabitIds = new Set<string>();
     private readonly frontend: KernelFrontendReminderDelivery;
@@ -132,16 +142,21 @@ export class KernelReminderService {
         const plan = await buildReminderSchedule(await this.loadTasks(),
             await this.storage.loadData(HABIT_DATA_FILE, true) || {}, settings,
             await this.storage.loadData(HOLIDAY_DATA_FILE, true) || {}, now);
-        if (settings.reminderWebhookEnabled && settings.reminderWebhookUrl?.trim()) {
+        for (const channel of this.getExternalChannels(settings)) {
             try {
-                const state: WebhookState | null = this.state || await this.storage.loadData(WEBHOOK_STATE_FILE, true);
-                if (state && (!state.sent || !state.pending)) throw new Error('Invalid kernel Webhook notification state');
+                const state: NotificationDeliveryState | null = this.channelStates.get(channel.stateFile)
+                    || await this.storage.loadData(channel.stateFile, true);
+                if (state && (!state.sent || !state.pending)) throw new Error('Invalid notification state');
                 const retryTimes = Object.values(state?.pending || {}).map(item =>
-                    Math.min(item.nextAttemptAt || now.getTime(), item.createdAt + RETRY_WINDOW_MS + 1));
-                if (retryTimes.length) plan.retryAt = new Date(Math.max(now.getTime() + 1000, Math.min(...retryTimes)));
+                    Math.min(Math.max(item.nextAttemptAt || item.desktopWakeAt || now.getTime(), item.desktopClaim?.until || 0),
+                        Math.max(item.createdAt + RETRY_WINDOW_MS + 1, item.desktopClaim?.until || 0)));
+                if (retryTimes.length) {
+                    const retryAt = Math.max(now.getTime() + 1000, Math.min(...retryTimes));
+                    plan.retryAt = new Date(Math.min(plan.retryAt?.getTime() ?? Infinity, retryAt));
+                }
             } catch {
-                // Webhook 记录故障不影响桌面提醒，单独安排恢复检查。
-                plan.retryAt = new Date(now.getTime() + RETRY_INTERVAL_MS);
+                // 通道记录故障不影响其他通知，单独安排恢复检查。
+                plan.retryAt = new Date(Math.min(plan.retryAt?.getTime() ?? Infinity, now.getTime() + RETRY_INTERVAL_MS));
             }
         }
         return plan;
@@ -180,6 +195,76 @@ export class KernelReminderService {
         return true;
     }
 
+    public async testEmail(options: Partial<EmailSettings> & { title?: string; message?: string }): Promise<boolean> {
+        await sendKernelEmail(this.client, options, options.title || this.translate('testEmailTitle'),
+            options.message || this.translate('testEmailMessage'));
+        return true;
+    }
+
+    /** SMTP 与桌面弹窗独立领取，已显示/关闭弹窗的事件仍可发邮件。 */
+    public async getDesktopEmailEvents(now: Date = new Date()): Promise<string[]> {
+        await this.check(now);
+        const settings = normalizeEmailSettings(await this.storage.loadData(SETTINGS_FILE, true) || {});
+        if (!settings.reminderEmailEnabled || settings.reminderEmailTransport !== 'smtp') return [];
+        const timestamp = now.getTime();
+        return Object.entries(this.channelStates.get(EMAIL_STATE_FILE)?.pending || {})
+            .filter(([, item]) => (!item.nextAttemptAt || item.nextAttemptAt <= timestamp)
+                && (!item.desktopClaim || item.desktopClaim.until <= timestamp)
+                && timestamp - item.createdAt <= RETRY_WINDOW_MS)
+            .map(([key]) => key);
+    }
+
+    public async claimDesktopEmail(key: string, owner: string, now: Date = new Date()) {
+        if (!owner || !(await this.getDesktopEmailEvents(now)).includes(key)) return null;
+        const settings = normalizeEmailSettings(await this.storage.loadData(SETTINGS_FILE, true) || {});
+        if (!settings.reminderEmailEnabled || settings.reminderEmailTransport !== 'smtp') return null;
+        const state = this.channelStates.get(EMAIL_STATE_FILE)!;
+        const notification = state.pending[key];
+        if (!notification || notification.desktopClaim?.until > now.getTime()) return null;
+        notification.desktopClaim = { owner, until: now.getTime() + 90_000 };
+        try { await this.storage.saveData(EMAIL_STATE_FILE, state); }
+        catch (error) { delete notification.desktopClaim; throw error; }
+        return { key, title: notification.title, message: notification.message, settings };
+    }
+
+    public async finishDesktopEmail(key: string, owner: string, sent: boolean, now: Date = new Date()): Promise<void> {
+        await this.activeCheck;
+        const state = this.channelStates.get(EMAIL_STATE_FILE);
+        const notification = state?.pending[key];
+        if (!notification || notification.desktopClaim?.owner !== owner) return;
+        if (sent) {
+            state.sent[key] = now.getTime();
+            delete state.pending[key];
+        } else {
+            delete notification.desktopClaim;
+            notification.nextAttemptAt = now.getTime() + RETRY_INTERVAL_MS;
+        }
+        await this.storage.saveData(EMAIL_STATE_FILE, state);
+        this.notifyChanged();
+    }
+
+    private getExternalChannels(settings: any): ExternalNotificationChannel[] {
+        const channels: ExternalNotificationChannel[] = [];
+        if (settings.reminderWebhookEnabled === true && settings.reminderWebhookUrl?.trim()) {
+            channels.push({ name: 'Webhook', stateFile: WEBHOOK_STATE_FILE, send: async (notification, _key, now) => {
+                const jsonType = settings.reminderWebhookJsonType
+                    || inferReminderWebhookJsonType(settings.reminderWebhookJsonTemplate || '');
+                const payload = buildWebhookPayload(notification.title, notification.message, notification.event, now.toISOString(),
+                    settings.reminderWebhookJsonTemplate || '', jsonType, notification);
+                if (!payload) throw new Error('Invalid Webhook JSON template');
+                await sendKernelWebhook(this.client, settings.reminderWebhookUrl.trim(), payload);
+            } });
+        }
+        if (settings.reminderEmailEnabled === true) {
+            const emailSettings = normalizeEmailSettings(settings);
+            channels.push(emailSettings.reminderEmailTransport === 'smtp'
+                ? { name: 'Email', stateFile: EMAIL_STATE_FILE, desktop: true }
+                : { name: 'Email', stateFile: EMAIL_STATE_FILE,
+                    send: (notification, key) => sendKernelEmail(this.client, emailSettings, notification.title, notification.message, key) });
+        }
+        return channels;
+    }
+
     private translate(key: string, count?: number): string {
         const messages = this.language.startsWith('zh') ? zhCN : en;
         return (messages[key] || key).replace('${count}', String(count ?? ''));
@@ -198,9 +283,9 @@ export class KernelReminderService {
         await this.frontend.initialize();
         const holidayData: HolidayData = await this.storage.loadData(HOLIDAY_DATA_FILE, true) || {};
         const tasks = await this.loadTasks();
-        const notifications: Record<string, WebhookNotification> = {};
+        const notifications: Record<string, ExternalNotification> = {};
         const alreadyQueued = (key: string) => this.frontend.hasEvent(key);
-        let draft: WebhookNotification | undefined;
+        let draft: ExternalNotification | undefined;
         const scanner = new ReminderTimeScanner({
             settings, notifiedReminders: new Map(),
             hasReminderNotified: async key => alreadyQueued(key),
@@ -252,10 +337,10 @@ export class KernelReminderService {
             await this.broadcast(REMINDER_DAY_METHOD, { logicalDate });
         }
         if (fresh.length) await this.broadcast(REMINDER_DUE_METHOD, { events: fresh });
-        if (settings.reminderWebhookEnabled === true && settings.reminderWebhookUrl?.trim()) {
-            // 桌面推送先完成；Webhook 故障、重试不会再次推送前端。
-            try { await this.sendWebhookNotifications(settings, tasks, now, logicalDate); }
-            catch { await this.logger.error('[kernel] Webhook delivery state failed'); }
+        for (const channel of this.getExternalChannels(settings)) {
+            // 桌面推送先完成；每个外部通道独立去重、重试，失败不影响其他通道。
+            try { await this.sendExternalNotifications(channel, tasks, now, logicalDate); }
+            catch { await this.logger.error(`[kernel] ${channel.name} delivery state failed`); }
         }
     }
 
@@ -264,27 +349,27 @@ export class KernelReminderService {
         catch { await this.logger.warn('[kernel] Reminder broadcast failed; frontend can recover events'); }
     }
 
-    private async sendWebhookNotifications(settings: any, tasks: Record<string, any>, now: Date, logicalDate: string): Promise<void> {
+    private async sendExternalNotifications(channel: ExternalNotificationChannel, tasks: Record<string, any>, now: Date, logicalDate: string): Promise<void> {
         const timestamp = now.getTime();
-        if (!this.state) {
-            const stored = await this.storage.loadData(WEBHOOK_STATE_FILE, true);
-            if (stored && (!stored.sent || !stored.pending)) throw new Error('Invalid kernel Webhook notification state');
-            this.state = stored || { sent: {}, pending: {} };
+        if (!this.channelStates.has(channel.stateFile)) {
+            const stored = await this.storage.loadData(channel.stateFile, true);
+            if (stored && (!stored.sent || !stored.pending)) throw new Error('Invalid notification state');
+            this.channelStates.set(channel.stateFile, stored || { sent: {}, pending: {} });
         }
-        const state = this.state;
+        const state = this.channelStates.get(channel.stateFile)!;
         state.expired ??= {};
         for (const [key, sentAt] of Object.entries(state.sent)) {
             if (timestamp - sentAt > 2 * 24 * 60 * 60_000) delete state.sent[key];
         }
         for (const [key, item] of Object.entries(state.pending)) {
-            if (timestamp - item.createdAt > RETRY_WINDOW_MS) {
+            if (timestamp - item.createdAt > RETRY_WINDOW_MS && !(item.desktopClaim?.until > timestamp)) {
                 delete state.pending[key]; state.expired[key] = timestamp;
             }
         }
         for (const [key, expiredAt] of Object.entries(state.expired)) {
             if (timestamp - expiredAt > 2 * 24 * 60 * 60_000) delete state.expired[key];
         }
-        // 通道独立去重：前端已确认的事件仍可发送 Webhook，反之亦然。
+        // 通道独立去重：前端已确认的事件仍可发送外部通知，反之亦然。
         for (const event of this.frontend.getEventsForWebhook(now, logicalDate)) {
             if (!state.sent[event.key] && !state.pending[event.key] && !state.expired[event.key]
                 && this.isTaskStillActive(event, tasks)) {
@@ -293,36 +378,39 @@ export class KernelReminderService {
         }
 
         // 发送前持久化待发送记录，重载内核后可继续重试；发送成功才记为已通知。
-        await this.storage.saveData(WEBHOOK_STATE_FILE, state);
+        await this.storage.saveData(channel.stateFile, state);
+        let wakeDesktop = false;
         for (const [key, notification] of Object.entries(state.pending)) {
+            // 切换发送方式时也尊重正在执行的 SMTP，避免 API 与桌面端重复发同一封邮件。
+            if (notification.desktopClaim?.until > timestamp) continue;
             if (!this.isTaskStillActive(notification, tasks)) {
                 delete state.pending[key];
                 continue;
             }
             if (notification.nextAttemptAt && notification.nextAttemptAt > timestamp) continue;
-            const jsonType = settings.reminderWebhookJsonType || inferReminderWebhookJsonType(settings.reminderWebhookJsonTemplate || '');
-            const payload = buildWebhookPayload(notification.title, notification.message, notification.event, now.toISOString(),
-                settings.reminderWebhookJsonTemplate || '', jsonType, notification);
-            if (!payload) {
-                notification.nextAttemptAt = timestamp + RETRY_INTERVAL_MS;
-                await this.logger.error('[kernel] Invalid Webhook JSON template');
+            if (channel.desktop) {
+                if (!notification.desktopWakeAt || notification.desktopWakeAt <= timestamp) {
+                    notification.desktopWakeAt = timestamp + RETRY_INTERVAL_MS;
+                    wakeDesktop = true;
+                }
                 continue;
             }
             try {
-                await sendKernelWebhook(this.client, settings.reminderWebhookUrl.trim(), payload);
+                await channel.send!(notification, key, now);
                 state.sent[key] = timestamp;
                 delete state.pending[key];
-                await this.storage.saveData(WEBHOOK_STATE_FILE, state);
+                await this.storage.saveData(channel.stateFile, state);
             } catch {
                 notification.nextAttemptAt = timestamp + RETRY_INTERVAL_MS;
-                // 不记录 URL 或响应正文，避免日志泄露机器人密钥。
-                await this.logger.warn(`[kernel] Webhook notification failed; will retry: ${notification.event}`);
+                // 不记录配置或响应正文，避免泄露机器人和邮件服务密钥。
+                await this.logger.warn(`[kernel] ${channel.name} notification failed; will retry: ${notification.event}`);
             }
         }
-        await this.storage.saveData(WEBHOOK_STATE_FILE, state);
+        await this.storage.saveData(channel.stateFile, state);
+        if (wakeDesktop) await this.broadcast(SMTP_EMAIL_DUE_METHOD, {});
     }
 
-    private isTaskStillActive(notification: WebhookNotification, tasks: Record<string, any>): boolean {
+    private isTaskStillActive(notification: ExternalNotification, tasks: Record<string, any>): boolean {
         const info = notification.reminderInfo;
         if (!info) return true;
         if (info.notificationKind === 'habit') return this.activeHabitIds.has(info.id);
@@ -334,8 +422,8 @@ export class KernelReminderService {
     }
 
     private async collectHabitReminders(tasks: Record<string, any>, date: string, time: string, timestamp: number,
-        alreadyQueued: (key: string) => boolean): Promise<Record<string, WebhookNotification>> {
-        const result: Record<string, WebhookNotification> = {};
+        alreadyQueued: (key: string) => boolean): Promise<Record<string, ExternalNotification>> {
+        const result: Record<string, ExternalNotification> = {};
         this.activeHabitIds.clear();
         const habits = await this.storage.loadData(HABIT_DATA_FILE, true) || {};
         const hasPomodoroHabit = Object.values(habits).some((habit: any) => hasHabitPomodoroGoal(habit));

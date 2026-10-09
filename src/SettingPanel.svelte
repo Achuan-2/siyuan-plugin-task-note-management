@@ -3,6 +3,7 @@
     import { Constants, Dialog, confirm } from 'siyuan';
     import Form from '@/libs/components/Form';
     import { i18n } from './pluginInstance';
+    import { EMAIL_PROVIDERS, EMAIL_TRANSPORTS, SMTP_SECURITY_MODES } from './services/emailNotification';
     import {
         DEFAULT_SETTINGS,
         SETTINGS_FILE,
@@ -871,6 +872,127 @@
                                                 ': ' +
                                                 (error.message || String(error))
                                         );
+                                    }
+                                },
+                            },
+                        },
+                    ],
+                },
+                {
+                    name: i18n('subGroupEmailNotification'),
+                    items: [
+                        {
+                            key: 'reminderEmailEnabled',
+                            value: settings.reminderEmailEnabled,
+                            type: 'checkbox',
+                            title: i18n('reminderEmailEnabled'),
+                            description: i18n('reminderEmailEnabledDesc'),
+                        },
+                        {
+                            key: 'reminderEmailTransport',
+                            value: settings.reminderEmailTransport,
+                            type: 'select',
+                            title: i18n('reminderEmailTransport'),
+                            description: i18n('reminderEmailTransportDesc'),
+                            options: { smtp: i18n('emailTransportSmtp'), api: i18n('emailTransportApi') },
+                        },
+                        {
+                            key: 'reminderEmailSmtpHost',
+                            value: settings.reminderEmailSmtpHost,
+                            type: 'textinput',
+                            title: i18n('reminderEmailSmtpHost'),
+                            description: i18n('reminderEmailSmtpHostDesc'),
+                            placeholder: 'smtp.qq.com',
+                        },
+                        {
+                            key: 'reminderEmailSmtpPort',
+                            value: settings.reminderEmailSmtpPort,
+                            type: 'number',
+                            title: i18n('reminderEmailSmtpPort'),
+                            description: i18n('reminderEmailSmtpPortDesc'),
+                        },
+                        {
+                            key: 'reminderEmailSmtpSecurity',
+                            value: settings.reminderEmailSmtpSecurity,
+                            type: 'select',
+                            title: i18n('reminderEmailSmtpSecurity'),
+                            description: i18n('reminderEmailSmtpSecurityDesc'),
+                            options: { tls: 'SSL/TLS', starttls: 'STARTTLS' },
+                        },
+                        {
+                            key: 'reminderEmailSmtpUser',
+                            value: settings.reminderEmailSmtpUser,
+                            type: 'textinput',
+                            title: i18n('reminderEmailSmtpUser'),
+                            description: i18n('reminderEmailSmtpUserDesc'),
+                        },
+                        {
+                            key: 'reminderEmailSmtpPassword',
+                            value: settings.reminderEmailSmtpPassword,
+                            type: 'password',
+                            title: i18n('reminderEmailSmtpPassword'),
+                            description: i18n('reminderEmailSmtpPasswordDesc'),
+                        },
+                        {
+                            key: 'reminderEmailProvider',
+                            value: settings.reminderEmailProvider,
+                            type: 'select',
+                            title: i18n('reminderEmailProvider'),
+                            description: i18n('reminderEmailProviderDesc'),
+                            options: {
+                                smtp2go: 'SMTP2GO',
+                                resend: 'Resend',
+                                custom: i18n('emailProviderCustom'),
+                            },
+                        },
+                        {
+                            key: 'reminderEmailApiUrl',
+                            value: settings.reminderEmailApiUrl,
+                            type: 'textinput',
+                            title: i18n('reminderEmailApiUrl'),
+                            description: i18n('reminderEmailApiUrlDesc'),
+                            placeholder: 'https://example.com/emails',
+                        },
+                        {
+                            key: 'reminderEmailApiKey',
+                            value: settings.reminderEmailApiKey,
+                            type: 'password',
+                            title: i18n('reminderEmailApiKey'),
+                            description: i18n('reminderEmailApiKeyDesc'),
+                        },
+                        {
+                            key: 'reminderEmailFrom',
+                            value: settings.reminderEmailFrom,
+                            type: 'textinput',
+                            title: i18n('reminderEmailFrom'),
+                            description: i18n('reminderEmailFromDesc'),
+                            placeholder: 'sender@example.com',
+                        },
+                        {
+                            key: 'reminderEmailTo',
+                            value: settings.reminderEmailTo,
+                            type: 'textinput',
+                            title: i18n('reminderEmailTo'),
+                            description: i18n('reminderEmailToDesc'),
+                            placeholder: 'recipient@example.com',
+                        },
+                        {
+                            key: 'testEmail',
+                            value: '',
+                            type: 'button',
+                            title: i18n('testEmail'),
+                            description: i18n('testEmailDesc'),
+                            button: {
+                                label: i18n('test'),
+                                callback: async () => {
+                                    await pushMsg(i18n('emailTesting'));
+                                    try {
+                                        await plugin.sendTestEmail(settings);
+                                        await pushMsg(i18n('emailTestSuccess'));
+                                    } catch (error: any) {
+                                        const code = error?.message || 'emailDeliveryFailed';
+                                        const detail = code.startsWith('email') ? i18n(code) : code;
+                                        await pushErrMsg(`${i18n('emailTestFailed')}: ${detail}`);
                                     }
                                 },
                             },
@@ -2200,6 +2322,18 @@
             }
         } else if (key === 'reminderWebhookUrl' && typeof value === 'string') {
             newValue = value.trim();
+        } else if (key === 'reminderEmailProvider') {
+            newValue = EMAIL_PROVIDERS.includes(value) ? value : DEFAULT_SETTINGS.reminderEmailProvider;
+        } else if (key === 'reminderEmailTransport') {
+            newValue = EMAIL_TRANSPORTS.includes(value) ? value : DEFAULT_SETTINGS.reminderEmailTransport;
+        } else if (key === 'reminderEmailSmtpSecurity') {
+            newValue = SMTP_SECURITY_MODES.includes(value) ? value : DEFAULT_SETTINGS.reminderEmailSmtpSecurity;
+        } else if (key === 'reminderEmailSmtpPort') {
+            newValue = Number(value);
+        } else if (key === 'reminderEmailSmtpUser' || key === 'reminderEmailSmtpHost') {
+            newValue = typeof value === 'string' ? value.trim() : '';
+        } else if (['reminderEmailApiUrl', 'reminderEmailApiKey', 'reminderEmailFrom', 'reminderEmailTo'].includes(key)) {
+            newValue = typeof value === 'string' ? value.trim() : '';
         } else if (key === 'reminderWebhookJsonType') {
             newValue = ['feishu', 'wecom', 'custom'].includes(value)
                 ? value
@@ -2531,6 +2665,15 @@
             // 预设飞书/企业微信格式不需要用户手动维护 JSON 请求体
             if (item.key === 'reminderWebhookJsonTemplate') {
                 updated.hidden = settings.reminderWebhookJsonType !== 'custom';
+            }
+            if (item.key === 'reminderEmailApiUrl') {
+                updated.hidden = settings.reminderEmailTransport !== 'api' || settings.reminderEmailProvider !== 'custom';
+            }
+            if (['reminderEmailProvider', 'reminderEmailApiKey'].includes(item.key)) {
+                updated.hidden = settings.reminderEmailTransport !== 'api';
+            }
+            if (item.key.startsWith('reminderEmailSmtp')) {
+                updated.hidden = settings.reminderEmailTransport !== 'smtp';
             }
 
             return updated;
