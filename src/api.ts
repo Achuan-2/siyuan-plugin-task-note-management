@@ -668,7 +668,8 @@ export async function exportMdContent(id: DocumentId, yfm: boolean = false, fill
         refMode: refMode, // 2：锚文本块链, 3：仅锚文本, 4：块引转脚注+锚点哈希
         embedMode: embedMode, //0：使用原始文本，1：使用 Blockquote
         adjustHeadingLevel: adjustHeadingLevel,
-        imgTag: imgTag
+        imgTag: imgTag,
+        preserveTaskMarkers: true, // 保留任务列表标记
     }
     let url = '/api/export/exportMdContent';
     return request(url, data);
