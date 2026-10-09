@@ -801,6 +801,30 @@
                                 '由思源内核后台发送任务、习惯和每日汇总 Webhook，无需打开页面。思源服务需保持运行。',
                         },
                         {
+                            key: 'reminderWebhookJsonType',
+                            value: settings.reminderWebhookJsonType,
+                            type: 'select',
+                            title: i18n('reminderWebhookJsonType') || 'Webhook JSON 类型',
+                            description:
+                                i18n('reminderWebhookJsonTypeDesc') ||
+                                '选择预设 JSON 格式；选择自定义时可手动编辑 JSON 请求体。',
+                            options: {
+                                feishu: i18n('webhookJsonTypeFeishu') || '飞书',
+                                wecom: i18n('webhookJsonTypeWecom') || '企业微信',
+                                custom: i18n('webhookJsonTypeCustom') || '自定义',
+                            },
+                        },
+                        {
+                            key: 'reminderWebhookJsonTemplate',
+                            value: settings.reminderWebhookJsonTemplate,
+                            type: 'textarea',
+                            title: i18n('reminderWebhookJsonTemplate') || 'Webhook JSON 格式',
+                            description:
+                                i18n('reminderWebhookJsonTemplateDesc') ||
+                                '选择自定义时生效。变量: ${title} 和 ${message}；清空后使用默认飞书 text 消息格式。',
+                            direction: 'row',
+                        },
+                        {
                             key: 'reminderWebhookUrl',
                             value: settings.reminderWebhookUrl,
                             type: 'textinput',
@@ -850,30 +874,6 @@
                                     }
                                 },
                             },
-                        },
-                        {
-                            key: 'reminderWebhookJsonType',
-                            value: settings.reminderWebhookJsonType,
-                            type: 'select',
-                            title: i18n('reminderWebhookJsonType') || 'Webhook JSON 类型',
-                            description:
-                                i18n('reminderWebhookJsonTypeDesc') ||
-                                '选择预设 JSON 格式；选择自定义时可手动编辑 JSON 请求体。',
-                            options: {
-                                feishu: i18n('webhookJsonTypeFeishu') || '飞书',
-                                wecom: i18n('webhookJsonTypeWecom') || '企业微信',
-                                custom: i18n('webhookJsonTypeCustom') || '自定义',
-                            },
-                        },
-                        {
-                            key: 'reminderWebhookJsonTemplate',
-                            value: settings.reminderWebhookJsonTemplate,
-                            type: 'textarea',
-                            title: i18n('reminderWebhookJsonTemplate') || 'Webhook JSON 格式',
-                            description:
-                                i18n('reminderWebhookJsonTemplateDesc') ||
-                                '选择自定义时生效。变量: ${title} 和 ${message}；清空后使用默认飞书 text 消息格式。',
-                            direction: 'row',
                         },
                     ],
                 },
