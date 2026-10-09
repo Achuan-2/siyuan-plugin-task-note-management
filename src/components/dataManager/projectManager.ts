@@ -1092,6 +1092,7 @@ export class ProjectManager {
         folderId?: string;
         categoryId?: string;
         startDate?: string;
+        blockId?: string;
     }): Promise<Project> {
         await this.initialize();
         const id = `project_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
@@ -1111,6 +1112,7 @@ export class ProjectManager {
         if (input.folderId) project.folderId = input.folderId;
         if (input.categoryId) project.categoryId = input.categoryId;
         if (input.startDate) project.startDate = input.startDate;
+        if (input.blockId) project.blockId = input.blockId;
 
         this.projects.push(project);
         await this.saveProjects();
@@ -1128,6 +1130,7 @@ export class ProjectManager {
         folderId?: string;
         categoryId?: string;
         startDate?: string;
+        blockId?: string;
     }): Promise<Project | undefined> {
         await this.initialize();
         const index = this.projects.findIndex(p => p.id === id);
@@ -1141,6 +1144,7 @@ export class ProjectManager {
         if (input.folderId !== undefined) updated.folderId = input.folderId;
         if (input.categoryId !== undefined) updated.categoryId = input.categoryId;
         if (input.startDate !== undefined) updated.startDate = input.startDate;
+        if (input.blockId !== undefined) updated.blockId = input.blockId;
 
         updated.updatedTime = new Date().toISOString();
         this.projects[index] = updated;

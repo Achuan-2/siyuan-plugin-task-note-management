@@ -4,18 +4,17 @@ import type { ProjectColumnsManager } from "../../components/dataManager/project
 import type { ProjectFolderManager } from "../../components/dataManager/projectFolderManager";
 import type { ToolDefinition } from "./common";
 import {
-    objectSchema,
     wrapHandler,
     successResponse,
     errorResponse,
 } from "./common";
 import {
-    assertDefined,
     assertString,
     assertOptionalString,
     assertOptionalEnum,
     assertOptionalDateString,
 } from "../utils/validation";
+import { addBlockProjectId, getBlockProjectIds, setBlockProjectIds } from "../utils/siyuanApi";
 
 const PROJECT_ACTIONS = [
     "search_project",
@@ -64,6 +63,7 @@ export function createProjectTool(
                     priority: { type: "string", enum: ["high", "medium", "low", "none"], description: "优先级" },
                     categoryId: { type: "string", description: "分类 ID" },
                     startDate: { type: "string", description: "开始日期 YYYY-MM-DD" },
+                    blockId: { type: "string", description: "创建/更新项目时绑定的思源块或文档 ID，自动同步块的项目属性；更新时传空字符串可解除绑定" },
                     // column
                     columnId: { type: "string", description: "分组 ID" },
                     icon: { type: "string", description: "图标" },
@@ -94,6 +94,7 @@ export function createProjectTool(
                         folderName: p.folderId ? folderMap.get(p.folderId) : undefined,
                         color: p.color,
                         priority: p.priority,
+                        blockId: p.blockId,
                     }));
 
                     // 按文件夹 ID 过滤
@@ -134,7 +135,9 @@ export function createProjectTool(
                         folderId: assertOptionalString(input.folderId, "folderId"),
                         categoryId: assertOptionalString(input.categoryId, "categoryId"),
                         startDate: assertOptionalDateString(input.startDate, "startDate"),
+                        blockId: assertOptionalString(input.blockId, "blockId")?.trim(),
                     });
+                    await syncProjectBlockBinding(project.id, undefined, project.blockId);
                     return successResponse(project);
                 }
 
@@ -155,7 +158,10 @@ export function createProjectTool(
                         folderId: assertOptionalString(input.folderId, "folderId"),
                         categoryId: assertOptionalString(input.categoryId, "categoryId"),
                         startDate: assertOptionalDateString(input.startDate, "startDate"),
+                        blockId: assertOptionalString(input.blockId, "blockId")?.trim(),
                     });
+                    if (!updated) return errorResponse(`项目不存在: ${id}`);
+                    await syncProjectBlockBinding(id, existing.blockId, updated.blockId);
                     if (typeof window !== "undefined") {
                         window.dispatchEvent(new CustomEvent("projectUpdated", {
                             detail: { projectId: id }
@@ -237,6 +243,24 @@ export function createProjectTool(
             }
         }),
     };
+}
+
+async function syncProjectBlockBinding(projectId: string, oldBlockId?: string, newBlockId?: string): Promise<void> {
+    if (oldBlockId && oldBlockId !== newBlockId) {
+        try {
+            const projectIds = await getBlockProjectIds(oldBlockId);
+            await setBlockProjectIds(oldBlockId, projectIds.filter(id => id !== projectId));
+        } catch (error) {
+            console.warn(`移除旧块 ${oldBlockId} 的项目 ${projectId} 绑定失败:`, error);
+        }
+    }
+    if (newBlockId) {
+        try {
+            await addBlockProjectId(newBlockId, projectId);
+        } catch (error) {
+            console.warn(`同步块 ${newBlockId} 的项目 ${projectId} 绑定失败:`, error);
+        }
+    }
 }
 
 function assertEnum<T extends string>(value: unknown, field: string, allowed: readonly T[]): T {

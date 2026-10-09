@@ -9,12 +9,12 @@ description: 用于在思源任务笔记管理插件中管理项目看板及文�
 
 ## 支持操作与参数
 
-### 1. `search`
+### 1. `search_project`
 搜索或列出项目。不传任何参数时返回所有项目。
 - **keyword** (字符串, 可选): 关键词，同时匹配项目名称和文件夹名称。文件夹名称命中时，返回该文件夹下的所有项目。
 - **folderId** (字符串, 可选): 仅获取指定项目文件夹下的项目。
 
-### 2. `create`
+### 2. `create_project`
 创建新项目。
 - **name** (字符串, 必填): 项目名称。
 - **status** (字符串, 可选): 项目状态 (例如 `"active"` 激活, `"someday"` 也许, `"archived"` 归档)。
@@ -23,8 +23,9 @@ description: 用于在思源任务笔记管理插件中管理项目看板及文�
 - **folderId** (字符串, 可选): 归属项目文件夹 ID。
 - **categoryId** (字符串, 可选): 分类 ID。
 - **startDate** (字符串, 可选): 开始日期 `YYYY-MM-DD`。
+- **blockId** (字符串, 可选): 绑定的思源块或文档 ID，自动保存项目绑定并同步块属性 `custom-task-projectId`。
 
-### 3. `update`
+### 3. `update_project`
 更新已有项目的信息，只传需要修改的字段。
 - **projectId** (字符串, 必填): 项目 ID。
 - **name** (字符串, 可选): 项目名称。
@@ -34,8 +35,9 @@ description: 用于在思源任务笔记管理插件中管理项目看板及文�
 - **folderId** (字符串, 可选): 归属项目文件夹 ID，传空字符串 `""` 可解除归属。
 - **categoryId** (字符串, 可选): 分类 ID。
 - **startDate** (字符串, 可选): 开始日期 `YYYY-MM-DD`。
+- **blockId** (字符串, 可选): 绑定的思源块或文档 ID。不传保留原绑定，传新 ID 自动换绑，传空字符串 `""` 解除绑定；换绑和解绑仅移除此项目的块属性关联，保留同块的其他项目。
 
-### 4. `get`
+### 4. `get_project`
 获取项目详情及统计信息（如任务总数及未完成数）。
 - **projectId** (字符串, 必填): 项目 ID。
 
@@ -86,14 +88,14 @@ description: 用于在思源任务笔记管理插件中管理项目看板及文�
 ### 列出所有项目
 ```json
 {
-  "action": "search"
+  "action": "search_project"
 }
 ```
 
 ### 按关键词搜索项目（命中文件夹名时返回该文件夹下所有项目）
 ```json
 {
-  "action": "search",
+  "action": "search_project",
   "keyword": "工作"
 }
 ```
@@ -104,5 +106,23 @@ description: 用于在思源任务笔记管理插件中管理项目看板及文�
   "action": "create_folder",
   "name": "工作相关",
   "icon": "💼"
+}
+```
+
+### 创建项目并绑定文档
+```json
+{
+  "action": "create_project",
+  "name": "论文修改",
+  "blockId": "20261009120000-abcdefg"
+}
+```
+
+### 解除项目的块绑定
+```json
+{
+  "action": "update_project",
+  "projectId": "project_...",
+  "blockId": ""
 }
 ```
