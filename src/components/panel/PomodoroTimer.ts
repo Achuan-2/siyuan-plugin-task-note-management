@@ -419,6 +419,8 @@ export class PomodoroTimer {
             reminderTitle: this.reminder.title,
             reminderId: this.reminder.id,
             blockId: this.reminder.blockId,
+            reminderUrl: this.reminder.url,
+            isBlockPomodoro: this.reminder.isBlockPomodoro,
             currentPhaseOriginalDuration: this.currentPhaseOriginalDuration,
             startTime: this.startTime,
             phaseStartTime: this.phaseStartTime,
@@ -8000,6 +8002,10 @@ export class PomodoroTimer {
             }
 
             if (!blockId) {
+                if (this.reminder.url?.startsWith('siyuan://blocks/')) {
+                    window.open(this.reminder.url, '_blank');
+                    return;
+                }
                 showMessage(i18n('cannotGetNoteId') || '无法获取笔记ID', 2000);
                 return;
             }
@@ -8241,7 +8247,7 @@ export class PomodoroTimer {
 
     public async handleTaskTitleClick() {
         const hasBlock = await this.hasBoundBlock();
-        if (hasBlock) {
+        if (hasBlock || this.reminder.url?.startsWith('siyuan://blocks/')) {
             this.openRelatedNote();
         } else {
             this.openTaskEditDialog();
@@ -9165,6 +9171,8 @@ document.body.classList.remove('docked-mode');
                 // Restore Reminder/Block IDs explicitly
                 if (recoveredState.reminderId) timer.reminder.id = recoveredState.reminderId;
                 if (recoveredState.blockId) timer.reminder.blockId = recoveredState.blockId;
+                if (recoveredState.reminderUrl) timer.reminder.url = recoveredState.reminderUrl;
+                if (recoveredState.isBlockPomodoro) timer.reminder.isBlockPomodoro = true;
 
                 // Restore random notification state
                 timer.randomRestEnabled = recoveredState.randomRestEnabled || false;
@@ -9317,6 +9325,8 @@ document.body.classList.remove('docked-mode');
                         if (recoveredState.blockId) {
                             this.reminder.blockId = recoveredState.blockId;
                         }
+                        if (recoveredState.reminderUrl) this.reminder.url = recoveredState.reminderUrl;
+                        if (recoveredState.isBlockPomodoro) this.reminder.isBlockPomodoro = true;
 
                         if (this.isRunning && this.isWorkPhase && !this.activeWorkSessionId) {
                             void this.ensureActiveWorkSessionStarted(this.activeWorkSessionStartTime || this.phaseStartTime || Date.now());

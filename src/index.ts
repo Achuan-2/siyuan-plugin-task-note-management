@@ -70,6 +70,7 @@ import { ChangelogUtils } from "./utils/changelogNotify";
 import { createPomodoroStartSubmenu as createSharedPomodoroStartSubmenu } from "./utils/pomodoroPresets";
 import { normalizeReminderSkipWeekendMode, shouldSkipReminderOnDate, type HolidayData } from "./utils/reminderSkipDate";
 import { DEFAULT_HABIT_MEMO_SYNC_TEMPLATE } from "./utils/habitMemoTemplate";
+import { getDatabaseSelectedIds, readDatabaseTaskSources, buildDatabasePomodoroReminder, type DatabaseMenuContext } from "./utils/databaseTaskSource";
 
 
 export const SETTINGS_FILE = "reminder-settings.json";
@@ -2411,6 +2412,10 @@ export default class ReminderPlugin extends Plugin {
         this.eventBus.on('click-blockicon', handleBlkMenu);
         this.addCleanup(() => this.eventBus.off('click-blockicon', handleBlkMenu));
 
+        const handleDatabaseMenu = this.handleDatabaseMenu.bind(this);
+        this.eventBus.on('open-menu-av', handleDatabaseMenu);
+        this.addCleanup(() => this.eventBus.off('open-menu-av', handleDatabaseMenu));
+
         // 前端只订阅内核提醒事件并展示通知。
         this.startReminderReceiver();
 
@@ -3393,6 +3398,82 @@ export default class ReminderPlugin extends Plugin {
             }
         }
 
+    }
+
+    private handleDatabaseMenu({ detail }: { detail: DatabaseMenuContext & { menu: any } }) {
+        const ids = getDatabaseSelectedIds(detail);
+        if (!ids.length) return;
+
+        const readSources = async () => {
+            const { request } = await import("./api");
+            return readDatabaseTaskSources(detail, request);
+        };
+        detail.menu.addItem({
+            iconHTML: "⏰",
+            label: ids.length === 1 ? i18n("setTimeReminder")
+                : i18n("batchSetReminderBlocks", { count: ids.length.toString() }),
+            click: async () => {
+                try {
+                    const sources = await readSources();
+                    if (sources.length === 1 && sources[0].blockId) {
+                        await this.handleMultipleBlocks([sources[0].blockId]);
+                    } else {
+                        const source = sources[0];
+                        const defaults = await this.getInheritedProjectAndGroup(source.blockId || source.databaseBlockId);
+                        const defaultSettings = {
+                            defaultProjectId: defaults.projectId,
+                            defaultCustomGroupId: defaults.groupId,
+                            defaultMilestoneId: defaults.milestoneId,
+                            defaultCategoryId: defaults.categoryId,
+                        };
+                        if (sources.length === 1) {
+                            const dialog = new QuickReminderDialog(undefined, undefined, undefined, undefined, {
+                                ...defaultSettings,
+                                defaultTitle: source.title || i18n("untitledTask"),
+                                defaultUrl: source.url,
+                                autoDetectDateTime: await this.getAutoDetectDateTimeEnabled(),
+                                mode: 'quick',
+                                plugin: this,
+                            });
+                            await dialog.show();
+                        } else {
+                            this.batchReminderDialog ||= new BatchReminderDialog(this);
+                            await this.batchReminderDialog.showDatabaseItems(sources, defaultSettings);
+                        }
+                    }
+                } catch (error) {
+                    console.error('为数据库条目创建任务失败:', error);
+                    showMessage(i18n("operationFailed"), 3000);
+                }
+            },
+        });
+
+        if (ids.length !== 1) return;
+        const startPomodoro = async (workDurationOverride?: number) => {
+            try {
+                const [source] = await readSources();
+                if (source.blockId) {
+                    await this.startPomodoroForBlock(source.blockId, workDurationOverride);
+                } else {
+                    await this.startPomodoroForReminder(
+                        buildDatabasePomodoroReminder(source, i18n("untitledTask") || "未命名任务"), workDurationOverride);
+                }
+            } catch (error) {
+                console.error('为数据库条目启动番茄钟失败:', error);
+                showMessage(i18n("operationFailed"), 3000);
+            }
+        };
+        detail.menu.addItem({
+            iconHTML: "🍅",
+            label: i18n("startPomodoro") || "开始番茄钟",
+            ...(this.settings?.pomodoroDirectStart ? { click: () => startPomodoro() } : {
+                submenu: createSharedPomodoroStartSubmenu({
+                    source: { id: ids[0], title: i18n("untitledTask") || "未命名任务" },
+                    plugin: this,
+                    startPomodoro,
+                }),
+            }),
+        });
     }
 
     private hasListChildren(blockElement: HTMLElement): boolean {

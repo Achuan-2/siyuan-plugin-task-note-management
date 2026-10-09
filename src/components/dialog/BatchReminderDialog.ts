@@ -8,6 +8,7 @@ import { QuickReminderDialog } from "./QuickReminderDialog";
 import { CategoryManager } from "../dataManager/categoryManager";
 import { ProjectManager } from "../dataManager/projectManager";
 import LoadingDialog from './LoadingDialog.svelte';
+import type { DatabaseTaskSource } from '../../utils/databaseTaskSource';
 
 export interface ListItemNode {
     id: string;        // 列表项 block ID
@@ -31,6 +32,7 @@ export interface BlockDetail {
 
 export interface AutoDetectResult {
     blockId: string;
+    databaseSource?: DatabaseTaskSource;
     content: string;
     note?: string;
     date?: string;
@@ -75,6 +77,17 @@ export class BatchReminderDialog {
         const autoDetectedData = await this.autoDetectBatchDateTime(blockIds);
         const smartBatchDialog = new SmartBatchDialog(this.plugin, blockIds, autoDetectedData, defaultSettings, hierarchyMap);
         smartBatchDialog.show();
+    }
+
+    async showDatabaseItems(sources: DatabaseTaskSource[], defaultSettings?: any) {
+        const removeMode = await this.plugin.getRemoveDateAfterDetectionMode();
+        const data: AutoDetectResult[] = sources.map(source => {
+            const content = source.title || i18n('untitledTask');
+            const detected = autoDetectDateTimeFromTitle(content, removeMode);
+            return { ...detected, blockId: source.id, content, databaseSource: source };
+        });
+        const dialog = new SmartBatchDialog(this.plugin, sources.map(source => source.id), data, defaultSettings);
+        await dialog.show();
     }
 
     async autoDetectBatchDateTime(blockIds: string[]): Promise<AutoDetectResult[]> {
@@ -242,7 +255,9 @@ class SmartBatchDialog {
             let milestoneId = this.defaultSettings?.defaultMilestoneId || '';
             let categoryId = this.defaultSettings?.defaultCategoryId || '';
             try {
-                const inherit = await (this.plugin as any).getInheritedProjectAndGroup(data.blockId);
+                const source = data.databaseSource;
+                const inherit = await (this.plugin as any).getInheritedProjectAndGroup(
+                    source ? source.blockId || source.databaseBlockId : data.blockId);
                 if (inherit) {
                     if (inherit.projectId) projectId = inherit.projectId;
                     if (inherit.groupId) customGroupId = inherit.groupId;
@@ -255,6 +270,8 @@ class SmartBatchDialog {
 
             this.blockSettings.set(data.blockId, {
                 blockId: data.blockId,
+                databaseSource: data.databaseSource,
+                url: data.databaseSource?.blockId ? undefined : data.databaseSource?.url,
                 content: data.content,
                 cleanTitle: data.cleanTitle || data.content,
                 date: data.date || getLogicalDateString(),
@@ -1153,7 +1170,8 @@ class SmartBatchDialog {
         // 创建临时的 reminder 对象用于 QuickReminderDialog
         const tempReminder = {
             id: `temp_${blockId}_${Date.now()}`,
-            blockId: setting.blockId,
+            blockId: setting.databaseSource ? setting.databaseSource.blockId : setting.blockId,
+            url: setting.url,
             content: setting.content,
             title: setting.cleanTitle,
             date: setting.date,
@@ -1190,6 +1208,7 @@ class SmartBatchDialog {
                     setting.milestoneId = modifiedReminder.milestoneId || '';
                     setting.kanbanStatus = modifiedReminder.kanbanStatus || '';
                     setting.note = modifiedReminder.note || '';
+                    setting.url = modifiedReminder.url || undefined;
                     setting.repeatConfig = modifiedReminder.repeat || {
                         enabled: false,
                         type: 'daily',
@@ -1619,12 +1638,14 @@ class SmartBatchDialog {
             const blockIdToReminderId: Map<string, string> = new Map();
 
             // 批量获取所有相关块信息，减少多次单独查询
-            const allBlockIds = Array.from(this.blockSettings.keys());
+            const allBlockIds = Array.from(new Set(Array.from(this.blockSettings.values())
+                .map(setting => setting.databaseSource ? setting.databaseSource.blockId : setting.blockId)
+                .filter(Boolean)));
             const { sql } = await import("../../api");
             const blockIdListSql = allBlockIds.map(id => `'${id}'`).join(',');
             let blockRows: any[] = [];
             try {
-                blockRows = await sql(`select * from blocks where id in (${blockIdListSql})`);
+                if (allBlockIds.length) blockRows = await sql(`select * from blocks where id in (${blockIdListSql})`);
             } catch (err) {
                 console.warn('批量获取块信息失败，回退到逐个获取:', err);
             }
@@ -1640,11 +1661,13 @@ class SmartBatchDialog {
 
             const createReminder = async (blockId: string, setting: BlockSetting, parentReminderId?: string) => {
                 const reminderId = `reminder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-                const block = blockMap[blockId];
+                const boundBlockId = setting.databaseSource ? setting.databaseSource.blockId : blockId;
+                const block = blockMap[boundBlockId];
 
                 const reminder: any = {
                     id: reminderId,
-                    blockId: blockId,
+                    blockId: boundBlockId,
+                    url: setting.url,
                     docId: block ? block.root_id : undefined,
                     completed: false,
                     pomodoroCount: 0,
@@ -1730,7 +1753,7 @@ class SmartBatchDialog {
                 reminderData[reminderId] = reminder;
                 blockIdToReminderId.set(blockId, reminderId);
                 successCount++;
-                successfulBlockIds.push(blockId);
+                if (boundBlockId) successfulBlockIds.push(boundBlockId);
             };
 
             let childSuccessCount = 0;
@@ -1824,6 +1847,8 @@ class SmartBatchDialog {
 
 interface BlockSetting {
     blockId: string;
+    databaseSource?: DatabaseTaskSource;
+    url?: string;
     content: string;
     cleanTitle: string;
     date: string;

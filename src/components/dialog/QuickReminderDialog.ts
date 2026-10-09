@@ -541,6 +541,7 @@ export class QuickReminderDialog {
     private initialEndTime?: string;
     private defaultQuadrant?: string;
     private defaultTitle?: string;
+    private defaultUrl?: string;
     private defaultNote?: string;
     private defaultCategoryId?: string;
     private defaultPriority?: string;
@@ -598,6 +599,7 @@ export class QuickReminderDialog {
             allowedProjectIds?: string[];
             defaultQuadrant?: string;
             defaultTitle?: string;
+            defaultUrl?: string;
             defaultNote?: string;
             defaultCategoryId?: string;
             defaultPriority?: string;
@@ -649,6 +651,7 @@ export class QuickReminderDialog {
             }
             this.defaultQuadrant = options.defaultQuadrant;
             this.defaultTitle = options.defaultTitle;
+            this.defaultUrl = options.defaultUrl;
             this.defaultNote = options.defaultNote;
             this.defaultCategoryId = options.defaultCategoryId;
             this.defaultPriority = options.defaultPriority;
@@ -3893,9 +3896,12 @@ export class QuickReminderDialog {
             this.updateStartDateOnlyOverdueControl();
             this.updateReminderSkipDateControls();
 
+            const defaultUrlInput = this.dialog.element.querySelector('#quickUrlInput') as HTMLInputElement;
+            if (defaultUrlInput && this.defaultUrl) defaultUrlInput.value = this.defaultUrl;
             // 设置默认值：优先使用 this.blockContent，其次使用 this.defaultTitle
-            if (this.blockContent && titleInput) {
-                titleInput.value = this.blockContent;
+            const initialTitle = this.blockContent || (this.defaultUrl ? this.defaultTitle : undefined);
+            if (initialTitle && titleInput) {
+                titleInput.value = initialTitle;
                 // 将光标移到开头，显示开头的字
                 titleInput.setSelectionRange(0, 0);
                 // 自动调整高度
@@ -3905,14 +3911,14 @@ export class QuickReminderDialog {
                 if (this.autoDetectDateTime) {
                     try {
                         // First parse date/time without altering title; cleanup is applied by global setting below.
-                        const detected = this.detectDateTimeFromTitle(this.blockContent, 'none');
+                        const detected = this.detectDateTimeFromTitle(initialTitle, 'none');
                         if (detected && (detected.date || detected.endDate)) {
                             this.applyNaturalLanguageResult(detected);
 
                             // 如果启用了识别后移除日期设置，更新标题
                             this.plugin.getRemoveDateAfterDetectionMode().then((mode: 'none' | 'date' | 'all') => {
                                 if (mode !== 'none') {
-                                    const detectedWithMode = this.detectDateTimeFromTitle(this.blockContent, mode);
+                                    const detectedWithMode = this.detectDateTimeFromTitle(initialTitle, mode);
                                     if (detectedWithMode.cleanTitle !== undefined) {
                                         titleInput.value = detectedWithMode.cleanTitle || titleInput.value;
                                         // 将光标移到开头，显示开头的字
@@ -3931,9 +3937,7 @@ export class QuickReminderDialog {
 
             else if (this.defaultTitle && titleInput) {
                 titleInput.value = this.defaultTitle;
-                // 将光标移到开头，显示开头的字
                 titleInput.setSelectionRange(0, 0);
-                // 自动调整高度
                 this.autoResizeTextarea(titleInput);
             }
 
@@ -6210,7 +6214,7 @@ export class QuickReminderDialog {
         openUrlBtn?.addEventListener('click', () => {
             const url = urlInput?.value?.trim();
             if (url) {
-                if (!/^https?:\/\//i.test(url)) {
+                if (!/^(https?:\/\/|siyuan:\/\/)/i.test(url)) {
                     window.open('http://' + url, '_blank');
                 } else {
                     window.open(url, '_blank');
