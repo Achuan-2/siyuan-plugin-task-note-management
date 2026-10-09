@@ -220,22 +220,30 @@ export class ReminderNotificationService {
                     });
                     this.desktopReminderNotifications.add(notification);
                     let handled = false;
+                    notification.on('close', (event: { reason?: string }) => {
+                        // 超时后通知仍可能留在通知中心；主动关闭则结束本次交互。
+                        if (event?.reason === 'timedOut') return;
+                        handled = true;
+                        this.desktopReminderNotifications.delete(notification);
+                    });
                     notification.on('action', (event: any, legacyIndex?: number) => {
                         const index = typeof event?.actionIndex === 'number' ? event.actionIndex : legacyIndex;
-                        if (handled || !actions[index]) return;
+                        if (handled || !this.desktopReminderNotifications.has(notification) || !actions[index]) return;
                         handled = true;
                         notification.close();
                         this.desktopReminderNotifications.delete(notification);
                         void this.handleAction(reminderInfo, actions[index].action);
                     });
                     notification.on('click', () => {
-                        if (handled) return;
+                        if (handled || !this.desktopReminderNotifications.has(notification)) return;
                         handled = true;
                         notification.close();
                         this.desktopReminderNotifications.delete(notification);
                         this.showActions(reminderInfo);
                     });
                     notification.on('failed', (_event: any, error: string) => {
+                        if (handled || !this.desktopReminderNotifications.has(notification)) return;
+                        handled = true;
                         console.warn('原生系统通知失败:', error);
                         this.desktopReminderNotifications.delete(notification);
                         this.showActions(reminderInfo);
@@ -254,10 +262,16 @@ export class ReminderNotificationService {
                     silent: false, // 使用我们自己的音频
                 });
                 this.desktopReminderNotifications.add(notification);
-                notification.onclose = () => this.desktopReminderNotifications.delete(notification);
+                let handled = false;
+                notification.onclose = () => {
+                    handled = true;
+                    this.desktopReminderNotifications.delete(notification);
+                };
 
                 // 点击通知时的处理
                 notification.onclick = () => {
+                    if (handled || !this.desktopReminderNotifications.has(notification)) return;
+                    handled = true;
                     this.focusWindow();
                     notification.close();
                     this.desktopReminderNotifications.delete(notification);
