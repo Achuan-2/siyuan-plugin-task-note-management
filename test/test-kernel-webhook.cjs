@@ -150,6 +150,42 @@ test('每日汇总单独去重，不会受前端通知记录影响', async () =>
     assert.ok(f.files[WEBHOOK_STATE_FILE].sent['daily_2026-10-08']);
 });
 
+test('每日 Webhook 汇总完整列出所有任务，保留逾期、时间和分类信息', async () => {
+    const tasks = Object.fromEntries(Array.from({ length: 12 }, (_, index) => {
+        const id = `task-${index}`;
+        return [id, {
+            id, title: `任务 ${String(index + 1).padStart(2, '0')}`,
+            date: index === 0 ? '2026-10-07' : '2026-10-08',
+            endDate: index === 0 ? '2026-10-07' : undefined,
+            time: index === 11 ? '10:00' : '', categoryName: '工作'
+        }];
+    }));
+    for (const jsonType of ['wecom', 'feishu', 'custom']) {
+        const f = fixture({ 'reminder.json': tasks });
+        Object.assign(f.files['reminder-settings.json'], {
+            dailyNotificationEnabled: true, dailyNotificationTime: '08:00',
+            reminderWebhookJsonType: jsonType,
+            reminderWebhookJsonTemplate: '{"text":"${title}\\n${message}","count":"${count}"}'
+        });
+        await f.scheduler.check(now());
+        await f.scheduler.check(now());
+        assert.equal(f.requests.length, 1);
+        const payload = f.requests[0].payload;
+        const content = jsonType === 'wecom' ? payload.text.content
+            : jsonType === 'feishu' ? payload.content.text : payload.text;
+        const [title, ...lines] = content.split('\n');
+        assert.equal(title, '📅 今日任务提醒 (12)');
+        assert.equal(lines.length, 12);
+        for (const task of Object.values(tasks)) {
+            assert.ok(lines.some(line => line.includes(`• ${task.title}`) && line.endsWith('[工作]')));
+        }
+        assert.ok(lines.includes('⚠️ • 任务 01 [工作]'));
+        assert.ok(lines.includes('• 任务 12 ⏰10:00 [工作]'));
+        assert.doesNotMatch(content, /还有|\.\.\./);
+        if (jsonType === 'custom') assert.equal(payload.count, '12');
+    }
+});
+
 test('并发扫描共用当前扫描，卸载会清理所有定时器', async () => {
     const f = fixture();
     await Promise.all([f.scheduler.check(now()), f.scheduler.check(now())]);

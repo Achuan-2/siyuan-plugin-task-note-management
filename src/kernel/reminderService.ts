@@ -232,8 +232,8 @@ export class KernelReminderService {
         if (settings.dailyNotificationEnabled === true && currentTime >= dailyTime && !alreadyQueued(dailyKey)) {
             const reminders = this.collectDailyReminders(tasks, logicalDate, settings, holidayData);
             if (reminders.length) {
-                const lines = reminders.slice(0, 2).map(item => `${item.isOverdue ? '⚠️ ' : ''}• ${item.title}${item.time ? ` ⏰${item.time}` : ''}`);
-                if (reminders.length > 2) lines.push(`... ${this.translate('moreItems', reminders.length - 2)}`);
+                const lines = reminders.map(item => `${item.isOverdue ? '⚠️ ' : ''}• ${item.title}${item.time ? ` ⏰${item.time}` : ''}`
+                    + (item.categoryName ? ` [${item.categoryName}]` : ''));
                 notifications[dailyKey] = {
                     title: `📅 ${this.translate('dailyRemindersNotification')} (${reminders.length})`,
                     message: lines.join('\n'), event: 'daily-reminders', reminders, createdAt: timestamp
