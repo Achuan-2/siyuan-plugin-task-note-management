@@ -1,5 +1,6 @@
 import {
     Plugin,
+    Constants,
     getActiveEditor,
     showMessage,
     confirm,
@@ -40,6 +41,7 @@ import { showVipDialog } from "./components/vip/VipDialog";
 import { performDataMigration } from "./components/dataManager/dataMigration";
 import { initIcsSync, initIcsSubscriptionSync, handleIcsSyncSettingsChange, cleanupIcsSync } from "./utils/icsSync";
 import { cleanReminderItem } from "./utils/reminderLoadUtils";
+import { ProtectedJsonStorage, type JsonShape } from "./utils/protectedJsonStorage";
 import { TaskNoteDOMManager } from "./components/render/taskNoteDOM";
 import { addDaysToDate, generateRepeatInstances, getDaysDifference, getRelativeReminderWindow, resolveRepeatReminderTimes } from "./components/dataManager/repeatUtils";
 import { ReminderNotificationService, type ReminderNotificationInfo } from "./services/ReminderNotificationService";
@@ -90,6 +92,14 @@ export const HOLIDAY_DATA_FILE = "holiday.json";
 export const LICENSE_DATA_FILE = "license.json";
 
 const HABIT_CHECKIN_DATA_KEYS = ["checkIns", "hasNotify", "totalCheckIns"] as const;
+
+const PROTECTED_DATA_FILES = new Map<string, JsonShape>([
+    [SETTINGS_FILE, 'object'], [REMINDER_DATA_FILE, 'object'],
+    [PROJECT_DATA_FILE, 'object'], [HABIT_DATA_FILE, 'object'],
+    [HOLIDAY_DATA_FILE, 'object'], [STATUSES_DATA_FILE, 'array'],
+    [CATEGORIES_DATA_FILE, 'array'], [HABIT_GROUP_DATA_FILE, 'array'],
+    ['filter-settings.json', 'object'], ['settings.json', 'object'],
+]);
 
 export interface AudioFileItem {
     path: string;
@@ -379,6 +389,7 @@ export default class ReminderPlugin extends Plugin {
     private statusDataCache: any = null;
     private categoriesDataCache: any = null;
     private habitDataCache: any = null;
+    private habitSaveQueue: Promise<void> = Promise.resolve();
     private habitGroupDataCache: any = null;
     private subscriptionCache: any = null;
     private subscriptionTasksCache: { [id: string]: any } = {};
@@ -406,6 +417,35 @@ export default class ReminderPlugin extends Plugin {
     public settings: any;
     public vip: any = { vipKeys: [], isVip: false, expireDate: '', freeTrialUsed: false };
     public isInMobileApp: boolean = false; // 是否在移动端（手机或平板）运行
+
+    private storageDisposed = false;
+    private readonly protectedStorage = new ProtectedJsonStorage({
+        pluginName: () => this.name,
+        appId: () => Constants.SIYUAN_APPID,
+        canWrite: () => !this.storageDisposed && !window.siyuan.config.readonly && !(window.siyuan as any).isPublish,
+    });
+
+    private getProtectedDataShape(file: string): JsonShape | undefined {
+        return PROTECTED_DATA_FILES.get(file)
+            ?? (/^(habitCheckin|habit)\/[^/]+\.json$/.test(file) ? 'object' : undefined);
+    }
+
+    public async loadData(storageName: string): Promise<any> {
+        const shape = this.getProtectedDataShape(storageName);
+        if (!shape) return super.loadData(storageName);
+        if (this.storageDisposed) throw new Error('插件已卸载，无法读取数据');
+        const data = await this.protectedStorage.load(storageName, shape);
+        this.data[storageName] = data;
+        return data;
+    }
+
+    public async saveData(storageName: string, data: any): Promise<any> {
+        const shape = this.getProtectedDataShape(storageName);
+        if (!shape) return super.saveData(storageName, data);
+        const result = await this.protectedStorage.save(storageName, data, shape);
+        this.data[storageName] = data;
+        return result;
+    }
 
     public getWorkspaceDir(): string {
         return (window as any).siyuan?.config?.system?.workspaceDir || "";
@@ -437,7 +477,7 @@ export default class ReminderPlugin extends Plugin {
                 this.reminderDataCache = data || {};
             } catch (error) {
                 console.error('Failed to load reminder data:', error);
-                this.reminderDataCache = {};
+                throw error;
             }
         }
         return this.reminderDataCache;
@@ -454,8 +494,8 @@ export default class ReminderPlugin extends Plugin {
                 }
             }
         }
-        this.reminderDataCache = data;
         await this.saveData(REMINDER_DATA_FILE, data);
+        this.reminderDataCache = data;
     }
 
     /**
@@ -469,7 +509,7 @@ export default class ReminderPlugin extends Plugin {
                 this.projectDataCache = data || {};
             } catch (error) {
                 console.error('Failed to load project data:', error);
-                this.projectDataCache = {};
+                throw error;
             }
         }
         return this.projectDataCache;
@@ -480,8 +520,8 @@ export default class ReminderPlugin extends Plugin {
      * @param data 项目数据
      */
     public async saveProjectData(data: any): Promise<void> {
-        this.projectDataCache = data;
         await this.saveData(PROJECT_DATA_FILE, data);
+        this.projectDataCache = data;
     }
 
     /**
@@ -495,7 +535,7 @@ export default class ReminderPlugin extends Plugin {
                 this.statusDataCache = data && Array.isArray(data) ? data : null;
             } catch (error) {
                 console.error('Failed to load status data:', error);
-                this.statusDataCache = null;
+                throw error;
             }
         }
         return this.statusDataCache;
@@ -506,8 +546,8 @@ export default class ReminderPlugin extends Plugin {
      * @param data 项目状态数据
      */
     public async saveProjectStatus(data: any): Promise<void> {
-        this.statusDataCache = data;
         await this.saveData(STATUSES_DATA_FILE, data);
+        this.statusDataCache = data;
     }
 
     /**
@@ -521,7 +561,7 @@ export default class ReminderPlugin extends Plugin {
                 this.categoriesDataCache = data && Array.isArray(data) ? data : null;
             } catch (error) {
                 console.error('Failed to load categories data:', error);
-                this.categoriesDataCache = null;
+                throw error;
             }
         }
         return this.categoriesDataCache;
@@ -532,8 +572,8 @@ export default class ReminderPlugin extends Plugin {
      * @param data 分类数据
      */
     public async saveCategories(data: any): Promise<void> {
-        this.categoriesDataCache = data;
         await this.saveData(CATEGORIES_DATA_FILE, data);
+        this.categoriesDataCache = data;
     }
 
     /**
@@ -568,14 +608,15 @@ export default class ReminderPlugin extends Plugin {
                         mergedData[habitId] = this.mergeHabitWithCheckinData(habit as Record<string, any>, checkinData);
                     } catch (error) {
                         console.warn(`Failed to load habit checkin data for ${habitId}:`, error);
-                        mergedData[habitId] = this.mergeHabitWithCheckinData(habit as Record<string, any>, null);
+                        throw error;
                     }
                 }));
 
                 this.habitDataCache = mergedData;
             } catch (error) {
                 console.error('Failed to load habit data:', error);
-                this.habitDataCache = {};
+                this.protectedStorage.block(HABIT_DATA_FILE);
+                throw error;
             }
         }
         return this.habitDataCache;
@@ -586,9 +627,23 @@ export default class ReminderPlugin extends Plugin {
      * @param data 习惯数据
      */
     public async saveHabitData(data: any): Promise<void> {
-        const fullData = (data && typeof data === 'object') ? data : {};
+        return this.enqueueHabitSave(() => this.persistHabitData(data));
+    }
+
+    private enqueueHabitSave(operation: () => Promise<void>): Promise<void> {
+        const pending = this.habitSaveQueue.then(operation);
+        this.habitSaveQueue = pending.catch(() => {});
+        return pending;
+    }
+
+    private async persistHabitData(data: any): Promise<void> {
+        if (!data || typeof data !== 'object' || Array.isArray(data)) {
+            throw new Error('习惯数据格式无效，已取消保存');
+        }
+        const fullData = data;
         const baseData: Record<string, any> = {};
-        const saveTasks: Promise<unknown>[] = [];
+        const saveTasks: (() => Promise<unknown>)[] = [];
+        this.protectedStorage.assertWritable(HABIT_DATA_FILE);
 
         Object.entries(fullData).forEach(([habitId, habit]) => {
             if (!habit || typeof habit !== 'object') {
@@ -597,7 +652,8 @@ export default class ReminderPlugin extends Plugin {
             }
 
             baseData[habitId] = this.stripHabitCheckinData(habit as Record<string, any>);
-            saveTasks.push(this.saveData(
+            this.protectedStorage.assertWritable(this.getHabitCheckinFileName(habitId));
+            saveTasks.push(() => this.saveData(
                 this.getHabitCheckinFileName(habitId),
                 this.extractHabitCheckinData(habit as Record<string, any>)
             ));
@@ -605,12 +661,11 @@ export default class ReminderPlugin extends Plugin {
 
         const staleHabitIds = Object.keys(this.habitDataCache || {}).filter((habitId) => !(habitId in fullData));
 
-        this.habitDataCache = fullData;
+        // 明细完整保存后再更新索引；失败时不删除旧明细，也不发布不完整缓存。
+        await Promise.all(saveTasks.map(save => save()));
         await this.saveData(HABIT_DATA_FILE, baseData);
-        await Promise.all([
-            ...saveTasks,
-            ...staleHabitIds.map((habitId) => this.removeData(this.getHabitCheckinFileName(habitId))),
-        ]);
+        this.habitDataCache = fullData;
+        await Promise.all(staleHabitIds.map((habitId) => this.removeData(this.getHabitCheckinFileName(habitId))));
     }
 
     /**
@@ -618,21 +673,25 @@ export default class ReminderPlugin extends Plugin {
      * 用于避免打卡时重刷所有习惯的打卡文件。
      */
     public async saveHabitPartial(habitId: string, habit: any): Promise<void> {
+        return this.enqueueHabitSave(() => this.persistHabitPartial(habitId, habit));
+    }
+
+    private async persistHabitPartial(habitId: string, habit: any): Promise<void> {
         if (!this.habitDataCache) {
             await this.loadHabitData();
         }
 
-        // 1. 更新内存缓存
-        this.habitDataCache[habitId] = habit;
+        this.protectedStorage.assertWritable(HABIT_DATA_FILE);
+        this.protectedStorage.assertWritable(this.getHabitCheckinFileName(habitId));
+        const fullData = { ...this.habitDataCache, [habitId]: habit };
 
-        // 2. 保存该习惯专属的打卡文件
+        // 保存明细后再提交索引和缓存。
         await this.saveData(
             this.getHabitCheckinFileName(habitId),
             this.extractHabitCheckinData(habit)
         );
 
-        // 3. 更新并保存主索引文件 habit.json (不含打卡明细)
-        const fullData = this.habitDataCache || {};
+        // 更新主索引文件 habit.json（不含打卡明细）。
         const baseData: Record<string, any> = {};
         Object.entries(fullData).forEach(([hid, h]) => {
             if (h) {
@@ -640,6 +699,7 @@ export default class ReminderPlugin extends Plugin {
             }
         });
         await this.saveData(HABIT_DATA_FILE, baseData);
+        this.habitDataCache = fullData;
     }
 
     private getHabitCheckinFileName(habitId: string): string {
@@ -683,7 +743,7 @@ export default class ReminderPlugin extends Plugin {
                 this.habitGroupDataCache = Array.isArray(data) ? data : [];
             } catch (error) {
                 console.error('Failed to load habit group data:', error);
-                this.habitGroupDataCache = [];
+                throw error;
             }
         }
         return this.habitGroupDataCache;
@@ -694,8 +754,8 @@ export default class ReminderPlugin extends Plugin {
      * @param data 习惯分组数据
      */
     public async saveHabitGroupData(data: any[]): Promise<void> {
-        this.habitGroupDataCache = data;
         await this.saveData(HABIT_GROUP_DATA_FILE, data);
+        this.habitGroupDataCache = data;
     }
 
     /**
@@ -709,7 +769,7 @@ export default class ReminderPlugin extends Plugin {
                 this.holidayDataCache = data || {};
             } catch (error) {
                 console.error('Failed to load holiday data:', error);
-                this.holidayDataCache = {};
+                throw error;
             }
         }
         return this.holidayDataCache;
@@ -720,8 +780,8 @@ export default class ReminderPlugin extends Plugin {
      * @param data 节假日数据
      */
     public async saveHolidayData(data: any): Promise<void> {
-        this.holidayDataCache = data;
         await this.saveData(HOLIDAY_DATA_FILE, data);
+        this.holidayDataCache = data;
         void this.kernel.rpc.call['refresh-reminder-schedule']().catch(() => {});
     }
 
@@ -1993,8 +2053,8 @@ export default class ReminderPlugin extends Plugin {
      * @param settings 设置数据
      */
     public async saveSettings(settings: any): Promise<void> {
-        this.settings = settings;
         await this.saveData(SETTINGS_FILE, settings);
+        this.settings = settings;
         void this.kernel.rpc.call['refresh-reminder-schedule']().catch(() => {});
     }
 
@@ -4684,6 +4744,7 @@ export default class ReminderPlugin extends Plugin {
     }
 
     onunload() {
+        this.storageDisposed = true;
         console.log("Task note management plugin disabled; starting resource cleanup...");
         this.reminderNotifications.destroy();
         // 清理音频资源
