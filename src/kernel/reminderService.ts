@@ -71,6 +71,7 @@ export class KernelReminderService {
     private started = false;
     private activeCheck: Promise<void> | null = null;
     private channelStates = new Map<string, NotificationDeliveryState>();
+    private savedChannelStates = new Map<string, string>();
     private language = 'zh_CN';
     private activeHabitIds = new Set<string>();
     private readonly frontend: KernelFrontendReminderDelivery;
@@ -222,7 +223,7 @@ export class KernelReminderService {
         const notification = state.pending[key];
         if (!notification || notification.desktopClaim?.until > now.getTime()) return null;
         notification.desktopClaim = { owner, until: now.getTime() + 90_000 };
-        try { await this.storage.saveData(EMAIL_STATE_FILE, state); }
+        try { await this.saveChannelState(EMAIL_STATE_FILE, state); }
         catch (error) { delete notification.desktopClaim; throw error; }
         return { key, title: notification.title, message: notification.message, settings };
     }
@@ -239,7 +240,7 @@ export class KernelReminderService {
             delete notification.desktopClaim;
             notification.nextAttemptAt = now.getTime() + RETRY_INTERVAL_MS;
         }
-        await this.storage.saveData(EMAIL_STATE_FILE, state);
+        await this.saveChannelState(EMAIL_STATE_FILE, state);
         this.notifyChanged();
     }
 
@@ -354,7 +355,10 @@ export class KernelReminderService {
         if (!this.channelStates.has(channel.stateFile)) {
             const stored = await this.storage.loadData(channel.stateFile, true);
             if (stored && (!stored.sent || !stored.pending)) throw new Error('Invalid notification state');
-            this.channelStates.set(channel.stateFile, stored || { sent: {}, pending: {} });
+            const state: NotificationDeliveryState = stored || { sent: {}, pending: {} };
+            state.expired ??= {};
+            this.channelStates.set(channel.stateFile, state);
+            this.savedChannelStates.set(channel.stateFile, JSON.stringify(state));
         }
         const state = this.channelStates.get(channel.stateFile)!;
         state.expired ??= {};
@@ -378,7 +382,7 @@ export class KernelReminderService {
         }
 
         // 发送前持久化待发送记录，重载内核后可继续重试；发送成功才记为已通知。
-        await this.storage.saveData(channel.stateFile, state);
+        await this.saveChannelState(channel.stateFile, state);
         let wakeDesktop = false;
         for (const [key, notification] of Object.entries(state.pending)) {
             // 切换发送方式时也尊重正在执行的 SMTP，避免 API 与桌面端重复发同一封邮件。
@@ -399,15 +403,23 @@ export class KernelReminderService {
                 await channel.send!(notification, key, now);
                 state.sent[key] = timestamp;
                 delete state.pending[key];
-                await this.storage.saveData(channel.stateFile, state);
+                await this.saveChannelState(channel.stateFile, state);
             } catch {
                 notification.nextAttemptAt = timestamp + RETRY_INTERVAL_MS;
                 // 不记录配置或响应正文，避免泄露机器人和邮件服务密钥。
                 await this.logger.warn(`[kernel] ${channel.name} notification failed; will retry: ${notification.event}`);
             }
         }
-        await this.storage.saveData(channel.stateFile, state);
+        await this.saveChannelState(channel.stateFile, state);
         if (wakeDesktop) await this.broadcast(SMTP_EMAIL_DUE_METHOD, {});
+    }
+
+    /** 空检查和已完成发送不应制造新的同步变更，失败写入则继续重试。 */
+    private async saveChannelState(file: string, state: NotificationDeliveryState): Promise<void> {
+        const snapshot = JSON.stringify(state);
+        if (snapshot === this.savedChannelStates.get(file)) return;
+        await this.storage.saveData(file, state);
+        this.savedChannelStates.set(file, snapshot);
     }
 
     private isTaskStillActive(notification: ExternalNotification, tasks: Record<string, any>): boolean {

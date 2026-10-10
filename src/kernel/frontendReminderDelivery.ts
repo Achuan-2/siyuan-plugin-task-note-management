@@ -12,6 +12,7 @@ interface DeliveryState {
 /** 内核保存事件、串行领取及确认；广播无订阅者时，前端连接后仍可补取。 */
 export class KernelFrontendReminderDelivery {
     private state: DeliveryState | null = null;
+    private savedState = '';
     private queue: Promise<unknown> = Promise.resolve();
     private claims = new Map<string, { owner: string; until: number }>();
 
@@ -29,7 +30,16 @@ export class KernelFrontendReminderDelivery {
             const stored = await this.storage.loadData(FRONTEND_REMINDER_STATE_FILE, true);
             if (stored && (!stored.events || !stored.delivered)) throw new Error('Invalid frontend reminder state');
             this.state = stored || { events: {}, delivered: {} };
+            this.savedState = JSON.stringify(this.state);
         });
+    }
+
+    /** 只持久化实际变化；写入失败时保留旧快照，后续检查仍可重试。 */
+    private async saveState(): Promise<void> {
+        const snapshot = JSON.stringify(this.state);
+        if (snapshot === this.savedState) return;
+        await this.storage.saveData(FRONTEND_REMINDER_STATE_FILE, this.state);
+        this.savedState = snapshot;
     }
 
     public hasEvent(key: string): boolean { return !!this.state?.events[key]; }
@@ -45,8 +55,7 @@ export class KernelFrontendReminderDelivery {
                     delete state.events[key]; delete state.delivered[key]; this.claims.delete(key);
                 }
             }
-            // 即使上次保存失败，下一次检查也会再次保存内存中的待补取事件。
-            await this.storage.saveData(FRONTEND_REMINDER_STATE_FILE, state);
+            await this.saveState();
             return fresh;
         });
     }
@@ -77,7 +86,7 @@ export class KernelFrontendReminderDelivery {
         return this.serial(async () => {
             if (this.claims.get(key)?.owner !== owner) return;
             this.state!.delivered[key] = Date.now();
-            try { await this.storage.saveData(FRONTEND_REMINDER_STATE_FILE, this.state); }
+            try { await this.saveState(); }
             catch (error) { delete this.state!.delivered[key]; throw error; }
             this.claims.delete(key);
         });

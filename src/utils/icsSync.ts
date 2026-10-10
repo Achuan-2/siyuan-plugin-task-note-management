@@ -13,6 +13,7 @@ interface IcsSyncState {
     timer: number | null;
     subscriptionTimer: number | null;
     isPerforming: boolean;
+    lastCheckedAt: number;
 }
 
 const ICS_SYNC_STATE = new WeakMap<object, IcsSyncState>();
@@ -20,7 +21,7 @@ const ICS_SYNC_STATE = new WeakMap<object, IcsSyncState>();
 function getState(plugin: IcsSyncPlugin): IcsSyncState {
     let state = ICS_SYNC_STATE.get(plugin as unknown as object);
     if (!state) {
-        state = { timer: null, subscriptionTimer: null, isPerforming: false };
+        state = { timer: null, subscriptionTimer: null, isPerforming: false, lastCheckedAt: 0 };
         ICS_SYNC_STATE.set(plugin as unknown as object, state);
     }
     return state;
@@ -196,13 +197,10 @@ async function scheduleIcsSync(plugin: IcsSyncPlugin, interval: IcsSyncInterval,
             return target.getTime();
         }
 
-        // 其他模式：基于上次同步时间 + 间隔
-        if (settings && settings.icsLastSyncAt) {
-            const last = Date.parse(settings.icsLastSyncAt);
-            if (!isNaN(last)) {
-                return last + intervalMs;
-            }
-        }
+        // 未上传的检查时间只留在内存，仍需按间隔安排下一次检查。
+        const last = Math.max(settings?.icsLastSyncAt ? Date.parse(settings.icsLastSyncAt) || 0 : 0,
+            state.lastCheckedAt);
+        if (last > 0) return last + intervalMs;
         return Date.now() + intervalMs;
     };
 
@@ -294,9 +292,8 @@ async function performIcsSync(plugin: IcsSyncPlugin): Promise<void> {
         const stat = await getFileStat(reminderPath);
         const lastSync = settings.icsLastSyncAt ? new Date(settings.icsLastSyncAt).getTime() : 0;
         if (stat && stat.mtime <= lastSync) {
-            // 没有新事件，只更新同步时间
-            settings.icsLastSyncAt = new Date().toISOString();
-            await plugin.saveSettings(settings);
+            // 没有新事件时不回写设置，避免定时检查触发思源同步。
+            state.lastCheckedAt = Date.now();
             return;
         }
 

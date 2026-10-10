@@ -20,6 +20,7 @@ function compile(source) {
 
 function fixture() {
     let now = Date.parse('2026-10-08T09:00:00+08:00');
+    let mtime = null;
     class Clock extends Date {
         constructor(...args) { super(...(args.length ? args : [now])); }
         static now() { return now; }
@@ -35,9 +36,9 @@ function fixture() {
     )(localStorage, Clock);
     const timers = new Map();
     const window = { setInterval: (callback, ms) => { timers.set(ms, callback); return ms; } };
-    const calls = { uploads: 0, subscriptions: 0 };
+    const calls = { uploads: 0, subscriptions: 0, stats: 0, settingsSaves: 0 };
     const dependencies = {
-        '../api': { getFileStat: async () => ({ mtime: now }) },
+        '../api': { getFileStat: async () => { calls.stats++; return { mtime: mtime ?? now }; } },
         './icsExport': { uploadIcsToCloud: async () => { calls.uploads++; } },
         './icsSubscription': {
             loadSubscriptions: async () => { calls.subscriptions++; return { subscriptions: {} }; }
@@ -56,8 +57,9 @@ function fixture() {
         icsSyncEnabled: true, icsSyncInterval: '15min', icsLastSyncAt: new Clock().toISOString()
     };
     plugin.loadSettings = async () => settings;
-    plugin.saveSettings = async () => {};
-    return { Plugin, plugin, sync: exports, timers, calls, storage, advance: ms => { now += ms; } };
+    plugin.saveSettings = async () => { calls.settingsSaves++; };
+    return { Plugin, plugin, sync: exports, timers, calls, storage, settings,
+        advance: ms => { now += ms; }, setMtime: value => { mtime = value; } };
 }
 
 test('ICS 自动同步和订阅定时回调可调用真实插件协调方法，卸载清理计时器', async () => {
@@ -85,4 +87,30 @@ test('ICS 协调保留跨窗口互斥，租约过期或损坏后可以接管', (
     assert.equal(plugin.isPrimaryInstance(), false);
     storage.set('siyuan_task_note_coordinator_lock', '{invalid');
     assert.equal(plugin.isPrimaryInstance(), true);
+});
+
+test('ICS 没有新任务时只按设定间隔检查，不保存设置或每 30 秒重复检查', async () => {
+    const { plugin, sync, timers, calls, settings, advance, setMtime } = fixture();
+    const lastSyncAt = settings.icsLastSyncAt;
+    setMtime(Date.parse(lastSyncAt));
+    await sync.initIcsSync(plugin);
+    advance(15 * 60 * 1000);
+    await timers.get(30000)();
+    assert.equal(calls.stats, 1);
+    assert.equal(calls.uploads, 0);
+    assert.equal(calls.settingsSaves, 0);
+    assert.equal(settings.icsLastSyncAt, lastSyncAt);
+    advance(30000);
+    await timers.get(30000)();
+    assert.equal(calls.stats, 1);
+    advance(15 * 60 * 1000 - 30000);
+    await timers.get(30000)();
+    assert.equal(calls.stats, 2);
+    assert.equal(calls.settingsSaves, 0);
+    // 下一轮出现实际任务改动时，仍能正常上传。
+    setMtime(Date.parse(lastSyncAt) + 1);
+    advance(15 * 60 * 1000);
+    await timers.get(30000)();
+    assert.equal(calls.uploads, 1);
+    sync.cleanupIcsSync(plugin);
 });
