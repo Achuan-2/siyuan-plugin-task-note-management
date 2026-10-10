@@ -253,7 +253,7 @@ export class DocumentReminderDialog {
             this.updateStats(documentReminders, searchedReminders);
 
         } catch (error) {
-            console.error('加载文档提醒失败:', error);
+            console.error("Failed to load document reminders:", error);
             if (this.remindersContainer) {
                 this.remindersContainer.innerHTML = `<div class="doc-reminder-error">${i18n("loadReminderError")}</div>`;
             }
@@ -581,7 +581,7 @@ export class DocumentReminderDialog {
                 }
             });
         } catch (error) {
-            console.warn('加载项目数据失败:', error);
+            console.warn("Failed to load project data:", error);
         }
     }
 
@@ -689,7 +689,7 @@ export class DocumentReminderDialog {
                 return `${dateStr} ${timeStr}`;
             }
         } catch (error) {
-            console.error('格式化完成时间失败:', error);
+            console.error("Failed to format completion time:", error);
             return completedTime;
         }
     }
@@ -732,7 +732,7 @@ export class DocumentReminderDialog {
             this.loadReminders();
 
         } catch (error) {
-            console.error('切换提醒状态失败:', error);
+            console.error("Failed to toggle reminder state:", error);
             showMessage(i18n("operationFailed"));
         }
     }
@@ -759,12 +759,12 @@ export class DocumentReminderDialog {
         try {
             const block = await getBlockByID(blockId);
             if (!block) {
-                throw new Error('块不存在');
+                throw new Error(i18n("blockNotFound"));
             }
 
             openBlock(blockId);
         } catch (error) {
-            console.error('打开块失败:', error);
+            console.error("Failed to open block:", error);
             showMessage(i18n("openNoteFailed"));
         }
     }
@@ -949,7 +949,7 @@ export class DocumentReminderDialog {
             showMessage(i18n("reminderDeletedSuccess"));
 
         } catch (error) {
-            console.error('删除提醒失败:', error);
+            console.error("Failed to delete reminder:", error);
             showMessage(i18n("operationFailed"));
         }
     }

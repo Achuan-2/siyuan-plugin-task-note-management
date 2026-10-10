@@ -62,7 +62,7 @@ export class ReminderNotificationService {
             currentWindow?.show();
             currentWindow?.focus();
         } catch (error) {
-            console.debug('恢复通知所属窗口失败:', error);
+            console.debug("Failed to restore notification owner window:", error);
         }
         window.focus();
     }
@@ -110,7 +110,7 @@ export class ReminderNotificationService {
 
             await this.completeTask(data, taskId, instanceDate);
         } catch (error) {
-            console.error('执行通知操作失败:', error);
+            console.error("Failed to execute notification action:", error);
             showMessage(i18n('operationFailed'), 3000, 'error');
         }
     }
@@ -153,7 +153,7 @@ export class ReminderNotificationService {
             ...Array.from(affectedBlocks, blockId => updateBindBlockAtrrs(blockId, this.plugin))
         ]);
         updates.forEach(result => {
-            if (result.status === 'rejected') console.warn('完成任务后更新关联信息失败:', result.reason);
+            if (result.status === 'rejected') console.warn("Failed to update related information after completing task:", result.reason);
         });
         await this.plugin.playTaskCompleteSound();
         this.updateBadges();
@@ -200,7 +200,7 @@ export class ReminderNotificationService {
                     return await sendNotification(title, message);
                 }
             } catch (error) {
-                console.warn('手机端发送系统通知失败:', error);
+                console.warn("Failed to send system notification on mobile:", error);
             }
             return;
         }
@@ -246,14 +246,14 @@ export class ReminderNotificationService {
                     notification.on('failed', (_event: any, error: string) => {
                         if (handled || !this.desktopReminderNotifications.has(notification)) return;
                         handled = true;
-                        console.warn('原生系统通知失败:', error);
+                        console.warn("Native system notification failed:", error);
                         this.desktopReminderNotifications.delete(notification);
                     });
                     notification.show();
                     return;
                 }
             } catch (error) {
-                console.debug('原生通知不可用，回退浏览器通知:', error);
+                console.debug("Native notification unavailable; falling back to browser notification:", error);
             }
             if ('Notification' in window && Notification.permission === 'granted') {
                 // 使用浏览器通知
@@ -291,7 +291,7 @@ export class ReminderNotificationService {
                                 openBlock(reminderInfo.blockId);
                             });
                         } catch (error) {
-                            console.warn('跳转到块失败:', error);
+                            console.warn("Failed to navigate to block:", error);
                         }
                     }
                 };
@@ -307,13 +307,13 @@ export class ReminderNotificationService {
                 });
             }
         } catch (error) {
-            console.warn('显示系统弹窗失败:', error);
+            console.warn("Failed to show system popup:", error);
         }
     }
 
     public destroy(): void {
         this.desktopReminderNotifications.forEach(notification => {
-            try { notification.close(); } catch (error) { console.debug('关闭系统通知失败:', error); }
+            try { notification.close(); } catch (error) { console.debug("Failed to close system notification:", error); }
         });
         this.desktopReminderNotifications.clear();
     }

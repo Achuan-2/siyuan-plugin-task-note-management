@@ -49,7 +49,7 @@ export async function countProjectTotalPomodoro(plugin: any, projectId: string, 
             }
         }
     } catch (e) {
-        console.warn('计算项目总番茄数失败，回退到直接累加:', e);
+        console.warn("Failed to calculate project total pomodoros; using direct sum:", e);
         allReminders.forEach((r: any) => {
             if (!r || typeof r !== 'object') return;
             if (r.projectId === projectId && r.pomodoroCount && typeof r.pomodoroCount === 'number') {
@@ -89,7 +89,7 @@ export async function countProjectTotalFocusTime(plugin: any, projectId: string,
             }
         }
     } catch (e) {
-        console.warn('计算项目总专注时长失败:', e);
+        console.warn("Failed to calculate project total focus duration:", e);
     }
     return totalMinutes;
 }
@@ -100,24 +100,24 @@ function renderStatsPanelHtml(totalTasks: number, totalPomodoro: number, focusTi
         <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap:12px; margin-bottom: 16px; flex-shrink: 0;">
             <!-- Card 1: Total Tasks -->
             <div style="background:var(--b3-theme-surface-lighter); padding:14px; border-radius:10px; border:1px solid var(--b3-border-color); display:flex; flex-direction:column; gap:4px; box-shadow: 0 2px 6px rgba(0,0,0,0.02);">
-                <div style="font-size:11px; opacity:0.7; display:flex; align-items:center; gap:4px;">📋 任务总数</div>
+                <div style="font-size:11px; opacity:0.7; display:flex; align-items:center; gap:4px;">${i18n("projectTaskCountCard")}</div>
                 <div style="font-size:24px; font-weight:bold; color:var(--b3-theme-primary);">${totalTasks}</div>
             </div>
             <!-- Card 2: Total Pomodoros -->
             <div style="background:var(--b3-theme-surface-lighter); padding:14px; border-radius:10px; border:1px solid var(--b3-border-color); display:flex; flex-direction:column; gap:4px; box-shadow: 0 2px 6px rgba(0,0,0,0.02);">
-                <div style="font-size:11px; opacity:0.7; display:flex; align-items:center; gap:4px;">🍅 番茄总数</div>
+                <div style="font-size:11px; opacity:0.7; display:flex; align-items:center; gap:4px;">${i18n("projectPomodoroCountCard")}</div>
                 <div style="font-size:24px; font-weight:bold; color:#e74c3c;">${totalPomodoro}</div>
             </div>
             <!-- Card 3: Total Focus Time -->
             <div style="background:var(--b3-theme-surface-lighter); padding:14px; border-radius:10px; border:1px solid var(--b3-border-color); display:flex; flex-direction:column; gap:4px; box-shadow: 0 2px 6px rgba(0,0,0,0.02);">
-                <div style="font-size:11px; opacity:0.7; display:flex; align-items:center; gap:4px;">⏱ 专注时长</div>
+                <div style="font-size:11px; opacity:0.7; display:flex; align-items:center; gap:4px;">${i18n("projectFocusTimeCard")}</div>
                 <div style="font-size:18px; font-weight:bold; color:#28a745; line-height:28px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${focusTimeStr}">${focusTimeStr}</div>
             </div>
         </div>
 
         <!-- Status Distribution Section -->
         <div style="background:var(--b3-theme-surface-lighter); padding:16px; border-radius:12px; border:1px solid var(--b3-border-color); display:flex; flex-direction:column; gap:12px; flex-shrink: 0; box-shadow: 0 2px 6px rgba(0,0,0,0.02);">
-            <div style="font-size:14px; font-weight:600; border-bottom:1px solid var(--b3-border-color); padding-bottom:8px; display:flex; align-items:center; gap:6px;">📊 状态分布</div>
+            <div style="font-size:14px; font-weight:600; border-bottom:1px solid var(--b3-border-color); padding-bottom:8px; display:flex; align-items:center; gap:6px;">${i18n("projectStatusDistributionTitle")}</div>
             <div style="display:flex; flex-direction:column; gap:4px;">
                 ${statusRowsHtml}
             </div>
@@ -131,7 +131,7 @@ export function showProjectStatsDialog(plugin: any, project: any, reminderDataCa
         plugin,
         parsed.emoji || "🎯",
         parsed.text || i18n("unnamedNote") || '未命名项目',
-        "项目统计数据",
+        i18n("projectStatisticsSubtitle"),
         [project],
         'project',
         reminderDataCache
@@ -143,8 +143,8 @@ export function showFolderStatsDialog(plugin: any, folder: any, node: any, remin
     showStatsDialogForProjects(
         plugin,
         folder.icon || "📂",
-        folder.name || "未命名文件夹",
-        `文件夹统计数据 • 包含 ${projects.length} 个项目`,
+        folder.name || i18n("unnamedFolder"),
+        i18n("folderStatsSubtitle", { count: String(projects.length) }),
         projects,
         'folder',
         reminderDataCache
@@ -157,7 +157,7 @@ export async function showStatsDialogForProjects(plugin: any, titleIcon: string,
         content: `
             <div id="statsDialogBody" style="display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:300px; padding:16px; gap:12px; color:var(--b3-theme-on-surface); box-sizing:border-box;">
                 <div style="width:36px; height:36px; border:3px solid var(--b3-theme-primary-lighter); border-top-color:var(--b3-theme-primary); border-radius:50%; animation: stats-spin 1s linear infinite;"></div>
-                <div style="font-size:13px; opacity:0.8;">正在计算统计数据...</div>
+                <div style="font-size:13px; opacity:0.8;">${i18n("calculatingStats")}</div>
                 <style>
                     @keyframes stats-spin {
                         0% { transform: rotate(0deg); }
@@ -237,10 +237,10 @@ export async function showStatsDialogForProjects(plugin: any, titleIcon: string,
             const formatMinutes = (minutes: number) => {
                 const hours = Math.floor(minutes / 60);
                 const mins = Math.floor(minutes % 60);
-                return hours > 0 ? `${hours}小时${mins}分钟` : `${mins}分钟`;
+                return hours > 0 ? i18n("durationHoursMinutes", { hours: String(hours), minutes: String(mins) }) : i18n("durationMinutesNoSpace", { minutes: String(mins) });
             };
 
-            const focusTimeStr = totalFocus > 0 ? formatMinutes(totalFocus) : '0分钟';
+            const focusTimeStr = totalFocus > 0 ? formatMinutes(totalFocus) : i18n("zeroMinutes");
 
             let statusRowsHtml = '';
             const allStatusKeys = Array.from(statusInfoMap.keys());
@@ -265,7 +265,7 @@ export async function showStatsDialogForProjects(plugin: any, titleIcon: string,
                                 <span style="font-size:14px;">${info.icon || '📝'}</span>
                                 <span style="font-weight: 500;">${info.name}</span>
                             </span>
-                            <span style="font-weight:500; opacity: 0.9;">${count}个 (${percentage}%)</span>
+                            <span style="font-weight:500; opacity: 0.9;">${i18n('statusCountPercentage', { count: String(count), percent: String(percentage) })}</span>
                         </div>
                         <div style="width:100%; height:8px; background:rgba(0,0,0,0.05); border-radius:4px; overflow:hidden;">
                             <div style="width:${percentage}%; height:100%; background:${barColor}; border-radius:4px; transition: width 0.3s ease;"></div>
@@ -318,7 +318,7 @@ export async function showStatsDialogForProjects(plugin: any, titleIcon: string,
                                 🍅 ${pPomo}
                             </td>
                             <td style="padding:10px 6px; text-align:right; color:#28a745; font-size:12px; font-weight:500;">
-                                ${pFoc > 0 ? pFoc + '分钟' : '-'}
+                                ${pFoc > 0 ? i18n('durationMinutesNoSpace', { minutes: String(pFoc) }) : '-'}
                             </td>
                         </tr>
                     `;
@@ -326,15 +326,15 @@ export async function showStatsDialogForProjects(plugin: any, titleIcon: string,
 
                 projectBreakdownHtml = `
                     <div style="background:var(--b3-theme-surface-lighter); padding:16px; border-radius:12px; border:1px solid var(--b3-border-color); display:flex; flex-direction:column; gap:12px; margin-top: 4px;">
-                        <div style="font-size:14px; font-weight:600; border-bottom:1px solid var(--b3-border-color); padding-bottom:8px; display:flex; align-items:center; gap:6px;">📂 项目明细 (${projectDetails.length} 个项目)</div>
+                        <div style="font-size:14px; font-weight:600; border-bottom:1px solid var(--b3-border-color); padding-bottom:8px; display:flex; align-items:center; gap:6px;">${i18n('projectDetailsCount', { count: String(projectDetails.length) })}</div>
                         <div style="overflow-y:auto; max-height:220px; width:100%; border-radius: 4px;">
                             <table style="width:100%; border-collapse:collapse; text-align:left;">
                                 <thead>
                                     <tr style="border-bottom:1px solid var(--b3-border-color); font-size:12px; opacity:0.7;">
-                                        <th style="padding:6px; font-weight:500;">项目名称</th>
-                                        <th style="padding:6px; font-weight:500; text-align:center;">任务 (已完成/总数)</th>
-                                        <th style="padding:6px; font-weight:500; text-align:center;">番茄数</th>
-                                        <th style="padding:6px; font-weight:500; text-align:right;">专注时长</th>
+                                        <th style="padding:6px; font-weight:500;">${i18n('projectName')}</th>
+                                        <th style="padding:6px; font-weight:500; text-align:center;">${i18n("taskRatioLabel")}</th>
+                                        <th style="padding:6px; font-weight:500; text-align:center;">${i18n("pomodoroCountLabel")}</th>
+                                        <th style="padding:6px; font-weight:500; text-align:right;">${i18n("focusDurationLabel")}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -354,7 +354,7 @@ export async function showStatsDialogForProjects(plugin: any, titleIcon: string,
         if (targetType === 'project' && projectGroups.length > 0) {
             tabHeadersHtml = `
                 <div class="stats-tabs-header" style="display: flex; gap: 8px; border-bottom: 1px solid var(--b3-border-color); padding-bottom: 8px; margin-bottom: 12px; overflow-x: auto; flex-shrink: 0;">
-                    <button class="stats-tab-btn active" data-tab="summary" style="padding: 6px 12px; border: none; background: transparent; border-bottom: 2px solid var(--b3-theme-primary); color: var(--b3-theme-primary); font-weight: 600; cursor: pointer; white-space: nowrap; font-size: 13px; outline: none; transition: all 0.2s;">汇总</button>
+                    <button class="stats-tab-btn active" data-tab="summary" style="padding: 6px 12px; border: none; background: transparent; border-bottom: 2px solid var(--b3-theme-primary); color: var(--b3-theme-primary); font-weight: 600; cursor: pointer; white-space: nowrap; font-size: 13px; outline: none; transition: all 0.2s;">${i18n("summaryLabel")}</button>
             `;
 
             const summaryStatsHtml = await calculateStatsAndRender(reminderData);
@@ -395,7 +395,7 @@ export async function showStatsDialogForProjects(plugin: any, titleIcon: string,
             const ungroupedTaskCount = Object.keys(ungroupedReminderData).length;
             if (ungroupedTaskCount > 0) {
                 tabHeadersHtml += `
-                    <button class="stats-tab-btn" data-tab="group-ungrouped" style="padding: 6px 12px; border: none; background: transparent; border-bottom: 2px solid transparent; color: var(--b3-theme-on-surface); opacity: 0.7; cursor: pointer; white-space: nowrap; font-size: 13px; outline: none; transition: all 0.2s;">未分组</button>
+                    <button class="stats-tab-btn" data-tab="group-ungrouped" style="padding: 6px 12px; border: none; background: transparent; border-bottom: 2px solid transparent; color: var(--b3-theme-on-surface); opacity: 0.7; cursor: pointer; white-space: nowrap; font-size: 13px; outline: none; transition: all 0.2s;">${i18n("ungrouped")}</button>
                 `;
 
                 const ungroupedStatsHtml = await calculateStatsAndRender(ungroupedReminderData);
@@ -483,11 +483,11 @@ export async function showStatsDialogForProjects(plugin: any, titleIcon: string,
             });
         }
     } catch (error) {
-        console.error("计算统计数据出错:", error);
+        console.error("Error calculating statistics:", error);
         bodyEl.innerHTML = `
             <div style="color:var(--b3-theme-error); display:flex; flex-direction:column; align-items:center; gap:8px;">
                 <span style="font-size: 24px;">⚠️</span>
-                <span>加载统计数据失败</span>
+                <span>${i18n("loadStatsFailed")}</span>
             </div>
         `;
     }

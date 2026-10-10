@@ -140,7 +140,7 @@ export async function isTaskListLikeBlock(blockId: string): Promise<boolean> {
         return /^\s*[-*+]\s*(?:\{:[^}]*\}\s*)?\[(?: |x|X)\]/m.test(kramdown)
             || /^\s*[-*+]\s*\[(?: |x|X)\](?:\s*\{:[^}]*\})?/m.test(kramdown);
     } catch (error) {
-        console.warn('检测任务列表块失败:', error);
+        console.warn("Failed to detect task list block:", error);
         return false;
     }
 }
@@ -185,7 +185,7 @@ async function syncTaskListBlockCompletion(blockId: string, reminders: any[], sy
                 marker: getTaskListMarkerByReminders(reminders, syncDoingAndAbandoned)
             }]);
         } catch (err) {
-            console.warn('同步任务列表块标记失败:', blockId, err);
+            console.warn("Failed to sync task list block marker:", blockId, err);
         }
         return;
     }
@@ -202,7 +202,7 @@ async function syncTaskListBlockCompletion(blockId: string, reminders: any[], sy
                         marker: getTaskListMarkerByReminders(reminders, syncDoingAndAbandoned)
                     }]);
                 } catch (err) {
-                    console.warn('同步子任务列表块标记失败:', child.id, err);
+                    console.warn("Failed to sync subtask list block marker:", child.id, err);
                 }
             }
         }
@@ -272,7 +272,7 @@ export async function updateBindBlockAtrrs(blockId: string, bridge: any): Promis
                         cleanupAttrs['custom-task-pomodoro-minutes'] = ownMinutes > 0 ? String(ownMinutes) : '';
                     }
                 } catch (pomoErr) {
-                    console.warn('清理块属性计算块自有番茄失败:', blockId, pomoErr);
+                    console.warn("Failed to clear block attributes and calculate own pomodoros:", blockId, pomoErr);
                 }
 
                 await setBlockAttrs(blockId, cleanupAttrs);
@@ -361,7 +361,7 @@ export async function updateBindBlockAtrrs(blockId: string, bridge: any): Promis
                 attrs['custom-task-pomodoro-minutes'] = totalPomoMinutes > 0 ? String(totalPomoMinutes) : '';
             }
         } catch (pomoErr) {
-            console.warn('计算/更新块番茄属性失败:', blockId, pomoErr);
+            console.warn("Failed to calculate/update block pomodoro attributes:", blockId, pomoErr);
         }
 
         await setBlockAttrs(blockId, attrs);
@@ -371,10 +371,10 @@ export async function updateBindBlockAtrrs(blockId: string, bridge: any): Promis
             const syncDoingAndAbandoned = settings?.enableTaskListStatusSync !== false;
             await syncTaskListBlockCompletion(blockId, blockReminders as any[], syncDoingAndAbandoned);
         } catch (syncErr) {
-            console.warn('同步任务列表块勾选状态失败:', blockId, syncErr);
+            console.warn("Failed to sync task list block check state:", blockId, syncErr);
         }
 
     } catch (error) {
-        console.error('更新块提醒书签失败:', error);
+        console.error("Failed to update block reminder bookmark:", error);
     }
 }

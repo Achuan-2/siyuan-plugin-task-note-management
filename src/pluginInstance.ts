@@ -1,3 +1,6 @@
+import zhCN from "../i18n/zh_CN.json";
+import en from "../i18n/en.json";
+
 let pluginInstance: any = null;
 
 // 设置插件实例的引用
@@ -11,43 +14,17 @@ export function getPluginInstance(): any {
 
 
 export function i18n(key: string, params?: { [key: string]: string }): string {
-    // 首先尝试从插件实例获取i18n数据
-    let i18nData = null;
-
-    if (pluginInstance && pluginInstance.i18n) {
-        i18nData = pluginInstance.i18n;
-    }
-
-    // 如果插件实例不可用，尝试从全局获取
-    if (!i18nData) {
-        try {
-            const { i18n } = require('siyuan');
-            i18nData = i18n;
-        } catch (error) {
-            console.warn('无法获取i18n对象:', error);
-        }
-    }
-
-    // 如果仍然没有i18n数据，返回空
-    if (!i18nData || typeof i18nData !== 'object') {
-        console.warn('i18n数据不可用，使用key作为后备:', key);
+    // 模块初始化和插件热重载期间实例可能尚未设置，使用当前思源语言的内置词典兜底。
+    const language = typeof window === 'undefined' ? 'zh_CN' : (window as any).siyuan?.config?.lang || 'zh_CN';
+    const bundled: Record<string, string> = /^zh(?:[-_]|$)/i.test(language) ? zhCN : en;
+    const hostText = pluginInstance?.i18n?.[key];
+    const text = typeof hostText === 'string' && hostText ? hostText : bundled[key];
+    if (typeof text !== 'string') {
+        console.warn("Translation not found:", key);
         return '';
     }
-
-    let text = i18nData[key];
-
-    // 如果没有找到对应的翻译文本,返回为空
-    if (typeof text !== 'string') {
-        console.warn('未找到翻译文本:', key);
-        text = '';
-    }
-
-    // 处理参数替换
-    if (params && typeof text === 'string') {
-        Object.keys(params).forEach(param => {
-            text = text.replace(new RegExp(`\\$\\{${param}\\}`, 'g'), params[param]);
-        });
-    }
-
-    return text;
+    // 回调替换保留用户文本中的 $&、$' 等字符，也避免参数之间发生二次替换。
+    return params ? text.replace(/\$\{([^}]+)\}/g, (placeholder, param) =>
+        Object.prototype.hasOwnProperty.call(params, param) ? params[param] : placeholder
+    ) : text;
 }

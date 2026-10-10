@@ -386,7 +386,7 @@ export class ProjectPanel {
                 }
             `;
         } catch (error) {
-            console.warn('注入项目状态分组头样式失败:', error);
+            console.warn("Failed to inject project status group header styles:", error);
         }
 
         // 标题部分
@@ -685,7 +685,7 @@ export class ProjectPanel {
             });
 
         } catch (error) {
-            console.error('渲染状态过滤器失败:', error);
+            console.error("Failed to render status filter:", error);
             this.filterSelect.innerHTML = `<option value="all">${i18n("allProjects") || "全部项目"}</option>`;
         }
     }
@@ -797,7 +797,7 @@ export class ProjectPanel {
                         await this.savePanelSettings();
                         this.loadProjects();
                     } catch (error) {
-                        console.error('保存项目排序配置失败:', error);
+                        console.error("Failed to save project sort configuration:", error);
                     }
                 },
                 onChange: async (criteria) => {
@@ -808,13 +808,13 @@ export class ProjectPanel {
                         await this.savePanelSettings();
                         this.loadProjects();
                     } catch (error) {
-                        console.error('实时更新项目排序配置失败:', error);
+                        console.error("Failed to update project sort configuration in real time:", error);
                     }
                 }
             });
             dialog.show();
         } catch (error) {
-            console.error('显示排序菜单失败:', error);
+            console.error("Failed to show sort menu:", error);
         }
     }
 
@@ -901,7 +901,7 @@ export class ProjectPanel {
             try {
                 this.reminderDataCache = await getAllReminders(this.plugin, undefined, false);
             } catch (err) {
-                console.warn('读取提醒数据失败，计数将异步回退：', err);
+                console.warn("Failed to read reminder data; counting will fall back asynchronously:", err);
                 this.reminderDataCache = null;
             }
 
@@ -924,8 +924,8 @@ export class ProjectPanel {
             this.renderProjects(displayProjects);
 
         } catch (error) {
-            console.error('加载项目失败:', error);
-            showMessage("加载项目失败");
+            console.error("Failed to load projects:", error);
+            showMessage(i18n("loadProjectFailed"));
         }
     }
 
@@ -1298,7 +1298,7 @@ export class ProjectPanel {
         // 添加番茄钟总数显示
         const pomodoroCountEl = document.createElement('span');
         pomodoroCountEl.className = 'project-count project-count--pomodoro';
-        pomodoroCountEl.textContent = '🍅 总计: ...';
+        pomodoroCountEl.textContent = i18n("projectPomodoroLoading");
         pomodoroCountEl.style.cssText = `
             font-size: 12px;
             color: var(--b3-theme-on-surface);
@@ -1363,7 +1363,7 @@ export class ProjectPanel {
 
         // 异步填充计数（使用缓存或实时读取），并同时更新进度条
         this.fillProjectTopLevelCounts(project.id, dynamicCountsWrapper, pomodoroCountEl, progressBarInner, progressText).catch(err => {
-            console.warn('填充项目任务计数失败:', err);
+            console.warn("Failed to populate project task counts:", err);
         });
         // 分类显示
         if (project.categoryId) {
@@ -1495,7 +1495,7 @@ export class ProjectPanel {
                     return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
                 };
                 const focusText = totalFocus > 0 ? ` ⏱ ${formatMinutesToString(totalFocus)}` : '';
-                pomodoroEl.textContent = `🍅 总计: ${totalPomodoro}${focusText}`;
+                pomodoroEl.textContent = i18n("projectPomodoroTotal", { count: String(totalPomodoro), focus: String(focusText) });
             }
 
             // 计算进度： done / (sum of non-completed statuses + done)
@@ -1507,7 +1507,7 @@ export class ProjectPanel {
                 progressText.textContent = `${percent}%`;
             }
         } catch (error) {
-            console.error('获取项目顶级任务计数失败:', error);
+            console.error("Failed to get project top-level task count:", error);
             // on error, show placeholders
             if (dynamicWrapper) dynamicWrapper.innerHTML = `
                 <span class="project-count project-count--doing">${i18n("doing") || '进行中'}: ?</span>
@@ -1515,7 +1515,7 @@ export class ProjectPanel {
                 <span class="project-count project-count--long-term">${i18n("longTerm") || '长期'}: ?</span>
                 <span class="project-count project-count--done">${i18n("done") || '已完成'}: ?</span>
             `;
-            if (pomodoroEl) pomodoroEl.textContent = `🍅 总计: ?`;
+            if (pomodoroEl) pomodoroEl.textContent = i18n("projectPomodoroUnknown");
             if (progressBarInner && progressText) {
                 progressBarInner.style.width = `0%`;
                 progressText.textContent = `0%`;
@@ -1607,7 +1607,7 @@ export class ProjectPanel {
                 }
             }
         } catch (e) {
-            console.warn('计算项目总番茄数失败，回退到直接累加:', e);
+            console.warn("Failed to calculate project total pomodoros; using direct sum:", e);
             // Fallback: sum per-event pomodoroCount provided in reminder data (if any)
             allReminders.forEach((r: any) => {
                 if (!r || typeof r !== 'object') return;
@@ -1650,7 +1650,7 @@ export class ProjectPanel {
                 }
             }
         } catch (e) {
-            console.warn('计算项目总专注时长失败:', e);
+            console.warn("Failed to calculate project total focus duration:", e);
         }
         return totalMinutes;
     }
@@ -1798,12 +1798,12 @@ export class ProjectPanel {
 
             await this.reorderProjects(draggedProject, targetProject, insertBefore);
 
-            showMessage("排序已更新");
+            showMessage(i18n("sortUpdated"));
             this.loadProjects(); // 重新加载以应用新排序
 
         } catch (error) {
-            console.error('处理拖放失败:', error);
-            showMessage("排序更新失败");
+            console.error("Failed to handle drop:", error);
+            showMessage(i18n("sortUpdateFailed"));
         }
     }
 
@@ -1877,7 +1877,7 @@ export class ProjectPanel {
             window.dispatchEvent(new CustomEvent('projectUpdated'));
 
         } catch (error) {
-            console.error('重新排序项目失败:', error);
+            console.error("Failed to reorder projects:", error);
             throw error;
         }
     }
@@ -1981,7 +1981,7 @@ export class ProjectPanel {
             timeStr += ` → ${endStr}`;
         }
 
-        return timeStr || '📅 无日期';
+        return timeStr || i18n("noDateWithIcon");
     }
 
     // 新增：创建已开始天数元素
@@ -2213,7 +2213,7 @@ export class ProjectPanel {
                         item.submenu = [
                             {
                                 iconHTML: folder.icon || "📁",
-                                label: "选择此文件夹",
+                                label: i18n("selectThisFolder"),
                                 current: currentFolderId === folder.id,
                                 click: () => {
                                     this.moveProjectToFolder(project.id, folder.id);
@@ -2287,7 +2287,7 @@ export class ProjectPanel {
             await platformUtils.writeText(blockRef);
             showMessage(i18n("blockRefCopied") || "块引用已复制到剪贴板");
         } catch (error) {
-            console.error('复制块引用失败:', error);
+            console.error("Failed to copy block reference:", error);
             showMessage(i18n("copyBlockRefFailed") || i18n("copyFailed") || "复制块引用失败");
         }
     }
@@ -2296,7 +2296,7 @@ export class ProjectPanel {
         try {
             const projectId = String(project?.id || '').trim();
             if (!projectId || !this.plugin?.name) {
-                throw new Error('缺少项目 ID 或插件名称');
+                throw new Error(i18n("projectIdOrPluginMissing"));
             }
 
             const title = String(project?.title || i18n("unnamedProject") || '未命名项目')
@@ -2312,7 +2312,7 @@ export class ProjectPanel {
             await platformUtils.writeText(`[${linkText}](${url.href})`);
             showMessage(i18n("projectKanbanMarkdownLinkCopied") || "项目看板 Markdown 链接已复制到剪贴板");
         } catch (error) {
-            console.error('复制项目看板 Markdown 链接失败:', error);
+            console.error("Failed to copy project kanban Markdown link:", error);
             showMessage(i18n("copyProjectKanbanMarkdownLinkFailed") || i18n("copyFailed") || "复制项目看板 Markdown 链接失败");
         }
     }
@@ -2332,7 +2332,7 @@ export class ProjectPanel {
 
             let html = `
                 <div class="b3-dialog__content" style="display:flex; flex-direction:column; gap:8px; overflow:visible;">
-                    <label>目标项目</label>
+                    <label>${i18n("targetProjectLabel")}</label>
                     <div class="custom-select" id="mergeProjectSelectCustom" style="position: relative;">
                         <div style="position: relative;">
                             <input type="text" id="mergeProjectSearchInput" class="b3-text-field" placeholder="${i18n("searchProject") || '搜索项目'}" autocomplete="off" style="width: 100%; padding-right: 30px; background: var(--b3-select-background);" spellcheck="false">
@@ -2343,9 +2343,9 @@ export class ProjectPanel {
                         </div>
                     </div>
 
-                    <label>目标分组（可选，选择"新建分组"可输入新名称）</label>
+                    <label>${i18n("targetGroupOptionalLabel")}</label>
                     <select id="mergeGroupSelect" style="width:100%; padding:6px;" class="b3-select"></select>
-                    <input id="mergeNewGroupInput" class="b3-text-field" type="text" placeholder="新分组名称" style="display:none; padding:6px;" />
+                    <input id="mergeNewGroupInput" class="b3-text-field" type="text" placeholder="${i18n("newGroupNamePlaceholder")}" style="display:none; padding:6px;" />
 
                     <label style="display:flex; align-items:center; gap:8px;"><input id="mergeDeleteSource" type="checkbox" class="b3-switch"/> ${i18n("deleteSourceProjectAfterMerge") || '合并后删除源项目'}</label>
                 </div>
@@ -2405,7 +2405,7 @@ export class ProjectPanel {
                             groupSelect.appendChild(o);
                         });
                     } catch (e) {
-                        console.error('加载目标自定义分组失败:', e);
+                        console.error("Failed to load target custom groups:", e);
                     }
                 }
             };
@@ -2475,7 +2475,7 @@ export class ProjectPanel {
             });
 
         } catch (error) {
-            console.error('显示合并对话框失败:', error);
+            console.error("Failed to show merge dialog:", error);
             showMessage(i18n("showMergeDialogFailed") || '显示合并对话框失败');
         }
     }
@@ -2545,7 +2545,7 @@ export class ProjectPanel {
             this.loadProjects();
 
         } catch (error) {
-            console.error('合并项目失败:', error);
+            console.error("Failed to merge projects:", error);
             showMessage(i18n("mergeFailed") || '合并失败');
         }
     }
@@ -2564,7 +2564,7 @@ export class ProjectPanel {
                 showMessage(i18n("projectNotExist") || "项目不存在");
             }
         } catch (error) {
-            console.error('设置优先级失败:', error);
+            console.error("Failed to set priority:", error);
             showMessage(i18n("setPriorityFailed") || "操作失败");
         }
     }
@@ -2587,7 +2587,7 @@ export class ProjectPanel {
                 showMessage(i18n("projectNotExist") || "项目不存在");
             }
         } catch (error) {
-            console.error('设置分类失败:', error);
+            console.error("Failed to set category:", error);
             showMessage(i18n("setCategoryFailed") || "操作失败");
         }
     }
@@ -2611,7 +2611,7 @@ export class ProjectPanel {
                 showMessage(i18n("projectNotExist") || "项目不存在");
             }
         } catch (error) {
-            console.error('设置状态失败:', error);
+            console.error("Failed to set status:", error);
             showMessage(i18n("setStatusFailed") || "操作失败");
         }
     }
@@ -2659,7 +2659,7 @@ export class ProjectPanel {
                 }
             );
         } catch (error) {
-            console.error('检查项目任务失败:', error);
+            console.error("Failed to check project tasks:", error);
             showMessage(i18n("deleteProjectFailed") || "删除项目失败");
         }
     }
@@ -2714,7 +2714,7 @@ export class ProjectPanel {
             // 重新加载项目列表
             this.loadProjects();
         } catch (error) {
-            console.error('删除项目失败:', error);
+            console.error("Failed to delete project:", error);
             showMessage(i18n("deleteProjectFailed") || "删除项目失败");
         }
     }
@@ -2724,7 +2724,7 @@ export class ProjectPanel {
 
             openBlock(blockId);
         } catch (error) {
-            console.error('打开项目失败:', error);
+            console.error("Failed to open project:", error);
             confirm(
                 i18n("openNoteFailed") || "打开项目失败",
                 i18n("noteBlockDeleted") || "项目文档可能已被删除，是否删除相关的项目记录？",
@@ -2758,7 +2758,7 @@ export class ProjectPanel {
                 showMessage(i18n("projectNotExist") || "项目记录不存在");
             }
         } catch (error) {
-            console.error('删除项目记录失败:', error);
+            console.error("Failed to delete project record:", error);
             showMessage(i18n("deleteProjectFailed") || "删除项目记录失败");
         }
     }
@@ -2776,7 +2776,7 @@ export class ProjectPanel {
                 }
             });
         } catch (error) {
-            console.error('关闭项目看板标签页失败:', error);
+            console.error("Failed to close project kanban tab:", error);
         }
     }
 
@@ -2807,7 +2807,7 @@ export class ProjectPanel {
             window.dispatchEvent(new CustomEvent('projectUpdated'));
         });
         globalStatusDialog.show().catch((error) => {
-            console.error('打开全局项目状态设置失败:', error);
+            console.error("Failed to open global project status settings:", error);
             showMessage(i18n('openModifyDialogFailed') || '打开配置对话框失败');
         });
     }
@@ -2817,8 +2817,8 @@ export class ProjectPanel {
             // 打开项目看板Tab
             this.plugin.openProjectKanbanTab(project.id, project.title);
         } catch (error) {
-            console.error('打开项目看板失败:', error);
-            showMessage("打开项目看板失败");
+            console.error("Failed to open project kanban:", error);
+            showMessage(i18n("openProjectKanbanFailed"));
         }
     }
 
@@ -2848,8 +2848,8 @@ export class ProjectPanel {
                 hideMoreButton: true
             });
         } catch (error) {
-            console.error('打开项目文件夹看板失败:', error);
-            showMessage("打开项目看板失败");
+            console.error("Failed to open project folder kanban:", error);
+            showMessage(i18n("openProjectKanbanFailed"));
         }
     }
 
@@ -2883,7 +2883,7 @@ export class ProjectPanel {
                 this.loadProjects();
             }
         } catch (error) {
-            console.error('绑定项目到块失败:', error);
+            console.error("Failed to bind project to block:", error);
             throw error;
         }
     }
@@ -2894,11 +2894,11 @@ export class ProjectPanel {
             if (this.plugin) {
                 this.plugin.openEisenhowerMatrixTab();
             } else {
-                showMessage("插件实例不可用");
+                showMessage(i18n("pluginInstanceUnavailable"));
             }
         } catch (error) {
-            console.error('打开四象限面板失败:', error);
-            showMessage("打开四象限面板失败");
+            console.error("Failed to open Eisenhower matrix panel:", error);
+            showMessage(i18n("openMatrixFailed"));
         }
     }
 
@@ -2955,7 +2955,7 @@ export class ProjectPanel {
                             console.warn('plugin.openSetting is not available');
                         }
                     } catch (err) {
-                        console.error('打开插件设置失败:', err);
+                        console.error("Failed to open plugin settings:", err);
                     }
                 }
             });
@@ -2982,7 +2982,7 @@ export class ProjectPanel {
                 });
             }
         } catch (error) {
-            console.error('显示更多菜单失败:', error);
+            console.error("Failed to show more menu:", error);
         }
     }
 
@@ -2995,8 +2995,8 @@ export class ProjectPanel {
             const initialTab = lastMode === 'habit' ? 'pomodoro' : lastMode;
             showStatsDialog(this.plugin, initialTab);
         } catch (error) {
-            console.error('打开番茄钟统计视图失败:', error);
-            showMessage("打开番茄钟统计视图失败");
+            console.error("Failed to open pomodoro statistics view:", error);
+            showMessage(i18n("openPomodoroStatsFailed"));
         }
     }
 
@@ -3156,7 +3156,7 @@ export class ProjectPanel {
             this.selectedCategories = settings.projectPanelSelectedCategories || [];
             this.currentViewMode = settings.projectPanelViewMode || 'card';
         } catch (error) {
-            console.error('恢复项目面板设置失败:', error);
+            console.error("Failed to restore project panel settings:", error);
         }
     }
 
@@ -3174,7 +3174,7 @@ export class ProjectPanel {
             settings.projectPanelViewMode = this.currentViewMode;
             await this.plugin.saveSettings(settings);
         } catch (error) {
-            console.error('保存项目面板设置失败:', error);
+            console.error("Failed to save project panel settings:", error);
         }
     }
 
@@ -3605,7 +3605,7 @@ export class ProjectPanel {
                 showMessage(i18n("reminderSaved") || "项目保存成功");
             }
         } catch (error) {
-            console.error('移动项目到文件夹失败:', error);
+            console.error("Failed to move project to folder:", error);
             showMessage(i18n("saveReminderFailed") || "保存项目失败");
         }
     }
@@ -3622,7 +3622,7 @@ export class ProjectPanel {
             showMessage(i18n("reminderSaved") || "排序已更新");
             this.loadProjects(); // 重新加载以应用新排序并渲染
         } catch (error) {
-            console.error('处理文件夹拖放失败:', error);
+            console.error("Failed to handle folder drop:", error);
             showMessage(i18n("saveReminderFailed") || "排序更新失败");
         }
     }
@@ -3632,7 +3632,7 @@ export class ProjectPanel {
             const folderManager = ProjectFolderManager.getInstance(this.plugin);
             await folderManager.moveFolder(draggedFolder.id, targetFolder.parentId || '', targetFolder.id, insertBefore);
         } catch (error) {
-            console.error('重新排序文件夹失败:', error);
+            console.error("Failed to reorder folders:", error);
             throw error;
         }
     }
@@ -3820,7 +3820,7 @@ export class ProjectPanel {
         } else if (project.startDate) {
             dateText = `🗓️${project.startDate}`;
         } else if (project.endDate) {
-            dateText = `🗓️截止:${project.endDate}`;
+            dateText = i18n("projectDeadlineWithIcon", { date: String(project.endDate) });
         }
 
         if (dateText) {
@@ -3980,7 +3980,7 @@ export class ProjectPanel {
 
         menu.addItem({
             icon: "iconFolder",
-            label: "新建子文件夹",
+            label: i18n("newSubfolder"),
             click: () => this.showQuickAddFolderDialog(folder.id)
         });
 
@@ -4020,7 +4020,7 @@ export class ProjectPanel {
                             <input type="text" id="folderNameInput" class="b3-text-field" value="${this.escapeHTML(folder.name || '')}" placeholder="${i18n("pleaseEnterFolderName") || "请输入文件夹名称"}">
                         </div>
                         <div class="b3-form__group">
-                            <label class="b3-form__label">上级文件夹</label>
+                            <label class="b3-form__label">${i18n("parentFolderLabel")}</label>
                             <select id="folderParentSelect" class="b3-select" style="width: 100%;">
                                 ${this.createFolderParentOptions(folder, folder.parentId || '')}
                             </select>
@@ -4094,7 +4094,7 @@ export class ProjectPanel {
                 editDialog.destroy();
                 window.dispatchEvent(new CustomEvent('projectUpdated'));
             } catch (error) {
-                console.error('保存文件夹失败:', error);
+                console.error("Failed to save folders:", error);
                 showMessage(i18n("saveFolderFailed") || "保存文件夹失败");
             }
         });
@@ -4115,7 +4115,7 @@ export class ProjectPanel {
         }
 
         const options = [
-            `<option value="" ${selectedParentId === '' ? 'selected' : ''}>无上级文件夹</option>`
+            `<option value="" ${selectedParentId === '' ? 'selected' : ''}>${i18n("noParentFolder")}</option>`
         ];
 
         folders
@@ -4140,7 +4140,7 @@ export class ProjectPanel {
                     showMessage(i18n("folderDeleted") || "文件夹已删除");
                     window.dispatchEvent(new CustomEvent('projectUpdated'));
                 } catch (error) {
-                    console.error('删除文件夹失败', error);
+                    console.error("Failed to delete folder", error);
                     showMessage(i18n("deleteFolderFailed") || "删除文件夹失败");
                 }
             }
@@ -4149,7 +4149,7 @@ export class ProjectPanel {
 
     private showQuickAddFolderDialog(parentId: string = '') {
         const editDialog = new Dialog({
-            title: parentId ? "新建子文件夹" : (i18n("addFolder") || "新建文件夹"),
+            title: parentId ? i18n("newSubfolder") : (i18n("addFolder") || "新建文件夹"),
             content: `
                 <div class="folder-edit-dialog">
                     <div class="b3-dialog__content">
@@ -4158,7 +4158,7 @@ export class ProjectPanel {
                             <input type="text" id="folderNameInput" class="b3-text-field" placeholder="${i18n("pleaseEnterFolderName") || "请输入文件夹名称"}">
                         </div>
                         <div class="b3-form__group">
-                            <label class="b3-form__label">上级文件夹</label>
+                            <label class="b3-form__label">${i18n("parentFolderLabel")}</label>
                             <select id="folderParentSelect" class="b3-select" style="width: 100%;">
                                 ${this.createFolderParentOptions(undefined, parentId)}
                             </select>
@@ -4232,7 +4232,7 @@ export class ProjectPanel {
                 editDialog.destroy();
                 window.dispatchEvent(new CustomEvent('projectUpdated'));
             } catch (error) {
-                console.error('保存文件夹失败:', error);
+                console.error("Failed to save folders:", error);
                 showMessage(i18n("saveFolderFailed") || "保存文件夹失败");
             }
         });
@@ -4382,7 +4382,7 @@ export class ProjectPanel {
                     .replace('${project}', projectTitle)
             );
         } catch (error) {
-            console.error('拖拽任务改项目失败:', error);
+            console.error("Failed to change task project by dragging:", error);
             showMessage(i18n('operationFailed') || '操作失败');
         }
     }

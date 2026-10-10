@@ -1,5 +1,9 @@
 export type HabitGoalType = "count" | "pomodoro" | "either";
 
+// 自动打卡的来源标识已写入历史记录，必须固定，不能随界面语言翻译。
+export const POMODORO_TARGET_AUTO_CHECKIN_MEANING = "番茄达标自动补录";
+export const POMODORO_PER_SESSION_AUTO_CHECKIN_MEANING = "自动番茄打卡";
+
 export type HabitFrequencyType = "daily" | "weekly" | "monthly" | "yearly" | "ebbinghaus" | "custom";
 
 export type HabitMemoSyncMode = "none" | "checkin" | "note";

@@ -1,3 +1,4 @@
+import { i18n } from "../pluginInstance";
 /*
  * Copyright (c) 2024 by [author]. All Rights Reserved.
  * @Author       : [author]
@@ -56,8 +57,8 @@ export async function parseIcsFile(icsContent: string): Promise<ParsedIcsEvent[]
 
         return events;
     } catch (error) {
-        console.error('解析ICS文件失败:', error);
-        throw new Error('解析ICS文件失败: ' + (error.message || error));
+        console.error("Failed to parse ICS file:", error);
+        throw new Error(i18n("icsParseFailedPrefix") + (error.message || error));
     }
 }
 
@@ -124,15 +125,15 @@ function parseIcalEvent(vevent: ICAL.Component): ParsedIcsEvent | null {
                         const dateMatch = valueStr.match(/^(\d{4}-\d{2}-\d{2})/);
                         if (dateMatch) {
                             parsedEvent.date = dateMatch[1];
-                            console.warn('从错误格式中提取日期:', dateMatch[1]);
+                            console.warn("Extracted date from malformed input:", dateMatch[1]);
                         } else {
-                            console.warn('无法解析为 ICAL.Time，使用原始值:', valueStr);
+                            console.warn("Cannot parse as ICAL.Time; using original value:", valueStr);
                         }
                     }
                 }
             }
         } catch (e) {
-            console.warn('解析开始时间失败:', e);
+            console.warn("Failed to parse start time:", e);
         }
 
         // 结束时间 - 先获取原始属性，避免自动解析错误
@@ -194,15 +195,15 @@ function parseIcalEvent(vevent: ICAL.Component): ParsedIcsEvent | null {
                             const date = new Date(dateMatch[1]);
                             date.setDate(date.getDate() - 1);
                             parsedEvent.endDate = formatDate(date);
-                            console.warn('从错误格式中提取结束日期:', parsedEvent.endDate);
+                            console.warn("Extracted end date from malformed input:", parsedEvent.endDate);
                         } else {
-                            console.warn('无法解析为 ICAL.Time，使用原始值:', valueStr);
+                            console.warn("Cannot parse as ICAL.Time; using original value:", valueStr);
                         }
                     }
                 }
             }
         } catch (e) {
-            console.warn('解析结束时间失败:', e);
+            console.warn("Failed to parse end time:", e);
         }
 
         // 状态
@@ -227,7 +228,7 @@ function parseIcalEvent(vevent: ICAL.Component): ParsedIcsEvent | null {
 
         return parsedEvent;
     } catch (error) {
-        console.error('解析事件失败:', error);
+        console.error("Failed to parse event:", error);
         return null;
     }
 }
@@ -383,7 +384,7 @@ function parseIcalRRule(rrule: ICAL.Recur): any {
 
         return repeat;
     } catch (error) {
-        console.error('解析RRULE失败:', error);
+        console.error("Failed to parse RRULE:", error);
         return null;
     }
 }
@@ -411,7 +412,7 @@ export async function resolveDefaultKanbanStatus(
         // 只有固定状态，放入进行中
         return 'doing';
     } catch (error) {
-        console.warn('resolveDefaultKanbanStatus 失败，使用 doing:', error);
+        console.warn("resolveDefaultKanbanStatus failed; using doing:", error);
         return 'doing';
     }
 }
@@ -506,7 +507,7 @@ export async function importIcsFile(
         const events = await parseIcsFile(icsContent);
 
         if (events.length === 0) {
-            await pushErrMsg('ICS文件中没有找到有效的事件');
+            await pushErrMsg(i18n("noValidEvents"));
             return { added: 0, updated: 0, total: 0 };
         }
 
@@ -525,7 +526,7 @@ export async function importIcsFile(
         // 6. 触发更新事件
         window.dispatchEvent(new CustomEvent('reminderUpdated'));
 
-        await pushMsg(`ICS导入成功：新增 ${stats.added} 个，更新 ${stats.updated} 个，共 ${stats.total} 个事件`);
+        await pushMsg(i18n("icsImportStats", { added: String(stats.added), updated: String(stats.updated), total: String(stats.total) }));
 
         return {
             added: stats.added,
@@ -533,8 +534,8 @@ export async function importIcsFile(
             total: stats.total,
         };
     } catch (error) {
-        console.error('导入ICS文件失败:', error);
-        await pushErrMsg('导入ICS文件失败: ' + (error.message || error));
+        console.error("Failed to import ICS file:", error);
+        await pushErrMsg(i18n("icsImportFailedPrefix") + (error.message || error));
         throw error;
     }
 }

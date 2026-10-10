@@ -96,7 +96,7 @@ export class HabitEditDialog {
                 overflow: hidden;
             `;
             iconBtn.textContent = this.habit?.icon || '🌱';
-            iconBtn.classList.add('ariaLabel'); iconBtn.setAttribute('aria-label', '点击选择图标');
+            iconBtn.classList.add('ariaLabel'); iconBtn.setAttribute('aria-label', i18n("chooseHabitIcon"));
             iconBtn.addEventListener('click', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -181,7 +181,7 @@ export class HabitEditDialog {
         countTargetInput.style.cssText = 'width: 120px;';
         countTargetInput.value = String(initialGoalType === 'pomodoro' ? 1 : Math.max(1, this.habit?.target || 1));
         const countTargetSuffix = document.createElement('span');
-        countTargetSuffix.textContent = '次';
+        countTargetSuffix.textContent = i18n("times");
         countTargetWrap.appendChild(countTargetInput);
         countTargetWrap.appendChild(countTargetSuffix);
         goalGroup.appendChild(countTargetWrap);
@@ -249,7 +249,7 @@ export class HabitEditDialog {
         // 新建习惯时，如果目标类型是番茄钟，默认勾选自动打卡
         autoCheckInCheckbox.checked = this.habit ? !!this.habit.autoCheckInAfterPomodoro : initialGoalType === 'pomodoro';
         const autoCheckInText = document.createElement('span');
-        autoCheckInText.textContent = '番茄完成后自动打卡';
+        autoCheckInText.textContent = i18n("autoCheckInAfterPomodoro");
         autoCheckInLabel.appendChild(autoCheckInCheckbox);
         autoCheckInLabel.appendChild(autoCheckInText);
 
@@ -286,15 +286,15 @@ export class HabitEditDialog {
         checkInButtonTypeRow.style.cssText = 'display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px;';
 
         const checkInButtonTypeLabel = document.createElement('span');
-        checkInButtonTypeLabel.textContent = '打卡按钮：';
+        checkInButtonTypeLabel.textContent = i18n("habitCheckInButtonLabel");
 
         const checkInButtonTypeSelect = document.createElement('select');
         checkInButtonTypeSelect.name = 'checkInButtonType';
         checkInButtonTypeSelect.className = 'b3-select';
         checkInButtonTypeSelect.style.cssText = 'min-width: 120px;';
         checkInButtonTypeSelect.innerHTML = `
-            <option value="pomodoro">🍅 番茄钟</option>
-            <option value="countup">⏱️ 正计时</option>
+            <option value="pomodoro">🍅 ${i18n("pomodoroTimerLabel")}</option>
+            <option value="countup">${i18n("pomodoroCountUpBadge")}</option>
         `;
         const initialButtonType = this.habit?.checkInButtonType || 'pomodoro';
         checkInButtonTypeSelect.value = initialButtonType;
@@ -459,7 +459,7 @@ export class HabitEditDialog {
         blockInput.name = 'blockId';
         blockInput.id = 'habitBlockInput';
         blockInput.className = 'b3-text-field';
-        blockInput.placeholder = '块或文档 ID（例如：(()) 或 siyuan://blocks/ID）';
+        blockInput.placeholder = i18n("habitBoundBlockPlaceholder");
         blockInput.value = this.habit?.blockId || '';
         blockInput.style.cssText = 'flex: 1;';
         blockInput.spellcheck = false;
@@ -586,10 +586,10 @@ export class HabitEditDialog {
 
         // initial preview if editing and block exists
         if (blockInput.value) {
-            this.updatePreviewForBlock(blockInput.value, blockPreview).catch(err => console.warn('初始化块预览失败', err));
+            this.updatePreviewForBlock(blockInput.value, blockPreview).catch(err => console.warn("Failed to initialize block preview", err));
         }
         if (habitMemoBlockInput.value) {
-            this.updatePreviewForBlock(habitMemoBlockInput.value, habitMemoBlockPreview).catch(err => console.warn('初始化习惯备注同步块预览失败', err));
+            this.updatePreviewForBlock(habitMemoBlockInput.value, habitMemoBlockPreview).catch(err => console.warn("Failed to initialize habit note sync block preview", err));
         }
 
         // 按钮
@@ -715,12 +715,12 @@ export class HabitEditDialog {
                         copiedText = `((${blockId} '${blockTitle.replace(/'/g, "\\'")}'))`;
                     }
                 } catch (innerError) {
-                    console.warn('构造块引用文案失败，使用纯块引用格式', innerError);
+                    console.warn("Failed to build block reference text; using plain block reference format", innerError);
                 }
                 await platformUtils.writeText(copiedText);
                 showMessage(i18n("copiedBlockRef") || i18n("copySuccess"));
             } catch (error) {
-                console.error('复制块引用失败:', error);
+                console.error("Failed to copy block reference:", error);
                 showMessage(i18n("copyFailed"), 3000, 'error');
             }
         });
@@ -739,7 +739,7 @@ export class HabitEditDialog {
                 habitMemoBlockPreview.textContent = '';
             } else if (habitMemoBlockInput.value.trim()) {
                 const id = this.extractBlockId(habitMemoBlockInput.value.trim()) || habitMemoBlockInput.value.trim();
-                this.updatePreviewForBlock(id, habitMemoBlockPreview).catch(err => console.warn('更新习惯备注同步块预览失败', err));
+                this.updatePreviewForBlock(id, habitMemoBlockPreview).catch(err => console.warn("Failed to update habit note sync block preview", err));
             }
         };
 
@@ -880,7 +880,7 @@ export class HabitEditDialog {
                 textEl.textContent = i18n("viewPomodoros");
             }
         } catch (error) {
-            console.warn('更新习惯番茄钟统计失败:', error);
+            console.warn("Failed to update habit pomodoro statistics:", error);
             textEl.textContent = i18n("viewPomodoros");
         }
     }
@@ -1013,7 +1013,7 @@ export class HabitEditDialog {
         yearlyDateInput.type = 'text';
         yearlyDateInput.name = 'yearlyDate';
         yearlyDateInput.className = 'b3-text-field';
-        yearlyDateInput.placeholder = '例如: 01-01 或 06-15';
+        yearlyDateInput.placeholder = i18n("habitYearlyDatePlaceholder");
         yearlyDateInput.style.cssText = 'width: 120px;';
 
         // 恢复已有的每年日期
@@ -1193,7 +1193,7 @@ export class HabitEditDialog {
         const pomodoroTotalMinutes = normalizedPomodoroHours * 60 + pomodoroTargetMinutes;
 
         if (hasPomodoroGoal && pomodoroTotalMinutes <= 0) {
-            showMessage('番茄目标时长需要大于 0 分钟', 3000, 'error');
+            showMessage(i18n("habitPomodoroDurationPositive"), 3000, 'error');
             return;
         }
 
@@ -1371,11 +1371,11 @@ export class HabitEditDialog {
                                 }
                             }
                         } catch (err) {
-                            console.warn('调整当天 hasNotify 失败:', err);
+                            console.warn("Failed to adjust today's hasNotify:", err);
                         }
                     }
                 } catch (err) {
-                    console.warn('判断提醒时间是否晚于当前时间失败', err);
+                    console.warn("Failed to determine whether reminder time is in the future", err);
                 }
             }
         }
@@ -1431,7 +1431,7 @@ export class HabitEditDialog {
             showMessage(isNew ? i18n("habitCreateSuccess") : i18n("habitSaveSuccess"));
             this.dialog.destroy();
         } catch (error) {
-            console.error('保存习惯失败:', error);
+            console.error("Failed to save habit:", error);
             showMessage(i18n("habitSaveFailed"), 3000, 'error');
         }
     }
@@ -1506,7 +1506,7 @@ export class HabitEditDialog {
             refEl.style.cssText = 'cursor:pointer; color:var(--b3-protyle-inline-blockref-color); border-bottom:1px dashed var(--b3-protyle-inline-blockref-color); word-break:break-word;';
             previewEl.appendChild(refEl);
         } catch (err) {
-            console.error('获取块预览失败:', err);
+            console.error("Failed to get block preview:", err);
             previewEl.textContent = i18n("blockPreviewFailed");
         }
     }

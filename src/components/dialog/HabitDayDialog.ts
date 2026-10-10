@@ -1,6 +1,6 @@
 import { Dialog, showMessage, confirm } from "siyuan";
 import type { Habit, HabitEmojiConfig as HabitCheckInEmoji } from "../../utils/habitUtils";
-import { isHabitActiveOnDate, isHabitCheckInDayComplete, shouldCheckInOnDate } from "../../utils/habitUtils";
+import { isHabitActiveOnDate, isHabitCheckInDayComplete, shouldCheckInOnDate, POMODORO_PER_SESSION_AUTO_CHECKIN_MEANING } from "../../utils/habitUtils";
 import { getLocalDateString, getLocalDateTimeString, getLogicalDateString } from "../../utils/dateUtils";
 import { PomodoroRecordManager, type PomodoroSession } from "../dataManager/pomodoroRecord";
 import { i18n, getPluginInstance } from "../../pluginInstance";
@@ -77,7 +77,7 @@ export class HabitDayDialog {
                 this.weekStartDay = settings.weekStartDay;
             }
         } catch (error) {
-            console.warn("读取周起始日设置失败:", error);
+            console.warn("Failed to read week start setting:", error);
         }
         await this.render(contentContainer, actionContainer);
     }
@@ -312,7 +312,7 @@ export class HabitDayDialog {
             });
             return sessionsByDate;
         } catch (error) {
-            console.warn("加载习惯番茄记录失败:", error);
+            console.warn("Failed to load habit pomodoro records:", error);
             return new Map();
         }
     }
@@ -352,7 +352,7 @@ export class HabitDayDialog {
         const header = document.createElement("div");
         header.style.cssText = "display:flex; align-items:center; justify-content:space-between; gap:8px;";
         const title = document.createElement("div");
-        title.innerHTML = `<span style="font-weight:600;">✅ 当天习惯打卡记录</span>`;
+        title.innerHTML = `<span style="font-weight:600;">${i18n("dailyHabitRecordsTitle")}</span>`;
         header.appendChild(title);
 
         const addBtn = document.createElement("button");
@@ -456,7 +456,7 @@ export class HabitDayDialog {
         header.style.cssText = "display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px;";
         const title = document.createElement("div");
         title.style.cssText = "font-weight:600;";
-        title.textContent = "🍅 当天番茄记录";
+        title.textContent = i18n("habitDayPomodoroTitle");
         const addBtn = document.createElement("button");
         addBtn.className = "b3-button b3-button--outline";
         addBtn.textContent = i18n("addPomodoro") || "补录番茄钟";
@@ -468,8 +468,8 @@ export class HabitDayDialog {
         const summary = document.createElement("div");
         summary.style.cssText = "font-size:12px; color:var(--b3-theme-on-surface-light); margin-bottom:8px;";
         summary.textContent = sessions.length > 0
-            ? `共 ${totalCount} 个番茄（${this.formatMinutes(totalMinutes)}）`
-            : "当天暂无番茄记录";
+            ? i18n("dayPomodoroTotal", { count: String(totalCount), duration: String(this.formatMinutes(totalMinutes)) })
+            : i18n("noPomodoroForDay");
         section.appendChild(summary);
 
         if (sessions.length > 0) {
@@ -488,8 +488,8 @@ export class HabitDayDialog {
                 const sourceSpan = document.createElement("span");
                 sourceSpan.style.cssText = "font-size:11px; color:var(--b3-theme-on-surface-light);";
                 sourceSpan.textContent = item.source === "task"
-                    ? `任务绑定：${session.eventTitle || "未命名任务"}`
-                    : `习惯：${session.eventTitle || this.habit.title}`;
+                    ? i18n("taskBindingLabel", { title: String(session.eventTitle || i18n("unnamedTask")) })
+                    : i18n("habitNameLabel", { title: String(session.eventTitle || this.habit.title) });
                 left.appendChild(timeSpan);
                 left.appendChild(sourceSpan);
 
@@ -532,7 +532,7 @@ export class HabitDayDialog {
                 const settings = await this.plugin.loadSettings();
                 workDuration = settings.pomodoroWorkDuration || 25;
             } catch (error) {
-                console.warn("加载番茄设置失败，使用默认值", error);
+                console.warn("Failed to load pomodoro settings; using defaults", error);
             }
         }
 
@@ -647,7 +647,7 @@ export class HabitDayDialog {
                     try {
                         await this.onSave(this.habit);
                     } catch (error) {
-                        console.warn("刷新习惯视图失败:", error);
+                        console.warn("Failed to refresh habit view:", error);
                     }
                 }
                 const content = this.dialog.element.querySelector(".b3-dialog__content") as HTMLElement;
@@ -656,7 +656,7 @@ export class HabitDayDialog {
                 window.dispatchEvent(new CustomEvent("habitUpdated"));
                 window.dispatchEvent(new CustomEvent("reminderUpdated"));
             } catch (error) {
-                console.error("补录番茄钟失败:", error);
+                console.error("Failed to add past pomodoro record:", error);
                 showMessage("❌ " + (i18n("addPomodoroFailed") || "补录番茄钟失败"), 3000, "error");
             }
         });
@@ -672,7 +672,7 @@ export class HabitDayDialog {
         if (!emojiConfig) {
             emojiConfig = {
                 emoji: selectedEmoji,
-                meaning: "自动番茄打卡",
+                meaning: POMODORO_PER_SESSION_AUTO_CHECKIN_MEANING,
                 countsAsSuccess: true,
                 promptNote: false
             };
@@ -704,7 +704,7 @@ export class HabitDayDialog {
         const entry: HabitMemoCheckInEntry = {
             emoji: emojiConfig.emoji, 
             timestamp: now,
-            meaning: emojiConfig.meaning,
+            meaning: POMODORO_PER_SESSION_AUTO_CHECKIN_MEANING,
             group: (emojiConfig.group || '').trim() || undefined
         };
         await syncHabitMemoBlock({
@@ -727,7 +727,7 @@ export class HabitDayDialog {
             }
             return true;
         } catch (error) {
-            console.warn("自动番茄打卡保存失败:", error);
+            console.warn("Failed to save automatic pomodoro check-in:", error);
             return false;
         }
     }
@@ -802,7 +802,7 @@ export class HabitDayDialog {
                 });
 
                 if (!affectedDate) {
-                    showMessage("❌ 未找到番茄记录", 3000, "error");
+                    showMessage(i18n("pomodoroRecordMissingMessage"), 3000, "error");
                     return;
                 }
 
@@ -814,7 +814,7 @@ export class HabitDayDialog {
                 try {
                     await this.onSave(this.habit);
                 } catch (error) {
-                    console.warn("刷新习惯视图失败:", error);
+                    console.warn("Failed to refresh habit view:", error);
                 }
                 const content = this.dialog.element.querySelector(".b3-dialog__content") as HTMLElement;
                 const action = this.dialog.element.querySelector(".b3-dialog__action") as HTMLElement;
@@ -822,8 +822,8 @@ export class HabitDayDialog {
                 window.dispatchEvent(new CustomEvent("habitUpdated"));
                 window.dispatchEvent(new CustomEvent("reminderUpdated"));
             } catch (error) {
-                console.error("修改番茄时长失败:", error);
-                showMessage("❌ 修改番茄时长失败", 3000, "error");
+                console.error("Failed to modify pomodoro duration:", error);
+                showMessage(i18n("updatePomodoroDurationFailed"), 3000, "error");
             }
         });
     }
@@ -831,22 +831,22 @@ export class HabitDayDialog {
     private async deletePomodoroSession(session: PomodoroSession) {
         confirm(
             i18n("delete") || "删除",
-            "确认删除该番茄记录吗？",
+            i18n("deletePomodoroRecordConfirm"),
             async () => {
                 try {
                     await this.pomodoroManager.initialize();
                     const success = await this.pomodoroManager.deleteSession(session.id);
                     if (!success) {
-                        showMessage("❌ 未找到番茄记录", 3000, "error");
+                        showMessage(i18n("pomodoroRecordMissingMessage"), 3000, "error");
                         return;
                     }
                     this.pomodoroManager.refreshIndex();
-                    showMessage("✅ 删除成功", 2000);
+                    showMessage(i18n("deleteSuccessMessage"), 2000);
 
                     try {
                         await this.onSave(this.habit);
                     } catch (error) {
-                        console.warn("刷新习惯视图失败:", error);
+                        console.warn("Failed to refresh habit view:", error);
                     }
                     const content = this.dialog.element.querySelector(".b3-dialog__content") as HTMLElement;
                     const action = this.dialog.element.querySelector(".b3-dialog__action") as HTMLElement;
@@ -854,8 +854,8 @@ export class HabitDayDialog {
                     window.dispatchEvent(new CustomEvent("habitUpdated"));
                     window.dispatchEvent(new CustomEvent("reminderUpdated"));
                 } catch (error) {
-                    console.error("删除番茄记录失败:", error);
-                    showMessage("❌ 删除番茄记录失败", 3000, "error");
+                    console.error("Failed to delete pomodoro record:", error);
+                    showMessage(i18n("deletePomodoroRecordFailed"), 3000, "error");
                 }
             }
         );
@@ -942,7 +942,7 @@ export class HabitDayDialog {
         });
         if (emojiConfigs.length === 0) {
             const empty = document.createElement("div");
-            empty.textContent = "无打卡项";
+            empty.textContent = i18n("noHabitCheckInOptions");
             empty.style.cssText = "color:var(--b3-theme-on-surface-light); font-size:12px;";
             wrap.appendChild(empty);
         }
@@ -1033,7 +1033,7 @@ export class HabitDayDialog {
                 const action = this.dialog?.element.querySelector(".b3-dialog__action") as HTMLElement;
                 if (content) await this.render(content, action);
             } catch (error) {
-                console.error("保存习惯打卡失败:", error);
+                console.error("Failed to save habit check-in:", error);
                 showMessage(i18n("habitSaveFailed"), 3000, "error");
             } finally {
                 saving = false;

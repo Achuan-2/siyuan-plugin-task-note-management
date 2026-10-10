@@ -186,7 +186,7 @@ export function buildWebhookPayload(
         try {
             return JSON.parse(renderWebhookTemplateAsJsonText(template, variables));
         } catch (renderError) {
-            console.warn('Webhook JSON 模板格式无效:', renderError || parseError);
+            console.warn("Invalid Webhook JSON template format:", renderError || parseError);
             return null;
         }
     }

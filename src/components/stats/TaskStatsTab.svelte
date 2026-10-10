@@ -134,7 +134,7 @@ class TaskStatsView {
             left,
             cellSize,
             monthNameMap: isNarrow
-                ? ['1月', '', '3月', '', '5月', '', '7月', '', '9月', '', '11月', '']
+                ? [i18n("january"), '', i18n("march"), '', i18n("may"), '', i18n("july"), '', i18n("september"), '', i18n("november"), '']
                 : 'ZH',
             monthFontSize: isCompact ? 10 : 11
         };
@@ -586,7 +586,7 @@ class TaskStatsView {
                 }
             });
         } catch (error) {
-            console.error('任务统计加载失败:', error);
+            console.error("Failed to load task statistics:", error);
             this.reminderData = {};
             this.projectNameMap = {};
             this.categoryNameMap = {};
@@ -1011,7 +1011,7 @@ class TaskStatsView {
             const data = typeof content === 'string' ? JSON.parse(content) : content;
             return Array.isArray(data) ? data : [];
         } catch (error) {
-            console.warn('读取分类数据失败:', error);
+            console.warn("Failed to read category data:", error);
             return [];
         }
     }
@@ -1759,8 +1759,8 @@ class TaskStatsView {
     private showDeleteConfirmation(): Promise<boolean> {
         return new Promise((resolve) => {
             confirm(
-                "删除番茄记录",
-                "确定要删除此记录吗？此操作无法撤销",
+                i18n("deleteRecordTitle"),
+                i18n("deleteRecordConfirm"),
                 () => {
                     resolve(true);
                 },

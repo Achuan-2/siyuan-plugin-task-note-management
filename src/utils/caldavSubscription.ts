@@ -1,3 +1,4 @@
+import { i18n } from "../pluginInstance";
 import { parseIcsFile, ParsedIcsEvent } from './icsImport';
 import type { IcsSubscription } from './icsSubscription';
 
@@ -18,7 +19,7 @@ interface CalDavRequestOptions {
 function getCalendarUrl(subscription: IcsSubscription): string {
     const url = (subscription.url || '').trim();
     if (!url) {
-        throw new Error('CalDAV 日历地址不能为空');
+        throw new Error(i18n("caldavUrlRequired"));
     }
     return url.endsWith('/') ? url : `${url}/`;
 }
@@ -249,7 +250,7 @@ async function discoverCalendarFromPath(subscription: IcsSubscription, pathUrl: 
 async function getOrDiscoverCalendarUrl(subscription: IcsSubscription): Promise<string> {
     let url = (subscription.url || '').trim();
     if (!url) {
-        throw new Error('CalDAV 日历地址不能为空');
+        throw new Error(i18n("caldavUrlRequired"));
     }
 
     if (!/^https?:\/\//i.test(url)) {
@@ -346,7 +347,7 @@ export async function fetchCalDavEvents(subscription: IcsSubscription): Promise<
     const doc = new DOMParser().parseFromString(xml, 'application/xml');
     const parserError = getElementsByLocalName(doc, 'parsererror')[0];
     if (parserError) {
-        throw new Error(`CalDAV 响应解析失败: ${parserError.textContent || ''}`);
+        throw new Error(i18n("caldavResponseParseFailed", { error: String(parserError.textContent || '') }));
     }
 
     const responseElements = getElementsByLocalName(doc, 'response');
@@ -508,7 +509,7 @@ function buildReplacementLines(task: any): string[] {
     const now = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
     const lines = [
         `UID:${escapeIcsText(getUid(task))}`,
-        `SUMMARY:${escapeIcsText(task.title || '未命名日程')}`,
+        `SUMMARY:${escapeIcsText(task.title || i18n("unnamedCalendarEvent"))}`,
         ...buildDateLines(task),
         `DTSTAMP:${now}`,
         `LAST-MODIFIED:${now}`

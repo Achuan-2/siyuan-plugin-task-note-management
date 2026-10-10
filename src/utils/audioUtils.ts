@@ -104,7 +104,7 @@ export async function playTaskCompleteSound(settings: any): Promise<void> {
         audio.volume = Math.max(0, Math.min(1, volume));
         await audio.play();
     } catch (error) {
-        console.warn('[AudioUtils] 播放任务完成音效失败:', error);
+        console.warn("[AudioUtils] Failed to play task completion sound:", error);
     }
 }
 
@@ -134,7 +134,7 @@ export async function playNotificationSound(plugin: any, settings: any): Promise
                 setTimeout(() => { isPlayingNotificationSound = false; }, 10000);
                 return;
             } catch (error) {
-                console.warn('[AudioUtils] 预加载音频播放失败，尝试创建新音频:', error);
+                console.warn("[AudioUtils] Preloaded audio playback failed; trying new audio:", error);
             }
         }
 
@@ -154,7 +154,7 @@ export async function playNotificationSound(plugin: any, settings: any): Promise
             clearTimeout(clearTimer);
         }
     } catch (error: any) {
-        console.warn('[AudioUtils] 播放通知声音失败:', error?.name || error);
+        console.warn("[AudioUtils] Failed to play notification sound:", error?.name || error);
     }
 }
 

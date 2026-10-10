@@ -331,7 +331,7 @@ export function createTaskTool(
                             const block = await getBlockByID(blockId);
                             docId = block?.root_id || (block?.type === 'd' ? block?.id : undefined);
                         } catch (error) {
-                            console.error('获取批量创建任务的绑定块信息失败:', error);
+                            console.error("Failed to get bound block information for batch task creation:", error);
                         }
                     }
 
@@ -377,7 +377,7 @@ export function createTaskTool(
                             }
                             await updateBindBlockAtrrs(blockId, (reminderManager as any).plugin);
                         } catch (error) {
-                            console.warn('同步批量创建任务的绑定块属性失败:', error);
+                            console.warn("Failed to sync bound block attributes for batch task creation:", error);
                         }
                     }
                     createdTasks.push(task);
@@ -494,7 +494,7 @@ export function createTaskTool(
                             const block = await getBlockByID(blockId);
                             docId = block?.root_id || (block?.type === 'd' ? block?.id : undefined);
                         } catch (error) {
-                            console.error('获取绑定块信息失败:', error);
+                            console.error("Failed to get bound block information:", error);
                         }
                     }
 
@@ -549,7 +549,7 @@ export function createTaskTool(
                             }
                             await updateBindBlockAtrrs(blockId, (reminderManager as any).plugin);
                         } catch (error) {
-                            console.warn('同步绑定块属性失败:', error);
+                            console.warn("Failed to sync bound block attributes:", error);
                         }
                     }
 
@@ -618,7 +618,7 @@ export function createTaskTool(
                                     const block = await getBlockByID(newBlockId);
                                     docId = block?.root_id || (block?.type === 'd' ? block?.id : undefined);
                                 } catch (error) {
-                                    console.error('获取块信息失败:', error);
+                                    console.error("Failed to get block information:", error);
                                     docId = undefined;
                                 }
                             } else {
@@ -687,7 +687,7 @@ export function createTaskTool(
                                 await updateBindBlockAtrrs(newBlockId, plugin);
                             }
                         } catch (error) {
-                            console.warn('同步更新绑定块属性失败:', id, error);
+                            console.warn("Failed to sync updates to bound block attributes:", id, error);
                         }
                     }
 

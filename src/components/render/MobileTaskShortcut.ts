@@ -52,7 +52,7 @@ export class MobileTaskShortcut {
         try {
             return getFrontend().endsWith("mobile");
         } catch (error) {
-            console.warn("检测手机端失败:", error);
+            console.warn("Failed to detect mobile device:", error);
             return false;
         }
     }
@@ -337,7 +337,7 @@ export class MobileTaskShortcut {
             try {
                 panel.destroy();
             } catch (e) {
-                console.warn("销毁手机快捷面板失败:", e);
+                console.warn("Failed to destroy mobile quick panel:", e);
             }
         });
         this.panels.clear();
@@ -362,7 +362,7 @@ export class MobileTaskShortcut {
         try {
             dialog.destroy();
         } catch (e) {
-            console.warn("关闭快捷弹窗失败:", e);
+            console.warn("Failed to close quick popup:", e);
         }
         this.destroyPanels();
         this.applyDock();
@@ -496,7 +496,7 @@ export class MobileTaskShortcut {
                 }
             }
         } catch (error) {
-            console.error(`创建手机快捷面板 ${tabId} 失败:`, error);
+            console.error(`Failed to create mobile quick panel ${tabId}:`, error);
             container.textContent = i18n("loadFailed") || "加载失败";
         }
     }
@@ -600,7 +600,7 @@ export class MobileTaskShortcut {
                 const { ReminderTaskLogic } = await import("../../utils/reminderTaskLogic");
                 return await ReminderTaskLogic.getTaskCountByTabs(this.plugin, ["today", "overdue"], true);
             } catch (error) {
-                console.error("更新手机快捷按钮任务徽标失败:", error);
+                console.error("Failed to update mobile quick button task badge:", error);
                 return 0;
             }
         })();
@@ -622,7 +622,7 @@ export class MobileTaskShortcut {
                 });
                 return buckets.pendingHabits.length;
             } catch (error) {
-                console.error("更新手机快捷按钮习惯徽标失败:", error);
+                console.error("Failed to update mobile quick button habit badge:", error);
                 return 0;
             }
         })();

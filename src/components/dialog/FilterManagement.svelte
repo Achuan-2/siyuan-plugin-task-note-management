@@ -272,13 +272,13 @@
                             if (name) statusNameSet.add(name);
                         });
                     } catch (error) {
-                        console.warn('加载项目看板状态失败:', project.id, error);
+                        console.warn("Failed to load project kanban statuses:", project.id, error);
                     }
                 })
             );
             kanbanStatusNameOptions = Array.from(statusNameSet).sort((a, b) => a.localeCompare(b, 'zh-CN'));
         } catch (error) {
-            console.error('加载看板状态名称选项失败:', error);
+            console.error("Failed to load kanban status name options:", error);
             kanbanStatusNameOptions = [];
         }
     }

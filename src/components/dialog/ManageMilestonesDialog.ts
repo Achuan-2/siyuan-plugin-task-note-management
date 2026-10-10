@@ -59,7 +59,7 @@ export async function renderMilestonesInDialog(view: any, container: HTMLElement
             container.appendChild(groupSection);
         }
     } catch (error) {
-        console.error(i18n('renderMilestonesFailed'), error);
+        console.error("Failed to render milestone list", error);
         container.innerHTML = `<div style="color: var(--b3-theme-error); text-align: center;">${i18n('loadFailed')}</div>`;
     }
 }
@@ -497,7 +497,7 @@ export async function renderMilestoneTaskTree(view: any, container: HTMLElement,
             await platformUtils.writeText(markdown);
             showMessage(i18n('copiedToClipboard'));
         } catch (err) {
-            console.error(i18n('copyFailed'), err);
+            console.error("Copy failed", err);
             showMessage(i18n('copyFailed'));
         }
     });
@@ -779,7 +779,7 @@ export function showMilestoneEditDialog(view: any, milestone: any | null, groupI
                 await Promise.resolve(onSave());
                 showMessage(i18n('milestoneSaved'));
             } catch (error) {
-                console.error('保存里程碑失败:', error);
+                console.error("Failed to save milestone:", error);
                 showMessage(i18n("operationFailed") || "操作失败");
             }
         })();

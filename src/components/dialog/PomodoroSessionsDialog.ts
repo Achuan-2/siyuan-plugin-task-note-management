@@ -81,7 +81,7 @@ export class PomodoroSessionsDialog {
                 const habit = habitData?.[eventId];
                 eventTitle = habit?.title || "";
             } catch (error) {
-                console.warn("解析 habit 标题失败:", error);
+                console.warn("Failed to parse habit title:", error);
             }
         } else {
             try {
@@ -100,7 +100,7 @@ export class PomodoroSessionsDialog {
 
                 eventTitle = reminder?.title || "";
             } catch (error) {
-                console.warn("解析 reminder 标题失败:", error);
+                console.warn("Failed to parse reminder title:", error);
             }
         }
 
@@ -116,7 +116,7 @@ export class PomodoroSessionsDialog {
             }
         }
 
-        return eventTitle || fallbackTitle || "未知任务";
+        return eventTitle || fallbackTitle || i18n("unknownTask");
     }
 
     public async show() {
@@ -253,7 +253,7 @@ export class PomodoroSessionsDialog {
             });
             return true;
         } catch (error) {
-            console.warn("同步块番茄属性失败:", error);
+            console.warn("Failed to sync block pomodoro attributes:", error);
             return false;
         }
     }
@@ -295,11 +295,11 @@ export class PomodoroSessionsDialog {
                 <div style="display: flex; justify-content: space-around; flex-wrap: wrap; gap: 8px;">
                     <div style="text-align: center; min-width: 80px;">
                         <div style="font-size: 24px; font-weight: bold; color: var(--b3-theme-primary);">${totalSessions}</div>
-                        <div style="font-size: 12px; color: var(--b3-theme-on-surface-light);">完成番茄数</div>
+                        <div style="font-size: 12px; color: var(--b3-theme-on-surface-light);">${i18n("completedPomodoroCountLabel")}</div>
                     </div>
                     <div style="text-align: center; min-width: 80px;">
                         <div style="font-size: 24px; font-weight: bold; color: var(--b3-theme-primary);">${this.formatDuration(totalFocusTime)}</div>
-                        <div style="font-size: 12px; color: var(--b3-theme-on-surface-light);">总专注时长</div>
+                        <div style="font-size: 12px; color: var(--b3-theme-on-surface-light);">${i18n("totalFocusDurationLabel")}</div>
                     </div>
                 </div>
             </div>
@@ -345,10 +345,10 @@ export class PomodoroSessionsDialog {
 
         const typeIcon = this.getTypeIcon(session.type);
         const statusBadge = session.inProgress
-            ? '<span style="background: var(--b3-theme-warning); color: var(--b3-theme-on-background); padding: 2px 6px; border-radius: 3px; font-size: 11px;">待补录</span>'
+            ? `<span style="background: var(--b3-theme-warning); color: var(--b3-theme-on-background); padding: 2px 6px; border-radius: 3px; font-size: 11px;">${i18n("toRecord")}</span>`
             : (session.completed
-                ? '<span style="background: #4caf50; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px;">✓ 完成</span>'
-                : '<span style="background: var(--b3-theme-error); color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px;">未完成</span>');
+                ? `<span style="background: #4caf50; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px;">${i18n("pomodoroCompletedBadge")}</span>`
+                : `<span style="background: var(--b3-theme-error); color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px;">${i18n("incomplete")}</span>`);
         const note = String(session.note || "").trim();
         const noteHtml = note
             ? `<div style="font-size: 12px; color: var(--b3-theme-on-surface); background: var(--b3-theme-background-light); padding: 6px 8px; border-radius: 4px; margin-top: 4px; white-space: pre-wrap; word-break: break-word;">${this.escapeHtml(note)}</div>`
@@ -359,12 +359,12 @@ export class PomodoroSessionsDialog {
             const count = this.recordManager.calculateSessionCount(session);
 
             if (session.isCountUp) {
-                extraBadges += `<span style="background: var(--b3-theme-secondary); color: var(--b3-theme-on-secondary); padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-left: 4px;">⏱️ 正计时</span>`;
+                extraBadges += `<span style="background: var(--b3-theme-secondary); color: var(--b3-theme-on-secondary); padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-left: 4px;">${i18n("pomodoroCountUpBadge")}</span>`;
                 if (count > 0) {
                     extraBadges += `<span style="background: var(--b3-theme-primary-light); color: var(--b3-theme-primary); padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-left: 4px;">🍅 x${count}</span>`;
                 }
             } else {
-                extraBadges += `<span style="background: var(--b3-theme-primary); color: var(--b3-theme-on-primary); padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-left: 4px;">⏳ 倒计时</span>`;
+                extraBadges += `<span style="background: var(--b3-theme-primary); color: var(--b3-theme-on-primary); padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-left: 4px;">${i18n("pomodoroCountDownBadge")}</span>`;
                 if (count > 0) {
                     extraBadges += `<span style="background: var(--b3-theme-primary-light); color: var(--b3-theme-primary); padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-left: 4px;">🍅 x${count}</span>`;
                 }
@@ -391,7 +391,7 @@ export class PomodoroSessionsDialog {
                     <div style="font-size: 12px; color: var(--b3-theme-on-surface-light); display: flex; gap: 12px;">
                         <span>📅 ${dateStr}</span>
                         <span>🕐 ${startTimeStr} - ${endTimeStr}</span>
-                        <span>⏱️ ${session.inProgress ? "待补录" : `${session.duration} 分钟`}</span>
+                        <span>⏱️ ${session.inProgress ? i18n("toRecord") : i18n("durationMinutes", { minutes: String(session.duration) })}</span>
                     </div>
                     ${noteHtml}
                 </div>
@@ -422,11 +422,11 @@ export class PomodoroSessionsDialog {
 
     private formatDuration(minutes: number): string {
         if (minutes < 60) {
-            return `${minutes}分`;
+            return i18n("durationMinutesCompact", { minutes: String(minutes) });
         }
         const hours = Math.floor(minutes / 60);
         const mins = minutes % 60;
-        return mins > 0 ? `${hours}小时${mins}分` : `${hours}小时`;
+        return mins > 0 ? i18n("durationHoursMinutesCompact", { hours: String(hours), minutes: String(mins) }) : i18n("durationHours", { hours: String(hours) });
     }
 
     private escapeHtml(value: any): string {
@@ -496,7 +496,7 @@ export class PomodoroSessionsDialog {
                 menu.open({ x: event.clientX, y: event.clientY });
             }
         } catch (error) {
-            console.error('显示番茄钟启动菜单失败:', error);
+            console.error("Failed to show pomodoro start menu:", error);
         }
     }
 
@@ -505,7 +505,7 @@ export class PomodoroSessionsDialog {
      */
     private async _startPomodoro(workDurationOverride?: number) {
         if (!this.plugin) {
-            showMessage("无法启动番茄钟：插件实例不可用");
+            showMessage(i18n("pomodoroUnavailable"));
             return;
         }
 
@@ -555,7 +555,7 @@ export class PomodoroSessionsDialog {
      */
     private async _startPomodoroCountUp() {
         if (!this.plugin) {
-            showMessage("无法启动番茄钟：插件实例不可用");
+            showMessage(i18n("pomodoroUnavailable"));
             return;
         }
 
@@ -660,7 +660,7 @@ export class PomodoroSessionsDialog {
                 window.dispatchEvent(new CustomEvent('habitUpdated'));
             }
         } catch (error) {
-            console.warn("派发习惯更新事件失败:", error);
+            console.warn("Failed to dispatch habit update event:", error);
         }
     }
 
@@ -716,11 +716,11 @@ export class PomodoroSessionsDialog {
                 try {
                     await updateBindBlockAtrrs(blockId, this.plugin);
                 } catch (e) {
-                    console.warn("更新块番茄属性失败:", blockId, e);
+                    console.warn("Failed to update block pomodoro attributes:", blockId, e);
                 }
             }
         } catch (err) {
-            console.warn("批量更新块番茄属性异常:", err);
+            console.warn("Exception updating block pomodoro attributes in batch:", err);
         }
     }
 
@@ -740,7 +740,7 @@ export class PomodoroSessionsDialog {
                 breakDuration = settings.pomodoroBreakDuration || 5;
                 longBreakDuration = settings.pomodoroLongBreakDuration || 15;
             } catch (error) {
-                console.warn('加载番茄钟设置失败，使用默认值', error);
+                console.warn("Failed to load pomodoro timer settings; using defaults", error);
             }
         }
 
@@ -751,9 +751,9 @@ export class PomodoroSessionsDialog {
                     <div class="b3-form__group">
                         <label class="b3-form__label">${i18n("sessionType") || "会话类型"}</label>
                         <select id="sessionType" class="b3-select" style="width: 100%;">
-                            <option value="work">🍅 工作番茄</option>
-                            <option value="shortBreak">☕ 短休息</option>
-                            <option value="longBreak">🌴 长休息</option>
+                            <option value="work">${i18n("pomodoroWorkType")}</option>
+                            <option value="shortBreak">${i18n("pomodoroShortBreakType")}</option>
+                            <option value="longBreak">${i18n("pomodoroLongBreakType")}</option>
                         </select>
                     </div>
                     <div class="b3-form__group">
@@ -779,7 +779,7 @@ export class PomodoroSessionsDialog {
                     </div>
                     <div class="b3-form__group">
                         <label class="b3-form__label">${i18n("note") || "备注"}</label>
-                        <textarea id="sessionNote" class="b3-text-field" rows="3" style="width: 100%; resize: vertical;" placeholder="这次专注完成了什么？"></textarea>
+                        <textarea id="sessionNote" class="b3-text-field" rows="3" style="width: 100%; resize: vertical;" placeholder="${i18n("pomodoroNotePlaceholder")}"></textarea>
                     </div>
                     <div class="b3-dialog__action">
                         <button class="b3-button b3-button--cancel">${i18n("cancel")}</button>
@@ -948,7 +948,7 @@ export class PomodoroSessionsDialog {
 
                 if (this.onUpdate) this.onUpdate();
             } catch (error) {
-                console.error("补录番茄钟失败:", error);
+                console.error("Failed to add past pomodoro record:", error);
                 showMessage("❌ " + (i18n("addPomodoroFailed") || "补录番茄钟失败"), 3000, "error");
             }
         });
@@ -967,9 +967,9 @@ export class PomodoroSessionsDialog {
                     <div class="b3-form__group">
                         <label class="b3-form__label">${i18n("sessionType") || "会话类型"}</label>
                         <select id="editSessionType" class="b3-select" style="width: 100%;">
-                            <option value="work">🍅 工作番茄</option>
-                            <option value="shortBreak">☕ 短休息</option>
-                            <option value="longBreak">🌴 长休息</option>
+                            <option value="work">${i18n("pomodoroWorkType")}</option>
+                            <option value="shortBreak">${i18n("pomodoroShortBreakType")}</option>
+                            <option value="longBreak">${i18n("pomodoroLongBreakType")}</option>
                         </select>
                     </div>
                     <div class="b3-form__group">
@@ -982,7 +982,7 @@ export class PomodoroSessionsDialog {
                     </div>
                     <div class="b3-form__group">
                         <label class="b3-form__label">${i18n("note") || "备注"}</label>
-                        <textarea id="editSessionNote" class="b3-text-field" rows="3" style="width: 100%; resize: vertical;" placeholder="这次专注完成了什么？">${this.escapeHtml(session.note || "")}</textarea>
+                        <textarea id="editSessionNote" class="b3-text-field" rows="3" style="width: 100%; resize: vertical;" placeholder="${i18n("pomodoroNotePlaceholder")}">${this.escapeHtml(session.note || "")}</textarea>
                     </div>
                     <div class="b3-dialog__action">
                         <button class="b3-button b3-button--cancel">${i18n("cancel")}</button>
@@ -1102,7 +1102,7 @@ export class PomodoroSessionsDialog {
 
                 if (this.onUpdate) this.onUpdate();
             } catch (error) {
-                console.error("修改番茄钟失败:", error);
+                console.error("Failed to modify pomodoro timer:", error);
                 showMessage("❌ " + (i18n("editPomodoroFailed") || "修改番茄钟失败"), 3000, "error");
             }
         });
@@ -1120,7 +1120,7 @@ export class PomodoroSessionsDialog {
             `<div style="padding: 16px;">
                 <p>${i18n("confirmDeletePomodoro") || "确定要删除这个番茄钟记录吗？"}</p>
                 <p style="color: var(--b3-theme-on-surface-light); font-size: 12px;">
-                    ${session.eventTitle} - ${new Date(session.startTime).toLocaleString(getLocaleTag())} (${session.duration}分钟)
+                    ${session.eventTitle} - ${new Date(session.startTime).toLocaleString(getLocaleTag())} (${i18n('durationMinutes', { minutes: String(session.duration) })})
                 </p>
             </div>`,
             async (dialog) => {
@@ -1141,7 +1141,7 @@ export class PomodoroSessionsDialog {
                         showMessage("❌ " + (i18n("deletePomodoroFailed") || "删除番茄钟失败"), 3000, "error");
                     }
                 } catch (error) {
-                    console.error("删除番茄钟失败:", error);
+                    console.error("Failed to delete pomodoro timer:", error);
                     showMessage("❌ " + (i18n("deletePomodoroFailed") || "删除番茄钟失败"), 3000, "error");
                 }
             }
@@ -1184,7 +1184,7 @@ export class PomodoroSessionsDialog {
                 await this.syncBlockPomodoroAttrs(baseId, count, minutes);
             }
         } catch (error) {
-            console.error("同步番茄钟数量失败:", error);
+            console.error("Failed to sync pomodoro count:", error);
         }
     }
 }

@@ -12,6 +12,7 @@ import { ScatterChart, CustomChart } from 'echarts/charts';
 import { TooltipComponent, GridComponent, TitleComponent, LegendComponent } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import { i18n } from "../../pluginInstance";
+import { getLocaleTag } from "../../utils/dateUtils";
 
 // 注册 ECharts 组件
 use([
@@ -137,7 +138,7 @@ export class HabitStatsDialog {
                 }
             }
         } catch (error) {
-            console.warn("HabitStatsDialog 初始化番茄数据或设置失败", error);
+            console.warn("HabitStatsDialog: failed to initialize pomodoro data or settings", error);
             this.pomodoroReady = false;
             this.linkedTaskPomodoroStats = new Map();
         }
@@ -235,7 +236,7 @@ export class HabitStatsDialog {
 
         const logTab = document.createElement('button');
         logTab.className = `b3-button ${this.currentTab !== 'logs' ? 'b3-button--outline' : ''}`;
-        logTab.textContent = "打卡日志";
+        logTab.textContent = i18n("habitLogTitle");
         logTab.style.cssText = this.currentTab === 'logs' ? 'font-weight: bold;' : '';
         logTab.addEventListener('click', () => {
             this.currentTab = 'logs';
@@ -314,7 +315,7 @@ export class HabitStatsDialog {
                 card.style.cssText = 'padding: 12px; background: var(--b3-theme-surface); border-radius: 8px; text-align: center; display: flex; flex-direction: column; align-items: center;';
                 card.innerHTML = `
                     <div class="habit-emoji-stat-icon">${stat.emoji}</div>
-                    <div style="font-size: 14px; font-weight: bold; margin-bottom: 4px;">${stat.count}次</div>
+                    <div style="font-size: 14px; font-weight: bold; margin-bottom: 4px;">${i18n('habitCheckInCountValue', { count: String(stat.count) })}</div>
                     <div style="font-size: 12px; color: var(--b3-theme-on-surface-light); margin-bottom: 8px;">${stat.percentage.toFixed(1)}%</div>
                     <div style="width: 60px; height: 80px; background: var(--b3-theme-surface-lighter); border-radius: 4px; position: relative; margin-top: auto;">
                         <div style="width: 100%; height: ${stat.percentage}%; background: #40c463; border-radius: 4px; position: absolute; bottom: 0; transition: height 0.3s ease;"></div>
@@ -877,7 +878,7 @@ export class HabitStatsDialog {
             const statCard = document.createElement('div');
             statCard.style.cssText = 'padding:6px; border-radius:8px; background:var(--b3-theme-background); text-align:center;';
             statCard.innerHTML = `
-                <div style="font-size:11px; color:var(--b3-theme-on-surface-light);">${month + 1}月</div>
+                <div style="font-size:11px; color:var(--b3-theme-on-surface-light);">${new Date(year, month, 1).toLocaleDateString(getLocaleTag(), { month: 'short' })}</div>
                 <div style="font-size:14px; font-weight:700; color:var(--b3-theme-primary);">${monthDoneDays}${i18n("habitDays")}</div>
             `;
             monthlyStatsGrid.appendChild(statCard);
@@ -891,7 +892,7 @@ export class HabitStatsDialog {
             row.style.cssText = 'display:grid; grid-template-columns:34px 1fr; align-items:center; gap:4px;';
 
             const label = document.createElement('div');
-            label.textContent = `${month + 1}月`;
+            label.textContent = new Date(year, month, 1).toLocaleDateString(getLocaleTag(), { month: 'short' });
             label.style.cssText = 'font-size:11px; color:var(--b3-theme-on-surface-light); text-align:right;';
             row.appendChild(label);
 
@@ -1081,7 +1082,7 @@ export class HabitStatsDialog {
 
         const startWrap = document.createElement('label');
         startWrap.style.cssText = 'display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--b3-theme-on-surface-light);';
-        startWrap.textContent = '开始日期';
+        startWrap.textContent = i18n("singleDateDefaultRoleStart");
         const startInput = document.createElement('input');
         startInput.type = 'date';
         startInput.value = this.logStartDate;
@@ -1095,7 +1096,7 @@ export class HabitStatsDialog {
 
         const endWrap = document.createElement('label');
         endWrap.style.cssText = 'display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--b3-theme-on-surface-light);';
-        endWrap.textContent = '结束日期';
+        endWrap.textContent = i18n("endDate");
         const endInput = document.createElement('input');
         endInput.type = 'date';
         endInput.value = this.logEndDate;
@@ -1118,11 +1119,11 @@ export class HabitStatsDialog {
             this.renderCheckInLogs(container);
         });
         noteOnlyWrap.appendChild(noteOnlyInput);
-        noteOnlyWrap.appendChild(document.createTextNode('仅看有备注'));
+        noteOnlyWrap.appendChild(document.createTextNode(i18n("onlyWithNotes")));
 
         const resetBtn = document.createElement('button');
         resetBtn.className = 'b3-button b3-button--outline';
-        resetBtn.textContent = '重置筛选';
+        resetBtn.textContent = i18n("resetFilters");
         resetBtn.addEventListener('click', () => {
             this.logStartDate = '';
             this.logEndDate = '';
@@ -1147,7 +1148,7 @@ export class HabitStatsDialog {
 
         const summary = document.createElement('div');
         summary.style.cssText = 'font-size:12px; color:var(--b3-theme-on-surface-light);';
-        summary.textContent = `共 ${filteredLogs.length} 条日志，每页 ${this.logPageSize} 条`;
+        summary.textContent = i18n("habitLogTotal", { count: String(filteredLogs.length), pageSize: String(this.logPageSize) });
         panel.appendChild(summary);
 
         const list = document.createElement('div');
@@ -1156,7 +1157,7 @@ export class HabitStatsDialog {
         if (pageLogs.length === 0) {
             const empty = document.createElement('div');
             empty.style.cssText = 'padding:24px 12px; text-align:center; color:var(--b3-theme-on-surface-light);';
-            empty.textContent = '当前筛选条件下没有打卡日志';
+            empty.textContent = i18n("noCheckInLogsMatching");
             list.appendChild(empty);
         } else {
             pageLogs.forEach(log => {
@@ -1168,7 +1169,7 @@ export class HabitStatsDialog {
 
                 const title = document.createElement('div');
                 title.style.cssText = 'font-size:14px; font-weight:600; color:var(--b3-theme-on-surface);';
-                title.textContent = `${this.habit.icon || "🌱"} ${this.habit.title || "未命名习惯"}`;
+                title.textContent = `${this.habit.icon || "🌱"} ${this.habit.title || i18n("unnamedHabit")}`;
 
                 const meta = document.createElement('div');
                 meta.style.cssText = 'font-size:12px; color:var(--b3-theme-on-surface-light);';
@@ -1183,7 +1184,7 @@ export class HabitStatsDialog {
 
                 const note = document.createElement('span');
                 note.style.cssText = log.hasNote ? '' : 'color:var(--b3-theme-on-surface-light);';
-                note.textContent = log.hasNote ? log.note : '无备注';
+                note.textContent = log.hasNote ? log.note : i18n("noNoteText");
 
                 content.appendChild(emoji);
                 content.appendChild(note);
@@ -1195,7 +1196,7 @@ export class HabitStatsDialog {
                 actions.style.cssText = 'flex-shrink:0;';
                 const openDayBtn = document.createElement('button');
                 openDayBtn.className = 'b3-button b3-button--outline';
-                openDayBtn.textContent = '查看当天';
+                openDayBtn.textContent = i18n("viewThisDay");
                 openDayBtn.addEventListener('click', () => {
                     const dayDialog = new HabitDayDialog(this.habit, log.dateStr, async (updatedHabit) => {
                         if (this.onSave) {
@@ -1233,7 +1234,7 @@ export class HabitStatsDialog {
 
         const pageLabel = document.createElement('span');
         pageLabel.style.cssText = 'min-width:120px; text-align:center; font-size:13px;';
-        pageLabel.textContent = `第 ${this.logPage} / ${totalPages} 页`;
+        pageLabel.textContent = i18n("pageOfPages", { page: String(this.logPage), pages: String(totalPages) });
 
         const nextBtn = document.createElement('button');
         nextBtn.className = 'b3-button b3-button--outline';

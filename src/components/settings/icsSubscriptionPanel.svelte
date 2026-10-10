@@ -149,7 +149,7 @@
                 subscriptions = [...subscriptions];
                 pushErrMsg(
                     `${i18n('subscriptionSyncError') || '订阅同步失败'}: ${
-                        result.error || '解析订阅日历失败'
+                        result.error || i18n("parseSubscribedCalendarFailed")
                     }`
                 );
                 return;
@@ -513,9 +513,9 @@
             const { ProjectFolderManager } = await import('../dataManager/projectFolderManager');
             const folderManager = ProjectFolderManager.getInstance(plugin);
             await folderManager.initialize();
-            let folder = folderManager.getFolders().find(f => f.name === '订阅日历');
+            let folder = folderManager.getFolders().find(f => f.name === i18n("subscribedCalendarTitle"));
             if (!folder) {
-                folder = await folderManager.addFolder('订阅日历', '📂');
+                folder = await folderManager.addFolder(i18n("subscribedCalendarTitle"), '📂');
             }
 
             const projectData = await plugin.loadProjectData();

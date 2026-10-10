@@ -1,3 +1,4 @@
+import { i18n } from "../../pluginInstance";
 import { Dialog, getFrontend, showMessage } from "siyuan";
 
 type StatsTab = "pomodoro" | "task" | "habit" | "summary" | "project";
@@ -15,7 +16,7 @@ export async function showStatsDialog(plugin: any, initialTab: StatsTab = "pomod
 
     const isMobile = plugin?.isInMobileApp || getFrontend().endsWith("mobile");
     const dialog = new Dialog({
-        title: "📊 统计视图",
+        title: i18n("statsViewTitle"),
         content: '<div id="showStatsViewContainer" style="height:100%;padding: 8px 16px 16px;box-sizing:border-box;"></div>',
         width: "min(1000px,95%)",
         height: isMobile ? "100%" : "80vh"
@@ -31,7 +32,7 @@ export async function showStatsDialog(plugin: any, initialTab: StatsTab = "pomod
             try {
                 component.$destroy();
             } catch (error) {
-                console.warn("销毁统计视图组件失败:", error);
+                console.warn("Failed to destroy statistics view component:", error);
             }
         }
         activeDialog = null;
@@ -44,7 +45,7 @@ export async function showStatsDialog(plugin: any, initialTab: StatsTab = "pomod
         const ShowStatsView = module.default;
         const target = dialog.element.querySelector("#showStatsViewContainer") as HTMLElement;
         if (!target) {
-            showMessage("统计视图容器初始化失败", 3000, "error");
+            showMessage(i18n("statsContainerInitFailed"), 3000, "error");
             dialog.destroy();
             return;
         }
@@ -59,8 +60,8 @@ export async function showStatsDialog(plugin: any, initialTab: StatsTab = "pomod
         });
         activeComponent = component;
     } catch (error) {
-        console.error("加载统计视图失败:", error);
-        showMessage("加载统计视图失败", 3000, "error");
+        console.error("Failed to load statistics view:", error);
+        showMessage(i18n("loadStatsViewFailed"), 3000, "error");
         dialog.destroy();
     }
 }

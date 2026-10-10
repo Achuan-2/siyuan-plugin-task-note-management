@@ -1,3 +1,5 @@
+维护文案后运行 `pnpm check:i18n`，检查中英文键、插值参数、代码引用、Svelte 界面硬编码文案和控制台日志。界面文案使用 i18n，控制台日志固定使用英文，不调用 i18n；检查覆盖独立窗口中的嵌入脚本。运行 `pnpm test:i18n` 验证语言兜底、参数替换、重复任务描述和日志规则。
+
 思源支持的 i18n 文件范围，可以在控制台 `siyuan.config.langs` 中查看。以下是思源 3.7.0 起使用的语言标识：
 
 The i18n files supported by SiYuan can be viewed in the console under `siyuan.config.langs`. The following language identifiers are used since SiYuan 3.7.0:

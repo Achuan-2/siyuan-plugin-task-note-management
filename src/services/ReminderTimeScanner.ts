@@ -154,11 +154,11 @@ export class ReminderTimeScanner {
 
                                 instances.push(constructed as any);
                             } catch (e) {
-                                console.warn('处理 repeat.instances 时出错', e);
+                                console.warn("Error processing repeat.instances", e);
                             }
                         }
                     } catch (e) {
-                        console.warn('处理重复实例的 repeat.instances 时发生错误:', e);
+                        console.warn("Error processing repeat.instances of recurring instance:", e);
                     }
 
                     // 将生成的实例与原始 reminderObj 合并，确保实例包含 title、note、priority 等字段
@@ -306,17 +306,17 @@ export class ReminderTimeScanner {
                                     }
                                 }
                             } catch (e) {
-                                console.warn('扫描 repeat.instances 自定义提醒时出错', e);
+                                console.warn("Error scanning custom reminders in repeat.instances", e);
                             }
                         }
                     } catch (e) {
-                        console.warn('扫描重复实例自定义提醒时发生错误:', e);
+                        console.warn("Error scanning custom reminders for recurring instances:", e);
                     }
                 }
             }
 
         } catch (error) {
-            console.error('检查时间提醒失败:', error);
+            console.error("Failed to check time reminders:", error);
         }
     }
 

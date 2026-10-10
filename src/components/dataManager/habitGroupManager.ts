@@ -47,7 +47,7 @@ export class HabitGroupManager {
             }
             this.initialized = true;
         } catch (error) {
-            console.error('初始化习惯分组管理器失败:', error);
+            console.error("Failed to initialize habit group manager:", error);
             this.groups.clear();
             this.initialized = true;
         }
@@ -64,7 +64,7 @@ export class HabitGroupManager {
             const groupsArray = Array.from(this.groups.values());
             await plugin.saveHabitGroupData(groupsArray);
         } catch (error) {
-            console.error('保存习惯分组失败:', error);
+            console.error("Failed to save habit group:", error);
             throw error;
         }
     }

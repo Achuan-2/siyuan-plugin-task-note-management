@@ -8,6 +8,8 @@
   "author": "frostime",
   "license": "MIT",
   "scripts": {
+    "check:i18n": "node scripts/check-i18n.cjs",
+    "test:i18n": "node --test scripts/test-i18n.cjs",
     "dev": "concurrently \"pnpm dev:app\" \"pnpm dev:kernel\" \"pnpm dev:smtp\"",
     "dev:app": "cross-env NODE_ENV=development VITE_SOURCEMAP=inline vite build --watch",
     "dev:kernel": "cross-env NODE_ENV=development vite build --watch --config vite.kernel.config.ts",

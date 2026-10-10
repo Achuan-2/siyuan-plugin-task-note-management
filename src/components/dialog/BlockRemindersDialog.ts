@@ -286,7 +286,7 @@ export class BlockRemindersDialog {
                     projectCache.set(renderReminder.id, projectCacheEntry);
                 }
             } catch (error) {
-                console.error('加载项目信息失败:', error);
+                console.error("Failed to load project information:", error);
             }
         }
 
@@ -392,7 +392,7 @@ export class BlockRemindersDialog {
             });
             dialog.show();
         } catch (err) {
-            console.error('打开编辑对话框失败:', err);
+            console.error("Failed to open edit dialog:", err);
             showMessage(i18n("openModifyDialogFailed") || '打开修改对话框失败，请重试', 3000, 'error');
         }
     }
@@ -417,7 +417,7 @@ export class BlockRemindersDialog {
                 });
             });
         } catch (error) {
-            console.error('构建里程碑映射失败:', error);
+            console.error("Failed to build milestone mapping:", error);
         }
     }
 
@@ -499,7 +499,7 @@ export class BlockRemindersDialog {
                 showMessage(completed ? (i18n("taskCompleted") || "任务已完成") : (i18n("taskUncompleted") || "任务已取消完成"), 2000);
             }
         } catch (error) {
-            console.error("切换任务完成状态失败:", error);
+            console.error("Failed to toggle task completion:", error);
             showMessage(i18n("operationFailed") || "操作失败", 3000, "error");
         }
     }
@@ -546,7 +546,7 @@ export class BlockRemindersDialog {
                         const reminderData = await this.plugin.loadReminderData();
                         const original = reminderData[reminder.originalId];
                         if (!original) {
-                            throw new Error('原始重复任务不存在');
+                            throw new Error(i18n("originalTaskMissing"));
                         }
                         if (!original.repeat) original.repeat = {};
                         if (!original.repeat.excludeDates) original.repeat.excludeDates = [];
@@ -583,7 +583,7 @@ export class BlockRemindersDialog {
                         showMessage(i18n("taskDeleted") || "任务已删除", 2000);
                     }
                 } catch (error) {
-                    console.error("删除任务失败:", error);
+                    console.error("Failed to delete task:", error);
                     showMessage(i18n("deleteFailed") || "删除失败", 3000, "error");
                 }
             }

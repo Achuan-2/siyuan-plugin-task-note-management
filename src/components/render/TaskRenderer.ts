@@ -103,11 +103,11 @@ export class TaskRenderer {
 
                     if (isRepeatInstance && originalId && instanceDate) {
                         const originalReminder = reminderData[originalId];
-                        if (!originalReminder) throw new Error(`原始重复任务不存在: ${originalId}`);
+                        if (!originalReminder) throw new Error(i18n("originalRepeatTaskMissingId", { id: String(originalId) }));
                         patchRepeatInstanceState(originalReminder, instanceDate, { customProgress: percent });
                     } else {
                         const storedTask = reminderData[taskId];
-                        if (!storedTask) throw new Error(`任务不存在: ${taskId}`);
+                        if (!storedTask) throw new Error(i18n("taskMissingId", { id: String(taskId) }));
                         storedTask.customProgress = percent;
                         storedTask.updatedAt = new Date().toISOString();
                     }
@@ -117,13 +117,13 @@ export class TaskRenderer {
                         try {
                             await updateBindBlockAtrrs(task.blockId, context.plugin);
                         } catch (error) {
-                            console.warn('同步自定义进度到绑定块属性失败:', task.blockId, error);
+                            console.warn("Failed to sync custom progress to bound block attributes:", task.blockId, error);
                         }
                     }
 
                     window.dispatchEvent(new CustomEvent('reminderUpdated'));
                 } catch (error) {
-                    console.error('更新自定义进度失败:', error);
+                    console.error("Failed to update custom progress:", error);
                     showMessage(i18n("updateReminderFailed") || "更新任务失败", 3000, "error");
                     window.dispatchEvent(new CustomEvent('reminderUpdated'));
                 }
@@ -143,7 +143,7 @@ export class TaskRenderer {
                     this.assetBlobCache.set(src, URL.createObjectURL(blob));
                 }
             } catch (e) {
-                console.warn('预加载备注图片失败:', src, e);
+                console.warn("Failed to preload note images:", src, e);
             }
         }));
     }
@@ -477,7 +477,7 @@ export class TaskRenderer {
                 }
             }
         } catch (e) {
-            console.warn('格式化 reminderTimes 失败', e);
+            console.warn("Failed to format reminderTimes", e);
         }
 
         return result.trim();
@@ -1132,7 +1132,7 @@ export class TaskRenderer {
 
         titleEl.textContent = task.title || i18n("unnamedNote");
         titleEl.classList.add('ariaLabel');
-        titleEl.setAttribute('aria-label', boundBlockId ? `点击打开绑定块: ${task.title || i18n("unnamedNote")}` : (task.title || i18n("unnamedNote")));
+        titleEl.setAttribute('aria-label', boundBlockId ? i18n("openBoundBlockTooltip", { title: String(task.title || i18n("unnamedNote")) }) : (task.title || i18n("unnamedNote")));
         titleRow.appendChild(titleEl);
 
         // 链接 URL 链图标
@@ -1348,7 +1348,7 @@ export class TaskRenderer {
                     } catch (e) { }
                     const ignoredEl = document.createElement('div');
                     ignoredEl.className = 'reminder-item__ignored-time';
-                    ignoredEl.textContent = `⭕ 今日已忽略`;
+                    ignoredEl.textContent = i18n("taskIgnoredTodayWithIcon");
                     ignoredEl.style.cssText = 'font-size:12px; margin-top:6px; opacity:0.95;';
                     infoEl.appendChild(ignoredEl);
                 }
@@ -1359,7 +1359,7 @@ export class TaskRenderer {
                 } catch (e) { }
                 const ignoredEl = document.createElement('div');
                 ignoredEl.className = 'reminder-item__ignored-time';
-                ignoredEl.textContent = `⭕ 今日已忽略`;
+                ignoredEl.textContent = i18n("taskIgnoredTodayWithIcon");
                 ignoredEl.style.cssText = 'font-size:12px; margin-top:6px; opacity:0.95;';
                 infoEl.appendChild(ignoredEl);
             }
@@ -1418,7 +1418,7 @@ export class TaskRenderer {
                 projectInfo.appendChild(nameSpan);
 
                 projectInfo.classList.add('ariaLabel');
-                projectInfo.setAttribute('aria-label', `点击打开项目: ${displayProjectName}`);
+                projectInfo.setAttribute('aria-label', i18n("openProjectTooltip", { name: String(displayProjectName) }));
 
                 projectInfo.addEventListener('click', (e) => {
                     e.preventDefault();
@@ -1534,9 +1534,9 @@ export class TaskRenderer {
                 cursor: pointer;
                 text-decoration: underline dotted;
             `;
-            habitInfo.textContent = `${habitIcon} 习惯: ${habitName}${modeText}`;
+            habitInfo.textContent = i18n("taskHabitLabel", { icon: String(habitIcon), name: String(habitName), mode: String(modeText) });
             habitInfo.classList.add('ariaLabel');
-            habitInfo.setAttribute('aria-label', `已绑定习惯: ${habitName}${modeText}，点击查看习惯统计`);
+            habitInfo.setAttribute('aria-label', i18n("boundHabitTooltip", { name: String(habitName), mode: String(modeText) }));
 
             habitInfo.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -1716,7 +1716,7 @@ export class TaskRenderer {
                         }
                     });
                 } catch (error) {
-                    console.error('加载项目标签失败:', error);
+                    console.error("Failed to load project tags:", error);
                 }
             })();
 

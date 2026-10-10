@@ -749,13 +749,13 @@ export async function syncAllSubscriptions(plugin: any): Promise<void> {
 
         // Show notification
         if (errorCount > 0) {
-            await pushErrMsg(`日历订阅同步完成：成功 ${successCount} 个，失败 ${errorCount} 个`);
+            await pushErrMsg(i18n("calendarSyncPartial", { success: String(successCount), failed: String(errorCount) }));
         } else {
-            await pushMsg(`日历订阅同步成功：已同步 ${successCount} 个日历`);
+            await pushMsg(i18n("calendarSyncSuccess", { count: String(successCount) }));
         }
     } catch (error) {
         console.error('Failed to sync all subscriptions:', error);
-        await pushErrMsg('日历订阅同步失败: ' + (error.message || error));
+        await pushErrMsg(i18n("calendarSyncFailedPrefix") + (error.message || error));
     }
 }
 
@@ -855,7 +855,7 @@ export async function syncHolidays(plugin: any, url: string): Promise<boolean> {
             if (event.date) {
                 const title = event.title || '';
                 let type: 'holiday' | 'workday' = 'holiday';
-                // 通常节假日 ICS 中，补班会带有 “班” 字，放假带有 “休” 字
+                // 这是外部日历内容的解析规则，不使用界面显示的 W/H 等本地化标记。
                 if (title.includes('班') || title.toLowerCase().includes('work')) {
                     type = 'workday';
                 } else if (title.includes('休') || title.toLowerCase().includes('holiday') || title.toLowerCase().includes('off')) {

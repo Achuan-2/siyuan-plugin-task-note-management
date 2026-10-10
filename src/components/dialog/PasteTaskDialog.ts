@@ -915,7 +915,7 @@ export class PasteTaskDialog {
                         showMessage(`${totalTasks} ${i18n("tasksCreated") || "个任务已创建"}`);
                     }
                 } catch (error) {
-                    console.error('批量创建任务失败:', error);
+                    console.error("Failed to create tasks in batch:", error);
                     if (this.config.onError) {
                         this.config.onError(error);
                     } else {
@@ -1325,7 +1325,7 @@ export class PasteTaskDialog {
                         boundBlockIds.add(task.blockId);
                     }
                 } catch (error) {
-                    console.error('绑定块失败:', error);
+                    console.error("Failed to bind block:", error);
                 }
             }
 
@@ -1359,7 +1359,7 @@ export class PasteTaskDialog {
                 try {
                     await updateBindBlockAtrrs(blockId, this.config.plugin);
                 } catch (error) {
-                    console.error(`更新块 ${blockId} 属性失败:`, error);
+                    console.error(`Failed to update attributes of block ${blockId}:`, error);
                 }
             }
         }

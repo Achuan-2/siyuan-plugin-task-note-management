@@ -310,7 +310,7 @@ export class BlockBindingDialog {
                     bindBlockPreview.style.display = 'none';
                 }
             } catch (error) {
-                console.error('获取块信息失败:', error);
+                console.error("Failed to get block information:", error);
                 bindBlockPreview.style.display = 'none';
             }
         };
@@ -426,7 +426,7 @@ export class BlockBindingDialog {
                     parentPathInput.value = pathTemplate || '/';
                 }
             } catch (err) {
-                console.warn('读取插件设置失败:', err);
+                console.warn("Failed to read plugin settings:", err);
             }
 
             // 如果传入了默认父块或项目绑定，尝试解析出绑定的文档块ID并提供“使用父块文档路径”按钮
@@ -445,7 +445,7 @@ export class BlockBindingDialog {
                                 boundDocBlockId = milestone.blockId;
                             }
                         } catch (err) {
-                            console.warn('解析里程碑绑定失败:', err);
+                            console.warn("Failed to parse milestone binding:", err);
                         }
                     }
 
@@ -483,7 +483,7 @@ export class BlockBindingDialog {
                                 if (project?.blockId) boundDocBlockId = project.blockId;
                             }
                         } catch (err) {
-                            console.warn('解析项目绑定失败:', err);
+                            console.warn("Failed to parse project binding:", err);
                         }
                     }
 
@@ -541,7 +541,7 @@ export class BlockBindingDialog {
                         }
                     }
                 } catch (err) {
-                    console.warn('尝试解析绑定文档块失败:', err);
+                    console.warn("Failed to parse bound document block:", err);
                 }
             }
 
@@ -591,7 +591,7 @@ export class BlockBindingDialog {
                                 });
                             });
                         } catch (err) {
-                            console.error('路径搜索失败:', err);
+                            console.error("Path search failed:", err);
                             pathSearchResults.innerHTML = `<div style="padding:8px;text-align:center;color:var(--b3-theme-error);">${i18n("searchFailed") || "搜索失败"}</div>`;
                             pathSearchResults.style.display = 'block';
                         }
@@ -599,7 +599,7 @@ export class BlockBindingDialog {
                 });
             }
         } catch (error) {
-            console.error('加载笔记本列表或初始化文档面板失败:', error);
+            console.error("Failed to load notebook list or initialize document panel:", error);
         }
     }
 
@@ -638,7 +638,7 @@ export class BlockBindingDialog {
             if (levelSelect) levelSelect.value = defaultLevel.toString();
             if (positionSelect) positionSelect.value = defaultPosition;
         } catch (error) {
-            console.error('加载默认设置失败:', error);
+            console.error("Failed to load default settings:", error);
         }
 
         // 初始化默认值
@@ -751,7 +751,7 @@ export class BlockBindingDialog {
                         }
                     }
                 } catch (err) {
-                    console.warn('解析里程碑绑定失败:', err);
+                    console.warn("Failed to parse milestone binding:", err);
                 }
             }
 
@@ -808,7 +808,7 @@ export class BlockBindingDialog {
 
             return autoFillBlockId;
         } catch (error) {
-            console.error('初始化标题标签页默认值失败:', error);
+            console.error("Failed to initialize title tab defaults:", error);
             return null;
         }
     }
@@ -844,7 +844,7 @@ export class BlockBindingDialog {
             const reminderData = await this.plugin.loadReminderData();
             return reminderData[parentId];
         } catch (error) {
-            console.error('获取父任务失败:', error);
+            console.error("Failed to get parent task:", error);
             return null;
         }
     }
@@ -889,7 +889,7 @@ export class BlockBindingDialog {
                 headingBlockPreview.style.display = 'none';
             }
         } catch (error) {
-            console.error('获取块信息失败:', error);
+            console.error("Failed to get block information:", error);
             headingBlockPreview.style.display = 'none';
         }
     }
@@ -964,7 +964,7 @@ export class BlockBindingDialog {
                 });
             });
         } catch (error) {
-            console.error('搜索块失败:', error);
+            console.error("Failed to search blocks:", error);
             resultsContainer.innerHTML = `<div style="padding: 8px; text-align: center; color: var(--b3-theme-error);">${i18n("searchFailed") || "搜索失败"}</div>`;
             resultsContainer.style.display = 'block';
         }
@@ -989,7 +989,7 @@ export class BlockBindingDialog {
 
             levelSelect.value = targetLevel.toString();
         } catch (error) {
-            console.error('调整标题层级失败:', error);
+            console.error("Failed to adjust heading level:", error);
         }
     }
 
@@ -1037,7 +1037,7 @@ export class BlockBindingDialog {
                 this.dialog.destroy();
             }
         } catch (error) {
-            console.error('操作失败:', error);
+            console.error("Operation failed:", error);
             // 这里可以显示错误提示
         }
     }
@@ -1106,11 +1106,11 @@ export class BlockBindingDialog {
                             // 可选：删除原文件或者不保留
                         }
                     } catch (e) {
-                        console.error('转移图片资源失败', sourcePath, e);
+                        console.error("Failed to transfer image assets", sourcePath, e);
                     }
                 }
             } catch (error) {
-                console.error('处理资源图片失败', error);
+                console.error("Failed to process asset images", error);
             }
         }
 
@@ -1122,7 +1122,7 @@ export class BlockBindingDialog {
                     notebookId = settings.newDocNotebook;
                 }
             } catch (err) {
-                console.warn('读取插件设置失败:', err);
+                console.warn("Failed to read plugin settings:", err);
             }
         }
 
@@ -1148,7 +1148,7 @@ export class BlockBindingDialog {
                 this.notebooks = await lsNotebooks();
                 notebookList = this.getNotebookList();
             } catch (err) {
-                console.warn('加载笔记本列表失败，无法使用默认笔记本:', err);
+                console.warn("Failed to load notebook list; cannot use default notebook:", err);
             }
         }
         if (!notebookId && notebookList.length > 0) {
@@ -1164,7 +1164,7 @@ export class BlockBindingDialog {
                 finalRendered = rendered;
             }
         } catch (err) {
-            console.warn('renderSprig 渲染路径失败，使用未渲染路径:', err);
+            console.warn("renderSprig failed to render path; using unrendered path:", err);
         }
 
         // 确定目标笔记本ID：优先使用搜索选择的 notebookId 或下拉/设置中的 notebookId
@@ -1190,7 +1190,7 @@ export class BlockBindingDialog {
                         relativePath = finalRendered;
                     }
                 } catch (err) {
-                    console.warn('加载笔记本列表失败，无法根据首段解析笔记本名:', err);
+                    console.warn("Failed to load notebook list; cannot resolve notebook name from first paragraph:", err);
                     relativePath = finalRendered;
                 }
             }
@@ -1286,11 +1286,11 @@ export class BlockBindingDialog {
                             processedSubContent = processedSubContent.replace(sourcePath, `assets/${fileName}`);
                         }
                     } catch (e) {
-                        console.error('转移图片资源失败', sourcePath, e);
+                        console.error("Failed to transfer image assets", sourcePath, e);
                     }
                 }
             } catch (error) {
-                console.error('处理资源图片失败', error);
+                console.error("Failed to process asset images", error);
             }
         }
 
@@ -1319,7 +1319,7 @@ export class BlockBindingDialog {
                     insertPreviousID = contentBlocks[contentBlocks.length - 1].id;
                 }
             } catch (e) {
-                console.warn('获取标题子块失败:', e);
+                console.warn("Failed to get heading child blocks:", e);
             }
 
             response = await insertBlock('markdown', markdownContent, undefined, insertPreviousID);
@@ -1337,7 +1337,7 @@ export class BlockBindingDialog {
                         }
                     }
                 } catch (e) {
-                    console.warn('获取文档子块失败:', e);
+                    console.warn("Failed to get document child blocks:", e);
                 }
 
                 // 有开头正文时，插到最后一个开头正文块之后；如果文档没有标题，这个锚点就是文档末尾。

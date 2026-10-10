@@ -54,7 +54,7 @@ export async function loadSortConfig(plugin: Plugin): Promise<SortConfig> {
 
         return DEFAULT_SORT_CONFIG;
     } catch (error) {
-        console.log('加载排序配置失败，使用默认配置:', error);
+        console.log("Failed to load sort configuration; using defaults:", error);
         return DEFAULT_SORT_CONFIG;
     }
 }
@@ -74,14 +74,14 @@ export async function saveSortConfig(plugin: Plugin, criteria: SortCriterion[]):
         }
 
         await (plugin as any).saveSettings(settings);
-        console.log('排序配置保存成功:', criteria);
+        console.log("Sort configuration saved:", criteria);
 
         // 触发排序配置更新事件
         window.dispatchEvent(new CustomEvent('sortConfigUpdated', {
             detail: { criteria }
         }));
     } catch (error) {
-        console.error('保存排序配置失败:', error);
+        console.error("Failed to save sort configuration:", error);
         // 即使保存失败，仍然触发事件以保持界面同步
         window.dispatchEvent(new CustomEvent('sortConfigUpdated', {
             detail: { criteria }
@@ -135,7 +135,7 @@ export async function loadFilterConfig(plugin: Plugin): Promise<string> {
         const settings = await (plugin as any).loadSettings();
         return settings.reminderPanelFilterTab || DEFAULT_FILTER_TAB;
     } catch (error) {
-        console.log('加载筛选配置失败，使用默认配置:', error);
+        console.log("Failed to load filter configuration; using defaults:", error);
         return DEFAULT_FILTER_TAB;
     }
 }
@@ -148,8 +148,8 @@ export async function saveFilterConfig(plugin: Plugin, filterTab: string): Promi
         const settings = await (plugin as any).loadSettings();
         settings.reminderPanelFilterTab = filterTab;
         await (plugin as any).saveSettings(settings);
-        console.log('筛选配置保存成功:', filterTab);
+        console.log("Filter configuration saved:", filterTab);
     } catch (error) {
-        console.error('保存筛选配置失败:', error);
+        console.error("Failed to save filter configuration:", error);
     }
 }

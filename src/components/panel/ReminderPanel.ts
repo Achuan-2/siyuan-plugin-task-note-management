@@ -170,7 +170,7 @@ export class ReminderPanel {
                 try {
                     await this.pomodoroRecordManager.refreshData();
                 } catch (e) {
-                    console.warn('刷新番茄钟数据失败:', e);
+                    console.warn("Failed to refresh pomodoro data:", e);
                 }
                 // 加载中的通知也要排队，不能丢掉后台保存完成后的刷新。
                 void this.loadReminders();
@@ -272,7 +272,7 @@ export class ReminderPanel {
             Object.assign(settings, partialSettings);
             await this.plugin.saveSettings(settings);
         } catch (error) {
-            console.error('保存任务面板设置失败:', error);
+            console.error("Failed to save task panel settings:", error);
         }
     }
 
@@ -283,13 +283,13 @@ export class ReminderPanel {
                 this.plugin.settings = settings;
             }
         } catch (error) {
-            console.warn('刷新任务提醒跳过设置失败:', error);
+            console.warn("Failed to refresh task reminder skip settings:", error);
         }
 
         try {
             this.reminderSkipHolidayData = await this.plugin.loadHolidayData() || {};
         } catch (error) {
-            console.warn('加载节假日数据失败，任务提醒跳过节假日判断将降级:', error);
+            console.warn("Failed to load holiday data; task holiday skipping will fall back:", error);
             this.reminderSkipHolidayData = {};
         }
     }
@@ -363,7 +363,7 @@ export class ReminderPanel {
             this.currentSortCriteria = config.criteria || [{ method: 'time', order: 'asc' }];
             this.updateSortButtonTitle();
         } catch (error) {
-            console.error('加载排序配置失败:', error);
+            console.error("Failed to load sort configuration:", error);
             this.currentSortCriteria = [{ method: 'time', order: 'asc' }];
         }
     }
@@ -382,7 +382,7 @@ export class ReminderPanel {
             }
             this.updateSortButtonTitle();
         } catch (error) {
-            console.error('加载筛选配置失败:', error);
+            console.error("Failed to load filter configuration:", error);
         }
     }
 
@@ -937,7 +937,7 @@ export class ReminderPanel {
     // 修改排序方法以支持多条件排序
     private sortReminders(reminders: any[]) {
         const criteria = this.getActiveSortCriteria();
-        // console.log('应用排序方式:', criteria, '提醒数量:', reminders.length);
+        // console.log('Applying sort criteria:', criteria, 'Reminder count:', reminders.length);
 
         // 特殊处理已完成相关的筛选器（包括昨日已完成）
         const isCompletedFilter = this.currentTab === 'completed' || this.currentTab === 'todayCompleted' || this.currentTab === 'yesterdayCompleted';
@@ -998,7 +998,7 @@ export class ReminderPanel {
             });
         }
 
-        // console.log('排序完成，排序方式:', criteria);
+        // console.log('Sorting complete; criteria:', criteria);
     }
 
     // 根据单个排序条件比较两个任务
@@ -1099,7 +1099,7 @@ export class ReminderPanel {
             const result = this.compareByCriterion(a, b, criterion);
             if (result !== 0) {
                 // 调试日志：记录哪个排序条件决定了顺序
-                // console.log(`[排序] ${a.title?.substring(0, 20)} vs ${b.title?.substring(0, 20)}: 按 ${criterion.method}(${criterion.order}) = ${result}`);
+                // console.log(`[Sort] ${a.title?.substring(0, 20)} vs ${b.title?.substring(0, 20)}: ${criterion.method}(${criterion.order}) = ${result}`);
                 return result;
             }
         }
@@ -1174,7 +1174,7 @@ export class ReminderPanel {
 
         // 调试日志
         // if (a.categoryId?.includes(',') || b.categoryId?.includes(',')) {
-        //     console.log('[分类排序]', a.title?.substring(0, 20), `(${a.categoryId || 'none'})`, '=>', catA, 'vs', b.title?.substring(0, 20), `(${b.categoryId || 'none'})`, '=>', catB);
+        //     console.log('[CategorySort]', a.title?.substring(0, 20), `(${a.categoryId || 'none'})`, '=>', catA, 'vs', b.title?.substring(0, 20), `(${b.categoryId || 'none'})`, '=>', catB);
         // }
 
         // 无分类的任务排在最后
@@ -1287,7 +1287,7 @@ export class ReminderPanel {
                     await this.setReminderBaseDate(targetId, newDate);
                 }
             } catch (err) {
-                console.error('快速调整开始日期失败:', err);
+                console.error("Failed to quickly adjust start date:", err);
                 showMessage(i18n("operationFailed"));
             }
         };
@@ -1301,7 +1301,7 @@ export class ReminderPanel {
                     await this.setReminderEndDate(targetId, newDate);
                 }
             } catch (err) {
-                console.error('快速调整结束日期失败:', err);
+                console.error("Failed to quickly adjust end date:", err);
                 showMessage(i18n("operationFailed"));
             }
         };
@@ -1365,7 +1365,7 @@ export class ReminderPanel {
             settings.reminderPanelSelectedCategories = this.selectedCategories;
             await this.plugin.saveSettings(settings);
         } catch (error) {
-            console.error('保存任务分类筛选设置失败:', error);
+            console.error("Failed to save task category filter settings:", error);
         }
     }
 
@@ -1414,7 +1414,7 @@ export class ReminderPanel {
                     plugin: this.plugin,
                     onFilterApplied: async (filter: any) => {
                         // 应用过滤器逻辑
-                        console.log('应用过滤器:', filter);
+                        console.log("Applying filter:", filter);
                         showMessage(i18n("filterApplied") || "过滤器已应用");
                         // 更新filterSelect（包含重新加载配置缓存）
                         const filterValue = filter?.id ? `custom_${filter.id}` : undefined;
@@ -1435,8 +1435,8 @@ export class ReminderPanel {
                 }
             });
         }).catch((error) => {
-            console.error('加载过滤器管理组件失败:', error);
-            showMessage('加载过滤器管理组件失败');
+            console.error("Failed to load filter management component:", error);
+            showMessage(i18n("loadFilterManagerFailed"));
             dialog.destroy();
         });
     }
@@ -1602,7 +1602,7 @@ export class ReminderPanel {
             tabCache.set(docId, title);
             return title;
         } catch (error) {
-            console.warn('获取文档标题失败:', error);
+            console.warn("Failed to get document title:", error);
             tabCache.set(docId, '');
             return '';
         }
@@ -1648,7 +1648,7 @@ export class ReminderPanel {
                 docTitleLink.setAttribute('data-type', 'a');
                 docTitleLink.setAttribute('data-href', `siyuan://blocks/${docId}`);
                 docTitleLink.textContent = cachedTitle;
-                docTitleLink.classList.add('ariaLabel'); docTitleLink.setAttribute('aria-label', `所属文档: ${cachedTitle}`);
+                docTitleLink.classList.add('ariaLabel'); docTitleLink.setAttribute('aria-label', i18n("documentTitleTooltip", { title: String(cachedTitle) }));
                 docTitleLink.style.cssText = `
                     cursor: pointer;
                     color: var(--b3-theme-on-background);
@@ -1702,7 +1702,7 @@ export class ReminderPanel {
                 docTitleLink.setAttribute('data-type', 'a');
                 docTitleLink.setAttribute('data-href', `siyuan://blocks/${docId}`);
                 docTitleLink.textContent = title;
-                docTitleLink.classList.add('ariaLabel'); docTitleLink.setAttribute('aria-label', `所属文档: ${title}`);
+                docTitleLink.classList.add('ariaLabel'); docTitleLink.setAttribute('aria-label', i18n("documentTitleTooltip", { title: String(title) }));
                 docTitleLink.style.cssText = `
                     cursor: pointer;
                     color: var(--b3-theme-on-background);
@@ -1735,7 +1735,7 @@ export class ReminderPanel {
                 }, 0);
             }
         } catch (error) {
-            console.warn('获取文档标题失败:', error);
+            console.warn("Failed to get document title:", error);
             // 静默失败，不影响主要功能
         }
     }
@@ -1767,7 +1767,7 @@ export class ReminderPanel {
                 });
             }
         } catch (error) {
-            console.error('ReminderPanel 构造里程碑映射失败:', error);
+            console.error("ReminderPanel: failed to build milestone mapping:", error);
         }
     }
 
@@ -1836,7 +1836,7 @@ export class ReminderPanel {
                                     this.setTemporarySortOverride(this.currentTab, criteria);
                                     this.updateSortButtonTitle();
                                 } catch (error) {
-                                    console.error('临时保存排序配置失败:', error);
+                                    console.error("Failed to temporarily save sort configuration:", error);
                                 }
                             },
                             onChange: async (criteria) => {
@@ -1849,7 +1849,7 @@ export class ReminderPanel {
                                     this.totalItems = 0;
                                     await this.loadReminders();
                                 } catch (error) {
-                                    console.error('临时更新排序失败:', error);
+                                    console.error("Failed to temporarily update order:", error);
                                 }
                             }
                         });
@@ -1872,7 +1872,7 @@ export class ReminderPanel {
                         this.updateSortButtonTitle();
                         await saveSortConfig(this.plugin, criteria);
                     } catch (error) {
-                        console.error('保存排序配置失败:', error);
+                        console.error("Failed to save sort configuration:", error);
                     }
                 },
                 onChange: async (criteria) => {
@@ -1887,13 +1887,13 @@ export class ReminderPanel {
                         this.totalItems = 0;
                         await this.loadReminders();
                     } catch (error) {
-                        console.error('实时更新排序失败:', error);
+                        console.error("Failed to update order in real time:", error);
                     }
                 }
             });
             dialog.show();
         } catch (error) {
-            console.error('显示排序菜单失败:', error);
+            console.error("Failed to show sort menu:", error);
         }
     }
     /**
@@ -2039,20 +2039,20 @@ export class ReminderPanel {
     private getAllAncestorIds(id: string, reminderMap: Map<string, any>): string[] {
         const result: string[] = [];
         let current = reminderMap.get(id);
-        // console.log(`获取任务 ${id} 的祖先, 当前任务:`, current);
+        // console.log(`Getting ancestors of task ${id}; current task:`, current);
 
         while (current && current.parentId) {
-            // console.log(`找到父任务: ${current.parentId}`);
+            // console.log(`Found parent task: ${current.parentId}`);
             if (result.includes(current.parentId)) {
-                // console.log(`检测到循环引用，停止查找`);
+                // console.log('Circular reference detected; stopping search');
                 break; // 防止循环引用
             }
             result.push(current.parentId);
             current = reminderMap.get(current.parentId);
-            // console.log(`父任务详情:`, current);
+            // console.log('Parent task details:', current);
         }
 
-        // console.log(`任务 ${id} 的所有祖先:`, result);
+        // console.log(`All ancestors of task ${id}:`, result);
         return result;
     }
 
@@ -2136,8 +2136,8 @@ export class ReminderPanel {
                                 };
                                 const totalFocusText = focusTimeMinutes > 0 ? ` ⏱ ${formatMinutesToString(focusTimeMinutes)}` : '';
                                 const todayFocusText = (todayFocusMinutes > 0 || totalCount > 0) ? ` ⏱ ${formatMinutesToString(todayFocusMinutes)}` : '';
-                                const totalLine = (totalCount > 0 || focusTimeMinutes > 0) ? `<span class="ariaLabel" aria-label="累计完成的番茄钟: ${totalCount}">🍅 ${totalCount}</span><span class="ariaLabel" aria-label="总专注时长: ${focusTimeMinutes} 分钟" style="margin-left:8px; opacity:0.9;">${totalFocusText}</span>` : '';
-                                const todayLine = (todayCount > 0 || todayFocusMinutes > 0 || totalCount > 0) ? `<div style="margin-top:6px; font-size:12px; opacity:0.95;"><span class="ariaLabel" aria-label='今日完成的番茄钟: ${todayCount}'>今日: 🍅 ${todayCount}</span><span class="ariaLabel" aria-label='今日专注时长: ${todayFocusMinutes} 分钟' style='margin-left:8px'>${todayFocusText}</span></div>` : '';
+                                const totalLine = (totalCount > 0 || focusTimeMinutes > 0) ? `<span class="ariaLabel" aria-label="${i18n('pomodoroCompletedTotalTooltip', { count: String(totalCount) })}">🍅 ${totalCount}</span><span class="ariaLabel" aria-label="${i18n('pomodoroFocusTotalTooltip', { minutes: String(focusTimeMinutes) })}" style="margin-left:8px; opacity:0.9;">${totalFocusText}</span>` : '';
+                                const todayLine = (todayCount > 0 || todayFocusMinutes > 0 || totalCount > 0) ? `<div style="margin-top:6px; font-size:12px; opacity:0.95;"><span class="ariaLabel" aria-label="${i18n('pomodoroCompletedTodayTooltip', { count: String(todayCount) })}">${i18n("todayPomodoroWithIcon")}${todayCount}</span><span class="ariaLabel" aria-label="${i18n('pomodoroFocusTodayTooltip', { minutes: String(todayFocusMinutes) })}" style="margin-left:8px">${todayFocusText}</span></div>` : '';
 
                                 const focusTimeText = focusTimeMinutes > 0 ? ` ⏱ ${formatMinutesToString(focusTimeMinutes)}` : '';
                                 pomEl.innerHTML = `${totalLine}${todayLine}`;
@@ -2478,7 +2478,7 @@ export class ReminderPanel {
             }
 
         } catch (error) {
-            console.error('加载提醒失败:', error);
+            console.error("Failed to load reminders:", error);
             showMessage(i18n("loadRemindersFailed"));
         } finally {
             this.isLoading = false;
@@ -2541,7 +2541,7 @@ export class ReminderPanel {
         try {
             habitData = await this.plugin.loadHabitData();
         } catch (error) {
-            console.warn('批量获取习惯数据失败:', error);
+            console.warn("Failed to get habit data in batch:", error);
             habitData = {};
         }
 
@@ -2582,7 +2582,7 @@ export class ReminderPanel {
                             }
                         }
                     } catch (err) {
-                        console.warn(`批量获取文档标题失败 (批次 ${i}-${i + batchSize}):`, err);
+                        console.warn(`Failed to fetch document titles in batch (${i}-${i + batchSize}):`, err);
                     }
                 }
             }
@@ -2605,7 +2605,7 @@ export class ReminderPanel {
                 const stats = await this.pomodoroRecordManager.resolveReminderPomodoroStats(reminder, fullData);
                 return { id: reminder.id, ...stats };
             } catch (error) {
-                console.warn(`获取任务 ${reminder.id} 的番茄钟计数失败:`, error);
+                console.warn(`Failed to get pomodoro count for task ${reminder.id}:`, error);
                 return { id: reminder.id, pomodoroCount: 0, focusTime: 0, todayPomodoroCount: 0, todayFocusTime: 0, totalRepeatingPomodoroCount: 0, totalRepeatingFocusTime: 0 };
             }
         });
@@ -2619,7 +2619,7 @@ export class ReminderPanel {
                     const project = projectData[reminder.projectId];
                     return { id: reminder.id, project };
                 } catch (error) {
-                    console.warn(`获取任务 ${reminder.id} 的项目信息失败:`, error);
+                    console.warn(`Failed to get project information for task ${reminder.id}:`, error);
                     return { id: reminder.id, project: null };
                 }
             });
@@ -2903,7 +2903,7 @@ export class ReminderPanel {
                     }
                 }
             } catch (error) {
-                console.error(`渲染任务 ${reminder.id} 失败:`, error);
+                console.error(`Failed to render task ${reminder.id}:`, error);
                 // 继续处理其他任务
             }
         }
@@ -3004,7 +3004,7 @@ export class ReminderPanel {
                 const displayTitle = title || i18n('unnamedNote');
                 titleEl.textContent = displayTitle;
                 titleEl.setAttribute('aria-label', reminder.blockId || reminder.docId
-                    ? `点击打开绑定块: ${displayTitle}` : displayTitle);
+                    ? i18n("openBoundBlockTooltip", { title: String(displayTitle) }) : displayTitle);
             }
             state.title = title;
         }
@@ -3499,8 +3499,8 @@ export class ReminderPanel {
                 }
             }
         } catch (e) {
-            console.error("完成每日可做任务失败", e);
-            showMessage("操作失败", 3000, "error");
+            console.error("Failed to complete daily available task", e);
+            showMessage(i18n("setCategoryFailed"), 3000, "error");
         }
     }
 
@@ -3527,12 +3527,12 @@ export class ReminderPanel {
                     if (!skipReload) {
                         this.loadReminders();
                     }
-                    showMessage("已取消今日完成标记");
+                    showMessage(i18n("dailyCompletionCleared"));
                 }
             }
         } catch (e) {
-            console.error("取消完成每日可做任务失败", e);
-            showMessage("操作失败", 3000, "error");
+            console.error("Failed to undo daily available task completion", e);
+            showMessage(i18n("setCategoryFailed"), 3000, "error");
         }
     }
 
@@ -3559,11 +3559,11 @@ export class ReminderPanel {
                 window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
                 // 刷新界面显示
                 this.loadReminders();
-                showMessage("今日已忽略该任务");
+                showMessage(i18n("taskIgnoredToday"));
             }
         } catch (e) {
-            console.error("忽略今日任务失败", e);
-            showMessage("操作失败", 3000, "error");
+            console.error("Failed to ignore today's task", e);
+            showMessage(i18n("setCategoryFailed"), 3000, "error");
         }
     }
 
@@ -3585,11 +3585,11 @@ export class ReminderPanel {
                 window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
                 // 刷新界面显示
                 this.loadReminders();
-                showMessage("已取消今日忽略");
+                showMessage(i18n("dailyIgnoreCleared"));
             }
         } catch (e) {
-            console.error("取消忽略今日任务失败", e);
-            showMessage("操作失败", 3000, "error");
+            console.error("Failed to undo ignoring today's task", e);
+            showMessage(i18n("setCategoryFailed"), 3000, "error");
         }
     }
 
@@ -3617,7 +3617,7 @@ export class ReminderPanel {
                         }
                     });
                 } catch (e) {
-                    console.warn(`获取项目 ${projectId} 的分组信息失败`, e);
+                    console.warn(`Failed to get group information for project ${projectId}`, e);
                 }
             }
 
@@ -3629,7 +3629,7 @@ export class ReminderPanel {
                 return true;
             });
         } catch (error) {
-            console.error('过滤已归档分组任务失败', error);
+            console.error("Failed to filter tasks in archived groups", error);
             return reminders;
         }
     }
@@ -3646,7 +3646,7 @@ export class ReminderPanel {
                 (reminder.date || reminder.parentId || this.hasChildren(reminder.id, reminderData) || reminder.completed || (!reminder.date && !reminder.parentId));
 
             if (reminder && reminder.id) {
-                // console.log(`任务 ${reminder.id} (${reminder.title}):`, {
+                // console.log(`Task ${reminder.id} (${reminder.title}):`, {
                 //     hasDate: !!reminder.date,
                 //     hasParentId: !!reminder.parentId,
                 //     hasChildren: this.hasChildren(reminder.id, reminderData),
@@ -3658,7 +3658,7 @@ export class ReminderPanel {
             return shouldInclude;
         });
 
-        // console.log(`生成的所有任务数量: ${reminders.length}`);
+        // console.log(`Total generated tasks: ${reminders.length}`);
         const allReminders = [];
         // 重置原始提醒缓存（用于重复实例的原始数据查询）
         this.originalRemindersCache = {};
@@ -4270,13 +4270,13 @@ export class ReminderPanel {
                     const statusMap = await projectManager.getProjectKanbanStatusMap(projectId);
                     nextCache.set(projectId, statusMap);
                 } catch (error) {
-                    console.warn(`[ReminderPanel] 加载项目状态失败: ${projectId}`, error);
+                    console.warn(`[ReminderPanel] Failed to load project statuses: ${projectId}`, error);
                 }
             }));
 
             this.projectKanbanStatusCache = nextCache;
         } catch (error) {
-            console.warn('[ReminderPanel] 刷新项目状态名称缓存失败', error);
+            console.warn("[ReminderPanel] Failed to refresh project status name cache", error);
             this.projectKanbanStatusCache.clear();
             this.defaultKanbanStatusCache.clear();
         }
@@ -4666,8 +4666,8 @@ export class ReminderPanel {
                 'overdue': i18n("noOverdueReminders"),
                 'thisWeek': i18n("noThisWeekReminders") || "本周暂无任务",
                 'completed': i18n("noCompletedReminders"),
-                'todayCompleted': "今日暂无已完成任务",
-                'yesterdayCompleted': "昨日暂无已完成任务",
+                'todayCompleted': i18n("noCompletedTasksToday"),
+                'yesterdayCompleted': i18n("noCompletedTasksYesterday"),
                 'all': i18n("noPast7Reminders"),
                 'allUncompleted': i18n("noAllUncompletedReminders"),
                 'noDate': i18n("noNoDateReminders")
@@ -4693,7 +4693,7 @@ export class ReminderPanel {
             // 为了性能考虑，我们可以在loadReminders时缓存这些数据
             return this.originalRemindersCache?.[originalId] || null;
         } catch (error) {
-            console.error('获取原始提醒失败:', error);
+            console.error("Failed to get original reminder:", error);
             return null;
         }
     }
@@ -5210,7 +5210,7 @@ export class ReminderPanel {
 
             this.projectSortMetaCache = projectSortMap;
         } catch (error) {
-            console.warn('刷新项目排序缓存失败:', error);
+            console.warn("Failed to refresh project sort cache:", error);
             this.projectPanelSortCriteria = [{ method: 'priority', order: 'desc' }];
             this.projectSortMetaCache = new Map();
         }
@@ -5411,13 +5411,13 @@ export class ReminderPanel {
                     try {
                         await this.plugin.updateMobileNotification(original);
                     } catch (e) {
-                        console.warn('刷新重复任务移动端通知失败:', originalId, e);
+                        console.warn("Failed to refresh recurring task mobile notifications:", originalId, e);
                     }
                 } else if (completed && this.plugin?.cancelMobileNotification) {
                     try {
                         await this.plugin.cancelMobileNotification(originalId);
                     } catch (e) {
-                        console.warn('取消重复任务移动端通知失败:', originalId, e);
+                        console.warn("Failed to cancel recurring task mobile notifications:", originalId, e);
                     }
                 }
 
@@ -5427,7 +5427,7 @@ export class ReminderPanel {
                         try {
                             await this.plugin.cancelMobileNotification(taskId);
                         } catch (e) {
-                            console.warn('取消移动端通知失败:', taskId, e);
+                            console.warn("Failed to cancel mobile notifications:", taskId, e);
                         }
                     }
                 }
@@ -5442,7 +5442,7 @@ export class ReminderPanel {
                     try {
                         await updateBindBlockAtrrs(bId, this.plugin);
                     } catch (err) {
-                        console.warn('更新子任务块属性失败:', bId, err);
+                        console.warn("Failed to update subtask block attributes:", bId, err);
                     }
                 }
 
@@ -5491,7 +5491,7 @@ export class ReminderPanel {
                     try {
                         await this.plugin.cancelMobileNotification(taskId);
                     } catch (e) {
-                        console.warn('取消移动端通知失败:', taskId, e);
+                        console.warn("Failed to cancel mobile notifications:", taskId, e);
                     }
                 }
             }
@@ -5511,7 +5511,7 @@ export class ReminderPanel {
                 try {
                     await updateBindBlockAtrrs(bId, this.plugin);
                 } catch (err) {
-                    console.warn('更新任务块属性失败:', bId, err);
+                    console.warn("Failed to update task block attributes:", bId, err);
                 }
             }
 
@@ -5530,7 +5530,7 @@ export class ReminderPanel {
                 }
             }));
         } catch (error) {
-            console.error('切换提醒状态失败:', error);
+            console.error("Failed to toggle reminder state:", error);
             showMessage(i18n("operationFailed"));
             await this.loadReminders(true);
         }
@@ -5540,7 +5540,7 @@ export class ReminderPanel {
             openBlock(blockId);
 
         } catch (error) {
-            console.error('打开块失败:', error);
+            console.error("Failed to open block:", error);
 
             // 询问用户是否删除无效的提醒
             await confirm(
@@ -5737,7 +5737,7 @@ export class ReminderPanel {
                 }
             }
         } catch (e) {
-            console.warn('格式化 reminderTimes 失败', e);
+            console.warn("Failed to format reminderTimes", e);
         }
 
         return result.trim();
@@ -5769,14 +5769,14 @@ export class ReminderPanel {
                 if (this.plugin.cancelMobileNotification) {
                     await Promise.all(deletedIds.map(id =>
                         this.plugin.cancelMobileNotification(id).catch((e: any) => {
-                            console.warn('取消移动端通知失败:', id, e);
+                            console.warn("Failed to cancel mobile notifications:", id, e);
                         })
                     ));
                 }
 
                 // 更新块的书签状态（应该会移除书签，因为没有提醒了）
                 await updateBindBlockAtrrs(blockId, this.plugin).catch((e: any) => {
-                    console.warn('更新块书签失败:', blockId, e);
+                    console.warn("Failed to update block bookmark:", blockId, e);
                 });
 
                 // 局部移除DOM、缓存、分页
@@ -5794,7 +5794,7 @@ export class ReminderPanel {
                 showMessage(i18n("noRelatedReminders"));
             }
         } catch (error) {
-            console.error('删除相关提醒失败:', error);
+            console.error("Failed to delete related reminders:", error);
             showMessage(i18n("deleteRelatedRemindersFailed"));
         } finally {
             this.isDeleting = false;
@@ -6090,7 +6090,7 @@ export class ReminderPanel {
                         }
                     }
                 } catch (error) {
-                    console.error('处理拖放失败:', error);
+                    console.error("Failed to handle drop:", error);
                     showMessage(i18n("operationFailed"));
                 }
                 return;
@@ -6920,7 +6920,7 @@ export class ReminderPanel {
             const childId = childReminder.isRepeatInstance ? childReminder.originalId : childReminder.id;
 
             if (!reminderData[childId]) {
-                throw new Error('任务不存在');
+                throw new Error(i18n("taskNotExist"));
             }
 
             // 获取父任务信息，用于继承属性
@@ -6966,7 +6966,7 @@ export class ReminderPanel {
             await this.loadReminders();
 
         } catch (error) {
-            console.error('移除父子关系失败:', error);
+            console.error("Failed to remove parent-child relationship:", error);
             showMessage(i18n("operationFailed") || "操作失败", 3000, 'error');
             throw error;
         }
@@ -7283,7 +7283,7 @@ export class ReminderPanel {
                 white-space: nowrap;
                 pointer-events: none;
             `;
-            hintText.textContent = '设为子任务 ↓';
+            hintText.textContent = i18n("setAsSubtaskDown");
             indicator.appendChild(hintText);
 
             element.style.position = 'relative';
@@ -7353,7 +7353,7 @@ export class ReminderPanel {
                 await this.loadReminders();
             }
         } catch (error) {
-            console.error('处理拖放失败:', error);
+            console.error("Failed to handle drop:", error);
             showMessage(i18n("operationFailed") || "操作失败");
         }
     }
@@ -7372,10 +7372,10 @@ export class ReminderPanel {
                 : parentId;
 
             if (!reminderData[childId]) {
-                throw new Error('子任务不存在');
+                throw new Error(i18n("subtaskMissing"));
             }
             if (!reminderData[storedParentId]) {
-                throw new Error('父任务不存在');
+                throw new Error(i18n("parentTaskNotExist"));
             }
 
             // 更新子任务的 parentId
@@ -7394,7 +7394,7 @@ export class ReminderPanel {
             await this.loadReminders();
 
         } catch (error) {
-            console.error('设置父子关系失败:', error);
+            console.error("Failed to set parent-child relationship:", error);
             throw error;
         }
     }
@@ -7407,7 +7407,7 @@ export class ReminderPanel {
             const targetElement = this.remindersContainer.querySelector(`[data-reminder-id="${targetReminder.id}"]`) as HTMLElement;
 
             if (!draggedElement || !targetElement) {
-                console.error('找不到拖拽或目标元素');
+                console.error("Dragged or target element not found");
                 return;
             }
 
@@ -7476,7 +7476,7 @@ export class ReminderPanel {
             }
 
         } catch (error) {
-            console.error('更新DOM顺序失败:', error);
+            console.error("Failed to update DOM order:", error);
         }
     }
 
@@ -7591,7 +7591,7 @@ export class ReminderPanel {
             }
 
         } catch (error) {
-            console.error('重新排序提醒失败:', error);
+            console.error("Failed to reorder reminders:", error);
             throw error;
         }
     }
@@ -7667,7 +7667,7 @@ export class ReminderPanel {
         const targetIndex = items.findIndex(item => item.id === targetFullId);
         const draggedIndex = items.findIndex(item => item.id === draggedFullId);
         if (targetIndex === -1 || draggedIndex === -1) {
-            console.error('找不到拖拽或目标任务', { draggedFullId, targetFullId, items: items.map(i => i.id) });
+            console.error("Dragged or target task not found", { draggedFullId, targetFullId, items: items.map(i => i.id) });
             return;
         }
 
@@ -7763,7 +7763,7 @@ export class ReminderPanel {
         const draggedIndex = items.findIndex(item => item.id === draggedFullId);
 
         if (targetIndex === -1 || draggedIndex === -1) {
-            console.error('??????????', { draggedFullId, targetFullId, items: items.map(i => i.id) });
+            console.error('Dragged or target task not found:', { draggedFullId, targetFullId, items: items.map(i => i.id) });
             return;
         }
 
@@ -7827,7 +7827,7 @@ export class ReminderPanel {
                 return `${dateStr} ${timeStr}`;
             }
         } catch (error) {
-            console.error('格式化完成时间失败:', error);
+            console.error("Failed to format completion time:", error);
             return completedTime;
         }
     }
@@ -7864,7 +7864,7 @@ export class ReminderPanel {
                     }
                 }
             } catch (error) {
-                console.warn('[ReminderPanel] 加载分组可见状态失败，使用全部状态:', error);
+                console.warn("[ReminderPanel] Failed to load group visible statuses; using all statuses:", error);
             }
         }
 
@@ -8125,9 +8125,9 @@ export class ReminderPanel {
                 click: async () => {
                     try {
                         await this.removeParentRelation(reminder);
-                        showMessage(i18n("taskUnlinkedFromParent").replace("${childTitle}", reminder.title || "任务").replace("${parentTitle}", "父任务"));
+                        showMessage(i18n("taskUnlinkedFromParent").replace("${childTitle}", reminder.title || i18n("reminder")).replace("${parentTitle}", i18n("parentTask")));
                     } catch (error) {
-                        console.error('解除父子关系失败:', error);
+                        console.error("Failed to remove parent-child relationship:", error);
                         showMessage(i18n("unlinkParentChildFailed") || "解除父子关系失败");
                     }
                 }
@@ -8238,7 +8238,7 @@ export class ReminderPanel {
                         await this.setReminderBaseDate(targetId, newDate);
                     }
                 } catch (err) {
-                    console.error('快速调整日期失败:', err);
+                    console.error("Failed to quickly adjust date:", err);
                     showMessage(i18n("operationFailed"));
                 }
             };
@@ -8633,7 +8633,7 @@ export class ReminderPanel {
             await this.loadReminders();
             window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
         } catch (err) {
-            console.error('设置基准日期失败:', err);
+            console.error("Failed to set base date:", err);
             showMessage(i18n("operationFailed"));
         }
     }
@@ -8664,7 +8664,7 @@ export class ReminderPanel {
             await this.loadReminders();
             window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
         } catch (err) {
-            console.error('设置结束日期失败:', err);
+            console.error("Failed to set end date:", err);
             showMessage(i18n("operationFailed"));
         }
     }
@@ -8705,7 +8705,7 @@ export class ReminderPanel {
             window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
             showMessage(i18n("instanceTimeUpdated") || "实例时间已更新");
         } catch (err) {
-            console.error('设置实例日期失败:', err);
+            console.error("Failed to set instance date:", err);
             showMessage(i18n("operationFailed"));
         }
     }
@@ -8734,14 +8734,14 @@ export class ReminderPanel {
             window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
             showMessage(i18n("instanceTimeUpdated") || "实例时间已更新");
         } catch (err) {
-            console.error('设置实例结束日期失败:', err);
+            console.error("Failed to set instance end date:", err);
             showMessage(i18n("operationFailed"));
         }
     }
 
     private startPomodoro(reminder: any, workDurationOverride?: number) {
         if (!this.plugin) {
-            showMessage("无法启动番茄钟：插件实例不可用");
+            showMessage(i18n("pomodoroUnavailable"));
             return;
         }
 
@@ -8749,28 +8749,28 @@ export class ReminderPanel {
         if (this.pomodoroManager.hasActivePomodoroTimer()) {
             // 获取当前番茄钟的状态
             const currentState = this.pomodoroManager.getCurrentState();
-            const currentTitle = currentState.reminderTitle || '当前任务';
-            const newTitle = reminder.title || '新任务';
+            const currentTitle = currentState.reminderTitle || i18n("currentTask");
+            const newTitle = reminder.title || i18n("newTaskTitle");
 
-            let confirmMessage = `当前正在进行番茄钟任务："${currentTitle}"，是否要切换到新任务："${newTitle}"？`;
+            let confirmMessage = i18n("switchPomodoroTaskConfirm", { current: String(currentTitle), next: String(newTitle) });
 
             // 如果当前番茄钟正在运行，先暂停并询问是否继承时间
             if (currentState.isRunning && !currentState.isPaused) {
                 // 先暂停当前番茄钟
                 if (!this.pomodoroManager.pauseCurrentTimer()) {
-                    console.error('暂停当前番茄钟失败');
+                    console.error("Failed to pause current pomodoro timer");
                 }
 
                 const timeDisplay = currentState.isWorkPhase ?
-                    `工作时间 ${Math.floor(currentState.timeElapsed / 60)}:${(currentState.timeElapsed % 60).toString().padStart(2, '0')}` :
-                    `休息时间 ${Math.floor(currentState.timeLeft / 60)}:${(currentState.timeLeft % 60).toString().padStart(2, '0')}`;
+                    i18n("pomodoroWorkElapsed", { minutes: String(Math.floor(currentState.timeElapsed / 60)), seconds: String((currentState.timeElapsed % 60).toString().padStart(2, '0')) }) :
+                    i18n("pomodoroBreakRemaining", { minutes: String(Math.floor(currentState.timeLeft / 60)), seconds: String((currentState.timeLeft % 60).toString().padStart(2, '0')) });
 
-                confirmMessage += `\n\n\n选择"确定"将继承当前进度继续计时。`;
+                confirmMessage += i18n('pomodoroSwitchProgressHint');
             }
 
             // 显示确认对话框
             confirm(
-                "切换番茄钟任务",
+                i18n("switchPomodoroTask"),
                 confirmMessage,
                 () => {
                     // 用户确认替换，传递当前状态
@@ -8780,7 +8780,7 @@ export class ReminderPanel {
                     // 用户取消，尝试恢复原番茄钟的运行状态
                     if (currentState.isRunning && !currentState.isPaused) {
                         if (!this.pomodoroManager.resumeCurrentTimer()) {
-                            console.error('恢复番茄钟运行失败');
+                            console.error("Failed to resume pomodoro timer");
                         }
                     }
                 }
@@ -8858,7 +8858,7 @@ export class ReminderPanel {
             this.loadReminders();
             showMessage(i18n("markedTodayCompleted"), 2000);
         } catch (error) {
-            console.error('标记今日已完成失败:', error);
+            console.error("Failed to mark today completed:", error);
             showMessage(i18n("operationFailed"));
         }
     }
@@ -8909,7 +8909,7 @@ export class ReminderPanel {
             this.loadReminders();
             showMessage(i18n("unmarkedTodayCompleted"), 2000);
         } catch (error) {
-            console.error('取消今日已完成失败:', error);
+            console.error("Failed to undo today's completion:", error);
             showMessage(i18n("operationFailed"));
         }
     }
@@ -8925,14 +8925,14 @@ export class ReminderPanel {
 
         if (hasStandaloneWindow) {
             // 如果存在独立窗口，更新独立窗口中的番茄钟
-            console.log('检测到独立窗口，更新独立窗口中的番茄钟');
+            console.log("Standalone window detected; updating pomodoro timer in that window");
             if (typeof this.plugin.openPomodoroWindow === 'function') {
                 await this.plugin.openPomodoroWindow(reminder, runtimeSettings, false, inheritState);
 
                 // 如果继承了状态且原来正在运行，显示继承信息
                 if (inheritState && inheritState.isRunning && !inheritState.isPaused) {
-                    const phaseText = inheritState.isWorkPhase ? '工作时间' : '休息时间';
-                    showMessage(`已切换任务并继承${phaseText}进度`, 2000);
+                    const phaseText = inheritState.isWorkPhase ? i18n("workTime") : i18n("breakTime");
+                    showMessage(i18n("switchedTaskPreservingProgress", { phase: String(phaseText) }), 2000);
                 }
             }
         } else {
@@ -8950,15 +8950,15 @@ export class ReminderPanel {
 
             // 如果继承了状态且原来正在运行，显示继承信息
             if (inheritState && inheritState.isRunning && !inheritState.isPaused) {
-                const phaseText = inheritState.isWorkPhase ? '工作时间' : '休息时间';
-                showMessage(`已切换任务并继承${phaseText}进度`, 2000);
+                const phaseText = inheritState.isWorkPhase ? i18n("workTime") : i18n("breakTime");
+                showMessage(i18n("switchedTaskPreservingProgress", { phase: String(phaseText) }), 2000);
             }
         }
     }
 
     private startPomodoroCountUp(reminder: any) {
         if (!this.plugin) {
-            showMessage("无法启动番茄钟：插件实例不可用");
+            showMessage(i18n("pomodoroUnavailable"));
             return;
         }
 
@@ -8966,24 +8966,24 @@ export class ReminderPanel {
         if (this.pomodoroManager.hasActivePomodoroTimer()) {
             // 获取当前番茄钟的状态
             const currentState = this.pomodoroManager.getCurrentState();
-            const currentTitle = currentState.reminderTitle || '当前任务';
-            const newTitle = reminder.title || '新任务';
+            const currentTitle = currentState.reminderTitle || i18n("currentTask");
+            const newTitle = reminder.title || i18n("newTaskTitle");
 
-            let confirmMessage = `当前正在进行番茄钟任务："${currentTitle}"，是否要切换到新的正计时任务："${newTitle}"？`;
+            let confirmMessage = i18n("switchCountUpTaskConfirm", { current: String(currentTitle), next: String(newTitle) });
 
             // 如果当前番茄钟正在运行，先暂停并询问是否继承时间
             if (currentState.isRunning && !currentState.isPaused) {
                 // 先暂停当前番茄钟
                 if (!this.pomodoroManager.pauseCurrentTimer()) {
-                    console.error('暂停当前番茄钟失败');
+                    console.error("Failed to pause current pomodoro timer");
                 }
 
-                confirmMessage += `\n\n\n选择"确定"将继承当前进度继续计时。`;
+                confirmMessage += i18n('pomodoroSwitchProgressHint');
             }
 
             // 显示确认对话框
             confirm(
-                "切换到正计时番茄钟",
+                i18n("switchToStopwatch"),
                 confirmMessage,
                 () => {
                     // 用户确认替换，传递当前状态
@@ -8993,7 +8993,7 @@ export class ReminderPanel {
                     // 用户取消，尝试恢复番茄钟的运行状态
                     if (currentState.isRunning && !currentState.isPaused) {
                         if (!this.pomodoroManager.resumeCurrentTimer()) {
-                            console.error('恢复番茄钟运行失败');
+                            console.error("Failed to resume pomodoro timer");
                         }
                     }
                 }
@@ -9013,21 +9013,21 @@ export class ReminderPanel {
 
         if (hasStandaloneWindow) {
             // 如果存在独立窗口，更新独立窗口中的番茄钟
-            console.log('检测到独立窗口，更新独立窗口中的番茄钟（正计时模式）');
+            console.log("Standalone window detected; updating count-up pomodoro timer in that window");
             if (typeof this.plugin.openPomodoroWindow === 'function') {
                 await this.plugin.openPomodoroWindow(reminder, settings, true, inheritState);
 
                 // 如果继承了状态且原来正在运行，显示继承信息
                 if (inheritState && inheritState.isRunning && !inheritState.isPaused) {
-                    const phaseText = inheritState.isWorkPhase ? '工作时间' : '休息时间';
-                    showMessage(`已切换到正计时模式并继承${phaseText}进度`, 2000);
+                    const phaseText = inheritState.isWorkPhase ? i18n("workTime") : i18n("breakTime");
+                    showMessage(i18n("switchedCountUpPreservingProgress", { phase: String(phaseText) }), 2000);
                 } else {
-                    showMessage("已启动正计时番茄钟", 2000);
+                    showMessage(i18n("stopwatchStarted"), 2000);
                 }
             }
         } else {
             // 没有独立窗口，在当前窗口显示番茄钟 Dialog（默认行为）
-            console.log('（正计时模式）');
+            console.log(" (count-up mode)");
 
             // 如果已经有活动的番茄钟，先关闭它
             this.pomodoroManager.closeCurrentTimer();
@@ -9041,10 +9041,10 @@ export class ReminderPanel {
 
             // 如果继承了状态且原来正在运行，显示继承信息
             if (inheritState && inheritState.isRunning && !inheritState.isPaused) {
-                const phaseText = inheritState.isWorkPhase ? '工作时间' : '休息时间';
-                showMessage(`已切换到正计时模式并继承${phaseText}进度`, 2000);
+                const phaseText = inheritState.isWorkPhase ? i18n("workTime") : i18n("breakTime");
+                showMessage(i18n("switchedCountUpPreservingProgress", { phase: String(phaseText) }), 2000);
             } else {
-                showMessage("已启动正计时番茄钟", 2000);
+                showMessage(i18n("stopwatchStarted"), 2000);
             }
         }
     }
@@ -9325,7 +9325,7 @@ export class ReminderPanel {
             const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
             const childrenIndex = this.buildChildrenIndex(reminderData);
             const hasDescendants = this.hasDescendantsUsingIndex(targetId, childrenIndex);
-            const extra = hasDescendants ? '（包括子任务）' : '';
+            const extra = hasDescendants ? i18n("includingSubtasks") : '';
 
             await confirm(
                 i18n("deleteReminder"),
@@ -9508,7 +9508,7 @@ export class ReminderPanel {
                 if (this.plugin.cancelMobileNotification) {
                     await Promise.all(notificationIds.map(id =>
                         this.plugin.cancelMobileNotification(id).catch((e: any) => {
-                            console.warn('取消移动端通知失败:', id, e);
+                            console.warn("Failed to cancel mobile notifications:", id, e);
                         })
                     ));
                 }
@@ -9518,7 +9518,7 @@ export class ReminderPanel {
                     const { deleteSubscriptionReminderTask } = await import('../../utils/icsSubscription');
                     await Promise.all(caldavDeletions.map(({ rem }) =>
                         deleteSubscriptionReminderTask(this.plugin, rem).catch((e: any) => {
-                            console.warn('删除 CalDAV 订阅任务失败:', rem?.id, e);
+                            console.warn("Failed to delete CalDAV subscription task:", rem?.id, e);
                         })
                     ));
                 }
@@ -9526,7 +9526,7 @@ export class ReminderPanel {
                 // 批量更新受影响的块的书签及番茄钟属性
                 await Promise.all(Array.from(affectedBlockIds).map(bId =>
                     updateBindBlockAtrrs(bId, this.plugin).catch((e: any) => {
-                        console.warn('更新块属性失败:', bId, e);
+                        console.warn("Failed to update block attributes:", bId, e);
                     })
                 ));
 
@@ -9552,7 +9552,7 @@ export class ReminderPanel {
                 showMessage(i18n("reminderNotExist"));
             }
         } catch (error) {
-            console.error('删除提醒失败:', error);
+            console.error("Failed to delete reminder:", error);
             showMessage(i18n("deleteReminderFailed"));
             if (keepCompletedInstances) await this.loadReminders(true);
         } finally {
@@ -9586,7 +9586,7 @@ export class ReminderPanel {
             };
             TaskRenderer.renderProgressBar(parent, context, infoEl);
         } catch (e) {
-            console.warn('局部更新父任务进度条失败:', parentId, e);
+            console.warn("Failed to update parent task progress bar locally:", parentId, e);
         }
     }
 
@@ -9668,7 +9668,7 @@ export class ReminderPanel {
             });
 
         } catch (error) {
-            console.error('从DOM移除任务失败:', error);
+            console.error("Failed to remove task from DOM:", error);
             // 出错时使用全局刷新
             this.loadReminders();
         }
@@ -9714,7 +9714,7 @@ export class ReminderPanel {
             window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
             await this.loadReminders();
         } catch (error) {
-            console.error('设置任务置顶状态失败:', error);
+            console.error("Failed to set task pin state:", error);
             showMessage(i18n("operationFailed"));
         }
     }
@@ -9777,7 +9777,7 @@ export class ReminderPanel {
                 showMessage(i18n("reminderNotExist"));
             }
         } catch (error) {
-            console.error('设置优先级失败:', error);
+            console.error("Failed to set priority:", error);
             showMessage(i18n("operationFailed"));
         }
     }
@@ -9858,7 +9858,7 @@ export class ReminderPanel {
                                     categoryTag.appendChild(nameSpan);
 
                                     // 设置标题提示
-                                    categoryTag.classList.add('ariaLabel'); categoryTag.setAttribute('aria-label', `分类: ${category.name}`);
+                                    categoryTag.classList.add('ariaLabel'); categoryTag.setAttribute('aria-label', i18n("categoryTooltip", { name: String(category.name) }));
 
                                     // 将分类标签添加到信息容器底部
                                     infoEl.appendChild(categoryTag);
@@ -9876,7 +9876,7 @@ export class ReminderPanel {
                 showMessage(i18n("reminderNotExist"));
             }
         } catch (error) {
-            console.error('设置分类失败:', error);
+            console.error("Failed to set category:", error);
             showMessage(i18n("operationFailed"));
         }
     }
@@ -9908,7 +9908,7 @@ export class ReminderPanel {
 
             showMessage(i18n("instanceModified") || "实例已修改");
         } catch (error) {
-            console.error('设置实例优先级失败:', error);
+            console.error("Failed to set instance priority:", error);
             showMessage(i18n("operationFailed"));
         }
     }
@@ -9940,7 +9940,7 @@ export class ReminderPanel {
 
             showMessage(i18n("instanceModified") || "实例已修改");
         } catch (error) {
-            console.error('设置实例分类失败:', error);
+            console.error("Failed to set instance category:", error);
             showMessage(i18n("operationFailed"));
         }
     }
@@ -9960,7 +9960,7 @@ export class ReminderPanel {
                 try {
                     await this.plugin.updateMobileNotification(originalReminder);
                 } catch (e) {
-                    console.warn('刷新重复任务移动端通知失败:', originalId, e);
+                    console.warn("Failed to refresh recurring task mobile notifications:", originalId, e);
                 }
             }
             return;
@@ -9971,7 +9971,7 @@ export class ReminderPanel {
                 try {
                     await this.plugin.cancelMobileNotification(originalId);
                 } catch (e) {
-                    console.warn('取消重复任务移动端通知失败:', originalId, e);
+                    console.warn("Failed to cancel recurring task mobile notifications:", originalId, e);
                 }
             }
         }
@@ -10013,7 +10013,7 @@ export class ReminderPanel {
                             try {
                                 await this.plugin.cancelMobileNotification(taskId);
                             } catch (e) {
-                                console.warn('取消移动端通知失败:', taskId, e);
+                                console.warn("Failed to cancel mobile notifications:", taskId, e);
                             }
                         }
                     }
@@ -10080,7 +10080,7 @@ export class ReminderPanel {
                             try {
                                 await this.plugin.cancelMobileNotification(taskId);
                             } catch (e) {
-                                console.warn('取消移动端通知失败:', taskId, e);
+                                console.warn("Failed to cancel mobile notifications:", taskId, e);
                             }
                         }
                     }
@@ -10127,7 +10127,7 @@ export class ReminderPanel {
                 try {
                     await updateBindBlockAtrrs(bId, this.plugin);
                 } catch (err) {
-                    console.warn('更新任务块属性失败:', bId, err);
+                    console.warn("Failed to update task block attributes:", bId, err);
                 }
             }
 
@@ -10135,7 +10135,7 @@ export class ReminderPanel {
             window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
             showMessage(i18n("operationSuccessful"));
         } catch (error) {
-            console.error('设置任务状态失败:', error);
+            console.error("Failed to set task status:", error);
             showMessage(i18n("operationFailed"));
         }
     }
@@ -10158,7 +10158,7 @@ export class ReminderPanel {
                         try {
                             await updateBindBlockAtrrs(affectedBlockId, this.plugin);
                         } catch (e) {
-                            console.warn('更新实例删除后绑定块属性失败:', affectedBlockId, e);
+                            console.warn("Failed to update bound block attributes after deleting instance:", affectedBlockId, e);
                         }
                     }
 
@@ -10172,7 +10172,7 @@ export class ReminderPanel {
                         detail: { source: this.panelId }
                     }));
                 } catch (error) {
-                    console.error('删除重复实例失败:', error);
+                    console.error("Failed to delete repeat instance:", error);
                     showMessage(i18n("deleteInstanceFailed"));
                 }
             }
@@ -10186,7 +10186,7 @@ export class ReminderPanel {
 
             if (reminderData[originalId]) {
                 if (!reminderData[originalId].repeat) {
-                    throw new Error('不是重复事件');
+                    throw new Error(i18n("notRecurringEvent"));
                 }
 
                 // 初始化排除日期列表
@@ -10201,10 +10201,10 @@ export class ReminderPanel {
 
                 await saveReminders(this.plugin, reminderData);
             } else {
-                throw new Error('原始事件不存在');
+                throw new Error(i18n("originalEventMissing"));
             }
         } catch (error) {
-            console.error('添加排除日期失败:', error);
+            console.error("Failed to add excluded date:", error);
             throw error;
         }
     }
@@ -10232,7 +10232,7 @@ export class ReminderPanel {
                     const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
                     const originalReminder = reminderData[reminder.originalId];
                     if (!originalReminder) {
-                        showMessage("原始周期事件不存在");
+                        showMessage(i18n("originalRepeatEventNotExist"));
                         return;
                     }
 
@@ -10273,7 +10273,7 @@ export class ReminderPanel {
                     isInstanceEdit = true;
                 }
             } catch (e) {
-                console.warn('获取原始提醒或处理实例失败:', e);
+                console.warn("Failed to get original reminder or process instance:", e);
             }
         }
 
@@ -10288,7 +10288,7 @@ export class ReminderPanel {
                         await this.loadReminders();
                     }
                 } catch (e) {
-                    console.error('时间编辑乐观更新失败，回退刷新', e);
+                    console.error("Optimistic time edit update failed; refreshing", e);
                     await this.loadReminders();
                 }
             },
@@ -10325,7 +10325,7 @@ export class ReminderPanel {
                 onConfirm: keepCompletedInstances => this.performDeleteReminder(originalId, undefined, undefined, originalReminder.blockId, keepCompletedInstances)
             });
         } catch (error) {
-            console.error('获取原始提醒失败:', error);
+            console.error("Failed to get original reminder:", error);
             showMessage(i18n("deleteReminderFailed"));
         }
     }
@@ -10339,7 +10339,7 @@ export class ReminderPanel {
                 reminder.id);
 
             if (!blockId) {
-                showMessage("无法获取块ID");
+                showMessage(i18n("cannotGetBlockId"));
                 return;
             }
 
@@ -10353,8 +10353,8 @@ export class ReminderPanel {
             await platformUtils.writeText(blockRef);
 
         } catch (error) {
-            console.error('复制块引失败:', error);
-            showMessage("复制块引失败");
+            console.error("Failed to copy block reference:", error);
+            showMessage(i18n("copyBlockRefFailed"));
         }
     }
     // 获取原始事件的blockId
@@ -10364,7 +10364,7 @@ export class ReminderPanel {
             const originalReminder = reminderData[originalId];
             return originalReminder?.blockId || originalId;
         } catch (error) {
-            console.error('获取原始块ID失败:', error);
+            console.error("Failed to get original block ID:", error);
             return null;
         }
     }
@@ -10375,13 +10375,13 @@ export class ReminderPanel {
     private showBindToBlockDialog(reminder: any, defaultTab: 'bind' | 'document' | 'heading' = 'heading') {
         const blockBindingDialog = new BlockBindingDialog(this.plugin, async (blockId: string) => {
             try {
-                console.log('选择绑定到块ID:', blockId);
+                console.log("Selected block ID for binding:", blockId);
                 await this.bindReminderToBlock(reminder, blockId);
                 showMessage(i18n("reminderBoundToBlock"));
                 // 绑定成功后刷新整个列表以确保显示正确
                 this.loadReminders();
             } catch (error) {
-                console.error('绑定提醒到块失败:', error);
+                console.error("Failed to bind reminder to block:", error);
                 showMessage(i18n("bindToBlockFailed"));
             }
         }, {
@@ -10406,7 +10406,7 @@ export class ReminderPanel {
             || ((parentReminder?.isRepeatInstance && parentReminder?.originalId)
                 ? this.getOriginalReminder(parentReminder.originalId)?.categoryId
                 : undefined);
-        console.log('创建子任务 - 计算默认值', {
+        console.log("Creating subtask - calculating defaults", {
             resolvedParentId,
             resolvedCategoryId
         });
@@ -10420,7 +10420,7 @@ export class ReminderPanel {
                         await this.handleOptimisticSavedReminder(savedReminder);
                     }
                 } catch (e) {
-                    console.error('乐观渲染子任务失败，回退到完整刷新', e);
+                    console.error("Optimistic subtask rendering failed; refreshing all tasks", e);
                     await this.loadReminders(true);
                 }
             },
@@ -10451,7 +10451,7 @@ export class ReminderPanel {
             defaultSetDate: isRepeatInstance ? true : undefined,
             defaultDateStr: isRepeatInstance ? parentReminder.date : undefined,
             onSuccess: (totalCount) => {
-                showMessage(`${totalCount} 个子任务已创建`);
+                showMessage(i18n("subtasksCreatedCount", { count: String(totalCount) }));
                 this.loadReminders();
                 window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
             }
@@ -10652,7 +10652,7 @@ export class ReminderPanel {
                 await refreshSql();
                 const block = await getBlockByID(blockId);
                 if (!block) {
-                    throw new Error('目标块不存在');
+                    throw new Error(i18n("targetBlockMissing"));
                 }
 
                 const oldBlockId = reminder.blockId;
@@ -10662,7 +10662,7 @@ export class ReminderPanel {
                     const parsedInstance = parseReminderInstanceId(reminder.id);
                     const instanceDate = parsedInstance?.instanceDate || reminder.date;
                     if (!instanceDate) {
-                        throw new Error('无法识别重复实例日期');
+                        throw new Error(i18n("repeatInstanceDateUnrecognized"));
                     }
                     patchRepeatInstanceState(reminderData[reminderId], instanceDate, { blockId, docId });
                 } else {
@@ -10680,7 +10680,7 @@ export class ReminderPanel {
                 if (projectId) {
                     const { addBlockProjectId } = await import('../../api');
                     await addBlockProjectId(blockId, projectId);
-                    console.debug('ReminderPanel: bindReminderToBlock - 已为块设置项目ID', blockId, projectId);
+                    console.debug("ReminderPanel: bindReminderToBlock - set project ID on block", blockId, projectId);
                 }
 
                 // 更新块的书签状态（添加⏰书签）
@@ -10694,10 +10694,10 @@ export class ReminderPanel {
                     detail: { source: this.panelId }
                 }));
             } else {
-                throw new Error('提醒不存在');
+                throw new Error(i18n("reminderMissing"));
             }
         } catch (error) {
-            console.error('绑定提醒到块失败:', error);
+            console.error("Failed to bind reminder to block:", error);
             throw error;
         }
     }
@@ -10712,7 +10712,7 @@ export class ReminderPanel {
             const projectData = await this.plugin.loadProjectData();
 
             if (!projectData || !projectData[projectId]) {
-                showMessage("项目不存在");
+                showMessage(i18n("projectNotExist"));
                 return;
             }
 
@@ -10721,8 +10721,8 @@ export class ReminderPanel {
             // 使用openProjectKanbanTab打开项目看板
             this.plugin.openProjectKanbanTab(project.id, project.title);
         } catch (error) {
-            console.error('打开项目看板失败:', error);
-            showMessage("打开项目看板失败");
+            console.error("Failed to open project kanban:", error);
+            showMessage(i18n("openProjectKanbanFailed"));
         }
     }
 
@@ -10755,7 +10755,7 @@ export class ReminderPanel {
             }, this.plugin);
             dialog.show();
         } catch (error) {
-            console.error('打开习惯统计失败:', error);
+            console.error("Failed to open habit statistics:", error);
             showMessage(i18n("operationFailed") || "操作失败", 3000, 'error');
         }
     }
@@ -10769,8 +10769,8 @@ export class ReminderPanel {
             const initialTab = lastMode === 'task' ? 'task' : 'pomodoro';
             showStatsDialog(this.plugin, initialTab);
         } catch (error) {
-            console.error('打开番茄钟统计视图失败:', error);
-            showMessage("打开番茄钟统计视图失败");
+            console.error("Failed to open pomodoro statistics view:", error);
+            showMessage(i18n("openPomodoroStatsFailed"));
         }
     }
 
@@ -10783,8 +10783,8 @@ export class ReminderPanel {
             // 使用插件的openEisenhowerMatrixTab方法打开四象限面板
             this.plugin.openEisenhowerMatrixTab();
         } catch (error) {
-            console.error('打开四象限面板失败:', error);
-            showMessage("打开四象限面板失败");
+            console.error("Failed to open Eisenhower matrix panel:", error);
+            showMessage(i18n("openMatrixFailed"));
         }
     }
 
@@ -10809,7 +10809,7 @@ export class ReminderPanel {
                             await this.loadReminders();
                         }
                     } catch (error) {
-                        console.error('添加新任务乐观渲染失败，使用全局刷新:', error);
+                        console.error("Optimistic rendering of new task failed; refreshing globally:", error);
                         this.loadReminders();
                     }
                 },
@@ -10824,7 +10824,7 @@ export class ReminderPanel {
             );
             quickDialog.show();
         } catch (error) {
-            console.error('显示新建任务对话框失败:', error);
+            console.error("Failed to show new task dialog:", error);
             showMessage(i18n("openNewTaskDialogFailed"));
         }
     }
@@ -11336,7 +11336,7 @@ export class ReminderPanel {
                 });
             }
         } catch (error) {
-            console.error('显示更多菜单失败:', error);
+            console.error("Failed to show more menu:", error);
         }
     }
 
@@ -11750,7 +11750,7 @@ export class ReminderPanel {
                     try {
                         await this.plugin.cancelMobileNotification(taskId);
                     } catch (e) {
-                        console.warn('取消移动端通知失败:', taskId, e);
+                        console.warn("Failed to cancel mobile notifications:", taskId, e);
                     }
                 }
             }
@@ -11763,7 +11763,7 @@ export class ReminderPanel {
                         try {
                             await this.plugin.updateMobileNotification(originalReminder);
                         } catch (e) {
-                            console.warn('批量完成后刷新重复任务移动端通知失败:', originalId, e);
+                            console.warn("Failed to refresh recurring task mobile notifications after batch completion:", originalId, e);
                         }
                     }
                 } else if (this.plugin?.cancelMobileNotification) {
@@ -11771,7 +11771,7 @@ export class ReminderPanel {
                         try {
                             await this.plugin.cancelMobileNotification(originalId);
                         } catch (e) {
-                            console.warn('批量完成后取消重复任务移动端通知失败:', originalId, e);
+                            console.warn("Failed to cancel recurring task mobile notifications after batch completion:", originalId, e);
                         }
                     }
                 }
@@ -11781,7 +11781,7 @@ export class ReminderPanel {
                 try {
                     await updateBindBlockAtrrs(bId, this.plugin);
                 } catch (err) {
-                    console.warn('批量完成后更新任务块属性失败:', bId, err);
+                    console.warn("Failed to update task block attributes after batch completion:", bId, err);
                 }
             }
 
@@ -11798,7 +11798,7 @@ export class ReminderPanel {
             showMessage(i18n('batchUpdateSuccess', { count: String(changedCount || ids.length) }) || `成功更新 ${changedCount || ids.length} 个任务`);
             this.exitPanelMultiSelectMode();
         } catch (e) {
-            console.error('批量完成任务失败:', e);
+            console.error("Failed to complete tasks in batch:", e);
             showMessage(i18n('operationFailed') || '操作失败');
             await this.loadReminders(true);
         }
@@ -11843,7 +11843,7 @@ export class ReminderPanel {
                 try {
                     await updateBindBlockAtrrs(bId, this.plugin);
                 } catch (e) {
-                    console.warn('批量设置日期后更新块属性失败:', bId, e);
+                    console.warn("Failed to update block attributes after setting dates in batch:", bId, e);
                 }
             }
 
@@ -11851,7 +11851,7 @@ export class ReminderPanel {
             showMessage(i18n('batchUpdateSuccess', { count: String(changedReminders.length) }) || `成功更新 ${changedReminders.length} 个任务`);
             this.exitPanelMultiSelectMode();
         } catch (e) {
-            console.error('批量设置日期失败:', e);
+            console.error("Failed to set dates in batch:", e);
             showMessage(i18n('operationFailed') || '操作失败');
             await this.loadReminders(true);
         }
@@ -12004,7 +12004,7 @@ export class ReminderPanel {
                     try {
                         await updateBindBlockAtrrs(bId, this.plugin);
                     } catch (e) {
-                        console.warn('批量日期对话框更新块属性失败:', bId, e);
+                        console.warn("Failed to update block attributes from batch date dialog:", bId, e);
                     }
                 }
 
@@ -12012,7 +12012,7 @@ export class ReminderPanel {
                 window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
                 this.exitPanelMultiSelectMode();
             } catch (e) {
-                console.error('批量设置日期失败:', e);
+                console.error("Failed to set dates in batch:", e);
                 showMessage(i18n('operationFailed') || '操作失败');
                 await this.loadReminders(true);
             }
@@ -12056,7 +12056,7 @@ export class ReminderPanel {
             showMessage(i18n('batchUpdateSuccess', { count: String(changedReminders.length) }) || `成功更新 ${changedReminders.length} 个任务`);
             this.exitPanelMultiSelectMode();
         } catch (e) {
-            console.error('批量设置优先级失败:', e);
+            console.error("Failed to set priorities in batch:", e);
             showMessage(i18n('operationFailed') || '操作失败');
             await this.loadReminders(true);
         }
@@ -12099,7 +12099,7 @@ export class ReminderPanel {
             showMessage(i18n('batchUpdateSuccess', { count: String(changedReminders.length) }) || `成功更新 ${changedReminders.length} 个任务`);
             this.exitPanelMultiSelectMode();
         } catch (e) {
-            console.error('批量设置分类失败:', e);
+            console.error("Failed to set categories in batch:", e);
             showMessage(i18n('operationFailed') || '操作失败');
             await this.loadReminders(true);
         }
@@ -12181,7 +12181,7 @@ export class ReminderPanel {
                     if (this.plugin?.cancelMobileNotification) {
                         await Promise.all(notificationIds.map(taskId =>
                             this.plugin.cancelMobileNotification(taskId).catch((e: any) => {
-                                console.warn('批量删除取消通知失败:', taskId, e);
+                                console.warn("Failed to cancel notifications during batch deletion:", taskId, e);
                             })
                         ));
                     }
@@ -12189,7 +12189,7 @@ export class ReminderPanel {
                     // 批量更新受影响的块的书签状态
                     await Promise.all(Array.from(affectedBlockIds).map(bId =>
                         updateBindBlockAtrrs(bId, this.plugin).catch((e: any) => {
-                            console.warn('批量删除更新块书签失败:', bId, e);
+                            console.warn("Failed to update block bookmarks during batch deletion:", bId, e);
                         })
                     ));
 
@@ -12197,7 +12197,7 @@ export class ReminderPanel {
                     showMessage(i18n('batchDeleteSuccess', { count: String(allIds.length) }) || `成功删除 ${allIds.length} 个任务`);
                     this.exitPanelMultiSelectMode();
                 } catch (e) {
-                    console.error('批量删除失败:', e);
+                    console.error("Batch deletion failed:", e);
                     showMessage(i18n('batchDeleteFailed') || '批量删除失败');
                     await this.loadReminders(true);
                 } finally {

@@ -409,7 +409,7 @@ export class RepeatSettingsDialog {
                         <div id="yearlyOptions" class="b3-form__group" style="display: none;">
                             <label class="b3-form__label" style="font-weight: 600;">${i18n("repeatDate")}</label>
                             <div class="repeat-settings-yearly-date-row">
-                                <input type="text" id="yearlyDateInput" class="b3-text-field" placeholder="例如: 01-01 或 06-15" value="${this.getYearlyDateValue()}">
+                                <input type="text" id="yearlyDateInput" class="b3-text-field" placeholder="${i18n("habitYearlyDatePlaceholder")}" value="${this.getYearlyDateValue()}">
                                 <span class="repeat-settings-date-format">${i18n("dateFormatDesc")}</span>
                             </div>
                         </div>

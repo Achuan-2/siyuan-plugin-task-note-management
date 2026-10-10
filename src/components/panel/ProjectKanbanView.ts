@@ -496,14 +496,14 @@ export class ProjectKanbanView {
                 ? await this.plugin.loadSettings()
                 : this.plugin?.settings || {};
         } catch (error) {
-            console.warn('[Kanban] 加载跳过提醒设置失败:', error);
+            console.warn("[Kanban] Failed to load reminder skip settings:", error);
             this.reminderSkipSettings = this.plugin?.settings || {};
         }
 
         try {
             this.reminderSkipHolidayData = await this.plugin?.loadHolidayData?.() || {};
         } catch (error) {
-            console.warn('[Kanban] 加载节假日数据失败:', error);
+            console.warn("[Kanban] Failed to load holiday data:", error);
             this.reminderSkipHolidayData = {};
         }
     }
@@ -643,7 +643,7 @@ export class ProjectKanbanView {
             const groups = await this.getProjectCustomGroupsForView();
             return groups.find((group: any) => group.id === groupId) || null;
         } catch (error) {
-            console.warn('[Kanban] 获取分组失败:', error);
+            console.warn("[Kanban] Failed to get groups:", error);
             return null;
         }
     }
@@ -829,7 +829,7 @@ export class ProjectKanbanView {
                 throw new Error(i18n('projectNotExist'));
             }
         } catch (error) {
-            console.error(i18n('loadProjectFailed'), error);
+            console.error("Load project failed", error);
             showMessage(i18n('loadProjectFailed'));
         }
     }
@@ -869,7 +869,7 @@ export class ProjectKanbanView {
                 this.kanbanStatuses = await projectManager.getProjectKanbanStatuses(this.projectId);
             }
         } catch (error) {
-            console.error(i18n('loadKanbanModeFailed'), error);
+            console.error("Failed to load kanban mode:", error);
             this.kanbanMode = 'status';
             // 使用默认状态配置
             this.kanbanStatuses = this.projectManager.getDefaultKanbanStatuses();
@@ -892,7 +892,7 @@ export class ProjectKanbanView {
                 }
             }
         } catch (error) {
-            console.warn('加载列宽度记忆失败:', error);
+            console.warn("Failed to load saved column widths:", error);
         }
         this.columnWidths = new Map();
     }
@@ -904,7 +904,7 @@ export class ProjectKanbanView {
             const widthsObj = Object.fromEntries(this.columnWidths);
             await this.saveFolderKanbanSetting({ columnWidths: widthsObj });
         } catch (error) {
-            console.warn('保存列宽度失败:', error);
+            console.warn("Failed to save column widths:", error);
         }
     }
 
@@ -915,7 +915,7 @@ export class ProjectKanbanView {
             const widthsObj = Object.fromEntries(this.columnWidths);
             await this.saveFolderKanbanSetting({ columnWidths: widthsObj });
         } catch (error) {
-            console.warn('保存列宽度失败:', error);
+            console.warn("Failed to save column widths:", error);
         }
     }
 
@@ -948,7 +948,7 @@ export class ProjectKanbanView {
             const modeName = modeMap[newMode] || newMode;
             showMessage(i18n('switchedToModeKanbanTemplate').replace('${mode}', modeName));
         } catch (error) {
-            console.error(i18n('switchKanbanModeFailed'), error);
+            console.error("Failed to switch Kanban mode", error);
             showMessage(i18n('switchKanbanModeFailed'));
         }
     }
@@ -1138,7 +1138,7 @@ export class ProjectKanbanView {
                 showMessage(i18n('milestoneSaved'));
             }
         } catch (error) {
-            console.error(i18n('setTaskMilestoneFailed'), error);
+            console.error("Set task milestone failed", error);
             showMessage(i18n('updateTaskFailed'));
         }
     }
@@ -1167,7 +1167,7 @@ export class ProjectKanbanView {
                 });
             }
         } catch (error) {
-            console.error(i18n('buildMilestoneMapFailed'), error);
+            console.error("Build milestone map failed", error);
         }
     }
 
@@ -1677,7 +1677,7 @@ export class ProjectKanbanView {
                 icon: "iconTNStatistic",
                 label: i18n('viewStatsMenuItem') || "查看统计",
                 click: () => {
-                    const project = this.project || this.projectManager.getProjectById(this.projectId) || { id: this.projectId, title: '看板项目' };
+                    const project = this.project || this.projectManager.getProjectById(this.projectId) || { id: this.projectId, title: i18n("kanbanProjectTitle") };
                     showProjectStatsDialog(this.plugin, project);
                 }
             });
@@ -1733,7 +1733,7 @@ export class ProjectKanbanView {
                             console.warn('plugin.openSetting is not available');
                         }
                     } catch (err) {
-                        console.error(i18n('openPluginSettingsFailed'), err);
+                        console.error("Failed to open plugin settings", err);
                     }
                 }
             });
@@ -2184,7 +2184,7 @@ export class ProjectKanbanView {
             };
             setTimeout(() => document.addEventListener('click', closeHandler), 0);
         } catch (error) {
-            console.error('加载里程碑筛选菜单失败:', error);
+            console.error("Failed to load milestone filter menu:", error);
         }
     }
 
@@ -2262,7 +2262,7 @@ export class ProjectKanbanView {
             this.doneSortButton = document.createElement('button');
             this.doneSortButton.className = 'b3-button b3-button--text';
             this.doneSortButton.innerHTML = '<svg style="width: 14px; height: 14px;"><use xlink:href="#iconSort"></use></svg>';
-            this.doneSortButton.classList.add('ariaLabel'); this.doneSortButton.setAttribute('aria-label', '排序');
+            this.doneSortButton.classList.add('ariaLabel'); this.doneSortButton.setAttribute('aria-label', i18n("sort"));
             this.doneSortButton.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.showDoneSortMenu(e);
@@ -2475,7 +2475,7 @@ export class ProjectKanbanView {
                         this.queueLoadTasks();
                         showMessage(i18n('statusOrderSaved') || '状态顺序已保存');
                     } catch (err) {
-                        console.error('保存状态顺序失败', err);
+                        console.error("Failed to save status order", err);
                     }
                 })();
             });
@@ -2917,7 +2917,7 @@ export class ProjectKanbanView {
                 }
 
                 if (updatedCount === 0) {
-                    showMessage('没有需要更新的任务分组');
+                    showMessage(i18n("noTaskGroupsToUpdate"));
                     return;
                 }
 
@@ -2926,9 +2926,9 @@ export class ProjectKanbanView {
                 this.dispatchReminderUpdate(true);
 
                 if (groupId === null) {
-                    showMessage(`已将 ${updatedCount} 个任务实例移出分组`);
+                    showMessage(i18n("instancesRemovedFromGroup", { count: String(updatedCount) }));
                 } else {
-                    showMessage(`已将 ${updatedCount} 个任务实例添加到分组`);
+                    showMessage(i18n("instancesAddedToGroup", { count: String(updatedCount) }));
                 }
 
                 await this.queueLoadTasks();
@@ -2937,7 +2937,7 @@ export class ProjectKanbanView {
 
             // 非实例情况：按原逻辑更新实际任务及其后代
             if (!reminderData[task.id]) {
-                showMessage("任务不存在");
+                showMessage(i18n("taskNotExist"));
                 return;
             }
 
@@ -2963,7 +2963,7 @@ export class ProjectKanbanView {
             });
 
             if (updatedCount === 0) {
-                showMessage('没有需要更新的任务分组');
+                showMessage(i18n("noTaskGroupsToUpdate"));
                 return;
             }
 
@@ -2974,16 +2974,16 @@ export class ProjectKanbanView {
 
             // 提示更新的任务数
             if (groupId === null) {
-                showMessage(`已将 ${updatedCount} 个任务移出分组`);
+                showMessage(i18n("tasksRemovedFromGroup", { count: String(updatedCount) }));
             } else {
-                showMessage(`已将 ${updatedCount} 个任务添加到分组`);
+                showMessage(i18n("tasksAddedToGroup", { count: String(updatedCount) }));
             }
 
             // 重新加载任务以更新显示（使用防抖队列）
             await this.queueLoadTasks();
         } catch (error) {
-            console.error('设置任务分组失败:', error);
-            showMessage("设置任务分组失败");
+            console.error("Failed to set task group:", error);
+            showMessage(i18n("setTaskGroupFailed"));
         }
     }
 
@@ -2999,7 +2999,7 @@ export class ProjectKanbanView {
             // 如果是重复实例，优先走实例处理逻辑；否则确保目标任务存在
             if (!(task.isRepeatInstance && task.originalId)) {
                 if (!reminderData[task.id]) {
-                    showMessage("任务不存在");
+                    showMessage(i18n("taskNotExist"));
                     return;
                 }
             }
@@ -3053,7 +3053,7 @@ export class ProjectKanbanView {
                 }
 
                 if (updatedCount === 0) {
-                    showMessage('没有需要更新的任务标签');
+                    showMessage(i18n("noTaskTagsToUpdate"));
                     return;
                 }
 
@@ -3075,9 +3075,9 @@ export class ProjectKanbanView {
                 }
 
                 if (isAdding) {
-                    showMessage(`已为 ${updatedCount} 个任务实例添加标签"${tagName}"`);
+                    showMessage(i18n("instancesTagAdded", { count: String(updatedCount), tag: String(tagName) }));
                 } else {
-                    showMessage(`已从 ${updatedCount} 个任务实例移除标签"${tagName}"`);
+                    showMessage(i18n("instancesTagRemoved", { count: String(updatedCount), tag: String(tagName) }));
                 }
 
                 if (filterActive) {
@@ -3138,9 +3138,9 @@ export class ProjectKanbanView {
 
             // 提示更新的任务数
             if (isAdding) {
-                showMessage(`已为 ${updatedCount} 个任务添加标签"${tagName}"`);
+                showMessage(i18n("tasksTagAdded", { count: String(updatedCount), tag: String(tagName) }));
             } else {
-                showMessage(`已从 ${updatedCount} 个任务移除标签"${tagName}"`);
+                showMessage(i18n("tasksTagRemoved", { count: String(updatedCount), tag: String(tagName) }));
             }
 
             // 标签筛选状态下重新应用过滤，否则直接更新 DOM 即可
@@ -3148,8 +3148,8 @@ export class ProjectKanbanView {
                 this.queueLoadTasks();
             }
         } catch (error) {
-            console.error('切换任务标签失败:', error);
-            showMessage("设置任务标签失败");
+            console.error("Failed to toggle task tag:", error);
+            showMessage(i18n("setTaskTagFailed"));
             this.queueLoadTasks();
         }
     }
@@ -3187,7 +3187,7 @@ export class ProjectKanbanView {
                 return true;
             });
         } catch (error) {
-            console.error('过滤已归档分组任务失败', error);
+            console.error("Failed to filter tasks in archived groups", error);
             return tasks;
         }
     }
@@ -3227,7 +3227,7 @@ export class ProjectKanbanView {
             try {
                 habitData = await this.plugin.loadHabitData();
             } catch (error) {
-                console.warn("加载习惯数据失败:", error);
+                console.warn("Failed to load habit data:", error);
                 habitData = {};
             }
             // 判断当前看板项目是否为「无项目任务归属项目」
@@ -3274,7 +3274,7 @@ export class ProjectKanbanView {
             // 如果有任务状态被修正，保存到存储
             if (hasInvalidStatus) {
                 saveReminders(this.plugin, reminderData).catch(err => {
-                    console.error('保存任务状态修正失败:', err);
+                    console.error("Failed to save task status corrections:", err);
                 });
             }
             const taskMap = new Map(projectTasks.map((t: any) => [t.id, { ...t }]));
@@ -3341,7 +3341,7 @@ export class ProjectKanbanView {
                     await saveReminders(this.plugin, reminderData);
                 }
             } catch (err) {
-                console.warn('自动根据日期级联设置状态失败:', err);
+                console.warn("Failed to automatically cascade statuses based on dates:", err);
             }
 
             const getRootStatus = (task: any): string => {
@@ -3924,7 +3924,7 @@ export class ProjectKanbanView {
                     this._defaultCollapseApplied = true;
                 }
             } catch (err) {
-                console.warn('设置默认折叠任务失败:', err);
+                console.warn("Failed to set tasks collapsed by default:", err);
             }
 
 
@@ -3963,8 +3963,8 @@ export class ProjectKanbanView {
 
             this.renderKanban();
         } catch (error) {
-            console.error('加载任务失败:', error);
-            showMessage("加载任务失败");
+            console.error("Failed to load tasks:", error);
+            showMessage(i18n("loadTasksFailed"));
         } finally {
             this.isLoading = false;
         }
@@ -3994,7 +3994,7 @@ export class ProjectKanbanView {
             try {
                 await this.loadTasks();
             } catch (e) {
-                console.error('queueLoadTasks 执行 loadTasks 时出错', e);
+                console.error("queueLoadTasks: error executing loadTasks", e);
             } finally {
                 if (this._pendingLoadResolve) {
                     this._pendingLoadResolve();
@@ -4033,7 +4033,7 @@ export class ProjectKanbanView {
                 columnScrollTopMap
             };
         } catch (err) {
-            console.warn('保存滚动状态失败', err);
+            console.warn("Failed to save scroll state", err);
             this._savedScrollState = null;
         }
     }
@@ -4096,7 +4096,7 @@ export class ProjectKanbanView {
                 }
             });
         } catch (err) {
-            console.warn('恢复滚动状态失败', err);
+            console.warn("Failed to restore scroll state", err);
         } finally {
             this._savedScrollState = null;
         }
@@ -4173,7 +4173,7 @@ export class ProjectKanbanView {
                             holidayData
                         ));
                 } catch (e) {
-                    console.error('生成重复实例失败', e);
+                    console.error("Failed to generate repeat instances", e);
                     repeatInstances = [];
                 }
 
@@ -4431,7 +4431,7 @@ export class ProjectKanbanView {
             const merged: FolderKanbanSettings = { ...(folder.kanbanSettings || {}), ...partial };
             await folderManager.updateFolder(folderId, { kanbanSettings: merged });
         } catch (error) {
-            console.warn('保存文件夹看板设置失败:', error);
+            console.warn("Failed to save folder kanban settings:", error);
         }
     }
 
@@ -4470,7 +4470,7 @@ export class ProjectKanbanView {
             this.currentSortCriteria = criteria;
             this.syncLegacySortStateFromCriteria();
         } catch (error) {
-            console.warn('加载看板排序配置失败，使用默认排序', error);
+            console.warn("Failed to load kanban sort configuration; using default order", error);
             this.currentSortCriteria = [{ method: 'priority', order: 'desc' }];
             this.syncLegacySortStateFromCriteria();
         }
@@ -4496,7 +4496,7 @@ export class ProjectKanbanView {
             projectData[this.projectId] = project;
             await this.plugin.saveProjectData(projectData);
         } catch (error) {
-            console.warn('保存看板排序配置失败', error);
+            console.warn("Failed to save kanban sort configuration", error);
         }
     }
 
@@ -5084,7 +5084,7 @@ export class ProjectKanbanView {
 
             const ungroupedGroup = {
                 id: 'ungrouped',
-                name: '未分组',
+                name: i18n("ungrouped"),
                 color: '#95a5a6',
                 icon: '📋',
                 milestones: defaultMilestones
@@ -5224,10 +5224,10 @@ export class ProjectKanbanView {
 
                         // 刷新看板（使用防抖队列以避免滚动位置被重置）
                         this.queueLoadTasks();
-                        showMessage('分组顺序已更新');
+                        showMessage(i18n("groupOrderUpdated"));
                     } catch (error) {
-                        console.error('更新自定义分组顺序失败:', error);
-                        showMessage('更新分组顺序失败');
+                        console.error("Failed to update custom group order:", error);
+                        showMessage(i18n("groupOrderUpdateFailed"));
                     }
                 });
             }
@@ -5509,7 +5509,7 @@ export class ProjectKanbanView {
             });
 
         } catch (err) {
-            console.error('批量设置标签失败:', err);
+            console.error("Failed to set tags in batch:", err);
             showMessage(i18n('batchSetTagsFailed') || '批量设置标签失败');
         }
     }
@@ -5633,7 +5633,7 @@ export class ProjectKanbanView {
             tabEntries.push({
                 group: {
                     id: 'ungrouped',
-                    name: '未分组',
+                    name: i18n("ungrouped"),
                     color: '#95a5a6',
                     icon: '📋',
                     milestones: defaultMilestones
@@ -5678,7 +5678,7 @@ export class ProjectKanbanView {
                     this.project.activeCustomGroupTabId = tabId;
                 }
             } catch (error) {
-                console.warn('保存分组页签状态失败:', error);
+                console.warn("Failed to save group tab state:", error);
             }
         };
 
@@ -5799,7 +5799,7 @@ export class ProjectKanbanView {
                     this.project.activeStatusTabId = tabId;
                 }
             } catch (error) {
-                console.warn('保存状态页签失败:', error);
+                console.warn("Failed to save status tab:", error);
             }
         };
 
@@ -6030,7 +6030,7 @@ export class ProjectKanbanView {
             // 只计算未归档的分组
             return projectGroups.some((g: any) => !g.archived);
         } catch (error) {
-            console.error('检查项目分组失败:', error);
+            console.error("Failed to check project groups:", error);
             return false;
         }
     }
@@ -6148,7 +6148,7 @@ export class ProjectKanbanView {
             if (showUngrouped) {
                 const ungroupedGroup = {
                     id: 'ungrouped',
-                    name: '未分组',
+                    name: i18n("ungrouped"),
                     color: '#95a5a6',
                     icon: '📋'
                 };
@@ -6192,8 +6192,8 @@ export class ProjectKanbanView {
                 width: 100%;
             ">
                 <div style="font-size: 48px; margin-bottom: 16px;">📋</div>
-                <div style="font-size: 16px; margin-bottom: 8px;">暂无自定义分组</div>
-                <div style="font-size: 14px;">请在项目设置中添加自定义分组</div>
+                <div style="font-size: 16px; margin-bottom: 8px;">${i18n("noCustomGroups")}</div>
+                <div style="font-size: 14px;">${i18n("addCustomGroupsHint")}</div>
             </div>
         `;
     }
@@ -6411,7 +6411,7 @@ export class ProjectKanbanView {
                     this.project.activeCustomGroupTabId = tabId;
                 }
             } catch (error) {
-                console.warn('保存分组页签状态失败:', error);
+                console.warn("Failed to save group tab state:", error);
             }
         };
 
@@ -7179,7 +7179,7 @@ export class ProjectKanbanView {
                 // 上一页按钮
                 const prevBtn = document.createElement('button');
                 prevBtn.className = 'b3-button b3-button--text';
-                prevBtn.textContent = '上一页';
+                prevBtn.textContent = i18n("prevPage");
                 prevBtn.disabled = currentPage <= 1;
                 prevBtn.addEventListener('click', () => {
                     this.pageIndexMap[status] = Math.max(1, currentPage - 1);
@@ -7190,13 +7190,13 @@ export class ProjectKanbanView {
                 // 页码信息
                 const pageInfo = document.createElement('div');
                 pageInfo.style.cssText = 'min-width: 120px; text-align: center; font-size: 13px; color: var(--b3-theme-on-surface);';
-                pageInfo.textContent = `第 ${currentPage} / ${totalPages} 页（共 ${totalTop} 项）`;
+                pageInfo.textContent = i18n("taskListPagination", { page: String(currentPage), pages: String(totalPages), count: String(totalTop) });
                 pagination.appendChild(pageInfo);
 
                 // 下一页按钮
                 const nextBtn = document.createElement('button');
                 nextBtn.className = 'b3-button b3-button--text';
-                nextBtn.textContent = '下一页';
+                nextBtn.textContent = i18n("nextPage");
                 nextBtn.disabled = currentPage >= totalPages;
                 nextBtn.addEventListener('click', () => {
                     this.pageIndexMap[status] = Math.min(totalPages, currentPage + 1);
@@ -7420,7 +7420,7 @@ export class ProjectKanbanView {
     private renderUngroupedColumn(tasks: any[]) {
         const ungroupedGroup = {
             id: 'ungrouped',
-            name: '未分组',
+            name: i18n("ungrouped"),
             color: '#95a5a6',
             icon: '📋'
         };
@@ -7668,7 +7668,7 @@ export class ProjectKanbanView {
         const collapseBtn = document.createElement('button');
         collapseBtn.className = 'b3-button b3-button--text custom-status-group-collapse-btn';
         collapseBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconDown"></use></svg>';
-        collapseBtn.classList.add('ariaLabel'); collapseBtn.setAttribute('aria-label', '折叠分组');
+        collapseBtn.classList.add('ariaLabel'); collapseBtn.setAttribute('aria-label', i18n("collapseGroup"));
         collapseBtn.style.cssText = `
             padding: 2px;
             min-width: auto;
@@ -7690,13 +7690,13 @@ export class ProjectKanbanView {
         // 设置初始显示状态
         groupTasksContainer.style.display = isCollapsed ? 'none' : 'block';
         collapseBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#icon${isCollapsed ? 'Right' : 'Down'}"></use></svg>`;
-        collapseBtn.classList.add('ariaLabel'); collapseBtn.setAttribute('aria-label', isCollapsed ? '展开分组' : '折叠分组');
+        collapseBtn.classList.add('ariaLabel'); collapseBtn.setAttribute('aria-label', isCollapsed ? i18n("expandGroup") : i18n("collapseGroup"));
 
         collapseBtn.addEventListener('click', () => {
             isCollapsed = !isCollapsed;
             groupTasksContainer.style.display = isCollapsed ? 'none' : 'block';
             collapseBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#icon${isCollapsed ? 'Right' : 'Down'}"></use></svg>`;
-            collapseBtn.classList.add('ariaLabel'); collapseBtn.setAttribute('aria-label', isCollapsed ? '展开分组' : '折叠分组');
+            collapseBtn.classList.add('ariaLabel'); collapseBtn.setAttribute('aria-label', isCollapsed ? i18n("expandGroup") : i18n("collapseGroup"));
 
             // 更新持久化状态
             if (isCollapsed) {
@@ -7896,7 +7896,7 @@ export class ProjectKanbanView {
         const collapseBtn = document.createElement('button');
         collapseBtn.className = 'b3-button b3-button--text custom-group-collapse-btn';
         collapseBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#icon${isCollapsedDefault ? 'Right' : 'Down'}"></use></svg>`;
-        collapseBtn.classList.add('ariaLabel'); collapseBtn.setAttribute('aria-label', isCollapsedDefault ? '展开分组' : '折叠分组');
+        collapseBtn.classList.add('ariaLabel'); collapseBtn.setAttribute('aria-label', isCollapsedDefault ? i18n("expandGroup") : i18n("collapseGroup"));
         collapseBtn.style.cssText = `
             padding: 2px;
             min-width: auto;
@@ -7919,13 +7919,13 @@ export class ProjectKanbanView {
         // 设置初始效果
         groupTasksContainer.style.display = isCollapsed ? 'none' : 'block';
         collapseBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#icon${isCollapsed ? 'Right' : 'Down'}"></use></svg>`;
-        collapseBtn.classList.add('ariaLabel'); collapseBtn.setAttribute('aria-label', isCollapsed ? '展开分组' : '折叠分组');
+        collapseBtn.classList.add('ariaLabel'); collapseBtn.setAttribute('aria-label', isCollapsed ? i18n("expandGroup") : i18n("collapseGroup"));
 
         collapseBtn.addEventListener('click', () => {
             isCollapsed = !isCollapsed;
             groupTasksContainer.style.display = isCollapsed ? 'none' : 'block';
             collapseBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#icon${isCollapsed ? 'Right' : 'Down'}"></use></svg>`;
-            collapseBtn.classList.add('ariaLabel'); collapseBtn.setAttribute('aria-label', isCollapsed ? '展开分组' : '折叠分组');
+            collapseBtn.classList.add('ariaLabel'); collapseBtn.setAttribute('aria-label', isCollapsed ? i18n("expandGroup") : i18n("collapseGroup"));
 
             // 更新持久化状态
             if (isCollapsed) {
@@ -8611,7 +8611,7 @@ export class ProjectKanbanView {
         const displayDate = task.date || task.endDate;
         if (!displayDate) {
             const timesStr = getUnexpiredReminderTimesStr();
-            return timesStr ? timesStr : "未设置日期";
+            return timesStr ? timesStr : i18n("notSetDate");
         }
 
         let baseResult = '';
@@ -8659,7 +8659,7 @@ export class ProjectKanbanView {
                 // 如果是同一天，但是有结束时间（比如 14:00 - 16:00）
                 baseResult = `${dateStr} - ${task.endTime}`;
             } else {
-                baseResult = dateStr || "未设置日期";
+                baseResult = dateStr || i18n("notSetDate");
             }
         }
 
@@ -9212,7 +9212,7 @@ export class ProjectKanbanView {
                         saveReminders(this.plugin, reminderData).then(() => {
                             this.dispatchReminderUpdate(true);
                         }).catch(err => {
-                            console.error('保存实例日期失败:', err);
+                            console.error("Failed to save instance date:", err);
                         });
                     } else {
                         const targetId = targetTask.isRepeatInstance ? targetTask.originalId : targetTask.id;
@@ -9244,11 +9244,11 @@ export class ProjectKanbanView {
                         saveReminders(this.plugin, reminderData).then(() => {
                             this.dispatchReminderUpdate(true);
                         }).catch(err => {
-                            console.error('保存日期失败:', err);
+                            console.error("Failed to save date:", err);
                         });
                     }
                 } catch (err) {
-                    console.error('快速调整日期失败:', err);
+                    console.error("Failed to quickly adjust date:", err);
                     showMessage(i18n("operationFailed"));
                 }
             };
@@ -9280,7 +9280,7 @@ export class ProjectKanbanView {
                         saveReminders(this.plugin, reminderData).then(() => {
                             this.dispatchReminderUpdate(true);
                         }).catch(err => {
-                            console.error('保存实例结束日期失败:', err);
+                            console.error("Failed to save instance end date:", err);
                         });
                     } else {
                         const targetId = targetTask.isRepeatInstance ? targetTask.originalId : targetTask.id;
@@ -9304,11 +9304,11 @@ export class ProjectKanbanView {
                         saveReminders(this.plugin, reminderData).then(() => {
                             this.dispatchReminderUpdate(true);
                         }).catch(err => {
-                            console.error('保存结束日期失败:', err);
+                            console.error("Failed to save end date:", err);
                         });
                     }
                 } catch (err) {
-                    console.error('快速调整结束日期失败:', err);
+                    console.error("Failed to quickly adjust end date:", err);
                     showMessage(i18n("operationFailed"));
                 }
             };
@@ -9432,7 +9432,7 @@ export class ProjectKanbanView {
                         }
                     }
                 } catch (error) {
-                    console.warn('[Kanban] 加载分组可见状态失败，使用全部状态:', error);
+                    console.warn("[Kanban] Failed to load group visible statuses; using all statuses:", error);
                 }
             }
 
@@ -9492,7 +9492,7 @@ export class ProjectKanbanView {
                     });
                 }
             } catch (error) {
-                console.error('加载分组信息失败:', error);
+                console.error("Failed to load group information:", error);
             }
             // 设置标签子菜单（仅在项目有标签时显示）
             try {
@@ -9519,7 +9519,7 @@ export class ProjectKanbanView {
                     });
                 }
             } catch (error) {
-                console.error('加载项目标签失败:', error);
+                console.error("Failed to load project tags:", error);
             }
 
             // 设置里程碑子菜单
@@ -9567,7 +9567,7 @@ export class ProjectKanbanView {
                     });
                 }
             } catch (error) {
-                console.error('加载项目里程碑失败:', error);
+                console.error("Failed to load project milestones:", error);
             }
         }
 
@@ -9762,7 +9762,7 @@ export class ProjectKanbanView {
                                 try {
                                     await this.plugin.cancelMobileNotification(taskId);
                                 } catch (e) {
-                                    console.warn('取消移动端通知失败:', taskId, e);
+                                    console.warn("Failed to cancel mobile notifications:", taskId, e);
                                 }
                             }
                         }
@@ -9772,7 +9772,7 @@ export class ProjectKanbanView {
                             try {
                                 await updateBindBlockAtrrs(bId, this.plugin);
                             } catch (err) {
-                                console.warn('更新块书签失败:', bId, err);
+                                console.warn("Failed to update block bookmark:", bId, err);
                             }
                         }
 
@@ -9796,8 +9796,8 @@ export class ProjectKanbanView {
                     }
                 }
             } catch (error) {
-                console.error('切换任务完成状态失败:', error);
-                showMessage('操作失败，正在恢复...');
+                console.error("Failed to toggle task completion:", error);
+                showMessage(i18n("operationFailedRestoring"));
                 this.queueLoadTasks(); // 失败回滚
             }
         })();
@@ -9816,7 +9816,7 @@ export class ProjectKanbanView {
             const recurringOriginalIds = new Set<string>([task.originalId]);
 
             if (!originalReminder) {
-                showMessage("原始重复事件不存在");
+                showMessage(i18n("originalRepeatTaskNotFound"));
                 return;
             }
 
@@ -9846,7 +9846,7 @@ export class ProjectKanbanView {
                     try {
                         await this.plugin.cancelMobileNotification(taskId);
                     } catch (e) {
-                        console.warn('取消移动端通知失败:', taskId, e);
+                        console.warn("Failed to cancel mobile notifications:", taskId, e);
                     }
                 }
             }
@@ -9863,7 +9863,7 @@ export class ProjectKanbanView {
                     try {
                         await updateBindBlockAtrrs(bId, this.plugin);
                     } catch (err) {
-                        console.warn('更新块书签失败:', bId, err);
+                        console.warn("Failed to update block bookmark:", bId, err);
                     }
                 }
             }
@@ -9891,8 +9891,8 @@ export class ProjectKanbanView {
             // 重复实例完成/取消完成后，需要立即重算实例列表（例如补出下一个实例）
             await this.queueLoadTasks();
         } catch (error) {
-            console.error('切换重复实例完成状态失败:', error);
-            showMessage('操作失败，请重试');
+            console.error("Failed to toggle repeat instance completion:", error);
+            showMessage(i18n("operationFailedRetry"));
         }
     }
 
@@ -9902,7 +9902,7 @@ export class ProjectKanbanView {
             const oldStatus = this.getTaskStatus(task);
             const instanceDate = task.isRepeatInstance ? this.getRepeatInstanceOriginalDate(task) : task.date;
             if (task.isRepeatInstance && !instanceDate) {
-                console.warn('[Kanban] 无法解析重复实例日期，已取消状态更新', task);
+                console.warn("[Kanban] Cannot parse repeat instance date; status update cancelled", task);
                 showMessage(i18n("operationFailed"));
                 return;
             }
@@ -9924,15 +9924,15 @@ export class ProjectKanbanView {
                     !this.isAbandonedStatus(newStatus)
                 ) {
                     const dialog = new Dialog({
-                        title: '提示',
+                        title: i18n("hintTitle"),
                         content: `
                             <div class="b3-dialog__content">
-                                <p>该任务的日期为今天或已过，系统会将其自动显示在“进行中”列。</p>
-                                <p>要将任务移出“进行中”，需要修改任务的日期或时间。</p>
+                                <p>${i18n("kanbanAutoDoingHint")}</p>
+                                <p>${i18n("kanbanMoveOutDoingHint")}</p>
                             </div>
                             <div class="b3-dialog__action">
-                                <button class="b3-button b3-button--cancel" id="cancelBtn">取消</button>
-                                <button class="b3-button b3-button--primary" id="editBtn">编辑任务时间</button>
+                                <button class="b3-button b3-button--cancel" id="cancelBtn">${i18n("cancel")}</button>
+                                <button class="b3-button b3-button--primary" id="editBtn">${i18n("editTaskTime")}</button>
                             </div>
                         `,
                         width: "420px"
@@ -10126,7 +10126,7 @@ export class ProjectKanbanView {
                         try {
                             await this.plugin.cancelMobileNotification(taskId);
                         } catch (e) {
-                            console.warn('取消移动端通知失败:', taskId, e);
+                            console.warn("Failed to cancel mobile notifications:", taskId, e);
                         }
                     }
                 }
@@ -10138,7 +10138,7 @@ export class ProjectKanbanView {
                     try {
                         await updateBindBlockAtrrs(bId, this.plugin);
                     } catch (err) {
-                        console.warn('更新块书签失败:', bId, err);
+                        console.warn("Failed to update block bookmark:", bId, err);
                     }
                 }
 
@@ -10182,8 +10182,8 @@ export class ProjectKanbanView {
                 }
             }
         } catch (error) {
-            console.error('切换任务状态失败:', error);
-            showMessage("状态切换失败");
+            console.error("Failed to toggle task state:", error);
+            showMessage(i18n("statusSwitchFailed"));
         }
     }
 
@@ -10231,7 +10231,7 @@ export class ProjectKanbanView {
                 showMessage(i18n('autoCompleteSubtasks', { count: String(completedCount) }), 2000);
             }
         } catch (error) {
-            console.error('自动完成子任务失败:', error);
+            console.error("Failed to automatically complete subtasks:", error);
             // 不要阻止父任务的完成，只是记录错误
         }
         return completedTaskIds;
@@ -10316,7 +10316,7 @@ export class ProjectKanbanView {
                 showMessage(i18n('autoCompleteSubtasks', { count: String(completedCount) }), 2000);
             }
         } catch (error) {
-            console.error('自动完成子任务实例失败:', error);
+            console.error("Failed to automatically complete subtask instances:", error);
             // 不要阻止父任务的完成，只是记录错误
         }
         return completedTaskIds;
@@ -10864,7 +10864,7 @@ export class ProjectKanbanView {
             });
             dialog.show();
         } catch (error) {
-            console.error('显示排序菜单失败:', error);
+            console.error("Failed to show sort menu:", error);
         }
     }
 
@@ -10967,7 +10967,7 @@ export class ProjectKanbanView {
 
             return nextSort;
         } catch (error) {
-            console.warn('计算前后插入排序值失败，回退默认排序', error);
+            console.warn("Failed to calculate adjacent insertion sort value; using default order", error);
             return undefined;
         }
     }
@@ -10995,7 +10995,7 @@ export class ProjectKanbanView {
 
             return true;
         } catch (error) {
-            console.warn('局部相邻插入新任务失败', error);
+            console.warn("Failed to insert new adjacent task locally", error);
             return false;
         }
     }
@@ -11037,7 +11037,7 @@ export class ProjectKanbanView {
                 defaultPriority
             );
         } catch (error) {
-            console.error('创建前后相邻任务失败:', error);
+            console.error("Failed to create adjacent task:", error);
             showMessage(i18n('operationFailed') || '操作失败');
         }
     }
@@ -11172,7 +11172,7 @@ export class ProjectKanbanView {
 
                         this.dispatchReminderUpdate(true);
                     } catch (e) {
-                        console.error("增量更新新任务失败，回退到完整重载", e);
+                        console.error("Failed to update new task incrementally; reloading all tasks", e);
                         await this.loadTasks();
                     }
                 } else {
@@ -11218,7 +11218,7 @@ export class ProjectKanbanView {
                     this.lastSelectedStatus = status;
                 }
             } catch (error) {
-                console.error('保存上一次选择的 status 失败:', error);
+                console.error("Failed to save last selected status:", error);
             }
 
             // 保存用户选择的自定义分组到内存中（空字符串视为 null）
@@ -11232,7 +11232,7 @@ export class ProjectKanbanView {
                     }
                 }
             } catch (error) {
-                console.error('保存上一次选择的自定义分组失败:', error);
+                console.error("Failed to save last selected custom group:", error);
             }
         };
     }
@@ -11249,7 +11249,7 @@ export class ProjectKanbanView {
                 const reminderData = await this.getReminders();
                 const originalReminder = reminderData[originalId];
                 if (!originalReminder) {
-                    showMessage("原始周期事件不存在");
+                    showMessage(i18n("originalRepeatEventNotExist"));
                     return;
                 }
                 taskToEdit = originalReminder;
@@ -11332,8 +11332,8 @@ export class ProjectKanbanView {
             );
             noteDialog.show();
         } catch (error) {
-            console.error('打开备注预览对话框失败:', error);
-            showMessage("打开备注预览对话框失败");
+            console.error("Failed to open note preview dialog:", error);
+            showMessage(i18n("openNotePreviewFailed"));
         }
     }
 
@@ -11347,7 +11347,7 @@ export class ProjectKanbanView {
                 const reminderData = await this.getReminders();
                 const originalReminder = reminderData[task.originalId];
                 if (!originalReminder) {
-                    showMessage("原始周期事件不存在");
+                    showMessage(i18n("originalRepeatEventNotExist"));
                     return;
                 }
                 // 使用原始事件对象而不是实例对象
@@ -11440,8 +11440,8 @@ export class ProjectKanbanView {
             });
             editDialog.show();
         } catch (error) {
-            console.error('打开编辑对话框失败:', error);
-            showMessage("打开编辑对话框失败");
+            console.error("Failed to open edit dialog:", error);
+            showMessage(i18n("openEditDialogFailed"));
         }
     }
 
@@ -11457,7 +11457,7 @@ export class ProjectKanbanView {
                 projectGroups = await this.projectManager.getProjectCustomGroups(createDefaults.projectId);
                 projectMilestones = await this.projectManager.getProjectMilestones(createDefaults.projectId);
             } catch (error) {
-                console.error('获取项目配置失败:', error);
+                console.error("Failed to get project configuration:", error);
             }
         }
 
@@ -11476,7 +11476,7 @@ export class ProjectKanbanView {
             projectMilestones,
             kanbanStatuses,
             onSuccess: async (totalCount) => {
-                showMessage(`${totalCount} 个任务已创建`);
+                showMessage(i18n("tasksCreatedCount", { count: String(totalCount) }));
                 this.reminderData = null; // 清理缓存，确保 loadTasks 读取最新数据
                 await this.loadTasks();
                 this.dispatchReminderUpdate(true);
@@ -11614,7 +11614,7 @@ export class ProjectKanbanView {
                     try {
                         await updateBindBlockAtrrs(boundId, this.plugin);
                     } catch (err) {
-                        console.warn(`更新已删除任务属性失败: `, boundId, err);
+                        console.warn("Failed to update deleted task attributes: ", boundId, err);
                     }
                 }
 
@@ -11626,8 +11626,8 @@ export class ProjectKanbanView {
 
                 // showMessage("任务已删除");
             } catch (error) {
-                console.error('删除任务失败:', error);
-                showMessage("删除任务失败");
+                console.error("Failed to delete task:", error);
+                showMessage(i18n("deleteTaskFailed"));
                 // Keep UI consistent or facilitate retry by reloading
                 await this.getReminders(true);
                 await this.loadTasks();
@@ -11671,7 +11671,7 @@ export class ProjectKanbanView {
                 try {
                     this.pomodoroManager.pauseCurrentTimer();
                 } catch (error) {
-                    console.error('暂停当前番茄钟失败:', error);
+                    console.error("Failed to pause current pomodoro timer:", error);
                 }
 
                 confirmMessage += `\n\n${i18n('switchAndInherit')}`;
@@ -11688,7 +11688,7 @@ export class ProjectKanbanView {
                         try {
                             this.pomodoroManager.resumeCurrentTimer();
                         } catch (error) {
-                            console.error('恢复番茄钟运行失败:', error);
+                            console.error("Failed to resume pomodoro timer:", error);
                         }
                     }
                 }
@@ -11717,7 +11717,7 @@ export class ProjectKanbanView {
                 try {
                     this.pomodoroManager.pauseCurrentTimer();
                 } catch (error) {
-                    console.error('暂停当前番茄钟失败:', error);
+                    console.error("Failed to pause current pomodoro timer:", error);
                 }
 
                 confirmMessage += `\n\n${i18n('switchAndInherit')}`;
@@ -11734,7 +11734,7 @@ export class ProjectKanbanView {
                         try {
                             this.pomodoroManager.resumeCurrentTimer();
                         } catch (error) {
-                            console.error('恢复番茄钟运行失败:', error);
+                            console.error("Failed to resume pomodoro timer:", error);
                         }
                     }
                 }
@@ -11769,8 +11769,8 @@ export class ProjectKanbanView {
 
                 // 如果继承了状态且原来正在运行，显示继承信息
                 if (inheritState && inheritState.isRunning && !inheritState.isPaused) {
-                    const phaseText = inheritState.isWorkPhase ? '工作时间' : '休息时间';
-                    showMessage(`已切换任务并继承${phaseText}进度`, 2000);
+                    const phaseText = inheritState.isWorkPhase ? i18n("workTime") : i18n("breakTime");
+                    showMessage(i18n("switchedTaskPreservingProgress", { phase: String(phaseText) }), 2000);
                 }
             }
         } else {
@@ -11793,8 +11793,8 @@ export class ProjectKanbanView {
 
             // 如果继承了状态且原来正在运行，显示继承信息
             if (inheritState && inheritState.isRunning && !inheritState.isPaused) {
-                const phaseText = inheritState.isWorkPhase ? '工作时间' : '休息时间';
-                showMessage(`已切换任务并继承${phaseText}进度`, 2000);
+                const phaseText = inheritState.isWorkPhase ? i18n("workTime") : i18n("breakTime");
+                showMessage(i18n("switchedTaskPreservingProgress", { phase: String(phaseText) }), 2000);
             }
         }
     }
@@ -11847,10 +11847,10 @@ export class ProjectKanbanView {
 
             // 如果继承了状态且原来正在运行，显示继承信息
             if (inheritState && inheritState.isRunning && !inheritState.isPaused) {
-                const phaseText = inheritState.isWorkPhase ? '工作时间' : '休息时间';
-                showMessage(`已切换到正计时模式并继承${phaseText}进度`, 2000);
+                const phaseText = inheritState.isWorkPhase ? i18n("workTime") : i18n("breakTime");
+                showMessage(i18n("switchedCountUpPreservingProgress", { phase: String(phaseText) }), 2000);
             } else {
-                showMessage("已启动正计时番茄钟", 2000);
+                showMessage(i18n("stopwatchStarted"), 2000);
             }
         }
     }
@@ -11892,7 +11892,7 @@ export class ProjectKanbanView {
             this.dispatchReminderUpdate(true);
             await this.queueLoadTasks();
         } catch (error) {
-            console.error('设置任务置顶状态失败:', error);
+            console.error("Failed to set task pin state:", error);
             showMessage(i18n("operationFailed"));
         }
     }
@@ -11929,9 +11929,9 @@ export class ProjectKanbanView {
                     if (infoEl) infoEl.appendChild(priorityEl);
                 }
                 const priorityNames = {
-                    'high': '高优先级',
-                    'medium': '中优先级',
-                    'low': '低优先级'
+                    'high': i18n("high"),
+                    'medium': i18n("medium"),
+                    'low': i18n("low")
                 };
                 priorityEl.className = `kanban-task-priority priority-label-${priority}`;
                 priorityEl.innerHTML = `<span class="priority-dot ${priority}"></span><span>${priorityNames[priority]}</span>`;
@@ -11982,8 +11982,8 @@ export class ProjectKanbanView {
             this.dispatchReminderUpdate(true);
 
         } catch (error) {
-            console.error('设置优先级失败:', error);
-            showMessage("设置优先级失败，正在恢复...");
+            console.error("Failed to set priority:", error);
+            showMessage(i18n("setPriorityFailedRestoring"));
             // 如果失败，强制重载以恢复正确状态
             await this.queueLoadTasks();
         }
@@ -11994,18 +11994,18 @@ export class ProjectKanbanView {
         try {
             const blockId = task.blockId;
             if (!blockId) {
-                showMessage("无法获取块ID");
+                showMessage(i18n("cannotGetBlockId"));
                 return;
             }
 
-            const title = task.title || "未命名任务";
+            const title = task.title || i18n("unnamedTask");
             const blockRef = `((${blockId} "${title}"))`;
 
             await platformUtils.writeText(blockRef);
-            showMessage("块引用已复制到剪贴板");
+            showMessage(i18n("blockRefCopied"));
         } catch (error) {
-            console.error('复制块引用失败:', error);
-            showMessage("复制块引用失败");
+            console.error("Failed to copy block reference:", error);
+            showMessage(i18n("copyBlockRefFailed"));
         }
     }
 
@@ -12017,7 +12017,7 @@ export class ProjectKanbanView {
                 showMessage(i18n("reminderBoundToBlock"));
                 this.queueLoadTasks();
             } catch (error) {
-                console.error('绑定提醒到块失败:', error);
+                console.error("Failed to bind reminder to block:", error);
                 showMessage(i18n("bindToBlockFailed"));
             }
         }, {
@@ -12072,7 +12072,7 @@ export class ProjectKanbanView {
 
                 const block = await getBlockByID(blockId);
                 if (!block) {
-                    throw new Error('目标块不存在');
+                    throw new Error(i18n("targetBlockMissing"));
                 }
 
                 // 更新提醒数据
@@ -12098,10 +12098,10 @@ export class ProjectKanbanView {
 
 
             } else {
-                throw new Error('提醒不存在');
+                throw new Error(i18n("reminderMissing"));
             }
         } catch (error) {
-            console.error('绑定提醒到块失败:', error);
+            console.error("Failed to bind reminder to block:", error);
             // 失败时回滚/刷新
             this.queueLoadTasks();
             throw error;
@@ -12117,18 +12117,18 @@ export class ProjectKanbanView {
         try {
             openBlock(blockId);
         } catch (error) {
-            console.error('打开块失败:', error);
+            console.error("Failed to open block:", error);
 
             // 询问用户是否删除无效的绑定
             await confirm(
-                "打开块失败",
-                "绑定的块可能已被删除，是否解除绑定？",
+                i18n("openBlockFailed"),
+                i18n("deletedBlockUnbindConfirm"),
                 async () => {
                     // 解除任务的块绑定
                     await this.unbindTaskFromBlock(blockId);
                 },
                 () => {
-                    showMessage("打开块失败");
+                    showMessage(i18n("openBlockFailed"));
                 }
             );
         }
@@ -12142,8 +12142,8 @@ export class ProjectKanbanView {
         try {
             openBlock(blockId);
         } catch (error) {
-            console.error('打开项目笔记失败:', error);
-            showMessage("打开项目笔记失败");
+            console.error("Failed to open project note:", error);
+            showMessage(i18n("openProjectNoteFailed"));
         }
     }
 
@@ -12172,14 +12172,14 @@ export class ProjectKanbanView {
                 // 触发更新事件
                 this.dispatchReminderUpdate(true);
 
-                showMessage(`已解除 ${unboundCount} 个任务的块绑定`);
+                showMessage(i18n("tasksBlockUnboundCount", { count: String(unboundCount) }));
                 await this.queueLoadTasks();
             } else {
-                showMessage("未找到相关的任务绑定");
+                showMessage(i18n("noRelatedTaskBindings"));
             }
         } catch (error) {
-            console.error('解除块绑定失败:', error);
-            showMessage("解除块绑定失败");
+            console.error("Failed to unbind block:", error);
+            showMessage(i18n("unbindBlockFailed"));
         }
     }
 
@@ -12446,7 +12446,7 @@ export class ProjectKanbanView {
         console.log('[Kanban] handleParentChildDrop:', { dragged: this.draggedTask.id, target: targetTask.id });
         try {
             await this.setParentChildRelation(this.draggedTask, targetTask);
-            showMessage(`"${this.draggedTask.title}" 已设置为 "${targetTask.title}" 的子任务`);
+            showMessage(i18n("taskSetAsSubtask", { childTitle: this.draggedTask.title, parentTitle: targetTask.title }));
         } catch (error) {
             // showMessage("设置父子任务关系失败");
         }
@@ -12462,11 +12462,11 @@ export class ProjectKanbanView {
             const reminderData = await this.getReminders();
 
             if (!reminderData[childTask.id]) {
-                throw new Error("子任务不存在");
+                throw new Error(i18n("subtaskMissing"));
             }
 
             if (!reminderData[parentTask.id]) {
-                throw new Error("父任务不存在");
+                throw new Error(i18n("parentTaskNotExist"));
             }
 
             // 设置子任务的父任务ID
@@ -12539,7 +12539,7 @@ export class ProjectKanbanView {
             // 但只在拖拽操作时使用防抖,避免频繁重载
             await this.queueLoadTasks();
         } catch (error) {
-            console.error('设置父子关系失败:', error);
+            console.error("Failed to set parent-child relationship:", error);
             throw error;
         }
     }
@@ -12553,7 +12553,7 @@ export class ProjectKanbanView {
             const reminderData = await this.getReminders();
 
             if (!reminderData[childTask.id]) {
-                throw new Error("任务不存在");
+                throw new Error(i18n("taskNotExist"));
             }
 
             if (!childTask.parentId) {
@@ -12562,7 +12562,7 @@ export class ProjectKanbanView {
 
             // 查找父任务的标题用于提示
             const parentTask = reminderData[childTask.parentId];
-            const parentTitle = parentTask ? parentTask.title : '未知任务';
+            const parentTitle = parentTask ? parentTask.title : i18n("unknownTask");
 
             // 移除父任务ID
             delete reminderData[childTask.id].parentId;
@@ -12582,8 +12582,8 @@ export class ProjectKanbanView {
             // 使用防抖避免频繁重载
             await this.queueLoadTasks();
         } catch (error) {
-            console.error('解除父子关系失败:', error);
-            showMessage("解除父子关系失败");
+            console.error("Failed to remove parent-child relationship:", error);
+            showMessage(i18n("unlinkParentChildFailed"));
         }
     }
 
@@ -12602,7 +12602,7 @@ export class ProjectKanbanView {
             await this.reorderTasks(this.draggedTask, targetTask, insertBefore);
 
         } catch (error) {
-            console.error('处理拖放排序失败:', error);
+            console.error("Failed to handle drag-and-drop sorting:", error);
             showMessage(i18n("sortUpdateFailed") || "排序更新失败");
         }
     }
@@ -12712,7 +12712,7 @@ export class ProjectKanbanView {
 
         } catch (error) {
             console.error('Failed to set task as sibling and sort:', error);
-            showMessage("移动任务失败");
+            showMessage(i18n("moveTaskFailed"));
         }
     }
 
@@ -12859,7 +12859,7 @@ export class ProjectKanbanView {
             const draggedIndex = items.findIndex(item => item.id === draggedFullId);
 
             if (targetIndex === -1 || draggedIndex === -1) {
-                console.error('找不到拖拽或目标任务', { draggedFullId, targetFullId, items: items.map(i => i.id) });
+                console.error("Dragged or target task not found", { draggedFullId, targetFullId, items: items.map(i => i.id) });
                 return false;
             }
 
@@ -13222,15 +13222,15 @@ export class ProjectKanbanView {
                 ) {
                     // 弹窗：取消 / 编辑任务时间
                     const dialog = new Dialog({
-                        title: '提示',
+                        title: i18n("hintTitle"),
                         content: `
                             <div class="b3-dialog__content">
-                                <p>该任务的日期为今天或已过，系统会将其自动显示在“进行中”列。</p>
-                                <p>要将任务移出“进行中”，需要修改任务的日期或时间。</p>
+                                <p>${i18n("kanbanAutoDoingHint")}</p>
+                                <p>${i18n("kanbanMoveOutDoingHint")}</p>
                             </div>
                             <div class="b3-dialog__action">
-                                <button class="b3-button b3-button--cancel" id="cancelBtn">取消</button>
-                                <button class="b3-button b3-button--primary" id="editBtn">编辑任务时间</button>
+                                <button class="b3-button b3-button--cancel" id="cancelBtn">${i18n("cancel")}</button>
+                                <button class="b3-button b3-button--primary" id="editBtn">${i18n("editTaskTime")}</button>
                             </div>
                         `,
                         width: "460px"
@@ -13686,7 +13686,7 @@ export class ProjectKanbanView {
 
             return true;
         } catch (error) {
-            console.error('重新排序任务失败:', error);
+            console.error("Failed to reorder tasks:", error);
             throw error;
         }
     }
@@ -13723,7 +13723,7 @@ export class ProjectKanbanView {
             const originalReminder = reminderData[task.originalId];
 
             if (!originalReminder) {
-                showMessage("原始周期事件不存在");
+                showMessage(i18n("originalRepeatEventNotExist"));
                 return;
             }
 
@@ -13786,8 +13786,8 @@ export class ProjectKanbanView {
             );
             editDialog.show();
         } catch (error) {
-            console.error('打开实例编辑对话框失败:', error);
-            showMessage("打开编辑对话框失败");
+            console.error("Failed to open instance edit dialog:", error);
+            showMessage(i18n("openEditDialogFailed"));
         }
     }
 
@@ -13821,15 +13821,15 @@ export class ProjectKanbanView {
                         try {
                             await updateBindBlockAtrrs(task.blockId || task.docId, this.plugin);
                         } catch (err) {
-                            console.warn('更新已删除实例的块书签失败:', err);
+                            console.warn("Failed to update block bookmark for deleted instance:", err);
                         }
                     }
 
-                    showMessage("实例已删除");
+                    showMessage(i18n("instanceDeleted"));
                     this.dispatchReminderUpdate(true);
                 } catch (error) {
-                    console.error('删除周期实例失败:', error);
-                    showMessage("删除实例失败");
+                    console.error("Failed to delete recurring instance:", error);
+                    showMessage(i18n("deleteInstanceFailed"));
                     await this.loadTasks();
                 }
             }
@@ -13845,7 +13845,7 @@ export class ProjectKanbanView {
 
             if (reminderData[originalId]) {
                 if (!reminderData[originalId].repeat) {
-                    throw new Error('不是重复事件');
+                    throw new Error(i18n("notRecurringEvent"));
                 }
 
                 // 初始化排除日期列表
@@ -13860,10 +13860,10 @@ export class ProjectKanbanView {
 
                 await saveReminders(this.plugin, reminderData);
             } else {
-                throw new Error('原始事件不存在');
+                throw new Error(i18n("originalEventMissing"));
             }
         } catch (error) {
-            console.error('添加排除日期失败:', error);
+            console.error("Failed to add excluded date:", error);
             throw error;
         }
     }
@@ -13880,7 +13880,7 @@ export class ProjectKanbanView {
         for (const node of nodes) {
             const indent = '  '.repeat(node.level);
             const t = node.task;
-            let title = t.title || '未命名任务';
+            let title = t.title || i18n("unnamedTask");
             if (t.blockId || t.docId) {
                 // 使用思源块链接
                 const targetId = t.blockId || t.docId;
@@ -14238,7 +14238,7 @@ export class ProjectKanbanView {
                             `;
                             infoEl.insertBefore(completedTimeEl, infoEl.firstChild);
                         }
-                        completedTimeEl.innerHTML = `<span>✅</span><span>完成于: ${getLocalDateTimeString(new Date(task.completedTime))}</span>`;
+                        completedTimeEl.innerHTML = `<span>✅</span><span>${i18n("completedAtLabel")}${getLocalDateTimeString(new Date(task.completedTime))}</span>`;
                     } else if (completedTimeEl) {
                         completedTimeEl.remove();
                     }
@@ -14302,7 +14302,7 @@ export class ProjectKanbanView {
                                 tagContainer.style.display = 'none';
                             }
                         } catch (error) {
-                            console.error('更新任务标签DOM失败:', error);
+                            console.error("Failed to update task tag DOM:", error);
                             this.refreshTaskElement(taskId);
                         }
                     })();
@@ -14402,13 +14402,13 @@ export class ProjectKanbanView {
                 // 自定义分组模式：在当前分组内移动到对应的状态子分组 (使用 completed)
                 const groupColumn = taskEl.closest('.kanban-column') as HTMLElement;
                 if (!groupColumn) {
-                    console.warn('找不到任务所属的分组列');
+                    console.warn("Task group column not found");
                     return false;
                 }
 
                 targetColumn = groupColumn.querySelector(`.custom-status-${targetStatus}`) as HTMLElement;
                 if (!targetColumn) {
-                    console.warn('找不到目标状态分组:', targetStatus);
+                    console.warn("Target status group not found:", targetStatus);
                     return false;
                 }
                 targetContent = targetColumn.querySelector('.custom-status-group-tasks') as HTMLElement;
@@ -14417,7 +14417,7 @@ export class ProjectKanbanView {
 
                 targetColumn = this.container.querySelector(`.kanban-column-${targetStatus}`) as HTMLElement;
                 if (!targetColumn) {
-                    console.warn('找不到目标列:', targetStatus);
+                    console.warn("Target column not found:", targetStatus);
                     return false;
                 }
 
@@ -14441,7 +14441,7 @@ export class ProjectKanbanView {
             }
 
             if (!targetContent) {
-                console.warn('找不到目标内容区域');
+                console.warn("Target content area not found");
                 return false;
             }
 
@@ -14512,7 +14512,7 @@ export class ProjectKanbanView {
 
             return true;
         } catch (error) {
-            console.error('移动任务卡片失败:', error);
+            console.error("Failed to move task card:", error);
             return false;
         }
     }
@@ -14534,7 +14534,7 @@ export class ProjectKanbanView {
             const newCount = Math.max(0, currentCount + delta);
             countEl.textContent = newCount.toString();
         } catch (error) {
-            console.error('更新列计数失败:', error);
+            console.error("Failed to update column count:", error);
         }
     }
 
@@ -14608,7 +14608,7 @@ export class ProjectKanbanView {
 
             return false;
         } catch (error) {
-            console.warn('局部插入新任务失败，回退整列渲染:', error);
+            console.warn("Failed to insert new task locally; rerendering entire column:", error);
             return false;
         }
     }
@@ -14679,7 +14679,7 @@ export class ProjectKanbanView {
 
             oldEl.replaceWith(newEl);
         } catch (error) {
-            console.error('刷新任务元素失败:', error);
+            console.error("Failed to refresh task element:", error);
         }
     }
 
@@ -14695,21 +14695,21 @@ export class ProjectKanbanView {
             // 1. 找到被拖拽的任务元素
             const draggedEl = this.container.querySelector(`[data-task-id="${draggedTaskId}"]`) as HTMLElement;
             if (!draggedEl) {
-                console.warn('找不到被拖拽的任务元素:', draggedTaskId);
+                console.warn("Dragged task element not found:", draggedTaskId);
                 return false;
             }
 
             // 2. 找到目标任务元素
             const targetEl = this.container.querySelector(`[data-task-id="${targetTaskId}"]`) as HTMLElement;
             if (!targetEl) {
-                console.warn('找不到目标任务元素:', targetTaskId);
+                console.warn("Target task element not found:", targetTaskId);
                 return false;
             }
 
             // 3. 获取父容器
             const parentContainer = targetEl.parentElement;
             if (!parentContainer) {
-                console.warn('找不到父容器');
+                console.warn("Parent container not found");
                 return false;
             }
 
@@ -14731,7 +14731,7 @@ export class ProjectKanbanView {
 
             return true;
         } catch (error) {
-            console.error('DOM重排失败:', error);
+            console.error("DOM reordering failed:", error);
             return false;
         }
     }
@@ -14746,7 +14746,7 @@ export class ProjectKanbanView {
             // 依然要重新刷新DOM，避免乐观更新错误
             await this.queueLoadTasks();
         } catch (error) {
-            console.error('批量排序失败:', error);
+            console.error("Batch sorting failed:", error);
             showMessage(i18n("sortUpdateFailed") || "排序更新失败");
             await this.queueLoadTasks(); // Revert on failure
         }
@@ -14816,17 +14816,17 @@ export class ProjectKanbanView {
                 if (offending.length > 0) {
                     const listHtml = offending.slice(0, 6).map(id => `- ${(reminderData[id] && reminderData[id].title) || id}`).join('<br>');
                     const dialog = new Dialog({
-                        title: '提示',
+                        title: i18n("hintTitle"),
                         content: `
                             <div class="b3-dialog__content">
-                                <p>所选任务中包含以下日期为今天或已过的未完成任务，系统会将它们自动显示在“进行中”列：</p>
+                                <p>${i18n("kanbanSelectedAutoDoingHint")}</p>
                                 <div style="max-height:180px;overflow:auto;margin:8px 0;padding:6px;border:1px solid var(--b3-border);">${listHtml}${offending.length > 6 ? '<div>...</div>' : ''}</div>
-                                <p>要将这些任务移出“进行中”，需要修改任务的日期或时间。</p>
+                                <p>${i18n("kanbanMoveSelectedOutDoingHint")}</p>
                             </div>
                             <div class="b3-dialog__action">
-                                <button class="b3-button b3-button--cancel" id="cancelBtn">取消</button>
-                                <button class="b3-button" id="continueBtn">继续（跳过这些任务）</button>
-                                <button class="b3-button b3-button--primary" id="editBtn">编辑第一个任务时间</button>
+                                <button class="b3-button b3-button--cancel" id="cancelBtn">${i18n("cancel")}</button>
+                                <button class="b3-button" id="continueBtn">${i18n("continueSkipTasks")}</button>
+                                <button class="b3-button b3-button--primary" id="editBtn">${i18n("editFirstTaskTime")}</button>
                             </div>
                         `,
                         width: "520px"
@@ -15035,7 +15035,7 @@ export class ProjectKanbanView {
             // 触发更新事件
             this.dispatchReminderUpdate(true);
         } catch (error) {
-            console.error('批量保存任务失败:', error);
+            console.error("Failed to save tasks in batch:", error);
             throw error;
         }
     }
@@ -15667,7 +15667,7 @@ export class ProjectKanbanView {
                 showMessage(i18n('batchUpdateSuccess', { count: String(successCount) }) || `成功更新 ${successCount} 个任务`);
                 this.queueLoadTasks();
             } catch (error) {
-                console.error('批量设置日期失败:', error);
+                console.error("Failed to set dates in batch:", error);
                 showMessage(i18n('batchUpdateFailed') || '批量更新失败');
             }
         });
@@ -15720,7 +15720,7 @@ export class ProjectKanbanView {
                 // 统一走 batchUpdateTasks，避免重复实例被当作独立任务写入 reminderData 产生拷贝键
                 await this.batchUpdateTasks(selectedIds, { kanbanStatus: newStatus });
             } catch (error) {
-                console.error('批量设置状态失败:', error);
+                console.error("Failed to set statuses in batch:", error);
                 showMessage(i18n('batchUpdateFailed') || '批量更新失败');
             }
         });
@@ -15736,7 +15736,7 @@ export class ProjectKanbanView {
         try {
             await this.batchUpdateTasks(selectedIds, { kanbanStatus: 'completed' });
         } catch (error) {
-            console.error('批量设置已完成失败:', error);
+            console.error("Failed to mark completed in batch:", error);
             showMessage(i18n('batchUpdateFailed') || '批量更新失败');
         }
     }
@@ -16301,12 +16301,12 @@ export class ProjectKanbanView {
                     await this.batchUpdateTasks(selectedIds, { customGroupId: groupId });
                     this.queueLoadTasks(); // batchUpdateTasks calls saveReminders and dispatch, but we can queue refresh just in case
                 } catch (error) {
-                    console.error('批量设置分组失败:', error);
+                    console.error("Failed to set groups in batch:", error);
                     showMessage(i18n('batchUpdateFailed') || '批量更新失败');
                 }
             });
         } catch (error) {
-            console.error('获取分组列表失败:', error);
+            console.error("Failed to get group list:", error);
             showMessage(i18n('loadGroupsFailed') || '加载分组失败');
         }
     }
@@ -16352,7 +16352,7 @@ export class ProjectKanbanView {
                 }
             }
         } catch (e) {
-            console.error('获取里程碑失败', e);
+            console.error("Failed to get milestone", e);
         }
 
         if (milestones.length === 0) {
@@ -16398,7 +16398,7 @@ export class ProjectKanbanView {
                 await this.batchUpdateTasks(selectedIds, { milestoneId: milestoneId });
                 this.queueLoadTasks();
             } catch (error) {
-                console.error('批量设置里程碑失败:', error);
+                console.error("Failed to set milestones in batch:", error);
                 showMessage(i18n('batchUpdateFailed') || '批量更新失败');
             }
         });
@@ -16455,7 +16455,7 @@ export class ProjectKanbanView {
                 await this.batchUpdateTasks(selectedIds, { priority: newPriority });
                 this.queueLoadTasks();
             } catch (error) {
-                console.error('批量设置优先级失败:', error);
+                console.error("Failed to set priorities in batch:", error);
                 showMessage(i18n('batchUpdateFailed') || '批量更新失败');
             }
         });
@@ -16481,7 +16481,7 @@ export class ProjectKanbanView {
 
                     showMessage(i18n('batchDeleteSuccess', { count: String(selectedIds.length) }) || `成功删除 ${selectedIds.length} 个任务`);
                 } catch (error) {
-                    console.error('批量删除失败:', error);
+                    console.error("Batch deletion failed:", error);
                     showMessage(i18n('batchDeleteFailed') || '批量删除失败');
                 }
             }
@@ -16558,7 +16558,7 @@ export class ProjectKanbanView {
                 try {
                     await this.plugin.updateMobileNotification(originalReminder);
                 } catch (e) {
-                    console.warn('看板刷新重复任务移动端通知失败:', originalId, e);
+                    console.warn("Failed to refresh recurring task mobile notifications in kanban:", originalId, e);
                 }
             }
             return;
@@ -16570,7 +16570,7 @@ export class ProjectKanbanView {
                 try {
                     await this.plugin.cancelMobileNotification(originalId);
                 } catch (e) {
-                    console.warn('看板取消重复任务移动端通知失败:', originalId, e);
+                    console.warn("Failed to cancel recurring task mobile notifications in kanban:", originalId, e);
                 }
             }
         }

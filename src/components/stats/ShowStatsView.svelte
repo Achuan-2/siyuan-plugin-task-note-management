@@ -5,6 +5,7 @@
     import TaskSummaryTab from "./TaskSummaryTab.svelte";
     import ProjectStatsTab from "./ProjectStatsTab.svelte";
     import { setLastStatsMode } from "./statsMode";
+    import { i18n } from '../../pluginInstance';
 
     export let plugin: any;
     export let initialTab: "pomodoro" | "task" | "habit" | "summary" | "project" = "pomodoro";
@@ -24,11 +25,11 @@
 
 <div class="stats-root">
     <div class="stats-tabs">
-        <button class:active={activeTab === "pomodoro"} on:click={() => switchTab("pomodoro")}>🍅 番茄统计</button>
-        <button class:active={activeTab === "task"} on:click={() => switchTab("task")}>✅ 任务统计</button>
-        <button class:active={activeTab === "summary"} on:click={() => switchTab("summary")}>📝 任务摘要</button>
-        <button class:active={activeTab === "project"} on:click={() => switchTab("project")}>🎯 项目统计</button>
-        <button class:active={activeTab === "habit"} on:click={() => switchTab("habit")}>📅 习惯统计</button>
+        <button class:active={activeTab === "pomodoro"} on:click={() => switchTab("pomodoro")}>🍅 {i18n('pomodoroStats')}</button>
+        <button class:active={activeTab === "task"} on:click={() => switchTab("task")}>✅ {i18n('taskStats')}</button>
+        <button class:active={activeTab === "summary"} on:click={() => switchTab("summary")}>📝 {i18n('taskSummary')}</button>
+        <button class:active={activeTab === "project"} on:click={() => switchTab("project")}>🎯 {i18n('projectStats')}</button>
+        <button class:active={activeTab === "habit"} on:click={() => switchTab("habit")}>📅 {i18n('habitStats')}</button>
     </div>
 
     <div class="stats-content">

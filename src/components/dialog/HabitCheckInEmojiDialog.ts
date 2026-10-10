@@ -4,9 +4,9 @@ import { i18n } from "../../pluginInstance";
 import { getBlockByID } from "../../api";
 
 const DEFAULT_EMOJIS: HabitCheckInEmoji[] = [
-    { emoji: "✅", meaning: "完成", promptNote: false, countsAsSuccess: true },
-    { emoji: "❌", meaning: "未完成", promptNote: false, countsAsSuccess: false },
-    { emoji: "⭐️", meaning: "部分完成", promptNote: false, countsAsSuccess: true }
+    { emoji: "✅", meaning: i18n('checkInCompletedMeaning'), promptNote: false, countsAsSuccess: true },
+    { emoji: "❌", meaning: i18n('incomplete'), promptNote: false, countsAsSuccess: false },
+    { emoji: "⭐️", meaning: i18n('partialCompleted'), promptNote: false, countsAsSuccess: true }
 ];
 
 export class HabitCheckInEmojiDialog {
@@ -174,7 +174,7 @@ export class HabitCheckInEmojiDialog {
         renameBtn.addEventListener("click", (event) => {
             event.stopPropagation();
             this.renameGroup(groupName).catch((error) => {
-                console.error("重命名分组失败:", error);
+                console.error("Failed to rename group:", error);
             });
         });
 
@@ -260,7 +260,7 @@ export class HabitCheckInEmojiDialog {
         addBox.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg> ${i18n("addCheckInGroup") || "添加打卡分组"}`;
         addBox.addEventListener("click", () => {
             this.addGroup().catch((error) => {
-                console.error("添加分组失败:", error);
+                console.error("Failed to add group:", error);
             });
         });
         return addBox;
@@ -678,12 +678,12 @@ export class HabitCheckInEmojiDialog {
             refEl.style.cssText = "font-weight:500; cursor:pointer; color:var(--b3-protyle-inline-blockref-color); border-bottom:1px dashed var(--b3-protyle-inline-blockref-color); word-break:break-word;";
             const metaEl = document.createElement("div");
             metaEl.style.cssText = "margin-top:4px;";
-            metaEl.textContent = `类型: ${block.type} | ID: ${block.id}`;
+            metaEl.textContent = i18n("blockTypeAndId", { type: String(block.type), id: String(block.id) });
             preview.appendChild(refEl);
             preview.appendChild(metaEl);
             preview.style.display = "block";
         } catch (error) {
-            console.warn("获取习惯备注同步块预览失败:", error);
+            console.warn("Failed to get habit note sync block preview:", error);
             preview.style.display = "block";
             preview.innerHTML = "";
             const errorText = document.createElement("span");
@@ -817,7 +817,7 @@ export class HabitCheckInEmojiDialog {
             showMessage(i18n("saveSuccess") || "保存成功");
             this.dialog.destroy();
         } catch (error) {
-            console.error("保存打卡选项失败:", error);
+            console.error("Failed to save check-in options:", error);
             showMessage(i18n("saveFailed") || "保存失败", 3000, "error");
         }
     }

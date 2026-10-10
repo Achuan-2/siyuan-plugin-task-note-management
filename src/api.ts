@@ -791,7 +791,7 @@ export function cancelNotification(id: number | undefined | null): void {
     try {
         platformUtils.cancelNotification(id);
     } catch (error) {
-        console.warn('取消通知失败:', error);
+        console.warn("Failed to cancel notification:", error);
     }
 }
 
@@ -859,7 +859,7 @@ export async function hasHabitNotified(habitId: string, date: string, time?: str
         // If time not provided, return true if any time was notified
         return Object.values(entry).some(v => !!v);
     } catch (error) {
-        console.warn('检查习惯通知记录失败:', error);
+        console.warn("Failed to check habit notification records:", error);
         return false;
     }
 }
@@ -871,13 +871,13 @@ export async function markHabitNotified(habitId: string, date: string, time?: st
         if (!plugin) return;
         const habitData = await plugin.loadHabitData();
         if (!habitData || typeof habitData !== 'object') {
-            console.warn('习惯数据不存在，无法标记通知');
+            console.warn("Habit data is missing; cannot mark notification");
             return;
         }
 
         const habit = habitData[habitId];
         if (!habit || typeof habit !== 'object') {
-            console.warn('习惯不存在，无法标记通知:', habitId);
+            console.warn("Habit not found; cannot mark notification:", habitId);
             return;
         }
 
@@ -906,7 +906,7 @@ export async function markHabitNotified(habitId: string, date: string, time?: st
         // 写回习惯数据
         await plugin.saveHabitData(habitData);
     } catch (error) {
-        console.error('标记习惯通知记录失败:', error);
+        console.error("Failed to mark habit notification record:", error);
     }
 }
 
@@ -939,7 +939,7 @@ export async function isTaskListLikeBlock(blockId: string): Promise<boolean> {
         return /^\s*[-*+]\s*(?:\{:[^}]*\}\s*)?\[(?: |x|X)\]/m.test(kramdown)
             || /^\s*[-*+]\s*\[(?: |x|X)\](?:\s*\{:[^}]*\})?/m.test(kramdown);
     } catch (error) {
-        console.warn('检测任务列表块失败:', error);
+        console.warn("Failed to detect task list block:", error);
         return false;
     }
 }
@@ -984,7 +984,7 @@ async function syncTaskListBlockCompletion(blockId: string, reminders: any[], sy
                 marker: getTaskListMarkerByReminders(reminders, syncDoingAndAbandoned)
             }]);
         } catch (err) {
-            console.warn('同步任务列表块标记失败:', blockId, err);
+            console.warn("Failed to sync task list block marker:", blockId, err);
         }
         return;
     }
@@ -1002,7 +1002,7 @@ async function syncTaskListBlockCompletion(blockId: string, reminders: any[], sy
                         marker: getTaskListMarkerByReminders(reminders, syncDoingAndAbandoned)
                     }]);
                 } catch (err) {
-                    console.warn('同步子任务列表块标记失败:', child.id, err);
+                    console.warn("Failed to sync subtask list block marker:", child.id, err);
                 }
             }
         }
@@ -1047,7 +1047,7 @@ export async function restoreTaskListMarkers(): Promise<number> {
         }
         return items.length;
     } catch (err) {
-        console.warn('恢复任务列表状态失败:', err);
+        console.warn("Failed to restore task list state:", err);
         return 0;
     }
 }
@@ -1085,7 +1085,7 @@ export async function resetDoingAndAbandonedTaskListMarkers(): Promise<number> {
         }
         return items.length;
     } catch (err) {
-        console.warn('重置任务列表进行中/放弃状态失败:', err);
+        console.warn("Failed to reset in-progress/abandoned task list state:", err);
         return 0;
     }
 }
@@ -1153,7 +1153,7 @@ export async function updateBindBlockAtrrs(blockId: string, plugin: any, provide
                         cleanupAttrs['custom-task-pomodoro-minutes'] = ownMinutes > 0 ? String(ownMinutes) : '';
                     }
                 } catch (pomoErr) {
-                    console.warn('清理块属性计算块自有番茄失败:', blockId, pomoErr);
+                    console.warn("Failed to clear block attributes and calculate own pomodoros:", blockId, pomoErr);
                 }
 
                 await setBlockAttrs(blockId, cleanupAttrs);
@@ -1250,7 +1250,7 @@ export async function updateBindBlockAtrrs(blockId: string, plugin: any, provide
                 attrs['custom-task-pomodoro-minutes'] = totalPomoMinutes > 0 ? String(totalPomoMinutes) : '';
             }
         } catch (pomoErr) {
-            console.warn('计算/更新块番茄属性失败:', blockId, pomoErr);
+            console.warn("Failed to calculate/update block pomodoro attributes:", blockId, pomoErr);
         }
 
         // 一次性更新所有属性
@@ -1270,11 +1270,11 @@ export async function updateBindBlockAtrrs(blockId: string, plugin: any, provide
             const syncDoingAndAbandoned = plugin.settings?.enableTaskListStatusSync !== false;
             await syncTaskListBlockCompletion(blockId, blockReminders as any[], syncDoingAndAbandoned);
         } catch (syncErr) {
-            console.warn('同步任务列表块勾选状态失败:', blockId, syncErr);
+            console.warn("Failed to sync task list block check state:", blockId, syncErr);
         }
 
     } catch (error) {
-        console.error('更新块提醒书签失败:', error);
+        console.error("Failed to update block reminder bookmark:", error);
     }
 }
 
@@ -1314,7 +1314,7 @@ export async function updateMilestoneBindBlockAttrs(blockId: string, projectId: 
 
         await setBlockAttrs(blockId, attrs);
     } catch (error) {
-        console.error('更新里程碑块属性失败:', error);
+        console.error("Failed to update milestone block attributes:", error);
     }
 }
 
@@ -1343,7 +1343,7 @@ export async function uploadCloud(paths?: string[], silent: boolean = false): Pr
         await fetchPost('/api/asset/uploadCloudByAssetsPaths', payload);
         return null;
     } catch (error) {
-        console.error('上传ICS到云端失败:', error);
+        console.error("Failed to upload ICS to cloud:", error);
         return null;
     }
 }

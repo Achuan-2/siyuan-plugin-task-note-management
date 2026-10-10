@@ -273,7 +273,7 @@ export class ProjectManager {
                 window.dispatchEvent(new CustomEvent('reminderSettingsUpdated'));
             }
         } catch (error) {
-            console.warn('设置默认无项目归属项目失败:', error);
+            console.warn("Failed to set default project for unassigned tasks:", error);
         }
     }
 
@@ -433,7 +433,7 @@ export class ProjectManager {
             const project = projectData[projectId];
             return project?.kanbanMode || 'status';
         } catch (error) {
-            console.error('获取项目看板模式失败:', error);
+            console.error("Failed to get project kanban mode:", error);
             return 'status';
         }
     }
@@ -449,7 +449,7 @@ export class ProjectManager {
                 await this.plugin.saveProjectData(projectData);
             }
         } catch (error) {
-            console.error('设置项目看板模式失败:', error);
+            console.error("Failed to set project kanban mode:", error);
             throw error;
         }
     }
@@ -463,7 +463,7 @@ export class ProjectManager {
             const project = projectData[projectId];
             return project?.customGroups || [];
         } catch (error) {
-            console.error('获取项目自定义分组失败:', error);
+            console.error("Failed to get project custom groups:", error);
             return [];
         }
     }
@@ -479,7 +479,7 @@ export class ProjectManager {
                 await this.plugin.saveProjectData(projectData);
             }
         } catch (error) {
-            console.error('设置项目自定义分组失败:', error);
+            console.error("Failed to set project custom groups:", error);
             throw error;
         }
     }
@@ -493,7 +493,7 @@ export class ProjectManager {
             const project = projectData[projectId];
             return project?.milestones || [];
         } catch (error) {
-            console.error('获取项目里程碑失败:', error);
+            console.error("Failed to get project milestones:", error);
             return [];
         }
     }
@@ -509,7 +509,7 @@ export class ProjectManager {
                 await this.plugin.saveProjectData(projectData);
             }
         } catch (error) {
-            console.error('设置项目里程碑失败:', error);
+            console.error("Failed to set project milestones:", error);
             throw error;
         }
     }
@@ -523,7 +523,7 @@ export class ProjectManager {
             const group = groups.find(g => g.id === groupId);
             return group?.milestones || [];
         } catch (error) {
-            console.error('获取分组里程碑失败:', error);
+            console.error("Failed to get group milestone:", error);
             return [];
         }
     }
@@ -549,7 +549,7 @@ export class ProjectManager {
 
             return undefined;
         } catch (error) {
-            console.error('根据ID获取里程碑失败:', error);
+            console.error("Failed to get milestone by ID:", error);
             return undefined;
         }
     }
@@ -615,7 +615,7 @@ export class ProjectManager {
         try {
             return this.buildMilestoneDateDisplayInfo(projectId, milestoneIds, this.plugin?.projectDataCache);
         } catch (error) {
-            console.warn('同步获取里程碑日期展示信息失败:', error);
+            console.warn("Failed to synchronously get milestone date display information:", error);
             return null;
         }
     }
@@ -625,7 +625,7 @@ export class ProjectManager {
             const projectData = await this.plugin.loadProjectData();
             return this.buildMilestoneDateDisplayInfo(projectId, milestoneIds, projectData);
         } catch (error) {
-            console.error('获取里程碑日期展示信息失败:', error);
+            console.error("Failed to get milestone date display information:", error);
             return null;
         }
     }
@@ -642,7 +642,7 @@ export class ProjectManager {
                 await this.setProjectCustomGroups(projectId, groups);
             }
         } catch (error) {
-            console.error('设置分组里程碑失败:', error);
+            console.error("Failed to set group milestone:", error);
             throw error;
         }
     }
@@ -663,7 +663,7 @@ export class ProjectManager {
             const project = projectData[projectId];
             return project?.sortRule || 'priority';
         } catch (error) {
-            console.error('获取项目排序规则失败:', error);
+            console.error("Failed to get project sort rule:", error);
             return 'priority';
         }
     }
@@ -679,7 +679,7 @@ export class ProjectManager {
                 await this.plugin.saveProjectData(projectData);
             }
         } catch (error) {
-            console.error('设置项目排序规则失败:', error);
+            console.error("Failed to set project sort rule:", error);
             throw error;
         }
     }
@@ -693,7 +693,7 @@ export class ProjectManager {
             const project = projectData[projectId];
             return project?.sortOrder || 'desc';
         } catch (error) {
-            console.error('获取项目排序方向失败:', error);
+            console.error("Failed to get project sort direction:", error);
             return 'desc';
         }
     }
@@ -709,7 +709,7 @@ export class ProjectManager {
                 await this.plugin.saveProjectData(projectData);
             }
         } catch (error) {
-            console.error('设置项目排序方向失败:', error);
+            console.error("Failed to set project sort direction:", error);
             throw error;
         }
     }
@@ -756,7 +756,7 @@ export class ProjectManager {
 
             return tags;
         } catch (error) {
-            console.error('获取项目标签失败:', error);
+            console.error("Failed to get project tags:", error);
             return [];
         }
     }
@@ -772,7 +772,7 @@ export class ProjectManager {
                 await this.plugin.saveProjectData(projectData);
             }
         } catch (error) {
-            console.error('设置项目标签失败:', error);
+            console.error("Failed to set project tags:", error);
             throw error;
         }
     }
@@ -910,7 +910,7 @@ export class ProjectManager {
                 return globalStatuses;
             }
         } catch (error) {
-            console.warn('读取全局看板状态配置失败，使用内置默认状态:', error);
+            console.warn("Failed to read global kanban status configuration; using built-in defaults:", error);
         }
 
         return this.getBuiltInDefaultKanbanStatuses();
@@ -970,7 +970,7 @@ export class ProjectManager {
             // 返回默认配置
             return this.getDefaultKanbanStatuses();
         } catch (error) {
-            console.error('获取项目看板状态失败:', error);
+            console.error("Failed to get project kanban statuses:", error);
             return this.getDefaultKanbanStatuses();
         }
     }
@@ -1034,7 +1034,7 @@ export class ProjectManager {
                 await this.plugin.saveProjectData(projectData);
             }
         } catch (error) {
-            console.error('设置项目看板状态失败:', error);
+            console.error("Failed to set project kanban statuses:", error);
             throw error;
         }
     }

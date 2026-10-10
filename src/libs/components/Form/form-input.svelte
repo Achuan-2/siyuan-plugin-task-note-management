@@ -1,5 +1,6 @@
 <script lang="ts">
     import { createEventDispatcher } from 'svelte';
+    import { i18n } from '../../../pluginInstance';
     export let type: string; // Setting Type
     export let key: string;
     export let value: any;
@@ -84,7 +85,7 @@
         {/if}
         <svg
             class="b3-tooltips b3-tooltips__nw"
-            aria-label={showPassword ? '隐藏密码' : '显示密码'}
+            aria-label={showPassword ? i18n('hidePassword') : i18n('showPassword')}
             on:click={() => (showPassword = !showPassword)}
             on:keydown={e => e.key === 'Enter' && (showPassword = !showPassword)}
             tabindex="0"

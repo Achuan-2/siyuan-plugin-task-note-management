@@ -247,7 +247,7 @@ export class CategoryManageDialog {
                 categoriesList.appendChild(categoryEl);
             });
         } catch (error) {
-            console.error(i18n("loadCategoriesFailed"), error);
+            console.error("Failed to load categories. Please try again.", error);
             categoriesList.innerHTML = `<div class="category-error">${i18n("loadCategoriesFailed")}</div>`;
         }
     }
@@ -258,7 +258,7 @@ export class CategoryManageDialog {
         categoryEl.draggable = true;
         categoryEl.dataset.categoryId = category.id;
         categoryEl.innerHTML = `
-            <div class="category-drag-handle ariaLabel" aria-label="拖拽排序"></div>
+            <div class="category-drag-handle ariaLabel" aria-label="${i18n("dragToSort")}"></div>
             <div class="category-info">
                 <div class="category-visual">
                     <div class="category-icon" style="background-color: ${category.color};">
@@ -269,18 +269,18 @@ export class CategoryManageDialog {
                 <div class="category-name">${category.name}</div>
             </div>
             <div class="category-actions">
-                <button class="b3-button b3-button--outline category-edit-btn ariaLabel" data-action="edit" data-id="${category.id}" aria-label="编辑分类">
+                <button class="b3-button b3-button--outline category-edit-btn ariaLabel" data-action="edit" data-id="${category.id}" aria-label="${i18n("editCategory")}">
                     <svg class="b3-button__icon"><use xlink:href="#iconEdit"></use></svg>
                 </button>
-                <button class="b3-button b3-button--outline category-delete-btn ariaLabel" data-action="delete" data-id="${category.id}" aria-label="删除分类">
+                <button class="b3-button b3-button--outline category-delete-btn ariaLabel" data-action="delete" data-id="${category.id}" aria-label="${i18n("deleteCategory")}">
                     <svg class="b3-button__icon"><use xlink:href="#iconTrashcan"></use></svg>
                 </button>
             </div>
             <div class="category-move-actions">
-                <button class="b3-button b3-button--text category-move-up-btn ariaLabel" data-action="moveUp" data-id="${category.id}" aria-label="上移">
+                <button class="b3-button b3-button--text category-move-up-btn ariaLabel" data-action="moveUp" data-id="${category.id}" aria-label="${i18n("moveUp")}">
                     <svg class="b3-button__icon"><use xlink:href="#iconUp"></use></svg>
                 </button>
-                <button class="b3-button b3-button--text category-move-down-btn ariaLabel" data-action="moveDown" data-id="${category.id}" aria-label="下移">
+                <button class="b3-button b3-button--text category-move-down-btn ariaLabel" data-action="moveDown" data-id="${category.id}" aria-label="${i18n("moveDown")}">
                     <svg class="b3-button__icon"><use xlink:href="#iconDown"></use></svg>
                 </button>
             </div>
@@ -408,7 +408,7 @@ export class CategoryManageDialog {
             this.renderCategories();
             showMessage(i18n("categoryMovedUp") || "分类已上移");
         } catch (error) {
-            console.error('上移分类失败:', error);
+            console.error("Failed to move category up:", error);
             showMessage(i18n("moveCategoryFailed") || "移动分类失败");
         }
     }
@@ -428,7 +428,7 @@ export class CategoryManageDialog {
             this.renderCategories();
             showMessage(i18n("categoryMovedDown") || "分类已下移");
         } catch (error) {
-            console.error('下移分类失败:', error);
+            console.error("Failed to move category down:", error);
             showMessage(i18n("moveCategoryFailed") || "移动分类失败");
         }
     }
@@ -467,10 +467,10 @@ export class CategoryManageDialog {
             // 重新渲染
             this.renderCategories();
 
-            showMessage("分类排序已更新");
+            showMessage(i18n("categorySortUpdated"));
         } catch (error) {
-            console.error('重新排序分类失败:', error);
-            showMessage("排序更新失败，请重试");
+            console.error("Failed to reorder categories:", error);
+            showMessage(i18n("sortUpdateFailedRetry"));
         }
     }
 
@@ -485,28 +485,28 @@ export class CategoryManageDialog {
     private showCategoryEditDialog(category?: Category) {
         const isEdit = !!category;
         const editDialog = new Dialog({
-            title: isEdit ? "编辑分类" : "添加分类",
+            title: isEdit ? i18n("editCategory") : i18n("addCategory"),
             content: `
                 <div class="category-edit-dialog">
                     <div class="b3-dialog__content">
                         <div class="b3-form__group">
-                            <label class="b3-form__label">分类名称</label>
-                            <input type="text" id="categoryName" class="b3-text-field" value="${category?.name || ''}" placeholder="请输入分类名称">
+                            <label class="b3-form__label">${i18n("categoryNameLabel")}</label>
+                            <input type="text" id="categoryName" class="b3-text-field" value="${category?.name || ''}" placeholder="${i18n("pleaseEnterCategoryName")}">
                         </div>
                         <div class="b3-form__group">
-                            <label class="b3-form__label">分类颜色</label>
+                            <label class="b3-form__label">${i18n("categoryColorLabel")}</label>
                             <input type="color" id="categoryColor" class="b3-text-field" value="${category?.color || '#3498db'}">
                         </div>
                         <div class="b3-form__group">
-                            <label class="b3-form__label">分类图标</label>
+                            <label class="b3-form__label">${i18n("categoryIconLabel")}</label>
                             <div id="categoryIcon" class="category-icon-display">${category?.icon || '🏷'}</div>
                         </div>
                         <div class="b3-form__group">
-                            <label class="b3-form__label">预览</label>
+                            <label class="b3-form__label">${i18n("preview")}</label>
                             <div class="category-preview">
                                 <div class="category-dot" id="previewDot" style="background-color: ${category?.color || '#3498db'};"></div>
                                 <span id="previewIcon">${category?.icon || '🏷'}</span>
-                                <span id="previewName">${category?.name || '新分类'}</span>
+                                <span id="previewName">${category?.name || i18n("newCategory")}</span>
                             </div>
                         </div>
                     </div>
@@ -563,7 +563,7 @@ export class CategoryManageDialog {
         });
 
         const updatePreview = () => {
-            const name = nameInput.value || '新分类';
+            const name = nameInput.value || i18n("newCategory");
             const color = colorInput.value;
             const icon = iconDisplay.textContent || '🏷';
 
@@ -590,24 +590,24 @@ export class CategoryManageDialog {
             const icon = iconDisplay.textContent || '';
 
             if (!name) {
-                showMessage("请输入分类名称");
+                showMessage(i18n("pleaseEnterCategoryName"));
                 return;
             }
 
             try {
                 if (isEdit && category) {
                     await this.categoryManager.updateCategory(category.id, { name, color, icon });
-                    showMessage("分类已更新");
+                    showMessage(i18n("categoryUpdated"));
                 } else {
                     await this.categoryManager.addCategory({ name, color, icon });
-                    showMessage("分类已添加");
+                    showMessage(i18n("categoryAdded"));
                 }
 
                 editDialog.destroy();
                 this.renderCategories();
             } catch (error) {
-                console.error('保存分类失败:', error);
-                showMessage("保存分类失败，请重试");
+                console.error("Failed to save categories:", error);
+                showMessage(i18n("saveCategoryFailedRetry"));
             }
         });
     }
@@ -622,7 +622,7 @@ export class CategoryManageDialog {
                     showMessage(i18n("categoryDeleted"));
                     this.renderCategories();
                 } catch (error) {
-                    console.error(i18n("deleteCategoryFailed"), error);
+                    console.error("Failed to delete category. Please try again.", error);
                     showMessage(i18n("deleteCategoryFailed"));
                 }
             }
@@ -639,7 +639,7 @@ export class CategoryManageDialog {
                     showMessage(i18n("categoriesReset"));
                     this.renderCategories();
                 } catch (error) {
-                    console.error(i18n("resetCategoriesFailed"), error);
+                    console.error("Failed to reset categories. Please try again.", error);
                     showMessage(i18n("resetCategoriesFailed"));
                 }
             }

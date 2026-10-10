@@ -76,8 +76,8 @@ export class NotificationDialog {
         let timeDisplay = '';
         if (isAllDay) {
             timeDisplay = endDate && endDate !== date ?
-                `${date} → ${endDate} (全天)` :
-                `${date} (全天)`;
+                i18n("allDayDateRange", { start: String(date), end: String(endDate) }) :
+                i18n("allDayDate", { date: String(date) });
         } else if (time) {
             timeDisplay = endDate && endDate !== date ?
                 `${date} → ${endDate} ${time}` :
@@ -147,9 +147,9 @@ export class NotificationDialog {
         const getTimeDisplay = (reminder: ReminderInfo) => {
             if (reminder.isAllDay) {
                 if (reminder.endDate && reminder.endDate !== reminder.date) {
-                    return `${reminder.date} → ${reminder.endDate} (全天)`;
+                    return i18n("allDayDateRange", { start: String(reminder.date), end: String(reminder.endDate) });
                 }
-                return '全天';
+                return i18n("allDay");
             } else if (reminder.time) {
                 if (reminder.endDate && reminder.endDate !== reminder.date) {
                     return `${reminder.date} ${reminder.time} → ${reminder.endDate}`;
@@ -159,7 +159,7 @@ export class NotificationDialog {
                 if (reminder.endDate && reminder.endDate !== reminder.date) {
                     return `${reminder.date} → ${reminder.endDate}`;
                 }
-                return '全天';
+                return i18n("allDay");
             }
         };
 
@@ -172,9 +172,9 @@ export class NotificationDialog {
 
         // 获取优先级文字
         const getPriorityText = (priority: string) => {
-            return priority === 'high' ? '高' :
-                priority === 'medium' ? '中' :
-                    priority === 'low' ? '低' : '';
+            return priority === 'high' ? i18n("highPriority") :
+                priority === 'medium' ? i18n("mediumPriority") :
+                    priority === 'low' ? i18n("lowPriority") : '';
         };
 
         // 对提醒进行分类和排序
@@ -199,7 +199,7 @@ export class NotificationDialog {
                         <svg><use xlink:href="#iconTNCalendar"></use></svg>
                     </div>
                     <div class="notification-title-container">
-                        <div class="notification-title">今日事件 (${reminders.length})</div>
+                        <div class="notification-title">${i18n('todayEventsCount', { count: String(reminders.length) })}</div>
                         <div class="notification-time">${new Date().toLocaleDateString(getLocaleTag())}</div>
                     </div>
                     <button class="notification-close" aria-label="${i18n('close')}">
@@ -216,7 +216,7 @@ export class NotificationDialog {
                         <div class="all-day-reminder-item ${isReminderOverdue ? 'overdue' : ''} ${priorityClass}" data-block-id="${reminder.blockId}">
                             <div class="item-header">
                                 <div class="item-title">
-                                    ${isReminderOverdue ? '<span class="overdue-tag">过期</span>' : ''}
+                                    ${isReminderOverdue ? `<span class="overdue-tag">${i18n("overdue")}</span>` : ''}
                                     ${this.escapeHtml(reminder.title)}
                                 </div>
                                 <div class="item-meta">
@@ -714,7 +714,7 @@ export class NotificationDialog {
             // 关闭通知
             this.destroy();
         } catch (error) {
-            console.error('跳转到块失败:', error);
+            console.error("Failed to navigate to block:", error);
         }
     }
 

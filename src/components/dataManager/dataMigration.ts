@@ -39,9 +39,9 @@ export async function performDataMigration(plugin: MigrationPlugin): Promise<voi
 
         // 检查是否需要迁移绑定块属性
         if (!settings.datatransfer?.bindblockAddAttr) {
-            console.log("开始迁移绑定块属性...");
+            console.log("Starting bound block attribute migration...");
             await migrateBindBlockAttributes(plugin);
-            console.log("绑定块属性迁移完成");
+            console.log("Bound block attribute migration complete");
 
             // 标记迁移完成
             settings.datatransfer = settings.datatransfer || {};
@@ -52,7 +52,7 @@ export async function performDataMigration(plugin: MigrationPlugin): Promise<voi
         // 检查是否需要迁移 termType -> kanbanStatus 并删除 termType 键
         if (!settings.datatransfer?.termTypeTransfer) {
             try {
-                console.log("开始迁移 termType 到 kanbanStatus 并删除 termType 键...");
+                console.log("Starting termType to kanbanStatus migration and termType key removal...");
                 const reminderData = await plugin.loadReminderData(true);
                 if (reminderData && typeof reminderData === "object") {
                     let mappedCount = 0;
@@ -79,36 +79,36 @@ export async function performDataMigration(plugin: MigrationPlugin): Promise<voi
                                         delete (item as any).termType;
                                         removedCount++;
                                     } catch (ee) {
-                                        console.warn(`无法删除提醒 ${id} 的 termType 键:`, ee);
+                                        console.warn(`Failed to remove termType key from reminder ${id}:`, ee);
                                     }
                                 }
                             }
                         } catch (err) {
-                            console.warn(`迁移提醒 ${id} 时出错:`, err);
+                            console.warn(`Error migrating reminder ${id}:`, err);
                         }
                     }
 
                     if (mappedCount > 0 || removedCount > 0) {
                         await plugin.saveReminderData(reminderData);
-                        console.log(`termType 迁移完成，映射 ${mappedCount} 条，删除 ${removedCount} 条 termType 键`);
+                        console.log(`termType migration complete: mapped ${mappedCount} entries and removed ${removedCount} termType keys`);
                     } else {
-                        console.log("termType 迁移完成，未发现需要映射或删除的项");
+                        console.log("termType migration complete: no entries to map or remove");
                     }
                 } else {
-                    console.log("没有找到提醒数据，跳过 termType 迁移");
+                    console.log("No reminder data found; skipping termType migration");
                 }
 
                 settings.datatransfer = settings.datatransfer || {};
                 settings.datatransfer.termTypeTransfer = true;
                 await plugin.saveSettings(settings);
             } catch (err) {
-                console.error("termType 到 kanbanStatus 的迁移失败:", err);
+                console.error("Failed to migrate termType to kanbanStatus:", err);
             }
         }
 
         // 检查是否需要迁移随机休息相关的设置项名称 (randomNotification -> randomRest)
         if (!settings.datatransfer?.randomRestTransfer) {
-            console.log("开始迁移随机休息设置项...");
+            console.log("Starting random break settings migration...");
             let migratedCount = 0;
             const mapping = {
                 randomNotificationEnabled: "randomRestEnabled",
@@ -159,17 +159,17 @@ export async function performDataMigration(plugin: MigrationPlugin): Promise<voi
                 settings.datatransfer = settings.datatransfer || {};
                 settings.datatransfer.randomRestTransfer = true;
                 await plugin.saveSettings(settings);
-                console.log(`随机休息设置项迁移完成，共迁移 ${migratedCount} 项`);
+                console.log(`Random break settings migration complete: ${migratedCount} entries migrated`);
             }
         }
 
         // 检查是否需要迁移 removeDateAfterDetection 从 bool 到 string
         if (typeof settings.removeDateAfterDetection === "boolean") {
-            console.log("开始迁移 removeDateAfterDetection...");
+            console.log("Starting removeDateAfterDetection migration...");
             const oldVal = (settings as any).removeDateAfterDetection;
             settings.removeDateAfterDetection = oldVal ? "all" : "none";
             await plugin.saveSettings(settings);
-            console.log("removeDateAfterDetection 迁移完成");
+            console.log("removeDateAfterDetection migration complete");
         }
 
         if (!settings.datatransfer?.reminderSkipWeekendModeTransfer) {
@@ -178,7 +178,7 @@ export async function performDataMigration(plugin: MigrationPlugin): Promise<voi
 
         // 检查是否需要迁移音频文件列表
         if (!settings.datatransfer?.audioFileTransfer) {
-            console.log("开始迁移音频文件列表...");
+            console.log("Starting audio file list migration...");
             const audioKeys = [
                 "notificationSound",
                 "pomodoroWorkSound",
@@ -223,7 +223,7 @@ export async function performDataMigration(plugin: MigrationPlugin): Promise<voi
             settings.datatransfer = settings.datatransfer || {};
             settings.datatransfer.audioFileTransfer = true;
             await plugin.saveSettings(settings);
-            console.log(`音频文件列表迁移完成，更新了 ${audioMigratedCount} 个项`);
+            console.log(`Audio file list migration complete: ${audioMigratedCount} entries updated`);
         }
         if (!settings.datatransfer?.habitCheckinTransfer) {
             await migrateHabitCheckinData(plugin, settings);
@@ -236,13 +236,13 @@ export async function performDataMigration(plugin: MigrationPlugin): Promise<voi
             await migrateRepeatInstanceState(plugin, settings);
         }
     } catch (error) {
-        console.error("数据迁移失败:", error);
+        console.error("Data migration failed:", error);
     }
 }
 
 async function migrateFilterSettingsFile(plugin: MigrationPlugin, settings: any): Promise<void> {
     try {
-        console.log("开始迁移筛选器配置文件 settings.json -> filter-settings.json...");
+        console.log("Starting filter configuration migration: settings.json -> filter-settings.json...");
 
         const legacySettings = await plugin.loadData(LEGACY_FILTER_SETTINGS_FILE);
         if (legacySettings && typeof legacySettings === "object" && !Array.isArray(legacySettings)) {
@@ -257,19 +257,19 @@ async function migrateFilterSettingsFile(plugin: MigrationPlugin, settings: any)
             try {
                 await plugin.removeData(LEGACY_FILTER_SETTINGS_FILE);
             } catch (error) {
-                console.warn(`删除旧筛选器配置文件 ${LEGACY_FILTER_SETTINGS_FILE} 失败:`, error);
+                console.warn(`Failed to remove legacy filter configuration file ${LEGACY_FILTER_SETTINGS_FILE}:`, error);
             }
 
-            console.log("筛选器配置文件迁移完成");
+            console.log("Filter configuration migration complete");
         } else {
-            console.log("未发现旧筛选器配置文件，跳过迁移");
+            console.log("No legacy filter configuration file found; skipping migration");
         }
 
         settings.datatransfer = settings.datatransfer || {};
         settings.datatransfer.filterSettingsFileTransfer = true;
         await plugin.saveSettings(settings);
     } catch (error) {
-        console.error("筛选器配置文件迁移失败:", error);
+        console.error("Filter configuration migration failed:", error);
     }
 }
 
@@ -300,7 +300,7 @@ function migrateReminderSkipWeekendFields(target: any): boolean {
 
 async function migrateReminderSkipWeekendMode(plugin: MigrationPlugin, settings: any): Promise<void> {
     try {
-        console.log("开始迁移 reminderSkipWeekends 到 reminderSkipWeekendMode...");
+        console.log("Starting reminderSkipWeekends to reminderSkipWeekendMode migration...");
 
         let changedCount = 0;
         if (migrateReminderSkipWeekendFields(settings)) {
@@ -340,9 +340,9 @@ async function migrateReminderSkipWeekendMode(plugin: MigrationPlugin, settings:
         settings.datatransfer = settings.datatransfer || {};
         settings.datatransfer.reminderSkipWeekendModeTransfer = true;
         await plugin.saveSettings(settings);
-        console.log(`reminderSkipWeekends 迁移完成，更新 ${changedCount} 处`);
+        console.log(`reminderSkipWeekends migration complete: ${changedCount} entries updated`);
     } catch (error) {
-        console.error("reminderSkipWeekends 迁移失败:", error);
+        console.error("reminderSkipWeekends migration failed:", error);
     }
 }
 
@@ -354,7 +354,7 @@ async function migrateBindBlockAttributes(plugin: MigrationPlugin): Promise<void
         const reminderData = await plugin.loadReminderData();
 
         if (!reminderData || typeof reminderData !== "object") {
-            console.log("没有找到提醒数据，跳过迁移");
+            console.log("No reminder data found; skipping migration");
             return;
         }
 
@@ -390,13 +390,13 @@ async function migrateBindBlockAttributes(plugin: MigrationPlugin): Promise<void
 
                 migratedCount++;
             } catch (error) {
-                console.warn(`迁移块 ${reminder.blockId} 的属性失败:`, error);
+                console.warn(`Failed to migrate attributes of block ${reminder.blockId}:`, error);
             }
         }
 
-        console.log(`成功迁移了 ${migratedCount} 个绑定块的属性`);
+        console.log(`Migrated attributes of ${migratedCount} bound blocks`);
     } catch (error) {
-        console.error("迁移绑定块属性时出错:", error);
+        console.error("Error migrating bound block attributes:", error);
         throw error;
     }
 }
@@ -485,14 +485,14 @@ async function migratePomodoroRecords(plugin: MigrationPlugin, settings: any): P
  */
 async function migrateRepeatInstanceState(plugin: MigrationPlugin, settings: any): Promise<void> {
     try {
-        console.log("开始迁移重复实例状态到统一的 instances 结构...");
+        console.log("Starting repeat instance state migration to the unified instances structure...");
 
         const reminderData = await plugin.loadReminderData(true);
         if (!reminderData || typeof reminderData !== "object") {
             settings.datatransfer = settings.datatransfer || {};
             settings.datatransfer.repeatInstanceStateTransfer = true;
             await plugin.saveSettings(settings);
-            console.log("没有找到提醒数据，跳过重复实例状态迁移");
+            console.log("No reminder data found; skipping repeat instance state migration");
             return;
         }
 
@@ -580,8 +580,8 @@ async function migrateRepeatInstanceState(plugin: MigrationPlugin, settings: any
         settings.datatransfer = settings.datatransfer || {};
         settings.datatransfer.repeatInstanceStateTransfer = true;
         await plugin.saveSettings(settings);
-        console.log("重复实例状态迁移完成");
+        console.log("Repeat instance state migration complete");
     } catch (error) {
-        console.error("重复实例状态迁移失败:", error);
+        console.error("Repeat instance state migration failed:", error);
     }
 }

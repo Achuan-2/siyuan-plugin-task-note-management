@@ -59,7 +59,7 @@ export class StatusManager {
         try {
             await this.loadStatuses();
         } catch (error) {
-            console.error('初始化状态失败:', error);
+            console.error("Failed to initialize statuses:", error);
             this.statuses = getLocalizedDefaultStatuses();
             await this.saveStatuses();
         }
@@ -69,7 +69,7 @@ export class StatusManager {
         try {
             const content = await this.plugin.loadProjectStatus();
             if (!content) {
-                console.log('状态文件不存在，创建默认状态');
+                console.log("Status file is missing; creating default statuses");
                 this.statuses = [...DEFAULT_STATUSES];
                 await this.saveStatuses();
                 return this.statuses;
@@ -90,12 +90,12 @@ export class StatusManager {
                     return status;
                 });
             } else {
-                console.log('状态数据无效，使用默认状态');
+                console.log("Invalid status data; using default statuses");
                 this.statuses = getLocalizedDefaultStatuses();
                 await this.saveStatuses();
             }
         } catch (error) {
-            console.warn('加载状态文件失败，使用默认状态:', error);
+            console.warn("Failed to load status file; using default statuses:", error);
             this.statuses = [...DEFAULT_STATUSES];
             await this.saveStatuses();
         }
@@ -107,7 +107,7 @@ export class StatusManager {
         try {
             await this.plugin.saveProjectStatus(this.statuses);
         } catch (error) {
-            console.error('保存状态失败:', error);
+            console.error("Failed to save statuses:", error);
             throw error;
         }
     }

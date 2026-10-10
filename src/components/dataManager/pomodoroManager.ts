@@ -60,7 +60,7 @@ export class PomodoroManager {
                 this.currentPomodoroTimer.pauseFromExternal();
                 return true;
             } catch (error) {
-                console.error('暂停当前番茄钟失败:', error);
+                console.error("Failed to pause current pomodoro timer:", error);
                 return false;
             }
         }
@@ -76,7 +76,7 @@ export class PomodoroManager {
                 this.currentPomodoroTimer.resumeFromExternal();
                 return true;
             } catch (error) {
-                console.error('恢复番茄钟运行失败:', error);
+                console.error("Failed to resume pomodoro timer:", error);
                 return false;
             }
         }
@@ -96,7 +96,7 @@ export class PomodoroManager {
                 }
                 this.currentPomodoroTimer.close();
             } catch (error) {
-                console.error('关闭番茄钟实例失败:', error);
+                console.error("Failed to close pomodoro timer instance:", error);
             }
             this.currentPomodoroTimer = null;
         }
@@ -115,7 +115,7 @@ export class PomodoroManager {
                 }
                 this.currentPomodoroTimer.destroy();
             } catch (error) {
-                console.error('销毁番茄钟实例失败:', error);
+                console.error("Failed to destroy pomodoro timer instance:", error);
             }
             this.currentPomodoroTimer = null;
         }
@@ -133,7 +133,7 @@ export class PomodoroManager {
             try {
                 preserved = this.currentPomodoroTimer.detachForPluginReload();
             } catch (error) {
-                console.warn('为插件重载保留番茄钟窗口失败，将按普通卸载清理:', error);
+                console.warn("Failed to preserve pomodoro window for plugin reload; using normal unload cleanup:", error);
             }
         }
 
@@ -164,7 +164,7 @@ export class PomodoroManager {
             try {
                 await this.currentPomodoroTimer.updateSettings(settings);
             } catch (error) {
-                console.error('更新番茄钟设置失败:', error);
+                console.error("Failed to update pomodoro timer settings:", error);
             }
         }
     }

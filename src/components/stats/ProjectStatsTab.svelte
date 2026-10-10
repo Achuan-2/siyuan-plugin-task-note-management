@@ -200,7 +200,7 @@
             const focusMinutes = await countProjectTotalFocusTime(plugin, project.id, reminderData);
             focusText = focusMinutes > 0 ? ` ⏱ ${formatMinutesShort(focusMinutes)}` : "";
         } catch (e) {
-            console.warn(`计算项目统计失败: ${project.id}`, e);
+            console.warn(`Failed to calculate project statistics: ${project.id}`, e);
         }
 
         const priority = project.priority || "none";
@@ -259,7 +259,7 @@
             const projects = projectManager.getProjects().filter((p: any) => p && p.id);
             allStats = await Promise.all(projects.map((p: any) => computeProjectStats(p)));
         } catch (e) {
-            console.error("加载项目统计失败:", e);
+            console.error("Failed to load project statistics:", e);
             allStats = [];
         }
     }
@@ -269,26 +269,26 @@
         try {
             await projectManager.initialize();
         } catch (e) {
-            console.warn("初始化项目管理器失败:", e);
+            console.warn("Failed to initialize project manager:", e);
         }
         try {
             categoryManager = CategoryManager.getInstance(plugin);
             await categoryManager.initialize();
         } catch (e) {
-            console.warn("初始化分类管理器失败:", e);
+            console.warn("Failed to initialize category manager:", e);
         }
         try {
             const folderManager = ProjectFolderManager.getInstance(plugin);
             await folderManager.initialize();
             folders = folderManager.getFolders() || [];
         } catch (e) {
-            console.warn("初始化文件夹管理器失败:", e);
+            console.warn("Failed to initialize folder manager:", e);
         }
         try {
             const pomodoroRecordManager = PomodoroRecordManager.getInstance(plugin);
             await pomodoroRecordManager.initialize();
         } catch (e) {
-            console.warn("初始化番茄记录失败:", e);
+            console.warn("Failed to initialize pomodoro records:", e);
         }
 
         statuses = projectManager.getStatusManager()?.getStatuses() || [];
@@ -413,7 +413,7 @@
                 type: "group",
                 key,
                 icon: node.folder.icon || "📂",
-                name: node.folder.name || "未命名文件夹",
+                name: node.folder.name || i18n("unnamedFolder"),
                 count: node.totalCount,
                 depth,
                 collapsed: isCollapsed,
@@ -452,8 +452,8 @@
                 try {
                     plugin.openProjectKanbanTab(project.id, project.title);
                 } catch (error) {
-                    console.error("打开项目看板失败:", error);
-                    showMessage("打开项目看板失败");
+                    console.error("Failed to open project kanban:", error);
+                    showMessage(i18n("openProjectKanbanFailed"));
                 }
             },
         });
@@ -471,19 +471,19 @@
 
 <div class="project-stats-root">
     {#if loading}
-        <div class="project-stats-empty">正在加载...</div>
+        <div class="project-stats-empty">{i18n('loading')}</div>
     {:else}
         <div class="project-stats-toolbar">
             <div class="view-toggle">
                 <button
                     class="filter-btn"
                     class:active={viewMode === "status"}
-                    on:click={() => (viewMode = "status")}>按状态</button
+                    on:click={() => (viewMode = "status")}>{i18n('projectStatsByStatus')}</button
                 >
                 <button
                     class="filter-btn"
                     class:active={viewMode === "folder"}
-                    on:click={() => (viewMode = "folder")}>按文件夹</button
+                    on:click={() => (viewMode = "folder")}>{i18n('projectStatsByFolder')}</button
                 >
             </div>
             <select

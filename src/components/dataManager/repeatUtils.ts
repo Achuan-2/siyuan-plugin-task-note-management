@@ -1,5 +1,5 @@
 import { RepeatConfig, RepeatInstanceState } from '../dialog/RepeatSettingsDialog';
-import { compareDateStrings, getLocalDateTimeString } from '../../utils/dateUtils';
+import { compareDateStrings, getLocalDateTimeString, getLocaleTag } from '../../utils/dateUtils';
 import { i18n } from '../../pluginInstance';
 import { solarToLunar, formatLunarMonth, formatLunarDay } from '../../utils/lunarUtils';
 import { normalizeReminderSkipWeekendMode, type HolidayData, type ReminderSkipWeekendMode, shouldSkipReminderOnDate } from '../../utils/reminderSkipDate';
@@ -443,17 +443,17 @@ export function getMonthlyWeekdayDate(year: number, month: number, order: number
 function getMonthlyWeekOrderText(order: number): string {
     switch (order) {
         case 1:
-            return '第一个';
+            return i18n('monthlyWeekOrderFirst');
         case 2:
-            return '第二个';
+            return i18n('monthlyWeekOrderSecond');
         case 3:
-            return '第三个';
+            return i18n('monthlyWeekOrderThird');
         case 4:
-            return '第四个';
+            return i18n('monthlyWeekOrderFourth');
         case 5:
-            return '第五个';
+            return i18n('monthlyWeekOrderFifth');
         case -1:
-            return '最后一个';
+            return i18n('monthlyWeekOrderLast');
         default:
             return '';
     }
@@ -968,8 +968,10 @@ export function getRepeatDescription(repeatConfig: RepeatConfig): string {
                     ? ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]
                     : ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
                 const dayNames = keys.map(k => i18n(k));
-                const days = repeatConfig.weekDays.map(d => dayNames[d]).join('、');
-                description = interval === 1 ? `每周${days}` : `每${interval}周的${days}`;
+                const days = repeatConfig.weekDays.map(d => dayNames[d]).join(getLocaleTag().startsWith('zh') ? '、' : ', ');
+                description = interval === 1
+                    ? i18n('repeatWeeklyDays', { days })
+                    : i18n('repeatEveryNWeeksDays', { interval: String(interval), days });
             } else {
                 description = interval === 1 ? i18n("everyWeek") : i18n("everyNWeeks", { n: interval.toString() });
             }
@@ -978,19 +980,18 @@ export function getRepeatDescription(repeatConfig: RepeatConfig): string {
             const monthlyWeekRules = getMonthlyWeekRules(repeatConfig);
             if (monthlyWeekRules.length > 0) {
                 const keys = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-                const fallbackDayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
-                const dayNames = keys.map((k, index) => i18n(k) || fallbackDayNames[index]);
+                const dayNames = keys.map(k => i18n(k));
                 const ruleText = monthlyWeekRules
-                    .map(rule => `${getMonthlyWeekOrderText(rule.order)}${dayNames[rule.weekday] || ''}`)
-                    .join('、');
+                    .map(rule => `${getMonthlyWeekOrderText(rule.order)}${getLocaleTag().startsWith('zh') ? '' : ' '}${dayNames[rule.weekday] || ''}`)
+                    .join(getLocaleTag().startsWith('zh') ? '、' : ', ');
                 description = interval === 1
-                    ? `每月${ruleText}`
-                    : `每${interval}个月的${ruleText}`;
+                    ? i18n('repeatMonthlyWeekRule', { rules: ruleText })
+                    : i18n('repeatEveryNMonthsWeekRule', { interval: String(interval), rules: ruleText });
             } else if (repeatConfig.monthDays && repeatConfig.monthDays.length > 0) {
-                const monthDaysText = repeatConfig.monthDays.join('、');
+                const monthDaysText = repeatConfig.monthDays.join(getLocaleTag().startsWith('zh') ? '、' : ', ');
                 description = interval === 1
-                    ? `每月${monthDaysText}号`
-                    : `每${interval}个月的${monthDaysText}号`;
+                    ? i18n('repeatMonthlyDays', { days: monthDaysText })
+                    : i18n('repeatEveryNMonthsDays', { interval: String(interval), days: monthDaysText });
             } else {
                 description = interval === 1 ? i18n("everyMonth") : i18n("everyNMonths", { n: interval.toString() });
             }
@@ -998,24 +999,24 @@ export function getRepeatDescription(repeatConfig: RepeatConfig): string {
         case 'yearly':
             if (repeatConfig.months && repeatConfig.months.length > 0 &&
                 repeatConfig.monthDays && repeatConfig.monthDays.length > 0) {
-                description = `每年${repeatConfig.months[0]}月${repeatConfig.monthDays[0]}号`;
+                description = i18n('repeatYearlyDate', { month: String(repeatConfig.months[0]), day: String(repeatConfig.monthDays[0]) });
             } else {
                 description = interval === 1 ? i18n("everyYear") : i18n("everyNYears", { n: interval.toString() });
             }
             break;
         case 'lunar-monthly':
             if (repeatConfig.lunarDay) {
-                const dayText = formatLunarDay(repeatConfig.lunarDay);
-                description = `农历每月${dayText}`;
+                const dayText = getLocaleTag().startsWith('zh') ? formatLunarDay(repeatConfig.lunarDay) : String(repeatConfig.lunarDay);
+                description = i18n('repeatLunarMonthDay', { day: dayText });
             } else {
                 description = i18n("lunarMonthlyRepeat");
             }
             break;
         case 'lunar-yearly':
             if (repeatConfig.lunarMonth && repeatConfig.lunarDay) {
-                const monthText = formatLunarMonth(repeatConfig.lunarMonth);
-                const dayText = formatLunarDay(repeatConfig.lunarDay);
-                description = `农历每年${monthText}${dayText}`;
+                const monthText = getLocaleTag().startsWith('zh') ? formatLunarMonth(repeatConfig.lunarMonth) : i18n(`lunarMonth${repeatConfig.lunarMonth}`);
+                const dayText = getLocaleTag().startsWith('zh') ? formatLunarDay(repeatConfig.lunarDay) : String(repeatConfig.lunarDay);
+                description = i18n('repeatLunarYearDate', { month: monthText, day: dayText });
             } else {
                 description = i18n("lunarYearlyRepeat");
             }

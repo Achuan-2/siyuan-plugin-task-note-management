@@ -45,7 +45,7 @@ export class ProjectFolderManageDialog {
                     </button>
                 </div>
                 <div class="folder-drag-hint">
-                    <span>💡 拖拽文件夹可排序，拖到行中间可设为子文件夹</span>
+                    <span>${i18n("folderDragSortHint")}</span>
                 </div>
                 <div class="folders-list" id="foldersList">
                     <!-- 文件夹树将在这里渲染 -->
@@ -246,8 +246,8 @@ export class ProjectFolderManageDialog {
                 foldersList.appendChild(this.createFolderTreeNode(node, 0));
             });
         } catch (error) {
-            console.error('加载文件夹失败', error);
-            foldersList.innerHTML = `<div class="folder-error">加载文件夹失败</div>`;
+            console.error("Failed to load folders", error);
+            foldersList.innerHTML = `<div class="folder-error">${i18n("loadFoldersFailed")}</div>`;
         }
     }
 
@@ -293,8 +293,8 @@ export class ProjectFolderManageDialog {
         folderEl.dataset.folderId = folder.id;
         folderEl.style.paddingLeft = `${8 + depth * 6}px`;
         folderEl.innerHTML = `
-            <div class="folder-drag-handle ariaLabel" aria-label="拖拽排序"></div>
-            <button class="b3-button b3-button--text folder-chevron ${folder.collapsed ? 'is-collapsed' : ''} ${hasChildren ? '' : 'folder-chevron--empty'} ariaLabel" data-action="toggle" aria-label="${folder.collapsed ? '展开' : '折叠'}">
+            <div class="folder-drag-handle ariaLabel" aria-label="${i18n("dragToSort")}"></div>
+            <button class="b3-button b3-button--text folder-chevron ${folder.collapsed ? 'is-collapsed' : ''} ${hasChildren ? '' : 'folder-chevron--empty'} ariaLabel" data-action="toggle" aria-label="${folder.collapsed ? i18n("expand") : i18n("collapse")}">
                 <svg><use xlink:href="#iconDown"></use></svg>
             </button>
             <div class="folder-info">
@@ -302,19 +302,19 @@ export class ProjectFolderManageDialog {
                 <div class="folder-name">${this.escapeHTML(folder.name)}</div>
             </div>
             <div class="folder-actions">
-                <button class="b3-button b3-button--text folder-add-child-btn ariaLabel" data-action="addChild" aria-label="新建子文件夹">
+                <button class="b3-button b3-button--text folder-add-child-btn ariaLabel" data-action="addChild" aria-label="${i18n("newSubfolder")}">
                     <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
                 </button>
                 <button class="b3-button b3-button--text folder-edit-btn ariaLabel" data-action="edit" aria-label="${i18n("editFolder") || "修改文件夹"}">
                     <svg class="b3-button__icon"><use xlink:href="#iconEdit"></use></svg>
                 </button>
-                <button class="b3-button b3-button--text folder-move-up-btn ariaLabel" data-action="moveUp" aria-label="上移">
+                <button class="b3-button b3-button--text folder-move-up-btn ariaLabel" data-action="moveUp" aria-label="${i18n("moveUp")}">
                     <svg class="b3-button__icon"><use xlink:href="#iconUp"></use></svg>
                 </button>
-                <button class="b3-button b3-button--text folder-move-down-btn ariaLabel" data-action="moveDown" aria-label="下移">
+                <button class="b3-button b3-button--text folder-move-down-btn ariaLabel" data-action="moveDown" aria-label="${i18n("moveDown")}">
                     <svg class="b3-button__icon"><use xlink:href="#iconDown"></use></svg>
                 </button>
-                <button class="b3-button b3-button--text folder-delete-btn ariaLabel" data-action="delete" aria-label="删除">
+                <button class="b3-button b3-button--text folder-delete-btn ariaLabel" data-action="delete" aria-label="${i18n("delete")}">
                     <svg class="b3-button__icon"><use xlink:href="#iconTrashcan"></use></svg>
                 </button>
             </div>
@@ -450,7 +450,7 @@ export class ProjectFolderManageDialog {
             this.notifyUpdated();
             this.renderFolders();
         } catch (error) {
-            console.error('上移文件夹失败:', error);
+            console.error("Failed to move folder up:", error);
             showMessage(i18n("saveFolderFailed") || "保存文件夹失败");
         }
     }
@@ -465,7 +465,7 @@ export class ProjectFolderManageDialog {
             this.notifyUpdated();
             this.renderFolders();
         } catch (error) {
-            console.error('下移文件夹失败:', error);
+            console.error("Failed to move folder down:", error);
             showMessage(i18n("saveFolderFailed") || "保存文件夹失败");
         }
     }
@@ -485,7 +485,7 @@ export class ProjectFolderManageDialog {
             this.notifyUpdated();
             this.renderFolders();
         } catch (error) {
-            console.error('排序文件夹失败:', error);
+            console.error("Failed to sort folders:", error);
             showMessage(i18n("saveFolderFailed") || "保存文件夹失败");
         }
     }
@@ -494,7 +494,7 @@ export class ProjectFolderManageDialog {
         const isEdit = !!folder;
         const selectedParentId = isEdit ? (folder.parentId || '') : defaultParentId;
         const editDialog = new Dialog({
-            title: isEdit ? (i18n("editFolder") || "修改文件夹") : (defaultParentId ? "新建子文件夹" : (i18n("addFolder") || "新建文件夹")),
+            title: isEdit ? (i18n("editFolder") || "修改文件夹") : (defaultParentId ? i18n("newSubfolder") : (i18n("addFolder") || "新建文件夹")),
             content: `
                 <div class="folder-edit-dialog">
                     <div class="b3-dialog__content">
@@ -503,7 +503,7 @@ export class ProjectFolderManageDialog {
                             <input type="text" id="folderNameInput" class="b3-text-field" value="${this.escapeHTML(folder?.name || '')}" placeholder="${i18n("pleaseEnterFolderName") || "请输入文件夹名称"}">
                         </div>
                         <div class="b3-form__group">
-                            <label class="b3-form__label">上级文件夹</label>
+                            <label class="b3-form__label">${i18n("parentFolderLabel")}</label>
                             <select id="folderParentSelect" class="b3-select" style="width: 100%;">
                                 ${this.createParentFolderOptions(folder, selectedParentId)}
                             </select>
@@ -582,7 +582,7 @@ export class ProjectFolderManageDialog {
                 this.notifyUpdated();
                 this.renderFolders();
             } catch (error) {
-                console.error('保存文件夹失败:', error);
+                console.error("Failed to save folders:", error);
                 showMessage(i18n("saveFolderFailed") || "保存文件夹失败");
             }
         });
@@ -601,7 +601,7 @@ export class ProjectFolderManageDialog {
         }
 
         const options = [
-            `<option value="" ${selectedParentId === '' ? 'selected' : ''}>无上级文件夹</option>`
+            `<option value="" ${selectedParentId === '' ? 'selected' : ''}>${i18n("noParentFolder")}</option>`
         ];
 
         folders
@@ -642,7 +642,7 @@ export class ProjectFolderManageDialog {
                     this.notifyUpdated();
                     this.renderFolders();
                 } catch (error) {
-                    console.error('删除文件夹失败', error);
+                    console.error("Failed to delete folder", error);
                     showMessage(i18n("deleteFolderFailed") || "删除文件夹失败");
                 }
             }

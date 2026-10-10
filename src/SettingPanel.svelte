@@ -91,7 +91,7 @@
                 // Fire-and-forget: save in background without blocking DOM update
                 onChanged({
                     detail: {
-                        group: '🗂️项目设置',
+                        group: '🗂️' + i18n('projectSettings'),
                         key: 'unassignedTasksProjectId',
                         value: projectId,
                     },
@@ -262,7 +262,7 @@
             await pushMsg(i18n('audioDownloadSuccess'));
             return localUrl;
         } catch (e) {
-            console.error('下载音频失败:', e);
+            console.error("Failed to download audio:", e);
             await pushErrMsg(i18n('audioDownloadFailed'));
             return null;
         } finally {
@@ -341,8 +341,8 @@
                 try {
                     return await uploadAudioFile(f);
                 } catch (e) {
-                    console.error('上传音频失败:', f.name, e);
-                    await pushErrMsg(`上传音频失败: ${f.name}`);
+                    console.error("Failed to upload audio:", f.name, e);
+                    await pushErrMsg(i18n("audioFileUploadFailed", { name: String(f.name) }));
                     return null;
                 }
             })
@@ -866,7 +866,7 @@
                                             );
                                         }
                                     } catch (error: any) {
-                                        console.error('Webhook测试异常:', error);
+                                        console.error("Webhook test exception:", error);
                                         await pushErrMsg(
                                             (i18n('webhookTestFailed') || 'Webhook 测试失败') +
                                                 ': ' +
@@ -1219,7 +1219,7 @@
                                         });
                                         await dialog.show();
                                     } catch (error) {
-                                        console.error('打开全局项目状态配置失败:', error);
+                                        console.error("Failed to open global project status configuration:", error);
                                         await pushErrMsg(
                                             i18n('openModifyDialogFailed') || '打开配置对话框失败'
                                         );
@@ -2031,7 +2031,7 @@
                                                     await removeFile(dataDir + file);
                                                     successCount++;
                                                 } catch (e) {
-                                                    console.error('删除文件失败:', file, e);
+                                                    console.error("Failed to delete file:", file, e);
                                                 }
                                             }
                                             pushErrMsg(
@@ -2104,7 +2104,7 @@
                                             // 显示批量设置对话框
                                             showImportDialog(content);
                                         } catch (error) {
-                                            console.error('读取文件失败:', error);
+                                            console.error("Failed to read file:", error);
                                             await pushErrMsg(i18n('readFileFailed'));
                                         }
                                     };
@@ -2193,7 +2193,7 @@
                 })
             );
         } catch (error) {
-            console.error('同步项目看板显示设置失败:', error);
+            console.error("Failed to sync project kanban display settings:", error);
             await pushErrMsg(
                 i18n('applyProjectKanbanDisplaySettingsFailed') || '同步项目看板显示设置失败'
             );
@@ -2252,7 +2252,7 @@
                     setDayStartTime(settings.todayStartTime);
                     setSingleDateDefaultRole(settings.singleDateDefaultRole);
                 } catch (error) {
-                    console.error('应用默认日期设置失败:', error);
+                    console.error("Failed to apply default date settings:", error);
                 }
 
                 await applyProjectKanbanDisplaySettingsToAllProjects();
@@ -2367,7 +2367,7 @@
                     const recordManager = PomodoroRecordManager.getInstance(plugin);
                     await recordManager.regenerateRecordsByDate();
                 } catch (error) {
-                    console.error('重新生成番茄钟记录失败:', error);
+                    console.error("Failed to regenerate pomodoro records:", error);
                 }
             })();
         }
@@ -2378,7 +2378,7 @@
                     const { setSingleDateDefaultRole } = await import('./utils/dateUtils');
                     setSingleDateDefaultRole(newValue as string);
                 } catch (error) {
-                    console.error('更新单日期默认识别设置失败:', error);
+                    console.error("Failed to update single-date recognition default:", error);
                 }
             })();
         }
@@ -2402,7 +2402,7 @@
                     const pomodoroSettings = await plugin.getPomodoroSettings(settings);
                     await PomodoroManager.getInstance().updateSettings(pomodoroSettings);
                 } catch (error) {
-                    console.error('更新番茄钟设置失败:', error);
+                    console.error("Failed to update pomodoro timer settings:", error);
                 }
             })();
         }
@@ -2429,7 +2429,7 @@
                         }
                     }
                 } catch (error) {
-                    console.error('同步任务列表状态失败:', error);
+                    console.error("Failed to sync task list state:", error);
                 }
             })();
         }
@@ -2514,7 +2514,7 @@
                 name: notebook.name,
             }));
         } catch (error) {
-            console.error('加载笔记本列表失败:', error);
+            console.error("Failed to load notebook list:", error);
             notebooks = [];
         }
     }
@@ -2528,7 +2528,7 @@
                 name: project.name || project.id,
             }));
         } catch (error) {
-            console.error('加载项目列表失败:', error);
+            console.error("Failed to load project list:", error);
             projectsList = [];
         }
     }
@@ -2556,7 +2556,7 @@
         await ensureDefaultNotebookSelected(true);
         loadProjectsList();
         updateGroupItems();
-        console.debug('加载配置文件完成');
+        console.debug("Configuration file loaded");
     }
 
     function updateGroupItems() {
@@ -2743,16 +2743,16 @@
         const groupedProjects = projectManager.getProjectsGroupedByStatus();
 
         const dialog = new Dialog({
-            title: '导入 ICS 文件',
+            title: i18n("importIcs"),
             content: `
                 <div class="b3-dialog__content" style="padding: 16px;">
                     <div class="fn__flex-column" style="gap: 16px;">
                         <div class="b3-label">
-                            <div class="b3-label__text">批量设置所属项目（可选）</div>
+                            <div class="b3-label__text">${i18n("icsImportProjectOptional")}</div>
                             <div class="fn__hr"></div>
                             <div style="display: flex; gap: 8px;">
                                 <select class="b3-select fn__flex-1" id="import-project-select">
-                                    <option value="">不设置</option>
+                                    <option value="">${i18n("doNotSet")}</option>
                                     ${Object.entries(groupedProjects)
                                         .map(([statusId, statusProjects]) => {
                                             if (statusProjects.length === 0) return '';
@@ -2776,14 +2776,14 @@
                                         })
                                         .join('')}
                                 </select>
-                                <button class="b3-button b3-button--outline" id="import-create-project" title="新建项目">
+                                <button class="b3-button b3-button--outline" id="import-create-project" title="${i18n('newProject')}">
                                     <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
                                 </button>
                             </div>
                         </div>
                         
                         <div class="b3-label">
-                            <div class="b3-label__text">批量设置分类（可选）</div>
+                            <div class="b3-label__text">${i18n("icsImportCategoryOptional")}</div>
                             <div class="fn__hr"></div>
                             <div id="import-category-selector" class="category-selector" style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;">
                                 <!-- 分类选择器将在这里渲染 -->
@@ -2791,22 +2791,22 @@
                         </div>
                         
                         <div class="b3-label">
-                            <div class="b3-label__text">批量设置优先级（可选）</div>
+                            <div class="b3-label__text">${i18n("icsImportPriorityOptional")}</div>
                             <div class="fn__hr"></div>
                             <select class="b3-select fn__flex-1" id="import-priority">
-                                <option value="">不设置</option>
-                                <option value="high">高优先级</option>
-                                <option value="medium">中优先级</option>
-                                <option value="low">低优先级</option>
-                                <option value="none">无优先级</option>
+                                <option value="">${i18n("doNotSet")}</option>
+                                <option value="high">${i18n("high")}</option>
+                                <option value="medium">${i18n("medium")}</option>
+                                <option value="low">${i18n("low")}</option>
+                                <option value="none">${i18n("noPriority")}</option>
                             </select>
                         </div>
                         
                         <div class="fn__hr"></div>
                         
                         <div class="fn__flex" style="justify-content: flex-end; gap: 8px;">
-                            <button class="b3-button b3-button--cancel">取消</button>
-                            <button class="b3-button b3-button--text" id="import-confirm">导入</button>
+                            <button class="b3-button b3-button--cancel">${i18n("cancel")}</button>
+                            <button class="b3-button b3-button--text" id="import-confirm">${i18n("importSettings")}</button>
                         </div>
                     </div>
                 </div>
@@ -2845,7 +2845,7 @@
                 const noCategoryEl = document.createElement('div');
                 noCategoryEl.className = 'category-option';
                 noCategoryEl.setAttribute('data-category', '');
-                noCategoryEl.textContent = '无分类';
+                noCategoryEl.textContent = i18n("noCategory");
                 noCategoryEl.style.cssText = `
                     display: inline-flex;
                     align-items: center;
@@ -2934,8 +2934,8 @@
                     });
                 });
             } catch (error) {
-                console.error('加载分类失败:', error);
-                categorySelector.innerHTML = '<div class="category-error">加载分类失败</div>';
+                console.error("Failed to load categories:", error);
+                categorySelector.innerHTML = `<div class="category-error">${i18n("loadCategoriesFailed")}</div>`;
             }
         }
 
@@ -2957,7 +2957,7 @@
                     const groupedProjects = projectManager.getProjectsGroupedByStatus();
 
                     // 清空并重新填充下拉列表
-                    projectSelect.innerHTML = '<option value="">不设置</option>';
+                    projectSelect.innerHTML = `<option value="">${i18n("doNotSet")}</option>`;
                     Object.entries(groupedProjects).forEach(([statusId, statusProjects]) => {
                         if (statusProjects.length === 0) return;
                         const status = projectManager.getStatusManager().getStatusById(statusId);
@@ -2987,8 +2987,8 @@
 
                 window.addEventListener('projectUpdated', handleProjectCreated as EventListener);
             } catch (error) {
-                console.error('创建项目失败:', error);
-                await pushErrMsg('创建项目失败');
+                console.error("Failed to create project:", error);
+                await pushErrMsg(i18n("createProjectFailed"));
             }
         });
 
@@ -3007,7 +3007,7 @@
                 });
                 dialog.destroy();
             } catch (error) {
-                console.error('导入失败:', error);
+                console.error("Import failed:", error);
             }
         });
 
@@ -3024,7 +3024,7 @@
             <input
                 class="b3-text-field config__search-input"
                 type="search"
-                placeholder="搜索设置项..."
+                placeholder={i18n('searchSettingsPlaceholder')}
                 bind:value={settingSearchKeyword}
             />
         </div>
@@ -3047,7 +3047,7 @@
     </div>
     <div class="config__tab-wrap">
         {#if visibleGroups.length === 0}
-            <div class="config__search-empty">未找到匹配的设置项</div>
+            <div class="config__search-empty">{i18n('noMatchingSettings')}</div>
         {:else}
             <!-- 手动按项目顺序渲染，保证 custom-audio 项在正确位置 -->
             <div class="config__tab-container" data-name={currentGroup?.name || ''}>

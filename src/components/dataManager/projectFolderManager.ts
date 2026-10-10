@@ -131,7 +131,7 @@ export class ProjectFolderManager {
         try {
             await this.loadFolders();
         } catch (error) {
-            console.error('初始化文件夹失败:', error);
+            console.error("Failed to initialize folders:", error);
             this.folders = [];
         }
     }
@@ -150,11 +150,11 @@ export class ProjectFolderManager {
             if (Array.isArray(content)) {
                 this.folders = content;
             } else {
-                console.log('文件夹数据无效，重置为空');
+                console.log("Invalid folder data; resetting to empty");
                 this.folders = [];
             }
         } catch (error) {
-            console.warn('加载文件夹文件失败:', error);
+            console.warn("Failed to load folder file:", error);
             this.folders = [];
         }
 
@@ -171,7 +171,7 @@ export class ProjectFolderManager {
         try {
             await this.plugin.saveData("project_folders.json", this.folders);
         } catch (error) {
-            console.error('保存文件夹失败:', error);
+            console.error("Failed to save folders:", error);
             throw error;
         }
     }
@@ -314,7 +314,7 @@ export class ProjectFolderManager {
                 }
             }
         } catch (error) {
-            console.error('解绑删除文件夹下项目归类失败:', error);
+            console.error("Failed to unassign projects from deleted folder:", error);
         }
 
         return true;

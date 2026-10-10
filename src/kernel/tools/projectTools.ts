@@ -251,14 +251,14 @@ async function syncProjectBlockBinding(projectId: string, oldBlockId?: string, n
             const projectIds = await getBlockProjectIds(oldBlockId);
             await setBlockProjectIds(oldBlockId, projectIds.filter(id => id !== projectId));
         } catch (error) {
-            console.warn(`移除旧块 ${oldBlockId} 的项目 ${projectId} 绑定失败:`, error);
+            console.warn(`Failed to remove project ${projectId} binding from old block ${oldBlockId}:`, error);
         }
     }
     if (newBlockId) {
         try {
             await addBlockProjectId(newBlockId, projectId);
         } catch (error) {
-            console.warn(`同步块 ${newBlockId} 的项目 ${projectId} 绑定失败:`, error);
+            console.warn(`Failed to sync project ${projectId} binding to block ${newBlockId}:`, error);
         }
     }
 }

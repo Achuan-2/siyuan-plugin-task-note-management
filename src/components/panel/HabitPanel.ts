@@ -146,7 +146,7 @@ export class HabitPanel {
             this.weekStartDay = Number.isInteger(settings.weekStartDay) && settings.weekStartDay >= 0 && settings.weekStartDay <= 6
                 ? settings.weekStartDay : 1;
         } catch (error) {
-            console.error('恢复习惯面板设置失败:', error);
+            console.error("Failed to restore habit panel settings:", error);
         }
     }
 
@@ -159,7 +159,7 @@ export class HabitPanel {
             settings.habitPanelShowWeekCheckIns = this.showWeekCheckIns;
             await this.plugin.saveSettings(settings);
         } catch (error) {
-            console.error('保存习惯面板设置失败:', error);
+            console.error("Failed to save habit panel settings:", error);
         }
     }
 
@@ -170,7 +170,7 @@ export class HabitPanel {
                 this.collapsedGroups = new Set(JSON.parse(states));
             }
         } catch (error) {
-            console.warn('加载折叠状态失败:', error);
+            console.warn("Failed to load collapsed state:", error);
         }
     }
 
@@ -179,7 +179,7 @@ export class HabitPanel {
             localStorage.setItem('habit-panel-collapse-states',
                 JSON.stringify(Array.from(this.collapsedGroups)));
         } catch (error) {
-            console.warn('保存折叠状态失败:', error);
+            console.warn("Failed to save collapsed state:", error);
         }
     }
 
@@ -234,7 +234,7 @@ export class HabitPanel {
                 }
             `;
         } catch (error) {
-            console.warn('注入习惯分组头样式失败:', error);
+            console.warn("Failed to inject habit group header styles:", error);
         }
 
         // 标题部分
@@ -441,7 +441,7 @@ export class HabitPanel {
                             console.warn('plugin.openSetting is not available');
                         }
                     } catch (err) {
-                        console.error('打开插件设置失败:', err);
+                        console.error("Failed to open plugin settings:", err);
                     }
                 }
             });
@@ -513,7 +513,7 @@ export class HabitPanel {
                 menu.open({ x: event.clientX, y: event.clientY });
             }
         } catch (error) {
-            console.error('显示更多菜单失败:', error);
+            console.error("Failed to show more menu:", error);
         }
     }
 
@@ -525,7 +525,7 @@ export class HabitPanel {
             try {
                 await this.pomodoroRecordManager.refreshData();
             } catch (error) {
-                console.warn('刷新番茄钟数据失败:', error);
+                console.warn("Failed to refresh pomodoro data:", error);
             }
 
             const [habitData, reminderData] = await Promise.all([
@@ -1381,13 +1381,13 @@ export class HabitPanel {
             pomodoroSection.style.cssText = 'display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; column-gap:4px; row-gap:2px; margin-top:0; margin-bottom:12px; font-size:12px;';
             pomodoroSection.style.color = 'var(--b3-theme-on-surface-light)';
             pomodoroSection.innerHTML = `
-                <div class="ariaLabel" aria-label="今日番茄钟: ${pomodoroStats.todayCount}" style="white-space:nowrap; opacity:0.95;">
-                    <span>今日: 🍅 ${pomodoroStats.todayCount}</span>
+                <div class="ariaLabel" aria-label="${i18n('pomodoroTodayCountTooltip', { count: String(pomodoroStats.todayCount) })}" style="white-space:nowrap; opacity:0.95;">
+                    <span>${i18n("todayPomodoroWithIcon")}${pomodoroStats.todayCount}</span>
                     <span style="margin-left:4px; opacity:0.9;">⏱ ${this.formatPomodoroFocusTime(pomodoroStats.todayFocusMinutes)}</span>
                 </div>
                 <span aria-hidden="true" style="flex:1 1 0; min-width:0;"></span>
-                <div class="ariaLabel" aria-label="总计番茄钟: ${pomodoroStats.totalCount}" style="white-space:nowrap;">
-                    <span>系列: 🍅 ${pomodoroStats.totalCount}</span>
+                <div class="ariaLabel" aria-label="${i18n('pomodoroTotalCountTooltip', { count: String(pomodoroStats.totalCount) })}" style="white-space:nowrap;">
+                    <span>${i18n("seriesPomodoroWithIcon")}${pomodoroStats.totalCount}</span>
                     <span style="margin-left:4px; opacity:0.9;">⏱ ${this.formatPomodoroFocusTime(pomodoroStats.totalFocusMinutes)}</span>
                 </div>
             `;
@@ -1488,14 +1488,14 @@ export class HabitPanel {
 
             if (isPomodoroGoal && buttonType === 'countup') {
                 // 正计时按钮
-                checkInBtn.innerHTML = `<span>⏱️</span><span>正计时</span>`;
+                checkInBtn.innerHTML = `<span>⏱️</span><span>${i18n("countUpLabel")}</span>`;
                 checkInBtn.classList.add('ariaLabel');
-                checkInBtn.setAttribute('aria-label', '开始正计时');
+                checkInBtn.setAttribute('aria-label', i18n("startCountUp"));
             } else if (isPomodoroGoal && buttonType === 'pomodoro') {
                 // 番茄钟按钮
-                checkInBtn.innerHTML = `<span>🍅</span><span>番茄钟</span>`;
+                checkInBtn.innerHTML = `<span>🍅</span><span>${i18n("pomodoroTimerLabel")}</span>`;
                 checkInBtn.classList.add('ariaLabel');
-                checkInBtn.setAttribute('aria-label', '开始番茄钟');
+                checkInBtn.setAttribute('aria-label', i18n("startPomodoro"));
             } else {
                 // 默认打卡按钮
                 checkInBtn.innerHTML = `<span>✓</span><span>${i18n("checkInBtn")}</span>`;
@@ -1549,7 +1549,7 @@ export class HabitPanel {
                 const timerBtn = document.createElement('button');
                 timerBtn.className = 'habit-card__checkin-btn';
                 const countUp = habit.checkInButtonType === 'countup';
-                timerBtn.innerHTML = countUp ? '<span>⏱️</span><span>正计时</span>' : '<span>🍅</span><span>番茄钟</span>';
+                timerBtn.innerHTML = countUp ? `<span>⏱️</span><span>${i18n("countUpLabel")}</span>` : `<span>🍅</span><span>${i18n("pomodoroTimerLabel")}</span>`;
                 timerBtn.addEventListener('click', event => {
                     event.preventDefault();
                     event.stopPropagation();
@@ -1948,7 +1948,7 @@ export class HabitPanel {
 
     private async startPomodoro(habit: Habit, workDurationOverride?: number) {
         if (!this.plugin) {
-            showMessage("无法启动番茄钟：插件实例不可用");
+            showMessage(i18n("pomodoroUnavailable"));
             return;
         }
 
@@ -1966,20 +1966,20 @@ export class HabitPanel {
 
         if (this.pomodoroManager.hasActivePomodoroTimer()) {
             const currentState = this.pomodoroManager.getCurrentState();
-            const currentTitle = currentState.reminderTitle || '当前任务';
-            const newTitle = habit.title || '新任务';
+            const currentTitle = currentState.reminderTitle || i18n("currentTask");
+            const newTitle = habit.title || i18n("newTaskTitle");
 
-            let confirmMessage = `当前正在进行番茄钟任务："${currentTitle}"，是否要切换到新任务："${newTitle}"？`;
+            let confirmMessage = i18n("switchPomodoroTaskConfirm", { current: String(currentTitle), next: String(newTitle) });
 
             if (currentState.isRunning && !currentState.isPaused) {
                 if (!this.pomodoroManager.pauseCurrentTimer()) {
-                    console.error('暂停当前番茄钟失败');
+                    console.error("Failed to pause current pomodoro timer");
                 }
-                confirmMessage += `\n\n\n选择"确定"将继承当前进度继续计时。`;
+                confirmMessage += i18n('pomodoroSwitchProgressHint');
             }
 
             confirm(
-                "切换番茄钟任务",
+                i18n("switchPomodoroTask"),
                 confirmMessage,
                 () => {
                     this.performStartPomodoro(habit, currentState, finalDuration);
@@ -1987,7 +1987,7 @@ export class HabitPanel {
                 () => {
                     if (currentState.isRunning && !currentState.isPaused) {
                         if (!this.pomodoroManager.resumeCurrentTimer()) {
-                            console.error('恢复番茄钟运行失败');
+                            console.error("Failed to resume pomodoro timer");
                         }
                     }
                 }
@@ -2011,8 +2011,8 @@ export class HabitPanel {
                 await this.plugin.openPomodoroWindow(habit, runtimeSettings, false, inheritState);
 
                 if (inheritState && inheritState.isRunning && !inheritState.isPaused) {
-                    const phaseText = inheritState.isWorkPhase ? '工作时间' : '休息时间';
-                    showMessage(`已切换任务并继承${phaseText}进度`, 2000);
+                    const phaseText = inheritState.isWorkPhase ? i18n("workTime") : i18n("breakTime");
+                    showMessage(i18n("switchedTaskPreservingProgress", { phase: String(phaseText) }), 2000);
                 }
             }
         } else {
@@ -2024,34 +2024,34 @@ export class HabitPanel {
             pomodoroTimer.show();
 
             if (inheritState && inheritState.isRunning && !inheritState.isPaused) {
-                const phaseText = inheritState.isWorkPhase ? '工作时间' : '休息时间';
-                showMessage(`已切换任务并继承${phaseText}进度`, 2000);
+                const phaseText = inheritState.isWorkPhase ? i18n("workTime") : i18n("breakTime");
+                showMessage(i18n("switchedTaskPreservingProgress", { phase: String(phaseText) }), 2000);
             }
         }
     }
 
     private startPomodoroCountUp(habit: Habit) {
         if (!this.plugin) {
-            showMessage("无法启动番茄钟：插件实例不可用");
+            showMessage(i18n("pomodoroUnavailable"));
             return;
         }
 
         if (this.pomodoroManager.hasActivePomodoroTimer()) {
             const currentState = this.pomodoroManager.getCurrentState();
-            const currentTitle = currentState.reminderTitle || '当前任务';
-            const newTitle = habit.title || '新任务';
+            const currentTitle = currentState.reminderTitle || i18n("currentTask");
+            const newTitle = habit.title || i18n("newTaskTitle");
 
-            let confirmMessage = `当前正在进行番茄钟任务："${currentTitle}"，是否要切换到新的正计时任务："${newTitle}"？`;
+            let confirmMessage = i18n("switchCountUpTaskConfirm", { current: String(currentTitle), next: String(newTitle) });
 
             if (currentState.isRunning && !currentState.isPaused) {
                 if (!this.pomodoroManager.pauseCurrentTimer()) {
-                    console.error('暂停当前番茄钟失败');
+                    console.error("Failed to pause current pomodoro timer");
                 }
-                confirmMessage += `\n\n\n选择"确定"将继承当前进度继续计时。`;
+                confirmMessage += i18n('pomodoroSwitchProgressHint');
             }
 
             confirm(
-                "切换到正计时番茄钟",
+                i18n("switchToStopwatch"),
                 confirmMessage,
                 () => {
                     this.performStartPomodoroCountUp(habit, currentState);
@@ -2059,7 +2059,7 @@ export class HabitPanel {
                 () => {
                     if (currentState.isRunning && !currentState.isPaused) {
                         if (!this.pomodoroManager.resumeCurrentTimer()) {
-                            console.error('恢复番茄钟运行失败');
+                            console.error("Failed to resume pomodoro timer");
                         }
                     }
                 }
@@ -2079,10 +2079,10 @@ export class HabitPanel {
                 await this.plugin.openPomodoroWindow(habit, settings, true, inheritState);
 
                 if (inheritState && inheritState.isRunning && !inheritState.isPaused) {
-                    const phaseText = inheritState.isWorkPhase ? '工作时间' : '休息时间';
-                    showMessage(`已切换到正计时模式并继承${phaseText}进度`, 2000);
+                    const phaseText = inheritState.isWorkPhase ? i18n("workTime") : i18n("breakTime");
+                    showMessage(i18n("switchedCountUpPreservingProgress", { phase: String(phaseText) }), 2000);
                 } else {
-                    showMessage("已启动正计时番茄钟", 2000);
+                    showMessage(i18n("stopwatchStarted"), 2000);
                 }
             }
         } else {
@@ -2094,10 +2094,10 @@ export class HabitPanel {
             pomodoroTimer.show();
 
             if (inheritState && inheritState.isRunning && !inheritState.isPaused) {
-                const phaseText = inheritState.isWorkPhase ? '工作时间' : '休息时间';
-                showMessage(`已切换到正计时模式并继承${phaseText}进度`, 2000);
+                const phaseText = inheritState.isWorkPhase ? i18n("workTime") : i18n("breakTime");
+                showMessage(i18n("switchedCountUpPreservingProgress", { phase: String(phaseText) }), 2000);
             } else {
-                showMessage("已启动正计时番茄钟", 2000);
+                showMessage(i18n("stopwatchStarted"), 2000);
             }
         }
     }
@@ -2138,7 +2138,7 @@ export class HabitPanel {
             todayCount += linkedTodayStats.count;
             todayFocusMinutes += linkedTodayStats.focusMinutes;
         } catch (error) {
-            console.warn(`获取习惯 ${habitId} 的番茄统计失败:`, error);
+            console.warn(`Failed to get pomodoro statistics for habit ${habitId}:`, error);
         }
 
         return {
@@ -2513,7 +2513,7 @@ export class HabitPanel {
                     await currentPlugin.cancelMobileNotification(previousHabit.id);
                 }
             } catch (e) {
-                console.warn('清理旧习惯ID的移动端通知失败:', e);
+                console.warn("Failed to clean up mobile notifications for old habit ID:", e);
             }
             habitData[habit.id] = habit;
             await currentPlugin.saveHabitData(habitData);
@@ -2527,7 +2527,7 @@ export class HabitPanel {
                 await currentPlugin.updateMobileNotification(habit, previousHabit, 7);
             }
         } catch (e) {
-            console.warn('更新习惯移动端通知失败:', e);
+            console.warn("Failed to update habit mobile notifications:", e);
         }
 
         window.dispatchEvent(new CustomEvent('habitUpdated'));
@@ -2547,7 +2547,7 @@ export class HabitPanel {
                     await this.plugin.cancelMobileNotification(habitId);
                 }
             } catch (e) {
-                console.warn('取消习惯移动端通知失败:', e);
+                console.warn("Failed to cancel habit mobile notifications:", e);
             }
 
             delete habitData[habitId];
@@ -2557,7 +2557,7 @@ export class HabitPanel {
                     await this.plugin.removeData(`habitCheckin/${habitId}.json`);
                 }
             } catch (e) {
-                console.warn('删除习惯打卡文件失败:', e);
+                console.warn("Failed to delete habit check-in file:", e);
             }
             showMessage(i18n("deleteSuccess"));
 
@@ -2599,7 +2599,7 @@ export class HabitPanel {
             // 习惯侧栏默认落在「习惯统计」页签
             showStatsDialog(this.plugin, 'habit');
         } catch (error) {
-            console.error('打开习惯统计视图失败:', error);
+            console.error("Failed to open habit statistics view:", error);
             showMessage(i18n("operationFailed") || "操作失败", 3000, 'error');
         }
     }

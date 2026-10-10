@@ -437,7 +437,7 @@ export class GlobalProjectStatusDialog {
             this.renderStatuses();
             showMessage(i18n("statusOrderSaved") || "状态顺序已更新");
         } catch (error) {
-            console.error("保存全局项目状态排序失败:", error);
+            console.error("Failed to save global project status order:", error);
             showMessage(i18n("saveReminderFailed") || "保存失败");
         }
     }
@@ -537,7 +537,7 @@ export class GlobalProjectStatusDialog {
                 this.renderStatuses();
                 showMessage(i18n("statusUpdated") || "状态已保存");
             } catch (error) {
-                console.error("保存全局项目状态失败:", error);
+                console.error("Failed to save global project statuses:", error);
                 showMessage(i18n("saveReminderFailed") || "保存失败");
             }
         });
@@ -560,7 +560,7 @@ export class GlobalProjectStatusDialog {
                     this.renderStatuses();
                     showMessage(i18n("statusDeleted") || "状态已删除");
                 } catch (error) {
-                    console.error("删除全局项目状态失败:", error);
+                    console.error("Failed to delete global project status:", error);
                     showMessage(i18n("deleteStatusFailed") || "删除失败");
                 }
             }
@@ -579,7 +579,7 @@ export class GlobalProjectStatusDialog {
                     this.renderStatuses();
                     showMessage(i18n("statusesReset") || "状态已重置");
                 } catch (error) {
-                    console.error("重置全局项目状态失败:", error);
+                    console.error("Failed to reset global project statuses:", error);
                     showMessage(i18n("resetStatusesFailed") || "重置失败");
                 }
             }

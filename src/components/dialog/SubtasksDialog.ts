@@ -79,20 +79,20 @@ export class SubtasksDialog {
             const sortConfig = await loadSortConfig(this.plugin);
             this.currentSortCriteria = this.normalizeSubtaskSortCriteria(sortConfig.criteria);
         } catch (error) {
-            console.warn('加载子任务排序配置失败:', error);
+            console.warn("Failed to load subtask sort configuration:", error);
         }
 
         try {
             await this.categoryManager.initialize();
         } catch (error) {
-            console.warn('初始化分类管理器失败:', error);
+            console.warn("Failed to initialize category manager:", error);
         }
 
         try {
             await this.projectManager.initialize();
             this.buildMilestoneMap();
         } catch (error) {
-            console.warn('初始化项目管理器失败:', error);
+            console.warn("Failed to initialize project manager:", error);
         }
     }
 
@@ -281,7 +281,7 @@ export class SubtasksDialog {
                 isRepeatInstance: true,
                 originalId: templateTask.id,
                 completed: instanceState.completed || false,
-                title: instanceState.title || templateTask.title || '(无标题)',
+                title: instanceState.title || templateTask.title || i18n("untitledInParentheses"),
                 date: instanceDateVal,
                 endDate: instanceEndDate,
                 time: instanceState.time !== undefined ? instanceState.time : templateTask.time,
@@ -1037,10 +1037,10 @@ export class SubtasksDialog {
         if (this.isTempMode) {
             const index = this.subtasks.findIndex(t => t.id === id);
             if (index !== -1) {
-                const taskTitle = this.subtasks[index].title || '无标题';
+                const taskTitle = this.subtasks[index].title || i18n("untitledTask");
                 confirm(
                     i18n("confirmDelete") || "确认删除",
-                    `确定要删除临时子任务 "${taskTitle}" 吗？`,
+                    i18n("deleteTemporarySubtaskConfirm", { title: String(taskTitle) }),
                     async () => {
                         this.subtasks.splice(index, 1);
                         this.renderSubtasks();
@@ -1117,7 +1117,7 @@ export class SubtasksDialog {
                 // 而不是删除整个模板
                 confirm(
                     i18n("confirmDelete") || "确认删除",
-                    `确定要在此日期隐藏子任务 "${task.title}" 吗？\n此操作仅影响当前日期的实例，不会影响其他日期的该子任务。`,
+                    i18n("hideSubtaskInstanceConfirm", { title: String(task.title) }),
                     async () => {
                         // 将 ghost 子任务标记为在当前日期隐藏
                         if (!task.repeat) task.repeat = {};
@@ -1144,7 +1144,7 @@ export class SubtasksDialog {
                 );
             } else {
                 // 编辑所有实例：删除整个模板任务
-                const ghostConfirmMsg = `确定要删除此子任务的原始模板吗？\n删除后所有日期的该子任务都将消失。\n\n任务标题: ${task.title}`;
+                const ghostConfirmMsg = i18n("deleteSubtaskTemplateConfirm", { title: String(task.title) });
                 confirm(
                     i18n("confirmDelete") || "确认删除",
                     ghostConfirmMsg,
@@ -1488,7 +1488,7 @@ export class SubtasksDialog {
                 }
             },
             onError: (error) => {
-                console.error('批量创建子任务失败:', error);
+                console.error("Failed to create subtasks in batch:", error);
                 showMessage(i18n("batchCreateFailed") || "批量创建任务失败");
             }
         });

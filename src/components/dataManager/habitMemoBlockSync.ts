@@ -49,7 +49,7 @@ async function getHabitMemoSyncTemplate(): Promise<string | undefined> {
             ? settings.habitMemoSyncTemplate
             : undefined;
     } catch (error) {
-        console.warn("读取习惯打卡同步块模板失败:", error);
+        console.warn("Failed to read habit check-in sync block template:", error);
         return undefined;
     }
 }
@@ -79,7 +79,7 @@ export async function syncHabitMemoBlock(options: SyncHabitMemoBlockOptions): Pr
             try {
                 await deleteBlock(existingBlockId);
             } catch (error) {
-                console.warn("删除习惯打卡备注同步块失败:", error);
+                console.warn("Failed to delete habit check-in note sync block:", error);
             }
         }
         delete entry.memoBlockId;
@@ -112,7 +112,7 @@ export async function syncHabitMemoBlock(options: SyncHabitMemoBlockOptions): Pr
                 response = await appendBlock("markdown", markdown, targetBlockId);
             }
         } catch (error) {
-            console.warn("获取同步目标块类型失败，尝试直接 appendBlock:", error);
+            console.warn("Failed to get sync target block type; trying appendBlock directly:", error);
             response = await appendBlock("markdown", markdown, targetBlockId);
         }
         const createdBlockId = response?.[0]?.doOperations?.[0]?.id;
@@ -121,7 +121,7 @@ export async function syncHabitMemoBlock(options: SyncHabitMemoBlockOptions): Pr
         entry.memoBlockId = createdBlockId;
         await setHabitMemoAttrs(createdBlockId, habit, entry);
     } catch (error) {
-        console.warn("同步习惯打卡备注到块失败:", error);
+        console.warn("Failed to sync habit check-in note to block:", error);
     }
 }
 
@@ -131,6 +131,6 @@ export async function deleteHabitMemoBlockForEntry(entry?: HabitMemoCheckInEntry
     try {
         await deleteBlock(blockId);
     } catch (error) {
-        console.warn("删除习惯打卡备注同步块失败:", error);
+        console.warn("Failed to delete habit check-in note sync block:", error);
     }
 }

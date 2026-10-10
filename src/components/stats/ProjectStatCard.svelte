@@ -1,5 +1,6 @@
 <script lang="ts">
     import { createEventDispatcher } from "svelte";
+    import { i18n } from '../../pluginInstance';
 
     export let item: any;
 
@@ -42,7 +43,7 @@
         </div>
     {/if}
     <div class="card-pomodoro">
-        <span class="stat-item stat-pomodoro">🍅 总计: {item.pomodoro}{item.focusText}</span>
+        <span class="stat-item stat-pomodoro">{i18n('projectPomodoroTotalPrefix')} {item.pomodoro}{item.focusText}</span>
     </div>
     <div class="progress-row">
         <div class="progress-bar">

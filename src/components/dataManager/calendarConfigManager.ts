@@ -154,12 +154,12 @@ export class CalendarConfigManager {
                         await (this.plugin as any).saveSettings(settings);
                         // 删除旧文件
                         await removeFile(CALENDAR_CONFIG_FILE);
-                        console.log('成功导入并删除旧的 calendar-config.json 文件');
+                        console.log("Imported and removed the legacy calendar-config.json file");
                     }
                 }
             } catch (error) {
                 // 如果文件不存在或其他错误，忽略
-                console.log('旧的 calendar-config.json 文件不存在或已处理');
+                console.log("Legacy calendar-config.json file is missing or already processed");
             }
 
             // 处理旧版视图名称迁移：将 MultiDays7 转换为 MultiDays

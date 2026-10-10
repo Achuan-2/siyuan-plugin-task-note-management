@@ -266,7 +266,7 @@ export class PomodoroTimer {
         // 如果是新任务，重置番茄钟数量，避免显示错误的已完成数
         if (isTaskInheritance) {
             this.completedPomodoros = 0;
-            console.log(`[PomodoroTimer] 任务切换：重置番茄钟计数，继承时间：${inheritState.timeLeft}s`);
+            console.log(`[PomodoroTimer] Task switched: reset pomodoro count, inherited time: ${inheritState.timeLeft}s`);
         } else {
             this.completedPomodoros = inheritState.completedPomodoros || 0;
         }
@@ -333,27 +333,27 @@ export class PomodoroTimer {
         // 保存继承的窗口位置信息（稍后在窗口创建后应用）
         if (inheritState.windowBounds) {
             this.inheritedWindowBounds = inheritState.windowBounds;
-            console.log('[PomodoroTimer] 已保存继承的窗口位置:', this.inheritedWindowBounds);
+            console.log("[PomodoroTimer] Saved inherited window position:", this.inheritedWindowBounds);
         }
 
         // 继承窗口模式状态（吸附模式和迷你模式）
         if (inheritState.isDocked !== undefined) {
             this.isDocked = inheritState.isDocked;
-            console.log('[PomodoroTimer] 继承吸附模式状态:', this.isDocked);
+            console.log("[PomodoroTimer] Inherited docked mode state:", this.isDocked);
         }
         if (inheritState.isMiniMode !== undefined) {
             this.isMiniMode = inheritState.isMiniMode;
-            console.log('[PomodoroTimer] 继承迷你模式状态:', this.isMiniMode);
+            console.log("[PomodoroTimer] Inherited mini mode state:", this.isMiniMode);
         }
 
         // 继承保存的正常窗口位置（用于从吸附模式恢复）
         if (inheritState.normalWindowBounds) {
             this.normalWindowBounds = inheritState.normalWindowBounds;
-            console.log('[PomodoroTimer] 继承保存的正常窗口位置:', this.normalWindowBounds);
+            console.log("[PomodoroTimer] Inherited saved normal window position:", this.normalWindowBounds);
         }
         if (inheritState.miniWindowBounds) {
             this.miniWindowBounds = inheritState.miniWindowBounds;
-            console.log('[PomodoroTimer] 继承保存的迷你窗口位置:', this.miniWindowBounds);
+            console.log("[PomodoroTimer] Inherited saved mini window position:", this.miniWindowBounds);
         }
         if (inheritState.domNormalPosition) {
             this.domNormalPosition = inheritState.domNormalPosition;
@@ -401,7 +401,7 @@ export class PomodoroTimer {
                 windowBounds = PomodoroTimer.browserWindowInstance.getBounds();
             }
         } catch (e) {
-            console.warn('[PomodoroTimer] 无法获取窗口位置信息:', e);
+            console.warn("[PomodoroTimer] Cannot get window position:", e);
         }
 
         return {
@@ -476,7 +476,7 @@ export class PomodoroTimer {
                 new Date(sessionStartTime)
             );
         } catch (error) {
-            console.error('[PomodoroTimer] 创建进行中番茄记录失败:', error);
+            console.error("[PomodoroTimer] Failed to create in-progress pomodoro record:", error);
             this.activeWorkSessionId = null;
         }
     }
@@ -763,11 +763,11 @@ export class PomodoroTimer {
         const randomRestEndSoundInitialization = this.randomRestEnabled && this.settings.randomRestEndSound
             ? this.initRandomRestEndSound() : Promise.resolve();
         const [workAudio, breakAudio, longBreakAudio, workEndAudio, breakEndAudio] = await Promise.all([
-            this.createPreloadedAudio(this.settings.workSound, this.isBackgroundAudioMuted ? 0 : this.workVolume, true, '工作背景音'),
-            this.createPreloadedAudio(this.settings.breakSound, this.isBackgroundAudioMuted ? 0 : this.breakVolume, true, '短时休息背景音'),
-            this.createPreloadedAudio(this.settings.longBreakSound, this.isBackgroundAudioMuted ? 0 : this.longBreakVolume, true, '长时休息背景音'),
-            this.createPreloadedAudio(this.settings.workEndSound, this.workEndVolume, false, '工作结束提示音'),
-            this.createPreloadedAudio(this.settings.breakEndSound, this.breakEndVolume, false, '休息结束提示音')
+            this.createPreloadedAudio(this.settings.workSound, this.isBackgroundAudioMuted ? 0 : this.workVolume, true, 'work background sound'),
+            this.createPreloadedAudio(this.settings.breakSound, this.isBackgroundAudioMuted ? 0 : this.breakVolume, true, 'short break background sound'),
+            this.createPreloadedAudio(this.settings.longBreakSound, this.isBackgroundAudioMuted ? 0 : this.longBreakVolume, true, 'long break background sound'),
+            this.createPreloadedAudio(this.settings.workEndSound, this.workEndVolume, false, 'work end sound'),
+            this.createPreloadedAudio(this.settings.breakEndSound, this.breakEndVolume, false, 'break end sound')
         ]);
         await Promise.all([randomRestSoundsInitialization, randomRestEndSoundInitialization]);
         this.workAudio = workAudio;
@@ -799,7 +799,7 @@ export class PomodoroTimer {
             audio.preload = 'auto';
             return audio;
         } catch (error) {
-            console.warn(`无法加载${label}:`, error);
+            console.warn(`Cannot load ${label}:`, error);
             return null;
         }
     }
@@ -850,17 +850,17 @@ export class PomodoroTimer {
                     });
 
                     audio.addEventListener('error', (e) => {
-                        console.error(`随机微休息加载失败: ${soundPath}`, e);
+                        console.error(`Failed to load random microbreak: ${soundPath}`, e);
                     });
 
                     this.randomRestSounds.push(audio);
                 } catch (error) {
-                    console.warn(`无法创建随机微休息: ${soundPath}`, error);
+                    console.warn(`Cannot create random microbreak: ${soundPath}`, error);
                 }
             }
 
         } catch (error) {
-            console.warn('初始化随机微休息失败:', error);
+            console.warn("Failed to initialize random microbreak:", error);
         }
     }
 
@@ -880,19 +880,19 @@ export class PomodoroTimer {
 
 
                 this.randomRestEndSound.addEventListener('error', (e) => {
-                    console.error('随机微休息结束声音加载失败:', e);
+                    console.error("Failed to load random microbreak end sound:", e);
                 });
 
 
             }
         } catch (error) {
-            console.warn('无法创建随机微休息结束声音:', error);
+            console.warn("Cannot create random microbreak end sound:", error);
         }
     }
 
     private async playRandomRestSound() {
         if (!this.randomRestEnabled) {
-            console.warn('随机微休息未启用或无可用音频文件');
+            console.warn("Random microbreak is disabled or no audio files are available");
             return;
         }
 
@@ -913,7 +913,7 @@ export class PomodoroTimer {
                 selectedAudio.volume = this.getAudioVolume(selectedAudio);
             } else {
                 // 未配置提示音时，仍然要打开弹窗提示并显示系统通知（见要求2）
-                console.debug('[PomodoroTimer] 未配置随机微休息提示音，跳过音频播放，但会显示弹窗与系统通知');
+                console.debug("[PomodoroTimer] No random microbreak sound configured; skipping audio, showing popup and system notification");
             }
 
             // 与全局提示音播放机制对齐：避免与 index.ts 中的提示音冲突
@@ -928,7 +928,7 @@ export class PomodoroTimer {
                         retried++;
                     }
                     if (pluginAny.isPlayingNotificationSound) {
-                        console.warn('[PomodoroTimer] 检测到已有全局提示音在播放，跳过本次音频播放以避免重叠');
+                        console.warn("[PomodoroTimer] Global notification sound is already playing; skipping audio to avoid overlap");
                         // 继续走弹窗与系统通知流程
                     }
                 }
@@ -945,7 +945,7 @@ export class PomodoroTimer {
 
                     const played = await this.safePlayAudio(selectedAudio);
                     if (!played) {
-                        console.warn('随机微休息播放失败或被阻止');
+                        console.warn("Random microbreak playback failed or was blocked");
                         this.audioInitialized = false;
                         this.attachAudioUnlockListeners();
                     }
@@ -992,10 +992,10 @@ export class PomodoroTimer {
                 if (this.randomRestEndSound) {
                     this.safePlayAudio(this.randomRestEndSound).then(played => {
                         if (!played) {
-                            console.warn('随机微休息结束声音被阻止或播放失败');
+                            console.warn("Random microbreak end sound was blocked or failed to play");
                         }
                     }).catch(err => {
-                        console.warn('播放随机微休息结束声音时发生异常:', err);
+                        console.warn("Exception playing random microbreak end sound:", err);
                     });
                 }
 
@@ -1007,7 +1007,7 @@ export class PomodoroTimer {
                     this.randomRestCount++;
                     this.updateDisplay();
                 } catch (err) {
-                    console.warn('更新随机微休息计数失败:', err);
+                    console.warn("Failed to update random microbreak count:", err);
                 }
 
                 // 显示系统通知
@@ -1022,7 +1022,7 @@ export class PomodoroTimer {
             }, breakDuration);
 
         } catch (error) {
-            console.error('播放随机微休息失败:', error);
+            console.error("Failed to play random microbreak:", error);
         }
     }
 
@@ -1065,7 +1065,7 @@ export class PomodoroTimer {
         const randomInterval = minInterval + Math.random() * (actualMaxInterval - minInterval);
         const nextTime = Date.now() + randomInterval;
 
-        // console.log(`[PomodoroTimer] 下次随机微休息时间: ${new Date(nextTime).toLocaleTimeString()} (间隔: ${Math.round(randomInterval / 1000 / 60)}分钟)`);
+        // console.log(`[PomodoroTimer] Next random microbreak: ${new Date(nextTime).toLocaleTimeString()} (interval: ${Math.round(randomInterval / 1000 / 60)} minutes)`);
 
         // 提示音响起具体时间
         return nextTime;
@@ -1079,7 +1079,7 @@ export class PomodoroTimer {
 
         // 检查弹窗是否需要自动关闭（不受 isWorkPhase 限制，确保 setTimeout 被节流时也能关闭）
         if (this.randomRestWindowCloseTime > 0 && now >= this.randomRestWindowCloseTime) {
-            console.log('[PomodoroTimer] 轮询检测到随机微休息弹窗超时，强制关闭');
+            console.log("[PomodoroTimer] Polling detected random microbreak popup timeout; forcing close");
             this.randomRestWindowCloseTime = 0;
             // 仅当 randomRestEndSoundTimer 还未触发时才手动补充关闭逻辑
             if (this.randomRestEndSoundTimer) {
@@ -1088,7 +1088,7 @@ export class PomodoroTimer {
                 // 播放结束声音
                 if (this.randomRestEndSound) {
                     this.safePlayAudio(this.randomRestEndSound).catch(err => {
-                        console.warn('轮询关闭时播放随机微休息结束声音异常:', err);
+                        console.warn("Exception playing random microbreak end sound during polling close:", err);
                     });
                 }
                 // 关闭弹窗
@@ -1098,7 +1098,7 @@ export class PomodoroTimer {
                     this.randomRestCount++;
                     this.updateDisplay();
                 } catch (err) {
-                    console.warn('更新随机微休息计数失败:', err);
+                    console.warn("Failed to update random microbreak count:", err);
                 }
                 // 显示结束系统通知
                 if (this.randomRestSystemNotificationEnabled) {
@@ -1119,7 +1119,7 @@ export class PomodoroTimer {
         if (now >= this.randomRestNextTriggerTime) {
             // 播放随机微休息
             this.playRandomRestSound().catch(error => {
-                console.warn('播放随机微休息失败:', error);
+                console.warn("Failed to play random microbreak:", error);
             });
 
             // 计算下次触发时间
@@ -1214,7 +1214,7 @@ export class PomodoroTimer {
                 showMessage(i18n('pomodoroNoteSaveFailed') || '番茄备注保存失败', 3000, 'error');
             }
         } catch (error) {
-            console.error('[PomodoroTimer] 保存番茄备注失败:', error);
+            console.error("[PomodoroTimer] Failed to save pomodoro note:", error);
             if (showToast) {
                 showMessage(i18n('pomodoroNoteSaveFailed') || '番茄备注保存失败', 3000, 'error');
             }
@@ -1245,7 +1245,7 @@ export class PomodoroTimer {
                         <div style="font-weight: 600; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${this.escapeHtml(taskTitle)}">
                             ${this.escapeHtml(taskTitle)}
                         </div>
-                        <textarea id="pomodoroCompletionNote" class="b3-text-field" rows="6" style="width: 100%; resize: vertical;" placeholder="这次专注完成了什么？">${this.escapeHtml(session.note || '')}</textarea>
+                        <textarea id="pomodoroCompletionNote" class="b3-text-field" rows="6" style="width: 100%; resize: vertical;" placeholder="${i18n("pomodoroNotePlaceholder")}">${this.escapeHtml(session.note || '')}</textarea>
                         <div class="b3-dialog__action">
                             <button class="b3-button b3-button--cancel" id="skipPomodoroNote">${i18n('skip') || '跳过'}</button>
                             <button class="b3-button b3-button--primary" id="savePomodoroNote">${i18n('save') || '保存'}</button>
@@ -1264,7 +1264,7 @@ export class PomodoroTimer {
                 dialog.destroy();
             });
         } catch (error) {
-            console.error('[PomodoroTimer] 打开番茄备注内部弹窗失败:', error);
+            console.error("[PomodoroTimer] Failed to open internal pomodoro note popup:", error);
         }
     }
 
@@ -1408,7 +1408,7 @@ export class PomodoroTimer {
                 <body>
                     <div class="title">🍅 ${this.escapeHtml(title)}</div>
                     <div class="task" title="${this.escapeHtml(taskTitle)}">${this.escapeHtml(taskTitle)}</div>
-                    <textarea id="note" autofocus placeholder="这次专注完成了什么？">${this.escapeHtml(session.note || '')}</textarea>
+                    <textarea id="note" autofocus placeholder="${i18n("pomodoroNotePlaceholder")}">${this.escapeHtml(session.note || '')}</textarea>
                     <div class="actions">
                         <button class="skip" onclick="skipNote()">${i18n('skip') || '跳过'}</button>
                         <button class="save" onclick="saveNote()">${i18n('save') || '保存'}</button>
@@ -1461,7 +1461,7 @@ export class PomodoroTimer {
             noteWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(htmlContent));
             return true;
         } catch (error) {
-            console.error('[PomodoroTimer] 打开番茄备注全局弹窗失败:', error);
+            console.error("[PomodoroTimer] Failed to open global pomodoro note popup:", error);
             return false;
         }
     }
@@ -1698,8 +1698,8 @@ export class PomodoroTimer {
                         <div class="title">${title}</div>
                         <div class="message">${message}</div>
                         <div class="buttons">
-                            <button class="btn-confirm" onclick="handleConfirm()">确认</button>
-                            <button class="btn-cancel" onclick="handleCancel()">取消</button>
+                            <button class="btn-confirm" onclick="handleConfirm()">${i18n("confirm")}</button>
+                            <button class="btn-cancel" onclick="handleCancel()">${i18n("cancel")}</button>
                         </div>
                     </div>
                     <script>
@@ -1911,7 +1911,7 @@ export class PomodoroTimer {
                             this.pomodoroEndWindow.setAlwaysOnTop(true, "screen-saver");
                         }
                     } catch (e) {
-                        console.warn('[PomodoroTimer] 显式显示番茄钟弹窗失败:', e);
+                        console.warn("[PomodoroTimer] Failed to explicitly show pomodoro popup:", e);
                     }
                 }
             };
@@ -1926,7 +1926,7 @@ export class PomodoroTimer {
                                 PomodoroTimer.browserWindowInstance.moveTop();
                                 PomodoroTimer.browserWindowInstance.showInactive();
                             } catch (e) {
-                                console.warn('[PomodoroTimer] 无法置顶番茄钟窗口:', e);
+                                console.warn("[PomodoroTimer] Cannot keep pomodoro window on top:", e);
                             }
                         }
                     }, 100);
@@ -2176,7 +2176,7 @@ export class PomodoroTimer {
                             this.randomRestWindow.setAlwaysOnTop(true, "screen-saver");
                         }
                     } catch (e) {
-                        console.warn('[PomodoroTimer] 显式显示微休息弹窗失败:', e);
+                        console.warn("[PomodoroTimer] Failed to explicitly show microbreak popup:", e);
                     }
                 }
             };
@@ -2193,7 +2193,7 @@ export class PomodoroTimer {
                                 PomodoroTimer.browserWindowInstance.moveTop();
                                 PomodoroTimer.browserWindowInstance.showInactive();
                             } catch (e) {
-                                console.warn('[PomodoroTimer] 无法置顶番茄钟窗口:', e);
+                                console.warn("[PomodoroTimer] Cannot keep pomodoro window on top:", e);
                             }
                         }
                     }, 100);
@@ -2277,12 +2277,12 @@ export class PomodoroTimer {
 
             const onError = () => {
                 cleanup();
-                reject(new Error('音频加载失败'));
+                reject(new Error(i18n("audioLoadFailed")));
             };
 
             const onTimeout = () => {
                 cleanup();
-                console.warn('音频加载超时，但继续执行');
+                console.warn("Audio loading timed out; continuing");
                 resolve(); // 超时时也resolve，避免阻塞
             };
 
@@ -2362,7 +2362,7 @@ export class PomodoroTimer {
         try {
             const win = PomodoroTimer.browserWindowInstance;
             if (!win || (win.isDestroyed && win.isDestroyed())) {
-                console.warn('[PomodoroTimer] BrowserWindow 不存在或已销毁');
+                console.warn("[PomodoroTimer] BrowserWindow is missing or destroyed");
                 return false;
             }
 
@@ -2373,7 +2373,7 @@ export class PomodoroTimer {
             }
 
             if (!resolvedSrc) {
-                console.warn('[PomodoroTimer] 无法解析音频路径:', src);
+                console.warn("[PomodoroTimer] Cannot resolve audio path:", src);
                 return false;
             }
 
@@ -2549,7 +2549,7 @@ export class PomodoroTimer {
                 return true;
             }
 
-            console.warn('[PomodoroTimer] BrowserWindow 音频播放失败:', {
+            console.warn("[PomodoroTimer] BrowserWindow audio playback failed:", {
                 error: res?.err || 'unknown error',
                 source: src.startsWith('data:') ? 'data URL' : src,
                 readyState: res?.readyState,
@@ -2590,7 +2590,7 @@ export class PomodoroTimer {
             this.bwAudioDataUrlCache.set(src, dataUrl);
             return dataUrl;
         } catch (e) {
-            console.warn('[PomodoroTimer] 音频转 data URL 失败，使用原始 URL（可能导致 BW 播放不稳定）:', src, e);
+            console.warn("[PomodoroTimer] Failed to convert audio to data URL; using original URL (BrowserWindow playback may be unstable):", src, e);
             return src; // 回退到原始 URL
         }
     }
@@ -2740,7 +2740,7 @@ export class PomodoroTimer {
                 }
                 return false;
             } catch (e) {
-                console.warn('在 BrowserWindow 中播放音频失败:', e);
+                console.warn("Failed to play audio in BrowserWindow:", e);
                 return false;
             }
         }
@@ -4181,7 +4181,7 @@ export class PomodoroTimer {
                     pluginAny.saveSettings({ ...pluginAny.settings, ...this.getVolumeSettingsForSave() });
                 }
             } catch (e) {
-                console.warn('[PomodoroTimer] 保存音量设置失败:', e);
+                console.warn("[PomodoroTimer] Failed to save volume settings:", e);
             }
         }, 300);
 
@@ -5416,7 +5416,7 @@ export class PomodoroTimer {
                 this.todayFocusDisplay.style.color = '#FF6B6B';
             }
         } catch (error) {
-            console.error('更新统计显示失败:', error);
+            console.error("Failed to update statistics display:", error);
             if (this.todayFocusDisplay) this.todayFocusDisplay.textContent = '0m';
             if (this.weekFocusDisplay) this.weekFocusDisplay.textContent = '0m';
         }
@@ -6040,7 +6040,7 @@ export class PomodoroTimer {
             this.openPomodoroCompletionNotePopup(interruptedSession);
             return interruptedSession;
         } catch (err) {
-            console.error('记录番茄专注失败:', err);
+            console.error("Failed to record pomodoro focus:", err);
             showMessage(i18n('pomodoroRecordFailed') || '记录失败', 3000);
             return null;
         }
@@ -6054,7 +6054,7 @@ export class PomodoroTimer {
             if (elapsedSeconds > 0) {
                 const minutes = Math.floor(elapsedSeconds / 60);
                 const eventId = this.reminder.id;
-                const eventTitle = this.reminder.title || '番茄专注';
+                const eventTitle = this.reminder.title || i18n("pomodoroFocusTitle");
 
                 // 检查是否是 BrowserWindow 模式
                 const isBrowserWindow = !this.isTabMode && this.container && typeof (this.container as any).webContents !== 'undefined';
@@ -6182,7 +6182,7 @@ export class PomodoroTimer {
             if (typeof require !== 'undefined') {
             }
         } catch (error) {
-            console.warn('初始化系统弹窗失败，将禁用此功能:', error);
+            console.warn("Failed to initialize system popup; disabling this feature:", error);
             this.systemNotificationEnabled = false;
         }
     }
@@ -6203,7 +6203,7 @@ export class PomodoroTimer {
                     return await sendNotification(title, message);
                 }
             } catch (error) {
-                console.warn('手机端发送系统通知失败:', error);
+                console.warn("Failed to send system notification on mobile:", error);
             }
             return;
         }
@@ -6231,7 +6231,7 @@ export class PomodoroTimer {
                 }
             }
         } catch (error) {
-            console.warn('显示系统弹窗失败:', error);
+            console.warn("Failed to show system popup:", error);
         }
     }
 
@@ -6244,7 +6244,7 @@ export class PomodoroTimer {
                 try {
                     cancelNotification(id);
                 } catch (e) {
-                    console.warn(`[PomodoroTimer] 取消移动端通知失败: id=${id}`, e);
+                    console.warn(`[PomodoroTimer] Failed to cancel mobile notification: id=${id}`, e);
                 }
             });
             this.scheduledNotificationIds = [];
@@ -6326,16 +6326,16 @@ export class PomodoroTimer {
                 if (breakTimeLeftMs > 0) {
                     const scheduledTime = new Date(now + breakTimeLeftMs);
                     const breakType = this.isLongBreak ? (i18n('pomodoroLongBreak') || '长时休息') : (i18n('pomodoroBreak') || '短时休息');
-                    const title = `🍵 ${breakType}结束！`;
+                    const title = i18n("breakFinishedTitle", { type: String(breakType) });
                     const eventTitle = this.reminder.title || (i18n('pomodoroFocusDefault') || '番茄专注');
-                    const message = `「${eventTitle}」的${breakType}已结束，准备开始下一个专注阶段吧！`;
+                    const message = i18n("breakFinishedNextFocus", { title: String(eventTitle), type: String(breakType) });
 
                     const id = await this.showSystemNotification(title, message, undefined, scheduledTime);
                     if (typeof id === 'number') this.scheduledNotificationIds.push(id);
                 }
             }
         } catch (e) {
-            console.warn('[PomodoroTimer] 调度移动端通知失败:', e);
+            console.warn("[PomodoroTimer] Failed to schedule mobile notification:", e);
         }
     }
 
@@ -6352,7 +6352,7 @@ export class PomodoroTimer {
                 }
             }));
         } catch (error) {
-            console.warn('触发习惯自动打卡事件失败:', error);
+            console.warn("Failed to trigger automatic habit check-in event:", error);
         }
     }
 
@@ -6362,7 +6362,7 @@ export class PomodoroTimer {
 
         // 防重入
         if (this.isCompletingPhase) {
-            console.warn('[PomodoroTimer] completePomodoroPhase 重入被阻止');
+            console.warn("[PomodoroTimer] Blocked completePomodoroPhase reentry");
             return;
         }
         this.isCompletingPhase = true;
@@ -6416,7 +6416,7 @@ export class PomodoroTimer {
                 this.pendingSettings = null;
                 // 倒计时模式：记录完成的工作番茄（每个实例独立记录）
                 const eventId = this.reminder.id;
-                const eventTitle = this.reminder.title || '番茄专注';
+                const eventTitle = this.reminder.title || i18n("pomodoroFocusTitle");
 
                 // 计算实际完成的时间（分钟）
                 const actualDuration = Math.round(this.totalTime / 60);
@@ -6463,7 +6463,7 @@ export class PomodoroTimer {
 
         // 防重入
         if (this.isCompletingPhase) {
-            console.warn('[PomodoroTimer] completeBreakPhase 重入被阻止');
+            console.warn("[PomodoroTimer] Blocked completeBreakPhase reentry");
             return;
         }
         this.isCompletingPhase = true;
@@ -6492,8 +6492,8 @@ export class PomodoroTimer {
             if (this.systemNotificationEnabled) {
                 const eventTitle = this.reminder.title || (i18n('pomodoroFocusDefault') || '番茄专注');
                 this.showSystemNotification(
-                    `🍵 ${breakType}结束！`,
-                    `「${eventTitle}」的${breakType}已结束，准备开始下一个工作阶段吧！`
+                    i18n("breakFinishedTitle", { type: String(breakType) }),
+                    i18n("breakFinishedNextWork", { title: String(eventTitle), type: String(breakType) })
                 );
             }
 
@@ -6580,7 +6580,7 @@ export class PomodoroTimer {
 
         // 防重入：避免 async 执行期间 setInterval 再次触发
         if (this.isCompletingPhase) {
-            console.warn('[PomodoroTimer] completePhase 重入被阻止');
+            console.warn("[PomodoroTimer] Blocked completePhase reentry");
             return;
         }
         this.isCompletingPhase = true;
@@ -6738,8 +6738,8 @@ export class PomodoroTimer {
                 if (this.systemNotificationEnabled) {
                     const eventTitle = this.reminder.title || (i18n('pomodoroFocusDefault') || '番茄专注');
                     this.showSystemNotification(
-                        `🍵 ${breakType}结束！`,
-                        `「${eventTitle}」的${breakType}已结束，准备开始下一个番茄钟吧！`
+                        i18n("breakFinishedTitle", { type: String(breakType) }),
+                        i18n("breakFinishedNextPomodoro", { title: String(eventTitle), type: String(breakType) })
                     );
                 }
 
@@ -7010,7 +7010,7 @@ export class PomodoroTimer {
             return true;
         } catch (error) {
             this.blockPomodoroMetricCache = null;
-            console.warn('写入块番茄属性失败:', error);
+            console.warn("Failed to write block pomodoro attributes:", error);
             return false;
         }
     }
@@ -7045,7 +7045,7 @@ export class PomodoroTimer {
                     // 获取原始任务
                     const originalReminder = reminderData[this.reminder.originalId];
                     if (!originalReminder) {
-                        console.warn('未找到原始提醒项:', this.reminder.originalId);
+                        console.warn("Original reminder item not found:", this.reminder.originalId);
                     } else {
                         // 为重复实例创建独立的番茄钟计数记录（保存在 repeat.instancePomodoroCount 中）
                         if (!originalReminder.repeat) {
@@ -7072,7 +7072,7 @@ export class PomodoroTimer {
                         reminderData[targetId].pomodoroCount++;
                         reminderDataChanged = true;
                     } else {
-                        console.debug('当前番茄钟未绑定提醒数据，仅更新块属性:', targetId);
+                        console.debug("Current pomodoro timer has no bound reminder data; only updating block attributes:", targetId);
                     }
                 }
 
@@ -7081,7 +7081,7 @@ export class PomodoroTimer {
                 }
                 return reminderDataChanged;
             } catch (error) {
-                console.error('更新提醒番茄数量失败:', error);
+                console.error("Failed to update reminder pomodoro count:", error);
                 return false;
             }
         };
@@ -7664,7 +7664,7 @@ export class PomodoroTimer {
                     ipcMain.removeAllListeners(`pomodoro-mouse-${pomodoroWindow.id}`);
                 }
             } catch (error) {
-                console.warn('[PomodoroTimer] 清理旧实例 IPC 监听器失败:', error);
+                console.warn("[PomodoroTimer] Failed to clean up old instance IPC listeners:", error);
             }
 
             if (PomodoroTimer.browserWindowTimer === this) {
@@ -7683,10 +7683,10 @@ export class PomodoroTimer {
             this.activeSources.clear();
 
             this.pendingSettings = null;
-            console.log('[PomodoroTimer] 插件代码重载：已释放旧实例并保留独立窗口');
+            console.log("[PomodoroTimer] Plugin code reloaded: released old instance and preserved standalone window");
             return true;
         } catch (error) {
-            console.warn('[PomodoroTimer] 为插件重载保留独立窗口失败:', error);
+            console.warn("[PomodoroTimer] Failed to preserve standalone window for plugin reload:", error);
             return false;
         }
     }
@@ -7705,7 +7705,7 @@ export class PomodoroTimer {
             if (elapsedSeconds > 0) {
                 const minutes = Math.floor(elapsedSeconds / 60);
                 const eventId = this.reminder.id;
-                const eventTitle = this.reminder.title || '番茄专注';
+                const eventTitle = this.reminder.title || i18n("pomodoroFocusTitle");
                 const originalDuration = this.currentPhaseOriginalDuration;
 
                 // 检查是否是 BrowserWindow 模式
@@ -7867,7 +7867,7 @@ export class PomodoroTimer {
             this.autoMode = settings.autoMode || false;
             this.longBreakInterval = Math.max(1, settings.longBreakInterval || 4);
         } catch (e) {
-            console.warn('更新番茄钟设置时解析新设置失败:', e);
+            console.warn("Failed to parse new pomodoro timer settings:", e);
         }
 
         // 重新初始化音频（如果设置改变）
@@ -7916,7 +7916,7 @@ export class PomodoroTimer {
                         }
                     }
                 } catch (e) {
-                    console.warn('更新继承状态时重新计算时间失败:', e);
+                    console.warn("Failed to recalculate time when updating inherited state:", e);
                 }
             }
         } else {
@@ -7942,7 +7942,7 @@ export class PomodoroTimer {
                 eventTitle.textContent = reminder.title || (i18n('unnamedNote') || '未命名笔记');
                 eventTitle.title = (i18n('openNote') || '打开笔记') + ': ' + (reminder.title || (i18n('unnamedNote') || '未命名笔记'));
             } else {
-                console.warn('PomodoroTimer: 未找到标题元素');
+                console.warn("PomodoroTimer: title element not found");
             }
         }
 
@@ -7974,7 +7974,7 @@ export class PomodoroTimer {
                     volumePercent.textContent = Math.round(curVol * 100) + '%';
                 }
             } catch (e) {
-                console.warn('更新音量滑块UI失败:', e);
+                console.warn("Failed to update volume slider UI:", e);
             }
         }
 
@@ -8022,7 +8022,7 @@ export class PomodoroTimer {
             showMessage(i18n('openingNote') || '正在打开笔记...', 1000);
 
         } catch (error) {
-            console.error('打开笔记失败:', error);
+            console.error("Failed to open note:", error);
             showMessage(i18n('openNoteFailed') || '打开笔记失败', 2000);
         }
     }
@@ -8122,7 +8122,7 @@ export class PomodoroTimer {
                         }
                     }
                 } catch (err) {
-                    console.error('[PomodoroTimer] 加载完整任务/习惯数据失败:', err);
+                    console.error("[PomodoroTimer] Failed to load complete task/habit data:", err);
                 }
             }
 
@@ -8165,7 +8165,7 @@ export class PomodoroTimer {
                                     this.updateBrowserWindowDisplay(this.container);
                                 }
                             } catch (err) {
-                                console.error('更新番茄钟习惯标题失败:', err);
+                                console.error("Failed to update pomodoro habit title:", err);
                             }
                         }
                         window.dispatchEvent(new CustomEvent('habitUpdated'));
@@ -8228,7 +8228,7 @@ export class PomodoroTimer {
                             }
                         }
                     } catch (err) {
-                        console.error('更新番茄钟任务标题失败:', err);
+                        console.error("Failed to update pomodoro task title:", err);
                     }
                     window.dispatchEvent(new CustomEvent('reminderUpdated'));
                 },
@@ -8642,9 +8642,9 @@ export class PomodoroTimer {
             if (blockAttrsChanged) {
                 window.dispatchEvent(new CustomEvent('reminderUpdated'));
             }
-            console.log(`[PomodoroTimer] 已记录部分专注时间: ${eventTitle}, ${Math.round(minutes * 10) / 10}分钟`);
+            console.log(`[PomodoroTimer] Recorded partial focus time: ${eventTitle}, ${Math.round(minutes * 10) / 10} minutes`);
         } catch (error) {
-            console.error('[PomodoroTimer] 记录部分专注时间失败:', error);
+            console.error("[PomodoroTimer] Failed to record partial focus time:", error);
         }
     }
 
@@ -8705,10 +8705,10 @@ export class PomodoroTimer {
                             this.isMiniMode = !!oldTimer.isMiniMode;
                             this.normalWindowBounds = oldTimer.normalWindowBounds ? { ...oldTimer.normalWindowBounds } : null;
                         } else {
-                            console.log('[PomodoroTimer] 保持继承的窗口模式状态，不从旧实例覆盖');
+                            console.log("[PomodoroTimer] Preserving inherited window mode state; not overwriting from old instance");
                         }
                     } catch (err) {
-                        console.warn('[PomodoroTimer] 同步旧实例窗口模式失败:', err);
+                        console.warn("[PomodoroTimer] Failed to sync window mode from old instance:", err);
                     }
                 } else {
                     // 如果没有旧实例，尝试从窗口 DOM class 推断当前模式（作为兜底）
@@ -8794,7 +8794,7 @@ export class PomodoroTimer {
                 if (this.inheritedWindowBounds) {
                     x = this.inheritedWindowBounds.x;
                     y = this.inheritedWindowBounds.y;
-                    console.log('[PomodoroTimer] 迷你模式使用继承的窗口位置:', this.inheritedWindowBounds);
+                    console.log("[PomodoroTimer] Mini mode using inherited window position:", this.inheritedWindowBounds);
                 }
             } else {
                 // 非吸附模式：优先使用 normalWindowBounds（从吸附模式恢复时的正常位置）
@@ -8806,14 +8806,14 @@ export class PomodoroTimer {
                     // 只继承位置，固定使用标准尺寸 240x235，避免 High DPI / 阴影边距等 getBounds() 误差累积导致窗口不断变大
                     winWidth = 240;
                     winHeight = 235;
-                    console.log('[PomodoroTimer] 使用保存的正常窗口位置:', this.normalWindowBounds);
+                    console.log("[PomodoroTimer] Using saved normal window position:", this.normalWindowBounds);
                 } else if (this.inheritedWindowBounds) {
                     // 只继承位置，不继承大小，避免 getBounds() 的阴影/缩放误差累积导致窗口越来越大
                     x = this.inheritedWindowBounds.x;
                     y = this.inheritedWindowBounds.y;
                     winWidth = 240;
                     winHeight = 235;
-                    console.log('[PomodoroTimer] 使用继承的窗口位置:', this.inheritedWindowBounds);
+                    console.log("[PomodoroTimer] Using inherited window position:", this.inheritedWindowBounds);
                 }
             }
 
@@ -9014,7 +9014,7 @@ export class PomodoroTimer {
 
                 // 如果继承了迷你模式状态，应用迷你模式设置
                 if (this.isMiniMode) {
-                    console.log('[PomodoroTimer] 应用继承的迷你模式设置');
+                    console.log("[PomodoroTimer] Applying inherited mini mode settings");
                     this.applyMiniWindowBounds(pomodoroWindow, this.inheritedWindowBounds || pomodoroWindow.getBounds());
 
                     // 添加迷你模式样式
@@ -9023,7 +9023,7 @@ export class PomodoroTimer {
                             pomodoroWindow.webContents.executeJavaScript(`
 document.body.classList.add('mini-mode');
 document.body.classList.remove('docked-mode');
-`).catch((e: any) => console.error('[PomodoroTimer] 应用迷你模式样式失败:', e));
+`).catch((e: any) => console.error("[PomodoroTimer] Failed to apply mini mode styles:", e));
                         }
                     }, 100);
                 } else if (this.isDocked) { // 吸附模式下的鼠标穿透处理
@@ -9052,7 +9052,7 @@ document.body.classList.remove('docked-mode');
 
                 // 如果是窗口重建（吸附模式切换），不要杀死计时器和音频状态
                 if (this.isRecreatingWindow) {
-                    console.log('[PomodoroTimer] 窗口重建中，保持计时器和音频状态');
+                    console.log("[PomodoroTimer] Rebuilding window; preserving timer and audio state");
                     return;
                 }
 
@@ -9090,7 +9090,7 @@ document.body.classList.remove('docked-mode');
 
                 // 如果是窗口重建（吸附模式切换），不要杀死计时器和音频状态
                 if (this.isRecreatingWindow) {
-                    console.log('[PomodoroTimer] 窗口重建中（destroyed事件），保持计时器和音频状态');
+                    console.log("[PomodoroTimer] Rebuilding window (destroyed event); preserving timer and audio state");
                     return;
                 }
 
@@ -9117,7 +9117,7 @@ document.body.classList.remove('docked-mode');
             });
 
         } catch (error) {
-            console.error('创建番茄钟窗口失败:', error);
+            console.error("Failed to create pomodoro window:", error);
             throw error;
         }
     }
@@ -9219,7 +9219,7 @@ document.body.classList.remove('docked-mode');
 
                 // FIX: 如果恢复为吸附模式，需要设置鼠标穿透
                 if (timer.isDocked) {
-                    console.log('[PomodoroTimer] 恢复吸附模式，设置鼠标穿透');
+                    console.log("[PomodoroTimer] Restoring docked mode and enabling mouse passthrough");
                     timer.setupDockedMouseEvents(win);
                 }
 
@@ -11279,7 +11279,7 @@ document.body.classList.remove('docked-mode');
                     } catch (e) { }
                 }
             } catch (err) {
-                console.warn('[PomodoroTimer] 应用窗口模式到复用窗口时出错:', err);
+                console.warn("[PomodoroTimer] Error applying window mode to reused window:", err);
             }
 
             // Resume background audio if needed (because recreating window kills the audio)
@@ -11375,7 +11375,7 @@ document.body.classList.remove('docked-mode');
             }
 
         } catch (error) {
-            console.error('[PomodoroTimer] 更新窗口内容失败:', error);
+            console.error("[PomodoroTimer] Failed to update window content:", error);
         }
     }
 
@@ -11716,7 +11716,7 @@ document.body.classList.remove('mini-mode');
     private restoreFromDockedMode() {
         if (!this.isDocked) return;
 
-        console.log('[PomodoroTimer] 非自动模式下阶段完成，自动从吸附模式恢复');
+        console.log("[PomodoroTimer] Phase completed in manual mode; automatically restoring from docked mode");
 
         // BrowserWindow 模式
         const pomodoroWindow = PomodoroTimer.browserWindowInstance;

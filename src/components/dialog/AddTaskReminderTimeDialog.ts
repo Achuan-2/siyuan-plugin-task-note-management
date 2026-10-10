@@ -115,7 +115,7 @@ export async function showAddTaskReminderTimeDialog(
                     try {
                         await plugin.updateMobileNotification(reminder);
                     } catch (e) {
-                        console.warn('添加时间提醒后更新移动端通知失败:', e);
+                        console.warn("Failed to update mobile notifications after adding time reminder:", e);
                     }
                 }
 
@@ -124,7 +124,7 @@ export async function showAddTaskReminderTimeDialog(
                 }
                 showMessage(i18n("operationSuccessful") || "添加成功");
             } catch (error) {
-                console.error('保存提醒时间失败:', error);
+                console.error("Failed to save reminder time:", error);
                 showMessage(i18n("saveFailed") || "保存失败");
             }
 
@@ -140,7 +140,7 @@ export async function showAddTaskReminderTimeDialog(
             }
         });
     } catch (error) {
-        console.error('打开添加提醒时间对话框失败:', error);
+        console.error("Failed to open add reminder time dialog:", error);
         showMessage(i18n("operationFailed"));
     }
 }

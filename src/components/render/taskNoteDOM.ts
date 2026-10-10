@@ -225,7 +225,7 @@ export class TaskNoteDOMManager {
                 this.pomodoroStatsByBaseEventId = statsByBaseEventId;
                 this.pomodoroStatsCacheUpdatedAt = Date.now();
             } catch (error) {
-                console.warn("加载番茄会话缓存失败:", error);
+                console.warn("Failed to load pomodoro session cache:", error);
                 this.pomodoroStatsByEventId = new Map();
                 this.pomodoroStatsByBaseEventId = new Map();
                 this.pomodoroStatsCacheUpdatedAt = Date.now();
@@ -588,7 +588,7 @@ export class TaskNoteDOMManager {
                 }
             }
         } catch (error) {
-            console.error("[大纲前缀] 更新失败:", error);
+            console.error("[OutlinePrefix] Update failed:", error);
         }
     }
 
@@ -847,7 +847,7 @@ export class TaskNoteDOMManager {
                 }
             }
         } catch (error) {
-            console.error("扫描块按钮失败:", error);
+            console.error("Failed to scan block buttons:", error);
         }
     }
 
@@ -1325,7 +1325,7 @@ export class TaskNoteDOMManager {
                 reminderData = await this.plugin.loadReminderData() as Record<string, any>;
             }
         } catch (e) {
-            console.warn('加载 reminderData 失败:', e);
+            console.warn("Failed to load reminderData:", e);
         }
 
         // 辅助：只有后缀是 YYYY-MM-DD 时才去掉（重复任务实例），其他情况保留完整 ID
@@ -1483,7 +1483,7 @@ export class TaskNoteDOMManager {
                                 }
                             }
                         } catch (sqlErr) {
-                            console.warn("校验块 ID 所属文档 SQL 失败:", sqlErr);
+                            console.warn("SQL query failed to verify block ID document:", sqlErr);
                         }
                     }
 
@@ -1500,7 +1500,7 @@ export class TaskNoteDOMManager {
                         cacheVersion: this.pomodoroStatsCacheUpdatedAt,
                     });
                 } catch (err) {
-                    console.warn("文档级反向匹配番茄数据失败:", err);
+                    console.warn("Failed to reverse-match pomodoro data at document level:", err);
                 }
             }
         }
@@ -1588,7 +1588,7 @@ export class TaskNoteDOMManager {
             const projectManager = ProjectManager.getInstance(this.plugin);
             return projectManager.getMilestoneDateDisplayInfoSync(projectId, milestoneIds);
         } catch (error) {
-            console.warn("同步获取里程碑日期展示信息失败:", error);
+            console.warn("Failed to synchronously get milestone date display information:", error);
             return null;
         }
     }
@@ -1598,7 +1598,7 @@ export class TaskNoteDOMManager {
             const projectManager = ProjectManager.getInstance(this.plugin);
             return await projectManager.getMilestoneDateDisplayInfo(projectId, milestoneIds);
         } catch (error) {
-            console.warn("获取里程碑日期展示信息失败:", error);
+            console.warn("Failed to get milestone date display information:", error);
             return null;
         }
     }
@@ -1664,7 +1664,7 @@ export class TaskNoteDOMManager {
         try {
             displayInfo = await this.getBoundReminderDateDisplayInfoFromPlugin(normalizedReminderIds);
         } catch (error) {
-            console.warn("获取绑定任务日期展示信息失败:", error);
+            console.warn("Failed to get bound task date display information:", error);
             return;
         }
 
@@ -1779,7 +1779,7 @@ export class TaskNoteDOMManager {
                 });
                 dialog.show();
             } catch (error) {
-                console.error("打开绑定任务日期编辑对话框失败:", error);
+                console.error("Failed to open bound task date edit dialog:", error);
                 showMessage(i18n("openModifyDialogFailed") || "打开修改对话框失败，请重试", 3000, "error");
             }
         });
@@ -1804,8 +1804,8 @@ export class TaskNoteDOMManager {
         const prefix = safeDisplayType === "completed" ? "✅" : (safeDisplayText.startsWith('⏰') ? '' : '🗓️');
         const text = safeDisplayText ? (prefix ? `${prefix} ${safeDisplayText}` : safeDisplayText) : prefix;
         const ariaText = safeDisplayType === "completed"
-            ? `最近完成时间 ${safeDisplayText}，点击编辑任务日期`
-            : `任务安排时间 ${safeDisplayText}，点击编辑任务日期`;
+            ? i18n("taskCompletionDateTooltip", { date: String(safeDisplayText) })
+            : i18n("taskScheduleDateTooltip", { date: String(safeDisplayText) });
 
         if (btn.dataset.reminderId !== safeReminderId) {
             btn.dataset.reminderId = safeReminderId;
@@ -1878,7 +1878,7 @@ export class TaskNoteDOMManager {
                 );
                 await dialog.show();
             } catch (error) {
-                console.error("打开番茄记录对话框失败:", error);
+                console.error("Failed to open pomodoro record dialog:", error);
                 showMessage(i18n("operationFailed") || "操作失败", 3000);
             }
         });
@@ -1892,7 +1892,7 @@ export class TaskNoteDOMManager {
 
     public _updatePomodoroSummaryButton(btn: HTMLElement, totalCount: number, totalMinutes: number, includeEventIds: string[] = []) {
         const text = this.getPomodoroSummaryText(totalCount, totalMinutes);
-        const ariaText = `番茄总数 ${totalCount}，番茄总时长 ${this.formatPomodoroDuration(totalMinutes)}`;
+        const ariaText = i18n("pomodoroTotalsTooltip", { count: String(totalCount), duration: String(this.formatPomodoroDuration(totalMinutes)) });
         const countStr = String(totalCount);
         const minutesStr = String(totalMinutes);
         const normalizedEventIds = this.normalizeReminderIds(includeEventIds);
@@ -1928,7 +1928,7 @@ export class TaskNoteDOMManager {
     public _createProjectButton(projectId: string, blockId: string): HTMLElement {
         const btn = document.createElement("button");
         btn.className = "block-project-btn block__icon fn__flex-center ariaLabel";
-        btn.setAttribute("aria-label", `打开项目看板: ${this.plugin.projectDataCache[projectId]?.title}`);
+        btn.setAttribute("aria-label", i18n("openProjectKanbanTooltip", { title: String(this.plugin.projectDataCache[projectId]?.title) }));
         btn.style.cssText = `
             margin-left: 6px;
             padding: 2px;
@@ -1960,7 +1960,7 @@ export class TaskNoteDOMManager {
                 const title = project ? project.title : projectId;
                 this.plugin.openProjectKanbanTab(projectId, title);
             } catch (error) {
-                console.error("打开项目看板失败:", error);
+                console.error("Failed to open project kanban:", error);
                 this.plugin.openProjectKanbanTab(projectId, projectId);
             }
         });
@@ -1971,7 +1971,7 @@ export class TaskNoteDOMManager {
     public _createBindButton(blockId: string): HTMLElement {
         const btn = document.createElement("button");
         btn.className = "block-bind-reminders-btn block__icon fn__flex-center ariaLabel";
-        btn.setAttribute("aria-label", "查看绑定任务");
+        btn.setAttribute("aria-label", i18n("viewBoundTasks"));
         btn.style.cssText = `
             margin-left: 6px;
             padding: 2px;
@@ -1991,7 +1991,7 @@ export class TaskNoteDOMManager {
         btn.innerHTML = `<svg class="b3-list-item__graphic" style="width:14px;height:14px"><use xlink:href="#iconTNTodoList"></use></svg>`;
         btn.dataset.blockId = blockId;
         btn.setAttribute("data-plugin-added", "reminder-plugin");
-        btn.classList.add('ariaLabel'); btn.setAttribute('aria-label', "查看绑定任务");
+        btn.classList.add('ariaLabel'); btn.setAttribute('aria-label', i18n("viewBoundTasks"));
 
         btn.addEventListener("click", async (e) => {
             e.preventDefault();
@@ -2001,7 +2001,7 @@ export class TaskNoteDOMManager {
                 const dialog = new BlockRemindersDialog(blockId, this.plugin);
                 await dialog.show();
             } catch (err) {
-                console.error("打开块绑定任务对话框失败:", err);
+                console.error("Failed to open block bound task dialog:", err);
             }
         });
 
@@ -2072,7 +2072,7 @@ export class TaskNoteDOMManager {
                 if (!targetProjectId || targetMilestoneIds.length === 0) return;
                 await this.openMilestoneTasksDialog(targetProjectId, targetMilestoneIds);
             } catch (err) {
-                console.error("打开里程碑任务对话框失败:", err);
+                console.error("Failed to open milestone task dialog:", err);
             }
         });
 
@@ -2096,8 +2096,8 @@ export class TaskNoteDOMManager {
         const safeDisplayText = String(displayText || "").trim();
         const text = safeDisplayText ? `🚩 ${safeDisplayText}` : "🚩";
         const ariaText = safeDisplayText
-            ? `查看里程碑任务，日期 ${safeDisplayText}`
-            : "查看里程碑任务";
+            ? i18n("milestoneDateTooltip", { date: String(safeDisplayText) })
+            : i18n("viewMilestoneTasks");
 
         if (btn.dataset.projectId !== safeProjectId) {
             btn.dataset.projectId = safeProjectId;

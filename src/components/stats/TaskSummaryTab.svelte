@@ -120,13 +120,13 @@
         try {
             await projectManager.initialize();
         } catch (e) {
-            console.warn("初始化项目管理器失败:", e);
+            console.warn("Failed to initialize project manager:", e);
         }
         try {
             pomodoroRecordManager = PomodoroRecordManager.getInstance(plugin);
             await pomodoroRecordManager.initialize();
         } catch (e) {
-            console.warn("初始化番茄记录失败:", e);
+            console.warn("Failed to initialize pomodoro records:", e);
         }
         // 使用插件全局共享的 Lute 实例
         lute = getLuteInstance();
@@ -138,7 +138,7 @@
             showHabit = settings.showHabitInSummary !== false;
             showHabitNotes = settings.showHabitNotesInSummary === true;
         } catch (e) {
-            console.warn("加载设置失败:", e);
+            console.warn("Failed to load settings:", e);
         }
         await loadData();
     });
@@ -165,7 +165,7 @@
             // 构建日期分组数据
             dateGroups = buildDateGroups(groupedTasks, dateRange, stats);
         } catch (error) {
-            console.error("加载任务摘要失败:", error);
+            console.error("Failed to load task summary:", error);
         } finally {
             loading = false;
         }
@@ -435,7 +435,7 @@
 
             return events;
         } catch (error) {
-            console.error("获取事件数据失败:", error);
+            console.error("Failed to get event data:", error);
             return [];
         }
     }
@@ -1234,7 +1234,7 @@
             }
             case "monthly": {
                 if (repeat.monthDays && repeat.monthDays.length > 0) {
-                    const days = `${repeat.monthDays.join("、")}号`;
+                    const days = i18n("repeatMonthDaysLabel", { days: String(repeat.monthDays.join("、")) });
                     return interval === 1
                         ? `🔄 ${i18n("monthly") || "每月"} (${days})`
                         : `🔄 ${i18n("every") || "每"}${interval}${i18n("months") || "月"} (${days})`;
@@ -1250,7 +1250,7 @@
                     parts.push(`${i18n("weekly") || "每周"}(${days.join("、")})`);
                 }
                 if (repeat.monthDays && repeat.monthDays.length) {
-                    parts.push(`${i18n("monthly") || "每月"}(${repeat.monthDays.join("、")}号)`);
+                    parts.push(`${i18n("monthly")}(${i18n('repeatMonthDaysLabel', { days: repeat.monthDays.join(', ') })})`);
                 }
                 if (repeat.months && repeat.months.length) {
                     parts.push(`${i18n("yearly") || "每年"}(${repeat.months.join("、")}${i18n("month") || "月"})`);
@@ -1461,7 +1461,7 @@
                 copyTextToClipboard(content);
             }
         } catch (error) {
-            console.error("复制失败:", error);
+            console.error("Copy failed:", error);
             showMessage(i18n("copyFailed"));
         }
     }
@@ -1713,7 +1713,7 @@
             await navigator.clipboard.write([clipboardItem]);
             showMessage(i18n("copiedToClipboard"));
         } catch (error) {
-            console.error("复制富文本失败，回退为纯文本复制:", error);
+            console.error("Failed to copy rich text; falling back to plain text:", error);
             copyTextToClipboard(fallbackText);
         }
     }
@@ -1787,7 +1787,7 @@
     {/if}
 
     {#if loading}
-        <div class="state-block">加载中...</div>
+        <div class="state-block">{i18n('loading')}</div>
     {:else if dateGroups.length === 0}
         <div class="state-block">{i18n("noTasks")}</div>
     {:else}

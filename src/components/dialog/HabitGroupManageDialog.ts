@@ -227,7 +227,7 @@ export class HabitGroupManageDialog {
                 this.renderGroupList(this.dialog.element.querySelector('#habitGroupManageContainer') as HTMLElement);
                 this.onUpdate();
             } catch (error) {
-                console.error('创建分组失败:', error);
+                console.error("Failed to create group:", error);
                 showMessage(i18n("groupCreateFailed"), 3000, 'error');
             }
         });
@@ -278,7 +278,7 @@ export class HabitGroupManageDialog {
                 this.renderGroupList(this.dialog.element.querySelector('#habitGroupManageContainer') as HTMLElement);
                 this.onUpdate();
             } catch (error) {
-                console.error('保存分组失败:', error);
+                console.error("Failed to save group:", error);
                 showMessage(i18n("groupSaveFailed"), 3000, 'error');
             }
         });
@@ -297,7 +297,7 @@ export class HabitGroupManageDialog {
                     this.renderGroupList(this.dialog.element.querySelector('#habitGroupManageContainer') as HTMLElement);
                     this.onUpdate();
                 } catch (error) {
-                    console.error('删除分组失败:', error);
+                    console.error("Failed to delete group:", error);
                     showMessage(i18n("deleteFailed"), 3000, 'error');
                 }
             }

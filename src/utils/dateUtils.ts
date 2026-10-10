@@ -19,7 +19,7 @@ function formatDateString(date: Date): string {
  * 获取当前的语言区域标识符（BCP 47格式，如 zh-CN, en-US）
  */
 export function getLocaleTag(): string {
-    const lang = (window as any).siyuan?.config?.lang || 'zh_CN';
+    const lang = typeof window === 'undefined' ? 'zh_CN' : (window as any).siyuan?.config?.lang || 'zh_CN';
     return lang.replace('_', '-');
 }
 
@@ -462,7 +462,7 @@ export function parseNaturalDateTime(text: string): ParseResult {
 
         return parseNaturalDateTimeInner(processedText);
     } catch (error) {
-        console.error('解析自然语言日期时间失败:', error);
+        console.error("Failed to parse natural language date/time:", error);
         return {};
     }
 }
@@ -699,7 +699,7 @@ function parseNaturalDateTimeInner(text: string): ParseResult {
 
         return { date, time, hasTime, hasDate };
     } catch (error) {
-        console.error('内部解析自然语言日期时间失败:', error);
+        console.error("Internal natural language date/time parsing failed:", error);
         return {};
     }
 }

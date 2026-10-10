@@ -23,7 +23,7 @@ export function getLuteInstance(): any {
         sharedLute = Lute.New();
         return sharedLute;
     } catch (e) {
-        console.error('初始化 Lute 失败:', e);
+        console.error("Failed to initialize Lute:", e);
         return null;
     }
 }

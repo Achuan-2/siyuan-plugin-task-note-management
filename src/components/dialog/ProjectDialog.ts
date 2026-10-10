@@ -72,7 +72,7 @@ export class ProjectDialog {
                 titleEl?.focus();
             }, 0);
         } catch (error) {
-            console.error('显示项目对话框失败:', error);
+            console.error("Failed to show project dialog:", error);
             showMessage(i18n("openModifyDialogFailed"));
         }
     }
@@ -279,7 +279,7 @@ export class ProjectDialog {
                     }
                 }
             } catch (error) {
-                console.error('读取剪贴板失败:', error);
+                console.error("Failed to read clipboard:", error);
                 showMessage(i18n("pasteBlockRefFailed") || "粘贴失败");
             }
         });
@@ -354,7 +354,7 @@ export class ProjectDialog {
                 folderEl.innerHTML = folderOptions;
             }
         } catch (error) {
-            console.error('刷新文件夹失败:', error);
+            console.error("Failed to refresh folders:", error);
         }
     }
 
@@ -407,7 +407,7 @@ export class ProjectDialog {
                 statusEl.innerHTML = statusOptions;
             }
         } catch (error) {
-            console.error('刷新状态失败:', error);
+            console.error("Failed to refresh statuses:", error);
         }
     }
 
@@ -419,7 +419,7 @@ export class ProjectDialog {
             this.selectedCategoryIds = this.selectedCategoryIds.filter(id => categoryIds.includes(id));
             this.renderCategorySelector();
         } catch (error) {
-            console.error('刷新分类失败:', error);
+            console.error("Failed to refresh categories:", error);
         }
     }
 
@@ -477,8 +477,8 @@ export class ProjectDialog {
             });
 
         } catch (error) {
-            console.error('渲染分类选择器失败:', error);
-            categorySelector.innerHTML = '<div class="category-error">加载分类失败</div>';
+            console.error("Failed to render category selector:", error);
+            categorySelector.innerHTML = `<div class="category-error">${i18n("loadCategoriesFailed")}</div>`;
         }
     }
 
@@ -639,7 +639,7 @@ export class ProjectDialog {
             this.dialog.destroy();
 
         } catch (error) {
-            console.error('保存项目失败:', error);
+            console.error("Failed to save project:", error);
             showMessage(i18n("saveReminderFailed") || "保存项目失败");
         }
     }

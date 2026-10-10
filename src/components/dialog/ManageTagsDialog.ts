@@ -108,7 +108,7 @@ export async function showManageTagsDialog(view: any) {
                 tagsContainer.appendChild(tagItem);
             });
         } catch (error) {
-            console.error(i18n('loadTagsFailed'), error);
+            console.error("Failed to load tags", error);
             tagsContainer.innerHTML = `<div style="text-align: center; color: var(--b3-theme-error); padding: 20px;">${i18n('loadTagsFailed')}</div>`;
         }
     };
@@ -126,7 +126,7 @@ export async function showManageTagsDialog(view: any) {
             await view.loadProject();
             showMessage(i18n('tagDeleted'));
         } catch (error) {
-            console.error(i18n('deleteTagFailed'), error);
+            console.error("Failed to delete tag", error);
             showMessage(i18n('deleteTagFailed'));
         }
     };
@@ -147,7 +147,7 @@ export async function showManageTagsDialog(view: any) {
                     showMessage(i18n('tagUpdated'));
                 }
             } catch (error) {
-                console.error(i18n('updateTagFailed'), error);
+                console.error("Failed to update tag", error);
                 showMessage(i18n('updateTagFailed'));
             }
         });
@@ -328,7 +328,7 @@ export async function showManageTagsDialog(view: any) {
                 syncDialog.destroy();
             });
         } catch (error) {
-            console.error(i18n('syncTagsFailed'), error);
+            console.error("Failed to sync tags", error);
             showMessage(i18n('syncTagsFailed'));
         }
     });
@@ -401,7 +401,7 @@ export async function showManageTagsDialog(view: any) {
                 pasteDialog.destroy();
             });
         } catch (error) {
-            console.error(i18n('createTagFailed'), error);
+            console.error("Failed to create tag", error);
             showMessage(i18n('createTagFailed'));
         }
     });
@@ -420,7 +420,7 @@ export async function showManageTagsDialog(view: any) {
                 await view.loadProject();
                 showMessage(i18n('tagCreated'));
             } catch (error) {
-                console.error(i18n('createTagFailed'), error);
+                console.error("Failed to create tag", error);
                 showMessage(i18n('createTagFailed'));
             }
         });

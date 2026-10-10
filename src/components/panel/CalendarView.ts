@@ -1580,7 +1580,7 @@ export class CalendarView {
                 await this.refreshEvents(true);
                 showMessage(i18n("refreshSuccess"));
             } catch (error) {
-                console.error('手动刷新失败:', error);
+                console.error("Manual refresh failed:", error);
                 showMessage(i18n("refreshFailed") || "刷新失败");
             } finally {
                 svgIcon?.classList.remove('fn__rotate');
@@ -1667,7 +1667,7 @@ export class CalendarView {
                                     console.warn('plugin.openSetting is not available');
                                 }
                             } catch (err) {
-                                console.error('打开插件设置失败:', err);
+                                console.error("Failed to open plugin settings:", err);
                             }
                         }
                     });
@@ -1675,7 +1675,7 @@ export class CalendarView {
                     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                     menu.open({ x: rect.right, y: rect.bottom + 4 });
                 } catch (err) {
-                    console.error('打开更多菜单失败:', err);
+                    console.error("Failed to open more menu:", err);
                 }
             });
 
@@ -2163,7 +2163,7 @@ export class CalendarView {
                 info.el.addEventListener('contextmenu', (e) => {
                     e.preventDefault();
                     this.showEventContextMenu(e, info.event).catch((err) => {
-                        console.error('显示事件右键菜单失败:', err);
+                        console.error("Failed to show event context menu:", err);
                     });
                 });
 
@@ -2710,7 +2710,7 @@ export class CalendarView {
                 // 隐藏指示器
                 this.hideDropIndicator();
             } catch (err) {
-                console.error('处理外部拖放失败', err);
+                console.error("Failed to handle external drop", err);
                 showMessage(i18n('operationFailed'));
                 this.hideDropIndicator();
             }
@@ -2801,7 +2801,7 @@ export class CalendarView {
                 this.projectFilterPopup.updateSelection(this.currentProjectFilter);
             }
         } catch (error) {
-            console.error(i18n("renderProjectFilterFailed"), error);
+            console.error("Failed to render project filter", error);
         }
     }
 
@@ -2898,7 +2898,7 @@ export class CalendarView {
                 });
             }
         } catch (error) {
-            console.error(i18n("renderCategoryFilterFailed"), error);
+            console.error("Failed to render category filter", error);
         }
     }
 
@@ -3048,7 +3048,7 @@ export class CalendarView {
                     // 仅更新尺寸即可；调用 render() 容易与 refreshEvents/datesSet 形成渲染循环
                     this.calendar.updateSize();
                 } catch (error) {
-                    console.error('重新渲染日历失败:', error);
+                    console.error("Failed to rerender calendar:", error);
                 }
             }
         }, 100);
@@ -3073,7 +3073,9 @@ export class CalendarView {
         const festival = lunar.getFestivals()[0] || solar.getFestivals()[0] || lunar.getJieQi() || "";
         const displayLunar = festival ? festival : lunarText;
         const isFestival = !!festival;
-        const fullLunarDate = lunar.getMonthInChinese() + '月' + lunar.getDayInChinese();
+        const fullLunarDate = getLocaleTag().startsWith('zh')
+            ? lunar.getMonthInChinese() + '月' + lunar.getDayInChinese()
+            : new Intl.DateTimeFormat(`${getLocaleTag()}-u-ca-chinese`, { month: 'long', day: 'numeric' }).format(date);
         return { displayLunar, isFestival, dateNum: date.getDate(), fullLunarDate, festivalName: festival };
     }
 
@@ -3179,13 +3181,13 @@ export class CalendarView {
             const targetDate = info.event.extendedProps.date;
             const habit = habitData?.[habitId];
             if (!habit || !targetDate) {
-                throw new Error('习惯数据不存在');
+                throw new Error(i18n("habitDataMissing"));
             }
 
             const oldHabitSnapshot = JSON.parse(JSON.stringify(habit));
             const resolvedReminderTimes = getHabitReminderTimesForDate(habit, targetDate);
             if (!resolvedReminderTimes[reminderIndex]) {
-                throw new Error('习惯提醒时间索引不存在');
+                throw new Error(i18n("habitReminderIndexMissing"));
             }
 
             let newStartDate = info.event.start;
@@ -3200,13 +3202,13 @@ export class CalendarView {
                 newEndDate = this.snapToMinutes(newEndDate, 5);
             }
             if (!newStartDate) {
-                throw new Error('习惯提醒时间缺少开始时间');
+                throw new Error(i18n("habitReminderStartMissing"));
             }
 
             const { timeStr: startTimeStr } = getLocalDateTime(newStartDate);
             const { timeStr: endTimeStr } = newEndDate ? getLocalDateTime(newEndDate) : { timeStr: null };
             if (!startTimeStr) {
-                throw new Error('习惯提醒时间缺少开始时间');
+                throw new Error(i18n("habitReminderStartMissing"));
             }
 
             const updatedReminderTimes = resolvedReminderTimes.map((item) => ({ ...item }));
@@ -3250,7 +3252,7 @@ export class CalendarView {
                 try {
                     await this.plugin.updateMobileNotification(habit, oldHabitSnapshot, 7);
                 } catch (e) {
-                    console.warn('更新习惯移动端通知失败:', e);
+                    console.warn("Failed to update habit mobile notifications:", e);
                 }
             }
 
@@ -3259,7 +3261,7 @@ export class CalendarView {
             window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
             showMessage(i18n("instanceTimeUpdated") || '提醒时间已更新');
         } catch (error) {
-            console.error('更新习惯提醒时间失败:', error);
+            console.error("Failed to update habit reminder time:", error);
             showMessage(i18n("operationFailed"));
             info.revert();
         }
@@ -3273,18 +3275,18 @@ export class CalendarView {
             const checkInIndex = info.event.extendedProps.checkInIndex;
             const habit = habitData?.[habitId];
             if (!habit || !targetDate || typeof checkInIndex !== 'number') {
-                throw new Error('习惯打卡数据不存在');
+                throw new Error(i18n("habitCheckInDataMissing"));
             }
 
             const checkIn = habit.checkIns?.[targetDate];
             if (!checkIn) {
-                throw new Error('习惯打卡记录不存在');
+                throw new Error(i18n("habitCheckInRecordMissing"));
             }
 
             // 获取打卡条目
             const entries = Array.isArray(checkIn.entries) ? checkIn.entries : [];
             if (!entries[checkInIndex]) {
-                throw new Error('习惯打卡条目索引不存在');
+                throw new Error(i18n("habitCheckInIndexMissing"));
             }
 
             let newStartDate = info.event.start;
@@ -3292,12 +3294,12 @@ export class CalendarView {
                 newStartDate = this.snapToMinutes(newStartDate, 5);
             }
             if (!newStartDate) {
-                throw new Error('习惯打卡时间缺少开始时间');
+                throw new Error(i18n("habitCheckInStartMissing"));
             }
 
             const { dateStr: newDateStr, timeStr: newTimeStr } = getLocalDateTime(newStartDate);
             if (!newTimeStr) {
-                throw new Error('习惯打卡时间缺少时间');
+                throw new Error(i18n("habitCheckInTimeMissing"));
             }
 
             // 更新打卡条目的 timestamp (格式: "YYYY-MM-DD HH:mm")
@@ -3332,7 +3334,7 @@ export class CalendarView {
             window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
             showMessage(i18n("habitCheckInTimeUpdated") || '打卡时间已更新');
         } catch (error) {
-            console.error('更新习惯打卡时间失败:', error);
+            console.error("Failed to update habit check-in time:", error);
             showMessage(i18n("operationFailed"));
             info.revert();
         }
@@ -3369,25 +3371,25 @@ export class CalendarView {
             }
 
             if (!newStartDate || !newEndDate) {
-                throw new Error('提醒时间事件缺少开始或结束时间');
+                throw new Error(i18n("reminderEventRangeMissing"));
             }
 
             const { dateStr: startDateStr, timeStr: startTimeStr } = getLocalDateTime(newStartDate);
             const { dateStr: endDateStr, timeStr: endTimeStr } = getLocalDateTime(newEndDate);
             if (!startTimeStr) {
-                throw new Error('提醒时间事件缺少开始时间');
+                throw new Error(i18n("reminderEventStartMissing"));
             }
 
             if (isRepeated) {
                 const originalReminder = reminderData[originalReminderId];
                 if (!originalReminder) {
-                    throw new Error('重复任务原始数据不存在');
+                    throw new Error(i18n("repeatTaskDataMissing"));
                 }
 
                 const parsedSource = parseReminderInstanceId(sourceEventId);
                 const instanceDate = parsedSource?.instanceDate || info.event.extendedProps.date;
                 if (!instanceDate) {
-                    throw new Error('重复任务实例日期不存在');
+                    throw new Error(i18n("repeatInstanceDateMissing"));
                 }
 
                 const existingState = getRepeatInstanceState(originalReminder, instanceDate);
@@ -3395,7 +3397,7 @@ export class CalendarView {
                 const reminderTimes = Array.isArray(reminderTimesSource) ? JSON.parse(JSON.stringify(reminderTimesSource)) : [];
 
                 if (!reminderTimes[reminderIndex]) {
-                    throw new Error('提醒时间索引不存在');
+                    throw new Error(i18n("reminderIndexMissing"));
                 }
 
                 const entry = reminderTimes[reminderIndex];
@@ -3439,20 +3441,20 @@ export class CalendarView {
                     try {
                         await this.plugin.updateMobileNotification(originalReminder);
                     } catch (e) {
-                        console.warn('更新重复提醒移动端通知失败:', e);
+                        console.warn("Failed to update recurring reminder mobile notifications:", e);
                     }
                 }
             } else {
                 const reminder = reminderData[originalReminderId || sourceEventId || info.event.id];
                 if (!reminder) {
-                    throw new Error('任务数据不存在');
+                    throw new Error(i18n("reminderDataNotExist"));
                 }
 
                 const reminderTimesSource = reminder.reminderTimes;
                 const reminderTimes = Array.isArray(reminderTimesSource) ? JSON.parse(JSON.stringify(reminderTimesSource)) : [];
 
                 if (!reminderTimes[reminderIndex]) {
-                    throw new Error('提醒时间索引不存在');
+                    throw new Error(i18n("reminderIndexMissing"));
                 }
 
                 const entry = reminderTimes[reminderIndex];
@@ -3495,7 +3497,7 @@ export class CalendarView {
                     try {
                         await this.plugin.updateMobileNotification(reminder);
                     } catch (e) {
-                        console.warn('更新提醒移动端通知失败:', e);
+                        console.warn("Failed to update reminder mobile notifications:", e);
                     }
                 }
             }
@@ -3504,7 +3506,7 @@ export class CalendarView {
             window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
             showMessage(i18n("instanceTimeUpdated") || '提醒时间已更新');
         } catch (error) {
-            console.error('更新提醒时间失败:', error);
+            console.error("Failed to update reminder time:", error);
             showMessage(i18n("operationFailed"));
             info.revert();
         }
@@ -3570,7 +3572,7 @@ export class CalendarView {
                         try {
                             await this.plugin.updateMobileNotification(originalReminder);
                         } catch (e) {
-                            console.warn('删除重复提醒后更新移动端通知失败:', e);
+                            console.warn("Failed to update mobile notifications after deleting recurring reminder:", e);
                         }
                     }
                 } else {
@@ -3597,7 +3599,7 @@ export class CalendarView {
                         try {
                             await this.plugin.updateMobileNotification(reminder);
                         } catch (e) {
-                            console.warn('删除提醒后更新移动端通知失败:', e);
+                            console.warn("Failed to update mobile notifications after deleting reminder:", e);
                         }
                     }
                 }
@@ -3627,7 +3629,7 @@ export class CalendarView {
             }
 
         } catch (error) {
-            console.error('删除提醒时间失败:', error);
+            console.error("Failed to delete reminder time:", error);
             showMessage(i18n("operationFailed"));
         }
     }
@@ -3964,7 +3966,7 @@ export class CalendarView {
                     const isIgnoredToday = reminder && Array.isArray(reminder.todayIgnored) && reminder.todayIgnored.includes(todayStr);
                     menu.addItem({
                         iconHTML: isIgnoredToday ? "↩️" : "⭕",
-                        label: isIgnoredToday ? (i18n("undoDailyDessertIgnore") || "取消今日忽略") : (i18n("todayIgnored") ? i18n("todayIgnored").replace('⭕ ', '') : "今日忽略"),
+                        label: isIgnoredToday ? (i18n("undoDailyDessertIgnore") || "取消今日忽略") : (i18n("todayIgnored") ? i18n("todayIgnored").replace('⭕ ', '') : i18n("ignoreForToday")),
                         click: () => {
                             this.toggleEventTodayIgnored(calendarEvent, todayStr);
                         }
@@ -4335,7 +4337,7 @@ export class CalendarView {
             await this.refreshEvents();
             window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
         } catch (err) {
-            console.error('设置基准日期失败:', err);
+            console.error("Failed to set base date:", err);
             showMessage(i18n("operationFailed"));
         }
     }
@@ -4366,7 +4368,7 @@ export class CalendarView {
             await this.refreshEvents();
             window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
         } catch (err) {
-            console.error('设置结束日期失败:', err);
+            console.error("Failed to set end date:", err);
             showMessage(i18n("operationFailed"));
         }
     }
@@ -4397,7 +4399,7 @@ export class CalendarView {
             window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
             showMessage(i18n("instanceTimeUpdated") || "实例时间已更新");
         } catch (err) {
-            console.error('设置实例日期失败:', err);
+            console.error("Failed to set instance date:", err);
             showMessage(i18n("operationFailed"));
         }
     }
@@ -4426,7 +4428,7 @@ export class CalendarView {
             window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
             showMessage(i18n("instanceTimeUpdated") || "实例时间已更新");
         } catch (err) {
-            console.error('设置实例结束日期失败:', err);
+            console.error("Failed to set instance end date:", err);
             showMessage(i18n("operationFailed"));
         }
     }
@@ -4461,7 +4463,7 @@ export class CalendarView {
                     await this.setReminderBaseDate(targetId, newDate);
                 }
             } catch (err) {
-                console.error('快速调整开始日期失败:', err);
+                console.error("Failed to quickly adjust start date:", err);
                 showMessage(i18n("operationFailed"));
             }
         };
@@ -4475,7 +4477,7 @@ export class CalendarView {
                     await this.setReminderEndDate(targetId, newDate);
                 }
             } catch (err) {
-                console.error('快速调整结束日期失败:', err);
+                console.error("Failed to quickly adjust end date:", err);
                 showMessage(i18n("operationFailed"));
             }
         };
@@ -4530,17 +4532,17 @@ export class CalendarView {
     private async updatePomodoroRecordTimeEvent(info: any, isResize: boolean) {
         try {
             if (info.event.allDay) {
-                throw new Error('番茄钟记录不支持拖到全天区域');
+                throw new Error(i18n("pomodoroCannotMoveToAllDay"));
             }
 
             const session = this.getPomodoroSessionFromCalendarEvent(info.event);
             if (!session) {
-                throw new Error('番茄钟记录不存在');
+                throw new Error(i18n("pomodoroRecordMissing"));
             }
 
             let nextStartTime = info.event.start ? new Date(info.event.start) : null;
             if (!nextStartTime || Number.isNaN(nextStartTime.getTime())) {
-                throw new Error('缺少番茄钟开始时间');
+                throw new Error(i18n("pomodoroStartMissing"));
             }
             nextStartTime = this.snapToMinutes(nextStartTime, 5);
 
@@ -4577,7 +4579,7 @@ export class CalendarView {
 
             const success = await this.pomodoroRecordManager.updateSession(updatedSession);
             if (!success) {
-                throw new Error('保存番茄钟记录失败');
+                throw new Error(i18n("savePomodoroRecordFailed"));
             }
 
             info.event.setStart(nextStartTime);
@@ -4589,7 +4591,7 @@ export class CalendarView {
             this.refreshEvents();
             window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
         } catch (error) {
-            console.error(isResize ? '调整番茄钟时长失败:' : '更新番茄钟时间失败:', error);
+            console.error(isResize ? "Failed to adjust pomodoro duration:" : "Failed to update pomodoro time:", error);
             showMessage(i18n("operationFailed"));
             info.revert?.();
         }
@@ -4613,9 +4615,9 @@ export class CalendarView {
                     <div class="b3-form__group">
                         <label class="b3-form__label">${i18n("sessionType") || "会话类型"}</label>
                         <select id="calendarEditSessionType" class="b3-select" style="width: 100%;">
-                            <option value="work">🍅 工作番茄</option>
-                            <option value="shortBreak">☕ 短休息</option>
-                            <option value="longBreak">🌴 长休息</option>
+                            <option value="work">${i18n("pomodoroWorkType")}</option>
+                            <option value="shortBreak">${i18n("pomodoroShortBreakType")}</option>
+                            <option value="longBreak">${i18n("pomodoroLongBreakType")}</option>
                         </select>
                     </div>
                     <div class="b3-form__group">
@@ -4628,7 +4630,7 @@ export class CalendarView {
                     </div>
                     <div class="b3-form__group">
                         <label class="b3-form__label">${i18n("pomodoroNote") || "番茄备注"}</label>
-                        <textarea id="calendarEditSessionNote" class="b3-text-field" rows="3" style="width: 100%; resize: vertical;" placeholder="这次专注完成了什么？">${this.escapeHtml(session.note || "")}</textarea>
+                        <textarea id="calendarEditSessionNote" class="b3-text-field" rows="3" style="width: 100%; resize: vertical;" placeholder="${i18n("pomodoroNotePlaceholder")}">${this.escapeHtml(session.note || "")}</textarea>
                     </div>
                     <div class="b3-dialog__action">
                         <button class="b3-button b3-button--cancel">${i18n("cancel")}</button>
@@ -4702,7 +4704,7 @@ export class CalendarView {
                 await this.refreshEvents();
                 window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
             } catch (error) {
-                console.error("修改番茄钟失败:", error);
+                console.error("Failed to modify pomodoro timer:", error);
                 showMessage("❌ " + (i18n("editPomodoroFailed") || "修改番茄钟失败"), 3000, "error");
             }
         });
@@ -4735,7 +4737,7 @@ export class CalendarView {
                         await this.plugin.updateMobileNotification(updatedHabit, oldHabitSnapshot, 7);
                     }
                 } catch (e) {
-                    console.warn('更新习惯移动端通知失败:', e);
+                    console.warn("Failed to update habit mobile notifications:", e);
                 }
 
                 window.dispatchEvent(new CustomEvent('habitUpdated'));
@@ -4743,7 +4745,7 @@ export class CalendarView {
             }, this.plugin);
             await dialog.show();
         } catch (error) {
-            console.error('打开习惯编辑失败:', error);
+            console.error("Failed to open habit editor:", error);
             showMessage(i18n("habitSaveFailed") || "保存习惯失败", 3000, 'error');
         }
     }
@@ -4770,7 +4772,7 @@ export class CalendarView {
             }, this.plugin);
             dialog.show();
         } catch (error) {
-            console.error('打开习惯统计失败:', error);
+            console.error("Failed to open habit statistics:", error);
             showMessage(i18n("operationFailed") || "操作失败", 3000, 'error');
         }
     }
@@ -4800,7 +4802,7 @@ export class CalendarView {
             }, this.plugin);
             dialog.show();
         } catch (error) {
-            console.error('打开当天习惯打卡数据失败:', error);
+            console.error("Failed to open today's habit check-in data:", error);
             showMessage(i18n("operationFailed") || "操作失败", 3000, 'error');
         }
     }
@@ -4995,7 +4997,7 @@ export class CalendarView {
             await this.refreshEvents(true);
             showMessage(`${i18n("checkInSuccess")}${emojiConfig.emoji}` + (note ? ` - ${note}` : ''));
         } catch (error) {
-            console.error('日历视图习惯打卡失败:', error);
+            console.error("Habit check-in failed in calendar view:", error);
             showMessage(i18n("checkInFailed") || "打卡失败", 3000, 'error');
         }
     }
@@ -5053,7 +5055,7 @@ export class CalendarView {
             );
             editDialog.show();
         } catch (error) {
-            console.error('打开实例编辑对话框失败:', error);
+            console.error("Failed to open instance edit dialog:", error);
             showMessage(i18n("openModifyDialogFailed"));
         }
     }
@@ -5090,7 +5092,7 @@ export class CalendarView {
                     showMessage(i18n("instanceDeleted"));
                     window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
                 } catch (error) {
-                    console.error('删除重复实例失败:', error);
+                    console.error("Failed to delete repeat instance:", error);
                     showMessage(i18n("deleteInstanceFailed"));
                 }
             }
@@ -5103,7 +5105,7 @@ export class CalendarView {
 
             if (reminderData[originalId]) {
                 if (!reminderData[originalId].repeat) {
-                    throw new Error('不是重复事件');
+                    throw new Error(i18n("notRecurringEvent"));
                 }
 
                 // 初始化排除日期列表
@@ -5119,10 +5121,10 @@ export class CalendarView {
                 await saveReminders(this.plugin, reminderData);
                 await this.refreshRecurringMobileNotifications(reminderData, [originalId]);
             } else {
-                throw new Error('原始事件不存在');
+                throw new Error(i18n("originalEventMissing"));
             }
         } catch (error) {
-            console.error('添加排除日期失败:', error);
+            console.error("Failed to add excluded date:", error);
             throw error;
         }
     }
@@ -5131,7 +5133,7 @@ export class CalendarView {
         try {
             // 检查是否有绑定的块ID
             if (!calendarEvent.extendedProps.blockId) {
-                showMessage(i18n("unboundReminder") + "，请先绑定到块");
+                showMessage(i18n("unboundReminder") + i18n("bindBlockFirstSuffix"));
                 return;
             }
 
@@ -5170,7 +5172,7 @@ export class CalendarView {
             // showMessage("块引已复制到剪贴板");
 
         } catch (error) {
-            console.error('复制块引失败:', error);
+            console.error("Failed to copy block reference:", error);
             showMessage(i18n("operationFailed"));
         }
     }
@@ -5202,7 +5204,7 @@ export class CalendarView {
             showMessage(i18n("eventTitleCopied") || "事件标题已复制到剪贴板");
 
         } catch (error) {
-            console.error('复制事件标题失败:', error);
+            console.error("Failed to copy event title:", error);
             showMessage(i18n("operationFailed"));
         }
     }
@@ -5278,7 +5280,7 @@ export class CalendarView {
             showMessage(i18n("copyCreated") || "副本已创建");
 
         } catch (error) {
-            console.error('创建副本失败:', error);
+            console.error("Failed to create duplicate:", error);
             showMessage(i18n("operationFailed"));
         }
     }
@@ -5317,7 +5319,7 @@ export class CalendarView {
                 showMessage(i18n("prioritySet", { priority: priorityNames[priority] }));
             }
         } catch (error) {
-            console.error('设置优先级失败:', error);
+            console.error("Failed to set priority:", error);
             showMessage(i18n("setPriorityFailed"));
         }
     }
@@ -5345,7 +5347,7 @@ export class CalendarView {
 
             showMessage(i18n("instanceModified") || "实例已修改");
         } catch (error) {
-            console.error('设置实例优先级失败:', error);
+            console.error("Failed to set instance priority:", error);
             showMessage(i18n("operationFailed"));
         }
     }
@@ -5429,7 +5431,7 @@ export class CalendarView {
                         try {
                             await updateBindBlockAtrrs(blockId, this.plugin);
                         } catch (err) {
-                            console.error('后台更新块属性失败:', err);
+                            console.error("Failed to update block attributes in background:", err);
                         }
                     }
 
@@ -5437,7 +5439,7 @@ export class CalendarView {
                     showMessage(i18n("reminderDeleted"));
                 }
             } catch (error) {
-                console.error('后台删除提醒过程出错:', error);
+                console.error("Error deleting reminder in background:", error);
                 showMessage(i18n("deleteReminderFailed"));
                 // 失败时同步数据回滚显示
                 await this.refreshEvents();
@@ -5451,7 +5453,7 @@ export class CalendarView {
             try {
                 await this.plugin.updateMobileNotification(reminder);
             } catch (e) {
-                console.warn('日历刷新任务移动端通知失败:', reminder?.id || reminderIdForFallback, e);
+                console.warn("Failed to refresh task mobile notifications in calendar:", reminder?.id || reminderIdForFallback, e);
             }
             return;
         }
@@ -5462,7 +5464,7 @@ export class CalendarView {
             try {
                 await this.plugin.cancelMobileNotification(fallbackId);
             } catch (e) {
-                console.warn('日历取消任务移动端通知失败:', fallbackId, e);
+                console.warn("Failed to cancel task mobile notifications in calendar:", fallbackId, e);
             }
         }
     }
@@ -5676,7 +5678,7 @@ export class CalendarView {
             textSpan.style.cursor = 'pointer';
             textSpan.setAttribute('data-type', 'a');
             textSpan.setAttribute('data-href', `siyuan://blocks/${props.blockId}`);
-            textSpan.classList.add('ariaLabel'); textSpan.setAttribute('aria-label', '已绑定块');
+            textSpan.classList.add('ariaLabel'); textSpan.setAttribute('aria-label', i18n("boundToBlock"));
 
             titleEl.appendChild(textSpan);
         } else {
@@ -5767,7 +5769,7 @@ export class CalendarView {
 
         // 如果是子任务，优先显示父任务信息
         if (props.parentId && props.parentTitle) {
-            labelText = `↪️ 父任务: ${props.parentTitle}`;
+            labelText = i18n("parentTaskWithArrow", { title: String(props.parentTitle) });
         }
 
         if (this.showCategoryAndProject) {
@@ -5992,8 +5994,8 @@ export class CalendarView {
                 }
             }
         } catch (error) {
-            console.error('切换事件完成状态失败:', error);
-            showMessage('切换完成状态失败，请重试');
+            console.error("Failed to toggle event completion:", error);
+            showMessage(i18n("toggleCompletionFailed"));
         }
     }
 
@@ -6021,10 +6023,10 @@ export class CalendarView {
 
                 window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
                 await this.refreshEvents();
-                showMessage(isCurrentlyIgnored ? (i18n("undoDailyDessertIgnore") || "已取消今日忽略") : "今日已忽略该任务");
+                showMessage(isCurrentlyIgnored ? (i18n("undoDailyDessertIgnore") || "已取消今日忽略") : i18n("taskIgnoredToday"));
             }
         } catch (e) {
-            console.error("切换今日忽略失败", e);
+            console.error("Failed to toggle ignore-today state", e);
             showMessage(i18n("operationFailed"));
         }
     }
@@ -6354,7 +6356,7 @@ export class CalendarView {
             window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
 
         } catch (error) {
-            console.error('全天事件重排序失败:', error);
+            console.error("Failed to reorder all-day events:", error);
             showMessage(i18n("operationFailed"));
         }
     }
@@ -6441,7 +6443,7 @@ export class CalendarView {
                 try {
                     openBlock(originalReminder.blockId);
                 } catch (error) {
-                    console.error('打开笔记失败:', error);
+                    console.error("Failed to open note:", error);
                     showMessage(i18n("openNoteFailed"));
                 }
             }
@@ -6463,7 +6465,7 @@ export class CalendarView {
         try {
             openBlock(blockId);
         } catch (error) {
-            console.error('打开笔记失败:', error);
+            console.error("Failed to open note:", error);
             const deleteReminderId = info.event.extendedProps?.type === 'reminderTime'
                 ? (info.event.extendedProps.originalId || info.event.id)
                 : info.event.id;
@@ -6693,7 +6695,7 @@ export class CalendarView {
             // 获取时间网格滚动容器
             const timeGridScroller = calendarEl.querySelector('.fc-scroller.fc-scroller-liquid-absolute') as HTMLElement;
             if (!timeGridScroller) {
-                console.warn('未找到时间网格滚动容器');
+                console.warn("Time grid scroll container not found");
                 return;
             }
 
@@ -6886,7 +6888,7 @@ export class CalendarView {
             window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
 
         } catch (error) {
-            console.error('更新重复事件系列失败:', error);
+            console.error("Failed to update recurring event series:", error);
             showMessage(i18n("operationFailed"));
             info.revert();
         }
@@ -7161,7 +7163,7 @@ export class CalendarView {
             window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
 
         } catch (error) {
-            console.error('更新单个实例失败:', error);
+            console.error("Failed to update single instance:", error);
             showMessage(i18n("updateInstanceFailed"));
             info.revert();
         }
@@ -7406,10 +7408,10 @@ export class CalendarView {
                 await saveReminders(this.plugin, reminderData);
 
             } else {
-                throw new Error('提醒数据不存在');
+                throw new Error(i18n("reminderDataMissing"));
             }
         } catch (error) {
-            console.error(isResize ? '调整事件大小失败:' : '更新事件时间失败:', error);
+            console.error(isResize ? "Failed to resize event:" : "Failed to update event time:", error);
             showMessage(i18n("operationFailed"));
             if (info?.revert) info.revert();
         }
@@ -7420,18 +7422,18 @@ export class CalendarView {
             const props = info.event.extendedProps || {};
             const reminderId = props.originalId || props.eventId;
             if (!reminderId) {
-                throw new Error('缺少任务ID');
+                throw new Error(i18n("taskIdMissing"));
             }
 
             const reminderData = await getAllReminders(this.plugin);
             const reminder = reminderData[reminderId];
             if (!reminder) {
-                throw new Error('提醒数据不存在');
+                throw new Error(i18n("reminderDataMissing"));
             }
 
             let newCompletedDate = info.event.end || info.event.start;
             if (!newCompletedDate) {
-                throw new Error('缺少新的完成时间');
+                throw new Error(i18n("completionTimeMissing"));
             }
             newCompletedDate = this.snapToMinutes(newCompletedDate, 5);
             const newCompletedTime = getLocalDateTimeString(newCompletedDate);
@@ -7454,7 +7456,7 @@ export class CalendarView {
             window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
             showMessage(i18n("operationSuccess") || "操作成功");
         } catch (error) {
-            console.error('更新完成时间失败:', error);
+            console.error("Failed to update completion time:", error);
             showMessage(i18n("operationFailed"));
             if (info?.revert) info.revert();
         }
@@ -7473,7 +7475,7 @@ export class CalendarView {
                 return newStartDate > now;
             }
         } catch (error) {
-            console.error('检查通知重置条件失败:', error);
+            console.error("Failed to check notification reset conditions:", error);
             return false;
         }
     }
@@ -7488,7 +7490,7 @@ export class CalendarView {
             const originalReminder = reminderData[originalId];
 
             if (!originalReminder) {
-                throw new Error('原始事件不存在');
+                throw new Error(i18n("originalEventMissing"));
             }
 
             // 如果修改了日期，需要清理可能存在的中间修改记录
@@ -7520,7 +7522,7 @@ export class CalendarView {
             await saveReminders(this.plugin, reminderData);
 
         } catch (error) {
-            console.error('保存实例修改失败:', error);
+            console.error("Failed to save instance changes:", error);
             throw error;
         }
     }
@@ -7656,7 +7658,7 @@ export class CalendarView {
                 showMessage(i18n("reminderDataNotExist"));
             }
         } catch (error) {
-            console.error('打开修改对话框失败:', error);
+            console.error("Failed to open modification dialog:", error);
             showMessage(i18n("openModifyDialogFailed"));
         }
     }
@@ -7698,7 +7700,7 @@ export class CalendarView {
                 showMessage(i18n("reminderDataNotExist"));
             }
         } catch (error) {
-            console.error('打开系列修改对话框失败:', error);
+            console.error("Failed to open series modification dialog:", error);
             showMessage(i18n("openModifyDialogFailed"));
         }
     }
@@ -7734,7 +7736,7 @@ export class CalendarView {
                 showMessage(calendarEvent.allDay ? i18n("changedToTimed") : i18n("changedToAllDay"));
             }
         } catch (error) {
-            console.error('切换全天事件失败:', error);
+            console.error("Failed to toggle all-day event:", error);
             showMessage(i18n("toggleAllDayFailed"));
         }
     }
@@ -8032,7 +8034,7 @@ export class CalendarView {
                     });
                 }
             } catch (error) {
-                console.error('刷新事件失败:', error);
+                console.error("Failed to refresh events:", error);
             } finally {
                 this.isRefreshingEvents = false;
                 const pending = this.refreshPending;
@@ -8541,7 +8543,7 @@ export class CalendarView {
 
             return events;
         } catch (error) {
-            console.error('获取事件数据失败:', error);
+            console.error("Failed to get event data:", error);
             showMessage(i18n("loadReminderDataFailed"));
             return [];
         }
@@ -8667,7 +8669,7 @@ export class CalendarView {
                 groupedHabits.delete(group.id);
             });
         } catch (e) {
-            console.warn('初始化习惯分组失败，回退到默认分组顺序:', e);
+            console.warn("Failed to initialize habit groups; using default group order:", e);
         }
 
         if (groupedHabits.has('none')) {
@@ -8899,7 +8901,7 @@ export class CalendarView {
                 }
             }
         } catch (error) {
-            console.error('加载习惯事件失败:', error);
+            console.error("Failed to load habit events:", error);
         }
     }
 
@@ -9148,7 +9150,7 @@ export class CalendarView {
                             }
                         }
                     } catch (err) {
-                        console.warn(`批量获取文档标题失败 (批次 ${i}-${i + batchSize}):`, err);
+                        console.warn(`Failed to fetch document titles in batch (${i}-${i + batchSize}):`, err);
                     }
                 }
             }
@@ -9168,7 +9170,7 @@ export class CalendarView {
                 }
             }
         } catch (error) {
-            console.warn('批量加载文档标题失败:', error);
+            console.warn("Failed to load document titles in batch:", error);
             // 失败时设置空标题，避免后续重复尝试
             for (const reminder of reminders) {
                 if (!reminder.docTitle) {
@@ -9198,7 +9200,7 @@ export class CalendarView {
                     const customGroups = await this.projectManager.getProjectCustomGroups(projectId);
                     projectCustomGroups.set(projectId, customGroups);
                 } catch (err) {
-                    console.warn(`获取项目 ${projectId} 的自定义分组失败:`, err);
+                    console.warn(`Failed to get custom groups for project ${projectId}:`, err);
                     projectCustomGroups.set(projectId, []);
                 }
             });
@@ -9217,7 +9219,7 @@ export class CalendarView {
                 }
             }
         } catch (error) {
-            console.warn('批量加载自定义分组名称失败:', error);
+            console.warn("Failed to load custom group names in batch:", error);
         }
     }
 
@@ -9331,7 +9333,7 @@ export class CalendarView {
                         }
                     });
                 } catch (e) {
-                    console.warn(`获取项目 ${projectId} 的分组信息失败`, e);
+                    console.warn(`Failed to get group information for project ${projectId}`, e);
                 }
             }
 
@@ -9343,7 +9345,7 @@ export class CalendarView {
                 return true;
             });
         } catch (error) {
-            console.error('过滤已归档分组任务失败', error);
+            console.error("Failed to filter tasks in archived groups", error);
             return reminders;
         }
     }
@@ -10047,7 +10049,7 @@ export class CalendarView {
             }
 
         } catch (error) {
-            console.error('显示事件提示框失败:', error);
+            console.error("Failed to show event tooltip:", error);
             this.hideEventTooltip();
         }
     }
@@ -10403,7 +10405,7 @@ export class CalendarView {
 
                 if (subtasks.length > visibleSubtasks.length) {
                     htmlParts.push(
-                        `<div style="opacity: 0.7;">${this.escapeHtml(`还有 ${subtasks.length - visibleSubtasks.length} 项`)}</div>`
+                        `<div style="opacity: 0.7;">${this.escapeHtml(i18n("moreItems", { count: String(subtasks.length - visibleSubtasks.length) }))}</div>`
                     );
                 }
 
@@ -10513,7 +10515,7 @@ export class CalendarView {
                                 labelText = `${project.name} - ${customGroup.name}`;
                             }
                         } catch (error) {
-                            console.warn('获取自定义分组失败:', error);
+                            console.warn("Failed to get custom groups:", error);
                         }
                     }
                 }
@@ -10666,7 +10668,7 @@ export class CalendarView {
                         }
                     }
                 } catch (error) {
-                    console.error('获取完成时间失败:', error);
+                    console.error("Failed to get completion time:", error);
                 }
 
                 htmlParts.push(
@@ -10704,7 +10706,7 @@ export class CalendarView {
 
                 if (subtasks.length > visibleSubtasks.length) {
                     htmlParts.push(
-                        `<div style="opacity: 0.7;">${this.escapeHtml(`还有 ${subtasks.length - visibleSubtasks.length} 项`)}</div>`
+                        `<div style="opacity: 0.7;">${this.escapeHtml(i18n("moreItems", { count: String(subtasks.length - visibleSubtasks.length) }))}</div>`
                     );
                 }
 
@@ -10715,7 +10717,7 @@ export class CalendarView {
             return htmlParts.join('');
 
         } catch (error) {
-            console.error('构建提示框内容失败:', error);
+            console.error("Failed to build tooltip content:", error);
             return `<div style="color: var(--b3-theme-error);">${i18n("loadFailed")}</div>`;
         }
     }
@@ -10749,7 +10751,7 @@ export class CalendarView {
                 return `${dateStr} ${timeStr}`;
             }
         } catch (error) {
-            console.error('格式化完成时间失败:', error);
+            console.error("Failed to format completion time:", error);
             return completedTime;
         }
     }
@@ -10893,7 +10895,7 @@ export class CalendarView {
             return dateStr;
 
         } catch (error) {
-            console.error('格式化日期时间失败:', error);
+            console.error("Failed to format date/time:", error);
             return reminder.date || reminder.endDate || '';
         }
     }
@@ -10943,7 +10945,7 @@ export class CalendarView {
                     return i18n("repeatEvent");
             }
         } catch (error) {
-            console.error('获取重复描述失败:', error);
+            console.error("Failed to get repeat description:", error);
             return i18n("repeatEvent");
         }
     }
@@ -11075,7 +11077,7 @@ export class CalendarView {
             editDialog.show();
 
         } catch (error) {
-            console.error('分割重复事件系列失败:', error);
+            console.error("Failed to split recurring event series:", error);
             showMessage(i18n("operationFailed"));
         }
     }
@@ -11153,7 +11155,7 @@ export class CalendarView {
             showMessage(i18n("seriesSplitSuccess"));
 
         } catch (error) {
-            console.error('执行分割重复事件系列失败:', error);
+            console.error("Failed to execute recurring event series split:", error);
             showMessage(i18n("operationFailed"));
         }
     }
@@ -11212,7 +11214,7 @@ export class CalendarView {
                     showMessage(i18n("firstOccurrenceSkipped"));
                     window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
                 } catch (error) {
-                    console.error('跳过首次发生失败:', error);
+                    console.error("Failed to skip first occurrence:", error);
                     showMessage(i18n("operationFailed"));
                 }
             }
@@ -11403,7 +11405,7 @@ export class CalendarView {
                     // 刷新日历显示
                     await this.refreshEvents();
                 } catch (error) {
-                    console.error('绑定提醒到块失败:', error);
+                    console.error("Failed to bind reminder to block:", error);
                     showMessage(i18n("bindToBlockFailed"));
                 }
             },
@@ -11431,7 +11433,7 @@ export class CalendarView {
                 await refreshSql();
                 const block = await getBlockByID(blockId);
                 if (!block) {
-                    throw new Error('目标块不存在');
+                    throw new Error(i18n("targetBlockMissing"));
                 }
 
                 // 更新提醒数据
@@ -11445,7 +11447,7 @@ export class CalendarView {
                 if (projectId) {
                     const { addBlockProjectId } = await import('../../api');
                     await addBlockProjectId(blockId, projectId);
-                    console.debug('CalendarView: bindReminderToBlock - 已为块设置项目ID', blockId, projectId);
+                    console.debug("CalendarView: bindReminderToBlock - set project ID on block", blockId, projectId);
                 }
 
                 // 更新块的书签状态（添加⏰书签）
@@ -11454,10 +11456,10 @@ export class CalendarView {
                 // 触发更新事件（标记来源为日历，避免自我触发）
                 window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
             } else {
-                throw new Error('提醒不存在');
+                throw new Error(i18n("reminderMissing"));
             }
         } catch (error) {
-            console.error('绑定提醒到块失败:', error);
+            console.error("Failed to bind reminder to block:", error);
             throw error;
         }
     }
@@ -11504,7 +11506,7 @@ export class CalendarView {
 
     private startPomodoro(calendarEvent: any, workDurationOverride?: number) {
         if (!this.plugin) {
-            showMessage("无法启动番茄钟：插件实例不可用");
+            showMessage(i18n("pomodoroUnavailable"));
             return;
         }
 
@@ -11512,28 +11514,28 @@ export class CalendarView {
         if (this.pomodoroManager.hasActivePomodoroTimer()) {
             // 获取当前番茄钟的状态
             const currentState = this.pomodoroManager.getCurrentState();
-            const currentTitle = currentState.reminderTitle || '当前任务';
-            const newTitle = calendarEvent.title || '新任务';
+            const currentTitle = currentState.reminderTitle || i18n("currentTask");
+            const newTitle = calendarEvent.title || i18n("newTaskTitle");
 
-            let confirmMessage = `当前正在进行番茄钟任务："${currentTitle}"，是否要切换到新任务："${newTitle}"？`;
+            let confirmMessage = i18n("switchPomodoroTaskConfirm", { current: String(currentTitle), next: String(newTitle) });
 
             // 如果当前番茄钟正在运行，先暂停并询问是否继承时间
             if (currentState.isRunning && !currentState.isPaused) {
                 // 先暂停当前番茄钟
                 if (!this.pomodoroManager.pauseCurrentTimer()) {
-                    console.error('暂停当前番茄钟失败');
+                    console.error("Failed to pause current pomodoro timer");
                 }
 
                 const timeDisplay = currentState.isWorkPhase ?
-                    `工作时间 ${Math.floor(currentState.timeElapsed / 60)}:${(currentState.timeElapsed % 60).toString().padStart(2, '0')}` :
-                    `休息时间 ${Math.floor(currentState.timeLeft / 60)}:${(currentState.timeLeft % 60).toString().padStart(2, '0')}`;
+                    i18n("pomodoroWorkElapsed", { minutes: String(Math.floor(currentState.timeElapsed / 60)), seconds: String((currentState.timeElapsed % 60).toString().padStart(2, '0')) }) :
+                    i18n("pomodoroBreakRemaining", { minutes: String(Math.floor(currentState.timeLeft / 60)), seconds: String((currentState.timeLeft % 60).toString().padStart(2, '0')) });
 
-                confirmMessage += `\n\n当前状态: ${timeDisplay}\n\n选择"确定"将继承当前进度继续计时。`;
+                confirmMessage += i18n("pomodoroSwitchCurrentState", { state: String(timeDisplay) });
             }
 
             // 显示确认对话框
             confirm(
-                "切换番茄钟任务",
+                i18n("switchPomodoroTask"),
                 confirmMessage,
                 () => {
                     // 用户确认替换，传递当前状态
@@ -11543,7 +11545,7 @@ export class CalendarView {
                     // 用户取消，尝试恢复原番茄钟的运行状态
                     if (currentState.isRunning && !currentState.isPaused) {
                         if (!this.pomodoroManager.resumeCurrentTimer()) {
-                            console.error('恢复番茄钟运行失败');
+                            console.error("Failed to resume pomodoro timer");
                         }
                     }
                 }
@@ -11557,7 +11559,7 @@ export class CalendarView {
 
     private startPomodoroCountUp(calendarEvent: any) {
         if (!this.plugin) {
-            showMessage("无法启动番茄钟：插件实例不可用");
+            showMessage(i18n("pomodoroUnavailable"));
             return;
         }
 
@@ -11565,24 +11567,24 @@ export class CalendarView {
         if (this.pomodoroManager.hasActivePomodoroTimer()) {
             // 获取当前番茄钟的状态
             const currentState = this.pomodoroManager.getCurrentState();
-            const currentTitle = currentState.reminderTitle || '当前任务';
-            const newTitle = calendarEvent.title || '新任务';
+            const currentTitle = currentState.reminderTitle || i18n("currentTask");
+            const newTitle = calendarEvent.title || i18n("newTaskTitle");
 
-            let confirmMessage = `当前正在进行番茄钟任务："${currentTitle}"，是否要切换到新的正计时任务："${newTitle}"？`;
+            let confirmMessage = i18n("switchCountUpTaskConfirm", { current: String(currentTitle), next: String(newTitle) });
 
             // 如果当前番茄钟正在运行，先暂停并询问是否继承时间
             if (currentState.isRunning && !currentState.isPaused) {
                 // 先暂停当前番茄钟
                 if (!this.pomodoroManager.pauseCurrentTimer()) {
-                    console.error('暂停当前番茄钟失败');
+                    console.error("Failed to pause current pomodoro timer");
                 }
 
-                confirmMessage += `\n\n选择"确定"将继承当前进度继续计时。`;
+                confirmMessage += i18n('pomodoroSwitchProgressHint');
             }
 
             // 显示确认对话框
             confirm(
-                "切换到正计时番茄钟",
+                i18n("switchToStopwatch"),
                 confirmMessage,
                 () => {
                     // 用户确认替换，传递当前状态
@@ -11592,7 +11594,7 @@ export class CalendarView {
                     // 用户取消，尝试恢复番茄钟的运行状态
                     if (currentState.isRunning && !currentState.isPaused) {
                         if (!this.pomodoroManager.resumeCurrentTimer()) {
-                            console.error('恢复番茄钟运行失败');
+                            console.error("Failed to resume pomodoro timer");
                         }
                     }
                 }
@@ -11615,7 +11617,7 @@ export class CalendarView {
 
         if (hasStandaloneWindow) {
             // 如果存在独立窗口，更新独立窗口中的番茄钟
-            console.log('检测到独立窗口，更新独立窗口中的番茄钟');
+            console.log("Standalone window detected; updating pomodoro timer in that window");
 
             // 构建提醒对象
             const reminder = {
@@ -11631,8 +11633,8 @@ export class CalendarView {
 
                 // 如果继承了状态且原来正在运行，显示继承信息
                 if (inheritState && inheritState.isRunning && !inheritState.isPaused) {
-                    const phaseText = inheritState.isWorkPhase ? '工作时间' : '休息时间';
-                    showMessage(`已切换任务并继承${phaseText}进度`, 2000);
+                    const phaseText = inheritState.isWorkPhase ? i18n("workTime") : i18n("breakTime");
+                    showMessage(i18n("switchedTaskPreservingProgress", { phase: String(phaseText) }), 2000);
                 }
             }
         } else {
@@ -11659,8 +11661,8 @@ export class CalendarView {
 
             // 如果继承了状态且原来正在运行，显示继承信息
             if (inheritState && inheritState.isRunning && !inheritState.isPaused) {
-                const phaseText = inheritState.isWorkPhase ? '工作时间' : '休息时间';
-                showMessage(`已切换任务并继承${phaseText}进度`, 2000);
+                const phaseText = inheritState.isWorkPhase ? i18n("workTime") : i18n("breakTime");
+                showMessage(i18n("switchedTaskPreservingProgress", { phase: String(phaseText) }), 2000);
             }
         }
     }
@@ -11673,7 +11675,7 @@ export class CalendarView {
 
         if (hasStandaloneWindow) {
             // 如果存在独立窗口，更新独立窗口中的番茄钟
-            console.log('检测到独立窗口，更新独立窗口中的番茄钟（正计时模式）');
+            console.log("Standalone window detected; updating count-up pomodoro timer in that window");
 
             // 构建提醒对象
             const reminder = {
@@ -11689,15 +11691,15 @@ export class CalendarView {
 
                 // 如果继承了状态且原来正在运行，显示继承信息
                 if (inheritState && inheritState.isRunning && !inheritState.isPaused) {
-                    const phaseText = inheritState.isWorkPhase ? '工作时间' : '休息时间';
-                    showMessage(`已切换到正计时模式并继承${phaseText}进度`, 2000);
+                    const phaseText = inheritState.isWorkPhase ? i18n("workTime") : i18n("breakTime");
+                    showMessage(i18n("switchedCountUpPreservingProgress", { phase: String(phaseText) }), 2000);
                 } else {
-                    showMessage("已启动正计时番茄钟", 2000);
+                    showMessage(i18n("stopwatchStarted"), 2000);
                 }
             }
         } else {
             // 没有独立窗口，在当前窗口显示番茄钟 Dialog（默认行为）
-            console.log('没有独立窗口，在当前窗口显示番茄钟 Dialog（正计时模式）');
+            console.log("No standalone window; showing count-up pomodoro dialog in current window");
 
             // 如果已经有活动的番茄钟，先关闭它
             this.pomodoroManager.closeCurrentTimer();
@@ -11720,10 +11722,10 @@ export class CalendarView {
 
             // 如果继承了状态且原来正在运行，显示继承信息
             if (inheritState && inheritState.isRunning && !inheritState.isPaused) {
-                const phaseText = inheritState.isWorkPhase ? '工作时间' : '休息时间';
-                showMessage(`已切换到正计时模式并继承${phaseText}进度`, 2000);
+                const phaseText = inheritState.isWorkPhase ? i18n("workTime") : i18n("breakTime");
+                showMessage(i18n("switchedCountUpPreservingProgress", { phase: String(phaseText) }), 2000);
             } else {
-                showMessage("已启动正计时番茄钟", 2000);
+                showMessage(i18n("stopwatchStarted"), 2000);
             }
         }
     }
@@ -11740,7 +11742,7 @@ export class CalendarView {
             const projectData = await this.plugin.loadProjectData();
 
             if (!projectData || !projectData[projectId]) {
-                showMessage("项目不存在");
+                showMessage(i18n("projectNotExist"));
                 return;
             }
 
@@ -11749,8 +11751,8 @@ export class CalendarView {
             // 使用openProjectKanbanTab打开项目看板
             this.plugin.openProjectKanbanTab(projectId, project.title);
         } catch (error) {
-            console.error('打开项目看板失败:', error);
-            showMessage("打开项目看板失败");
+            console.error("Failed to open project kanban:", error);
+            showMessage(i18n("openProjectKanbanFailed"));
         }
     }
 
@@ -11870,7 +11872,7 @@ export class CalendarView {
             // 如果配置无效，返回默认值（周一）
             return 1;
         } catch (error) {
-            console.error('获取周开始日设置失败:', error);
+            console.error("Failed to get week start setting:", error);
             // 出错时返回默认值（周一）
             return 1;
         }
@@ -11939,7 +11941,7 @@ export class CalendarView {
         // 周视图追加 ISO 周数
         if (viewType.includes('Week')) {
             const weekNum = this.getISOWeekNumber(start);
-            title = `${title} (第${weekNum}周)`;
+            title = i18n("calendarWeekTitle", { title: String(title), week: String(weekNum) });
         }
 
         return title;
@@ -11961,7 +11963,7 @@ export class CalendarView {
             // 如果配置无效，返回默认值
             return '06:00';
         } catch (error) {
-            console.error('获取一天起始时间设置失败:', error);
+            console.error("Failed to get day start time setting:", error);
             // 出错时返回默认值
             return '06:00';
         }
@@ -11984,7 +11986,7 @@ export class CalendarView {
             // 如果配置无效，返回默认值
             return '00:00';
         } catch (error) {
-            console.error('获取逻辑一天起始时间设置失败:', error);
+            console.error("Failed to get logical day start time setting:", error);
             // 出错时返回默认值
             return '00:00';
         }
@@ -12016,7 +12018,7 @@ export class CalendarView {
 
             return `${formattedHours}:${formattedMinutes}`;
         } catch (error) {
-            console.error('计算 slotMaxTime 失败:', error);
+            console.error("Failed to calculate slotMaxTime:", error);
             return '24:00';
         }
     }
@@ -12096,7 +12098,7 @@ export class CalendarView {
 
             return ranges;
         } catch (e) {
-            console.error('计算折叠时间段失败:', e);
+            console.error("Failed to calculate collapsed time ranges:", e);
             return [];
         }
     }

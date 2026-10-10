@@ -172,7 +172,7 @@ export class PomodoroRecordManager {
                 this.records = content;
             } else {
                 // 如果返回的是错误对象或包含错误信息，则初始化为空记录
-                console.log('番茄钟记录文件不存在或格式错误，初始化空记录');
+                console.log("Pomodoro record file is missing or malformed; initializing empty records");
                 this.records = {};
                 await this.saveRecords();
             }
@@ -180,7 +180,7 @@ export class PomodoroRecordManager {
             // 确保每个日期记录都有 sessions 数组，并构建索引
             this.buildStatsIndex();
         } catch (error) {
-            console.log('番茄钟记录文件不存在，初始化空记录');
+            console.log("Pomodoro record file is missing; initializing empty records");
             this.records = {};
             this.eventStats = {};
         } finally {
@@ -250,7 +250,7 @@ export class PomodoroRecordManager {
                 }
             }
         } catch (error) {
-            console.error('保存番茄钟记录失败:', error);
+            console.error("Failed to save pomodoro records:", error);
         } finally {
             this.isSaving = false;
         }
@@ -296,7 +296,7 @@ export class PomodoroRecordManager {
         const logicalDate = getLogicalDateString(startTime);
         this.ensureTodayRecord(logicalDate);
 
-        // console.log('记录工作会话前:', JSON.stringify(this.records[today]));
+        // console.log('Before recording work session:', JSON.stringify(this.records[today]));
 
         const count = this.calculateWorkSessionCount(roundedWorkMinutes, plannedDuration, completed, isCountUp);
 
@@ -327,7 +327,7 @@ export class PomodoroRecordManager {
         // 更新索引，使用取整后的分钟数
         this.updateStatsIndex(eventId, count, roundedWorkMinutes);
 
-        // console.log('记录工作会话后:', JSON.stringify(this.records[today]));
+        // console.log('After recording work session:', JSON.stringify(this.records[today]));
 
         await this.saveRecords([logicalDate]);
         return session;
@@ -354,7 +354,7 @@ export class PomodoroRecordManager {
         const logicalDate = getLogicalDateString(startTime);
         this.ensureTodayRecord(logicalDate);
 
-        // console.log('记录休息会话前:', JSON.stringify(this.records[today]));
+        // console.log('Before recording break session:', JSON.stringify(this.records[today]));
 
         // 创建详细的会话记录
         const session: PomodoroSession = {
@@ -376,7 +376,7 @@ export class PomodoroRecordManager {
         // 更新统计数据
         this.records[logicalDate].totalBreakTime += roundedBreakMinutes;
 
-        // console.log('记录休息会话后:', JSON.stringify(this.records[today]));
+        // console.log('After recording break session:', JSON.stringify(this.records[today]));
 
         await this.saveRecords([logicalDate]);
     }
@@ -645,7 +645,7 @@ export class PomodoroRecordManager {
 
             return total;
         } catch (error) {
-            console.error('获取提醒及子任务累计番茄数量失败:', error);
+            console.error("Failed to get total pomodoro count for reminder and subtasks:", error);
             return 0;
         }
     }
@@ -708,7 +708,7 @@ export class PomodoroRecordManager {
             });
             return totalMinutes;
         } catch (error) {
-            console.error('获取提醒及子任务累计专注时长失败:', error);
+            console.error("Failed to get total focus duration for reminder and subtasks:", error);
             return 0;
         }
     }
@@ -740,7 +740,7 @@ export class PomodoroRecordManager {
      */
     async refreshData(force: boolean = false) {
         if (this.isSaving || this.isLoading) {
-            console.log('正在进行文件操作，跳过刷新');
+            console.log("File operation in progress; skipping refresh");
             return;
         }
 
@@ -1028,7 +1028,7 @@ export class PomodoroRecordManager {
                     this.records[logicalDate].totalBreakTime += session.duration;
                 }
             } catch (error) {
-                console.error('处理会话时出错:', session, error);
+                console.error("Error processing session:", session, error);
             }
         }
 
@@ -1094,7 +1094,7 @@ export class PomodoroRecordManager {
                 totalRepeatingFocusTime
             };
         } catch (error) {
-            console.error('解析番茄钟统计数据失败:', error, reminder);
+            console.error("Failed to parse pomodoro statistics:", error, reminder);
             return {
                 pomodoroCount: 0,
                 focusTime: 0,

@@ -188,11 +188,11 @@ export class StatusManageDialog {
         try {
             await this.statusManager.updateStatus(status.id, { includeInBadge } as any);
             status.includeInBadge = includeInBadge;
-            showMessage(includeInBadge ? "已计入项目徽章" : "已从项目徽章排除");
+            showMessage(includeInBadge ? i18n("projectBadgeIncluded") : i18n("projectBadgeExcluded"));
             window.dispatchEvent(new CustomEvent('projectUpdated'));
         } catch (error) {
-            console.error("更新状态徽章计数配置失败", error);
-            showMessage("更新徽章计数配置失败，请重试");
+            console.error("Failed to update status badge count configuration", error);
+            showMessage(i18n("projectBadgeUpdateFailed"));
             this.renderStatuses();
         }
     }
@@ -210,7 +210,7 @@ export class StatusManageDialog {
                 statusesList.appendChild(statusEl);
             });
         } catch (error) {
-            console.error(i18n("loadStatusesFailed") || "加载状态失败", error);
+            console.error("Failed to load statuses", error);
             statusesList.innerHTML = `<div class="status-error">${i18n("loadStatusesFailed") || "加载状态失败"}</div>`;
         }
     }
@@ -223,15 +223,15 @@ export class StatusManageDialog {
         statusEl.draggable = true;
         statusEl.dataset.statusId = status.id;
         statusEl.innerHTML = `
-            <div class="status-drag-handle ariaLabel" aria-label="拖拽排序"></div>
+            <div class="status-drag-handle ariaLabel" aria-label="${i18n("dragToSort")}"></div>
             <div class="status-info">
                 <div class="status-icon">${status.icon || '📝'}</div>
                 <div class="status-name">${status.name}</div>
             </div>
             <div class="status-actions">
-                <label class="status-count-switch ariaLabel" aria-label="是否计入项目徽章">
+                <label class="status-count-switch ariaLabel" aria-label="${i18n("includeInProjectBadge")}">
                     <input type="checkbox" class="b3-switch" data-action="toggle-badge" ${includeInBadge ? 'checked' : ''}>
-                    <span>计数</span>
+                    <span>${i18n("countLabel")}</span>
                 </label>
                 <button class="b3-button b3-button--outline status-edit-btn ariaLabel" data-action="edit" data-id="${status.id}" aria-label="${i18n("editStatus") || "编辑状态"}">
                     <svg class="b3-button__icon"><use xlink:href="#iconEdit"></use></svg>
@@ -368,10 +368,10 @@ export class StatusManageDialog {
 
             await this.statusManager.reorderStatuses(reorderedStatuses);
             this.renderStatuses();
-            showMessage("状态排序已更新");
+            showMessage(i18n("statusSortUpdated"));
         } catch (error) {
-            console.error("重新排序状态失败", error);
-            showMessage("排序更新失败，请重试");
+            console.error("Failed to reorder statuses", error);
+            showMessage(i18n("sortUpdateFailedRetry"));
         }
     }
 
@@ -392,10 +392,10 @@ export class StatusManageDialog {
                             <div id="statusIcon" class="status-icon-display">${status?.icon || '📝'}</div>
                         </div>
                         <div class="b3-form__group">
-                            <label class="b3-form__label">项目徽章计数</label>
+                            <label class="b3-form__label">${i18n("projectBadgeCountLabel")}</label>
                             <label class="status-badge-checkbox">
                                 <input type="checkbox" class="b3-switch" id="statusIncludeInBadge" ${initialIncludeInBadge ? 'checked' : ''}>
-                                <span>该状态项目计入侧栏项目徽章</span>
+                                <span>${i18n("projectStatusCountsInBadge")}</span>
                             </label>
                         </div>
                     </div>
@@ -485,7 +485,7 @@ export class StatusManageDialog {
                 this.renderStatuses();
                 window.dispatchEvent(new CustomEvent('projectUpdated'));
             } catch (error) {
-                console.error("保存状态失败", error);
+                console.error("Failed to save statuses", error);
                 showMessage(i18n("saveStatusFailed") || "保存状态失败，请重试");
             }
         });
@@ -506,7 +506,7 @@ export class StatusManageDialog {
                     showMessage(i18n("statusDeleted") || "状态已删除");
                     this.renderStatuses();
                 } catch (error) {
-                    console.error(i18n("deleteStatusFailed") || "删除状态失败", error);
+                    console.error("Failed to delete status", error);
                     showMessage(i18n("deleteStatusFailed") || "删除状态失败");
                 }
             }
@@ -523,7 +523,7 @@ export class StatusManageDialog {
                     showMessage(i18n("statusesReset") || "状态已重置");
                     this.renderStatuses();
                 } catch (error) {
-                    console.error(i18n("resetStatusesFailed") || "重置状态失败", error);
+                    console.error("Failed to reset statuses", error);
                     showMessage(i18n("resetStatusesFailed") || "重置状态失败");
                 }
             }

@@ -15,21 +15,21 @@ const DOCK_BADGE_CONFIGS: Record<DockBadgeType, DockBadgeConfig> = {
         badgeClass: "TN-reminder-dock-badge",
         badgeColor: "var(--b3-theme-error)",
         settingKey: "enableReminderDockBadge",
-        displayName: "提醒"
+        displayName: "reminder"
     },
     project: {
         dockKey: "TN_project_dock",
         badgeClass: "TN-project-dock-badge",
         badgeColor: "#2c6a2e",
         settingKey: "enableProjectDockBadge",
-        displayName: "项目"
+        displayName: "project"
     },
     habit: {
         dockKey: "TN_habit_dock",
         badgeClass: "TN-habit-dock-badge",
         badgeColor: "var(--b3-theme-primary)",
         settingKey: "enableHabitDockBadge",
-        displayName: "习惯"
+        displayName: "habit"
     }
 };
 
@@ -129,7 +129,7 @@ async function resolveProjectBadgeCount(fallbackCount: number): Promise<number> 
 
         return count;
     } catch (error) {
-        console.warn("按状态配置计算项目停靠栏徽章失败，回退默认计数:", error);
+        console.warn("Failed to calculate project dock badge from status configuration; using default count:", error);
         return fallbackCount;
     }
 }
@@ -158,7 +158,7 @@ export async function setDockBadgeByType(options: {
         const dockIcon = await plugin.whenElementExist(selector);
         applyDockBadge(dockIcon, config, finalCount);
     } catch (error) {
-        console.warn(`设置${config.displayName}停靠栏徽章失败:`, error);
+        console.warn(`Failed to set ${config.displayName} dock badge:`, error);
         const dockIcon = document.querySelector(selector);
         if (!dockIcon) return;
         applyDockBadge(dockIcon, config, finalCount);

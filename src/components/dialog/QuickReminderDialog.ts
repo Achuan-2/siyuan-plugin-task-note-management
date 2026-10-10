@@ -714,7 +714,7 @@ export class QuickReminderDialog {
                 instanceDate: this.instanceDate,
                 isInstance: true,
                 isRepeatInstance: true,
-                title: instanceState.title || this.reminder.title || '(无标题)'
+                title: instanceState.title || this.reminder.title || i18n("untitledInParentheses")
             };
             this.defaultStatus = this.reminder.kanbanStatus || this.defaultStatus;
         }
@@ -776,7 +776,7 @@ export class QuickReminderDialog {
             // 渲染现有提醒列表
             this.renderExistingReminders();
         } catch (error) {
-            console.error('加载现有提醒失败:', error);
+            console.error("Failed to load existing reminders:", error);
         }
     }
 
@@ -860,7 +860,7 @@ export class QuickReminderDialog {
         if (this.existingReminders.length === 0) {
             existingContainer.innerHTML = `
                 <div style="color: var(--b3-theme-on-surface-light); font-size: 14px;">
-                    📝 此块暂无绑定提醒
+                    ${i18n("noBoundRemindersForBlock")}
                 </div>
             `;
             return;
@@ -868,11 +868,11 @@ export class QuickReminderDialog {
 
         existingContainer.innerHTML = `
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                <div style="font-weight: 500; color: var(--b3-theme-on-surface);">📋 已绑定提醒 (${this.existingReminders.length})</div>
+                <div style="font-weight: 500; color: var(--b3-theme-on-surface);">${i18n("boundRemindersLabel")}${this.existingReminders.length})</div>
                 <div class="sort-controls" style="display: flex; gap: 4px;">
-                    <button class="b3-button b3-button--outline" data-sort="time" style="padding: 2px 8px; font-size: 12px;">时间</button>
-                    <button class="b3-button b3-button--outline" data-sort="priority" style="padding: 2px 8px; font-size: 12px;">优先级</button>
-                    <button class="b3-button b3-button--outline" data-sort="category" style="padding: 2px 8px; font-size: 12px;">分类</button>
+                    <button class="b3-button b3-button--outline" data-sort="time" style="padding: 2px 8px; font-size: 12px;">${i18n("timeInputLabel")}</button>
+                    <button class="b3-button b3-button--outline" data-sort="priority" style="padding: 2px 8px; font-size: 12px;">${i18n("priority")}</button>
+                    <button class="b3-button b3-button--outline" data-sort="category" style="padding: 2px 8px; font-size: 12px;">${i18n("categories")}</button>
                 </div>
             </div>
             <div class="existing-reminders-list" style="max-height: 200px; overflow-y: auto;">
@@ -934,8 +934,8 @@ export class QuickReminderDialog {
                     </div>
                 </div>
                 <div style="display: flex; gap: 4px;">
-                    <button class="b3-button b3-button--outline" data-action="edit" style="padding: 2px 6px; font-size: 11px;">编辑</button>
-                    <button class="b3-button b3-button--outline" data-action="delete" style="padding: 2px 6px; font-size: 11px;">删除</button>
+                    <button class="b3-button b3-button--outline" data-action="edit" style="padding: 2px 6px; font-size: 11px;">${i18n("edit")}</button>
+                    <button class="b3-button b3-button--outline" data-action="delete" style="padding: 2px 6px; font-size: 11px;">${i18n("delete")}</button>
                 </div>
             </div>
         `;
@@ -1747,7 +1747,7 @@ export class QuickReminderDialog {
                 }
             } catch (e) {
                 // 忽略任何 DOM 查询异常，保持界面可用
-                console.warn('隐藏实例日期字段时出错:', e);
+                console.warn("Error hiding instance date fields:", e);
             }
         }
 
@@ -2090,7 +2090,7 @@ export class QuickReminderDialog {
                     isRepeatInstance: true,
                     originalId: templateTask.id,
                     completed: instanceState.completed || false,
-                    title: instanceState.title || templateTask.title || '(无标题)',
+                    title: instanceState.title || templateTask.title || i18n("untitledInParentheses"),
                 };
             };
 
@@ -2438,7 +2438,7 @@ export class QuickReminderDialog {
                 collectChildTaskIds([rootBaseId], 0);
             }
         } catch (err) {
-            console.warn('加载 reminderData 查找子任务失败:', err);
+            console.warn("Failed to load reminderData to find subtasks:", err);
         }
 
         return resultIds;
@@ -2500,7 +2500,7 @@ export class QuickReminderDialog {
                 const seriesTimeStr = seriesMinutes > 0 ? `(${Math.floor(seriesMinutes / 60)}h${seriesMinutes % 60}m)` : '';
 
                 if (instanceCount > 0 || seriesCount > 0) {
-                    pomodorosCountText.textContent = `${i18n("viewPomodoros")} ${instanceCount}🍅${instanceTimeStr} / 系列: ${seriesCount}🍅${seriesTimeStr}`;
+                    pomodorosCountText.textContent = `${i18n("viewPomodoros")} ${instanceCount}🍅${instanceTimeStr} / ${i18n('seriesLabel')} ${seriesCount}🍅${seriesTimeStr}`;
                 } else {
                     pomodorosCountText.textContent = `${i18n("viewPomodoros")}`;
                 }
@@ -2556,9 +2556,9 @@ export class QuickReminderDialog {
                     syncTitleContainer.style.display = this.blockContent ? 'block' : 'none';
                 }
                 content.innerHTML = `
-                    <span style="font-weight: 500; margin-bottom: 4px; cursor: pointer; color: var(--b3-protyle-inline-blockref-color); border-bottom: 1px dashed var(--b3-protyle-inline-blockref-color); padding-bottom: 2px; max-width: 100%; word-wrap: break-word; overflow-wrap: break-word;" id="quickBlockPreviewHover" data-type="a" data-href="siyuan://blocks/${block.id}">${(block.content || '无内容').length > 50 ? (block.content || '无内容').substring(0, 50) + '...' : (block.content || '无内容')}</span>
+                    <span style="font-weight: 500; margin-bottom: 4px; cursor: pointer; color: var(--b3-protyle-inline-blockref-color); border-bottom: 1px dashed var(--b3-protyle-inline-blockref-color); padding-bottom: 2px; max-width: 100%; word-wrap: break-word; overflow-wrap: break-word;" id="quickBlockPreviewHover" data-type="a" data-href="siyuan://blocks/${block.id}">${(block.content || i18n("noContentHint")).length > 50 ? (block.content || i18n("noContentHint")).substring(0, 50) + '...' : (block.content || i18n("noContentHint"))}</span>
                     <div style="font-size: 12px; color: var(--b3-theme-on-surface-light);">
-                        类型: ${block.type} | ID: ${block.id}
+                        ${i18n("blockTypeLabel")}${block.type} | ID: ${block.id}
                     </div>
                 `;
                 preview.style.display = 'block';
@@ -2568,7 +2568,7 @@ export class QuickReminderDialog {
                 if (syncTitleContainer) syncTitleContainer.style.display = 'none';
             }
         } catch (error) {
-            console.error('获取块信息失败:', error);
+            console.error("Failed to get block information:", error);
             preview.style.display = 'none';
             const syncTitleContainer = this.dialog.element.querySelector('#quickSyncBlockTitleContainer') as HTMLElement;
             if (syncTitleContainer) syncTitleContainer.style.display = 'none';
@@ -2668,15 +2668,15 @@ export class QuickReminderDialog {
                 if (currentParseResult.date && currentParseResult.hasDate && currentParseResult.endDate && currentParseResult.hasEndDate) {
                     previewText = `📅 ${currentParseResult.date}${currentParseResult.time ? ' ' + currentParseResult.time : ''} ➡️ ${currentParseResult.endDate}${currentParseResult.endTime ? ' ' + currentParseResult.endTime : ''}`;
                 } else if (currentParseResult.endDate && currentParseResult.hasEndDate && !(currentParseResult.date && currentParseResult.hasDate)) {
-                    previewText = `🏁 截止：${currentParseResult.endDate}${currentParseResult.endTime ? ' ' + currentParseResult.endTime : ''}`;
+                    previewText = i18n("detectedDeadline", { date: String(currentParseResult.endDate), time: String(currentParseResult.endTime ? ' ' + currentParseResult.endTime : '') });
                 } else if (currentParseResult.endTime && currentParseResult.hasEndTime && !hasDate) {
-                    previewText = `⏰ 提醒时间：${currentParseResult.endTime}`;
+                    previewText = i18n("detectedReminderTime", { time: String(currentParseResult.endTime) });
                 } else if (currentParseResult.time && currentParseResult.hasTime && !hasDate) {
-                    previewText = `⏰ 提醒时间：${currentParseResult.time}`;
+                    previewText = i18n("detectedReminderTime", { time: String(currentParseResult.time) });
                 }
 
                 if (removeMode !== 'none' && currentParseResult.cleanTitle) {
-                    previewText += `\n📝 标题：${currentParseResult.cleanTitle}`;
+                    previewText += i18n("detectedTaskTitle", { title: String(currentParseResult.cleanTitle) });
                 }
 
                 nlPreview.innerText = previewText;
@@ -2777,17 +2777,17 @@ export class QuickReminderDialog {
             this.isApplyingNaturalLanguageResult = false;
         }
 
-        let msg = '✨ 已识别设置';
+        let msg = i18n("dateSettingsDetected");
         if (result.date && result.hasDate) {
             msg += `：${result.date}${result.time ? ' ' + result.time : ''}`;
         } else if (result.time) {
             msg += `：⏰ ${result.time}`;
         }
         if (result.endDate && result.hasEndDate && result.endDate !== result.date) {
-            msg += ` 至 ${result.endDate}${result.endTime ? ' ' + result.endTime : ''}`;
+            msg += i18n("detectedDateRangeEnd", { date: String(result.endDate), time: String(result.endTime ? ' ' + result.endTime : '') });
         }
         if (result.endDate && result.hasEndDate && !result.date) {
-            msg += ` 截止于 ${result.endDate}${result.endTime ? ' ' + result.endTime : ''}`;
+            msg += i18n("detectedDeadlineSuffix", { date: String(result.endDate), time: String(result.endTime ? ' ' + result.endTime : '') });
         }
 
         showMessage(msg);
@@ -2883,7 +2883,7 @@ export class QuickReminderDialog {
                     try {
                         this.autoDetectDateTime = await this.plugin.getAutoDetectDateTimeEnabled();
                     } catch (err) {
-                        console.warn('获取自动识别设置失败，使用默认值 false:', err);
+                        console.warn("Failed to get automatic recognition setting; defaulting to false:", err);
                         this.autoDetectDateTime = false;
                     }
                 } else {
@@ -2896,7 +2896,7 @@ export class QuickReminderDialog {
                 try {
                     this.singleDateDefaultRole = await this.plugin.getSingleDateDefaultRole();
                 } catch (err) {
-                    console.warn('获取单日期默认识别设置失败，使用默认截止日期:', err);
+                    console.warn("Failed to get single-date recognition default; defaulting to due date:", err);
                     this.singleDateDefaultRole = 'deadline';
                 }
             }
@@ -2905,7 +2905,7 @@ export class QuickReminderDialog {
                 try {
                     this.titlePasteAutoDetect = await this.plugin.getQuickReminderTitlePasteAutoDetectEnabled();
                 } catch (err) {
-                    console.warn('获取标题粘贴自动识别设置失败，使用默认开启:', err);
+                    console.warn("Failed to get automatic date recognition setting for pasted titles; defaulting to enabled:", err);
                     this.titlePasteAutoDetect = true;
                 }
             }
@@ -2913,7 +2913,7 @@ export class QuickReminderDialog {
             try {
                 this.reminderSkipHolidayData = await this.plugin?.loadHolidayData?.() || {};
             } catch (err) {
-                console.warn('加载节假日数据失败，任务提醒跳过节假日设置将隐藏:', err);
+                console.warn("Failed to load holiday data; hiding skip-holiday reminder setting:", err);
                 this.reminderSkipHolidayData = {};
             }
 
@@ -2962,7 +2962,7 @@ export class QuickReminderDialog {
                         this.blockContent = block?.fcontent || block?.content || i18n("unnamedNote");
                     }
                 } catch (error) {
-                    console.warn('获取块信息失败:', error);
+                    console.warn("Failed to get block information:", error);
                 }
             }
         } catch (error) {
@@ -3076,7 +3076,7 @@ export class QuickReminderDialog {
                                     <input type="number" id="quickDurationDays" min="1" step="1" class="b3-text-field" value="1" style="width: 100px; min-width: 80px;">
                                     <span style="font-size: 13px; color: var(--b3-theme-on-surface-light);">${i18n("daysUnit")}</span>
                                     <span id="quickSpannedDaysLabel" style="font-size: 13px; color: var(--b3-theme-on-surface-light); margin-left: 4px; display: none;"></span>
-                                    <button type="button" id="quickSwapStartEndTimeBtn" class="b3-button b3-button--outline ariaLabel" aria-label="交换开始和结束时间" title="交换开始和结束时间" style="display: none; align-items: center; justify-content: center; padding: 4px 8px; font-size: 14px; line-height: 1; flex: 0 0 auto;">
+                                    <button type="button" id="quickSwapStartEndTimeBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n('swapStartAndEndTime')}" title="${i18n('swapStartAndEndTime')}" style="display: none; align-items: center; justify-content: center; padding: 4px 8px; font-size: 14px; line-height: 1; flex: 0 0 auto;">
                                         ⇵
                                     </button>
                                 </div>
@@ -3146,12 +3146,12 @@ export class QuickReminderDialog {
                                 <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                                     <div id="quickCustomReminderDayWrapper" style="display: none; flex: 0 0 auto; align-items: center; gap: 6px;">
                                         <select id="quickCustomReminderDayValue" class="b3-text-field" style="min-width: 120px;">
-                                            <option value="today">当天</option>
-                                            <option value="before">提前</option>
+                                            <option value="today">${i18n("reminderSameDay")}</option>
+                                            <option value="before">${i18n("reminderDaysBefore")}</option>
                                         </select>
                                         <div id="quickCustomReminderBeforeDaysWrapper" style="display: none; align-items: center; gap: 6px;">
                                             <input type="number" id="quickCustomReminderBeforeDays" class="b3-text-field" style="width: 72px;" min="1" step="1" value="1">
-                                            <span>天</span>
+                                            <span>${i18n('daysUnit')}</span>
                                         </div>
                                     </div>
                                     <input type="datetime-local" id="quickCustomReminderTime" class="b3-text-field" style="flex: 1 1 140px; min-width: 0;" lang="${langTag}">
@@ -3615,7 +3615,7 @@ export class QuickReminderDialog {
                     img.addEventListener("dblclick", (e) => {
                         e.stopPropagation();
                         e.preventDefault();
-                        this.showImageModal(img.src, node.attrs.title || node.attrs.alt || "图片预览");
+                        this.showImageModal(img.src, node.attrs.title || node.attrs.alt || i18n("imagePreviewTitle"));
                     });
                     img.addEventListener("contextmenu", (e) => {
                         e.preventDefault();
@@ -3930,7 +3930,7 @@ export class QuickReminderDialog {
                             });
                         }
                     } catch (err) {
-                        console.warn('自动识别标题日期失败:', err);
+                        console.warn("Failed to automatically recognize dates in title:", err);
                     }
                 }
             }
@@ -4209,7 +4209,7 @@ export class QuickReminderDialog {
                 const minutes = String(completedDate.getMinutes()).padStart(2, '0');
                 return `${year}-${month}-${day} ${hours}:${minutes}`;
             } catch (error) {
-                console.error('解析完成时间失败:', error);
+                console.error("Failed to parse completion time:", error);
             }
         }
         const now = new Date();
@@ -4270,7 +4270,7 @@ export class QuickReminderDialog {
             });
 
         } catch (error) {
-            console.error('渲染分类选择器失败:', error);
+            console.error("Failed to render category selector:", error);
             categorySelector.innerHTML = `<div class="category-error">${i18n("loadCategoryFailed")}</div>`;
         }
     }
@@ -4379,7 +4379,7 @@ export class QuickReminderDialog {
             });
 
         } catch (error) {
-            console.error('加载项目标签失败:', error);
+            console.error("Failed to load project tags:", error);
             if (tagsGroup) tagsGroup.style.display = 'none';
         }
     }
@@ -4737,19 +4737,19 @@ export class QuickReminderDialog {
 
             if (durationDays > 1) {
                 const dayOptions = Array.from({ length: durationDays }, (_, idx) =>
-                    `<option value="day:${idx + 1}">第${idx + 1}天</option>`
+                    `<option value="day:${idx + 1}">${i18n('reminderDayNumber', { day: String(idx + 1) })}</option>`
                 ).join('');
-                const specificOption = isRepeatInstance ? '<option value="specific">指定日期</option>' : '';
-                daySelect.innerHTML = `${dayOptions}<option value="every">每天</option><option value="before">提前</option>${specificOption}`;
+                const specificOption = isRepeatInstance ? `<option value="specific">${i18n("specificReminderDate")}</option>` : '';
+                daySelect.innerHTML = `${dayOptions}<option value="every">${i18n("dailyReminderLabel")}</option><option value="before">${i18n("reminderDaysBefore")}</option>${specificOption}`;
                 daySelect.value = (previousValue?.startsWith('day:') || previousValue === 'before' || previousValue === 'every' || (isRepeatInstance && previousValue === 'specific')) ? previousValue : 'day:1';
                 if (!daySelect.value) daySelect.value = 'day:1';
-                dayHint.textContent = isRepeatInstance ? `可选第1天到第${durationDays}天、每天、提前 x 天或指定日期` : `可选第1天到第${durationDays}天、每天，或提前 x 天`;
+                dayHint.textContent = isRepeatInstance ? i18n("reminderMultiDayHint", { days: String(durationDays) }) : i18n("reminderMultiDayTemplateHint", { days: String(durationDays) });
             } else {
-                const specificOption = isRepeatInstance ? '<option value="specific">指定日期</option>' : '';
-                daySelect.innerHTML = `<option value="today">当天</option><option value="before">提前</option>${specificOption}`;
+                const specificOption = isRepeatInstance ? `<option value="specific">${i18n("specificReminderDate")}</option>` : '';
+                daySelect.innerHTML = `<option value="today">${i18n("reminderSameDay")}</option><option value="before">${i18n("reminderDaysBefore")}</option>${specificOption}`;
                 daySelect.value = previousValue === 'before' || (isRepeatInstance && previousValue === 'specific') ? previousValue : 'today';
                 if (!daySelect.value) daySelect.value = 'today';
-                dayHint.textContent = isRepeatInstance ? '可选当天、提前 x 天或指定日期' : '可选当天，或提前 x 天';
+                dayHint.textContent = isRepeatInstance ? i18n("reminderSingleDayHint") : i18n("reminderSingleDayTemplateHint");
             }
             beforeDaysInput.min = '1';
             if (!beforeDaysInput.value || Number.parseInt(beforeDaysInput.value, 10) < 1) {
@@ -4768,17 +4768,17 @@ export class QuickReminderDialog {
 
             if (addPresetBtn) {
                 addPresetBtn.disabled = true;
-                addPresetBtn.classList.add('ariaLabel'); addPresetBtn.setAttribute('aria-label', '重复任务请直接设置提醒日与时间');
+                addPresetBtn.classList.add('ariaLabel'); addPresetBtn.setAttribute('aria-label', i18n("reminderRepeatDateHint"));
             }
         } else {
             // 普通非重复任务（跨天、单天、无日期）
             dayWrapper.style.display = '';
             dayHint.style.display = '';
             const previousValue = daySelect.value;
-            daySelect.innerHTML = '<option value="every">每天</option><option value="specific">指定日期</option>';
+            daySelect.innerHTML = `<option value="every">${i18n("dailyReminderLabel")}</option><option value="specific">${i18n("specificReminderDate")}</option>`;
             daySelect.value = previousValue === 'every' || previousValue === 'specific' ? previousValue : 'every';
             if (!daySelect.value) daySelect.value = 'every';
-            dayHint.textContent = '每天提醒，或指定具体日期和时间';
+            dayHint.textContent = i18n("reminderDailyOrSpecificHint");
             beforeDaysWrapper.style.display = 'none';
 
             if (daySelect.value === 'every') {
@@ -4840,7 +4840,7 @@ export class QuickReminderDialog {
             timeInput.value = isSpecificDate
                 ? (normalizedItem.time || '')
                 : this.getCustomReminderTimeValue(normalizedItem.time);
-            timeInput.placeholder = '开始：';
+            timeInput.placeholder = i18n("startLabel");
 
             const startLabel = document.createElement('span');
             startLabel.style.cssText = 'font-size: 13px; color: var(--b3-theme-on-surface); opacity: 0.8; white-space: nowrap; flex: 0 0 auto;';
@@ -4858,7 +4858,7 @@ export class QuickReminderDialog {
             endTimeInput.value = normalizedItem.endTime
                 ? (isSpecificDate ? normalizedItem.endTime : this.getCustomReminderTimeValue(normalizedItem.endTime))
                 : '';
-            endTimeInput.placeholder = '结束：';
+            endTimeInput.placeholder = i18n("endLabel");
 
             const endLabel = document.createElement('span');
             endLabel.style.cssText = 'font-size: 13px; color: var(--b3-theme-on-surface); opacity: 0.8; white-space: nowrap; flex: 0 0 auto;';
@@ -4888,23 +4888,23 @@ export class QuickReminderDialog {
             daySelect.className = 'b3-text-field';
             daySelect.style.cssText = 'min-width: 120px;';
             if (isRepeatMode && durationDays > 1) {
-                const specificOption = isRepeatInstance ? '<option value="specific">指定日期</option>' : '';
+                const specificOption = isRepeatInstance ? `<option value="specific">${i18n("specificReminderDate")}</option>` : '';
                 const options = Array.from({ length: durationDays }, (_, idx) => {
                     const day = idx + 1;
-                    return `<option value="day:${day}">第${day}天</option>`;
-                }).join('') + `<option value="every">每天</option><option value="before">提前</option>${specificOption}`;
+                    return `<option value="day:${day}">${i18n('reminderDayNumber', { day: String(day) })}</option>`;
+                }).join('') + `<option value="every">${i18n("dailyReminderLabel")}</option><option value="before">${i18n("reminderDaysBefore")}</option>${specificOption}`;
                 daySelect.innerHTML = options;
                 daySelect.value = selection.selectValue.startsWith('day:') || selection.selectValue === 'before' || selection.selectValue === 'every' || (isRepeatInstance && selection.selectValue === 'specific')
                     ? selection.selectValue
                     : 'day:1';
             } else if (!isRepeatMode) {
-                daySelect.innerHTML = '<option value="every">每天</option><option value="specific">指定日期</option>';
+                daySelect.innerHTML = `<option value="every">${i18n("dailyReminderLabel")}</option><option value="specific">${i18n("specificReminderDate")}</option>`;
                 daySelect.value = selection.selectValue === 'every' || selection.selectValue === 'specific'
                     ? selection.selectValue
                     : 'every';
             } else {
-                const specificOption = isRepeatInstance ? '<option value="specific">指定日期</option>' : '';
-                daySelect.innerHTML = `<option value="today">当天</option><option value="before">提前</option>${specificOption}`;
+                const specificOption = isRepeatInstance ? `<option value="specific">${i18n("specificReminderDate")}</option>` : '';
+                daySelect.innerHTML = `<option value="today">${i18n("reminderSameDay")}</option><option value="before">${i18n("reminderDaysBefore")}</option>${specificOption}`;
                 daySelect.value = selection.selectValue === 'before' || (isRepeatInstance && selection.selectValue === 'specific')
                     ? selection.selectValue
                     : 'today';
@@ -4919,7 +4919,7 @@ export class QuickReminderDialog {
             beforeDaysInput.step = '1';
             beforeDaysInput.value = String(selection.beforeDays);
             const beforeSuffix = document.createElement('span');
-            beforeSuffix.textContent = '天';
+            beforeSuffix.textContent = i18n("days");
             beforeWrapper.appendChild(beforeDaysInput);
             beforeWrapper.appendChild(beforeSuffix);
 
@@ -5262,7 +5262,7 @@ export class QuickReminderDialog {
                             await this.updateBlockPreview(blockId);
                             showMessage(i18n('reminderUpdated'));
                         } catch (error) {
-                            console.error('更新块内容失败:', error);
+                            console.error("Failed to update block content:", error);
                             showMessage(i18n('updateFailed') || '更新失败', 3000, 'error');
                         }
                     },
@@ -6058,7 +6058,7 @@ export class QuickReminderDialog {
                     showMessage(i18n('noBlockToCopy') || '没有可复制的块引用', 3000, 'error');
                 }
             } catch (error) {
-                console.error('复制到剪贴板失败:', error);
+                console.error("Failed to copy to clipboard:", error);
                 showMessage(i18n('copyFailed') || '复制失败', 3000, 'error');
             }
         });
@@ -6148,7 +6148,7 @@ export class QuickReminderDialog {
                     customReminderBeforeDaysInput.value = '1';
                 }
             } catch (e) {
-                console.warn('初始化自定义提醒时间失败:', e);
+                console.warn("Failed to initialize custom reminder times:", e);
             }
         });
 
@@ -6342,7 +6342,7 @@ export class QuickReminderDialog {
                 autoCheckInCheckbox.checked = true;
             }
         } catch (error) {
-            console.warn('根据习惯目标类型设置默认绑定选项失败:', error);
+            console.warn("Failed to set default binding options based on habit goal type:", error);
         }
     }
 
@@ -6379,7 +6379,7 @@ export class QuickReminderDialog {
                 autoCheckInOptionSelect.appendChild(option);
             });
         } catch (error) {
-            console.warn('加载习惯打卡选项失败:', error);
+            console.warn("Failed to load habit check-in options:", error);
         }
     }
 
@@ -6536,7 +6536,7 @@ export class QuickReminderDialog {
             this.updateHabitBindingOptionsVisibility();
             await this.refreshHabitAutoCheckInOptionSelector(this.reminder?.linkedHabitAutoCheckInOptionKey, this.reminder?.linkedHabitAutoCheckInEmoji);
         } catch (error) {
-            console.error('渲染习惯选择器失败:', error);
+            console.error("Failed to render habit selector:", error);
         }
     }
 
@@ -6575,7 +6575,7 @@ export class QuickReminderDialog {
                 await this.onProjectChange(firstProjectId);
             }
         } catch (error) {
-            console.error('渲染项目选择器失败:', error);
+            console.error("Failed to render project selector:", error);
         }
     }
 
@@ -6652,7 +6652,7 @@ export class QuickReminderDialog {
                 this.currentKanbanStatuses = await projectManager.getProjectKanbanStatuses(projectId);
                 this.updateKanbanStatusSelector();
             } catch (error) {
-                console.error('检查项目分组失败:', error);
+                console.error("Failed to check project groups:", error);
                 this.currentActiveProjectGroups = [];
                 customGroupContainer.style.display = 'none';
             }
@@ -6779,7 +6779,7 @@ export class QuickReminderDialog {
             }
 
         } catch (error) {
-            console.error('渲染自定义分组选择器失败:', error);
+            console.error("Failed to render custom group selector:", error);
         }
     }
 
@@ -6908,7 +6908,7 @@ export class QuickReminderDialog {
                 searchInputText.value = '';
             }
         } catch (e) {
-            console.error('渲染里程碑选择器失败:', e);
+            console.error("Failed to render milestone selector:", e);
             milestoneGroup.style.display = 'none';
         }
     }
@@ -7048,17 +7048,17 @@ export class QuickReminderDialog {
                     instanceDate: instanceDate,
                     note: note
                 });
-                console.debug('实例备注已更新 (后台)');
+                console.debug("Instance note updated in background");
             } else {
                 const reminderData = await this.plugin.loadReminderData();
                 if (reminderData[this.reminder.id]) {
                     reminderData[this.reminder.id].note = note;
                     await this.plugin.saveReminderData(reminderData);
-                    console.debug('备注已更新 (后台)');
+                    console.debug("Note updated in background");
                 }
             }
         } catch (error) {
-            console.error('保存备注失败:', error);
+            console.error("Failed to save note:", error);
             showMessage(i18n("saveFailed"), 3000, 'error');
         }
     }
@@ -7177,7 +7177,7 @@ export class QuickReminderDialog {
 
         if (!title) {
             // 无论新建或编辑，均允许空标题并替换为未命名标题
-            title = '未命名任务';
+            title = i18n("unnamedTask");
         }
 
         // 允许不设置日期
@@ -7256,7 +7256,7 @@ export class QuickReminderDialog {
                     const blk = await getBlockByID(reminderData.blockId);
                     reminderData.docId = blk?.root_id || (blk?.type === 'd' ? blk?.id : null);
                 } catch (err) {
-                    console.warn('获取块信息失败 (batch_edit):', err);
+                    console.warn("Failed to get block information (batch_edit):", err);
                 }
             }
 
@@ -7282,7 +7282,7 @@ export class QuickReminderDialog {
                 const blk = await getBlockByID(inputId);
                 optimisticDocId = blk?.root_id || (blk?.type === 'd' ? blk?.id : null);
             } catch (err) {
-                console.warn('获取绑定块 root_id 失败（乐观）:', err);
+                console.warn("Failed to get bound block root_id (optimistic update):", err);
             }
         }
 
@@ -7476,7 +7476,7 @@ export class QuickReminderDialog {
                             try {
                                 await updateBindBlockAtrrs(blockId as string, this.plugin);
                             } catch (error) {
-                                console.warn('更新实例绑定块属性失败:', blockId, error);
+                                console.warn("Failed to update instance bound block attributes:", blockId, error);
                             }
                         }
 
@@ -7557,7 +7557,7 @@ export class QuickReminderDialog {
                                 const block = await getBlockByID(inputId);
                                 reminder.docId = block.root_id;
                             } catch (error) {
-                                console.error('获取块信息失败:', error);
+                                console.error("Failed to get block information:", error);
                                 reminder.docId = undefined;
                             }
                         } else {
@@ -7590,7 +7590,7 @@ export class QuickReminderDialog {
                                     const minutes = String(completedDate.getMinutes()).padStart(2, '0');
                                     reminder.completedTime = `${year}-${month}-${day} ${hours}:${minutes}`;
                                 } catch (error) {
-                                    console.error('解析完成时间失败:', error);
+                                    console.error("Failed to parse completion time:", error);
                                     // 如果解析失败，使用当前时间
                                     const now = new Date();
                                     const year = now.getFullYear();
@@ -7628,7 +7628,7 @@ export class QuickReminderDialog {
                         try {
                             await this.plugin.updateMobileNotification(reminder, this.futureEditOriginalReminder || this.reminder);
                         } catch (e) {
-                            console.warn('更新移动端通知失败:', e);
+                            console.warn("Failed to update mobile notifications:", e);
                         }
 
                         // 如果看板状态或自定义分组发生变化，将该字段递归应用到所有子任务（包含多层子孙）
@@ -7707,16 +7707,16 @@ export class QuickReminderDialog {
                                                     await setBlockProjectIds(item.blockId, []);
                                                 }
                                             } catch (e) {
-                                                console.warn('同步子任务绑定块的 projectId 失败:', item.blockId, e);
+                                                console.warn("Failed to sync projectId to subtask bound blocks:", item.blockId, e);
                                             }
                                         }
                                     } catch (e) {
-                                        console.warn('导入 API 以同步块 projectId 失败:', e);
+                                        console.warn("Failed to import API to sync block projectId:", e);
                                     }
                                 }
                             }
                         } catch (err) {
-                            console.warn('更新子任务状态/分组失败:', err);
+                            console.warn("Failed to update subtask status/group:", err);
                         }
 
                         // 处理块绑定变更
@@ -7727,9 +7727,9 @@ export class QuickReminderDialog {
                         if (oldBlockId && !newBlockId) {
                             try {
                                 await updateBindBlockAtrrs(oldBlockId, this.plugin);
-                                console.debug('QuickReminderDialog: 已移除原块的书签绑定', oldBlockId);
+                                console.debug("QuickReminderDialog: removed bookmark binding from original block", oldBlockId);
                             } catch (error) {
-                                console.warn('更新原块书签状态失败:', error);
+                                console.warn("Failed to update original block bookmark state:", error);
                             }
                         }
 
@@ -7737,9 +7737,9 @@ export class QuickReminderDialog {
                         if (oldBlockId && newBlockId && oldBlockId !== newBlockId) {
                             try {
                                 await updateBindBlockAtrrs(oldBlockId, this.plugin);
-                                console.debug('QuickReminderDialog: 已更新原块的书签状态', oldBlockId);
+                                console.debug("QuickReminderDialog: updated original block bookmark state", oldBlockId);
                             } catch (error) {
-                                console.warn('更新原块书签状态失败:', error);
+                                console.warn("Failed to update original block bookmark state:", error);
                             }
                         }
 
@@ -7758,7 +7758,7 @@ export class QuickReminderDialog {
                                 // 为绑定块添加⏰书签
                                 await updateBindBlockAtrrs(newBlockId, this.plugin);
                             } catch (error) {
-                                console.warn('设置块自定义属性 custom-task-projectId 失败:', error);
+                                console.warn("Failed to set block custom-task-projectId attribute:", error);
                             }
                         }
 
@@ -7922,7 +7922,7 @@ export class QuickReminderDialog {
                 try {
                     await this.plugin.updateMobileNotification(reminder);
                 } catch (e) {
-                    console.warn('设置移动端通知失败:', e);
+                    console.warn("Failed to set mobile notification:", e);
                 }
 
                 // 在保存后，如果绑定了块，确保 reminder 包含 docId（root_id）
@@ -7939,7 +7939,7 @@ export class QuickReminderDialog {
                             await this.plugin.saveReminderData(reminderData);
                         }
                     } catch (err) {
-                        console.warn('获取块信息失败（保存 docId）:', err);
+                        console.warn("Failed to get block information (saving docId):", err);
                     }
                 }
 
@@ -7958,7 +7958,7 @@ export class QuickReminderDialog {
                         // 为绑定块添加⏰书签
                         await updateBindBlockAtrrs(reminder.blockId, this.plugin);
                     } catch (error) {
-                        console.warn('设置块自定义属性 custom-task-projectId 失败:', error);
+                        console.warn("Failed to set block custom-task-projectId attribute:", error);
                     }
                 }
 
@@ -7989,7 +7989,7 @@ export class QuickReminderDialog {
                 // if (this.onSaved) this.onSaved(reminder);
                 // this.dialog.destroy();
             } catch (error) {
-                console.error('保存快速提醒失败:', error);
+                console.error("Failed to save quick reminder:", error);
                 // 此时 UI 已销毁，如果保存失败，使用通用 notification
                 showMessage(this.mode === 'edit' ? i18n("updateReminderFailed") : i18n("saveReminderFailed"));
             }
@@ -8007,7 +8007,7 @@ export class QuickReminderDialog {
             const reminderData = await this.plugin.loadReminderData();
 
             if (!reminderData[originalId]) {
-                throw new Error('原始事件不存在');
+                throw new Error(i18n("originalEventMissing"));
             }
 
             // 确保 repeat 结构存在并初始化统一实例状态表，避免访问未定义属性时报错
@@ -8128,7 +8128,7 @@ export class QuickReminderDialog {
             await this.plugin.saveReminderData(reminderData);
 
         } catch (error) {
-            console.error('保存实例修改失败:', error);
+            console.error("Failed to save instance changes:", error);
             throw error;
         }
     }
@@ -8201,7 +8201,7 @@ export class QuickReminderDialog {
                     parentId: parentIdForSubtask,
                     blockId: tempSubtask.blockId || null,
                     docId: tempSubtask.docId || null,
-                    title: tempSubtask.title || '未命名任务',
+                    title: tempSubtask.title || i18n("unnamedTask"),
                     url: tempSubtask.url || undefined,
                     date: tempSubtask.date || undefined,
                     time: tempSubtask.time || undefined,
@@ -8242,7 +8242,7 @@ export class QuickReminderDialog {
                         const block = await getBlockByID(subtask.blockId);
                         subtask.docId = block?.root_id || (block?.type === 'd' ? block?.id : null);
                     } catch (err) {
-                        console.warn('获取子任务绑定块信息失败:', err);
+                        console.warn("Failed to get subtask bound block information:", err);
                     }
                 }
 
@@ -8257,19 +8257,19 @@ export class QuickReminderDialog {
                         const { addBlockProjectId } = await import('../../api');
                         await addBlockProjectId(subtask.blockId, subtask.projectId);
                     } catch (error) {
-                        console.warn('设置子任务块属性失败:', error);
+                        console.warn("Failed to set subtask block attributes:", error);
                     }
                 }
             }
 
             await this.plugin.saveReminderData(reminderData);
-            console.log(`已保存 ${orderedTempSubtasks.length} 个子任务`);
+            console.log(`Saved ${orderedTempSubtasks.length} subtasks`);
             showMessage(i18n("subtasksSaved"));
 
             // 保存成功后清空临时子任务数组
             this.tempSubtasks = [];
         } catch (error) {
-            console.error('保存临时子任务失败:', error);
+            console.error("Failed to save temporary subtasks:", error);
         }
     }
 
@@ -8320,7 +8320,7 @@ export class QuickReminderDialog {
             const displayTitle = this.tempParentName || i18n("newTask") || "新建任务";
             parentTaskDisplay.value = displayTitle;
             parentTaskDisplay.classList.add('ariaLabel');
-            parentTaskDisplay.setAttribute('aria-label', `临时父任务: ${displayTitle}`);
+            parentTaskDisplay.setAttribute('aria-label', i18n("temporaryParentLabel", { title: String(displayTitle) }));
             viewParentBtn.style.display = 'none';
             removeParentBtn.style.display = '';
             return;
@@ -8345,7 +8345,7 @@ export class QuickReminderDialog {
                         ...originalTask,
                         ...instanceState,
                         id: parentId,
-                        title: instanceState.title || originalTask.title || '(无标题)',
+                        title: instanceState.title || originalTask.title || i18n("untitledInParentheses"),
                         isInstance: true,
                         isRepeatInstance: true,
                         instanceDate,
@@ -8356,23 +8356,23 @@ export class QuickReminderDialog {
 
             if (parentTask) {
                 // 显示父任务标题
-                const displayTitle = instanceDate ? `${parentTask.title} (${instanceDate})` : (parentTask.title || '(无标题)');
+                const displayTitle = instanceDate ? `${parentTask.title} (${instanceDate})` : (parentTask.title || i18n("untitledInParentheses"));
                 parentTaskDisplay.value = displayTitle;
-                parentTaskDisplay.classList.add('ariaLabel'); parentTaskDisplay.setAttribute('aria-label', instanceDate ? `父任务实例: ${displayTitle}` : `父任务: ${displayTitle}`);
+                parentTaskDisplay.classList.add('ariaLabel'); parentTaskDisplay.setAttribute('aria-label', instanceDate ? i18n("parentInstanceLabel", { title: String(displayTitle) }) : i18n("parentTaskLabel", { title: String(displayTitle) }));
 
                 // 显示查看按钮和删除按钮
                 viewParentBtn.style.display = '';
                 removeParentBtn.style.display = '';
             } else {
                 // 父任务不存在
-                parentTaskDisplay.value = '(父任务不存在)';
-                parentTaskDisplay.classList.add('ariaLabel'); parentTaskDisplay.setAttribute('aria-label', '父任务已被删除或不存在');
+                parentTaskDisplay.value = i18n("parentMissingInParentheses");
+                parentTaskDisplay.classList.add('ariaLabel'); parentTaskDisplay.setAttribute('aria-label', i18n("parentDeletedOrMissing"));
                 viewParentBtn.style.display = 'none';
                 removeParentBtn.style.display = 'none';
             }
         } catch (error) {
-            console.error('加载父任务信息失败:', error);
-            parentTaskDisplay.value = '(加载失败)';
+            console.error("Failed to load parent task information:", error);
+            parentTaskDisplay.value = i18n("loadFailedInParentheses");
             viewParentBtn.style.display = 'none';
             removeParentBtn.style.display = 'none';
         }
@@ -8496,7 +8496,7 @@ export class QuickReminderDialog {
                 }
             });
         } catch (error) {
-            console.warn('生成历史重复实例快照失败:', error);
+            console.warn("Failed to generate historical repeat instance snapshot:", error);
         }
 
         return instancesByKey;
@@ -8510,7 +8510,7 @@ export class QuickReminderDialog {
         const instanceState = getRepeatInstanceState(originalReminder, originalDateKey);
         const snapshot: any = {
             preservedFromSeriesEdit: true,
-            title: instance.title || originalReminder.title || '(无标题)',
+            title: instance.title || originalReminder.title || i18n("untitledInParentheses"),
             date: instance.date || originalDateKey,
             modifiedAt: new Date().toISOString().split('T')[0]
         };
@@ -8679,7 +8679,7 @@ export class QuickReminderDialog {
 
             allInstancesDialog.show();
         } catch (error) {
-            console.error('编辑所有实例失败:', error);
+            console.error("Failed to edit all instances:", error);
             showMessage(i18n("operationFailed"));
         }
     }
@@ -8772,7 +8772,7 @@ export class QuickReminderDialog {
 
             parentDialog.show();
         } catch (error) {
-            console.error('查看父任务失败:', error);
+            console.error("Failed to view parent task:", error);
             showMessage(i18n("operationFailed"));
         }
     }
@@ -8822,7 +8822,7 @@ export class QuickReminderDialog {
                     completedTimeInput.value = `${year}-${month}-${day}T${hours}:${minutes}`;
                 }
             } catch (error) {
-                console.error('解析完成时间失败:', error);
+                console.error("Failed to parse completion time:", error);
                 // 如果解析失败，设置为当前时间
                 const now = new Date();
                 const year = now.getFullYear();

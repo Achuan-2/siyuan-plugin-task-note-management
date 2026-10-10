@@ -70,7 +70,7 @@ export async function initIcsSubscriptionSync(plugin: IcsSyncPlugin): Promise<vo
         // 启动定时检查 (参考 ICS 云端同步的短轮询机制)
         await scheduleIcsSubscriptionSync(plugin);
     } catch (error) {
-        console.error("初始化ICS订阅同步失败:", error);
+        console.error("Failed to initialize ICS subscription sync:", error);
     }
 }
 
@@ -84,7 +84,7 @@ async function scheduleIcsSubscriptionSync(plugin: IcsSyncPlugin): Promise<void>
         try {
             await performIcsSubscriptionSync(plugin);
         } catch (error) {
-            console.error("ICS订阅轮询同步检查失败:", error);
+            console.error("ICS subscription polling sync check failed:", error);
         }
     }, shortPollMs);
 }
@@ -251,7 +251,7 @@ async function scheduleIcsSync(plugin: IcsSyncPlugin, interval: IcsSyncInterval,
             }
         }
     } catch (e) {
-        console.warn("计算 ICS 下次同步时间失败，使用默认策略:", e);
+        console.warn("Failed to calculate next ICS sync time; using default strategy:", e);
         nextDueMs = Date.now() + intervalMs;
     }
 
@@ -274,7 +274,7 @@ async function scheduleIcsSync(plugin: IcsSyncPlugin, interval: IcsSyncInterval,
             // 同步成功后，重新计算下一次触发时间
             nextDueMs = await calculateNextDueMs();
         } catch (e) {
-            console.warn("短轮询触发 ICS 同步失败:", e);
+            console.warn("ICS sync triggered by short polling failed:", e);
         }
     }, shortPollMs);
 }
@@ -299,7 +299,7 @@ async function performIcsSync(plugin: IcsSyncPlugin): Promise<void> {
 
         await uploadIcsToCloud(plugin as any, settings, settings.icsSilentUpload);
     } catch (error) {
-        console.error("ICS自动同步失败:", error);
+        console.error("Automatic ICS sync failed:", error);
     } finally {
         state.isPerforming = false;
     }

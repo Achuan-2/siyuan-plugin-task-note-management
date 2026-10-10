@@ -191,18 +191,18 @@ export class BatchReminderDialog {
                         } as AutoDetectResult);
                     }
                 } catch (error) {
-                    console.error(`获取块 ${blockId} 失败:`, error);
+                    console.error(`Failed to get block ${blockId}:`, error);
                     results.push({
                         blockId,
-                        content: '无法获取块内容',
-                        cleanTitle: '无法获取块内容'
+                        content: i18n("cannotGetBlockContent"),
+                        cleanTitle: i18n("cannotGetBlockContent")
                     } as AutoDetectResult);
                 }
             }
 
             return results;
         } catch (err) {
-            console.error('批量识别块内容失败:', err);
+            console.error("Failed to recognize block content in batch:", err);
             // 回退到逐个处理（兼容性保守策略）
             const { getBlockByID } = await import("../../api");
             for (const blockId of blockIds) {
@@ -210,7 +210,7 @@ export class BatchReminderDialog {
                     const block = await getBlockByID(blockId);
                     results.push({ blockId, content: block?.content || '', cleanTitle: block?.content || '' } as AutoDetectResult);
                 } catch (error) {
-                    results.push({ blockId, content: '无法获取块内容', cleanTitle: '无法获取块内容' } as AutoDetectResult);
+                    results.push({ blockId, content: i18n("cannotGetBlockContent"), cleanTitle: i18n("cannotGetBlockContent") } as AutoDetectResult);
                 }
             }
             return results;
@@ -510,8 +510,8 @@ class SmartBatchDialog {
         const listHtml = await Promise.all(this.autoDetectedData.map(async data => {
             const setting = this.blockSettings.get(data.blockId);
             const dateStatus = data.date ? '✅' : '❌';
-            const dateDisplay = setting?.date ? new Date(setting.date + 'T00:00:00').toLocaleDateString(getLocaleTag()) : '未设置';
-            const timeDisplay = setting?.hasTime && setting.time ? setting.time : '全天';
+            const dateDisplay = setting?.date ? new Date(setting.date + 'T00:00:00').toLocaleDateString(getLocaleTag()) : i18n("notConfigured");
+            const timeDisplay = setting?.hasTime && setting.time ? setting.time : i18n("allDay");
 
             // 获取分类、优先级和项目显示
             const categoryDisplay = this.getCategoryDisplay(setting?.categoryId);
@@ -531,7 +531,7 @@ class SmartBatchDialog {
                         statusDisplay = `<span class="status-badge"><span class="status-dot" style="background-color: ${color};"></span><span>${status.name}</span></span>`;
                     }
                 } catch (error) {
-                    console.error('获取状态失败:', error);
+                    console.error("Failed to get status:", error);
                 }
             }
 
@@ -616,7 +616,7 @@ class SmartBatchDialog {
                 return badges.join('');
             }
         } catch (error) {
-            console.error('获取分类显示失败:', error);
+            console.error("Failed to get category display:", error);
         }
 
         return `🏷️ ${i18n("noCategory")}`;
@@ -652,7 +652,7 @@ class SmartBatchDialog {
                 return `<span class="project-badge" style="background-color: ${project.color || '#E0E0E0'}; padding: 2px 6px; border-radius: 3px; font-size: 12px;">${text}</span>`;
             }
         } catch (error) {
-            console.error('获取项目显示失败:', error);
+            console.error("Failed to get project display:", error);
         }
 
         return `📂 ${i18n("noProject")}`;
@@ -667,7 +667,7 @@ class SmartBatchDialog {
                 return `<span class="milestone-badge" style="background-color: #f0f6ff; padding: 2px 6px; border-radius:3px; margin-left:6px; font-size:11px;">🏁 ${m.name}</span>`;
             }
         } catch (err) {
-            console.warn('获取里程碑显示失败:', err);
+            console.warn("Failed to get milestone display:", err);
         }
         return '';
     }
@@ -829,7 +829,7 @@ class SmartBatchDialog {
                         batchGroupSelector.style.display = '';
                     }
                 } catch (err) {
-                    console.warn('加载项目自定义分组失败:', err);
+                    console.warn("Failed to load project custom groups:", err);
                 }
 
                 // 加载项目级里程碑（过滤掉已归档的）
@@ -846,7 +846,7 @@ class SmartBatchDialog {
                         batchMilestoneSelector.style.display = '';
                     }
                 } catch (err) {
-                    console.warn('加载项目里程碑失败:', err);
+                    console.warn("Failed to load project milestones:", err);
                 }
 
                 // 当选择某个分组时加载该分组下的里程碑（如果有）
@@ -868,13 +868,13 @@ class SmartBatchDialog {
                                 batchMilestoneSelector.style.display = '';
                             }
                         } catch (err) {
-                            console.warn('加载分组里程碑失败:', err);
+                            console.warn("Failed to load group milestones:", err);
                         }
                     });
                 }
 
             } catch (error) {
-                console.error('加载项目状态/分组/里程碑失败:', error);
+                console.error("Failed to load project statuses/groups/milestones:", error);
             }
         });
 
@@ -1379,7 +1379,7 @@ class SmartBatchDialog {
             });
 
         } catch (error) {
-            console.error('渲染批量分类选择器失败:', error);
+            console.error("Failed to render batch category selector:", error);
             categorySelector.innerHTML = `<div class="category-error">${i18n("loadCategoryFailed")}</div>`;
         }
     }
@@ -1416,7 +1416,7 @@ class SmartBatchDialog {
             });
 
         } catch (error) {
-            console.error('渲染批量项目选择器失败:', error);
+            console.error("Failed to render batch project selector:", error);
         }
     }
 
@@ -1550,12 +1550,12 @@ class SmartBatchDialog {
         const blockItem = dialog.element.querySelector(`[data-block-id="${blockId}"]`) as HTMLElement;
         if (!blockItem) return;
 
-        let dateDisplay = setting.date ? new Date(setting.date + 'T00:00:00').toLocaleDateString(getLocaleTag()) : '未设置';
+        let dateDisplay = setting.date ? new Date(setting.date + 'T00:00:00').toLocaleDateString(getLocaleTag()) : i18n("notConfigured");
         if (setting.endDate) {
             dateDisplay += ` ➡️ ${new Date(setting.endDate + 'T00:00:00').toLocaleDateString(getLocaleTag())}`;
         }
 
-        let timeDisplay = setting.hasTime && setting.time ? setting.time : '全天';
+        let timeDisplay = setting.hasTime && setting.time ? setting.time : i18n("allDay");
         if (setting.hasEndTime && setting.endTime) {
             timeDisplay += ` - ${setting.endTime}`;
         }
@@ -1585,7 +1585,7 @@ class SmartBatchDialog {
                     statusDisplay = `<span class="status-badge"><span class="status-dot" style="background-color: ${color};"></span><span>${status.name}</span></span>`;
                 }
             } catch (error) {
-                console.error('获取状态失败:', error);
+                console.error("Failed to get status:", error);
             }
         }
         if (blockStatus) blockStatus.innerHTML = statusDisplay;
@@ -1625,7 +1625,7 @@ class SmartBatchDialog {
             // 显示加载对话框
             const loadingMessage = this.hierarchyMap
                 ? (i18n("hierarchicalBatchCreating") || "正在创建层级任务...")
-                : "正在批量创建任务...";
+                : i18n("batchCreatingTasks");
             this.showLoadingDialog(loadingMessage);
 
             const reminderData = await this.plugin.loadReminderData();
@@ -1647,7 +1647,7 @@ class SmartBatchDialog {
             try {
                 if (allBlockIds.length) blockRows = await sql(`select * from blocks where id in (${blockIdListSql})`);
             } catch (err) {
-                console.warn('批量获取块信息失败，回退到逐个获取:', err);
+                console.warn("Failed to fetch block information in batch; fetching individually:", err);
             }
             const blockMap: Record<string, any> = {};
             (blockRows || []).forEach(b => blockMap[b.id] = b);
@@ -1774,7 +1774,7 @@ class SmartBatchDialog {
                         childSuccessCount++;
                     }
                 } catch (error) {
-                    console.error(`设置块 ${blockId} 提醒失败:`, error);
+                    console.error(`Failed to set reminder for block ${blockId}:`, error);
                     failureCount++;
                 }
             }
@@ -1809,7 +1809,7 @@ class SmartBatchDialog {
                 try {
                     await updateBindBlockAtrrs(blockId, this.plugin);
                 } catch (error) {
-                    console.error(`更新块 ${blockId} 书签失败:`, error);
+                    console.error(`Failed to update bookmark for block ${blockId}:`, error);
                 }
             }));
 
@@ -1836,7 +1836,7 @@ class SmartBatchDialog {
             window.dispatchEvent(new CustomEvent('projectUpdated'));
 
         } catch (error) {
-            console.error('保存批量提醒失败:', error);
+            console.error("Failed to save reminders in batch:", error);
             showMessage(i18n("batchSaveFailed"));
         } finally {
             // 关闭加载对话框
@@ -1922,7 +1922,7 @@ class BlockEditDialog {
                     
                     <div class="b3-form__group">
                         <label class="b3-form__label">${i18n("eventCategory")}
-                            <button type="button" id="editManageCategoriesBtn" class="b3-button b3-button--outline ariaLabel" aria-label="管理分类">
+                            <button type="button" id="editManageCategoriesBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("manageCategories")}">
                                 <svg class="b3-button__icon"><use xlink:href="#iconSettings"></use></svg>
                             </button>
                         </label>
@@ -2031,7 +2031,7 @@ class BlockEditDialog {
             });
 
         } catch (error) {
-            console.error('渲染分类选择器失败:', error);
+            console.error("Failed to render category selector:", error);
             categorySelector.innerHTML = `<div class="category-error">${i18n("loadCategoryFailed")}</div>`;
         }
     }
@@ -2069,7 +2069,7 @@ class BlockEditDialog {
             });
 
         } catch (error) {
-            console.error('渲染项目选择器失败:', error);
+            console.error("Failed to render project selector:", error);
         }
     }
 
@@ -2115,7 +2115,7 @@ class BlockEditDialog {
         const updatePreview = () => {
             const input = nlInput.value.trim();
             if (!input) {
-                nlPreview.textContent = '请输入日期时间描述';
+                nlPreview.textContent = i18n("pleaseInputDescription");
                 nlConfirmBtn.disabled = true;
                 return;
             }
@@ -2142,7 +2142,7 @@ class BlockEditDialog {
                 nlPreview.innerHTML = `<span style="color: var(--b3-theme-primary);">✅ ${previewText}</span>`;
                 nlConfirmBtn.disabled = false;
             } else {
-                nlPreview.innerHTML = '<span style="color: var(--b3-theme-error);">❌ 无法识别，请尝试其他表达方式</span>';
+                nlPreview.innerHTML = `<span style="color: var(--b3-theme-error);">${i18n("dateParseFailedMessage")}</span>`;
                 nlConfirmBtn.disabled = true;
             }
         };
@@ -2203,7 +2203,7 @@ class BlockEditDialog {
         // 更新显示
         this.toggleDateTimeInputs(dialog, !result.hasTime);
 
-        showMessage(`✨ 已识别并设置：${new Date(result.date + 'T00:00:00').toLocaleDateString(getLocaleTag())}${result.time ? ` ${result.time}` : ''}`);
+        showMessage(i18n("detectedDateAndTime", { date: String(new Date(result.date + 'T00:00:00').toLocaleDateString(getLocaleTag())), time: String(result.time ? ` ${result.time}` : '') }));
     }
 
     // 切换日期时间输入框类型

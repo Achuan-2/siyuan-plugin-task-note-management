@@ -1,3 +1,4 @@
+import { i18n } from "../pluginInstance";
 /*
  * Copyright (c) 2024 by [author]. All Rights Reserved.
  * @Author       : [author]
@@ -27,7 +28,7 @@ const useShell = async (cmd: 'showItemInFolder' | 'openPath', filePath: string) 
             filePath: filePath,
         });
     } catch (error) {
-        await pushErrMsg('当前客户端不支持打开插件数据文件夹');
+        await pushErrMsg(i18n("openFolderNotSupported"));
     }
 };
 
@@ -267,7 +268,7 @@ export async function exportIcsFile(
                             trigger,
                         });
                     } catch (e) {
-                        console.warn('构建 reminderTime VALARM 失败', e, rt);
+                        console.warn("Failed to build reminderTime VALARM", e, rt);
                     }
                 }
                 if (alarms.length > 0) return alarms;
@@ -560,7 +561,7 @@ export async function exportIcsFile(
                     const until = `${dt.getUTCFullYear()}${String(dt.getUTCMonth() + 1).padStart(2, '0')}${String(dt.getUTCDate()).padStart(2, '0')}T${String(dt.getUTCHours()).padStart(2, '0')}${String(dt.getUTCMinutes()).padStart(2, '0')}${String(dt.getUTCSeconds()).padStart(2, '0')}Z`;
                     parts.push(`UNTIL=${until}`);
                 } catch (e) {
-                    console.warn('构建 UNTIL 失败', e);
+                    console.warn("Failed to build UNTIL", e);
                 }
             }
 
@@ -573,7 +574,7 @@ export async function exportIcsFile(
         for (const id of rootIds) {
             const r = reminderMap[id];
 
-            const title = r.title || '无标题';
+            const title = r.title || i18n("untitledTask");
             let description = r.note || '';
 
             try {
@@ -582,7 +583,7 @@ export async function exportIcsFile(
                     .filter((item: any) => item.parentId === id);
                 for (const child of children) {
                     try {
-                        const childTitle = child.title || '无标题子任务';
+                        const childTitle = child.title || i18n("untitledSubtask");
                         const childNote = child.note || '';
                         const childHasTime = !!(child.time || child.date);
 
@@ -851,7 +852,7 @@ export async function exportIcsFile(
                                         }
                                     }
                                 } catch (e) {
-                                    console.warn('构建子任务 RRULE 失败', e, child);
+                                    console.warn("Failed to build subtask RRULE", e, child);
                                 }
                             }
 
@@ -908,11 +909,11 @@ export async function exportIcsFile(
                             processReminderTimes(child, child.id || id, childTitle, child.completed, events);
                         }
                     } catch (ce) {
-                        console.error('处理子任务失败:', ce, child);
+                        console.error("Failed to process subtask:", ce, child);
                     }
                 }
             } catch (e) {
-                console.warn('处理子任务出错', e);
+                console.warn("Error processing subtask", e);
             }
 
             // Check parent filter
@@ -1219,7 +1220,7 @@ export async function exportIcsFile(
                         events.push(recurringEvent);
                         continue;
                     } catch (e) {
-                        console.warn('处理艾宾浩斯重复事件失败', e, r);
+                        console.warn("Failed to process Ebbinghaus recurring event", e, r);
                     }
                 }
 
@@ -1322,7 +1323,7 @@ export async function exportIcsFile(
                         // 已经为 lunar-yearly 展开为独立事件，跳过后续的 RRULE 处理与基础事件
                         continue;
                     } catch (e) {
-                        console.warn('处理农历重复事件失败', e, r);
+                        console.warn("Failed to process lunar recurring event", e, r);
                     }
                 }
 
@@ -1331,7 +1332,7 @@ export async function exportIcsFile(
                     try {
                         const lunarDay = r.repeat.lunarDay;
                         if (!lunarDay) {
-                            console.warn('lunar-monthly 缺少 lunarDay', r);
+                            console.warn("lunar-monthly is missing lunarDay", r);
                         } else {
                             const nowYear = new Date().getFullYear();
                             const startDate = new Date(nowYear, 0, 1);
@@ -1440,7 +1441,7 @@ export async function exportIcsFile(
                         // 已展开为独立事件,跳过后续 RRULE 与基础事件
                         continue;
                     } catch (e) {
-                        console.warn('处理农历每月事件失败', e, r);
+                        console.warn("Failed to process monthly lunar event", e, r);
                     }
                 }
 
@@ -1491,7 +1492,7 @@ export async function exportIcsFile(
                         }
                     }
                 } catch (e) {
-                    console.warn('构建 RRULE 失败', e, r);
+                    console.warn("Failed to build RRULE", e, r);
                 }
             }
 
@@ -1545,12 +1546,12 @@ export async function exportIcsFile(
         const { error, value } = ics.createEvents(events, {
             productId: 'siyuan-plugin-task-note-management',
             method: 'PUBLISH',
-            calName: '思源任务笔记管理',
+            calName: i18n("icsCalendarName"),
         });
 
         if (error) {
-            console.error('ICS 生成失败:', error);
-            await pushErrMsg('ICS 生成失败: ' + error.message);
+            console.error("ICS generation failed:", error);
+            await pushErrMsg(i18n("icsGenerateFailedPrefix") + error.message);
             return;
         }
 
@@ -1562,11 +1563,11 @@ export async function exportIcsFile(
             await useShell('showItemInFolder', window.siyuan.config.system.workspaceDir + '/' + outPath);
         }
         if (!isSilent) {
-            await pushMsg(`ICS 文件已生成: ${outPath} (共 ${events.length} 个事件)`);
+            await pushMsg(i18n("icsFileGenerated", { path: String(outPath), count: String(events.length) }));
         }
     } catch (err) {
-        console.error('导出 ICS 失败:', err);
-        await pushErrMsg('导出 ICS 失败');
+        console.error("Failed to export ICS:", err);
+        await pushErrMsg(i18n("icsExportFailed"));
     }
 }
 
@@ -1590,9 +1591,9 @@ export async function uploadIcsToCloud(plugin: any, settings: any, silent: boole
                     /* ignore */
                 }
             } catch (e) {
-                console.warn('保存自动生成的 ICS 文件名失败:', e);
+                console.warn("Failed to save automatically generated ICS filename:", e);
             }
-            await pushMsg(`未设置 ICS 文件名，已自动生成: ${icsFileName}.ics`);
+            await pushMsg(i18n("icsFileNameGenerated", { name: String(icsFileName) }));
         }
 
         // 确保文件名不包含.ics后缀
@@ -1609,7 +1610,7 @@ export async function uploadIcsToCloud(plugin: any, settings: any, silent: boole
 
         const icsBlob = await getFileBlob(icsPath);
         if (!icsBlob) {
-            await pushErrMsg('reminders.ics 文件不存在，请先生成 ICS 文件');
+            await pushErrMsg(i18n("icsFileMissingGenerateFirst"));
             return;
         }
 
@@ -1627,8 +1628,8 @@ export async function uploadIcsToCloud(plugin: any, settings: any, silent: boole
             await uploadToSiyuan(settings, icsContent, plugin, silent);
         }
     } catch (err) {
-        console.error('上传ICS到云端失败:', err);
-        await pushErrMsg('上传ICS到云端失败: ' + (err.message || err));
+        console.error("Failed to upload ICS to cloud:", err);
+        await pushErrMsg(i18n("icsCloudUploadFailedPrefix") + (err.message || err));
     }
 }
 
@@ -1643,11 +1644,11 @@ async function uploadToWebdav(settings: any, icsContent: string, fileName: strin
         const password = settings.webdavPassword || '';
 
         if (!url) {
-            await pushErrMsg('请先配置 WebDAV 网址');
+            await pushErrMsg(i18n("webdavUrlRequired"));
             return;
         }
 
-        console.log('WebDAV 上传:', { url, fileName, username: username ? '已设置' : '未设置' });
+        console.log("WebDAV upload:", { url, fileName, username: username ? "Set" : "Not set" });
         
         let baseUrl = url;
         if (!baseUrl.endsWith('/')) {
@@ -1662,7 +1663,7 @@ async function uploadToWebdav(settings: any, icsContent: string, fileName: strin
             urlObj.password = encodeURIComponent(password);
             urlWithAuth = urlObj.toString();
         } catch (e) {
-            console.warn('URL 编码失败，使用原始 URL:', e);
+            console.warn("URL encoding failed; using original URL:", e);
             urlWithAuth = baseUrl;
         }
         
@@ -1679,7 +1680,7 @@ async function uploadToWebdav(settings: any, icsContent: string, fileName: strin
             { 'Authorization': `Basic ${credentials}` }
         ];
 
-        console.log('发送 PUT 请求到:', targetUrl.replace(/\/\/[^@]+@/, '//***@'));
+        console.log("Sending PUT request to:", targetUrl.replace(/\/\/[^@]+@/, '//***@'));
         let response = await forwardProxy(
             targetUrl,
             'PUT',
@@ -1689,11 +1690,11 @@ async function uploadToWebdav(settings: any, icsContent: string, fileName: strin
             'text/calendar; charset=utf-8'
         );
         
-        console.log('PUT 响应状态:', response.status);
+        console.log("PUT response status:", response.status);
 
         if (response.status === 409) {
             // 尝试创建目录
-            console.log('目录不存在，尝试创建:', dirUrl.replace(/\/\/[^@]+@/, '//***@'));
+            console.log("Directory not found; attempting to create:", dirUrl.replace(/\/\/[^@]+@/, '//***@'));
             try {
                 const mkdirResponse = await forwardProxy(
                     dirUrl,
@@ -1702,13 +1703,13 @@ async function uploadToWebdav(settings: any, icsContent: string, fileName: strin
                     [{ 'Authorization': `Basic ${credentials}` }],
                     30000
                 );
-                console.log('MKCOL 响应状态:', mkdirResponse.status);
+                console.log("MKCOL response status:", mkdirResponse.status);
             } catch (e) {
-                console.warn('MKCOL 创建目录失败 (可忽略):', e);
+                console.warn("MKCOL failed to create directory (ignorable):", e);
             }
 
             // 重试上传
-            console.log('重试 PUT 请求...');
+            console.log("Retrying PUT request...");
             response = await forwardProxy(
                 targetUrl,
                 'PUT',
@@ -1717,11 +1718,11 @@ async function uploadToWebdav(settings: any, icsContent: string, fileName: strin
                 30000,
                 'text/calendar; charset=utf-8'
             );
-            console.log('重试 PUT 响应状态:', response.status);
+            console.log("Retry PUT response status:", response.status);
         }
 
         if (response.status < 200 || response.status >= 300) {
-            console.error('WebDAV 上传失败，响应:', response);
+            console.error("WebDAV upload failed; response:", response);
             throw { status: response.status, message: `HTTP error! status: ${response.status}` };
         }
 
@@ -1742,7 +1743,7 @@ async function uploadToWebdav(settings: any, icsContent: string, fileName: strin
             }
             displayUrl = urlObj.toString();
         } catch (e) {
-            console.warn('URL 解析失败，无法在URL中嵌入凭据', e);
+            console.warn("URL parsing failed; cannot embed credentials in URL", e);
         }
 
         settings.icsCloudUrl = displayUrl;
@@ -1754,28 +1755,28 @@ async function uploadToWebdav(settings: any, icsContent: string, fileName: strin
         try {
             window.dispatchEvent(new CustomEvent('reminderSettingsUpdated'));
         } catch (e) {
-            console.warn('触发设置更新事件失败:', e);
+            console.warn("Failed to trigger settings update event:", e);
         }
 
         if (!silent) {
-            await pushMsg(`ICS文件已上传到WebDAV`);
+            await pushMsg(i18n("icsUploadedWebdav"));
         }
-        console.log('ICS 文件上传到 WebDAV 成功');
+        console.log("ICS file uploaded to WebDAV");
     } catch (err: any) {
-        console.error('上传到WebDAV失败:', err);
+        console.error("Failed to upload to WebDAV:", err);
         // 提取详细的错误信息
         let errorMsg = err.message || err;
         if (err?.status) {
             errorMsg = `HTTP error! status: ${err.status}`;
             if (err.status === 401) {
-                errorMsg += ' (认证失败: 请检查用户名和密码。坚果云用户注意：用户名是邮箱，密码是第三方应用密码)';
+                errorMsg += i18n("webdavAuthErrorHint");
             } else if (err.status === 403) {
-                errorMsg += ' (禁止访问: 请检查权限设置)';
+                errorMsg += i18n("webdavForbiddenHint");
             } else if (err.status === 409) {
-                errorMsg += ' (冲突: 请先在 WebDAV 服务器中手动创建对应的文件夹)';
+                errorMsg += i18n("webdavConflictHint");
             }
         }
-        throw new Error('上传到WebDAV失败: ' + errorMsg);
+        throw new Error(i18n("webdavUploadFailedPrefix") + errorMsg);
     }
 }
 
@@ -1798,7 +1799,7 @@ async function uploadToS3(settings: any, icsContent: string, fileName: string, p
             // 使用思源的S3配置
             const siyuanS3 = window.siyuan?.config?.sync?.s3;
             if (!siyuanS3) {
-                await pushErrMsg('未找到思源的S3配置，请先在思源设置中配置S3同步');
+                await pushErrMsg(i18n("s3ConfigMissing"));
                 return;
             }
             s3Bucket = settings.s3Bucket || siyuanS3.bucket || '';
@@ -1823,7 +1824,7 @@ async function uploadToS3(settings: any, icsContent: string, fileName: string, p
 
         // 验证S3配置
         if (!s3Bucket || !s3Endpoint || !s3AccessKeyId || !s3AccessKeySecret) {
-            await pushErrMsg('S3配置不完整，请检查Bucket、Endpoint、AccessKeyId和AccessKeySecret');
+            await pushErrMsg(i18n("s3ConfigIncomplete"));
             return;
         }
 
@@ -1857,7 +1858,7 @@ async function uploadToS3(settings: any, icsContent: string, fileName: string, p
                         }),
                     });
                 } catch (e) {
-                    console.warn('无法配置TLS验证选项:', e);
+                    console.warn("Cannot configure TLS verification options:", e);
                 }
             }
         }
@@ -1899,12 +1900,12 @@ async function uploadToS3(settings: any, icsContent: string, fileName: string, p
                 }
                 if (endpointIsPrivate) {
                     throw new Error(
-                        '检测到局域网 S3 地址（' + endpoint + '），直连上传失败（CORS）。' +
-                        '思源 v3.6.5+ 禁止通过代理访问私有 IP，' +
-                        '请在思源桌面客户端中使用，或将 MinIO 部署到公网可访问地址。'
+                        i18n("s3PrivateAddressPrefix") + endpoint + i18n("s3CorsFailureSuffix") +
+                        i18n("s3PrivateProxyUnsupported") +
+                        i18n("s3UseDesktopOrPublicHost")
                     );
                 }
-                console.warn('S3 直连上传失败，尝试通过思源代理重试（通常由浏览器 CORS 导致）:', directErr);
+                console.warn("Direct S3 upload failed; retrying through SiYuan proxy (usually caused by browser CORS):", directErr);
                 await uploadToS3ByForwardProxy(s3Client, s3Bucket, s3Key, icsContent, endpoint);
                 uploadedByProxy = true;
             }
@@ -1953,20 +1954,20 @@ async function uploadToS3(settings: any, icsContent: string, fileName: string, p
         try {
             window.dispatchEvent(new CustomEvent('reminderSettingsUpdated'));
         } catch (e) {
-            console.warn('触发设置更新事件失败:', e);
+            console.warn("Failed to trigger settings update event:", e);
         }
 
         if (!silent) {
             await pushMsg(
                 uploadedByProxy
-                    ? `ICS文件已上传到S3（代理模式）: ${cloudUrl}`
-                    : `ICS文件已上传到S3: ${cloudUrl}`
+                    ? i18n("icsUploadedS3Proxy", { url: String(cloudUrl) })
+                    : i18n("icsUploadedS3", { url: String(cloudUrl) })
             );
         }
-        console.log('ICS 文件上传到 S3 成功');
+        console.log("ICS file uploaded to S3");
     } catch (err) {
-        console.error('上传到S3失败:', err);
-        throw new Error('上传到S3失败: ' + (err.message || err));
+        console.error("Failed to upload to S3:", err);
+        throw new Error(i18n("s3UploadFailedPrefix") + (err.message || err));
     }
 }
 
@@ -2024,8 +2025,7 @@ async function uploadToS3ByForwardProxy(
 ): Promise<void> {
     if (endpoint && isPrivateEndpoint(endpoint)) {
         throw new Error(
-            '思源 v3.6.5+ 禁止通过代理访问局域网 S3 地址（' + endpoint + '）。' +
-            '请在思源桌面客户端中使用直连模式，或将 MinIO 部署到公网可访问地址。'
+            i18n("s3PrivateProxyUnsupportedAddress", { endpoint })
         );
     }
     const signedUrl = await getSignedUrl(
@@ -2046,7 +2046,7 @@ async function uploadToS3ByForwardProxy(
         'text/calendar'
     );
     if (!response || response.status < 200 || response.status >= 300) {
-        throw new Error(`代理上传S3失败，状态码: ${response?.status ?? 'unknown'}`);
+        throw new Error(i18n("s3ProxyUploadFailedStatus", { status: String(response?.status ?? 'unknown') }));
     }
 }
 
@@ -2069,9 +2069,9 @@ async function uploadToSiyuan(settings: any, icsContent: string, plugin: any, si
                     window.dispatchEvent(new CustomEvent('reminderSettingsUpdated'));
                 } catch (e) { }
             } catch (e) {
-                console.warn('保存自动生成的 ICS 文件名失败:', e);
+                console.warn("Failed to save automatically generated ICS filename:", e);
             }
-            await pushMsg(`未设置 ICS 文件名，已自动生成: ${icsFileName}.ics`);
+            await pushMsg(i18n("icsFileNameGenerated", { name: String(icsFileName) }));
         }
 
         // 确保不包含 .ics 后缀
@@ -2103,15 +2103,15 @@ async function uploadToSiyuan(settings: any, icsContent: string, plugin: any, si
                 try {
                     window.dispatchEvent(new CustomEvent('reminderSettingsUpdated'));
                 } catch (e) {
-                    console.warn('触发设置更新事件失败:', e);
+                    console.warn("Failed to trigger settings update event:", e);
                 }
             } catch (e) {
-                console.warn('保存 ICS 同步时间失败:', e);
+                console.warn("Failed to save ICS sync time:", e);
             }
         }
 
     } catch (err) {
-        console.error('上传到思源服务器失败:', err);
-        throw new Error('上传到思源服务器失败: ' + (err.message || err));
+        console.error("Failed to upload to SiYuan server:", err);
+        throw new Error(i18n("siyuanUploadFailedPrefix") + (err.message || err));
     }
 }
