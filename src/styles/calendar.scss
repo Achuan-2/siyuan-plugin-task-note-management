@@ -65,6 +65,13 @@
             --fc-page-bg-color: var(--b3-theme-background);
             --fc-today-bg-color: var(--b3-theme-primary-lightest);
 
+            // FullCalendar 将多天任务挂在起始日期单元格内，再延伸到后续日期。
+            // 其他插件的全局 .fc-daygrid-day { overflow: hidden } 会裁掉跨天部分；
+            // 在本插件范围内恢复可见溢出，兼容月/年视图及时间视图的全天区域。
+            .fc-daygrid-day {
+                overflow: visible;
+            }
+
             /* Today highlight fix */
             .fc-today-custom:not(.fc-popover),
             .fc-list-day-today-custom,
