@@ -404,6 +404,8 @@ export class HabitStatsDialog {
         const startDate = new Date(`${habit.startDate || dateStr}T00:00:00`);
 
         switch (frequency.type) {
+            case "none":
+                return false;
             case "daily":
                 if (frequency.interval) {
                     const daysDiff = Math.floor((checkDate.getTime() - startDate.getTime()) / 86400000);

@@ -991,10 +991,14 @@
 
         habits.forEach(habit => {
             dateList.forEach(dateStr => {
-                if (shouldCheckInOnDate(habit, dateStr)) {
-                    totalHabitTargetDays++;
+                const required = shouldCheckInOnDate(habit, dateStr);
+                const checkInRecord = habit.checkIns?.[dateStr];
+                const hasUnscheduledRecord = habit.frequency?.type === "none" &&
+                    (checkInRecord?.count > 0 || checkInRecord?.entries?.length > 0 || checkInRecord?.status?.length > 0);
+                if (required || hasUnscheduledRecord) {
+                    if (required) totalHabitTargetDays++;
                     const isComplete = isHabitComplete(habit, dateStr);
-                    if (isComplete) {
+                    if (required && isComplete) {
                         completedHabitDays++;
                     }
 
@@ -1059,6 +1063,8 @@
         const interval = frequency.interval || 1;
 
         switch (frequency.type) {
+            case "none":
+                return i18n("freqNone");
             case "daily":
                 label = interval === 1 ? i18n("daily") : `${i18n("every")}${interval}${i18n("days")}`;
                 break;
@@ -1135,6 +1141,8 @@
         const startDate = new Date(`${habit.startDate}T00:00:00`);
 
         switch (frequency?.type) {
+            case "none":
+                return false;
             case "daily":
                 if (frequency.interval) {
                     const daysDiff = Math.floor((checkDate.getTime() - startDate.getTime()) / 86400000);

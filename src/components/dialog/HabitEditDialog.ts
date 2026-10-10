@@ -438,6 +438,12 @@ export class HabitEditDialog {
         reminderGroup.appendChild(reminderTimesContainer);
         reminderGroup.appendChild(addTimeBtn);
         form.appendChild(reminderGroup);
+        const frequencySelect = frequencyGroup.querySelector('select') as HTMLSelectElement;
+        const updateReminderVisibility = () => {
+            reminderGroup.style.display = frequencySelect.value === 'none' ? 'none' : 'flex';
+        };
+        frequencySelect.addEventListener('change', updateReminderVisibility);
+        updateReminderVisibility();
 
         // 分组选择
         const groupSelect = this.createGroupSelect();
@@ -928,6 +934,7 @@ export class HabitEditDialog {
             <option value="monthly">${i18n("freqMonthly")}</option>
             <option value="yearly">${i18n("freqYearly")}</option>
             <option value="ebbinghaus">${i18n("ebbinghaus")}</option>
+            <option value="none">${i18n("freqNone")}</option>
         `;
 
         if (this.habit?.frequency) {
@@ -1036,6 +1043,11 @@ export class HabitEditDialog {
         helperContainer.appendChild(monthDaysContainer);
         helperContainer.appendChild(yearlyDateContainer);
 
+        const noFrequencyHint = document.createElement('div');
+        noFrequencyHint.className = 'b3-label__text';
+        noFrequencyHint.textContent = i18n('freqNoneHint');
+        helperContainer.appendChild(noFrequencyHint);
+
         group.appendChild(label);
         group.appendChild(select);
         group.appendChild(helperContainer);
@@ -1043,6 +1055,7 @@ export class HabitEditDialog {
         // 事件：根据频率类型显示不同的选择项
         const updateHelperUI = () => {
             const type = select.value;
+            noFrequencyHint.style.display = type === 'none' ? 'block' : 'none';
             if (type === 'daily') {
                 intervalContainer.style.display = 'flex';
                 intervalSuffix.textContent = i18n("intervalSuffixDay");
@@ -1067,7 +1080,7 @@ export class HabitEditDialog {
                 weekdaysContainer.style.display = 'none';
                 monthDaysContainer.style.display = 'none';
                 yearlyDateContainer.style.display = 'flex';
-            } else if (type === 'ebbinghaus') {
+            } else if (type === 'ebbinghaus' || type === 'none') {
                 intervalContainer.style.display = 'none';
                 weekdaysContainer.style.display = 'none';
                 monthDaysContainer.style.display = 'none';
@@ -1145,7 +1158,7 @@ export class HabitEditDialog {
 
         const now = getLocalDateTimeString(new Date());
 
-        const frequencyType = formData.get('frequencyType') as any || 'daily';
+        const frequencyType = (formData.get('frequencyType') as Habit['frequency']['type']) || 'daily';
         const intervalStr = formData.get('interval') as string;
         const interval = intervalStr ? parseInt(intervalStr) : undefined;
 

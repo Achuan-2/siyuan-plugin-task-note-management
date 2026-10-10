@@ -450,12 +450,16 @@ function shouldCheckInOnDate(habit: Habit, dateStr: string): boolean {
 }
 
 function hasRequiredDateInRange(habit: Habit, dates: Date[]): boolean {
+    // 自由记录的习惯也保留在统计日历中，方便查看和补录。
+    if (habit.frequency.type === "none") return true;
     return dates.some(day => shouldCheckInOnDate(habit, getDateKey(day)));
 }
 
 function getFrequencyText(frequency: Habit["frequency"]): string {
     const { type, interval, weekdays, monthDays, months } = frequency;
     switch (type) {
+        case "none":
+            return i18n("freqNone");
         case "daily":
             return interval ? i18n("freqEveryNDays", { n: String(interval) }) : i18n("freqEveryDay");
         case "weekly":

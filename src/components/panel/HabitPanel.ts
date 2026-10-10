@@ -337,6 +337,7 @@ export class HabitPanel {
             <option value="todayCompleted">${i18n("filterTodayCompleted")}</option>
             <option value="yesterdayCompleted">${i18n("filterYesterdayCompleted")}</option>
             <option value="tomorrow">${i18n("filterTomorrow")}</option>
+            <option value="noFixedFrequency">${i18n("filterNoFixedFrequencyHabits")}</option>
             <option value="all">${i18n("filterAll")}</option>
             <option value="ended">${i18n("filterEnded") || "已结束"}</option>
             <option value="abandoned">${i18n("filterAbandoned") || "已放弃"}</option>
@@ -854,6 +855,8 @@ export class HabitPanel {
                 return todayBuckets.completedHabits as Habit[];
             case 'yesterdayCompleted':
                 return activeHabits.filter(h => this.isCompletedOnDate(h, yesterday));
+            case 'noFixedFrequency':
+                return activeHabits.filter(h => h.frequency.type === 'none');
             case 'all':
             default:
                 return activeHabits;
@@ -1279,8 +1282,8 @@ export class HabitPanel {
         const isCompletedOnDisplayDate = !isInactive && this.isCompletedOnDate(habit, displayDate);
         const checkIn = habit.checkIns?.[displayDate];
 
-        // 已结束和已放弃的习惯不显示进度条
-        if (!isInactive) {
+        // 无固定频率仅用于记录，不展示每日目标进度。
+        if (!isInactive && habit.frequency.type !== 'none') {
             const goalType = this.getHabitGoalType(habit);
             const progress = this.getHabitProgressOnDate(habit, displayDate);
             const { current: currentProgress, target: targetProgress } = progress;
@@ -1455,7 +1458,7 @@ export class HabitPanel {
         footer.className = 'habit-card__footer';
 
         // 根据习惯设置显示连续打卡天数或累计达标天数
-        const checkInDaysMode = this.checkInDaysMode;
+        const checkInDaysMode = habit.frequency.type === 'none' ? 'total' : this.checkInDaysMode;
         const completionOptions = {
             getPomodoroFocusMinutes: (habitId: string, logicalDate: string) =>
                 this.getHabitFocusMinutesByDate(habitId, logicalDate)
@@ -1662,6 +1665,8 @@ export class HabitPanel {
         const { type, interval, weekdays, monthDays, months } = frequency;
 
         switch (type) {
+            case 'none':
+                return i18n("freqNone");
             case 'daily':
                 return interval ? i18n("freqEveryNDays", { n: String(interval) }) : i18n("freqEveryDay");
             case 'weekly':

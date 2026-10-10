@@ -4,7 +4,7 @@ export type HabitGoalType = "count" | "pomodoro" | "either";
 export const POMODORO_TARGET_AUTO_CHECKIN_MEANING = "番茄达标自动补录";
 export const POMODORO_PER_SESSION_AUTO_CHECKIN_MEANING = "自动番茄打卡";
 
-export type HabitFrequencyType = "daily" | "weekly" | "monthly" | "yearly" | "ebbinghaus" | "custom";
+export type HabitFrequencyType = "daily" | "weekly" | "monthly" | "yearly" | "ebbinghaus" | "custom" | "none";
 
 export type HabitMemoSyncMode = "none" | "checkin" | "note";
 
@@ -31,6 +31,7 @@ export interface HabitReminderTimeModification {
 
 export interface HabitLike {
     id?: string;
+    abandoned?: boolean;
     startDate?: string;
     endDate?: string;
     target?: number;
@@ -160,6 +161,9 @@ export function shouldCheckInOnDate(habit: HabitLike, date: string): boolean {
     const startDate = new Date(habit?.startDate || date);
 
     switch (frequency.type) {
+        case "none":
+            // 仅记录实际发生的打卡，不生成应打卡日期。
+            return false;
         case "daily":
             if (frequency.interval) {
                 const daysDiff = Math.floor((checkDate.getTime() - startDate.getTime()) / 86400000);
@@ -331,6 +335,7 @@ export function getHabitStreakDays(
         getPomodoroFocusMinutes?: (habitId: string, logicalDate: string) => number;
     }
 ): number {
+    if (habit.frequency?.type === "none") return 0;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(asOfDate)) return 0;
 
     const startDate = habit?.startDate || asOfDate;
@@ -380,10 +385,12 @@ function normalizeHabitReminderTimes(
 }
 
 export function getHabitReminderTimes(habit: HabitLike): HabitReminderTimeEntry[] {
+    if (habit.frequency?.type === "none") return [];
     return normalizeHabitReminderTimes(habit?.reminderTimes, habit?.reminderTime);
 }
 
 export function getHabitReminderTimesForDate(habit: HabitLike, date: string): HabitReminderTimeEntry[] {
+    if (habit.frequency?.type === "none") return [];
     const modification = date ? habit?.reminderTimeModifications?.[date] : undefined;
     if (modification && Array.isArray(modification.reminderTimes)) {
         return normalizeHabitReminderTimes(modification.reminderTimes);
@@ -417,7 +424,12 @@ export function getTodayHabitBuckets(
     });
 
     const pendingHabits = dueHabits.filter((habit) => !isHabitCompletedOnDate(habit, today, options));
-    const completedHabits = dueHabits.filter((habit) => isHabitCompletedOnDate(habit, today, options));
+    // 无固定频率没有待办要求，但当天完成的打卡仍进入已打卡列表。
+    const completedHabits = habits.filter((habit) =>
+        habit?.abandoned !== true && isHabitActiveOnDate(habit, today) &&
+        (habit.frequency?.type === "none" || shouldCheckInOnDate(habit, today)) &&
+        isHabitCompletedOnDate(habit, today, options)
+    );
 
     return { dueHabits, pendingHabits, completedHabits };
 }

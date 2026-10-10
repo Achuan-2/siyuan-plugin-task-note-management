@@ -66,6 +66,11 @@ function loadFrontend(file, manager, messages = []) {
         '../../utils/linkedHabitPomodoro': linked,
         '../../utils/dateUtils': {
             getLogicalDateString: () => date,
+            getRelativeDateString: offset => {
+                const value = new Date(`${date}T12:00:00`);
+                value.setDate(value.getDate() + offset);
+                return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+            },
             getLocalDateString: value => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`,
             getLocalDateTimeString: () => `${date} 09:30:00`,
             compareDateStrings: (a, b) => a.localeCompare(b)
@@ -201,4 +206,72 @@ test('内核习惯管理保存并更新组合目标，不丢失另一项目标',
     await manager.updateHabit(created.id, { pomodoroTargetMinutes: 30 });
     assert.equal(files['habit.json'][created.id].target, 3);
     assert.equal(files['habit.json'][created.id].pomodoroTargetMinutes, 30);
+});
+
+test('无固定频率不进入待打卡和提醒计划，打卡后保留已完成记录', async () => {
+    const value = habit(0, {
+        goalType: 'count', target: 1, frequency: { type: 'none' },
+        reminderTimes: ['09:30'], reminderTime: '09:30',
+        reminderTimeModifications: { [date]: { reminderTimes: ['10:00'] } }
+    });
+    assert.equal(utils.shouldCheckInOnDate(value, date), false);
+    assert.deepEqual(utils.getHabitReminderTimes(value), []);
+    assert.deepEqual(utils.getHabitReminderTimesForDate(value, date), []);
+    assert.deepEqual(utils.getTodayHabitBuckets([value], date), { dueHabits: [], pendingHabits: [], completedHabits: [] });
+    const { buildReminderSchedule } = load('src/services/ReminderSchedule.ts');
+    const schedule = await buildReminderSchedule({}, { habit: value }, {}, {}, new Date(`${date}T09:00:00`));
+    assert.equal(schedule.times.size, 0);
+
+    value.checkIns[date] = { count: 1, status: ['✅'], timestamp: `${date} 09:30:00` };
+    const buckets = utils.getTodayHabitBuckets([value], date);
+    assert.equal(buckets.dueHabits.length, 0);
+    assert.equal(buckets.pendingHabits.length, 0);
+    assert.deepEqual(buckets.completedHabits, [value]);
+    assert.equal(utils.getHabitCompletedDaysCount(value), 1);
+    assert.equal(utils.getHabitStreakDays(value, date), 0);
+    for (const overrides of [{ abandoned: true }, { startDate: '2026-10-09' }, { endDate: '2026-10-07' }]) {
+        assert.equal(utils.getTodayHabitBuckets([{ ...value, ...overrides }], date).completedHabits.length, 0);
+    }
+});
+
+test('无固定频率在全部习惯可打卡，日历只展示实际记录', async () => {
+    const value = habit(0, { goalType: 'count', target: 1, frequency: { type: 'none' }, reminderTimes: ['09:30'] });
+    const { panel, calendar } = fixture(value, 0);
+    panel.currentTab = 'all';
+    assert.deepEqual(panel.applyFilter([value]), [value]);
+    for (const tab of ['today', 'tomorrow', 'todayCompleted']) {
+        panel.currentTab = tab;
+        assert.deepEqual(panel.applyFilter([value]), []);
+    }
+    assert.equal(panel.getFrequencyText(value.frequency), 'freqNone');
+    const empty = [];
+    await calendar.addHabitEventsToList(empty, date, date);
+    assert.equal(empty.length, 0);
+    value.checkIns[date] = { count: 1, status: ['✅'], timestamp: `${date} 09:30:00` };
+    const events = [];
+    await calendar.addHabitEventsToList(events, date, '2026-10-09');
+    assert.ok(events.some(event => event.extendedProps.type === 'habit'));
+    assert.ok(events.some(event => event.extendedProps.type === 'habitCheckInTime'));
+    assert.ok(events.every(event => event.extendedProps.date === date && event.extendedProps.type !== 'habitReminderTime'));
+    panel.currentTab = 'todayCompleted';
+    assert.deepEqual(panel.applyFilter([value]), [value]);
+});
+
+test('切换无固定频率并重新编辑保留历史，切回每天恢复计划', async () => {
+    const { HabitEditDialog } = loadFrontend('src/components/dialog/HabitEditDialog.ts', {});
+    const editor = Object.create(HabitEditDialog.prototype);
+    const saved = [];
+    const original = habit(1, { goalType: 'count', target: 1, frequency: { type: 'weekly', weekdays: [1] } });
+    Object.assign(editor, { habit: original, onSave: async value => saved.push(value), dialog: { destroy() {} } });
+    const values = { title: '理发', color: '#66bb6a', startDate: original.startDate, goalType: 'count', target: '1', frequencyType: 'none', interval: '3' };
+    const form = { values, querySelectorAll: () => [] };
+    for (const type of ['none', 'none', 'daily']) {
+        values.frequencyType = type;
+        await editor.handleSubmit(form, false, editor.habit.checkInEmojis, false);
+        editor.habit = saved.at(-1);
+        assert.deepEqual(editor.habit.checkIns, original.checkIns);
+        assert.equal(editor.habit.id, original.id);
+        assert.deepEqual(editor.habit.frequency, type === 'none' ? { type: 'none' } : { type: 'daily', interval: 3 });
+    }
+    assert.equal(utils.shouldCheckInOnDate(editor.habit, original.startDate), true);
 });
