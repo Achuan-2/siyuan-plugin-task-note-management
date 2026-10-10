@@ -20,10 +20,10 @@ new Function('require', 'module', 'exports', repeatSource)(
         : name === '../../utils/lunarUtils' || name === '../../utils/reminderSkipDate' ? {} : require(name), repeat, repeat.exports
 );
 
-function fixture(data = {}, platform = 'win32', version = '42.0.0') {
+function fixture(data = {}, platform = 'win32', version = '42.0.0', nativeSupported = true) {
     const notices = [];
     class NativeNotification {
-        static isSupported() { return true; }
+        static isSupported() { return nativeSupported; }
         constructor(options) { this.options = options; this.handlers = {}; notices.push(this); }
         on(name, callback) { this.handlers[name] = callback; }
         show() { this.shown = true; }
@@ -72,7 +72,8 @@ function fixture(data = {}, platform = 'win32', version = '42.0.0') {
         updateMobileNotification: async () => {}, playTaskCompleteSound: async () => {}, updateBadges() {}
     };
     const harness = new exports.ReminderNotificationService(host, async task => { harness.started = task; }, () => {});
-    harness.focusWindow = () => {};
+    harness.focusCount = 0;
+    harness.focusWindow = () => harness.focusCount++;
     harness.showActions = info => { harness.dialog = info; };
     return { harness, notices, checks, savedHabits, host, dependencies };
 }
@@ -172,18 +173,58 @@ test('点击系统通知的习惯打卡按钮只打开一次添加弹窗', async
     notices[0].handlers.click();
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(checks.length, 1);
+    assert.equal(harness.focusCount, 1);
     assert.equal(checks[0].habit.id, 'habit');
     assert.equal(savedHabits.length, 0);
     assert.equal(notices[0].closed, true);
 });
 
-test('旧版 Windows 使用浏览器通知，点击后显示操作框', async () => {
+test('旧版 Windows 使用无按钮的原生通知，点击正文后显示操作框', async () => {
     const { harness, notices } = fixture({}, 'win32', '40.0.0');
     const info = { id: 'task' };
     await harness.show('任务', '内容', info);
-    notices[0].onclick();
+    assert.deepEqual(notices[0].options.actions, []);
+    notices[0].handlers.click();
     assert.equal(harness.dialog, info);
     assert.equal(notices[0].closed, true);
+});
+
+test('习惯通知正文点击或关闭误报点击都不唤起思源，打卡按钮仍可用', async () => {
+    for (const [version, nativeSupported] of [['42.0.0', true], ['40.0.0', true], ['40.0.0', false]]) {
+        for (const closeFirst of [true, false]) {
+            const { harness, notices, checks } = fixture({ habit: { id: 'habit' } }, 'win32', version, nativeSupported);
+            await harness.show('习惯', '内容', { id: 'habit', notificationKind: 'habit' });
+            const click = () => nativeSupported ? notices[0].handlers.click() : notices[0].onclick();
+            const close = () => nativeSupported ? notices[0].handlers.close({ reason: 'userCanceled' }) : notices[0].onclose();
+            if (closeFirst) close();
+            click();
+            assert.equal(harness.focusCount, 0);
+            assert.equal(harness.dialog, undefined);
+            assert.equal(checks.length, 0);
+            if (!closeFirst && version === '42.0.0') {
+                notices[0].handlers.action({ actionIndex: 0 });
+                await new Promise(resolve => setImmediate(resolve));
+                assert.equal(harness.focusCount, 1);
+                assert.equal(checks.length, 1);
+            }
+            if (!closeFirst) close();
+        }
+    }
+});
+
+test('原生通知发送失败不会自动弹出习惯打卡操作框', async () => {
+    const { harness, notices, checks } = fixture({ habit: { id: 'habit' } });
+    await harness.show('习惯', '内容', { id: 'habit', notificationKind: 'habit' });
+    const originalWarn = console.warn;
+    try {
+        console.warn = () => {};
+        notices[0].handlers.failed({}, 'delivery failed');
+    } finally {
+        console.warn = originalWarn;
+    }
+    assert.equal(harness.dialog, undefined);
+    assert.equal(checks.length, 0);
+    assert.equal(harness.desktopReminderNotifications.size, 0);
 });
 
 test('关闭原生习惯通知后忽略后续点击、打卡和失败回调', async () => {
@@ -211,21 +252,24 @@ test('原生通知超时进入通知中心后仍可点击打卡', async () => {
     assert.equal(harness.desktopReminderNotifications.size, 0);
 });
 
-test('关闭浏览器习惯通知后不再弹出操作框，正常点击只弹出一次', async () => {
-    const { harness, notices } = fixture({}, 'win32', '40.0.0');
+test('关闭浏览器习惯通知后不再弹出操作框，任务点击仍只弹出一次', async () => {
+    const { harness, notices } = fixture({}, 'win32', '40.0.0', false);
     const info = { id: 'habit', notificationKind: 'habit' };
     await harness.show('习惯', '内容', info);
+    assert.equal(notices[0].options.requireInteraction, false);
     notices[0].onclose();
     notices[0].onclick();
     assert.equal(harness.dialog, undefined);
+    assert.equal(harness.focusCount, 0);
     assert.equal(harness.desktopReminderNotifications.size, 0);
 
     let dialogs = 0;
     harness.showActions = () => dialogs++;
-    await harness.show('习惯', '内容', info);
+    await harness.show('任务', '内容', { id: 'task', notificationKind: 'task' });
     notices[1].onclick();
     notices[1].onclick();
     assert.equal(dialogs, 1);
+    assert.equal(harness.focusCount, 1);
 });
 
 test('销毁模块会关闭并清空未处理的系统通知', async () => {

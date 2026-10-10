@@ -207,16 +207,16 @@ export class ReminderNotificationService {
 
         try {
             const actions = this.getActions(reminderInfo);
-            // Windows 在 Electron 42 起支持原生 action 回调；旧版点击通知后提供操作框。
+            // 桌面端优先使用原生通知；按钮是否可用与通知本身是否可用分别判断。
             try {
                 const remote = (window as any).require?.('@electron/remote');
                 const runtimeProcess = remote?.process;
                 const supportsActions = runtimeProcess?.platform === 'darwin'
                     || (runtimeProcess?.platform === 'win32' && parseInt(runtimeProcess.versions.electron, 10) >= 42);
-                if (actions.length && supportsActions && remote.Notification?.isSupported()) {
+                if (actions.length && remote?.Notification?.isSupported()) {
                     const notification = new remote.Notification({
                         title, body: message, timeoutType: 'never',
-                        actions: actions.map(action => ({ type: 'button', text: action.text }))
+                        actions: supportsActions ? actions.map(action => ({ type: 'button', text: action.text })) : []
                     });
                     this.desktopReminderNotifications.add(notification);
                     let handled = false;
@@ -236,6 +236,8 @@ export class ReminderNotificationService {
                     });
                     notification.on('click', () => {
                         if (handled || !this.desktopReminderNotifications.has(notification)) return;
+                        // 习惯只响应打卡按钮；正文点击或关闭误报点击都不唤起窗口。
+                        if (reminderInfo.notificationKind === 'habit') return;
                         handled = true;
                         notification.close();
                         this.desktopReminderNotifications.delete(notification);
@@ -246,7 +248,6 @@ export class ReminderNotificationService {
                         handled = true;
                         console.warn('原生系统通知失败:', error);
                         this.desktopReminderNotifications.delete(notification);
-                        this.showActions(reminderInfo);
                     });
                     notification.show();
                     return;
@@ -258,7 +259,8 @@ export class ReminderNotificationService {
                 // 使用浏览器通知
                 const notification = new Notification(title, {
                     body: message,
-                    requireInteraction: true,
+                    // 浏览器兼容路径使用系统的关闭入口，避免额外的“关闭”按钮触发点击。
+                    requireInteraction: false,
                     silent: false, // 使用我们自己的音频
                 });
                 this.desktopReminderNotifications.add(notification);
@@ -271,6 +273,7 @@ export class ReminderNotificationService {
                 // 点击通知时的处理
                 notification.onclick = () => {
                     if (handled || !this.desktopReminderNotifications.has(notification)) return;
+                    if (reminderInfo?.notificationKind === 'habit') return;
                     handled = true;
                     this.focusWindow();
                     notification.close();
