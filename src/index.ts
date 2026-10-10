@@ -4790,7 +4790,6 @@ export default class ReminderPlugin extends Plugin {
                     const taskSame = this.isSameMobileNotificationPlan(currentTaskPlan, expectedTaskPlan);
                     const habitSame = this.isSameMobileNotificationPlan(this.mobileHabitNotificationPlansCache, expectedHabitPlan);
                     if (taskSame && habitSame) {
-                        pushMsg('[MobileNotification] 数据变化但任务/习惯通知计划未变化，跳过重建');
                         return;
                     }
 
