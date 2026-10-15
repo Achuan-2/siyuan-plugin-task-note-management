@@ -251,8 +251,64 @@ function autoSortFixture(parents) {
             doOperations: [{ action: 'update', data: snapshot(after) }],
         }] };
     }
-    return { sorter, calls, errors, complete, drain: () => queue, setWritable: value => { writable = value; } };
+    return {
+        sorter, calls, errors, complete,
+        drain: async () => {
+            await new Promise(resolve => setTimeout(resolve, autoUtils.TASK_LIST_AUTO_SORT_DELAY + 10));
+            await queue;
+        },
+        flush: () => queue,
+        setWritable: value => { writable = value; },
+    };
 }
+
+test('自动排序延迟 400ms，连续勾选重新计时并合并为一次排序', async t => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const parent = list([' ', ' ', 'X']);
+    const env = autoSortFixture([parent]);
+    await env.sorter.toggle([{ id: 'root', kind: 'list' }], 'bottom', () => true);
+    const first = parent.children[0];
+    const second = parent.children[1];
+    const count = env.calls.length;
+    env.sorter.handleTransactions(env.complete([[first, 'X']]));
+    t.mock.timers.tick(300);
+    await env.flush();
+    assert.equal(env.calls.length, count);
+    env.sorter.handleTransactions(env.complete([[second, 'X']]));
+    t.mock.timers.tick(autoUtils.TASK_LIST_AUTO_SORT_DELAY - 1);
+    await env.flush();
+    assert.equal(env.calls.length, count);
+    t.mock.timers.tick(1);
+    await env.flush();
+    assert.equal(env.calls.filter(call => call.url === '/api/transactions').length, 1);
+    assert.deepEqual(parent.children.map(item => item.dataset.nodeId), ['root-2', 'root-0', 'root-1']);
+});
+
+test('延迟期间取消完成不移动任务，关闭开关或卸载后不执行待处理排序', async t => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const parent = list([' ', 'X']);
+    const env = autoSortFixture([parent]);
+    const targets = [{ id: 'root', kind: 'list' }];
+    await env.sorter.toggle(targets, 'bottom', () => true);
+    env.sorter.handleTransactions(env.complete([[parent.children[0], 'X']]));
+    env.sorter.handleTransactions(env.complete([[parent.children[0], ' ']]));
+    t.mock.timers.tick(autoUtils.TASK_LIST_AUTO_SORT_DELAY);
+    await env.flush();
+    assert.equal(env.calls.some(call => call.url === '/api/transactions'), false);
+    env.sorter.handleTransactions(env.complete([[parent.children[0], 'X']]));
+    await env.sorter.toggle(targets, 'bottom', () => true);
+    t.mock.timers.tick(autoUtils.TASK_LIST_AUTO_SORT_DELAY);
+    await env.flush();
+    assert.equal(env.calls.some(call => call.url === '/api/transactions'), false);
+    await env.sorter.toggle(targets, 'bottom', () => true);
+    parent.children[0].setAttribute('data-task', ' ');
+    env.sorter.handleTransactions(env.complete([[parent.children[0], 'X']]));
+    env.sorter.destroy();
+    const count = env.calls.length;
+    t.mock.timers.tick(autoUtils.TASK_LIST_AUTO_SORT_DELAY);
+    await env.flush();
+    assert.equal(env.calls.length, count);
+});
 
 test('自动排序开关保存到当前列表，重建控制器可读取，取消后清除，聚焦列表项能定位父列表', async () => {
     const parent = list([' ', 'X']);

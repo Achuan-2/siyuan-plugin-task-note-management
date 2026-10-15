@@ -1,6 +1,7 @@
 import { createTaskSortPlan, type CompletedTaskPosition, type TaskListSortTarget } from './taskListSort';
 
 export const TASK_LIST_AUTO_SORT_ATTR = 'custom-task-note-auto-sort';
+export const TASK_LIST_AUTO_SORT_DELAY = 400;
 const TASK_LIST = '[data-type="NodeList"][data-subtype="t"]';
 const TASK_ITEM = '[data-type="NodeListItem"][data-subtype="t"]';
 
@@ -55,7 +56,22 @@ export function getNewlyCompletedTaskIds(event: any): string[] {
 
 /** 开关保存在列表自身；每次使用最新完整快照，不继承父级或其他列表的设置。 */
 export class TaskListAutoSorter {
+    private readonly pendingIds = new Set<string>();
+    private timer: ReturnType<typeof setTimeout> | null = null;
+    private disposed = false;
+
     constructor(private readonly options: AutoSortOptions) {}
+
+    private canSort(): boolean {
+        return !this.disposed && this.options.canSort();
+    }
+
+    destroy(): void {
+        this.disposed = true;
+        if (this.timer !== null) clearTimeout(this.timer);
+        this.timer = null;
+        this.pendingIds.clear();
+    }
 
     private async readList(id: string): Promise<HTMLElement | undefined> {
         const response = await this.options.request('/api/block/getBlockDOM', { id });
@@ -80,11 +96,11 @@ export class TaskListAutoSorter {
 
     async toggle(targets: TaskListSortTarget[], position: CompletedTaskPosition, canEdit: () => boolean): Promise<void> {
         await this.options.enqueue(async () => {
-            if (!this.options.canSort() || !canEdit()) return;
+            if (!this.canSort() || !canEdit()) return;
             const states = await this.getStates(targets);
             const enabled = !states.every(state => state.position !== null);
             for (const state of states) {
-                if (!this.options.canSort() || !canEdit()) return;
+                if (!this.canSort() || !canEdit()) return;
                 await this.options.request('/api/attr/setBlockAttrs', {
                     id: state.id, attrs: { [TASK_LIST_AUTO_SORT_ATTR]: enabled ? position : '' },
                 });
@@ -94,13 +110,25 @@ export class TaskListAutoSorter {
 
     handleTransactions(event: any): void {
         // 由编辑操作的发起端负责排序，避免多个客户端处理同一条广播。
-        if (!this.options.canSort() || (event?.app && event.app !== this.options.context.app)) return;
+        if (!this.canSort() || (event?.app && event.app !== this.options.context.app)) return;
         const changedIds = getNewlyCompletedTaskIds(event);
         if (!changedIds.length) return;
+        for (const id of changedIds) this.pendingIds.add(id);
+        if (this.timer !== null) clearTimeout(this.timer);
+        // 保留勾选反馈，连续勾选在最后一次操作后统一整理。
+        this.timer = setTimeout(() => {
+            this.timer = null;
+            const completed = [...this.pendingIds];
+            this.pendingIds.clear();
+            this.sortCompleted(completed);
+        }, TASK_LIST_AUTO_SORT_DELAY);
+    }
+
+    private sortCompleted(changedIds: string[]): void {
         void this.options.enqueue(async () => {
             const byList = new Map<string, Set<string>>();
             for (const id of changedIds) {
-                if (!this.options.canSort()) return;
+                if (!this.canSort()) return;
                 // SiblingID 的 parent 会跳过列表层；RelevantIDs 才返回直接父列表。
                 const parent = (await this.options.request('/api/block/getBlockRelevantIDs', { id }))?.parentID;
                 if (!parent) continue;
@@ -108,10 +136,10 @@ export class TaskListAutoSorter {
                 byList.get(parent)!.add(id);
             }
             for (const [id, completed] of byList) {
-                if (!this.options.canSort()) return;
+                if (!this.canSort()) return;
                 const list = await this.readList(id);
                 const position = list && positionOf(list);
-                if (!list || !position || !this.options.canSort()) continue;
+                if (!list || !position || !this.canSort()) continue;
                 const plan = createTaskSortPlan(list, position, completed);
                 if (!plan) continue;
                 await this.options.request('/api/transactions', {

@@ -2498,6 +2498,7 @@ export default class ReminderPlugin extends Plugin {
         this.eventBus.on('ws-main', handleAutoSort);
         this.addCleanup(() => {
             this.eventBus.off('ws-main', handleAutoSort);
+            this.taskListAutoSorter?.destroy();
             this.taskListAutoSorter = null;
         });
         const handleBlkMenu = this.handleBlockMenu.bind(this);
