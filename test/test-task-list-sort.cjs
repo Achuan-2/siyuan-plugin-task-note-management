@@ -139,7 +139,7 @@ test('只读或读取期间卸载不提交排序，接口失败向菜单传播',
         { app: 'app', session: 'plugin' }, () => true), /network/);
 });
 
-function menuFixture(readOnly = false) {
+function menuFixture(readOnly = false, settings = {}) {
     const env = apiFixture();
     const errors = [];
     const source = fs.readFileSync(path.join(root, 'src/index.ts'), 'utf8');
@@ -154,7 +154,7 @@ function menuFixture(readOnly = false) {
     global.window = { siyuan: { config: { editor: { readOnly } } } };
     const plugin = new Fixture();
     Object.assign(plugin, { taskListSortQueue: Promise.resolve(), storageDisposed: false,
-        app: { appId: 'app' }, name: 'plugin', settings: { pomodoroDirectStart: true }, hasListChildren: () => false });
+        app: { appId: 'app' }, name: 'plugin', settings: { pomodoroDirectStart: true, ...settings }, hasListChildren: () => false });
     const items = [];
     const detail = { blockElements: [env.parent.children[0]], menu: { addItem: item => items.push(item) },
         protyle: { options: { action: [] } } };
@@ -188,3 +188,39 @@ test('只读菜单禁用，普通段落不显示任务排序菜单', async () =>
         menu: { addItem: item => items.push(item) } } });
     assert.equal(items.some(item => item.label === 'taskListSort'), false);
 });
+
+test('关闭任务排序隐藏菜单，并阻止已打开菜单继续排序', async () => {
+    const disabled = menuFixture(false, { enableTaskListSort: false });
+    assert.equal(disabled.items.some(item => ['taskListSort', 'completedTasksToBottom', 'completedTasksToTop'].includes(item.label)), false);
+    assert.ok(disabled.items.some(item => item.label === 'setTimeReminder'));
+    assert.ok(disabled.items.some(item => item.label === 'startPomodoro'));
+
+    const env = menuFixture();
+    const sort = env.items.find(item => item.label === 'taskListSort');
+    env.plugin.settings.enableTaskListSort = false;
+    await sort.submenu[0].click();
+    assert.equal(env.calls.length, 0);
+});
+
+for (const mode of ['bottom', 'top']) {
+    test(`固定 ${mode} 模式直接显示对应菜单并执行排序，只读时禁用`, async () => {
+        const settings = { enableTaskListSort: true, taskListSortMenuMode: mode };
+        const env = menuFixture(false, settings);
+        if (mode === 'top') env.parent.children.reverse();
+        const label = mode === 'bottom' ? 'completedTasksToBottom' : 'completedTasksToTop';
+        const otherLabel = mode === 'bottom' ? 'completedTasksToTop' : 'completedTasksToBottom';
+        assert.equal(env.items.some(item => item.label === 'taskListSort' || item.label === otherLabel), false);
+        const item = env.items.find(item => item.label === label);
+        assert.ok(item);
+        assert.equal(item.submenu, undefined);
+        await item.click();
+        assert.equal(env.calls.filter(call => call.url === '/api/transactions').length, 1);
+        assert.equal(env.parent.children[mode === 'bottom' ? 1 : 0].getAttribute('data-task'), 'X');
+
+        const readOnly = menuFixture(true, settings);
+        const disabled = readOnly.items.find(item => item.label === label);
+        assert.equal(disabled.disabled, true);
+        await disabled.click();
+        assert.equal(readOnly.calls.length, 0);
+    });
+}

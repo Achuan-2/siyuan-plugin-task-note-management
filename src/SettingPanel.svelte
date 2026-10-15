@@ -1360,6 +1360,31 @@
                     ],
                 },
                 {
+                    name: i18n('taskListSort'),
+                    items: [
+                        {
+                            key: 'enableTaskListSort',
+                            value: settings.enableTaskListSort,
+                            type: 'checkbox',
+                            title: i18n('enableTaskListSort'),
+                            description: i18n('enableTaskListSortDesc'),
+                        },
+                        {
+                            key: 'taskListSortMenuMode',
+                            value: settings.taskListSortMenuMode,
+                            type: 'select',
+                            title: i18n('taskListSortMenuMode'),
+                            description: i18n('taskListSortMenuModeDesc'),
+                            disabled: !settings.enableTaskListSort,
+                            options: {
+                                submenu: i18n('taskListSortSubmenu'),
+                                bottom: i18n('completedTasksToBottom'),
+                                top: i18n('completedTasksToTop'),
+                            },
+                        },
+                    ],
+                },
+                {
                     name: i18n('subGroupTaskNoteSync'),
                     items: [
                         {
@@ -2576,6 +2601,10 @@
                         return v;
                     })(),
                 };
+
+                if (item.key === 'taskListSortMenuMode') {
+                    updatedItem.disabled = !settings.enableTaskListSort;
+                }
 
                 // 为笔记本选择器更新选项
                 if (item.key === 'newDocNotebook') {

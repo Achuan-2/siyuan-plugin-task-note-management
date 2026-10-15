@@ -142,6 +142,8 @@ export const DEFAULT_SETTINGS = {
     defaultHeadingPosition: 'prepend', // 新增：新建标题的默认位置（'prepend' | 'append'），默认为最前
     enableOutlinePrefix: true, // 是否在大纲中为绑定标题添加任务状态前缀
     enableTaskListStatusSync: false, // 任务列表状态与任务进行中/放弃状态联动
+    enableTaskListSort: true, // 在任务列表块菜单中显示手动排序
+    taskListSortMenuMode: 'submenu', // 排序菜单展示方式：submenu | bottom | top
     taskPriorityDisplayStyle: 'background', // 任务卡片优先级显示样式：background | checkboxBorder
     showTaskCardDocumentTitle: true, // 任务卡片是否显示绑定块所属文档标题
     unassignedTasksProjectId: 'inbox', // 无项目的任务归属项目ID，默认'inbox'
@@ -3465,36 +3467,44 @@ export default class ReminderPlugin extends Plugin {
     }
 
     private addTaskListSortMenu(detail: any, blockElements: HTMLElement[]) {
+        if (this.settings.enableTaskListSort === false) return;
         const targets = getTaskListSortTargets(blockElements);
         if (!targets.length) return;
-        const canSort = () => !this.storageDisposed && !window.siyuan?.config?.editor?.readOnly &&
+        const canSort = () => this.settings.enableTaskListSort !== false &&
+            !this.storageDisposed && !window.siyuan?.config?.editor?.readOnly &&
             !detail.protyle?.disabled && !detail.protyle?.options?.action?.includes('cb-get-history');
-        detail.menu.addItem({
-            icon: 'iconCheck', label: i18n('taskListSort'), type: 'submenu',
-            submenu: (['bottom', 'top'] as const).map(position => ({
-                icon: position === 'bottom' ? 'iconDown' : 'iconUp',
-                label: i18n(position === 'bottom' ? 'completedTasksToBottom' : 'completedTasksToTop'),
-                disabled: !canSort(),
-                click: async () => {
-                    const pending = this.taskListSortQueue.then(async () => {
-                        if (!canSort()) return;
-                        await sortTaskLists(targets, position, async (url, data) => {
-                            const response = await fetchSyncPost(url, { ...data,
-                                ...(detail.protyle?.notebookId ? { notebook: detail.protyle.notebookId } : {}) });
-                            if (!response || response.code !== 0) throw new Error(response?.msg || 'Task list sort request failed');
-                            return response.data;
-                        }, { app: this.app.appId, session: this.name }, canSort);
-                    });
-                    this.taskListSortQueue = pending.catch(() => {});
-                    try {
-                        await pending;
-                    } catch (error) {
-                        console.error('Failed to sort task list:', error);
-                        showMessage(i18n('taskListSortFailed'), 5000, 'error');
-                    }
-                },
-            })),
+        const createSortItem = (position: 'bottom' | 'top') => ({
+            icon: position === 'bottom' ? 'iconDown' : 'iconUp',
+            label: i18n(position === 'bottom' ? 'completedTasksToBottom' : 'completedTasksToTop'),
+            disabled: !canSort(),
+            click: async () => {
+                const pending = this.taskListSortQueue.then(async () => {
+                    if (!canSort()) return;
+                    await sortTaskLists(targets, position, async (url, data) => {
+                        const response = await fetchSyncPost(url, { ...data,
+                            ...(detail.protyle?.notebookId ? { notebook: detail.protyle.notebookId } : {}) });
+                        if (!response || response.code !== 0) throw new Error(response?.msg || 'Task list sort request failed');
+                        return response.data;
+                    }, { app: this.app.appId, session: this.name }, canSort);
+                });
+                this.taskListSortQueue = pending.catch(() => {});
+                try {
+                    await pending;
+                } catch (error) {
+                    console.error('Failed to sort task list:', error);
+                    showMessage(i18n('taskListSortFailed'), 5000, 'error');
+                }
+            },
         });
+        const mode = this.settings.taskListSortMenuMode;
+        if (mode === 'bottom' || mode === 'top') {
+            detail.menu.addItem(createSortItem(mode));
+        } else {
+            detail.menu.addItem({
+                icon: 'iconCheck', label: i18n('taskListSort'), type: 'submenu',
+                submenu: (['bottom', 'top'] as const).map(createSortItem),
+            });
+        }
     }
 
     private handleDatabaseMenu({ detail }: { detail: DatabaseMenuContext & { menu: any } }) {
