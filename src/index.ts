@@ -8,6 +8,7 @@ import {
     openTab,
     getFrontend,
     getBackend,
+    fetchSyncPost,
 } from "siyuan";
 import { VipManager } from "./components/vip/vip";
 import "./index.scss";
@@ -75,6 +76,7 @@ import { createPomodoroStartSubmenu as createSharedPomodoroStartSubmenu } from "
 import { normalizeReminderSkipWeekendMode, shouldSkipReminderOnDate, type HolidayData } from "./utils/reminderSkipDate";
 import { DEFAULT_HABIT_MEMO_SYNC_TEMPLATE } from "./utils/habitMemoTemplate";
 import { getDatabaseSelectedIds, readDatabaseTaskSources, buildDatabasePomodoroReminder, type DatabaseMenuContext } from "./utils/databaseTaskSource";
+import { getTaskListSortTargets, sortTaskLists } from "./utils/taskListSort";
 
 
 export const SETTINGS_FILE = "reminder-settings.json";
@@ -390,6 +392,7 @@ export default class ReminderPlugin extends Plugin {
     private categoriesDataCache: any = null;
     private habitDataCache: any = null;
     private habitSaveQueue: Promise<void> = Promise.resolve();
+    private taskListSortQueue: Promise<void> = Promise.resolve();
     private habitGroupDataCache: any = null;
     private subscriptionCache: any = null;
     private subscriptionTasksCache: { [id: string]: any } = {};
@@ -3365,6 +3368,7 @@ export default class ReminderPlugin extends Plugin {
 
     private handleBlockMenu({ detail }) {
         const blockElements = Array.isArray(detail.blockElements) ? detail.blockElements : [];
+        this.addTaskListSortMenu(detail, blockElements);
 
         // 检查选中的块是否包含列表块或列表项块
         const hasListOrListItem = blockElements.some(el => {
@@ -3458,6 +3462,39 @@ export default class ReminderPlugin extends Plugin {
             }
         }
 
+    }
+
+    private addTaskListSortMenu(detail: any, blockElements: HTMLElement[]) {
+        const targets = getTaskListSortTargets(blockElements);
+        if (!targets.length) return;
+        const canSort = () => !this.storageDisposed && !window.siyuan?.config?.editor?.readOnly &&
+            !detail.protyle?.disabled && !detail.protyle?.options?.action?.includes('cb-get-history');
+        detail.menu.addItem({
+            icon: 'iconCheck', label: i18n('taskListSort'), type: 'submenu',
+            submenu: (['bottom', 'top'] as const).map(position => ({
+                icon: position === 'bottom' ? 'iconDown' : 'iconUp',
+                label: i18n(position === 'bottom' ? 'completedTasksToBottom' : 'completedTasksToTop'),
+                disabled: !canSort(),
+                click: async () => {
+                    const pending = this.taskListSortQueue.then(async () => {
+                        if (!canSort()) return;
+                        await sortTaskLists(targets, position, async (url, data) => {
+                            const response = await fetchSyncPost(url, { ...data,
+                                ...(detail.protyle?.notebookId ? { notebook: detail.protyle.notebookId } : {}) });
+                            if (!response || response.code !== 0) throw new Error(response?.msg || 'Task list sort request failed');
+                            return response.data;
+                        }, { app: this.app.appId, session: this.name }, canSort);
+                    });
+                    this.taskListSortQueue = pending.catch(() => {});
+                    try {
+                        await pending;
+                    } catch (error) {
+                        console.error('Failed to sort task list:', error);
+                        showMessage(i18n('taskListSortFailed'), 5000, 'error');
+                    }
+                },
+            })),
+        });
     }
 
     private handleDatabaseMenu({ detail }: { detail: DatabaseMenuContext & { menu: any } }) {

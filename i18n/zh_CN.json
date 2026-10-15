@@ -2872,5 +2872,9 @@
     "repeatLunarYearDate": "农历每年${month}${day}",
     "habitCheckInCountValue": "${count}次",
     "newProject": "新建项目",
-    "projectName": "项目名称"
+    "projectName": "项目名称",
+    "taskListSort": "任务排序",
+    "completedTasksToBottom": "已完成任务移到底部",
+    "completedTasksToTop": "已完成任务移到顶部",
+    "taskListSortFailed": "任务列表排序失败，请稍后重试。"
 }

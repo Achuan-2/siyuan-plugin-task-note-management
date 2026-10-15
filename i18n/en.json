@@ -2872,5 +2872,9 @@
     "repeatLunarYearDate": "Every lunar year on ${month} ${day}",
     "habitCheckInCountValue": "${count} check-ins",
     "newProject": "New project",
-    "projectName": "Project name"
+    "projectName": "Project name",
+    "taskListSort": "Sort tasks",
+    "completedTasksToBottom": "Move completed tasks to bottom",
+    "completedTasksToTop": "Move completed tasks to top",
+    "taskListSortFailed": "Failed to sort task list. Please try again later."
 }
