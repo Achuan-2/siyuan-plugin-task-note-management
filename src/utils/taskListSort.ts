@@ -35,7 +35,7 @@ export function getTaskListSortTargets(blocks: HTMLElement[]): TaskListSortTarge
     return [...targets.values()];
 }
 
-/** 稳定分组，仅移动完成项，不重写正文或拆开任务子树。 */
+/** 仅移动完成项；置底时追加到已有完成区末尾，不重写正文或拆开任务子树。 */
 export function createTaskSortPlan(list: HTMLElement, position: CompletedTaskPosition) {
     const parentID = list.dataset.nodeId;
     const items = Array.from(list.children).filter(child => child.getAttribute('data-type') === 'NodeListItem');
@@ -51,17 +51,20 @@ export function createTaskSortPlan(list: HTMLElement, position: CompletedTaskPos
     const current = [...ids];
     const doOperations: TaskMoveOperation[] = [];
     const undoOperations: TaskMoveOperation[] = [];
-    let previousID = position === 'bottom' ? remaining.at(-1)! : '';
-    for (const id of position === 'top' ? [...completed].reverse() : completed) {
+    // 最后一个未完成任务之后是已有完成区，保持原位，只追加上方的完成项。
+    const moving = position === 'bottom'
+        ? ids.slice(0, ids.indexOf(remaining.at(-1)!)).filter(id => done.has(id))
+        : [...completed].reverse();
+    for (const id of moving) {
         const index = current.indexOf(id);
         const oldPreviousID = current[index - 1] || '';
+        const previousID = position === 'bottom' ? current.at(-1)! : '';
         if (oldPreviousID !== previousID) {
             doOperations.push({ action: 'move', id, parentID, previousID });
             undoOperations.unshift({ action: 'move', id, parentID, previousID: oldPreviousID });
             current.splice(index, 1);
             current.splice(previousID ? current.indexOf(previousID) + 1 : 0, 0, id);
         }
-        if (position === 'bottom') previousID = id;
     }
     return { doOperations, undoOperations };
 }

@@ -50,14 +50,17 @@ function move(items, operations) {
     }
 }
 
-test('全部六项完成状态组合稳定置顶/置底，逆事务恢复顺序且不改写任务子块', () => {
+test('全部六项完成状态组合置顶/追加置底，逆事务恢复顺序且不改写任务子块', () => {
     for (let mask = 0; mask < 64; mask++) for (const position of ['top', 'bottom']) {
         const parent = list(Array.from({ length: 6 }, (_, index) => mask & (1 << index) ? index % 2 ? 'x' : 'X' : ' '));
         const original = [...parent.children];
         const nested = original.map(item => item.children);
         const done = original.filter(item => item.getAttribute('data-task').toUpperCase() === 'X');
         const todo = original.filter(item => !done.includes(item));
-        const expected = position === 'top' ? [...done, ...todo] : [...todo, ...done];
+        const lastTodoIndex = original.indexOf(todo.at(-1));
+        const oldCompleted = original.slice(lastTodoIndex + 1);
+        const newlyCompleted = done.filter(item => !oldCompleted.includes(item));
+        const expected = position === 'top' ? [...done, ...todo] : [...todo, ...oldCompleted, ...newlyCompleted];
         const plan = utils.createTaskSortPlan(parent, position);
         if (plan) move(parent.children, plan.doOperations);
         assert.deepEqual(parent.children, expected);
@@ -76,8 +79,24 @@ test('进行中、取消、自定义状态不算完成，兼容旧版 action 标
     legacy.querySelector = () => ({ getAttribute: () => 'x' });
     const plan = utils.createTaskSortPlan(parent, 'bottom');
     move(parent.children, plan.doOperations);
-    assert.deepEqual(parent.children.map(item => item.dataset.nodeId), ['root-1', 'root-2', 'root-3', 'root-0', 'root-4']);
+    assert.deepEqual(parent.children.map(item => item.dataset.nodeId), ['root-1', 'root-2', 'root-3', 'root-4', 'root-0']);
     assert.equal(utils.createTaskSortPlan(block('NodeList', 'ordinary', 'u'), 'top'), null);
+});
+
+test('新完成任务追加到已有完成任务之后，连续移动始终以列表末项为锚点', () => {
+    const parent = list(['X', ' ', 'x', ' ', 'X', 'x']);
+    const original = [...parent.children];
+    const plan = utils.createTaskSortPlan(parent, 'bottom');
+    assert.deepEqual(plan.doOperations, [
+        { action: 'move', id: 'root-0', parentID: 'root', previousID: 'root-5' },
+        { action: 'move', id: 'root-2', parentID: 'root', previousID: 'root-0' },
+    ]);
+    move(parent.children, plan.doOperations);
+    assert.deepEqual(parent.children.map(item => item.dataset.nodeId),
+        ['root-1', 'root-3', 'root-4', 'root-5', 'root-0', 'root-2']);
+    assert.equal(utils.createTaskSortPlan(parent, 'bottom'), null);
+    move(parent.children, plan.undoOperations);
+    assert.deepEqual(parent.children, original);
 });
 
 test('列表块与列表项定位同级列表，多选去重，聚焦任务项保留接口解析目标', () => {
