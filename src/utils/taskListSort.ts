@@ -80,7 +80,7 @@ export async function sortTaskLists(targets: TaskListSortTarget[], position: Com
     for (const target of targets) {
         if (!canSort()) return;
         const id = target.kind === 'list' ? target.id :
-            (await request('/api/block/getBlockSiblingID', { id: target.id }))?.parent;
+            (await request('/api/block/getBlockRelevantIDs', { id: target.id }))?.parentID;
         if (id) ids.add(id);
     }
     for (const id of ids) {

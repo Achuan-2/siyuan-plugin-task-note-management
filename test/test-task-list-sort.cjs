@@ -121,7 +121,8 @@ function apiFixture() {
     };
     const request = async (url, data) => {
         calls.push({ url, data });
-        if (url.endsWith('getBlockSiblingID')) return { parent: 'root' };
+        if (url.endsWith('getBlockSiblingID')) return { parent: 'document', previous: '', next: '' };
+        if (url.endsWith('getBlockRelevantIDs')) return { parentID: 'root', previousID: '', nextID: '' };
         if (url.endsWith('getBlockDOM')) return { dom: 'snapshot' };
         if (url === '/api/transactions') {
             move(parent.children, data.transactions[0].doOperations);
@@ -207,8 +208,10 @@ function autoSortFixture(parents) {
     const request = async (url, data) => {
         calls.push({ url, data });
         const parent = parents.find(parent => parent.dataset.nodeId === data.id);
-        if (url.endsWith('getBlockSiblingID')) {
-            return { parent: parents.find(parent => parent.children.some(item => item.dataset.nodeId === data.id))?.dataset.nodeId };
+        if (url.endsWith('getBlockSiblingID')) return { parent: 'document', previous: '', next: '' };
+        if (url.endsWith('getBlockRelevantIDs')) {
+            return { parentID: parents.find(parent => parent.children.some(item => item.dataset.nodeId === data.id))?.dataset.nodeId,
+                previousID: '', nextID: '' };
         }
         if (url.endsWith('getBlockDOM')) return { dom: snapshot(parent.children, [parent]) };
         if (url.endsWith('setBlockAttrs')) {
@@ -257,6 +260,8 @@ test('自动排序开关保存到当前列表，重建控制器可读取，取�
     const targets = [{ id: 'root-0', kind: 'item' }];
     await env.sorter.toggle(targets, 'bottom', () => true);
     assert.equal(parent.getAttribute(autoUtils.TASK_LIST_AUTO_SORT_ATTR), 'bottom');
+    assert.ok(env.calls.some(call => call.url === '/api/block/getBlockRelevantIDs'));
+    assert.equal(env.calls.some(call => call.url === '/api/block/getBlockSiblingID'), false);
     env = autoSortFixture([parent]);
     assert.deepEqual(await env.sorter.getStates(targets), [{ id: 'root', position: 'bottom' }]);
     await env.sorter.toggle(targets, 'bottom', () => true);

@@ -67,7 +67,7 @@ export class TaskListAutoSorter {
         const ids = new Set<string>();
         for (const target of targets) {
             const id = target.kind === 'list' ? target.id :
-                (await this.options.request('/api/block/getBlockSiblingID', { id: target.id }))?.parent;
+                (await this.options.request('/api/block/getBlockRelevantIDs', { id: target.id }))?.parentID;
             if (id) ids.add(id);
         }
         const states: AutoSortState[] = [];
@@ -101,7 +101,8 @@ export class TaskListAutoSorter {
             const byList = new Map<string, Set<string>>();
             for (const id of changedIds) {
                 if (!this.options.canSort()) return;
-                const parent = (await this.options.request('/api/block/getBlockSiblingID', { id }))?.parent;
+                // SiblingID 的 parent 会跳过列表层；RelevantIDs 才返回直接父列表。
+                const parent = (await this.options.request('/api/block/getBlockRelevantIDs', { id }))?.parentID;
                 if (!parent) continue;
                 if (!byList.has(parent)) byList.set(parent, new Set());
                 byList.get(parent)!.add(id);
