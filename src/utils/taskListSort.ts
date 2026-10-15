@@ -36,7 +36,7 @@ export function getTaskListSortTargets(blocks: HTMLElement[]): TaskListSortTarge
 }
 
 /** 仅移动完成项；置底时追加到已有完成区末尾，不重写正文或拆开任务子树。 */
-export function createTaskSortPlan(list: HTMLElement, position: CompletedTaskPosition) {
+export function createTaskSortPlan(list: HTMLElement, position: CompletedTaskPosition, changedIds?: ReadonlySet<string>) {
     const parentID = list.dataset.nodeId;
     const items = Array.from(list.children).filter(child => child.getAttribute('data-type') === 'NodeListItem');
     if (!parentID || !list.matches(TASK_LIST) || items.some(item => !item.matches(TASK_ITEM))) return null;
@@ -46,17 +46,21 @@ export function createTaskSortPlan(list: HTMLElement, position: CompletedTaskPos
     const done = new Set(completed);
     const remaining = ids.filter(id => !done.has(id));
     const desired = position === 'top' ? [...completed, ...remaining] : [...remaining, ...completed];
-    if (ids.every((id, index) => id === desired[index])) return null;
+    if (!changedIds && ids.every((id, index) => id === desired[index])) return null;
 
     const current = [...ids];
     const doOperations: TaskMoveOperation[] = [];
     const undoOperations: TaskMoveOperation[] = [];
     // 最后一个未完成任务之后是已有完成区，保持原位，只追加上方的完成项。
-    const moving = position === 'bottom'
-        ? ids.slice(0, ids.indexOf(remaining.at(-1)!)).filter(id => done.has(id))
-        : [...completed].reverse();
+    const moving = changedIds
+        ? completed.filter(id => changedIds.has(id))
+        : position === 'bottom'
+            ? ids.slice(0, ids.indexOf(remaining.at(-1)!)).filter(id => done.has(id))
+            : [...completed];
+    if (position === 'top') moving.reverse();
     for (const id of moving) {
         const index = current.indexOf(id);
+        if (position === 'bottom' && index === current.length - 1) continue;
         const oldPreviousID = current[index - 1] || '';
         const previousID = position === 'bottom' ? current.at(-1)! : '';
         if (oldPreviousID !== previousID) {
@@ -66,7 +70,7 @@ export function createTaskSortPlan(list: HTMLElement, position: CompletedTaskPos
             current.splice(previousID ? current.indexOf(previousID) + 1 : 0, 0, id);
         }
     }
-    return { doOperations, undoOperations };
+    return doOperations.length ? { doOperations, undoOperations } : null;
 }
 
 export async function sortTaskLists(targets: TaskListSortTarget[], position: CompletedTaskPosition,

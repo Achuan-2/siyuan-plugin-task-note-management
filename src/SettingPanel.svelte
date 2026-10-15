@@ -1370,6 +1370,13 @@
                             description: i18n('enableTaskListSortDesc'),
                         },
                         {
+                            key: 'showTaskListAutoSortMenu',
+                            value: settings.showTaskListAutoSortMenu,
+                            type: 'checkbox',
+                            title: i18n('showTaskListAutoSortMenu'),
+                            description: i18n('showTaskListAutoSortMenuDesc'),
+                        },
+                        {
                             key: 'taskListSortMenuMode',
                             value: settings.taskListSortMenuMode,
                             type: 'select',

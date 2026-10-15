@@ -77,6 +77,7 @@ import { normalizeReminderSkipWeekendMode, shouldSkipReminderOnDate, type Holida
 import { DEFAULT_HABIT_MEMO_SYNC_TEMPLATE } from "./utils/habitMemoTemplate";
 import { getDatabaseSelectedIds, readDatabaseTaskSources, buildDatabasePomodoroReminder, type DatabaseMenuContext } from "./utils/databaseTaskSource";
 import { getTaskListSortTargets, sortTaskLists } from "./utils/taskListSort";
+import { TaskListAutoSorter } from "./utils/taskListAutoSort";
 
 
 export const SETTINGS_FILE = "reminder-settings.json";
@@ -143,6 +144,7 @@ export const DEFAULT_SETTINGS = {
     enableOutlinePrefix: true, // 是否在大纲中为绑定标题添加任务状态前缀
     enableTaskListStatusSync: false, // 任务列表状态与任务进行中/放弃状态联动
     enableTaskListSort: true, // 在任务列表块菜单中显示手动排序
+    showTaskListAutoSortMenu: true, // 在任务列表块菜单中显示自动排序开关
     taskListSortMenuMode: 'submenu', // 排序菜单展示方式：submenu | bottom | top
     taskPriorityDisplayStyle: 'background', // 任务卡片优先级显示样式：background | checkboxBorder
     showTaskCardDocumentTitle: true, // 任务卡片是否显示绑定块所属文档标题
@@ -395,6 +397,7 @@ export default class ReminderPlugin extends Plugin {
     private habitDataCache: any = null;
     private habitSaveQueue: Promise<void> = Promise.resolve();
     private taskListSortQueue: Promise<void> = Promise.resolve();
+    private taskListAutoSorter: TaskListAutoSorter | null = null;
     private habitGroupDataCache: any = null;
     private subscriptionCache: any = null;
     private subscriptionTasksCache: { [id: string]: any } = {};
@@ -2473,6 +2476,30 @@ export default class ReminderPlugin extends Plugin {
         this.addCleanup(() => this.eventBus.off('click-editortitleicon', handleDocMenu));
 
         // 块菜单添加菜单
+        this.taskListAutoSorter = new TaskListAutoSorter({
+            request: async (url, data) => {
+                const response = await fetchSyncPost(url, data);
+                if (!response || response.code !== 0) throw new Error(response?.msg || 'Task list auto-sort request failed');
+                return response.data;
+            },
+            enqueue: work => {
+                const pending = this.taskListSortQueue.then(work);
+                this.taskListSortQueue = pending.catch(() => {});
+                return pending;
+            },
+            context: { app: this.app.appId, session: this.name },
+            canSort: () => !this.storageDisposed && !window.siyuan?.config?.editor?.readOnly,
+            onError: error => {
+                console.error('Failed to automatically sort task list:', error);
+                showMessage(i18n('taskListSortFailed'), 5000, 'error');
+            },
+        });
+        const handleAutoSort = (event: CustomEvent) => this.taskListAutoSorter?.handleTransactions(event.detail);
+        this.eventBus.on('ws-main', handleAutoSort);
+        this.addCleanup(() => {
+            this.eventBus.off('ws-main', handleAutoSort);
+            this.taskListAutoSorter = null;
+        });
         const handleBlkMenu = this.handleBlockMenu.bind(this);
         this.eventBus.on('click-blockicon', handleBlkMenu);
         this.addCleanup(() => this.eventBus.off('click-blockicon', handleBlkMenu));
@@ -3467,9 +3494,10 @@ export default class ReminderPlugin extends Plugin {
     }
 
     private addTaskListSortMenu(detail: any, blockElements: HTMLElement[]) {
-        if (this.settings.enableTaskListSort === false) return;
         const targets = getTaskListSortTargets(blockElements);
         if (!targets.length) return;
+        this.addTaskListAutoSortMenu(detail, targets);
+        if (this.settings.enableTaskListSort === false) return;
         const canSort = () => this.settings.enableTaskListSort !== false &&
             !this.storageDisposed && !window.siyuan?.config?.editor?.readOnly &&
             !detail.protyle?.disabled && !detail.protyle?.options?.action?.includes('cb-get-history');
@@ -3505,6 +3533,38 @@ export default class ReminderPlugin extends Plugin {
                 submenu: (['bottom', 'top'] as const).map(createSortItem),
             });
         }
+    }
+
+    private addTaskListAutoSortMenu(detail: any, targets: ReturnType<typeof getTaskListSortTargets>) {
+        const sorter = this.taskListAutoSorter;
+        if (!sorter || this.settings.showTaskListAutoSortMenu === false) return;
+        const canEdit = () => !this.storageDisposed && !window.siyuan?.config?.editor?.readOnly &&
+            !detail.protyle?.disabled && !detail.protyle?.options?.action?.includes('cb-get-history');
+        detail.menu.addItem({
+            icon: 'iconSort', label: i18n('taskListAutoSort'),
+            disabled: !canEdit(),
+            bind: (element: HTMLElement) => {
+                element.setAttribute('disabled', 'disabled');
+                void sorter.getStates(targets).then(states => {
+                    if (!states.length || !canEdit()) return;
+                    element.removeAttribute('disabled');
+                    if (states.every(state => state.position !== null)) {
+                        element.insertAdjacentHTML('beforeend', '<svg class="b3-menu__checked"><use xlink:href="#iconSelect"></use></svg>');
+                    }
+                }).catch(error => {
+                    console.error('Failed to read task list auto-sort state:', error);
+                });
+            },
+            click: async () => {
+                if (!canEdit() || this.settings.showTaskListAutoSortMenu === false) return;
+                try {
+                    await sorter.toggle(targets, this.settings.taskListSortMenuMode === 'top' ? 'top' : 'bottom', canEdit);
+                } catch (error) {
+                    console.error('Failed to toggle task list auto-sort:', error);
+                    showMessage(i18n('taskListSortFailed'), 5000, 'error');
+                }
+            },
+        });
     }
 
     private handleDatabaseMenu({ detail }: { detail: DatabaseMenuContext & { menu: any } }) {
