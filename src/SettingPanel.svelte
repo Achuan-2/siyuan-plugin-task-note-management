@@ -1389,9 +1389,7 @@
                             type: 'select',
                             title: i18n('taskListSortMenuMode'),
                             description: i18n('taskListSortMenuModeDesc'),
-                            disabled: !settings.enableTaskListSort && !settings.enableGlobalTaskListAutoSort,
                             options: {
-                                submenu: i18n('taskListSortSubmenu'),
                                 bottom: i18n('completedTasksToBottom'),
                                 top: i18n('completedTasksToTop'),
                             },
@@ -2615,10 +2613,6 @@
                         return v;
                     })(),
                 };
-
-                if (item.key === 'taskListSortMenuMode') {
-                    updatedItem.disabled = !settings.enableTaskListSort && !settings.enableGlobalTaskListAutoSort;
-                }
 
                 // 为笔记本选择器更新选项
                 if (item.key === 'newDocNotebook') {

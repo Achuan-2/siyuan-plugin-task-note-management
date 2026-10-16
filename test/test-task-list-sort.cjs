@@ -215,6 +215,11 @@ function autoSortFixture(parents) {
                 previousID: '', nextID: '' };
         }
         if (url.endsWith('getBlockDOM')) return { dom: snapshot(parent.children, [parent]) };
+        if (url === '/api/query/sql') {
+            const cursor = /id > '([^']*)'/.exec(data.stmt)?.[1] || '';
+            return parents.map(parent => ({ id: parent.dataset.nodeId }))
+                .filter(row => row.id > cursor).sort((a, b) => a.id.localeCompare(b.id)).slice(0, 64);
+        }
         if (url.endsWith('setBlockAttrs')) {
             for (const [key, value] of Object.entries(data.attrs)) parent.setAttribute(key, value);
             return null;
@@ -264,6 +269,62 @@ function autoSortFixture(parents) {
         setGlobalPosition: value => { globalPosition = value; },
     };
 }
+
+test('开启块自动排序立即整理已有完成项，恢复跟随全局也会整理', async () => {
+    const parent = list(['X', ' ', 'X']);
+    const env = autoSortFixture([parent]);
+    const targets = [{ id: 'root', kind: 'list' }];
+    await env.sorter.toggle(targets, 'bottom', () => true);
+    assert.deepEqual(parent.children.map(item => item.dataset.nodeId), ['root-1', 'root-2', 'root-0']);
+    assert.equal(env.calls.filter(call => call.url === '/api/transactions').length, 1);
+    await env.sorter.toggle(targets, 'bottom', () => true);
+    parent.children.reverse();
+    env.setGlobalPosition('bottom');
+    await env.sorter.followGlobal(targets, () => true);
+    assert.deepEqual(parent.children.map(item => item.dataset.nodeId), ['root-1', 'root-0', 'root-2']);
+    assert.equal(env.calls.filter(call => call.url === '/api/transactions').length, 2);
+});
+
+test('开启全局自动排序分批整理已有列表，尊重块级关闭及独立方向', async () => {
+    const parents = Array.from({ length: 65 }, (_, index) => list(['X', ' '], `list-${String(index).padStart(3, '0')}`));
+    parents[0].setAttribute(autoUtils.TASK_LIST_AUTO_SORT_ATTR, 'off');
+    parents[1].setAttribute(autoUtils.TASK_LIST_AUTO_SORT_ATTR, 'top');
+    const env = autoSortFixture(parents);
+    env.setGlobalPosition('bottom');
+    await env.sorter.reconcileGlobal();
+    assert.equal(env.calls.filter(call => call.url === '/api/query/sql').length, 2);
+    assert.deepEqual(parents[0].children.map(item => item.dataset.nodeId), ['list-000-0', 'list-000-1']);
+    assert.deepEqual(parents[1].children.map(item => item.dataset.nodeId), ['list-001-0', 'list-001-1']);
+    for (const parent of parents.slice(2)) assert.equal(parent.children[0].getAttribute('data-task'), ' ');
+    assert.equal(env.calls.filter(call => call.url === '/api/transactions').length, 63);
+    await env.sorter.reconcileGlobal();
+    assert.equal(env.calls.filter(call => call.url === '/api/transactions').length, 63);
+});
+
+test('保存设置仅在开启全局排序或切换方向时启动已有任务整理，旧子菜单模式迁移为置底', async () => {
+    const source = fs.readFileSync(path.join(root, 'src/index.ts'), 'utf8');
+    const ast = ts.createSourceFile('index.ts', source, ts.ScriptTarget.Latest, true);
+    const cls = ast.statements.find(node => ts.isClassDeclaration(node) && node.name.text === 'ReminderPlugin');
+    const method = cls.members.find(node => node.name?.getText(ast) === 'saveSettings');
+    const Fixture = evaluate('const SETTINGS_FILE = "settings.json"; export class Fixture { ' + method.getText(ast) + ' }').Fixture;
+    const plugin = new Fixture();
+    let reconciliations = 0;
+    Object.assign(plugin, {
+        settings: { enableGlobalTaskListAutoSort: false, taskListSortMenuMode: 'bottom' },
+        saveData: async () => {},
+        kernel: { rpc: { call: { 'refresh-reminder-schedule': async () => {} } } },
+        taskListAutoSorter: { reconcileGlobal: async () => { reconciliations++; } },
+    });
+    await plugin.saveSettings({ enableGlobalTaskListAutoSort: true, taskListSortMenuMode: 'submenu' });
+    assert.equal(plugin.settings.taskListSortMenuMode, 'bottom');
+    assert.equal(reconciliations, 1);
+    await plugin.saveSettings({ ...plugin.settings, anotherSetting: true });
+    assert.equal(reconciliations, 1);
+    await plugin.saveSettings({ ...plugin.settings, taskListSortMenuMode: 'top' });
+    assert.equal(reconciliations, 2);
+    await plugin.saveSettings({ ...plugin.settings, enableGlobalTaskListAutoSort: false });
+    assert.equal(reconciliations, 2);
+});
 
 test('全局默认关闭，开启后未单独设置的多个列表自动排序且保留延迟', async t => {
     t.mock.timers.enable({ apis: ['setTimeout'] });
@@ -460,15 +521,15 @@ test('取消开关、只读、卸载以及其他客户端事务不自动排序',
 });
 
 test('同批完成多个任务只提交一个事务，按列表原顺序追加且可以撤销', async () => {
-    const parent = list([' ', 'X', ' ', ' ']);
+    const parent = list([' ', ' ', ' ', 'X']);
     const env = autoSortFixture([parent]);
     await env.sorter.toggle([{ id: 'root', kind: 'list' }], 'bottom', () => true);
     const original = [...parent.children];
     env.sorter.handleTransactions(env.complete([
-        [parent.children[2], 'X'], [parent.children[0], 'X'], [parent.children[3], 'X'],
+        [parent.children[2], 'X'], [parent.children[0], 'X'], [parent.children[1], 'X'],
     ]));
     await env.drain();
-    assert.deepEqual(parent.children.map(item => item.dataset.nodeId), ['root-1', 'root-0', 'root-2', 'root-3']);
+    assert.deepEqual(parent.children.map(item => item.dataset.nodeId), ['root-3', 'root-0', 'root-1', 'root-2']);
     const transactions = env.calls.filter(call => call.url === '/api/transactions');
     assert.equal(transactions.length, 1);
     move(parent.children, transactions[0].data.transactions[0].undoOperations);
@@ -534,9 +595,15 @@ test('块菜单勾选反映全局生效状态，并可关闭当前列表或恢�
     auto.setGlobalPosition('bottom');
     env.plugin.taskListAutoSorter = auto.sorter;
     const items = [];
-    env.plugin.handleBlockMenu({ detail: { ...env.detail, menu: { addItem: item => items.push(item) } } });
-    const toggle = items.find(item => item.label === 'taskListAutoSort');
-    const follow = items.find(item => item.label === 'taskListAutoSortFollowGlobal');
+    const open = () => {
+        items.length = 0;
+        env.plugin.handleBlockMenu({ detail: { ...env.detail, menu: { addItem: item => items.push(item) } } });
+        return {
+            toggle: items.find(item => item.label === 'taskListAutoSort'),
+            follow: items.find(item => item.label === 'taskListAutoSortFollowGlobal'),
+        };
+    };
+    let { toggle, follow } = open();
     const isChecked = async item => {
         let checked = false;
         item.bind({ setAttribute() {}, removeAttribute() {}, insertAdjacentHTML() { checked = true; } });
@@ -547,39 +614,71 @@ test('块菜单勾选反映全局生效状态，并可关闭当前列表或恢�
     assert.equal(await isChecked(follow), true);
     await toggle.click();
     assert.equal(env.parent.getAttribute(autoUtils.TASK_LIST_AUTO_SORT_ATTR), 'off');
+    ({ toggle, follow } = open());
     assert.equal(await isChecked(toggle), false);
     assert.equal(await isChecked(follow), false);
     await follow.click();
     assert.equal(env.parent.getAttribute(autoUtils.TASK_LIST_AUTO_SORT_ATTR), '');
+    ({ toggle, follow } = open());
     assert.equal(await isChecked(toggle), true);
     assert.equal(await isChecked(follow), true);
 });
 
-test('现有块菜单入口提供两个排序操作，并保留设置任务和番茄钟菜单', async () => {
-    const env = menuFixture();
-    const sort = env.items.find(item => item.label === 'taskListSort');
-    assert.deepEqual(sort.submenu.map(item => item.label), ['completedTasksToBottom', 'completedTasksToTop']);
+test('自动排序开启时隐藏手动菜单且禁止手动执行，关闭后显示唯一的手动排序操作', async () => {
+    const env = menuFixture(false, { showTaskListAutoSortMenu: false });
+    let position = 'bottom';
+    env.plugin.taskListAutoSorter = {
+        getStates: async () => [{ id: 'root', position, override: null }],
+    };
+    const open = () => {
+        const items = [];
+        env.plugin.handleBlockMenu({ detail: { ...env.detail, menu: { addItem: item => items.push(item) } } });
+        assert.equal(items.filter(item => ['completedTasksToBottom', 'completedTasksToTop'].includes(item.label)).length, 1);
+        return items.find(item => item.label === 'completedTasksToBottom');
+    };
+    const displayOf = async item => {
+        const element = { style: {} };
+        item.bind(element);
+        await new Promise(resolve => setImmediate(resolve));
+        return element.style.display;
+    };
+    let item = open();
+    assert.equal(await displayOf(item), 'none');
+    await item.click();
+    assert.equal(env.calls.length, 0);
+    position = null;
+    item = open();
+    assert.equal(await displayOf(item), '');
+    await item.click();
+    assert.equal(env.calls.filter(call => call.url === '/api/transactions').length, 1);
+});
+
+test('旧子菜单模式只显示一个置底操作，并保留设置任务和番茄钟菜单', async () => {
+    const env = menuFixture(false, { taskListSortMenuMode: 'submenu' });
+    const sort = env.items.find(item => item.label === 'completedTasksToBottom');
+    assert.equal(sort.submenu, undefined);
+    assert.equal(env.items.some(item => item.label === 'completedTasksToTop'), false);
     assert.ok(env.items.some(item => item.label === 'setTimeReminder'));
     assert.ok(env.items.some(item => item.label === 'startPomodoro'));
-    await sort.submenu[0].click();
+    await sort.click();
     assert.equal(env.calls.filter(call => call.url === '/api/transactions').length, 1);
     env.plugin.storageDisposed = true;
     const count = env.calls.length;
-    await sort.submenu[1].click();
+    await sort.click();
     assert.equal(env.calls.length, count);
     assert.deepEqual(env.errors, []);
 });
 
 test('只读菜单禁用，普通段落不显示任务排序菜单', async () => {
     const env = menuFixture(true);
-    const sort = env.items.find(item => item.label === 'taskListSort');
-    assert.ok(sort.submenu.every(item => item.disabled));
-    await sort.submenu[0].click();
+    const sort = env.items.find(item => item.label === 'completedTasksToBottom');
+    assert.equal(sort.disabled, true);
+    await sort.click();
     assert.equal(env.calls.length, 0);
     const items = [];
     env.plugin.handleBlockMenu({ detail: { ...env.detail, blockElements: [block('NodeParagraph', 'text')],
         menu: { addItem: item => items.push(item) } } });
-    assert.equal(items.some(item => item.label === 'taskListSort'), false);
+    assert.equal(items.some(item => item.label === 'completedTasksToBottom'), false);
 });
 
 test('关闭任务排序隐藏菜单，并阻止已打开菜单继续排序', async () => {
@@ -589,9 +688,9 @@ test('关闭任务排序隐藏菜单，并阻止已打开菜单继续排序', as
     assert.ok(disabled.items.some(item => item.label === 'startPomodoro'));
 
     const env = menuFixture();
-    const sort = env.items.find(item => item.label === 'taskListSort');
+    const sort = env.items.find(item => item.label === 'completedTasksToBottom');
     env.plugin.settings.enableTaskListSort = false;
-    await sort.submenu[0].click();
+    await sort.click();
     assert.equal(env.calls.length, 0);
 });
 

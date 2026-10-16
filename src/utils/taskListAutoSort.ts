@@ -123,7 +123,39 @@ export class TaskListAutoSorter {
                 await this.options.request('/api/attr/setBlockAttrs', {
                     id: state.id, attrs: { [TASK_LIST_AUTO_SORT_ATTR]: override ?? '' },
                 });
+                const position = override === 'off' ? null : override ?? this.options.getGlobalPosition();
+                if (position && position !== state.position) await this.reconcileList(state.id, canEdit);
             }
+        });
+    }
+
+    /** 仅在开启全局排序或切换方向时分批整理已有列表，不在编辑过程中全库扫描。 */
+    async reconcileGlobal(): Promise<void> {
+        let cursor = '';
+        while (this.canSort() && this.options.getGlobalPosition()) {
+            const rows = await this.options.request('/api/query/sql', {
+                stmt: `SELECT id FROM blocks WHERE type = 'l' AND subtype = 't' AND id > '${cursor.replace(/'/g, "''")}' ORDER BY id LIMIT 64`,
+            });
+            if (!Array.isArray(rows) || !rows.length) return;
+            for (const row of rows) {
+                if (!this.canSort() || !this.options.getGlobalPosition()) return;
+                // 每个列表独立排队，允许勾选、关闭块开关等交互穿插执行。
+                await this.options.enqueue(() => this.reconcileList(row.id));
+            }
+            const next = rows.at(-1)?.id;
+            if (rows.length < 64 || typeof next !== 'string' || next <= cursor) return;
+            cursor = next;
+        }
+    }
+
+    private async reconcileList(id: string, canEdit = () => true): Promise<void> {
+        if (!this.canSort() || !canEdit()) return;
+        const list = await this.readList(id);
+        const position = list && this.getState(list).position;
+        if (!list || !position || !this.canSort() || !canEdit()) return;
+        const plan = createTaskSortPlan(list, position);
+        if (plan) await this.options.request('/api/transactions', {
+            ...this.options.context, reqId: Date.now(), transactions: [plan],
         });
     }
 

@@ -146,7 +146,7 @@ export const DEFAULT_SETTINGS = {
     enableTaskListSort: true, // 在任务列表块菜单中显示手动排序
     enableGlobalTaskListAutoSort: false, // 未单独设置的任务列表默认是否自动排序
     showTaskListAutoSortMenu: true, // 在任务列表块菜单中显示自动排序开关
-    taskListSortMenuMode: 'submenu', // 排序菜单展示方式：submenu | bottom | top
+    taskListSortMenuMode: 'bottom', // 已完成任务排序方向：bottom | top
     taskPriorityDisplayStyle: 'background', // 任务卡片优先级显示样式：background | checkboxBorder
     showTaskCardDocumentTitle: true, // 任务卡片是否显示绑定块所属文档标题
     unassignedTasksProjectId: 'inbox', // 无项目的任务归属项目ID，默认'inbox'
@@ -1926,6 +1926,9 @@ export default class ReminderPlugin extends Plugin {
             },
         };
 
+        // 旧版子菜单模式统一迁移为置底，只保留一个手动排序方向。
+        settings.taskListSortMenuMode = settings.taskListSortMenuMode === 'top' ? 'top' : 'bottom';
+
         const rawWeekendMode = Object.prototype.hasOwnProperty.call(data, 'reminderSkipWeekendMode')
             ? normalizeReminderSkipWeekendMode(data.reminderSkipWeekendMode)
             : undefined;
@@ -2062,8 +2065,18 @@ export default class ReminderPlugin extends Plugin {
      * @param settings 设置数据
      */
     public async saveSettings(settings: any): Promise<void> {
+        const oldGlobalEnabled = this.settings?.enableGlobalTaskListAutoSort === true;
+        const oldDirection = this.settings?.taskListSortMenuMode === 'top' ? 'top' : 'bottom';
+        settings.taskListSortMenuMode = settings.taskListSortMenuMode === 'top' ? 'top' : 'bottom';
         await this.saveData(SETTINGS_FILE, settings);
         this.settings = settings;
+        if (settings.enableGlobalTaskListAutoSort === true &&
+            (!oldGlobalEnabled || oldDirection !== settings.taskListSortMenuMode)) {
+            void this.taskListAutoSorter?.reconcileGlobal().catch(error => {
+                console.error('Failed to initially sort existing task lists:', error);
+                showMessage(i18n('taskListSortFailed'), 5000, 'error');
+            });
+        }
         void this.kernel.rpc.call['refresh-reminder-schedule']().catch(() => {});
     }
 
@@ -3500,19 +3513,38 @@ export default class ReminderPlugin extends Plugin {
     private addTaskListSortMenu(detail: any, blockElements: HTMLElement[]) {
         const targets = getTaskListSortTargets(blockElements);
         if (!targets.length) return;
-        this.addTaskListAutoSortMenu(detail, targets);
+        if (this.settings.enableTaskListSort === false && this.settings.showTaskListAutoSortMenu === false) return;
+        const sorter = this.taskListAutoSorter;
+        // 同一份状态快照供自动和手动菜单使用，避免重复请求完整列表。
+        const states = sorter ? sorter.getStates(targets) : Promise.resolve([]);
+        this.addTaskListAutoSortMenu(detail, targets, states);
+        // 即使两个菜单均隐藏，也接住状态请求失败，避免未处理的 Promise 拒绝。
+        void states.catch(error => console.error('Failed to read task list sort state:', error));
         if (this.settings.enableTaskListSort === false) return;
         const canSort = () => this.settings.enableTaskListSort !== false &&
             !this.storageDisposed && !window.siyuan?.config?.editor?.readOnly &&
             !detail.protyle?.disabled && !detail.protyle?.options?.action?.includes('cb-get-history');
-        const createSortItem = (position: 'bottom' | 'top') => ({
+        const position = this.settings.taskListSortMenuMode === 'top' ? 'top' : 'bottom';
+        detail.menu.addItem({
             icon: position === 'bottom' ? 'iconDown' : 'iconUp',
             label: i18n(position === 'bottom' ? 'completedTasksToBottom' : 'completedTasksToTop'),
             disabled: !canSort(),
+            bind: (element: HTMLElement) => {
+                // 等待状态时先隐藏，自动排序启用的列表不再显示手动排序。
+                element.style.display = 'none';
+                void states.then(values => {
+                    if (!sorter || values.some(state => state.position === null)) element.style.display = '';
+                }).catch(() => {});
+            },
             click: async () => {
                 const pending = this.taskListSortQueue.then(async () => {
                     if (!canSort()) return;
-                    await sortTaskLists(targets, position, async (url, data) => {
+                    const manualTargets = sorter
+                        ? (await sorter.getStates(targets)).filter(state => state.position === null)
+                            .map(state => ({ id: state.id, kind: 'list' as const }))
+                        : targets;
+                    if (!canSort() || !manualTargets.length) return;
+                    await sortTaskLists(manualTargets, position, async (url, data) => {
                         const response = await fetchSyncPost(url, { ...data,
                             ...(detail.protyle?.notebookId ? { notebook: detail.protyle.notebookId } : {}) });
                         if (!response || response.code !== 0) throw new Error(response?.msg || 'Task list sort request failed');
@@ -3528,28 +3560,20 @@ export default class ReminderPlugin extends Plugin {
                 }
             },
         });
-        const mode = this.settings.taskListSortMenuMode;
-        if (mode === 'bottom' || mode === 'top') {
-            detail.menu.addItem(createSortItem(mode));
-        } else {
-            detail.menu.addItem({
-                icon: 'iconCheck', label: i18n('taskListSort'), type: 'submenu',
-                submenu: (['bottom', 'top'] as const).map(createSortItem),
-            });
-        }
     }
 
-    private addTaskListAutoSortMenu(detail: any, targets: ReturnType<typeof getTaskListSortTargets>) {
+    private addTaskListAutoSortMenu(detail: any, targets: ReturnType<typeof getTaskListSortTargets>,
+        states: ReturnType<TaskListAutoSorter['getStates']>) {
         const sorter = this.taskListAutoSorter;
         if (!sorter || this.settings.showTaskListAutoSortMenu === false) return;
         const canEdit = () => !this.storageDisposed && !window.siyuan?.config?.editor?.readOnly &&
             !detail.protyle?.disabled && !detail.protyle?.options?.action?.includes('cb-get-history');
         const bindState = (followGlobal: boolean) => (element: HTMLElement) => {
             element.setAttribute('disabled', 'disabled');
-            void sorter.getStates(targets).then(states => {
-                if (!states.length || !canEdit()) return;
+            void states.then(values => {
+                if (!values.length || !canEdit()) return;
                 element.removeAttribute('disabled');
-                if (states.every(state => followGlobal ? state.override === null : state.position !== null)) {
+                if (values.every(state => followGlobal ? state.override === null : state.position !== null)) {
                     element.insertAdjacentHTML('beforeend', '<svg class="b3-menu__checked"><use xlink:href="#iconSelect"></use></svg>');
                 }
             }).catch(error => {
