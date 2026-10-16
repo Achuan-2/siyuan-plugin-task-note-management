@@ -1370,6 +1370,13 @@
                             description: i18n('enableTaskListSortDesc'),
                         },
                         {
+                            key: 'enableGlobalTaskListAutoSort',
+                            value: settings.enableGlobalTaskListAutoSort,
+                            type: 'checkbox',
+                            title: i18n('enableGlobalTaskListAutoSort'),
+                            description: i18n('enableGlobalTaskListAutoSortDesc'),
+                        },
+                        {
                             key: 'showTaskListAutoSortMenu',
                             value: settings.showTaskListAutoSortMenu,
                             type: 'checkbox',
@@ -1382,7 +1389,7 @@
                             type: 'select',
                             title: i18n('taskListSortMenuMode'),
                             description: i18n('taskListSortMenuModeDesc'),
-                            disabled: !settings.enableTaskListSort,
+                            disabled: !settings.enableTaskListSort && !settings.enableGlobalTaskListAutoSort,
                             options: {
                                 submenu: i18n('taskListSortSubmenu'),
                                 bottom: i18n('completedTasksToBottom'),
@@ -2610,7 +2617,7 @@
                 };
 
                 if (item.key === 'taskListSortMenuMode') {
-                    updatedItem.disabled = !settings.enableTaskListSort;
+                    updatedItem.disabled = !settings.enableTaskListSort && !settings.enableGlobalTaskListAutoSort;
                 }
 
                 // 为笔记本选择器更新选项

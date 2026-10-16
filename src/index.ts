@@ -144,6 +144,7 @@ export const DEFAULT_SETTINGS = {
     enableOutlinePrefix: true, // 是否在大纲中为绑定标题添加任务状态前缀
     enableTaskListStatusSync: false, // 任务列表状态与任务进行中/放弃状态联动
     enableTaskListSort: true, // 在任务列表块菜单中显示手动排序
+    enableGlobalTaskListAutoSort: false, // 未单独设置的任务列表默认是否自动排序
     showTaskListAutoSortMenu: true, // 在任务列表块菜单中显示自动排序开关
     taskListSortMenuMode: 'submenu', // 排序菜单展示方式：submenu | bottom | top
     taskPriorityDisplayStyle: 'background', // 任务卡片优先级显示样式：background | checkboxBorder
@@ -2489,6 +2490,8 @@ export default class ReminderPlugin extends Plugin {
             },
             context: { app: this.app.appId, session: this.name },
             canSort: () => !this.storageDisposed && !window.siyuan?.config?.editor?.readOnly,
+            getGlobalPosition: () => this.settings.enableGlobalTaskListAutoSort === true
+                ? (this.settings.taskListSortMenuMode === 'top' ? 'top' : 'bottom') : null,
             onError: error => {
                 console.error('Failed to automatically sort task list:', error);
                 showMessage(i18n('taskListSortFailed'), 5000, 'error');
@@ -3541,30 +3544,38 @@ export default class ReminderPlugin extends Plugin {
         if (!sorter || this.settings.showTaskListAutoSortMenu === false) return;
         const canEdit = () => !this.storageDisposed && !window.siyuan?.config?.editor?.readOnly &&
             !detail.protyle?.disabled && !detail.protyle?.options?.action?.includes('cb-get-history');
-        detail.menu.addItem({
-            icon: 'iconSort', label: i18n('taskListAutoSort'),
-            disabled: !canEdit(),
-            bind: (element: HTMLElement) => {
-                element.setAttribute('disabled', 'disabled');
-                void sorter.getStates(targets).then(states => {
-                    if (!states.length || !canEdit()) return;
-                    element.removeAttribute('disabled');
-                    if (states.every(state => state.position !== null)) {
-                        element.insertAdjacentHTML('beforeend', '<svg class="b3-menu__checked"><use xlink:href="#iconSelect"></use></svg>');
-                    }
-                }).catch(error => {
-                    console.error('Failed to read task list auto-sort state:', error);
-                });
-            },
-            click: async () => {
-                if (!canEdit() || this.settings.showTaskListAutoSortMenu === false) return;
-                try {
-                    await sorter.toggle(targets, this.settings.taskListSortMenuMode === 'top' ? 'top' : 'bottom', canEdit);
-                } catch (error) {
-                    console.error('Failed to toggle task list auto-sort:', error);
-                    showMessage(i18n('taskListSortFailed'), 5000, 'error');
+        const bindState = (followGlobal: boolean) => (element: HTMLElement) => {
+            element.setAttribute('disabled', 'disabled');
+            void sorter.getStates(targets).then(states => {
+                if (!states.length || !canEdit()) return;
+                element.removeAttribute('disabled');
+                if (states.every(state => followGlobal ? state.override === null : state.position !== null)) {
+                    element.insertAdjacentHTML('beforeend', '<svg class="b3-menu__checked"><use xlink:href="#iconSelect"></use></svg>');
                 }
-            },
+            }).catch(error => {
+                console.error('Failed to read task list auto-sort state:', error);
+            });
+        };
+        const applyChange = async (followGlobal: boolean) => {
+            if (!canEdit() || this.settings.showTaskListAutoSortMenu === false) return;
+            try {
+                if (followGlobal) {
+                    await sorter.followGlobal(targets, canEdit);
+                } else {
+                    await sorter.toggle(targets, this.settings.taskListSortMenuMode === 'top' ? 'top' : 'bottom', canEdit);
+                }
+            } catch (error) {
+                console.error('Failed to update task list auto-sort:', error);
+                showMessage(i18n('taskListSortFailed'), 5000, 'error');
+            }
+        };
+        detail.menu.addItem({
+            icon: 'iconSort', label: i18n('taskListAutoSort'), disabled: !canEdit(),
+            bind: bindState(false), click: () => applyChange(false),
+        });
+        detail.menu.addItem({
+            icon: 'iconRefresh', label: i18n('taskListAutoSortFollowGlobal'), disabled: !canEdit(),
+            bind: bindState(true), click: () => applyChange(true),
         });
     }
 

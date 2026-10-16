@@ -8,6 +8,7 @@ const TASK_ITEM = '[data-type="NodeListItem"][data-subtype="t"]';
 interface AutoSortState {
     id: string;
     position: CompletedTaskPosition | null;
+    override: CompletedTaskPosition | 'off' | null;
 }
 
 interface AutoSortOptions {
@@ -15,6 +16,7 @@ interface AutoSortOptions {
     enqueue: (work: () => Promise<void>) => Promise<void>;
     context: { app: string; session: string };
     canSort: () => boolean;
+    getGlobalPosition: () => CompletedTaskPosition | null;
     onError: (error: unknown) => void;
 }
 
@@ -22,9 +24,9 @@ function parseDOM(html: string): Document {
     return new DOMParser().parseFromString(html, 'text/html');
 }
 
-function positionOf(list: Element): CompletedTaskPosition | null {
+function overrideOf(list: Element): AutoSortState['override'] {
     const value = list.getAttribute(TASK_LIST_AUTO_SORT_ATTR);
-    return value === 'bottom' || value === 'top' ? value : null;
+    return value === 'bottom' || value === 'top' || value === 'off' ? value : null;
 }
 
 function taskStates(html: string): Map<string, boolean> {
@@ -54,7 +56,7 @@ export function getNewlyCompletedTaskIds(event: any): string[] {
     return [...changed];
 }
 
-/** 开关保存在列表自身；每次使用最新完整快照，不继承父级或其他列表的设置。 */
+/** 列表自身设置优先于全局默认值，不继承父级列表的单独设置。 */
 export class TaskListAutoSorter {
     private readonly pendingIds = new Set<string>();
     private timer: ReturnType<typeof setTimeout> | null = null;
@@ -79,6 +81,14 @@ export class TaskListAutoSorter {
             .find(list => list.dataset.nodeId === id);
     }
 
+    private getState(list: HTMLElement): AutoSortState {
+        const override = overrideOf(list);
+        return {
+            id: list.dataset.nodeId!, override,
+            position: override === 'off' ? null : override ?? this.options.getGlobalPosition(),
+        };
+    }
+
     async getStates(targets: TaskListSortTarget[]): Promise<AutoSortState[]> {
         const ids = new Set<string>();
         for (const target of targets) {
@@ -89,20 +99,29 @@ export class TaskListAutoSorter {
         const states: AutoSortState[] = [];
         for (const id of ids) {
             const list = await this.readList(id);
-            if (list) states.push({ id, position: positionOf(list) });
+            if (list) states.push(this.getState(list));
         }
         return states;
     }
 
     async toggle(targets: TaskListSortTarget[], position: CompletedTaskPosition, canEdit: () => boolean): Promise<void> {
+        await this.updateOverride(targets, states => states.every(state => state.position !== null) ? 'off' : position, canEdit);
+    }
+
+    async followGlobal(targets: TaskListSortTarget[], canEdit: () => boolean): Promise<void> {
+        await this.updateOverride(targets, () => null, canEdit);
+    }
+
+    private async updateOverride(targets: TaskListSortTarget[],
+        getOverride: (states: AutoSortState[]) => AutoSortState['override'], canEdit: () => boolean): Promise<void> {
         await this.options.enqueue(async () => {
             if (!this.canSort() || !canEdit()) return;
             const states = await this.getStates(targets);
-            const enabled = !states.every(state => state.position !== null);
+            const override = getOverride(states);
             for (const state of states) {
                 if (!this.canSort() || !canEdit()) return;
                 await this.options.request('/api/attr/setBlockAttrs', {
-                    id: state.id, attrs: { [TASK_LIST_AUTO_SORT_ATTR]: enabled ? position : '' },
+                    id: state.id, attrs: { [TASK_LIST_AUTO_SORT_ATTR]: override ?? '' },
                 });
             }
         });
@@ -138,7 +157,7 @@ export class TaskListAutoSorter {
             for (const [id, completed] of byList) {
                 if (!this.canSort()) return;
                 const list = await this.readList(id);
-                const position = list && positionOf(list);
+                const position = list && this.getState(list).position;
                 if (!list || !position || !this.canSort()) continue;
                 const plan = createTaskSortPlan(list, position, completed);
                 if (!plan) continue;

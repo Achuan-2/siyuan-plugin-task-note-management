@@ -191,6 +191,7 @@ function autoSortFixture(parents) {
     const calls = [];
     const errors = [];
     let writable = true;
+    let globalPosition = null;
     let queue = Promise.resolve();
     let nextSnapshot = 0;
     const snapshot = (items, lists = []) => {
@@ -236,6 +237,7 @@ function autoSortFixture(parents) {
         },
         context: { app: 'app', session: 'plugin' },
         canSort: () => writable,
+        getGlobalPosition: () => globalPosition,
         onError: error => errors.push(error),
     });
     function complete(changes) {
@@ -259,8 +261,92 @@ function autoSortFixture(parents) {
         },
         flush: () => queue,
         setWritable: value => { writable = value; },
+        setGlobalPosition: value => { globalPosition = value; },
     };
 }
+
+test('全局默认关闭，开启后未单独设置的多个列表自动排序且保留延迟', async t => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const parent = list([' ', 'X']);
+    const other = list([' ', 'X'], 'other');
+    const env = autoSortFixture([parent, other]);
+    const targets = [{ id: 'root', kind: 'list' }];
+    assert.deepEqual(await env.sorter.getStates(targets), [{ id: 'root', position: null, override: null }]);
+    env.sorter.handleTransactions(env.complete([[parent.children[0], 'X']]));
+    t.mock.timers.tick(autoUtils.TASK_LIST_AUTO_SORT_DELAY);
+    await env.flush();
+    assert.equal(env.calls.some(call => call.url === '/api/transactions'), false);
+
+    parent.children[0].setAttribute('data-task', ' ');
+    env.setGlobalPosition('bottom');
+    env.sorter.handleTransactions(env.complete([[parent.children[0], 'X'], [other.children[0], 'X']]));
+    t.mock.timers.tick(autoUtils.TASK_LIST_AUTO_SORT_DELAY - 1);
+    await env.flush();
+    assert.equal(env.calls.some(call => call.url === '/api/transactions'), false);
+    t.mock.timers.tick(1);
+    await env.flush();
+    assert.deepEqual(parent.children.map(item => item.dataset.nodeId), ['root-1', 'root-0']);
+    assert.deepEqual(other.children.map(item => item.dataset.nodeId), ['other-1', 'other-0']);
+    assert.equal(parent.getAttribute(autoUtils.TASK_LIST_AUTO_SORT_ATTR), null);
+    assert.equal(other.getAttribute(autoUtils.TASK_LIST_AUTO_SORT_ATTR), null);
+});
+
+test('块单独关闭覆盖全局开启且不影响子列表，单独开启覆盖全局关闭，可恢复跟随全局', async t => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const parent = list([' ', 'X']);
+    const nested = list([' ', 'X'], 'nested');
+    parent.children[0].children.push(nested);
+    const env = autoSortFixture([parent, nested]);
+    const targets = [{ id: 'root', kind: 'list' }];
+    env.setGlobalPosition('bottom');
+    await env.sorter.toggle(targets, 'bottom', () => true);
+    assert.equal(parent.getAttribute(autoUtils.TASK_LIST_AUTO_SORT_ATTR), 'off');
+    env.sorter.handleTransactions(env.complete([[parent.children[0], 'X'], [nested.children[0], 'X']]));
+    t.mock.timers.tick(autoUtils.TASK_LIST_AUTO_SORT_DELAY);
+    await env.flush();
+    assert.deepEqual(parent.children.map(item => item.dataset.nodeId), ['root-0', 'root-1']);
+    assert.deepEqual(nested.children.map(item => item.dataset.nodeId), ['nested-1', 'nested-0']);
+
+    await env.sorter.toggle(targets, 'bottom', () => true);
+    env.setGlobalPosition(null);
+    parent.children[0].setAttribute('data-task', ' ');
+    env.sorter.handleTransactions(env.complete([[parent.children[0], 'X']]));
+    t.mock.timers.tick(autoUtils.TASK_LIST_AUTO_SORT_DELAY);
+    await env.flush();
+    assert.deepEqual(parent.children.map(item => item.dataset.nodeId), ['root-1', 'root-0']);
+    assert.equal(parent.getAttribute(autoUtils.TASK_LIST_AUTO_SORT_ATTR), 'bottom');
+
+    await env.sorter.followGlobal(targets, () => true);
+    assert.equal(parent.getAttribute(autoUtils.TASK_LIST_AUTO_SORT_ATTR), '');
+    assert.deepEqual(await env.sorter.getStates(targets), [{ id: 'root', position: null, override: null }]);
+    env.setGlobalPosition('top');
+    assert.deepEqual(await env.sorter.getStates(targets), [{ id: 'root', position: 'top', override: null }]);
+});
+
+test('全局设置在延迟期间变更立即生效，原有顶部和底部单独设置保持优先', async t => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const parent = list([' ', 'X']);
+    const oldTop = list([' ', 'X'], 'old-top');
+    const oldBottom = list([' ', 'X'], 'old-bottom');
+    oldTop.setAttribute(autoUtils.TASK_LIST_AUTO_SORT_ATTR, 'top');
+    oldBottom.setAttribute(autoUtils.TASK_LIST_AUTO_SORT_ATTR, 'bottom');
+    const env = autoSortFixture([parent, oldTop, oldBottom]);
+    env.setGlobalPosition('bottom');
+    env.sorter.handleTransactions(env.complete([[parent.children[0], 'X']]));
+    env.setGlobalPosition(null);
+    t.mock.timers.tick(autoUtils.TASK_LIST_AUTO_SORT_DELAY);
+    await env.flush();
+    assert.equal(env.calls.some(call => call.url === '/api/transactions'), false);
+
+    env.setGlobalPosition('top');
+    assert.deepEqual(await env.sorter.getStates([
+        { id: 'root', kind: 'list' }, { id: 'old-top', kind: 'list' }, { id: 'old-bottom', kind: 'list' },
+    ]), [
+        { id: 'root', position: 'top', override: null },
+        { id: 'old-top', position: 'top', override: 'top' },
+        { id: 'old-bottom', position: 'bottom', override: 'bottom' },
+    ]);
+});
 
 test('自动排序延迟 400ms，连续勾选重新计时并合并为一次排序', async t => {
     t.mock.timers.enable({ apis: ['setTimeout'] });
@@ -310,7 +396,7 @@ test('延迟期间取消完成不移动任务，关闭开关或卸载后不执�
     assert.equal(env.calls.length, count);
 });
 
-test('自动排序开关保存到当前列表，重建控制器可读取，取消后清除，聚焦列表项能定位父列表', async () => {
+test('自动排序开关保存到当前列表，重建控制器可读取，取消后显式关闭，聚焦列表项能定位父列表', async () => {
     const parent = list([' ', 'X']);
     let env = autoSortFixture([parent]);
     const targets = [{ id: 'root-0', kind: 'item' }];
@@ -319,10 +405,10 @@ test('自动排序开关保存到当前列表，重建控制器可读取，取�
     assert.ok(env.calls.some(call => call.url === '/api/block/getBlockRelevantIDs'));
     assert.equal(env.calls.some(call => call.url === '/api/block/getBlockSiblingID'), false);
     env = autoSortFixture([parent]);
-    assert.deepEqual(await env.sorter.getStates(targets), [{ id: 'root', position: 'bottom' }]);
+    assert.deepEqual(await env.sorter.getStates(targets), [{ id: 'root', position: 'bottom', override: 'bottom' }]);
     await env.sorter.toggle(targets, 'bottom', () => true);
-    assert.equal(parent.getAttribute(autoUtils.TASK_LIST_AUTO_SORT_ATTR), '');
-    assert.deepEqual(await env.sorter.getStates(targets), [{ id: 'root', position: null }]);
+    assert.equal(parent.getAttribute(autoUtils.TASK_LIST_AUTO_SORT_ATTR), 'off');
+    assert.deepEqual(await env.sorter.getStates(targets), [{ id: 'root', position: null, override: 'off' }]);
 });
 
 test('已开启列表持续追加新完成任务，包括最后一个未完成任务；其他列表和嵌套子列表不继承', async () => {
@@ -437,9 +523,36 @@ test('菜单显示开关独立于手动排序，菜单勾选反映当前列表�
     await new Promise(resolve => setImmediate(resolve));
     assert.match(checked, /b3-menu__checked/);
     await item.click();
-    assert.equal(env.parent.getAttribute(autoUtils.TASK_LIST_AUTO_SORT_ATTR), '');
+    assert.equal(env.parent.getAttribute(autoUtils.TASK_LIST_AUTO_SORT_ATTR), 'off');
     env.plugin.settings.showTaskListAutoSortMenu = false;
     assert.equal(open(), undefined);
+});
+
+test('块菜单勾选反映全局生效状态，并可关闭当前列表或恢复跟随全局', async () => {
+    const env = menuFixture();
+    const auto = autoSortFixture([env.parent]);
+    auto.setGlobalPosition('bottom');
+    env.plugin.taskListAutoSorter = auto.sorter;
+    const items = [];
+    env.plugin.handleBlockMenu({ detail: { ...env.detail, menu: { addItem: item => items.push(item) } } });
+    const toggle = items.find(item => item.label === 'taskListAutoSort');
+    const follow = items.find(item => item.label === 'taskListAutoSortFollowGlobal');
+    const isChecked = async item => {
+        let checked = false;
+        item.bind({ setAttribute() {}, removeAttribute() {}, insertAdjacentHTML() { checked = true; } });
+        await new Promise(resolve => setImmediate(resolve));
+        return checked;
+    };
+    assert.equal(await isChecked(toggle), true);
+    assert.equal(await isChecked(follow), true);
+    await toggle.click();
+    assert.equal(env.parent.getAttribute(autoUtils.TASK_LIST_AUTO_SORT_ATTR), 'off');
+    assert.equal(await isChecked(toggle), false);
+    assert.equal(await isChecked(follow), false);
+    await follow.click();
+    assert.equal(env.parent.getAttribute(autoUtils.TASK_LIST_AUTO_SORT_ATTR), '');
+    assert.equal(await isChecked(toggle), true);
+    assert.equal(await isChecked(follow), true);
 });
 
 test('现有块菜单入口提供两个排序操作，并保留设置任务和番茄钟菜单', async () => {
