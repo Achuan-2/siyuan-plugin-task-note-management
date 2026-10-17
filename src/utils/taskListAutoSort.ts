@@ -108,10 +108,6 @@ export class TaskListAutoSorter {
         await this.updateOverride(targets, states => states.every(state => state.position !== null) ? 'off' : position, canEdit);
     }
 
-    async followGlobal(targets: TaskListSortTarget[], canEdit: () => boolean): Promise<void> {
-        await this.updateOverride(targets, () => null, canEdit);
-    }
-
     private async updateOverride(targets: TaskListSortTarget[],
         getOverride: (states: AutoSortState[]) => AutoSortState['override'], canEdit: () => boolean): Promise<void> {
         await this.options.enqueue(async () => {

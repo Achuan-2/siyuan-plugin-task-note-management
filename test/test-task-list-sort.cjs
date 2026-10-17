@@ -270,7 +270,7 @@ function autoSortFixture(parents) {
     };
 }
 
-test('开启块自动排序立即整理已有完成项，恢复跟随全局也会整理', async () => {
+test('开启及重新开启块自动排序立即整理已有完成项', async () => {
     const parent = list(['X', ' ', 'X']);
     const env = autoSortFixture([parent]);
     const targets = [{ id: 'root', kind: 'list' }];
@@ -280,7 +280,7 @@ test('开启块自动排序立即整理已有完成项，恢复跟随全局也�
     await env.sorter.toggle(targets, 'bottom', () => true);
     parent.children.reverse();
     env.setGlobalPosition('bottom');
-    await env.sorter.followGlobal(targets, () => true);
+    await env.sorter.toggle(targets, 'bottom', () => true);
     assert.deepEqual(parent.children.map(item => item.dataset.nodeId), ['root-1', 'root-0', 'root-2']);
     assert.equal(env.calls.filter(call => call.url === '/api/transactions').length, 2);
 });
@@ -352,7 +352,7 @@ test('全局默认关闭，开启后未单独设置的多个列表自动排序�
     assert.equal(other.getAttribute(autoUtils.TASK_LIST_AUTO_SORT_ATTR), null);
 });
 
-test('块单独关闭覆盖全局开启且不影响子列表，单独开启覆盖全局关闭，可恢复跟随全局', async t => {
+test('块单独关闭覆盖全局开启且不影响子列表，单独开启覆盖全局关闭', async t => {
     t.mock.timers.enable({ apis: ['setTimeout'] });
     const parent = list([' ', 'X']);
     const nested = list([' ', 'X'], 'nested');
@@ -377,11 +377,8 @@ test('块单独关闭覆盖全局开启且不影响子列表，单独开启覆�
     assert.deepEqual(parent.children.map(item => item.dataset.nodeId), ['root-1', 'root-0']);
     assert.equal(parent.getAttribute(autoUtils.TASK_LIST_AUTO_SORT_ATTR), 'bottom');
 
-    await env.sorter.followGlobal(targets, () => true);
-    assert.equal(parent.getAttribute(autoUtils.TASK_LIST_AUTO_SORT_ATTR), '');
-    assert.deepEqual(await env.sorter.getStates(targets), [{ id: 'root', position: null, override: null }]);
     env.setGlobalPosition('top');
-    assert.deepEqual(await env.sorter.getStates(targets), [{ id: 'root', position: 'top', override: null }]);
+    assert.deepEqual(await env.sorter.getStates(targets), [{ id: 'root', position: 'bottom', override: 'bottom' }]);
 });
 
 test('全局设置在延迟期间变更立即生效，原有顶部和底部单独设置保持优先', async t => {
@@ -589,7 +586,7 @@ test('菜单显示开关独立于手动排序，菜单勾选反映当前列表�
     assert.equal(open(), undefined);
 });
 
-test('块菜单勾选反映全局生效状态，并可关闭当前列表或恢复跟随全局', async () => {
+test('块菜单只保留自动排序开关，反映全局生效状态并可单独关闭或开启', async () => {
     const env = menuFixture();
     const auto = autoSortFixture([env.parent]);
     auto.setGlobalPosition('bottom');
@@ -598,12 +595,10 @@ test('块菜单勾选反映全局生效状态，并可关闭当前列表或恢�
     const open = () => {
         items.length = 0;
         env.plugin.handleBlockMenu({ detail: { ...env.detail, menu: { addItem: item => items.push(item) } } });
-        return {
-            toggle: items.find(item => item.label === 'taskListAutoSort'),
-            follow: items.find(item => item.label === 'taskListAutoSortFollowGlobal'),
-        };
+        assert.equal(items.some(item => item.label === 'taskListAutoSortFollowGlobal'), false);
+        return items.find(item => item.label === 'taskListAutoSort');
     };
-    let { toggle, follow } = open();
+    let toggle = open();
     const isChecked = async item => {
         let checked = false;
         item.bind({ setAttribute() {}, removeAttribute() {}, insertAdjacentHTML() { checked = true; } });
@@ -611,17 +606,14 @@ test('块菜单勾选反映全局生效状态，并可关闭当前列表或恢�
         return checked;
     };
     assert.equal(await isChecked(toggle), true);
-    assert.equal(await isChecked(follow), true);
     await toggle.click();
     assert.equal(env.parent.getAttribute(autoUtils.TASK_LIST_AUTO_SORT_ATTR), 'off');
-    ({ toggle, follow } = open());
+    toggle = open();
     assert.equal(await isChecked(toggle), false);
-    assert.equal(await isChecked(follow), false);
-    await follow.click();
-    assert.equal(env.parent.getAttribute(autoUtils.TASK_LIST_AUTO_SORT_ATTR), '');
-    ({ toggle, follow } = open());
+    await toggle.click();
+    assert.equal(env.parent.getAttribute(autoUtils.TASK_LIST_AUTO_SORT_ATTR), 'bottom');
+    toggle = open();
     assert.equal(await isChecked(toggle), true);
-    assert.equal(await isChecked(follow), true);
 });
 
 test('自动排序开启时隐藏手动菜单且禁止手动执行，关闭后显示唯一的手动排序操作', async () => {

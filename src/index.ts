@@ -3568,26 +3568,22 @@ export default class ReminderPlugin extends Plugin {
         if (!sorter || this.settings.showTaskListAutoSortMenu === false) return;
         const canEdit = () => !this.storageDisposed && !window.siyuan?.config?.editor?.readOnly &&
             !detail.protyle?.disabled && !detail.protyle?.options?.action?.includes('cb-get-history');
-        const bindState = (followGlobal: boolean) => (element: HTMLElement) => {
+        const bindState = (element: HTMLElement) => {
             element.setAttribute('disabled', 'disabled');
             void states.then(values => {
                 if (!values.length || !canEdit()) return;
                 element.removeAttribute('disabled');
-                if (values.every(state => followGlobal ? state.override === null : state.position !== null)) {
+                if (values.every(state => state.position !== null)) {
                     element.insertAdjacentHTML('beforeend', '<svg class="b3-menu__checked"><use xlink:href="#iconSelect"></use></svg>');
                 }
             }).catch(error => {
                 console.error('Failed to read task list auto-sort state:', error);
             });
         };
-        const applyChange = async (followGlobal: boolean) => {
+        const applyChange = async () => {
             if (!canEdit() || this.settings.showTaskListAutoSortMenu === false) return;
             try {
-                if (followGlobal) {
-                    await sorter.followGlobal(targets, canEdit);
-                } else {
-                    await sorter.toggle(targets, this.settings.taskListSortMenuMode === 'top' ? 'top' : 'bottom', canEdit);
-                }
+                await sorter.toggle(targets, this.settings.taskListSortMenuMode === 'top' ? 'top' : 'bottom', canEdit);
             } catch (error) {
                 console.error('Failed to update task list auto-sort:', error);
                 showMessage(i18n('taskListSortFailed'), 5000, 'error');
@@ -3595,11 +3591,7 @@ export default class ReminderPlugin extends Plugin {
         };
         detail.menu.addItem({
             icon: 'iconSort', label: i18n('taskListAutoSort'), disabled: !canEdit(),
-            bind: bindState(false), click: () => applyChange(false),
-        });
-        detail.menu.addItem({
-            icon: 'iconRefresh', label: i18n('taskListAutoSortFollowGlobal'), disabled: !canEdit(),
-            bind: bindState(true), click: () => applyChange(true),
+            bind: bindState, click: applyChange,
         });
     }
 
