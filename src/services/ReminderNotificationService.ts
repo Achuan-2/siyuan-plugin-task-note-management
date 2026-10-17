@@ -46,7 +46,10 @@ export class ReminderNotificationService {
     private getActions(reminderInfo?: ReminderNotificationInfo): NotificationAction[] {
         if (!reminderInfo?.id) return [];
         if (reminderInfo.notificationKind === 'habit') {
-            return [{ text: i18n('checkInAction') || '打卡', action: 'checkIn' }];
+            return [
+                { text: i18n('startPomodoro') || '开始番茄钟', action: 'pomodoro' },
+                { text: i18n('checkInAction') || '打卡', action: 'checkIn' }
+            ];
         }
         return [
             { text: i18n('startPomodoro') || '开始番茄钟', action: 'pomodoro' },
@@ -85,6 +88,16 @@ export class ReminderNotificationService {
                 );
                 dialog.openAddEntryDialog();
                 return;
+            }
+
+            if (reminderInfo.notificationKind === 'habit' || reminderInfo.id?.startsWith('habit')) {
+                if (action === 'pomodoro') {
+                    const habits = await this.plugin.loadHabitData(true);
+                    const habit = habits[reminderInfo.id];
+                    if (!habit || habit.abandoned) return;
+                    await this.startPomodoro({ ...habit, isHabit: true, type: 'habit' });
+                    return;
+                }
             }
 
             const data = await this.plugin.loadReminderData(true);
@@ -220,9 +233,10 @@ export class ReminderNotificationService {
                     });
                     this.desktopReminderNotifications.add(notification);
                     let handled = false;
-                    notification.on('close', (event: { reason?: string }) => {
+                    notification.on('close', (event: any, legacyReason?: string) => {
+                        const reason = typeof event?.reason === 'string' ? event.reason : legacyReason;
                         // 超时后通知仍可能留在通知中心；主动关闭则结束本次交互。
-                        if (event?.reason === 'timedOut') return;
+                        if (reason === 'timedOut') return;
                         handled = true;
                         this.desktopReminderNotifications.delete(notification);
                     });
@@ -236,7 +250,8 @@ export class ReminderNotificationService {
                     });
                     notification.on('click', () => {
                         if (handled || !this.desktopReminderNotifications.has(notification)) return;
-                        // 习惯只响应打卡按钮；正文点击或关闭误报点击都不唤起窗口。
+                        // 原生通知支持操作按钮时，任务与习惯均只响应按钮操作；正文点击或关闭误报点击都不唤起操作弹窗。
+                        if (supportsActions) return;
                         if (reminderInfo.notificationKind === 'habit') return;
                         handled = true;
                         notification.close();

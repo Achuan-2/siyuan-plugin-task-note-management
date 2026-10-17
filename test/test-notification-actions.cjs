@@ -163,19 +163,31 @@ test('原生通知按钮分别路由任务操作，兼容新旧事件参数并�
     }
     const { harness, notices } = fixture();
     await harness.show('习惯', '内容', { id: 'habit', notificationKind: 'habit' });
-    assert.equal(notices[0].options.actions.length, 1);
+    assert.equal(notices[0].options.actions.length, 2);
 });
 
 test('点击系统通知的习惯打卡按钮只打开一次添加弹窗', async () => {
     const { harness, notices, checks, savedHabits } = fixture({ habit: { id: 'habit' } });
     await harness.show('习惯', '内容', { id: 'habit', notificationKind: 'habit' });
-    notices[0].handlers.action({ actionIndex: 0 });
+    notices[0].handlers.action({ actionIndex: 1 });
     notices[0].handlers.click();
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(checks.length, 1);
     assert.equal(harness.focusCount, 1);
     assert.equal(checks[0].habit.id, 'habit');
     assert.equal(savedHabits.length, 0);
+    assert.equal(notices[0].closed, true);
+});
+
+test('点击系统通知的习惯番茄钟按钮启动番茄钟', async () => {
+    const habit = { id: 'habit', title: '读书' };
+    const { harness, notices } = fixture({ habit });
+    await harness.show('习惯', '内容', { id: 'habit', notificationKind: 'habit' });
+    notices[0].handlers.action({ actionIndex: 0 });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(harness.started?.id, 'habit');
+    assert.equal(harness.started?.title, '读书');
+    assert.equal(harness.focusCount, 1);
     assert.equal(notices[0].closed, true);
 });
 
@@ -202,12 +214,33 @@ test('习惯通知正文点击或关闭误报点击都不唤起思源，打卡�
             assert.equal(harness.dialog, undefined);
             assert.equal(checks.length, 0);
             if (!closeFirst && version === '42.0.0') {
-                notices[0].handlers.action({ actionIndex: 0 });
+                notices[0].handlers.action({ actionIndex: 1 });
                 await new Promise(resolve => setImmediate(resolve));
                 assert.equal(harness.focusCount, 1);
                 assert.equal(checks.length, 1);
             }
             if (!closeFirst) close();
+        }
+    }
+});
+
+test('支持原生按钮时任务通知正文点击或关闭误报点击都不唤起操作弹窗，按钮仍可用', async () => {
+    for (const closeFirst of [true, false]) {
+        const { harness, notices } = fixture({}, 'win32', '42.0.0', true);
+        const calls = [];
+        harness.handleAction = async (info, action) => calls.push([info.id, action]);
+        await harness.show('任务', '内容', { id: 'task', notificationKind: 'task' });
+        const click = () => notices[0].handlers.click();
+        const close = () => notices[0].handlers.close({ reason: 'userCanceled' });
+        if (closeFirst) close();
+        click();
+        assert.equal(harness.focusCount, 0);
+        assert.equal(harness.dialog, undefined);
+        if (!closeFirst) {
+            notices[0].handlers.action({ actionIndex: 0 });
+            await new Promise(resolve => setImmediate(resolve));
+            assert.deepEqual(calls, [['task', 'pomodoro']]);
+            close();
         }
     }
 });
@@ -233,7 +266,7 @@ test('关闭原生习惯通知后忽略后续点击、打卡和失败回调', as
         await harness.show('习惯', '内容', { id: 'habit', notificationKind: 'habit' });
         notices[0].handlers.close(event);
         notices[0].handlers.click();
-        notices[0].handlers.action({ actionIndex: 0 });
+        notices[0].handlers.action({ actionIndex: 1 });
         notices[0].handlers.failed({}, 'late failure');
         await new Promise(resolve => setImmediate(resolve));
         assert.equal(harness.desktopReminderNotifications.size, 0);
@@ -246,7 +279,7 @@ test('原生通知超时进入通知中心后仍可点击打卡', async () => {
     const { harness, notices, checks } = fixture({ habit: { id: 'habit' } });
     await harness.show('习惯', '内容', { id: 'habit', notificationKind: 'habit' });
     notices[0].handlers.close({ reason: 'timedOut' });
-    notices[0].handlers.action({ actionIndex: 0 });
+    notices[0].handlers.action({ actionIndex: 1 });
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(checks.length, 1);
     assert.equal(harness.desktopReminderNotifications.size, 0);
