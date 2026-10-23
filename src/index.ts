@@ -9,6 +9,7 @@ import {
     getFrontend,
     getBackend,
     fetchSyncPost,
+    type IMenu,
 } from "siyuan";
 import { VipManager } from "./components/vip/vip";
 import "./index.scss";
@@ -3517,15 +3518,31 @@ export default class ReminderPlugin extends Plugin {
         const sorter = this.taskListAutoSorter;
         // 同一份状态快照供自动和手动菜单使用，避免重复请求完整列表。
         const states = sorter ? sorter.getStates(targets) : Promise.resolve([]);
-        this.addTaskListAutoSortMenu(detail, targets, states);
+        const submenu: IMenu[] = [];
+        const autoSortMenu = this.createTaskListAutoSortMenu(detail, targets, states);
+        if (autoSortMenu) submenu.push(autoSortMenu);
+        if (this.settings.enableTaskListSort !== false) {
+            submenu.push(this.createTaskListManualSortMenu(detail, targets, states));
+        }
+        if (submenu.length) {
+            detail.menu.addItem({
+                icon: 'iconSort',
+                label: i18n('taskListSort'),
+                submenu,
+            });
+        }
         // 即使两个菜单均隐藏，也接住状态请求失败，避免未处理的 Promise 拒绝。
         void states.catch(error => console.error('Failed to read task list sort state:', error));
-        if (this.settings.enableTaskListSort === false) return;
+    }
+
+    private createTaskListManualSortMenu(detail: any, targets: ReturnType<typeof getTaskListSortTargets>,
+        states: ReturnType<TaskListAutoSorter['getStates']>): IMenu {
+        const sorter = this.taskListAutoSorter;
         const canSort = () => this.settings.enableTaskListSort !== false &&
             !this.storageDisposed && !window.siyuan?.config?.editor?.readOnly &&
             !detail.protyle?.disabled && !detail.protyle?.options?.action?.includes('cb-get-history');
         const position = this.settings.taskListSortMenuMode === 'top' ? 'top' : 'bottom';
-        detail.menu.addItem({
+        return {
             icon: position === 'bottom' ? 'iconDown' : 'iconUp',
             label: i18n(position === 'bottom' ? 'completedTasksToBottom' : 'completedTasksToTop'),
             disabled: !canSort(),
@@ -3559,11 +3576,11 @@ export default class ReminderPlugin extends Plugin {
                     showMessage(i18n('taskListSortFailed'), 5000, 'error');
                 }
             },
-        });
+        };
     }
 
-    private addTaskListAutoSortMenu(detail: any, targets: ReturnType<typeof getTaskListSortTargets>,
-        states: ReturnType<TaskListAutoSorter['getStates']>) {
+    private createTaskListAutoSortMenu(detail: any, targets: ReturnType<typeof getTaskListSortTargets>,
+        states: ReturnType<TaskListAutoSorter['getStates']>): IMenu | undefined {
         const sorter = this.taskListAutoSorter;
         if (!sorter || this.settings.showTaskListAutoSortMenu === false) return;
         const canEdit = () => !this.storageDisposed && !window.siyuan?.config?.editor?.readOnly &&
@@ -3589,10 +3606,10 @@ export default class ReminderPlugin extends Plugin {
                 showMessage(i18n('taskListSortFailed'), 5000, 'error');
             }
         };
-        detail.menu.addItem({
+        return {
             icon: 'iconSort', label: i18n('taskListAutoSort'), disabled: !canEdit(),
             bind: bindState, click: applyChange,
-        });
+        };
     }
 
     private handleDatabaseMenu({ detail }: { detail: DatabaseMenuContext & { menu: any } }) {

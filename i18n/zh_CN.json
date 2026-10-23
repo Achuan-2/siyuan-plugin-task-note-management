@@ -2873,7 +2873,7 @@
     "habitCheckInCountValue": "${count}次",
     "newProject": "新建项目",
     "projectName": "项目名称",
-    "taskListSort": "任务列表排序",
+    "taskListSort": "任务排序",
     "enableGlobalTaskListAutoSort": "全局任务列表自动排序",
     "enableGlobalTaskListAutoSortDesc": "默认关闭。开启时按所选方向分批整理已有任务列表，之后在勾选完成后自动排序。块菜单可单独开启或关闭当前列表的自动排序。",
     "showTaskListAutoSortMenu": "显示任务列表自动排序菜单",
