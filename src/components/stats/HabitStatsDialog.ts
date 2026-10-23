@@ -339,6 +339,21 @@ export class HabitStatsDialog {
         this.renderYearlyView(yearlyContainer);
     }
 
+    private openDayEditor(dateStr: string) {
+        const dayDialog = new HabitDayDialog(this.habit, dateStr, async (updatedHabit) => {
+            await this.onSave?.(updatedHabit);
+            this.habit = updatedHabit;
+
+            // 打卡窗口可切换周内日期，保存后同步刷新摘要、月视图和年视图。
+            const container = this.dialog.element.querySelector('#habitStatsContainer') as HTMLElement;
+            if (!container) return;
+            const scrollTop = container.scrollTop;
+            this.renderContainer(container);
+            container.scrollTop = scrollTop;
+        }, this.plugin);
+        dayDialog.show();
+    }
+
     private calculateStreak(): number {
         if (!this.habit.checkIns || Object.keys(this.habit.checkIns).length === 0) {
             return 0;
@@ -762,15 +777,7 @@ export class HabitStatsDialog {
             // 单击进入该日的历史打卡管理（快速添加/编辑）
             dayCell.addEventListener('click', (e) => {
                 e.stopPropagation();
-                const dayDialog = new HabitDayDialog(this.habit, dateStr, async (updatedHabit) => {
-                    if (this.onSave) {
-                        await this.onSave(updatedHabit);
-                    } else {
-                        this.habit = updatedHabit;
-                    }
-                    this.renderMonthlyView(container);
-                }, this.plugin);
-                dayDialog.show();
+                this.openDayEditor(dateStr);
             });
 
             monthGrid.appendChild(dayCell);
@@ -971,15 +978,7 @@ export class HabitStatsDialog {
 
                 dayCell.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    const dayDialog = new HabitDayDialog(this.habit, dateStr, async (updatedHabit) => {
-                        if (this.onSave) {
-                            await this.onSave(updatedHabit);
-                        } else {
-                            this.habit = updatedHabit;
-                        }
-                        this.rerenderYearlyView(container);
-                    }, this.plugin);
-                    dayDialog.show();
+                    this.openDayEditor(dateStr);
                 });
 
                 cells.appendChild(dayCell);
@@ -1200,15 +1199,7 @@ export class HabitStatsDialog {
                 openDayBtn.className = 'b3-button b3-button--outline';
                 openDayBtn.textContent = i18n("viewThisDay");
                 openDayBtn.addEventListener('click', () => {
-                    const dayDialog = new HabitDayDialog(this.habit, log.dateStr, async (updatedHabit) => {
-                        if (this.onSave) {
-                            await this.onSave(updatedHabit);
-                        } else {
-                            this.habit = updatedHabit;
-                        }
-                        this.renderCheckInLogs(container);
-                    }, this.plugin);
-                    dayDialog.show();
+                    this.openDayEditor(log.dateStr);
                 });
                 actions.appendChild(openDayBtn);
 
