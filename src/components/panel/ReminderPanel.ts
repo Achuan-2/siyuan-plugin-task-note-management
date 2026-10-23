@@ -2926,6 +2926,23 @@ export class ReminderPanel {
         });
     }
 
+    /** 仅嵌套展示时隐藏与直接父任务相同的项目、分类；独立展示的子任务保留标签。 */
+    private getReminderBadgeVisibility(reminder: any, level: number, allVisibleReminders: any[]): { showProjectBadge: boolean; showCategoryBadge: boolean } {
+        const parent = level > 0 && reminder.parentId
+            ? allVisibleReminders.find(task => task.id === reminder.parentId)
+                || this.currentRemindersCache.find(task => task.id === reminder.parentId)
+                || this.allRemindersMap.get(reminder.parentId)
+            : null;
+        const normalizeCategories = (categoryId: unknown): string => Array.from(new Set(
+            String(categoryId || '').split(',').map(id => id.trim()).filter(Boolean)
+        )).sort().join(',');
+
+        return {
+            showProjectBadge: !parent || !reminder.projectId || reminder.projectId !== parent.projectId,
+            showCategoryBadge: !parent || normalizeCategories(reminder.categoryId) !== normalizeCategories(parent.categoryId),
+        };
+    }
+
     /** 标题、备注和排序位置可局部更新；其他渲染依赖变化时重建对应卡片。 */
     private getReminderElementSignature(reminder: any, asyncDataCache: Map<string, any>, today: string, level: number, allVisibleReminders: any[]): string {
         const allTasks = Array.from(this.allRemindersMap.values());
@@ -2959,6 +2976,7 @@ export class ReminderPanel {
             children: children.map(task => ({ id: task.id, completed: !!task.completed })),
             visibleDescendants: this.getAllDescendantIds(reminder.id, visibleMap),
             parentVisible: visibleMap.has(reminder.parentId),
+            badges: this.getReminderBadgeVisibility(reminder, level, allVisibleReminders),
             ancestors,
             collapsed: this.isTaskCollapsed(reminder.id, children.length > 0),
             selected: this.selectedReminderIds.has(reminder.id),
@@ -3048,7 +3066,7 @@ export class ReminderPanel {
             showCompletedSubtasks: this.showCompletedSubtasks,
             clipTitleToOneLine: this.clipTitleToOneLine,
             showProjectKanbanStatus: this.showProjectKanbanStatus,
-            showProjectBadge: true,
+            ...this.getReminderBadgeVisibility(reminder, level, allVisibleReminders),
             showDocumentTitle: this.isTaskCardDocumentTitleEnabled(),
             allTasks: this.allRemindersMap && this.allRemindersMap.size > 0
                 ? Array.from(this.allRemindersMap.values())
