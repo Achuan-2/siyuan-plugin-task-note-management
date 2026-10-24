@@ -163,13 +163,22 @@ test('只读或读取期间卸载不提交排序，接口失败向菜单传播',
         { app: 'app', session: 'plugin' }, () => true), /network/);
 });
 
+function collectMenuItem(items, item) {
+    if (item.submenu) {
+        assert.equal(item.label, 'taskListSort');
+        assert.equal(item.icon, 'iconSort');
+        items.push(...item.submenu);
+    } else items.push(item);
+}
+
 function menuFixture(readOnly = false, settings = {}) {
     const env = apiFixture();
     const errors = [];
     const source = fs.readFileSync(path.join(root, 'src/index.ts'), 'utf8');
     const ast = ts.createSourceFile('index.ts', source, ts.ScriptTarget.Latest, true);
     const cls = ast.statements.find(node => ts.isClassDeclaration(node) && node.name.text === 'ReminderPlugin');
-    const methods = cls.members.filter(node => ['handleBlockMenu', 'addTaskListSortMenu', 'addTaskListAutoSortMenu'].includes(node.name?.getText(ast)));
+    const methods = cls.members.filter(node => ['handleBlockMenu', 'addTaskListSortMenu', 'createTaskListAutoSortMenu',
+        'createTaskListManualSortMenu'].includes(node.name?.getText(ast)));
     const Fixture = evaluate('import { getTaskListSortTargets, sortTaskLists, i18n, showMessage, fetchSyncPost } from "test-utils";\n' +
         `export class Fixture { ${methods.map(node => node.getText(ast)).join('\n')} }`, {
         'test-utils': { ...utils, i18n: key => key, showMessage: message => errors.push(message),
@@ -180,7 +189,7 @@ function menuFixture(readOnly = false, settings = {}) {
     Object.assign(plugin, { taskListSortQueue: Promise.resolve(), storageDisposed: false,
         app: { appId: 'app' }, name: 'plugin', settings: { pomodoroDirectStart: true, ...settings }, hasListChildren: () => false });
     const items = [];
-    const detail = { blockElements: [env.parent.children[0]], menu: { addItem: item => items.push(item) },
+    const detail = { blockElements: [env.parent.children[0]], menu: { addItem: item => collectMenuItem(items, item) },
         protyle: { options: { action: [] } } };
     plugin.handleBlockMenu({ detail });
     return { ...env, plugin, items, errors, detail };
@@ -195,7 +204,8 @@ function autoSortFixture(parents) {
     let queue = Promise.resolve();
     let nextSnapshot = 0;
     const snapshot = (items, lists = []) => {
-        const key = `snapshot-${++nextSnapshot}`;
+        const key = `<!-- snapshot-${++nextSnapshot} -->` + items.map(item =>
+            `<div data-type="${item.getAttribute('data-type')}" data-node-id="${item.dataset.nodeId}" data-task="${item.getAttribute('data-task')}"></div>`).join('');
         snapshots.set(key, { items, lists });
         return key;
     };
@@ -269,6 +279,25 @@ function autoSortFixture(parents) {
         setGlobalPosition: value => { globalPosition = value; },
     };
 }
+
+test('普通段落连续编辑不创建 HTML 文档，未完成任务只解析正向快照', () => {
+    let parses = 0;
+    global.DOMParser = class {
+        parseFromString() {
+            parses++;
+            return { querySelectorAll: () => [block('NodeListItem', 'task', 't', ' ')] };
+        }
+    };
+    const paragraph = '<div data-type="NodeParagraph">普通正文</div>';
+    const event = html => ({ cmd: 'transactions', data: [{
+        doOperations: [{ action: 'update', data: html }],
+        undoOperations: [{ action: 'update', data: html }],
+    }] });
+    for (let index = 0; index < 1000; index++) assert.deepEqual(autoUtils.getNewlyCompletedTaskIds(event(paragraph)), []);
+    assert.equal(parses, 0);
+    assert.deepEqual(autoUtils.getNewlyCompletedTaskIds(event('<div data-type="NodeListItem" data-task=" ">任务</div>')), []);
+    assert.equal(parses, 1);
+});
 
 test('开启及重新开启块自动排序立即整理已有完成项', async () => {
     const parent = list(['X', ' ', 'X']);
@@ -567,7 +596,7 @@ test('菜单显示开关独立于手动排序，菜单勾选反映当前列表�
     const items = [];
     const open = () => {
         items.length = 0;
-        env.plugin.handleBlockMenu({ detail: { ...env.detail, menu: { addItem: item => items.push(item) } } });
+        env.plugin.handleBlockMenu({ detail: { ...env.detail, menu: { addItem: item => collectMenuItem(items, item) } } });
         return items.find(item => item.label === 'taskListAutoSort');
     };
     let item = open();
@@ -594,7 +623,7 @@ test('块菜单只保留自动排序开关，反映全局生效状态并可单�
     const items = [];
     const open = () => {
         items.length = 0;
-        env.plugin.handleBlockMenu({ detail: { ...env.detail, menu: { addItem: item => items.push(item) } } });
+        env.plugin.handleBlockMenu({ detail: { ...env.detail, menu: { addItem: item => collectMenuItem(items, item) } } });
         assert.equal(items.some(item => item.label === 'taskListAutoSortFollowGlobal'), false);
         return items.find(item => item.label === 'taskListAutoSort');
     };
@@ -624,7 +653,7 @@ test('自动排序开启时隐藏手动菜单且禁止手动执行，关闭后�
     };
     const open = () => {
         const items = [];
-        env.plugin.handleBlockMenu({ detail: { ...env.detail, menu: { addItem: item => items.push(item) } } });
+        env.plugin.handleBlockMenu({ detail: { ...env.detail, menu: { addItem: item => collectMenuItem(items, item) } } });
         assert.equal(items.filter(item => ['completedTasksToBottom', 'completedTasksToTop'].includes(item.label)).length, 1);
         return items.find(item => item.label === 'completedTasksToBottom');
     };
@@ -687,7 +716,7 @@ test('关闭任务排序隐藏菜单，并阻止已打开菜单继续排序', as
 });
 
 for (const mode of ['bottom', 'top']) {
-    test(`固定 ${mode} 模式直接显示对应菜单并执行排序，只读时禁用`, async () => {
+    test(`固定 ${mode} 模式在任务排序子菜单内显示对应操作，只读时禁用`, async () => {
         const settings = { enableTaskListSort: true, taskListSortMenuMode: mode };
         const env = menuFixture(false, settings);
         if (mode === 'top') env.parent.children.reverse();

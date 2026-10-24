@@ -30,6 +30,8 @@ function overrideOf(list: Element): AutoSortState['override'] {
 }
 
 function taskStates(html: string): Map<string, boolean> {
+    // 大多数编辑事务只有普通段落，避免为每次输入创建离屏 HTML 文档。
+    if (!html.includes('NodeListItem')) return new Map();
     return new Map(Array.from(parseDOM(html).querySelectorAll(TASK_ITEM)).map(item => [
         item.getAttribute('data-node-id') || '',
         (item.getAttribute('data-task') ?? item.querySelector(':scope > .protyle-action--task[data-task]')?.getAttribute('data-task') ?? ' ').toUpperCase() === 'X',
@@ -41,17 +43,21 @@ export function getNewlyCompletedTaskIds(event: any): string[] {
     if (event?.cmd !== 'transactions' || event.context?.isUndoReplay || !Array.isArray(event.data)) return [];
     const changed = new Set<string>();
     for (const transaction of event.data) {
+        const completedIds = new Set<string>();
+        for (const operation of transaction.doOperations || []) {
+            if (operation.action !== 'update' || typeof operation.data !== 'string') continue;
+            for (const [id, completed] of taskStates(operation.data)) {
+                if (id && completed) completedIds.add(id);
+            }
+        }
+        // 没有完成项时也不必解析撤销快照（例如正在编辑未完成任务的正文）。
+        if (!completedIds.size) continue;
         const before = new Map<string, boolean>();
         for (const operation of transaction.undoOperations || []) {
             if (operation.action !== 'update' || typeof operation.data !== 'string') continue;
             for (const [id, completed] of taskStates(operation.data)) before.set(id, completed);
         }
-        for (const operation of transaction.doOperations || []) {
-            if (operation.action !== 'update' || typeof operation.data !== 'string') continue;
-            for (const [id, completed] of taskStates(operation.data)) {
-                if (id && completed && before.get(id) === false) changed.add(id);
-            }
-        }
+        for (const id of completedIds) if (before.get(id) === false) changed.add(id);
     }
     return [...changed];
 }

@@ -2547,11 +2547,6 @@ export default class ReminderPlugin extends Plugin {
             this.updateBadges();
             this.scheduleHabitPomodoroAutoSync();
             this.taskNoteDOM.addBreadcrumbButtonsToExistingProtyles();
-            const currentProtyle = getActiveEditor(false)?.protyle;
-            // 500ms之后调用
-            setTimeout(() => {
-                this.taskNoteDOM.addBlockProjectButtonsToProtyle(currentProtyle);
-            }, 500);
         };
         window.addEventListener('reminderUpdated', onReminderUpdated);
         this.addCleanup(() => window.removeEventListener('reminderUpdated', onReminderUpdated));
@@ -2630,18 +2625,29 @@ export default class ReminderPlugin extends Plugin {
         }
 
         // 启动时同步一次番茄习惯自动打卡（处理补录）
-        setTimeout(() => {
+        const habitSyncTimer = setTimeout(() => {
             this.syncHabitPomodoroAutoCheckIns().catch(e => console.error('Startup habit sync failed:', e));
         }, 3000);
+        this.addCleanup(() => clearTimeout(habitSyncTimer));
 
         // 在布局准备就绪后监听 protyle 相关事件，统一初始化按钮
+        const protyleInitTimers = new Map<Element, ReturnType<typeof setTimeout>>();
+        const cancelProtyleInit = (element: Element) => {
+            const timer = protyleInitTimers.get(element);
+            if (timer !== undefined) clearTimeout(timer);
+            protyleInitTimers.delete(element);
+        };
         const initProtyleButtons = (protyle: any) => {
-            if (!protyle) return;
+            if (!protyle?.element) return;
+            const element = protyle.element;
+            cancelProtyleInit(element);
             // 延迟添加按钮，确保 protyle 切换/加载已完成
-            setTimeout(() => {
+            protyleInitTimers.set(element, setTimeout(() => {
+                protyleInitTimers.delete(element);
+                if (!this.taskNoteDOM.isProtyleVisible(protyle)) return;
                 this.taskNoteDOM.addBreadcrumbReminderButton(protyle);
                 this.taskNoteDOM.addBlockProjectButtonsToProtyle(protyle);
-            }, 500);
+            }, 500));
         };
 
         const onProtyleReady = (e: any) => {
@@ -2652,6 +2658,13 @@ export default class ReminderPlugin extends Plugin {
         protyleEvents.forEach((eventName) => {
             this.eventBus.on(eventName, onProtyleReady);
             this.addCleanup(() => this.eventBus.off(eventName, onProtyleReady));
+        });
+        const onProtyleDestroyed = (event: any) => cancelProtyleInit(event?.detail?.protyle?.element);
+        this.eventBus.on('destroy-protyle', onProtyleDestroyed);
+        this.addCleanup(() => {
+            this.eventBus.off('destroy-protyle', onProtyleDestroyed);
+            for (const timer of protyleInitTimers.values()) clearTimeout(timer);
+            protyleInitTimers.clear();
         });
         // 为当前已存在的protyle添加按钮
         this.taskNoteDOM.addBreadcrumbButtonsToExistingProtyles();

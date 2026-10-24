@@ -6,6 +6,12 @@ import { ProjectManager, type MilestoneDateDisplayInfo } from "../dataManager/pr
 const PROJECT_KANBAN_TAB_TYPE = "TN_project_kanban_tab";
 const BLOCK_POMODORO_COUNT_ATTR = "custom-task-pomodoro-count";
 const BLOCK_POMODORO_MINUTES_ATTR = "custom-task-pomodoro-minutes";
+const TRACKED_BLOCK_ATTRS = [
+    "custom-task-projectid", "custom-bind-reminders", "custom-bind-milestones",
+    BLOCK_POMODORO_COUNT_ATTR, BLOCK_POMODORO_MINUTES_ATTR,
+];
+const TRACKED_BLOCK_SELECTOR = TRACKED_BLOCK_ATTRS.map(name => `[${name}]`).join(", ");
+const BUTTON_STRUCTURE_SELECTOR = `${TRACKED_BLOCK_SELECTOR}, .protyle-attr, .protyle-title, .protyle-wysiwyg, [data-plugin-added="reminder-plugin"]`;
 const INSTANCE_EVENT_ID_SUFFIX_REGEX = /^(.*)_\d{4}-\d{2}-\d{2}$/;
 const OUTLINE_PREFIX_DATA_ATTR = "data-task-note-outline-prefix";
 const OUTLINE_PREFIX_OWNED_ATTR = "data-task-note-outline-prefix-owned";
@@ -26,8 +32,9 @@ export class TaskNoteDOMManager {
 
     private processingBlockButtons: Set<string> = new Set();
     private outlinePrefixCache: Map<string, string | null> = new Map();
-    private protyleObservers: WeakMap<Element, MutationObserver> = new WeakMap();
-    private protyleDebounceTimers: WeakMap<Element, number> = new WeakMap();
+    private protyleObservers: Map<Element, MutationObserver> = new Map();
+    private protyleDebounceTimers: Map<Element, number> = new Map();
+    private disposed = false;
     private currentHeadingIds: Set<string> = new Set();
     private pomodoroStatsByEventId: Map<string, PomodoroStats> = new Map();
     private pomodoroStatsByBaseEventId: Map<string, PomodoroStats> = new Map();
@@ -52,17 +59,32 @@ export class TaskNoteDOMManager {
         this.plugin = plugin;
         const onReminderUpdated = () => {
             this.invalidatePomodoroStatsCache();
-            this.refreshBoundReminderDateButtonsForAllProtyles();
+        };
+        const onProtyleDestroyed = (event: CustomEvent) => {
+            const element = event.detail?.protyle?.element;
+            if (element) this.releaseProtyle(element);
         };
         window.addEventListener("reminderUpdated", onReminderUpdated as EventListener);
+        this.plugin.eventBus.on("destroy-protyle", onProtyleDestroyed);
         this.scheduleDialogPreload();
         this.plugin.addCleanup(() => {
+            this.disposed = true;
             window.removeEventListener("reminderUpdated", onReminderUpdated as EventListener);
+            this.plugin.eventBus.off("destroy-protyle", onProtyleDestroyed);
+            for (const element of this.protyleObservers.keys()) this.releaseProtyle(element);
             if (this.dialogPreloadTimer) {
                 window.clearTimeout(this.dialogPreloadTimer);
                 this.dialogPreloadTimer = null;
             }
         });
+    }
+
+    private releaseProtyle(element: Element) {
+        this.protyleObservers.get(element)?.disconnect();
+        this.protyleObservers.delete(element);
+        const timer = this.protyleDebounceTimers.get(element);
+        if (timer !== undefined) window.clearTimeout(timer);
+        this.protyleDebounceTimers.delete(element);
     }
 
     private scheduleDialogPreload() {
@@ -94,9 +116,7 @@ export class TaskNoteDOMManager {
     }
 
     private shouldIgnoreMutation(mutation: MutationRecord): boolean {
-        if (mutation.type === "attributes") {
-            return this.isPluginManagedNode(mutation.target);
-        }
+        if (this.isPluginManagedNode(mutation.target)) return true;
         if (mutation.type === "childList") {
             const changedNodes = [...Array.from(mutation.addedNodes), ...Array.from(mutation.removedNodes)];
             if (changedNodes.length === 0) return false;
@@ -105,8 +125,22 @@ export class TaskNoteDOMManager {
         return false;
     }
 
+    private mutationAffectsBlockButtons(mutation: MutationRecord): boolean {
+        if (this.shouldIgnoreMutation(mutation)) return false;
+        if (mutation.type === "attributes") {
+            return TRACKED_BLOCK_ATTRS.includes(mutation.attributeName || "") &&
+                mutation.oldValue !== (mutation.target as Element).getAttribute(mutation.attributeName!);
+        }
+        if (mutation.type !== "childList") return false;
+        // 正文文字、行内样式和光标变化无需扫描整篇文档；只关心绑定属性或按钮容器的增删。
+        const affectsStructure = (node: Node) => node instanceof Element &&
+            (node.matches(BUTTON_STRUCTURE_SELECTOR) || !!node.querySelector(BUTTON_STRUCTURE_SELECTOR));
+        return Array.from(mutation.addedNodes).some(affectsStructure) ||
+            Array.from(mutation.removedNodes).some(affectsStructure);
+    }
+
     public isProtyleVisible(protyle: any): boolean {
-        if (!protyle || !protyle.element) return false;
+        if (this.disposed || !protyle || !protyle.element) return false;
         const element = protyle.element as HTMLElement;
         if (!element.isConnected) return false;
         if (element.closest(".fn__none")) return false;
@@ -114,14 +148,6 @@ export class TaskNoteDOMManager {
         const style = window.getComputedStyle(element);
         if (style.display === "none" || style.visibility === "hidden") return false;
         return true;
-    }
-
-    private refreshBoundReminderDateButtonsForAllProtyles() {
-        document.querySelectorAll(".protyle").forEach((protyleElement) => {
-            const protyle = (protyleElement as any).protyle;
-            if (!protyle?.element || !this.isProtyleVisible(protyle)) return;
-            this._scanProtyleForButtons(protyle);
-        });
     }
 
     private parsePomodoroMetric(value?: string | null): number {
@@ -488,7 +514,7 @@ export class TaskNoteDOMManager {
             }
         }, 2000);
 
-        setTimeout(() => {
+        const initialOutlineTimer = setTimeout(() => {
             const outlineContainer = document.querySelector(".file-tree.sy__outline");
             if (outlineContainer && !currentObserver) {
                 lastObservedElement = outlineContainer;
@@ -505,6 +531,7 @@ export class TaskNoteDOMManager {
             if (currentObserver) currentObserver.disconnect();
             this.plugin.eventBus.off("ws-main", wsMainHandler);
             clearInterval(checkInterval);
+            clearTimeout(initialOutlineTimer);
             if (updateTimeout) clearTimeout(updateTimeout);
         });
     }
@@ -859,38 +886,7 @@ export class TaskNoteDOMManager {
 
         if (!this.protyleObservers.has(protyle.element)) {
             const observer = new MutationObserver((mutations) => {
-                let shouldUpdate = false;
-                for (const mutation of mutations) {
-                    if (this.shouldIgnoreMutation(mutation)) {
-                        continue;
-                    }
-                    if (mutation.type === "attributes") {
-                        shouldUpdate = true;
-                        const target = mutation.target as Element;
-                        this._processSingleBlock(protyle, target);
-                    } else if (mutation.type === "childList") {
-                        if (mutation.addedNodes.length > 0) {
-                            shouldUpdate = true;
-                            mutation.addedNodes.forEach((node) => {
-                                if (node.nodeType === 1) {
-                                    const el = node as Element;
-                                    this._processSingleBlock(protyle, el);
-                                    const relevantChildren = el.querySelectorAll?.(
-                                        `[custom-task-projectid], [custom-bind-reminders], [custom-bind-milestones], [${BLOCK_POMODORO_COUNT_ATTR}], [${BLOCK_POMODORO_MINUTES_ATTR}]`
-                                    );
-                                    if (relevantChildren && relevantChildren.length > 0) {
-                                        relevantChildren.forEach((child) => this._processSingleBlock(protyle, child));
-                                    }
-                                }
-                            });
-                        }
-                        if (mutation.removedNodes.length > 0) {
-                            shouldUpdate = true;
-                        }
-                    }
-                }
-
-                if (shouldUpdate) {
+                if (mutations.some(mutation => this.mutationAffectsBlockButtons(mutation))) {
                     const element = protyle.element;
                     const existingTimer = this.protyleDebounceTimers.get(element);
                     if (existingTimer) {
@@ -898,9 +894,10 @@ export class TaskNoteDOMManager {
                     }
 
                     const timer = window.setTimeout(() => {
+                        this.protyleDebounceTimers.delete(element);
                         if (!this.isProtyleVisible(protyle)) return;
                         this._scanProtyleForButtons(protyle);
-                    }, 50);
+                    }, 100);
 
                     this.protyleDebounceTimers.set(element, timer);
                 }
@@ -910,40 +907,11 @@ export class TaskNoteDOMManager {
                 childList: true,
                 subtree: true,
                 attributes: true,
-                attributeFilter: [
-                    "custom-task-projectid",
-                    "custom-bind-reminders",
-                    "custom-bind-milestones",
-                    BLOCK_POMODORO_COUNT_ATTR,
-                    BLOCK_POMODORO_MINUTES_ATTR,
-                    "updated",
-                    "bookmark",
-                ],
-            });
-
-            const attrObserver = new MutationObserver((mutations) => {
-                for (const m of mutations) {
-                    if (this.shouldIgnoreMutation(m)) {
-                        continue;
-                    }
-                    if (m.target instanceof Element && m.target.classList.contains("protyle-attr")) {
-                        const block = m.target.closest("[data-node-id]");
-                        if (block) this._processSingleBlock(protyle, block);
-                    }
-                }
-            });
-            attrObserver.observe(protyle.element, {
-                childList: true,
-                subtree: true,
+                attributeOldValue: true,
+                attributeFilter: TRACKED_BLOCK_ATTRS,
             });
 
             this.protyleObservers.set(protyle.element, observer);
-
-            this.plugin.addCleanup(() => {
-                observer.disconnect();
-                attrObserver.disconnect();
-                this.protyleObservers.delete(protyle.element);
-            });
         }
     }
 
