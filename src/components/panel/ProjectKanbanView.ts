@@ -8144,6 +8144,16 @@ export class ProjectKanbanView {
 
 
     private createTaskElement(task: any, level: number = 0): HTMLElement {
+        // 仅嵌套展示时与直接父任务比较，独立展示的子任务仍保留分类。
+        const parentTask = level > 0 && task.parentId
+            ? this.tasks.find(parent => parent.id === task.parentId)
+            : null;
+        const normalizeCategories = (categoryId: unknown): string => Array.from(new Set(
+            String(categoryId || '').split(',').map(id => id.trim()).filter(Boolean)
+        )).sort().join(',');
+        const hasSameParentCategories = !!parentTask
+            && normalizeCategories(task.categoryId) === normalizeCategories(parentTask.categoryId);
+
         const context = {
             plugin: this.plugin,
             today: getLogicalDateString(),
@@ -8154,7 +8164,7 @@ export class ProjectKanbanView {
             clipTitleToOneLine: this.clipTitleToOneLine,
             showProjectKanbanStatus: false,
             showProjectBadge: false,
-            showCategoryBadge: this.showTaskCategories,
+            showCategoryBadge: this.showTaskCategories && !hasSameParentCategories,
             customContainerClass: 'kanban-task',
             allTasks: this.tasks,
             categoryManager: this.categoryManager,
