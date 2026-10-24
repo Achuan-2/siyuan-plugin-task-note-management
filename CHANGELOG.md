@@ -1,3 +1,21 @@
+## v7.1.5 / 20261024
+
+- ✨ 任务列表：新增“任务排序”子菜单，支持将已完成任务置顶或置底；支持全局自动排序和列表单独开关，连续勾选后合并整理，新完成任务置底时追加到已有完成任务之后。
+- 🎨 任务卡片：任务侧栏隐藏子任务与父任务相同的项目和分类，项目看板隐藏重复分类，减少重复信息。
+- 🎨 习惯通知：新增番茄钟按钮，可从通知直接开始专注。
+- ⚡ 编辑性能：减少普通正文编辑时的全文扫描和 HTML 解析，合并重复刷新，并在关闭文档时释放监听和延迟任务。
+- 🐛 番茄钟：修复结束弹窗关闭后提示音仍持续循环的问题。
+- 🐛 习惯统计：修复周视图打卡后年视图未同步刷新的问题。
+
+---
+
+- ✨ Task lists: added a Task Sorting submenu to move completed tasks to the top or bottom. Supports global automatic sorting and per-list overrides, batches consecutive check-offs, and appends newly completed tasks after existing completed tasks when sorting to the bottom.
+- 🎨 Task cards: hide project and category badges shared by a subtask and its parent in the task sidebar, and hide duplicate category badges on project boards.
+- 🎨 Habit notifications: added a Pomodoro button to start a focus session directly from a notification.
+- ⚡ Editing performance: reduced full-document scans and HTML parsing during ordinary text editing, merged redundant refreshes, and released observers and pending timers when documents close.
+- 🐛 Pomodoro: fixed notification audio continuing to loop after the completion dialog was closed.
+- 🐛 Habit statistics: fixed the yearly view not refreshing after a check-in in the weekly view.
+
 ## v7.1.4 / 20261010
 - 🎨 日历视图：支持显示番茄钟每日总专注时长
 - 🎨 webhook：使用内核来调用webhook，docker部署不需要打开服务器也能进行通知
