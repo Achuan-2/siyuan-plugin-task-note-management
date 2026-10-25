@@ -84,13 +84,28 @@ function fixture({ browserWindow = false, waitForLoad = false, abortPlay = false
         '../../pluginInstance': { i18n: key => key },
         '../../utils/audioUtils': { resolveAudioPath: async src => src }
     };
+    const notifications = [];
+    class Notification {
+        constructor(title, options) {
+            this.title = title;
+            this.options = options;
+            notifications.push(this);
+        }
+        close() {}
+    }
+    Notification.permission = 'granted';
     const module = { exports: {} };
-    const window = { require: () => ({ remote: {
-        BrowserWindow: Popup,
-        screen: { getPrimaryDisplay: () => ({ workAreaSize: { width: 1000, height: 800 } }) }
-    } }) };
-    new Function('require', 'module', 'exports', 'window', 'setTimeout', 'clearTimeout', compiled)(
-        name => dependencies[name] || {}, module, module.exports, window, setTimeout, clearTimeout
+    const window = {
+        require: () => ({ remote: {
+            BrowserWindow: Popup,
+            screen: { getPrimaryDisplay: () => ({ workAreaSize: { width: 1000, height: 800 } }) }
+        } }),
+        Notification,
+        setTimeout,
+        clearTimeout
+    };
+    new Function('require', 'module', 'exports', 'window', 'setTimeout', 'clearTimeout', 'Notification', compiled)(
+        name => dependencies[name] || {}, module, module.exports, window, setTimeout, clearTimeout, Notification
     );
     const Timer = module.exports.PomodoroTimer;
     if (browserWindow) Timer.browserWindowInstance = playbackWindow;
@@ -114,7 +129,7 @@ function fixture({ browserWindow = false, waitForLoad = false, abortPlay = false
     });
     // 弹窗销毁执行真实 stopAllAudio，覆盖正在播放和待播放的两类音源。
     timer.openSiyuanDialog('结束', '结束', '🍅', 0, true);
-    return { timer, audios, popups, startedSources, runTimeouts };
+    return { timer, audios, popups, startedSources, notifications, runTimeouts };
 }
 
 for (const phase of ['workEndAudio', 'breakEndAudio']) {
@@ -291,3 +306,39 @@ for (const testCase of [
         assert.equal(endSoundPlaying, true);
     });
 }
+
+test('随机微休息开始和结束使用自定义声音，系统通知保持静默', async () => {
+    const { timer, notifications, runTimeouts } = fixture();
+    const played = [];
+    timer.workEndAudio.readyState = 3;
+    Object.assign(timer, {
+        randomRestEnabled: true,
+        randomRestSounds: [timer.workEndAudio],
+        randomRestEndSound: timer.breakEndAudio,
+        randomRestVolume: 0.4,
+        randomRestEndVolume: 0.6,
+        randomRestSystemNotificationEnabled: true,
+        randomRestAutoClose: true,
+        randomRestAutoCloseDelay: 5,
+        randomRestCount: 0,
+        settings: { randomRestBreakDuration: 5 },
+        plugin: null,
+        openRandomRestWindow() {},
+        closeRandomRestWindow() {},
+        updateDisplay() {},
+        safePlayAudio: async audio => {
+            played.push(audio);
+            return true;
+        }
+    });
+
+    await timer.playRandomRestSound();
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0].options.silent, true);
+    assert.deepEqual(played, [timer.workEndAudio]);
+
+    runTimeouts(5000);
+    assert.equal(notifications.length, 2);
+    assert.ok(notifications.every(notification => notification.options.silent === true));
+    assert.deepEqual(played, [timer.workEndAudio, timer.breakEndAudio]);
+});

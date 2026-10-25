@@ -970,7 +970,9 @@ export class PomodoroTimer {
                 this.showSystemNotification(
                     i18n('randomRestSettings'),
                     i18n('randomRest', { duration: this.settings.randomRestBreakDuration }),
-                    this.randomRestAutoClose ? this.randomRestAutoCloseDelay : undefined
+                    this.randomRestAutoClose ? this.randomRestAutoCloseDelay : undefined,
+                    undefined,
+                    true
                 );
             }
 
@@ -1018,7 +1020,9 @@ export class PomodoroTimer {
                     this.showSystemNotification(
                         i18n('randomRestSettings'),
                         i18n('randomRestComplete') || '微休息时间结束，可以继续专注工作了！',
-                        this.randomRestAutoClose ? this.randomRestAutoCloseDelay : undefined
+                        this.randomRestAutoClose ? this.randomRestAutoCloseDelay : undefined,
+                        undefined,
+                        true
                     );
                 }
                 this.randomRestEndSoundTimer = null;
@@ -1108,7 +1112,9 @@ export class PomodoroTimer {
                     this.showSystemNotification(
                         i18n('randomRestSettings'),
                         i18n('randomRestComplete') || '微休息时间结束，可以继续专注工作了！',
-                        this.randomRestAutoClose ? this.randomRestAutoCloseDelay : undefined
+                        this.randomRestAutoClose ? this.randomRestAutoCloseDelay : undefined,
+                        undefined,
+                        true
                     );
                 }
             }
@@ -6218,7 +6224,7 @@ export class PomodoroTimer {
      * 注意：调用方负责检查各自的通知开关（systemNotificationEnabled / randomRestSystemNotificationEnabled），
      * 本函数不做统一拦截，避免随机微休息通知被番茄钟通知开关错误屏蔽。
      */
-    private async showSystemNotification(title: string, message: string, autoCloseDelay?: number, scheduledTime?: Date | string): Promise<number | undefined> {
+    private async showSystemNotification(title: string, message: string, autoCloseDelay?: number, scheduledTime?: Date | string, silent: boolean = false): Promise<number | undefined> {
         // 判断是否是移动端
         if (this.plugin?.isInMobileApp) {
             // 手机端：使用内核接口进行系统通知
@@ -6240,7 +6246,7 @@ export class PomodoroTimer {
                 const notification = new Notification(title, {
                     body: message,
                     requireInteraction: !autoCloseDelay,
-                    silent: false
+                    silent
                 });
 
                 // 点击通知时的处理
