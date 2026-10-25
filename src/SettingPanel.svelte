@@ -1360,6 +1360,25 @@
                     ],
                 },
                 {
+                    name: i18n('subGroupTaskNoteSync'),
+                    items: [
+                        {
+                            key: 'enableOutlinePrefix',
+                            value: settings.enableOutlinePrefix,
+                            type: 'checkbox',
+                            title: i18n('enableOutlinePrefix'),
+                            description: i18n('enableOutlinePrefixDesc'),
+                        },
+                        {
+                            key: 'enableTaskListStatusSync',
+                            value: settings.enableTaskListStatusSync,
+                            type: 'checkbox',
+                            title: i18n('enableTaskListStatusSync'),
+                            description: i18n('enableTaskListStatusSyncDesc'),
+                        },
+                    ],
+                },
+                {
                     name: i18n('taskListSort'),
                     items: [
                         {
@@ -1393,25 +1412,6 @@
                                 bottom: i18n('completedTasksToBottom'),
                                 top: i18n('completedTasksToTop'),
                             },
-                        },
-                    ],
-                },
-                {
-                    name: i18n('subGroupTaskNoteSync'),
-                    items: [
-                        {
-                            key: 'enableOutlinePrefix',
-                            value: settings.enableOutlinePrefix,
-                            type: 'checkbox',
-                            title: i18n('enableOutlinePrefix'),
-                            description: i18n('enableOutlinePrefixDesc'),
-                        },
-                        {
-                            key: 'enableTaskListStatusSync',
-                            value: settings.enableTaskListStatusSync,
-                            type: 'checkbox',
-                            title: i18n('enableTaskListStatusSync'),
-                            description: i18n('enableTaskListStatusSyncDesc'),
                         },
                     ],
                 },
