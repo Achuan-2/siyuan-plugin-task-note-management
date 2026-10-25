@@ -6507,8 +6507,8 @@ export class PomodoroTimer {
             // 打开休息结束弹窗（先打开弹窗，再播放提示音，避免 closePomodoroEndWindow 内部的 stopAllAudio 把刚播放的声音切掉）
             this.openPomodoroEndWindow(false);
 
-            // 播放休息结束提示音
-            if (this.breakEndAudio) {
+            // 自动切换会先停止背景音，结束提示音需在切换完成后播放。
+            if (!this.autoMode && this.breakEndAudio) {
                 await this.safePlayAudio(this.breakEndAudio);
             }
 
@@ -6549,14 +6549,20 @@ export class PomodoroTimer {
                 this.updateDisplay();
                 this.updateMainSwitchButton();
 
+                const switchToWork = async () => {
+                    await this.autoSwitchToWork();
+                    if (this.breakEndAudio) {
+                        await this.safePlayAudio(this.breakEndAudio);
+                    }
+                };
                 // 检查是否为 BrowserWindow 模式，如果是则跳过 setTimeout 延迟以防被 Chromium 挂起后台节流
                 const isBrowserWindowActive = PomodoroTimer.browserWindowInstance && !PomodoroTimer.browserWindowInstance.isDestroyed();
                 if (isBrowserWindowActive) {
-                    this.autoSwitchToWork();
+                    await switchToWork();
                 } else {
                     this.autoTransitionTimer = window.setTimeout(() => {
                         this.autoTransitionTimer = null;
-                        this.autoSwitchToWork();
+                        void switchToWork();
                     }, 1000); // 延迟1秒切换
                 }
             } else {
@@ -6634,9 +6640,8 @@ export class PomodoroTimer {
                     );
                 }
 
-                // 播放工作结束提示音
-
-                if (this.workEndAudio) {
+                // 自动切换会先停止背景音，结束提示音需在切换完成后播放。
+                if (!this.autoMode && this.workEndAudio) {
                     await this.safePlayAudio(this.workEndAudio);
                 }            // 记录完成的工作番茄（每个实例独立记录）
                 const eventId = this.reminder.id;
@@ -6677,14 +6682,20 @@ export class PomodoroTimer {
                     this.updateDisplay();
                     this.updateMainSwitchButton();
 
+                    const switchToBreak = async () => {
+                        await this.autoSwitchToBreak(shouldTakeLongBreak);
+                        if (this.workEndAudio) {
+                            await this.safePlayAudio(this.workEndAudio);
+                        }
+                    };
                     // 自动切换到休息阶段（如果是 BrowserWindow 模式，跳过延迟防 Chromium 挂起）
                     const isBrowserWindowActive = PomodoroTimer.browserWindowInstance && !PomodoroTimer.browserWindowInstance.isDestroyed();
                     if (isBrowserWindowActive) {
-                        this.autoSwitchToBreak(shouldTakeLongBreak);
+                        await switchToBreak();
                     } else {
                         this.autoTransitionTimer = window.setTimeout(() => {
                             this.autoTransitionTimer = null;
-                            this.autoSwitchToBreak(shouldTakeLongBreak);
+                            void switchToBreak();
                         }, 1000);
                     }
                 } else {                // 非自动模式下，也要根据番茄钟数量判断休息类型
@@ -6735,8 +6746,8 @@ export class PomodoroTimer {
                 // 打开休息结束弹窗（先打开弹窗，再播放提示音，避免 closePomodoroEndWindow 内部的 stopAllAudio 把刚播放的声音切掉）
                 this.openPomodoroEndWindow(false);
 
-                // 播放休息结束提示音
-                if (this.breakEndAudio) {
+                // 自动切换会先停止背景音，结束提示音需在切换完成后播放。
+                if (!this.autoMode && this.breakEndAudio) {
                     await this.safePlayAudio(this.breakEndAudio);
                 }
 
@@ -6778,14 +6789,20 @@ export class PomodoroTimer {
                     this.updateDisplay();
                     this.updateMainSwitchButton();
 
+                    const switchToWork = async () => {
+                        await this.autoSwitchToWork();
+                        if (this.breakEndAudio) {
+                            await this.safePlayAudio(this.breakEndAudio);
+                        }
+                    };
                     // 自动切换到工作阶段（如果是 BrowserWindow 模式，跳过延迟防 Chromium 挂起）
                     const isBrowserWindowActive = PomodoroTimer.browserWindowInstance && !PomodoroTimer.browserWindowInstance.isDestroyed();
                     if (isBrowserWindowActive) {
-                        this.autoSwitchToWork();
+                        await switchToWork();
                     } else {
                         this.autoTransitionTimer = window.setTimeout(() => {
                             this.autoTransitionTimer = null;
-                            this.autoSwitchToWork();
+                            void switchToWork();
                         }, 1000);
                     }
                 } else {

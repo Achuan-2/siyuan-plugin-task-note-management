@@ -81,6 +81,7 @@ function fixture({ browserWindow = false, waitForLoad = false, abortPlay = false
     }
     const dependencies = {
         siyuan: { Dialog, showMessage() {} },
+        '../../pluginInstance': { i18n: key => key },
         '../../utils/audioUtils': { resolveAudioPath: async src => src }
     };
     const module = { exports: {} };
@@ -234,3 +235,59 @@ test('旧原生弹窗关闭事件不会清空新弹窗，直接销毁新弹窗�
     assert.equal(timer.pomodoroEndWindow, null);
     assert.equal(startedSources[0].stopped, true);
 });
+
+for (const testCase of [
+    { method: 'completePhase', isWorkPhase: true, endAudio: 'workEndAudio', switchMethod: 'autoSwitchToBreak' },
+    { method: 'completePhase', isWorkPhase: false, endAudio: 'breakEndAudio', switchMethod: 'autoSwitchToWork' },
+    { method: 'completeBreakPhase', isWorkPhase: false, endAudio: 'breakEndAudio', switchMethod: 'autoSwitchToWork' }
+]) {
+    test(`${testCase.method}：自动切换后仍播放${testCase.endAudio}`, async () => {
+        const { timer } = fixture({ browserWindow: true });
+        const calls = [];
+        let endSoundPlaying = false;
+        Object.assign(timer, testCase, {
+            autoMode: true,
+            isCompletingPhase: false,
+            timer: null,
+            totalTime: 1500,
+            completedPomodoros: 0,
+            longBreakInterval: 4,
+            currentPhaseOriginalDuration: 5,
+            phaseStartTime: 0,
+            isLongBreak: false,
+            systemNotificationEnabled: false,
+            pendingSettings: null,
+            reminder: { id: 'task', title: '任务' },
+            settings: { pomodoroEndPopupWindow: true, workDuration: 25, breakDuration: 5, longBreakDuration: 15 },
+            recordManager: { recordBreakSession: async () => {} },
+            cancelAllMobileNotifications() {},
+            stopRandomRestTimer() {},
+            openPomodoroEndWindow() {},
+            closePomodoroEndWindow() {},
+            finishActiveWorkSession: async () => null,
+            openPomodoroCompletionNotePopup() {},
+            updateReminderPomodoroCount: async () => {},
+            triggerHabitAutoCheckInAfterPomodoro() {},
+            stopForAutoTransition() {},
+            updateDisplay() {},
+            updateMainSwitchButton() {},
+            updateStatsDisplay() {},
+            stopAllAudio() { endSoundPlaying = false; },
+            safePlayAudio: async audio => {
+                if (audio === timer[testCase.endAudio]) {
+                    endSoundPlaying = true;
+                    calls.push('end');
+                }
+                return true;
+            }
+        });
+        timer[testCase.switchMethod] = async () => {
+            timer.stopAllAudio();
+            calls.push('switch');
+        };
+
+        await timer[testCase.method]();
+        assert.deepEqual(calls, ['switch', 'end']);
+        assert.equal(endSoundPlaying, true);
+    });
+}
