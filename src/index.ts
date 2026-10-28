@@ -79,6 +79,7 @@ import { DEFAULT_HABIT_MEMO_SYNC_TEMPLATE } from "./utils/habitMemoTemplate";
 import { getDatabaseSelectedIds, readDatabaseTaskSources, buildDatabasePomodoroReminder, type DatabaseMenuContext } from "./utils/databaseTaskSource";
 import { getTaskListSortTargets, sortTaskLists } from "./utils/taskListSort";
 import { TaskListAutoSorter } from "./utils/taskListAutoSort";
+import { TaskListAutoCompleter } from "./utils/taskListAutoComplete";
 
 
 export const SETTINGS_FILE = "reminder-settings.json";
@@ -144,6 +145,7 @@ export const DEFAULT_SETTINGS = {
     defaultHeadingPosition: 'prepend', // 新增：新建标题的默认位置（'prepend' | 'append'），默认为最前
     enableOutlinePrefix: true, // 是否在大纲中为绑定标题添加任务状态前缀
     enableTaskListStatusSync: false, // 任务列表状态与任务进行中/放弃状态联动
+    autoCompleteTaskListChildren: false, // 完成文档中的父任务列表项时，自动勾选全部子任务列表项
     enableTaskListSort: true, // 在任务列表块菜单中显示手动排序
     enableGlobalTaskListAutoSort: false, // 未单独设置的任务列表默认是否自动排序
     showTaskListAutoSortMenu: true, // 在任务列表块菜单中显示自动排序开关
@@ -2491,6 +2493,33 @@ export default class ReminderPlugin extends Plugin {
         this.addCleanup(() => this.eventBus.off('click-editortitleicon', handleDocMenu));
 
         // 块菜单添加菜单
+        const taskListAutoCompleter = new TaskListAutoCompleter({
+            request: async (url, data) => {
+                const response = await fetchSyncPost(url, data);
+                if (!response || response.code !== 0) throw new Error(response?.msg || 'Task list auto-completion request failed');
+                return response.data;
+            },
+            enqueue: work => {
+                const pending = this.taskListSortQueue.then(work);
+                this.taskListSortQueue = pending.catch(() => {});
+                return pending;
+            },
+            app: this.app.appId,
+            canComplete: () => this.settings.autoCompleteTaskListChildren === true &&
+                !this.storageDisposed && !window.siyuan?.config?.readonly &&
+                !window.siyuan?.config?.editor?.readOnly && !(window.siyuan as any)?.isPublish,
+            onError: error => {
+                console.error('Failed to automatically complete child task list items:', error);
+                showMessage(i18n('taskListAutoCompleteFailed'), 5000, 'error');
+            },
+        });
+        const handleTaskListCompletion = (event: CustomEvent) => taskListAutoCompleter.handleTransactions(event.detail);
+        this.eventBus.on('ws-main', handleTaskListCompletion);
+        this.addCleanup(() => {
+            this.eventBus.off('ws-main', handleTaskListCompletion);
+            taskListAutoCompleter.destroy();
+        });
+
         this.taskListAutoSorter = new TaskListAutoSorter({
             request: async (url, data) => {
                 const response = await fetchSyncPost(url, data);

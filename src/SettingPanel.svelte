@@ -1376,6 +1376,13 @@
                             title: i18n('enableTaskListStatusSync'),
                             description: i18n('enableTaskListStatusSyncDesc'),
                         },
+                        {
+                            key: 'autoCompleteTaskListChildren',
+                            value: settings.autoCompleteTaskListChildren,
+                            type: 'checkbox',
+                            title: i18n('autoCompleteTaskListChildren'),
+                            description: i18n('autoCompleteTaskListChildrenDesc'),
+                        },
                     ],
                 },
                 {
