@@ -133,8 +133,6 @@
     "taskListStatusUpdated": "已将 ${count} 个任务设置为${status}",
     "taskListStatusUpdateFailed": "设置任务状态失败：${status}",
     "enableTaskListStatusSync": "任务列表状态联动",
-    "autoCompleteSubtasksOnParentComplete": "父任务完成时自动勾选子任务",
-    "autoCompleteSubtasksOnParentCompleteDesc": "开启后，完成父任务时自动完成所有层级的子任务；周期任务仅完成本次实例的子任务。取消父任务完成状态时，不改变子任务状态。",
     "enableTaskListStatusSyncDesc": "开启后，任务设置为进行中或放弃时，自动同步任务列表的勾选状态（/-）；关闭后仅同步已完成（x）状态",
     "taskListStatusResetDone": "已重置任务列表进行中/放弃状态",
     "taskListStatusRestoreDone": "已恢复任务列表进行中/放弃状态",

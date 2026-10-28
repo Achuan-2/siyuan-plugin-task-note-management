@@ -9666,7 +9666,7 @@ export class ProjectKanbanView {
 
             // 乐观更新所有子任务
             const childIds: string[] = [];
-            if (completed && this.plugin?.settings?.autoCompleteSubtasksOnParentComplete !== false) {
+            if (completed) {
                 const descendantIds = this.getAllDescendantIds(task.id, this.tasks);
                 descendantIds.forEach(childId => {
                     const localChild = this.tasks.find(t => t.id === childId);
@@ -10203,7 +10203,6 @@ export class ProjectKanbanView {
      * @param reminderData 任务数据
      */
     private async completeAllChildTasks(parentId: string, reminderData: any, affectedBlockIds?: Set<string>): Promise<string[]> {
-        if (this.plugin?.settings?.autoCompleteSubtasksOnParentComplete === false) return [];
         const completedTaskIds: string[] = [];
         try {
             // 获取所有子任务ID（递归获取所有后代）
@@ -10255,7 +10254,6 @@ export class ProjectKanbanView {
      * @param reminderData 全量任务数据
      */
     private async completeAllChildInstances(parentId: string, date: string, reminderData: any, affectedBlockIds?: Set<string>, instanceId?: string): Promise<string[]> {
-        if (this.plugin?.settings?.autoCompleteSubtasksOnParentComplete === false) return [];
         const completedTaskIds: string[] = [];
         try {
             const currentTime = getLocalDateTimeString(new Date());

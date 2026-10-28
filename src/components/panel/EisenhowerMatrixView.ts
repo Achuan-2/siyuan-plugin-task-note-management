@@ -1684,7 +1684,6 @@ export class EisenhowerMatrixView {
      * @param reminderData 任务数据
      */
     private async completeAllChildInstances(parentId: string, date: string, reminderData: any): Promise<string[]> {
-        if (this.plugin?.settings?.autoCompleteSubtasksOnParentComplete === false) return [];
         const completedTaskIds: string[] = [];
 
         // 1. 处理 Ghost 子任务 (基于 originalId 的后代)
@@ -1714,7 +1713,6 @@ export class EisenhowerMatrixView {
      * @param reminderData 任务数据
      */
     private async completeAllChildTasks(parentId: string, reminderData: any): Promise<string[]> {
-        if (this.plugin?.settings?.autoCompleteSubtasksOnParentComplete === false) return [];
         const completedTaskIds: string[] = [];
         try {
             // 获取所有子任务ID（递归获取所有后代）

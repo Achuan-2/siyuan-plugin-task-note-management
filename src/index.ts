@@ -144,7 +144,6 @@ export const DEFAULT_SETTINGS = {
     defaultHeadingPosition: 'prepend', // 新增：新建标题的默认位置（'prepend' | 'append'），默认为最前
     enableOutlinePrefix: true, // 是否在大纲中为绑定标题添加任务状态前缀
     enableTaskListStatusSync: false, // 任务列表状态与任务进行中/放弃状态联动
-    autoCompleteSubtasksOnParentComplete: true, // 完成父任务时自动勾选所有层级的子任务
     enableTaskListSort: true, // 在任务列表块菜单中显示手动排序
     enableGlobalTaskListAutoSort: false, // 未单独设置的任务列表默认是否自动排序
     showTaskListAutoSortMenu: true, // 在任务列表块菜单中显示自动排序开关

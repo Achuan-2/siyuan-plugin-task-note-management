@@ -30,7 +30,7 @@ interface NotificationAction {
 
 // 只依赖通知操作需要的插件能力，番茄钟入口通过回调注入。
 type NotificationHost = Pick<ReminderPlugin,
-    'settings' | 'isInMobileApp' | 'loadHabitData' | 'saveHabitPartial' | 'loadReminderData' | 'saveReminderData' |
+    'isInMobileApp' | 'loadHabitData' | 'saveHabitPartial' | 'loadReminderData' | 'saveReminderData' |
     'updateMobileNotification' | 'playTaskCompleteSound'>;
 
 /** 管理系统通知、兼容操作框和按钮操作，不负责到期提醒的扫描与调度。 */
@@ -129,7 +129,6 @@ export class ReminderNotificationService {
     }
 
     private async completeTask(data: Record<string, any>, taskId: string, instanceDate?: string) {
-        const cascadeCompletion = this.plugin.settings?.autoCompleteSubtasksOnParentComplete !== false;
         const completedTime = getLocalDateTimeString(new Date());
         const affectedBlocks = new Set<string>();
         const affectedTasks = new Map<string, any>();
@@ -154,7 +153,6 @@ export class ReminderNotificationService {
             const blockId = date ? getInstanceField(state, 'blockId', task.blockId) : task.blockId;
             if (blockId) affectedBlocks.add(blockId);
             affectedTasks.set(id, task);
-            if (!cascadeCompletion) return;
             for (const child of Object.values(data)) {
                 if (child.parentId === id) complete(child.id, date);
                 else if (date && child.parentId === `${id}_${date}`) complete(child.id);
