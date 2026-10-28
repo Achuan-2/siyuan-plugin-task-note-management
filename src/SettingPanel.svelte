@@ -1376,6 +1376,13 @@
                             title: i18n('enableTaskListStatusSync'),
                             description: i18n('enableTaskListStatusSyncDesc'),
                         },
+                        {
+                            key: 'autoCompleteSubtasksOnParentComplete',
+                            value: settings.autoCompleteSubtasksOnParentComplete,
+                            type: 'checkbox',
+                            title: i18n('autoCompleteSubtasksOnParentComplete'),
+                            description: i18n('autoCompleteSubtasksOnParentCompleteDesc'),
+                        },
                     ],
                 },
                 {

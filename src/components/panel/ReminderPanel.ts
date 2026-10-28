@@ -1945,6 +1945,7 @@ export class ReminderPanel {
      * Returns array of completed task IDs for mobile notification cancellation.
      */
     private async completeAllChildTasks(parentId: string, reminderData: any, affectedBlockIds: Set<string>, instanceDate?: string): Promise<string[]> {
+        if (this.plugin?.settings?.autoCompleteSubtasksOnParentComplete === false) return [];
         const completedTaskIds: string[] = [];
 
         // 1. Ghost Subtasks: Children of the original parent (recurse with instanceDate)
@@ -5396,7 +5397,8 @@ export class ReminderPanel {
                 this.plugin.playTaskCompleteSound();
             }
             const optimisticRootId = optimisticReminderId || (isRepeatInstance && instanceDate ? `${reminderId}_${instanceDate}` : reminderId);
-            const optimisticIds = [optimisticRootId, ...this.getDescendantIdsFromCache(optimisticRootId)];
+            const cascadeCompletion = completed && this.plugin?.settings?.autoCompleteSubtasksOnParentComplete !== false;
+            const optimisticIds = [optimisticRootId, ...(cascadeCompletion ? this.getDescendantIdsFromCache(optimisticRootId) : [])];
             const optimisticCompletedTime = completed ? getLocalDateTimeString(new Date()) : undefined;
             this.applyOptimisticCompletionForIds(optimisticIds, completed, optimisticCompletedTime);
 

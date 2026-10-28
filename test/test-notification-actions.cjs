@@ -114,6 +114,30 @@ test('移动日期的重复任务完成原始实例及子任务，保留其他�
     assert.equal(data.child.completed, true);
 });
 
+test('关闭自动勾选后，通知完成父任务保留普通和周期子任务的状态', async () => {
+    for (const instanceDate of [undefined, '2026-10-07']) {
+        const data = {
+            task: { id: 'task', customProgress: 30 },
+            child: { id: 'child', parentId: 'task', completed: false, customProgress: 20 },
+            grandchild: { id: 'grandchild', parentId: 'child', completed: false },
+            instanceChild: { id: 'instanceChild', parentId: 'task_2026-10-07', completed: false },
+            done: { id: 'done', parentId: 'task', completed: true, completedTime: '原完成时间' }
+        };
+        const before = structuredClone(data);
+        const { harness, host } = fixture(data);
+        host.settings = { autoCompleteSubtasksOnParentComplete: false };
+        const notifiedTasks = [];
+        host.updateMobileNotification = async task => notifiedTasks.push(task.id);
+        await harness.completeTask(data, 'task', instanceDate);
+        assert.equal(instanceDate ? data.task.repeat.instances[instanceDate].completed : data.task.completed, true);
+        for (const id of ['child', 'grandchild', 'instanceChild', 'done']) {
+            assert.deepEqual(data[id], before[id]);
+        }
+        assert.deepEqual(notifiedTasks, ['task']);
+        assert.equal(harness.writes, 1);
+    }
+});
+
 test('删除的任务或实例不能从旧通知中启动或完成', async () => {
     const { harness } = fixture({ task: { id: 'task', repeat: { instances: { '2026-10-08': { deleted: true } } } } });
     await harness.handleAction({ id: 'missing' }, 'complete');
