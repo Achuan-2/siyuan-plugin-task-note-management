@@ -1,3 +1,15 @@
+## v7.1.7 / 20261029
+
+- ✨ 任务列表：新增“父任务列表项完成时自动勾选子任务”设置，开启后勾选文档中的父任务列表项会自动完成其下所有层级的子任务列表项；取消勾选父项不改变子项状态。
+- 🐛 块绑定：修复思源 v3.8.9 中通过“新建文档”绑定任务时出现 `document metadata is not ready` 的问题，支持逐级创建缺失父文档，并兼容旧版思源。
+- 🎨 块绑定：提交期间防止重复点击，失败时显示错误提示，保留对话框及填写内容。
+
+---
+
+- ✨ Task lists: added an option to automatically complete all nested child task list items when their parent is checked in a document. Unchecking the parent leaves child states unchanged.
+- 🐛 Block binding: fixed `document metadata is not ready` when creating a document to bind a task in SiYuan v3.8.9. Missing parent documents are created one level at a time, with a fallback for older SiYuan versions.
+- 🎨 Block binding: prevent duplicate submissions and show errors while keeping the dialog and entered content available.
+
 ## v7.1.6 / 20261025
 - 🎨 随机微休息系统通知改为静默并使用自定义提示音
 - 🎨 任务列表排序设置项移到任务笔记最下方
