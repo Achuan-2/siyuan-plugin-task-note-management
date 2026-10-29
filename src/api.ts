@@ -10,6 +10,7 @@ import { fetchPost, fetchSyncPost, IWebSocketData, openTab, Constants, platformU
 
 import { getFrontend, openMobileFileById } from 'siyuan';
 import { getPluginInstance, i18n } from "./pluginInstance";
+import { createDocumentWithMarkdown } from "./utils/documentCreation";
 export async function request(url: string, data: any) {
     let response: IWebSocketData = await fetchSyncPost(url, data);
     let res = response.code === 0 ? response.data : null;
@@ -83,13 +84,7 @@ export async function getDoc(id: BlockId) {
 
 
 export async function createDocWithMd(notebook: NotebookId, path: string, markdown: string): Promise<DocumentId> {
-    let data = {
-        notebook: notebook,
-        path: path,
-        markdown: markdown,
-    };
-    let url = '/api/filetree/createDocWithMd';
-    return request(url, data);
+    return createDocumentWithMarkdown(notebook, path, markdown);
 }
 
 export async function searchDocs(k: string, flashcard: boolean = false): Promise<IResSearchDocs[]> {

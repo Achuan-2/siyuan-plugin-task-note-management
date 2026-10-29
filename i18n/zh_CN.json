@@ -1,4 +1,8 @@
 {
+    "documentMetadataNotReady": "思源的文档元数据尚未就绪，请等待笔记本加载完成后重试；若持续报错，请重建索引。",
+    "documentPathAmbiguous": "保存路径中存在同名文档，无法确定父文档，请选择明确的保存路径。",
+    "documentCreationFailed": "创建文档失败，未收到有效的文档 ID。",
+    "documentCreationCheckId": "请先检查文档 ${id} 是否已创建，再决定是否重试。",
     "viewChangelog": "查看更新日志",
     "cancel": "取消",
     "skip": "跳过",

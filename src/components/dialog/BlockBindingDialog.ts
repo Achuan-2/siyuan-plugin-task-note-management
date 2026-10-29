@@ -1,4 +1,4 @@
-import { Dialog } from "siyuan";
+import { Dialog, showMessage } from "siyuan";
 import { i18n } from "../../pluginInstance";
 /**
  * 块绑定对话框组件
@@ -20,6 +20,7 @@ export class BlockBindingDialog {
     private defaultTitle?: string;
     private forMilestone: boolean = false;
     private forGroup: boolean = false;
+    private confirming: boolean = false;
     constructor(
         plugin: any,
         callback: (blockId: string) => void,
@@ -1011,6 +1012,10 @@ export class BlockBindingDialog {
      * 处理确定按钮点击
      */
     private async handleConfirm() {
+        if (this.confirming) return;
+        this.confirming = true;
+        const confirmButton = this.dialog.element.querySelector('#quickCreateConfirmBtn') as HTMLButtonElement;
+        if (confirmButton) confirmButton.disabled = true;
         // 查找当前显示的标签页内容
         const activeContent = this.dialog.element.querySelector('.tab-content[style*="display: block"]') as HTMLElement;
         const tabName = activeContent?.getAttribute('data-content');
@@ -1038,7 +1043,15 @@ export class BlockBindingDialog {
             }
         } catch (error) {
             console.error("Operation failed:", error);
-            // 这里可以显示错误提示
+            const message = error instanceof Error ? error.message : String(error);
+            // showMessage 接受 HTML，内核返回的标题和错误文本必须先转义。
+            const escaped = message.replace(/[&<>"']/g, char => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[char]!));
+            showMessage(escaped.replace(/\n/g, '<br>'), 7000, 'error');
+        } finally {
+            this.confirming = false;
+            if (confirmButton) confirmButton.disabled = false;
         }
     }
 

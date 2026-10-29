@@ -1,4 +1,8 @@
 {
+    "documentMetadataNotReady": "SiYuan document metadata is not ready. Wait for the notebook to finish loading and try again. Rebuild the index if the error persists.",
+    "documentPathAmbiguous": "The save path contains documents with the same name. Select an unambiguous parent path.",
+    "documentCreationFailed": "Document creation failed: no valid document ID was returned.",
+    "documentCreationCheckId": "Check whether document ${id} was created before trying again.",
     "viewChangelog": "View Changelog",
     "cancel": "Cancel",
     "skip": "Skip",
