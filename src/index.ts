@@ -1872,7 +1872,7 @@ export default class ReminderPlugin extends Plugin {
 
 
     // 重写 openSetting 方法
-    async openSetting() {
+    async openSetting(initialGroup: string = '') {
         let dialog = new Dialog({
             title: i18n("settingsPanel"),
             content: `<div id="SettingPanel" style="height: 100%;"></div>`,
@@ -1886,7 +1886,8 @@ export default class ReminderPlugin extends Plugin {
         let pannel = new SettingPanelComponent({
             target: dialog.element.querySelector("#SettingPanel"),
             props: {
-                plugin: this
+                plugin: this,
+                initialGroup
             }
         });
     }

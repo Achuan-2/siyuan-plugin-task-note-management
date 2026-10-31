@@ -40,6 +40,7 @@
     import { ProjectSelectorPopup } from './components/dialog/ProjectSelectorPopup';
 
     export let plugin;
+    export let initialGroup: string = '';
 
     // 使用从 index.ts 导入的默认设置
     let settings = { ...DEFAULT_SETTINGS };
@@ -2189,7 +2190,7 @@
         },
     ];
 
-    let focusGroup = groups[0].name;
+    let focusGroup = groups.find(group => group.name === initialGroup)?.name || groups[0].name;
     let settingSearchKeyword = '';
 
     interface ChangeEvent {

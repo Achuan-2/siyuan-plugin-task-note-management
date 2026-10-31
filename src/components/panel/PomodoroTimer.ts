@@ -5179,6 +5179,11 @@ export class PomodoroTimer {
             label: `🧘 ${longBreakText}`,
             click: () => this.startLongBreak()
         }));
+        menu.append(new MenuItem({ type: 'separator' }));
+        menu.append(new MenuItem({
+            label: i18n('pomodoroSettings') || '番茄钟设置',
+            click: () => this.plugin?.openSetting?.(i18n('pomodoroSettings'))
+        }));
 
         const pomodoroWindow = PomodoroTimer.browserWindowInstance;
         if (pomodoroWindow && !pomodoroWindow.isDestroyed()) {
@@ -9808,13 +9813,15 @@ document.body.classList.remove('docked-mode');
             display: none;
             flex-direction: column;
             padding: 4px;
-            min-width: 140px;
+            min-width: 128px;
             pointer-events: auto;
         }
         .switch-menu.show { display: flex; }
         /* Electron 拖拽区域不会触发点击；菜单展开时允许空白处接收关闭事件。 */
         body.switch-menu-open,
-        body.switch-menu-open * {
+        body.switch-menu-open *,
+        body.volume-menu-open,
+        body.volume-menu-open * {
             -webkit-app-region: no-drag !important;
         }
         .menu-item {
@@ -9824,15 +9831,16 @@ document.body.classList.remove('docked-mode');
             color: ${textColor};
             font-family: inherit;
             cursor: pointer !important;
-            padding: 10px 14px;
+            padding: 6px 10px;
             border-radius: 6px;
-            font-size: 13px;
+            font-size: 12px;
             text-align: left;
             transition: background 0.2s;
             pointer-events: auto;
             white-space: nowrap;
         }
         .menu-item:hover { background: ${hoverColor}; }
+        .menu-item-settings { border-top: 1px solid ${borderColor}; border-radius: 0 0 6px 6px; margin-top: 3px; }
         .volume-menu {
             -webkit-app-region: no-drag;
             position: fixed;
@@ -9845,13 +9853,28 @@ document.body.classList.remove('docked-mode');
             box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
             z-index: 10000;
             display: none;
-            flex-direction: column;
+            align-items: center;
             gap: 10px;
-            padding: 14px 18px;
-            width: 180px;
+            padding: 12px;
+            width: 220px;
+            max-width: calc(100vw - 16px);
             pointer-events: auto;
         }
         .volume-menu.show { display: flex; }
+        .volume-menu-controls { display: flex; flex-direction: column; gap: 10px; flex: 1; min-width: 0; }
+        .volume-mute-btn {
+            -webkit-app-region: no-drag;
+            flex-shrink: 0;
+            width: 28px;
+            height: 28px;
+            border: none;
+            border-radius: 6px;
+            background: ${surfaceColor};
+            color: ${textColor};
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .volume-mute-btn:hover { background: ${hoverColor}; }
         .volume-menu-header {
             display: flex;
             align-items: center;
@@ -10544,13 +10567,17 @@ document.body.classList.remove('docked-mode');
         <button class="menu-item" onclick="callMethod('startWorkTime')">💪 ${workText}</button>
         <button class="menu-item" onclick="callMethod('startShortBreak')">🍵 ${shortBreakText}</button>
         <button class="menu-item" onclick="callMethod('startLongBreak')">🧘 ${longBreakText}</button>
+        <button class="menu-item menu-item-settings" onclick="callMethod('openPomodoroSettings')">${i18n('pomodoroSettings') || '番茄钟设置'}</button>
     </div>
     <div class="volume-menu" id="volumeMenu">
+        <div class="volume-menu-controls">
         <div class="volume-menu-header">
             <span id="volumeMenuTitle">${i18n('backgroundVolume') || '背景音量'}</span>
             <span class="volume-percent" id="volumePercent">50%</span>
         </div>
         <input type="range" class="volume-slider" id="volumeSlider" min="0" max="1" step="0.01" title="${i18n('backgroundVolume') || '背景音量'}">
+        </div>
+        <button type="button" class="volume-mute-btn" id="volumeMuteBtn" onclick="toggleVolumeMute(event)"></button>
     </div>
     <script>
         const { ipcRenderer } = require('electron');
@@ -10601,6 +10628,7 @@ document.body.classList.remove('docked-mode');
         }
 
         function closeVolumeMenu() {
+            document.body.classList.remove('volume-menu-open');
             const v = document.getElementById('volumeMenu');
             if (v) v.classList.remove('show');
         }
@@ -10613,8 +10641,34 @@ document.body.classList.remove('docked-mode');
             if (willShow) {
                 updateVolumeMenuUI();
             }
-            v.classList.toggle('show');
+            v.classList.toggle('show', willShow);
+            document.body.classList.toggle('volume-menu-open', willShow);
             closeSwitchMenu();
+        }
+
+        function toggleVolumeMute(e) {
+            e.stopPropagation();
+            // 先提交尚未发送的滑块值，避免稍后的节流回调覆盖静音状态。
+            if (volumeSliderTimeout) {
+                clearTimeout(volumeSliderTimeout);
+                volumeSliderTimeout = null;
+                sendVolumeToMain(localState[getActiveVolumeKey()]);
+            }
+            const key = getActiveVolumeKey();
+            const isSilent = localState.isBackgroundAudioMuted || localState[key] === 0;
+            if (isSilent && localState[key] === 0) {
+                localState[key] = 0.5;
+                sendVolumeToMain(localState[key]);
+            } else {
+                ipcRenderer.send('${actionChannel}', 'toggleBackgroundAudio');
+            }
+            localState.isBackgroundAudioMuted = !isSilent;
+            setLocalAudioVolume(isSilent ? localState[key] : 0);
+            updateVolumeMenuUI();
+        }
+
+        function getActiveVolumeKey() {
+            return localState.isWorkPhase ? 'workVolume' : (localState.isLongBreak ? 'longBreakVolume' : 'breakVolume');
         }
 
         function updateVolumeMenuUI() {
@@ -10623,6 +10677,7 @@ document.body.classList.remove('docked-mode');
             const percent = document.getElementById('volumePercent');
             const title = document.getElementById('volumeMenuTitle');
             const soundBtn = document.getElementById('soundBtn');
+            const muteBtn = document.getElementById('volumeMuteBtn');
             const isMuted = localState.isBackgroundAudioMuted;
             const isWork = localState.isWorkPhase;
             const isLongBreak = localState.isLongBreak;
@@ -10641,6 +10696,11 @@ document.body.classList.remove('docked-mode');
             }
             const isSilent = isMuted || vol === 0;
             const icon = isSilent ? '🔇' : '🔊';
+            if (muteBtn) {
+                muteBtn.textContent = isSilent ? '🔊' : '🔇';
+                muteBtn.title = isSilent ? '${i18n('enableBackgroundAudio') || '开启背景音'}' : '${i18n('muteBackgroundAudio') || '静音背景音'}';
+                muteBtn.setAttribute('aria-label', muteBtn.title);
+            }
             // 拖动过程中不覆盖按钮状态，避免图标来回闪烁
             if (soundBtn && !isVolumeSliderDragging) {
                 soundBtn.textContent = icon;
@@ -10667,11 +10727,14 @@ document.body.classList.remove('docked-mode');
 
         function onVolumeSliderInput(value) {
             const vol = parseFloat(value);
+            localState[getActiveVolumeKey()] = vol;
+            localState.isBackgroundAudioMuted = vol === 0;
             const percent = document.getElementById('volumePercent');
             const soundBtn = document.getElementById('soundBtn');
             if (percent) percent.textContent = Math.round(vol * 100) + '%';
             const icon = vol === 0 ? '🔇' : '🔊';
             if (soundBtn) soundBtn.textContent = icon;
+            updateVolumeMenuUI();
             // 本地立即更新音频音量，避免 IPC 往返延迟导致的声音卡顿或滑块回弹
             setLocalAudioVolume(vol);
             // 节流发送 IPC，避免拖动时消息堆积
@@ -10718,6 +10781,7 @@ document.body.classList.remove('docked-mode');
 
         function toggleSwitchMenu(e) {
             e.stopPropagation();
+            closeVolumeMenu();
             const m = document.getElementById('switchMenu');
             const btn = document.getElementById('statusBtn');
             if (!m) return;
@@ -11503,6 +11567,9 @@ document.body.classList.remove('docked-mode');
                     break;
                 case 'showSwitchMenuPopup':
                     this.showNativeSwitchMenuPopup();
+                    break;
+                case 'openPomodoroSettings':
+                    this.plugin?.openSetting?.(i18n('pomodoroSettings'));
                     break;
                 case 'openRelatedNote':
                     this.openRelatedNote();
