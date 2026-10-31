@@ -521,6 +521,7 @@
     "collapse": "Collapse",
     "expand": "Expand",
     "editTime": "Double click to edit time",
+    "pomodoroEditDuration": "Edit Duration",
     "muteBackgroundAudio": "Mute background audio",
     "enableBackgroundAudio": "Enable background audio",
     "backgroundAudioMuted": "Background audio muted",

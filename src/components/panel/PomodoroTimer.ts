@@ -3037,11 +3037,24 @@ export class PomodoroTimer {
         });
         this.initMenuItemHoverEffects(longBreakBtn);
 
+        const editDurationBtn = document.createElement('button');
+        editDurationBtn.className = 'pomodoro-menu-item';
+        editDurationBtn.style.cssText = this.getMenuItemStyle();
+        editDurationBtn.textContent = `✏️ ${i18n('pomodoroEditDuration')}`;
+        editDurationBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.hideSwitchMenu();
+            this.editTime(true);
+        });
+        this.initMenuItemHoverEffects(editDurationBtn);
+
         // 将菜单项添加到菜单中
         this.switchMenu.appendChild(this.modeToggleBtn);
         this.switchMenu.appendChild(workBtn);
         this.switchMenu.appendChild(shortBreakBtn);
         this.switchMenu.appendChild(longBreakBtn);
+        this.switchMenu.appendChild(editDurationBtn);
 
         // 将按钮和菜单添加到容器中
         switchContainer.appendChild(this.mainSwitchBtn);
@@ -5186,6 +5199,11 @@ export class PomodoroTimer {
         }));
         menu.append(new MenuItem({ type: 'separator' }));
         menu.append(new MenuItem({
+            label: `✏️ ${i18n('pomodoroEditDuration')}`,
+            enabled: !(this.isCountUp && this.isWorkPhase),
+            click: () => this.editTime(true)
+        }));
+        menu.append(new MenuItem({
             label: i18n('pomodoroSettings') || '番茄钟设置',
             click: () => this.plugin?.openSetting?.(i18n('pomodoroSettings'))
         }));
@@ -7156,10 +7174,10 @@ export class PomodoroTimer {
         }
     }
 
-    private editTime() {
+    private editTime(useOverlay: boolean = false) {
         // 如果是BrowserWindow模式，使用专门的编辑方法
         if (!this.isTabMode && this.container && typeof (this.container as any).webContents !== 'undefined') {
-            this.editTimeInBrowserWindow(this.container as any);
+            this.editTimeInBrowserWindow(this.container as any, useOverlay);
             return;
         }
 
@@ -7374,7 +7392,7 @@ export class PomodoroTimer {
     /**
      * 在BrowserWindow中编辑时间
      */
-    private editTimeInBrowserWindow(window: any) {
+    private editTimeInBrowserWindow(window: any, useOverlay: boolean = false) {
         if (!window || window.isDestroyed()) {
             return;
         }
@@ -7402,11 +7420,19 @@ export class PomodoroTimer {
 
         const editScript = `
             (function() {
+                const existingInput = document.getElementById('pomodoro-time-input');
+                if (existingInput) {
+                    existingInput.focus();
+                    existingInput.select();
+                    return;
+                }
                 const timeDisplay = document.getElementById('timeDisplay');
                 if (!timeDisplay) return;
 
-                const parent = timeDisplay.parentNode;
+                const useOverlay = ${useOverlay};
+                const parent = useOverlay ? document.body : timeDisplay.parentNode;
                 const input = document.createElement('input');
+                input.id = 'pomodoro-time-input';
                 input.type = 'text';
                 input.value = '${currentTimeString}';
                 input.placeholder = 'MM:SS';
@@ -7423,9 +7449,16 @@ export class PomodoroTimer {
                     font-variant-numeric: tabular-nums;
                     outline: none;
                     font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+                    -webkit-app-region: no-drag;
                 \`;
 
-                parent.replaceChild(input, timeDisplay);
+                if (useOverlay) {
+                    // 菜单入口使用浮动输入框，兼容 Mini 和隐藏时间显示的紧凑布局。
+                    input.style.cssText += 'position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10001;';
+                    parent.appendChild(input);
+                } else {
+                    parent.replaceChild(input, timeDisplay);
+                }
                 input.focus();
                 input.select();
 
@@ -7438,7 +7471,8 @@ export class PomodoroTimer {
                     if (input.parentNode !== parent) return;
 
                     const inputValue = input.value.trim();
-                    parent.replaceChild(timeDisplay, input);
+                    if (useOverlay) input.remove();
+                    else parent.replaceChild(timeDisplay, input);
 
                     // 通知主进程应用新时间
                     require('electron').ipcRenderer.send('pomodoro-time-edit-${window.id}', inputValue);
@@ -7448,8 +7482,10 @@ export class PomodoroTimer {
                     if (isEditingFinished) return;
                     isEditingFinished = true;
                     if (input.parentNode === parent) {
-                        parent.replaceChild(timeDisplay, input);
+                        if (useOverlay) input.remove();
+                        else parent.replaceChild(timeDisplay, input);
                     }
+                    require('electron').ipcRenderer.send('pomodoro-time-edit-${window.id}', null);
                 };
 
                 input.addEventListener('blur', finishEdit);
@@ -7509,6 +7545,7 @@ export class PomodoroTimer {
             }
 
             const editHandler = (_event: any, inputValue: string) => {
+                if (inputValue === null) return;
                 const newTimeInSeconds = this.parseTimeStringToSeconds(inputValue);
 
                 if (newTimeInSeconds === null) {
@@ -7555,6 +7592,7 @@ export class PomodoroTimer {
                 ipcMain.removeListener(`pomodoro-time-edit-${window.id}`, editHandler);
             };
 
+            ipcMain.removeAllListeners(`pomodoro-time-edit-${window.id}`);
             ipcMain.once(`pomodoro-time-edit-${window.id}`, editHandler);
 
             // 执行 JavaScript 创建输入框
@@ -9854,7 +9892,8 @@ document.body.classList.remove('docked-mode');
             pointer-events: auto;
             white-space: nowrap;
         }
-        .menu-item:hover { background: ${hoverColor}; }
+        .menu-item:not(:disabled):hover { background: ${hoverColor}; }
+        .menu-item:disabled { opacity: 0.5; cursor: default !important; }
         .menu-item-settings { border-top: 1px solid ${borderColor}; border-radius: 0 0 6px 6px; margin-top: 3px; }
         .volume-menu {
             -webkit-app-region: no-drag;
@@ -10582,6 +10621,7 @@ document.body.classList.remove('docked-mode');
         <button class="menu-item" onclick="callMethod('startWorkTime')">💪 ${workText}</button>
         <button class="menu-item" onclick="callMethod('startShortBreak')">🍵 ${shortBreakText}</button>
         <button class="menu-item" onclick="callMethod('startLongBreak')">🧘 ${longBreakText}</button>
+        <button class="menu-item" id="editDurationMenuItem" onclick="callMethod('editTime', true)" ${currentState.isCountUp && currentState.isWorkPhase ? 'disabled' : ''}>✏️ ${i18n('pomodoroEditDuration')}</button>
         <button class="menu-item menu-item-settings" onclick="callMethod('openPomodoroSettings')">${i18n('pomodoroSettings') || '番茄钟设置'}</button>
     </div>
     <div class="volume-menu" id="volumeMenu">
@@ -11105,6 +11145,8 @@ document.body.classList.remove('docked-mode');
             if (miniProgressFill) miniProgressFill.style.backgroundColor = color;
 
             const switchModeMenuItem = document.getElementById('switchModeMenuItem');
+            const editDurationMenuItem = document.getElementById('editDurationMenuItem');
+            if (editDurationMenuItem) editDurationMenuItem.disabled = localState.isCountUp && localState.isWorkPhase;
             const miniSwitchModeMenuItem = document.getElementById('miniSwitchModeMenuItem');
             const modeLabel = (localState.isCountUp ? '🍅 ' + '${switchToCountdownText}' : '⏱ ' + '${switchToCountUpText}');
             if (switchModeMenuItem && switchModeMenuItem.textContent !== modeLabel) {
@@ -11599,7 +11641,7 @@ document.body.classList.remove('docked-mode');
                     this.showStatsPanel();
                     break;
                 case 'editTime':
-                    this.editTime();
+                    this.editTime(args[0] === true);
                     break;
                 case 'toggleBackgroundAudio':
                     this.toggleBackgroundAudio();
