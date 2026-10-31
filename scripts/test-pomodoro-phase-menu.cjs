@@ -9,151 +9,95 @@ const ts = require('typescript');
 const source = fs.readFileSync(path.join(__dirname, '../src/components/panel/PomodoroTimer.ts'), 'utf8');
 const ast = ts.createSourceFile('PomodoroTimer.ts', source, ts.ScriptTarget.Latest, true);
 const timerClass = ast.statements.find(node => ts.isClassDeclaration(node) && node.name.text === 'PomodoroTimer');
-const names = ['showNativePhaseMenuPopup', 'hideNativePhaseMenuPopup', 'callMethod'];
+const names = ['showNativeSwitchMenuPopup', 'callMethod'];
 const methods = timerClass.members.filter(node => names.includes(node.name?.getText(ast)))
     .map(node => node.getText(ast)).join('\n');
 const hostCode = ts.transpileModule(`class PomodoroTimer { ${methods} }`, {
     compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS }
 }).outputText;
-const rendererCode = source.slice(source.indexOf('        let phaseMenuOpen ='),
-    source.indexOf("        document.addEventListener('click', e =>", source.indexOf('        let phaseMenuOpen =')))
+const rendererCode = source.slice(source.indexOf('        function toggleSwitchMenu(e)'),
+    source.indexOf('        function applyMiniStyleClass()'))
     .replaceAll('${actionChannel}', 'pomodoro-action-test');
 
-function fixture({ failPopup = false } = {}) {
-    const requests = [];
+function fixture({ isCountUp = false, isWorkPhase = true } = {}) {
     const menus = [];
     const actions = [];
-    const errors = [];
-    const elements = new Map();
-    const element = (id, rect = {}) => {
-        const classes = new Set(['show']);
-        const attributes = {};
-        const node = {
-            attributes,
-            classList: {
-                contains: name => classes.has(name),
-                remove: name => classes.delete(name),
-                add: name => classes.add(name)
-            },
-            setAttribute: (name, value) => { attributes[name] = value; },
-            getBoundingClientRect: () => rect,
-            closest: selector => selector.includes(`#${id}`) ? node : null
-        };
-        elements.set(id, node);
-        return node;
-    };
-    const root = element('switchMenu', { right: 188 });
-    const trigger = element('phaseMenuTrigger', { top: 68 });
-    const body = element('body');
-    let hit = root;
-    const context = vm.createContext({
-        window: { addEventListener() {} },
-        document: { body, getElementById: id => elements.get(id), elementFromPoint: () => hit },
-        ipcRenderer: { send: (...args) => requests.push(args) }
-        // 故意不提供 remote：番茄钟子窗口没有启用 remote 时仍须能够展开菜单。
-    });
-    vm.runInContext(rendererCode, context);
-    const owner = {
-        isDestroyed: () => false,
-        getContentBounds: () => ({ x: 100, y: 200 }),
-        webContents: {
-            getZoomFactor: () => 1.5,
-            executeJavaScript: script => { vm.runInContext(script, context); return Promise.resolve(); }
-        }
-    };
+    let volumeClosed = 0;
+    const owner = { isDestroyed: () => false };
     const remote = {
-        screen: { getCursorScreenPoint: () => ({ x: 250, y: 350 }) },
-        Menu: { buildFromTemplate: items => {
-            const menu = {
-                items,
-                popup(options) {
-                    if (failPopup) throw new Error('popup failed');
-                    this.options = options;
-                },
-                closePopup() { this.options?.callback(); }
-            };
-            menus.push(menu);
-            return menu;
-        } }
+        Menu: class {
+            constructor() { this.items = []; menus.push(this); }
+            append(item) { this.items.push(item); }
+            popup(options) { this.options = options; }
+        },
+        MenuItem: class { constructor(options) { Object.assign(this, options); } }
     };
-    const Timer = new Function('window', 'i18n', 'console', `${hostCode}; return PomodoroTimer;`)(
-        { require: () => remote }, key => key, { error: (...args) => errors.push(args) }
+    const Timer = new Function('window', 'i18n', `${hostCode}; return PomodoroTimer;`)(
+        { require: () => remote }, key => key
     );
     Timer.browserWindowInstance = owner;
-    const timer = new Timer();
-    for (const method of ['startWorkTime', 'startShortBreak', 'startLongBreak']) timer[method] = () => actions.push(method);
-    const flush = () => {
-        for (const [, method, ...args] of requests.splice(0)) timer.callMethod(method, ...args);
-    };
-    return { context, root, trigger, menus, actions, errors, owner, flush,
-        open() { vm.runInContext('showPhaseMenu()', context); flush(); },
-        close() { vm.runInContext('closeSwitchMenu()', context); flush(); },
-        hitOutside() { hit = null; }
-    };
-}
-
-test('子窗口无 remote 时，通过 IPC 展开原生二级菜单，保持一级菜单并适配缩放', () => {
-    const view = fixture();
-    view.open();
-    assert.equal(view.menus.length, 1);
-    assert.equal(view.menus[0].items.length, 3);
-    assert.equal(view.menus[0].options.window, view.owner);
-    assert.equal(view.menus[0].options.x, 285);
-    assert.equal(view.menus[0].options.y, 102);
-    assert.equal(view.root.classList.contains('show'), true);
-    assert.equal(view.trigger.attributes['aria-expanded'], 'true');
-    view.open();
-    assert.equal(view.menus.length, 1);
-});
-
-for (const [index, method] of ['startWorkTime', 'startShortBreak', 'startLongBreak'].entries()) {
-    test(`二级菜单正确执行 ${method} 并关闭菜单`, () => {
-        const view = fixture();
-        view.open();
-        view.menus[0].items[index].click();
-        view.menus[0].options.callback();
-        assert.deepEqual(view.actions, [method]);
-        assert.equal(view.root.classList.contains('show'), false);
-        assert.equal(view.trigger.attributes['aria-expanded'], 'false');
+    const timer = Object.assign(new Timer(), { isCountUp, isWorkPhase,
+        plugin: { openSetting: key => actions.push(['openSetting', key]) } });
+    for (const method of ['toggleMode', 'startWorkTime', 'startShortBreak', 'startLongBreak', 'editTime']) {
+        timer[method] = () => actions.push(method);
+    }
+    const context = vm.createContext({
+        closeVolumeMenu: () => { volumeClosed++; },
+        closeSwitchMenu() {},
+        ipcRenderer: { send: (channel, method, ...args) => {
+            assert.equal(channel, 'pomodoro-action-test');
+            timer.callMethod(method, ...args);
+        } }
+        // 子窗口无需 remote 或 HTML 菜单，普通和迷你模式均通过 IPC 打开完整原生菜单。
     });
+    vm.runInContext(rendererCode, context);
+    return { menus, actions, owner, timer,
+        get volumeClosed() { return volumeClosed; },
+        open(mini = false) {
+            vm.runInContext(`${mini ? 'toggleMiniSwitchMenu' : 'toggleSwitchMenu'}({ stopPropagation() {} })`, context);
+            return menus.at(-1);
+        }
+    };
 }
 
-test('取消二级菜单后可重新展开，过期回调不影响新菜单', () => {
+test('普通模式设置菜单和状态二级菜单属于同一个原生菜单树', () => {
     const view = fixture();
-    view.open();
-    const first = view.menus[0];
-    first.options.callback();
-    assert.equal(view.root.classList.contains('show'), true);
-    view.open();
-    first.options.callback();
-    assert.equal(view.trigger.attributes['aria-expanded'], 'true');
-    view.close();
-    assert.equal(view.trigger.attributes['aria-expanded'], 'false');
-    assert.equal(view.root.classList.contains('show'), false);
+    const menu = view.open();
+    assert.equal(menu.options.window, view.owner);
+    assert.equal(menu.items.length, 4);
+    assert.equal(menu.items[1].label, '🔄 pomodoroSwitchStatus');
+    assert.equal(menu.items[1].submenu.length, 3);
+    assert.equal(view.volumeClosed, 1);
 });
 
-test('原生菜单关闭回调早于选择回调时，选择状态仍会关闭一级菜单', () => {
+test('迷你模式复用相同的完整原生菜单入口', () => {
     const view = fixture();
-    view.open();
-    view.menus[0].options.callback();
-    view.menus[0].items[1].click();
-    assert.deepEqual(view.actions, ['startShortBreak']);
-    assert.equal(view.root.classList.contains('show'), false);
+    const normal = view.open();
+    const mini = view.open(true);
+    assert.deepEqual(mini.items.map(item => item.label), normal.items.map(item => item.label));
+    assert.equal(mini.options.window, view.owner);
 });
 
-test('点击窗口外空白处同时关闭两级菜单', () => {
+test('原生菜单保留模式、状态、修改时长和设置操作', () => {
     const view = fixture();
-    view.open();
-    view.hitOutside();
-    view.menus[0].options.callback();
-    assert.equal(view.root.classList.contains('show'), false);
+    const menu = view.open();
+    menu.items[0].click();
+    for (const item of menu.items[1].submenu) item.click();
+    menu.items[2].click();
+    menu.items[3].click();
+    assert.deepEqual(view.actions, ['toggleMode', 'startWorkTime', 'startShortBreak', 'startLongBreak',
+        'editTime', ['openSetting', 'pomodoroSettings']]);
 });
 
-test('原生菜单创建失败后恢复展开状态，允许再次尝试', () => {
-    const view = fixture({ failPopup: true });
-    view.open();
-    assert.equal(view.trigger.attributes['aria-expanded'], 'false');
-    assert.equal(view.errors.length, 1);
-    view.open();
-    assert.equal(view.menus.length, 2);
+test('每次展开使用当前计时模式和阶段更新标签与时长编辑权限', () => {
+    const view = fixture();
+    const countdown = view.open();
+    assert.equal(countdown.items[0].label, '⏱ switchToCountUp');
+    assert.equal(countdown.items[2].enabled, true);
+    view.timer.isCountUp = true;
+    const countUp = view.open();
+    assert.equal(countUp.items[0].label, '🍅 switchToCountdown');
+    assert.equal(countUp.items[2].enabled, false);
+    view.timer.isWorkPhase = false;
+    assert.equal(view.open().items[2].enabled, true);
 });
