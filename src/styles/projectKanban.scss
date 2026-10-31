@@ -733,6 +733,19 @@
     padding: 4px;
 }
 
+.custom-group-status-tabs-bar {
+    position: sticky;
+    top: 0;
+    z-index: 11;
+    margin-bottom: 0;
+    padding: 4px;
+    background: var(--b3-theme-background);
+}
+
+.custom-group-status-tab-btn.kanban-drop-zone-active {
+    box-shadow: inset 0 0 0 2px var(--b3-theme-primary);
+}
+
 .custom-status-group {
     background: var(--b3-theme-background);
     border-radius: 8px;

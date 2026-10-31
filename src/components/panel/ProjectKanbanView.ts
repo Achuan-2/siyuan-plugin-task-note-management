@@ -229,6 +229,7 @@ export class ProjectKanbanView {
     private activeCustomGroupTabId: string | null = null; // 当前选中的分组页签
     private statusTabsMode: boolean = false; // 状态看板是否使用页签显示
     private activeStatusTabId: string | null = null; // 当前选中的状态页签
+    private activeGroupStatusTabIds = new Map<string, string>(); // 各分组在当前视图中选中的状态页签
     private reminderSkipSettings: any = {};
     private reminderSkipHolidayData: HolidayData = {};
 
@@ -1441,6 +1442,7 @@ export class ProjectKanbanView {
             this.statusTabsMode = checked;
             if (!checked) {
                 this.activeStatusTabId = null;
+                this.activeGroupStatusTabIds.clear();
             }
             const projectData = await this.plugin.loadProjectData() || {};
             if (projectData[this.projectId]) {
@@ -2775,7 +2777,7 @@ export class ProjectKanbanView {
 
             if (this.isDragging && this.draggedTask) {
                 const currentStatus = this.getTaskStatus(this.draggedTask);
-                const statusGroup = element.closest('.custom-status-group') as HTMLElement;
+                const statusGroup = element.closest('.custom-status-group, .custom-group-status-tab-btn') as HTMLElement;
                 let targetGroupId: string | null | undefined = undefined;
                 if (statusGroup && statusGroup.dataset.groupId) {
                     const groupId = statusGroup.dataset.groupId;
@@ -2807,7 +2809,7 @@ export class ProjectKanbanView {
 
         element.addEventListener('drop', async (e) => {
             this.clearDropZoneHighlights();
-            const statusGroup = element.closest('.custom-status-group') as HTMLElement;
+            const statusGroup = element.closest('.custom-status-group, .custom-group-status-tab-btn') as HTMLElement;
             let targetGroupId: string | null | undefined = undefined;
             if (statusGroup && statusGroup.dataset.groupId) {
                 const groupId = statusGroup.dataset.groupId;
@@ -7472,7 +7474,7 @@ export class ProjectKanbanView {
             }
         });
 
-        // 第二遍：创建所有状态分组
+        // 第二遍：收集状态分组，页签和纵向布局共用可见状态及空状态过滤
         visibleStatuses.forEach(status => {
             let tasks: any[];
             if (status.id === 'completed') {
@@ -7488,14 +7490,15 @@ export class ProjectKanbanView {
             }
 
             statusEntries.push({ status, tasks });
-            const statusGroupContainer = this.createStatusGroupInCustomColumn(
-                group,
-                tasks,
-                status.id,
-                status.name
-            );
-            groupsContainer.appendChild(statusGroupContainer);
         });
+
+        if (this.statusTabsMode) {
+            this.renderCustomGroupStatusTabs(groupsContainer, group, statusEntries);
+        } else {
+            statusEntries.forEach(({ status, tasks }) => {
+                groupsContainer.appendChild(this.createStatusGroupInCustomColumn(group, tasks, status.id, status.name));
+            });
+        }
 
         content.appendChild(groupsContainer);
 
@@ -7524,7 +7527,70 @@ export class ProjectKanbanView {
         }
     }
 
-    private createStatusGroupInCustomColumn(group: any, tasks: any[], status: string, statusLabel: string): HTMLElement {
+    private renderCustomGroupStatusTabs(
+        container: HTMLElement,
+        group: any,
+        entries: Array<{ status: any; tasks: any[] }>
+    ) {
+        if (entries.length === 0) return;
+
+        // 项目和分组共同标识选中状态，避免切换项目后串用同名分组的状态。
+        const selectionKey = `${this.projectId}:${group.id}`;
+        const previousStatusId = this.activeGroupStatusTabIds.get(selectionKey);
+        const activeStatusId = entries.some(entry => entry.status.id === previousStatusId)
+            ? previousStatusId
+            : entries[0].status.id;
+        this.activeGroupStatusTabIds.set(selectionKey, activeStatusId);
+
+        const tabsBar = document.createElement('div');
+        tabsBar.className = 'custom-group-tabs-bar custom-group-status-tabs-bar';
+        const tabContent = document.createElement('div');
+        tabContent.className = 'custom-group-status-tab-content';
+
+        const renderActiveStatus = () => {
+            const activeEntry = entries.find(entry => entry.status.id === this.activeGroupStatusTabIds.get(selectionKey));
+            if (!activeEntry) return;
+            tabContent.innerHTML = '';
+            tabContent.appendChild(this.createStatusGroupInCustomColumn(
+                group, activeEntry.tasks, activeEntry.status.id, activeEntry.status.name, true
+            ));
+        };
+
+        const buttons = new Map<string, HTMLButtonElement>();
+        entries.forEach(({ status }) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'b3-button custom-group-status-tab-btn';
+            button.textContent = status.icon ? `${status.icon} ${status.name}` : status.name;
+            button.dataset.groupId = group.id;
+            button.dataset.status = status.id;
+            this.addStatusSubGroupDropEvents(button, status.id);
+            buttons.set(status.id, button);
+            button.addEventListener('click', () => {
+                if (this.activeGroupStatusTabIds.get(selectionKey) === status.id) return;
+                this.activeGroupStatusTabIds.set(selectionKey, status.id);
+                updateButtons();
+                renderActiveStatus();
+            });
+            tabsBar.appendChild(button);
+        });
+
+        const updateButtons = () => {
+            buttons.forEach((button, statusId) => {
+                const isActive = this.activeGroupStatusTabIds.get(selectionKey) === statusId;
+                button.classList.toggle('b3-button--primary', isActive);
+                button.classList.toggle('b3-button--outline', !isActive);
+                button.setAttribute('aria-pressed', String(isActive));
+            });
+        };
+
+        container.appendChild(tabsBar);
+        container.appendChild(tabContent);
+        updateButtons();
+        renderActiveStatus();
+    }
+
+    private createStatusGroupInCustomColumn(group: any, tasks: any[], status: string, statusLabel: string, tabbed: boolean = false): HTMLElement {
         const groupContainer = document.createElement('div');
         groupContainer.className = `custom-status-group custom-status-${status}`;
         groupContainer.dataset.groupId = group.id;
@@ -7615,7 +7681,11 @@ export class ProjectKanbanView {
             text-align: center;
         `;
 
-        groupHeader.appendChild(groupTitle);
+        if (!tabbed) {
+            groupHeader.appendChild(groupTitle);
+        } else {
+            groupHeader.style.justifyContent = 'flex-end';
+        }
 
         const headerRight = document.createElement('div');
         headerRight.style.cssText = 'display:flex; align-items:center; gap:8px;';
@@ -7690,7 +7760,7 @@ export class ProjectKanbanView {
         }
 
         // 设置初始显示状态
-        groupTasksContainer.style.display = isCollapsed ? 'none' : 'block';
+        groupTasksContainer.style.display = !tabbed && isCollapsed ? 'none' : 'block';
         collapseBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#icon${isCollapsed ? 'Right' : 'Down'}"></use></svg>`;
         collapseBtn.classList.add('ariaLabel'); collapseBtn.setAttribute('aria-label', isCollapsed ? i18n("expandGroup") : i18n("collapseGroup"));
 
@@ -7710,7 +7780,9 @@ export class ProjectKanbanView {
             }
         });
 
-        groupTitle.insertBefore(collapseBtn, groupIcon);
+        if (!tabbed) {
+            groupTitle.insertBefore(collapseBtn, groupIcon);
+        }
 
         groupContainer.appendChild(groupHeaderWrapper);
 
@@ -11137,9 +11209,9 @@ export class ProjectKanbanView {
                         // 立即排序，确保乐观更新时顺序正确
                         this.sortTasks();
 
-                        // 页签模式的渲染闭包只包含当次渲染生成的分组数据；新建任务后直接重绘页签容器，
-                        // 避免非当前页签分组走局部回退渲染时被插到外层看板容器造成错位。
-                        if (this.kanbanMode === 'custom' && this.customGroupTabsMode) {
+                        // 分组/状态页签的渲染闭包只包含当次数据，新建后重绘以更新页签和隐藏状态的内容，
+                        // 同时避免非当前页签分组走局部回退渲染时被插到外层看板容器造成错位。
+                        if (this.kanbanMode === 'custom' && (this.customGroupTabsMode || this.statusTabsMode)) {
                             this.captureScrollState();
                             await this.renderKanban();
                             this.dispatchReminderUpdate(true);
