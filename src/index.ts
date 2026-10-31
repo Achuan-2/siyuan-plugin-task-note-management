@@ -2458,6 +2458,7 @@ export default class ReminderPlugin extends Plugin {
                     // 使用统一的tabId格式保存番茄钟实例引用
                     const standardTabId = this.name + POMODORO_TAB_TYPE;
                     this.tabViews.set(standardTabId, pomodoroTimer);
+                    pomodoroTimer.show();
                 });
             }) as any,
             destroy: (() => {

@@ -55,6 +55,8 @@ export class PomodoroTimer {
     private isOpeningEditDialog: boolean = false;
     private isRunning: boolean = false;
     private isPaused: boolean = false;
+    private componentsReady: Promise<void>;
+    private startOnShowPromise: Promise<void> | null = null;
     private isWorkPhase: boolean = true;
     private isLongBreak: boolean = false;
     private isCountUp: boolean = false;
@@ -248,10 +250,10 @@ export class PomodoroTimer {
             // But valid tick loop needs to start.
 
             // Let's defer "init components" which loads audio etc.
-            this.initComponents(container, orphanedWindow);
+            this.componentsReady = this.initComponents(container, orphanedWindow);
         } else {
             this.findAndAttachOrphanedWindow();
-            this.initComponents(container);
+            this.componentsReady = this.initComponents(container);
         }
     }
 
@@ -753,6 +755,8 @@ export class PomodoroTimer {
     private async initComponents(container?: HTMLElement, orphanedWindow?: any) {
         // 统计记录与音频互不依赖，并行准备，避免文件读取串行拖慢窗口创建。
         await Promise.all([this.recordManager.initialize(), this.initAudio()]);
+
+        if (this.isWindowClosed) return;
 
         if (orphanedWindow) {
             // If recovering, we already have the window (orphanedWindow).
@@ -7616,13 +7620,19 @@ export class PomodoroTimer {
         }
     }
 
-    show() {
-        // 如果番茄钟继承了运行状态，自动开始计时
-        setTimeout(async () => {
-            if (this.isRunning && !this.isPaused) {
-                await this.startTimer();
-            }
-        }, 100);
+    show(): Promise<void> {
+        // 所有启动入口在窗口和音频准备完成后直接计时；重复调用不重启或恢复暂停的计时。
+        if (!this.startOnShowPromise) {
+            this.startOnShowPromise = this.componentsReady.then(async () => {
+                if (!this.isWindowClosed && !this.timer) {
+                    await this.startTimer();
+                }
+            }).catch((error) => {
+                console.error('[PomodoroTimer] Failed to start timer:', error);
+                showMessage(i18n('operationFailed'), 3000);
+            });
+        }
+        return this.startOnShowPromise;
     }
 
     /**
