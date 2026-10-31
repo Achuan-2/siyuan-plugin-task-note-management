@@ -8227,7 +8227,15 @@ export class ProjectKanbanView {
                 e.stopPropagation();
                 await this.editTask(task);
             },
-            onNoteClick: (task: any, e: Event) => {
+            onNoteClick: (task: any, e: MouseEvent) => {
+                if (this.handleMultiSelectTaskClick(task, e)) {
+                    return;
+                }
+
+                if (this.handleQuickMultiSelectClick(task, e)) {
+                    return;
+                }
+
                 this.showTaskNotePreview(task);
             },
             onCardClick: (task: any, e: MouseEvent) => {
