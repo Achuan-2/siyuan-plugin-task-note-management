@@ -5165,6 +5165,27 @@ export class PomodoroTimer {
         showMessage((i18n('switchedToMode') || '已切换到') + modeText + (i18n('mode') || '模式'), 2000);
     }
 
+    private openPomodoroSettings() {
+        try {
+            // 此方法运行在插件所在的思源窗口中，不能激活番茄钟独立窗口。
+            const electronReq = (window as any).require;
+            const electron = electronReq?.('electron');
+            const remote = electronReq?.('@electron/remote') || electron?.remote;
+            const mainWindow = remote?.getCurrentWindow();
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                if (mainWindow.isMinimized()) mainWindow.restore();
+                mainWindow.show();
+                mainWindow.focus();
+            } else {
+                window.focus();
+            }
+        } catch (error) {
+            window.focus();
+            console.warn('[PomodoroTimer] Failed to activate SiYuan window for settings:', error);
+        }
+        this.plugin?.openSetting?.(i18n('pomodoroSettings'));
+    }
+
     private showNativeSwitchMenuPopup() {
         const electronReq = typeof window !== 'undefined' ? ((window as any).require || (window as any).exports?.require || (window as any).parent?.require) : null;
         if (!electronReq) return;
@@ -5199,7 +5220,7 @@ export class PomodoroTimer {
         }));
         menu.append(new MenuItem({
             label: i18n('pomodoroSettings') || '番茄钟设置',
-            click: () => this.plugin?.openSetting?.(i18n('pomodoroSettings'))
+            click: () => this.openPomodoroSettings()
         }));
 
         const pomodoroWindow = PomodoroTimer.browserWindowInstance;
@@ -11557,7 +11578,7 @@ document.body.classList.remove('docked-mode');
                     this.showNativeSwitchMenuPopup();
                     break;
                 case 'openPomodoroSettings':
-                    this.plugin?.openSetting?.(i18n('pomodoroSettings'));
+                    this.openPomodoroSettings();
                     break;
                 case 'openRelatedNote':
                     this.openRelatedNote();

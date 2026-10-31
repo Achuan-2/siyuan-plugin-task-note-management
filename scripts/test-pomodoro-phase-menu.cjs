@@ -9,7 +9,7 @@ const ts = require('typescript');
 const source = fs.readFileSync(path.join(__dirname, '../src/components/panel/PomodoroTimer.ts'), 'utf8');
 const ast = ts.createSourceFile('PomodoroTimer.ts', source, ts.ScriptTarget.Latest, true);
 const timerClass = ast.statements.find(node => ts.isClassDeclaration(node) && node.name.text === 'PomodoroTimer');
-const names = ['showNativeSwitchMenuPopup', 'callMethod'];
+const names = ['showNativeSwitchMenuPopup', 'openPomodoroSettings', 'callMethod'];
 const methods = timerClass.members.filter(node => names.includes(node.name?.getText(ast)))
     .map(node => node.getText(ast)).join('\n');
 const hostCode = ts.transpileModule(`class PomodoroTimer { ${methods} }`, {
@@ -19,12 +19,24 @@ const rendererCode = source.slice(source.indexOf('        function toggleSwitchM
     source.indexOf('        function applyMiniStyleClass()'))
     .replaceAll('${actionChannel}', 'pomodoro-action-test');
 
-function fixture({ isCountUp = false, isWorkPhase = true } = {}) {
+function fixture({ isCountUp = false, isWorkPhase = true, minimized = false, failFocus = false } = {}) {
     const menus = [];
     const actions = [];
+    const mainWindowCalls = [];
     let volumeClosed = 0;
     const owner = { isDestroyed: () => false };
+    const mainWindow = {
+        isDestroyed: () => false,
+        isMinimized: () => minimized,
+        restore: () => mainWindowCalls.push('restore'),
+        show: () => mainWindowCalls.push('show'),
+        focus: () => {
+            if (failFocus) throw new Error('focus failed');
+            mainWindowCalls.push('focus');
+        }
+    };
     const remote = {
+        getCurrentWindow: () => mainWindow,
         Menu: class {
             constructor() { this.items = []; menus.push(this); }
             append(item) { this.items.push(item); }
@@ -32,8 +44,8 @@ function fixture({ isCountUp = false, isWorkPhase = true } = {}) {
         },
         MenuItem: class { constructor(options) { Object.assign(this, options); } }
     };
-    const Timer = new Function('window', 'i18n', `${hostCode}; return PomodoroTimer;`)(
-        { require: () => remote }, key => key
+    const Timer = new Function('window', 'i18n', 'console', `${hostCode}; return PomodoroTimer;`)(
+        { require: () => remote, focus: () => mainWindowCalls.push('domFocus') }, key => key, { warn() {} }
     );
     Timer.browserWindowInstance = owner;
     const timer = Object.assign(new Timer(), { isCountUp, isWorkPhase,
@@ -51,7 +63,7 @@ function fixture({ isCountUp = false, isWorkPhase = true } = {}) {
         // 子窗口无需 remote 或 HTML 菜单，普通和迷你模式均通过 IPC 打开完整原生菜单。
     });
     vm.runInContext(rendererCode, context);
-    return { menus, actions, owner, timer,
+    return { menus, actions, owner, timer, mainWindowCalls,
         get volumeClosed() { return volumeClosed; },
         open(mini = false) {
             vm.runInContext(`${mini ? 'toggleMiniSwitchMenu' : 'toggleSwitchMenu'}({ stopPropagation() {} })`, context);
@@ -100,4 +112,25 @@ test('每次展开使用当前计时模式和阶段更新标签与时长编辑�
     assert.equal(countUp.items[2].enabled, false);
     view.timer.isWorkPhase = false;
     assert.equal(view.open().items[2].enabled, true);
+});
+
+test('点击番茄钟设置时显示并聚焦思源窗口', () => {
+    const view = fixture();
+    view.open().items[3].click();
+    assert.deepEqual(view.mainWindowCalls, ['show', 'focus']);
+    assert.deepEqual(view.actions, [['openSetting', 'pomodoroSettings']]);
+});
+
+test('通过 IPC 打开番茄钟设置时恢复最小化的思源窗口', () => {
+    const view = fixture({ minimized: true });
+    view.timer.callMethod('openPomodoroSettings');
+    assert.deepEqual(view.mainWindowCalls, ['restore', 'show', 'focus']);
+    assert.deepEqual(view.actions, [['openSetting', 'pomodoroSettings']]);
+});
+
+test('窗口激活失败时仍然打开番茄钟设置', () => {
+    const view = fixture({ failFocus: true });
+    view.open().items[3].click();
+    assert.deepEqual(view.mainWindowCalls, ['show', 'domFocus']);
+    assert.deepEqual(view.actions, [['openSetting', 'pomodoroSettings']]);
 });
