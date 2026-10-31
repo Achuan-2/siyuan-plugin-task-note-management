@@ -6839,6 +6839,79 @@ export class ReminderPanel {
         }
     }
 
+    /** 多选日期按首个有效条件填充；“全部日期”与筛选逻辑一样优先。 */
+    private getNewTaskDateAttributes(): { defaultDate: string; defaultEndDate: string } {
+        const builtInTypes: Record<string, string> = {
+            today: 'today', tomorrow: 'tomorrow', thisWeek: 'this_week',
+            future7: 'next_7_days', futureAll: 'future', overdue: 'overdue',
+            all: 'past_7_days', noDate: 'none', todayCompleted: 'today',
+            yesterdayCompleted: 'yesterday',
+        };
+        const filters = this.getActiveCustomFilterConfig()?.dateFilters
+            || [{ type: builtInTypes[this.currentTab] || 'all' }];
+        const dateFilter = filters.some((df: any) => df.type === 'all')
+            ? { type: 'all' }
+            : filters.find((df: any) => df.type !== 'start_only');
+        const today = getLogicalDateString();
+        let defaultDate = today;
+        let defaultEndDate = '';
+
+        switch (dateFilter?.type) {
+            case 'none':
+                defaultDate = '';
+                break;
+            case 'yesterday':
+            case 'overdue':
+                defaultDate = getRelativeDateString(-1);
+                break;
+            case 'tomorrow':
+            case 'future':
+                defaultDate = getRelativeDateString(1);
+                break;
+            case 'this_week': {
+                const start = new Date(today + 'T00:00:00');
+                start.setDate(start.getDate() - (start.getDay() + 6) % 7);
+                const end = new Date(start);
+                end.setDate(end.getDate() + 6);
+                defaultDate = getLocalDateString(start);
+                defaultEndDate = getLocalDateString(end);
+                break;
+            }
+            case 'next_7_days':
+                if (this.currentTab === 'future7') defaultDate = getRelativeDateString(1);
+                defaultEndDate = getRelativeDateString(7);
+                break;
+            case 'past_7_days':
+                defaultDate = getRelativeDateString(-7);
+                defaultEndDate = today;
+                break;
+            case 'future_x_days':
+                defaultEndDate = getRelativeDateString(dateFilter.futureDays || 14);
+                break;
+            case 'custom_range':
+                defaultDate = dateFilter.startDate || dateFilter.endDate || today;
+                defaultEndDate = dateFilter.endDate || '';
+                break;
+            case 'yearly_date_range': {
+                const year = today.slice(0, 4);
+                const monthDay = (month: number, day: number) =>
+                    `${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const start = monthDay(dateFilter.yearlyStartMonth || 1, dateFilter.yearlyStartDay || 1);
+                const end = monthDay(dateFilter.yearlyEndMonth || 12, dateFilter.yearlyEndDay || 31);
+                defaultDate = `${year}-${start}`;
+                defaultEndDate = `${year}-${end}`;
+                if (start > end) {
+                    // 年度筛选只匹配当年，跨年范围取当年内的一段，避免开始晚于结束。
+                    if (today.slice(5) <= end) defaultDate = `${year}-01-01`;
+                    else defaultEndDate = `${year}-12-31`;
+                }
+                break;
+            }
+        }
+
+        return { defaultDate, defaultEndDate };
+    }
+
     private async getFilterAttributes() {
         let defaultDate = '';
         let defaultEndDate = '';
@@ -10813,9 +10886,9 @@ export class ReminderPanel {
             const maxSort = allReminders.reduce((max, r) => Math.max(max, r.sort || 0), 0);
             const defaultSort = maxSort + 10000;
 
-            const today = getLocalDateString();
+            const { defaultDate, defaultEndDate } = this.getNewTaskDateAttributes();
             const quickDialog = new QuickReminderDialog(
-                today, // 初始日期为今天
+                defaultDate,
                 undefined, // 不指定初始时间
                 async (savedReminder?: any) => {
                     // 乐观渲染：快速在面板中插入或更新元素，后台仍由 dialog 持久化并触发 reminderUpdated
@@ -10832,8 +10905,8 @@ export class ReminderPanel {
                     }
                 },
                 {
-                    isTimeRange: true,
-                    endDate: today
+                    isTimeRange: !!defaultDate,
+                    endDate: defaultEndDate || defaultDate
                 },
                 {
                     plugin: this.plugin, // 传入plugin实例
@@ -11297,10 +11370,11 @@ export class ReminderPanel {
                 icon: 'iconPaste',
                 label: i18n("pasteCreateTask") || "粘贴新建任务",
                 click: () => {
+                    const { defaultDate } = this.getNewTaskDateAttributes();
                     const dialog = new PasteTaskDialog({
                         plugin: this.plugin,
-                        defaultSetDate: true,
-                        defaultDateStr: getLocalDateString(),
+                        defaultSetDate: !!defaultDate,
+                        defaultDateStr: defaultDate,
                         onSuccess: () => {
                             this.loadReminders(true);
                         }

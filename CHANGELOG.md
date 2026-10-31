@@ -1,3 +1,23 @@
+## v7.1.8 / 20261031
+
+- ✨ 任务侧栏：新建任务自动填入当前筛选项对应的日期和日期范围，无日期筛选保持留空；粘贴新建同步跟随筛选日期。
+- ✨ 项目看板：支持跨项目页签和看板拖动任务，修复跨项目操作时旧快照覆盖任务、新建任务未选中自定义状态的问题。
+- 🎨 项目看板：优化分组和状态页签，支持配置任务数量显示，新建任务跟随当前页签。
+- ✨ 番茄钟：支持桌面独立窗口全屏及迷你模式全屏布局，可设置独立窗口默认样式；点击番茄钟和正计时入口后直接开始计时。
+- 🎨 番茄钟：优化音量面板、设置入口、修改时长和状态切换菜单，统一桌面菜单样式，修复菜单关闭与二级菜单展开问题。
+- 🐛 番茄钟：修复手机端迷你窗口布局、边框裁切和层级问题，调整迷你模式字号；打开设置时唤起思源窗口。
+- 🎨 统一插件拖拽抓手样式，修复 Ctrl 点击任务备注误打开弹窗的问题。
+
+---
+
+- ✨ Task sidebar: prefill new tasks with the active filter's dates and date range, leave dates empty for the no-date filter, and apply the filtered date when creating tasks from pasted text.
+- ✨ Project boards: drag tasks across project tabs and boards; fixed stale snapshots overwriting cross-project changes and new tasks missing custom statuses.
+- 🎨 Project boards: refined group and status tabs, added configurable task counts, and made new tasks follow the active tab.
+- ✨ Pomodoro: added fullscreen layouts for desktop and mini windows, a default standalone window style setting, and immediate start from Pomodoro and count-up entries.
+- 🎨 Pomodoro: improved volume controls, settings access, duration editing and status menus; unified desktop menus and fixed menu dismissal and submenu expansion.
+- 🐛 Pomodoro: fixed mobile mini-window layout, border clipping and stacking, adjusted its font size, and brought SiYuan to the foreground when opening settings.
+- 🎨 Unified drag handles throughout the plugin and fixed Ctrl-clicking task notes opening a dialog unintentionally.
+
 ## v7.1.7 / 20261029
 
 - ✨ 任务列表：新增“父任务列表项完成时自动勾选子任务”设置，开启后勾选文档中的父任务列表项会自动完成其下所有层级的子任务列表项；取消勾选父项不改变子项状态。
