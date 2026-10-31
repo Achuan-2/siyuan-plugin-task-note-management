@@ -35,6 +35,32 @@ const code = ts.transpileModule(`${persistence}\nclass Board { ${methods} }`, {
     compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS },
 }).outputText;
 
+test('看板通知阶段只排队，不在防抖前重复读取，仍忽略自身和无关项目更新', async () => {
+    const handlers = new Map();
+    const compiled = ts.transpileModule(`class Board { ${extract('src/components/panel/ProjectKanbanView.ts', 'ProjectKanbanView', ['initializeAsync'])} }`, {
+        compilerOptions: { target: ts.ScriptTarget.ES2020 },
+    }).outputText;
+    const Board = new Function('window', 'document', compiled + '; return Board;')(
+        { addEventListener: (name, handler) => handlers.set(name, handler) }, { addEventListener: () => {} },
+    );
+    let preloads = 0, queued = 0;
+    const board = Object.assign(new Board(), {
+        kanbanInstanceId: 'self', categoryManager: { initialize: async () => {} },
+        loadProject: async () => {}, loadKanbanMode: async () => {}, loadKanbanSortConfig: async () => {},
+        initUI: () => {}, loadTasks: async () => {}, checkVip: () => {},
+        isProjectInCurrentView: id => id === 'A', reminderData: { old: {} },
+        getReminders: async () => { preloads++; }, queueLoadTasks: () => { queued++; return Promise.resolve(); },
+    });
+    await board.initializeAsync();
+    const notify = detail => handlers.get('reminderUpdated')({ detail });
+    notify({ source: 'self' }); notify({ projectId: 'B' });
+    assert.equal(queued, 0);
+    notify({ oldProjectId: 'B', newProjectId: 'A' }); notify({});
+    assert.equal(preloads, 0);
+    assert.equal(queued, 2);
+    assert.equal(board.reminderData, null);
+});
+
 function task(id, projectId, kanbanStatus = 'doing') {
     return { id, title: id, projectId, kanbanStatus, completed: false };
 }

@@ -707,7 +707,7 @@ export class ProjectKanbanView {
 
         // 监听提醒更新事件（使用防抖加载以避免频繁重绘导致滚动重置）
         // 只有外部触发的事件才重新加载任务
-        window.addEventListener('reminderUpdated', async (e: CustomEvent) => {
+        window.addEventListener('reminderUpdated', (e: CustomEvent) => {
             const detail = e.detail || {};
             // 如果是自己触发的更新，忽略
             if (detail?.source === this.kanbanInstanceId) {
@@ -726,10 +726,9 @@ export class ProjectKanbanView {
                 }
             }
 
-            // 外部触发的更新，需要刷新缓存 (但不强制读取文件，只使用插件内存缓存)
+            // loadTasks 会在防抖后读取最新数据，通知阶段只失效快照，避免每条通知重复合并订阅任务。
             this.reminderData = null;
-            await this.getReminders(false);
-            this.queueLoadTasks();
+            void this.queueLoadTasks();
         });
 
         // 全局/项目级显示设置变更后刷新当前看板配置

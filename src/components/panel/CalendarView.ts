@@ -1,5 +1,6 @@
 import { Calendar, formatDate, formatRange } from '@fullcalendar/core';
 import { getDragHandleIcon } from "../../utils/dragHandleIcon";
+import { CalendarEventReconciler } from '../../utils/calendarEventReconciler';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import multiMonthPlugin from '@fullcalendar/multimonth';
@@ -108,12 +109,16 @@ export class CalendarView {
     private eventClickTimeout: number | null = null;
     private refreshTimeout: number | null = null; // 添加刷新防抖超时
     private readonly calendarViewInstanceId: string = `calendar-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    private readonly eventReconciler = new CalendarEventReconciler(this.calendarViewInstanceId);
+    private refreshVersion: number = 0;
+    private disposed: boolean = false;
     private currentCompletionFilter: string = 'all'; // 当前完成状态过滤
     private isDragging: boolean = false; // 标记是否正在拖动事件
     private refreshPendingDuringDrag: boolean = false; // 标记拖动期间是否有未处理的刷新请求
     private isRefreshingEvents: boolean = false; // 标记是否正在刷新事件，防止并发执行
     private refreshPending: boolean = false; // 标记是否有被挂起的刷新请求
     private refreshPendingForce: boolean = false; // 挂起刷新请求时是否强制刷新
+    private refreshPendingIncremental: boolean = true; // 合并请求中只要有一次完整刷新，就不能降级
     private lastRefreshedStart: number | null = null;
     private lastRefreshedEnd: number | null = null;
     private lastRefreshedViewType: string | null = null;
@@ -2735,7 +2740,7 @@ export class CalendarView {
                 return;
             }
 
-            this.refreshEvents();
+            this.refreshEvents(false, true);
         };
         window.addEventListener('reminderUpdated', this.externalReminderUpdatedHandler);
 
@@ -7935,18 +7940,49 @@ export class CalendarView {
         this.calendar.unselect();
     }
 
-    private async refreshEvents(force: boolean = false) {
+    /** 事件数据之外，项目标签、分类图标与订阅顺序也会影响渲染。按 ID 复用本轮查询。 */
+    private getEventRenderKeys(events: any[]): Map<string, unknown> {
+        const projects = new Map<string, unknown>();
+        const categories = new Map<string, unknown>();
+        const keys = new Map<string, unknown>();
+        const today = getLogicalDateString();
+        for (const event of events) {
+            const props = event.extendedProps || {};
+            if (this.showCategoryAndProject && props.projectId && !projects.has(props.projectId)) {
+                const project = this.projectManager.getProjectById(props.projectId);
+                projects.set(props.projectId, project ? {
+                    name: project.name, color: this.projectManager.getProjectColor(props.projectId),
+                } : null);
+            }
+            const categoryIds = this.showCategoryAndProject ? String(props.categoryId || '').split(',').filter(Boolean) : [];
+            for (const id of categoryIds) {
+                if (categories.has(id)) continue;
+                const category = this.categoryManager.getCategoryById(id);
+                categories.set(id, category ? { name: category.name, icon: category.icon } : null);
+            }
+            keys.set(String(event.id ?? ''), {
+                today,
+                project: projects.get(props.projectId),
+                categories: categoryIds.map(id => categories.get(id)),
+                subscriptionOrder: this.subscriptionOrderMap.get(props.subscriptionId),
+            });
+        }
+        return keys;
+    }
+
+    private async refreshEvents(force: boolean = false, incremental: boolean = false) {
+        if (this.disposed) return;
+        this.refreshVersion++;
+        this.refreshPending = true;
+        this.refreshPendingForce ||= force;
+        this.refreshPendingIncremental &&= incremental;
         if (this.isDragging) {
             this.refreshPendingDuringDrag = true;
             return;
         }
 
-        // 如果当前正在刷新，只标记一个挂起的请求，避免并发执行
-        if (this.isRefreshingEvents) {
-            this.refreshPending = true;
-            this.refreshPendingForce = force;
-            return;
-        }
+        // 加载中的请求使旧结果失效，结束后只处理合并后的最新请求。
+        if (this.isRefreshingEvents) return;
 
         // 清除之前的刷新超时
         if (this.refreshTimeout) {
@@ -7955,19 +7991,24 @@ export class CalendarView {
 
         // 使用防抖机制，避免频繁刷新
         this.refreshTimeout = window.setTimeout(async () => {
+            this.refreshTimeout = null;
+            if (this.disposed) return;
             if (this.isDragging) {
                 this.refreshPendingDuringDrag = true;
                 return;
             }
 
             // 再次检查，因为 setTimeout 期间可能已经有其他刷新在执行
-            if (this.isRefreshingEvents) {
-                this.refreshPending = true;
-                this.refreshPendingForce = force;
-                return;
-            }
+            if (this.isRefreshingEvents) return;
 
+            const version = this.refreshVersion;
+            const readForce = this.refreshPendingForce;
+            const dataOnly = this.refreshPendingIncremental;
+            this.refreshPending = false;
+            this.refreshPendingForce = false;
+            this.refreshPendingIncremental = true;
             this.isRefreshingEvents = true;
+            const isCurrent = () => !this.disposed && version === this.refreshVersion;
 
             // 1. 记录当前所有滚动容器的位置 (特别是月视图或时间轴视图中的滚动条)
             const scrollerStates = Array.from(this.container.querySelectorAll('.fc-scroller')).map((el: HTMLElement) => ({
@@ -7983,27 +8024,22 @@ export class CalendarView {
                 }
 
                 // 先获取新的事件数据
-                const events = await this.getEvents(force);
-
-                // 清除所有现有事件和事件源
-                this.calendar.removeAllEvents();
-                this.calendar.removeAllEventSources();
-
-                // 批量添加事件（比逐个添加更高效）
-                if (events.length > 0) {
-                    this.calendar.addEventSource(events);
-                }
+                const events = await this.getEvents(readForce);
+                if (!isCurrent()) return;
+                const changed = this.eventReconciler.sync(this.calendar, events, dataOnly, this.getEventRenderKeys(events));
 
                 // 强制重新渲染日历并更新大小
-                if (this.isCalendarVisible()) {
+                if (changed && this.isCalendarVisible()) {
                     this.calendar.updateSize();
-                    this.calendar.render();
+                    // FullCalendar 的 render() 会强制重跑所有自定义内容；数据变化由事件 API 自动绘制。
+                    if (!dataOnly) this.calendar.render();
 
                     // 2. 恢复滚动位置
                     // 注意：FullCalendar 重新渲染可能会保留部分 DOM 结构，如果 el 还在文档中则直接恢复
                     // 如果 DOM 被完全销毁并重建，则需要通过索引或类名重新匹配。
                     // 实践中 FC v6 调用 render() 往往会重用 scroller 容器。
                     requestAnimationFrame(() => {
+                        if (!isCurrent()) return;
                         // 如果最近刚刚点击了"今天"按钮（2秒内），则不要恢复之前的滚动位置
                         // 防止滚动到"今天"后被重置回之前的位置
                         if (Date.now() - this.lastNavigatedToTodayAt < 2000) {
@@ -8038,12 +8074,11 @@ export class CalendarView {
                 console.error("Failed to refresh events:", error);
             } finally {
                 this.isRefreshingEvents = false;
-                const pending = this.refreshPending;
-                const pendingForce = this.refreshPendingForce;
-                this.refreshPending = false;
-                this.refreshPendingForce = false;
-                if (pending) {
-                    this.refreshEvents(pendingForce);
+                if (this.refreshPending && !this.disposed) {
+                    // 旧请求未提交时，强制读取或完整渲染的要求必须传给下一轮。
+                    this.refreshPendingForce ||= readForce;
+                    this.refreshPendingIncremental &&= dataOnly;
+                    void this.refreshEvents(this.refreshPendingForce, this.refreshPendingIncremental);
                 }
             }
         }, 100); // 100ms 防抖延迟
@@ -8546,7 +8581,7 @@ export class CalendarView {
         } catch (error) {
             console.error("Failed to get event data:", error);
             showMessage(i18n("loadReminderDataFailed"));
-            return [];
+            throw error;
         }
     }
 
@@ -10963,6 +10998,10 @@ export class CalendarView {
 
     // 添加销毁方法
     destroy() {
+        this.disposed = true;
+        this.refreshVersion++;
+        this.refreshPending = false;
+        this.eventReconciler.clear();
         // 清理提示框显示延迟超时
         if (this.tooltipShowTimeout) {
             clearTimeout(this.tooltipShowTimeout);
