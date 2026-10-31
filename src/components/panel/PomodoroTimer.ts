@@ -4357,7 +4357,6 @@ export class PomodoroTimer {
             display: none;
             width: 100%;
             height: 100%;
-            align-items: center;
             position: relative;
             z-index: 2;
         `;
@@ -4375,16 +4374,6 @@ export class PomodoroTimer {
         this.minimizedTitle.className = 'pomodoro-minimized-title';
         this.minimizedTitle.style.cssText = `
             display: none;
-            font-size: 10px;
-            font-weight: 500;
-            color: var(--b3-theme-on-surface);
-            opacity: 0.6;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            margin-bottom: 2px;
-            pointer-events: none;
-            width: 100%;
         `;
 
         const minimizedTopRow = document.createElement('div');
@@ -4467,7 +4456,6 @@ export class PomodoroTimer {
         minimizedActions.appendChild(this.minimizedStopBtn);
         minimizedTopRow.appendChild(this.minimizedTimeDisplay);
         minimizedTopRow.appendChild(minimizedActions);
-        minimizedInfo.appendChild(this.minimizedTitle);
         minimizedInfo.appendChild(minimizedTopRow);
         minimizedInfo.appendChild(minimizedProgressTrack);
         minimizedBarLayout.appendChild(this.minimizedModeBtn);
@@ -4511,6 +4499,7 @@ export class PomodoroTimer {
         miniCard.appendChild(this.minimizedBg);
         miniCard.appendChild(this.minimizedOverlay);
         miniCard.appendChild(this.minimizedIcon);
+        miniCard.appendChild(this.minimizedTitle);
         miniCard.appendChild(minimizedBarLayout);
         miniCard.appendChild(this.restoreBtn);
         this.minimizedView.appendChild(miniCard);
@@ -4520,7 +4509,7 @@ export class PomodoroTimer {
             this.restoreBtn.style.display = 'flex';
         });
         this.minimizedView.addEventListener('mouseleave', () => {
-            this.restoreBtn.style.display = 'none';
+            this.restoreBtn.style.removeProperty('display');
         });
 
         // 为最小化视图添加拖拽支持
@@ -11897,6 +11886,10 @@ document.body.classList.remove('mini-mode');
         this.container.classList.remove('minimized-style-ring', 'minimized-style-horizontal', 'minimized-style-minimal');
 
         const style = this.getMiniWindowStyle();
+        // DOM 模式使用与独立窗口相同的横条尺寸，避免按手机视口计算 mini 内部比例。
+        const { width, height } = this.resolveMiniWindowBounds();
+        this.container.style.setProperty('--pomodoro-mini-width', `${width}px`);
+        this.container.style.setProperty('--pomodoro-mini-height', `${height}px`);
         if (style === 'horizontal') {
             this.container.classList.add('minimized-style-horizontal');
         } else if (style === 'minimal') {
@@ -11961,7 +11954,7 @@ document.body.classList.remove('mini-mode');
         const style = this.getMiniWindowStyle();
         const defaults = {
             ring: { width: 50, height: 50 },
-            horizontal: { width: 150, height: 28 },
+            horizontal: { width: 150, height: 32 },
             minimal: { width: 130, height: 22 }
         };
         const fallback = defaults[style];
