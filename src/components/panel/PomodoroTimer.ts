@@ -3045,7 +3045,7 @@ export class PomodoroTimer {
             e.preventDefault();
             e.stopPropagation();
             this.hideSwitchMenu();
-            this.editTime(true);
+            this.editTime();
         });
         this.initMenuItemHoverEffects(editDurationBtn);
 
@@ -5201,7 +5201,7 @@ export class PomodoroTimer {
         menu.append(new MenuItem({
             label: `✏️ ${i18n('pomodoroEditDuration')}`,
             enabled: !(this.isCountUp && this.isWorkPhase),
-            click: () => this.editTime(true)
+            click: () => this.editTime()
         }));
         menu.append(new MenuItem({
             label: i18n('pomodoroSettings') || '番茄钟设置',
@@ -7174,10 +7174,10 @@ export class PomodoroTimer {
         }
     }
 
-    private editTime(useOverlay: boolean = false) {
+    private editTime() {
         // 如果是BrowserWindow模式，使用专门的编辑方法
         if (!this.isTabMode && this.container && typeof (this.container as any).webContents !== 'undefined') {
-            this.editTimeInBrowserWindow(this.container as any, useOverlay);
+            this.editTimeInBrowserWindow(this.container as any);
             return;
         }
 
@@ -7392,7 +7392,7 @@ export class PomodoroTimer {
     /**
      * 在BrowserWindow中编辑时间
      */
-    private editTimeInBrowserWindow(window: any, useOverlay: boolean = false) {
+    private editTimeInBrowserWindow(window: any) {
         if (!window || window.isDestroyed()) {
             return;
         }
@@ -7418,6 +7418,11 @@ export class PomodoroTimer {
             currentTimeString = `${currentMinutes.toString().padStart(2, '0')}:${currentSeconds.toString().padStart(2, '0')}`;
         }
 
+        // Mini 模式的时间区域不可见，展开后使用与双击相同的行内编辑器。
+        if (this.isMiniMode) {
+            this.toggleBrowserWindowMiniMode(window);
+        }
+
         const editScript = `
             (function() {
                 const existingInput = document.getElementById('pomodoro-time-input');
@@ -7429,8 +7434,7 @@ export class PomodoroTimer {
                 const timeDisplay = document.getElementById('timeDisplay');
                 if (!timeDisplay) return;
 
-                const useOverlay = ${useOverlay};
-                const parent = useOverlay ? document.body : timeDisplay.parentNode;
+                const parent = timeDisplay.parentNode;
                 const input = document.createElement('input');
                 input.id = 'pomodoro-time-input';
                 input.type = 'text';
@@ -7452,13 +7456,8 @@ export class PomodoroTimer {
                     -webkit-app-region: no-drag;
                 \`;
 
-                if (useOverlay) {
-                    // 菜单入口使用浮动输入框，兼容 Mini 和隐藏时间显示的紧凑布局。
-                    input.style.cssText += 'position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10001;';
-                    parent.appendChild(input);
-                } else {
-                    parent.replaceChild(input, timeDisplay);
-                }
+                parent.replaceChild(input, timeDisplay);
+                if (typeof applyNormalResponsiveLayout === 'function') applyNormalResponsiveLayout();
                 input.focus();
                 input.select();
 
@@ -7471,8 +7470,8 @@ export class PomodoroTimer {
                     if (input.parentNode !== parent) return;
 
                     const inputValue = input.value.trim();
-                    if (useOverlay) input.remove();
-                    else parent.replaceChild(timeDisplay, input);
+                    parent.replaceChild(timeDisplay, input);
+                    if (typeof applyNormalResponsiveLayout === 'function') applyNormalResponsiveLayout();
 
                     // 通知主进程应用新时间
                     require('electron').ipcRenderer.send('pomodoro-time-edit-${window.id}', inputValue);
@@ -7482,8 +7481,8 @@ export class PomodoroTimer {
                     if (isEditingFinished) return;
                     isEditingFinished = true;
                     if (input.parentNode === parent) {
-                        if (useOverlay) input.remove();
-                        else parent.replaceChild(timeDisplay, input);
+                        parent.replaceChild(timeDisplay, input);
+                        if (typeof applyNormalResponsiveLayout === 'function') applyNormalResponsiveLayout();
                     }
                     require('electron').ipcRenderer.send('pomodoro-time-edit-${window.id}', null);
                 };
@@ -10621,7 +10620,7 @@ document.body.classList.remove('docked-mode');
         <button class="menu-item" onclick="callMethod('startWorkTime')">💪 ${workText}</button>
         <button class="menu-item" onclick="callMethod('startShortBreak')">🍵 ${shortBreakText}</button>
         <button class="menu-item" onclick="callMethod('startLongBreak')">🧘 ${longBreakText}</button>
-        <button class="menu-item" id="editDurationMenuItem" onclick="callMethod('editTime', true)" ${currentState.isCountUp && currentState.isWorkPhase ? 'disabled' : ''}>✏️ ${i18n('pomodoroEditDuration')}</button>
+        <button class="menu-item" id="editDurationMenuItem" onclick="callMethod('editTime')" ${currentState.isCountUp && currentState.isWorkPhase ? 'disabled' : ''}>✏️ ${i18n('pomodoroEditDuration')}</button>
         <button class="menu-item menu-item-settings" onclick="callMethod('openPomodoroSettings')">${i18n('pomodoroSettings') || '番茄钟设置'}</button>
     </div>
     <div class="volume-menu" id="volumeMenu">
@@ -10928,12 +10927,13 @@ document.body.classList.remove('docked-mode');
 
             let hideStats = width < 220 || (height - titlebarHeight - eventHeight - contentBuffer) < 132;
             let availableHeight = height - titlebarHeight - eventHeight - contentBuffer - (hideStats ? 0 : statsReserve);
-            let hideTime = width < (horizontalPadding + preferredRingSize + minTimeInfoWidth + compactGap) || availableHeight < 92;
+            const isEditingTime = !!document.getElementById('pomodoro-time-input');
+            let hideTime = !isEditingTime && (width < (horizontalPadding + preferredRingSize + minTimeInfoWidth + compactGap) || availableHeight < 92);
             let availableWidth = width - horizontalPadding - (hideTime ? 0 : (minTimeInfoWidth + compactGap));
 
             let ringSize = Math.min(maxRingSize, availableWidth, availableHeight);
 
-            if (!hideTime && ringSize < preferredRingSize) {
+            if (!isEditingTime && !hideTime && ringSize < preferredRingSize) {
                 hideTime = true;
                 availableWidth = width - horizontalPadding;
                 ringSize = Math.min(maxRingSize, availableWidth, availableHeight);
@@ -10944,7 +10944,7 @@ document.body.classList.remove('docked-mode');
                 availableHeight = height - titlebarHeight - eventHeight - contentBuffer;
                 ringSize = Math.min(maxRingSize, availableWidth, availableHeight);
 
-                if (!hideTime && ringSize < preferredRingSize) {
+                if (!isEditingTime && !hideTime && ringSize < preferredRingSize) {
                     hideTime = true;
                     availableWidth = width - horizontalPadding;
                     ringSize = Math.min(maxRingSize, availableWidth, availableHeight);
@@ -11641,7 +11641,7 @@ document.body.classList.remove('docked-mode');
                     this.showStatsPanel();
                     break;
                 case 'editTime':
-                    this.editTime(args[0] === true);
+                    this.editTime();
                     break;
                 case 'toggleBackgroundAudio':
                     this.toggleBackgroundAudio();
