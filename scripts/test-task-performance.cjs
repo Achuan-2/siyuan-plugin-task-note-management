@@ -21,6 +21,7 @@ function load(relative) {
     return exports;
 }
 const { TaskHierarchyIndex } = load('src/utils/taskHierarchy.ts');
+const { ReminderPomodoroStatsSnapshot } = load('src/utils/reminderPomodoroStats.ts');
 const { PomodoroRecordManager } = load('src/components/dataManager/pomodoroRecord.ts');
 function fixture(tasks, sessions = []) {
     let reads = 0;
@@ -147,6 +148,92 @@ test('多组有下划线 ID、重复实例和父子关系的数据与旧实现�
             sessions.push(session(id, { duration: i + 1 }));
         }
         await compareWithExisting(tasks, undefined, sessions);
+    }
+});
+
+test('缺失父任务的虚拟根、投影实例和树外显式实例仍与旧统计一致', async () => {
+    const tasks = {
+        child: { id: 'child', parentId: 'missing' },
+        series: { id: 'series', repeat: { enabled: true } },
+        [`plain_${today}`]: { id: `plain_${today}` },
+        [`ghost_${today}`]: { id: `ghost_${today}`, parentId: `series_${today}`, originalId: 'child', isRepeatInstance: true },
+    };
+    await compareWithExisting(tasks, [
+        { id: 'missing' }, { id: 'plain' },
+        { id: `series_${today}`, originalId: 'series', isRepeatInstance: true },
+    ], [session('missing'), session('child'), session(`plain_${today}`), session(`series_${today}`), session(`ghost_${today}`)]);
+});
+
+test('实例既在后代树中又由重复规则构造时只计一次，虚拟实例根也保持去重', async () => {
+    const tasks = {
+        root: { id: 'root', repeat: { enabled: true } },
+        [`root_${today}`]: { id: `root_${today}`, parentId: 'root', originalId: 'root', isRepeatInstance: true },
+        child: { id: 'child', parentId: 'root', repeat: { enabled: true } },
+        [`child_${today}`]: { id: `child_${today}`, parentId: 'root', originalId: 'child', isRepeatInstance: true },
+    };
+    await compareWithExisting(tasks, undefined, Object.keys(tasks).map(id => session(id)));
+    const virtual = { series: { id: 'series', parentId: `series_${today}`, repeat: { enabled: true } } };
+    await compareWithExisting(virtual, [{ id: `series_${today}` }], [session('series'), session(`series_${today}`)]);
+});
+
+test('旧版实例时长共享 ID 或覆盖子任务 ID，仍按原 Set 与遍历规则处理', async () => {
+    const tasks = {
+        root: { id: 'root', repeat: { instancePomodoroCount: { child: 1, shared: 1 } } },
+        child: { id: 'child', parentId: 'root', repeat: { instancePomodoroCount: { shared: 2 } } },
+        grandchild: { id: 'grandchild', parentId: 'child' },
+    };
+    await compareWithExisting(tasks, undefined, [
+        session('root'), session('child'), session('grandchild', { duration: 50 }), session('shared', { duration: 10 }),
+    ]);
+});
+
+test('循环和自引用任务退回兼容遍历，不因汇总缓存重复计数', async () => {
+    await compareWithExisting({
+        a: { id: 'a', parentId: 'b' }, b: { id: 'b', parentId: 'a' },
+        self: { id: 'self', parentId: 'self' },
+    }, undefined, [session('a'), session('b'), session('self')]);
+});
+
+test('5000 层普通及重复任务直接读取汇总值，不再逐父任务展开子树', () => {
+    for (const repeat of [false, true]) {
+        const size = 5000;
+        const tasks = Array.from({ length: size }, (_, i) => ({
+            id: `task_${i}`, ...(i ? { parentId: `task_${i - 1}` } : {}),
+            ...(repeat ? { repeat: { enabled: true } } : {}),
+        }));
+        const rawTotals = Object.fromEntries(tasks.map(task => [task.id, { count: 1, duration: 25 }]));
+        let reads = 0;
+        const totals = new Proxy(rawTotals, { get: (target, key) => { reads++; return target[key]; } });
+        const todayTotals = new Map(tasks.map(task => [task.id, { count: 1, duration: 25 }]));
+        if (repeat) tasks.forEach(task => todayTotals.set(`${task.id}_${today}`, { count: 1, duration: 10 }));
+        const snapshot = new ReminderPomodoroStatsSnapshot(tasks, tasks, totals, todayTotals, today);
+        snapshot.hierarchy.descendantIds = () => assert.fail('逐父任务展开后代');
+        snapshot.localSubtree = () => assert.fail('逐父任务汇总本地子树');
+        for (let i = 0; i < size; i++) {
+            const stats = snapshot.resolve(tasks[i]);
+            assert.equal(stats.pomodoroCount, size - i);
+            assert.equal(stats.focusTime, (size - i) * 25);
+            assert.equal(stats.todayPomodoroCount, (size - i) * (repeat ? 2 : 1));
+            assert.equal(stats.todayFocusTime, (size - i) * (repeat ? 35 : 25));
+        }
+        assert.ok(reads < size * 5, `Expected linear total reads, got ${reads}`);
+    }
+});
+
+test('5000 层 ghost 实例共用子树汇总，同时保留各自系列统计', () => {
+    const size = 5000;
+    const tasks = Array.from({ length: size }, (_, i) => ({
+        id: `series_${i}_${today}`, originalId: `series_${i}`, isRepeatInstance: true,
+        ...(i ? { parentId: `series_${i - 1}_${today}` } : {}),
+    }));
+    const totals = Object.fromEntries(tasks.map(task => [task.id, { count: 1, duration: 25 }]));
+    const snapshot = new ReminderPomodoroStatsSnapshot(tasks, [], totals, new Map(Object.entries(totals)), today);
+    snapshot.hierarchy.descendantIds = () => assert.fail('重复展开 ghost 子树');
+    for (let i = 0; i < size; i++) {
+        const stats = snapshot.resolve(tasks[i]);
+        assert.equal(stats.pomodoroCount, size - i);
+        assert.equal(stats.todayPomodoroCount, size - i);
+        assert.equal(stats.totalRepeatingPomodoroCount, 1);
     }
 });
 
