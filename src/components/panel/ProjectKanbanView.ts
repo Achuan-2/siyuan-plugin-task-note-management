@@ -1415,7 +1415,7 @@ export class ProjectKanbanView {
         }
 
         // 自定义分组看板：页签显示模式
-        displaySettingsDropdown.appendChild(createSwitchItem(i18n("customGroupTabsMode") || "分组看板使用页签显示", this.customGroupTabsMode, async (checked) => {
+        displaySettingsDropdown.appendChild(createSwitchItem(i18n("customGroupTabsMode") || "分组使用页签显示", this.customGroupTabsMode, async (checked) => {
             this.customGroupTabsMode = checked;
             if (!checked) {
                 this.activeCustomGroupTabId = null;
@@ -1476,7 +1476,7 @@ export class ProjectKanbanView {
         displaySettingsDropdown.appendChild(groupTabCountSetting);
 
         // 状态看板：页签显示模式
-        displaySettingsDropdown.appendChild(createSwitchItem(i18n("statusTabsMode") || "状态看板使用页签显示", this.statusTabsMode, async (checked) => {
+        displaySettingsDropdown.appendChild(createSwitchItem(i18n("statusTabsMode") || "状态使用页签显示", this.statusTabsMode, async (checked) => {
             this.statusTabsMode = checked;
             if (!checked) {
                 this.activeStatusTabId = null;
