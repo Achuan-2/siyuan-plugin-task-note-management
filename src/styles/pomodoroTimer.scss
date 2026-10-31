@@ -411,6 +411,32 @@
                 height: 16px;
                 font-size: 9px;
             }
+
+            &.is-mobile {
+                height: max(var(--pomodoro-mini-height, 32px), 36px) !important;
+
+                .pomodoro-minimized-title {
+                    font-size: 11px;
+                }
+
+                .pomodoro-minimized-time {
+                    font-size: 14px;
+                }
+
+                .pomodoro-minimized-mode-btn,
+                .pomodoro-minimized-action-btn {
+                    width: 16px;
+                    height: 16px;
+                }
+
+                .pomodoro-minimized-mode-btn {
+                    font-size: 12px;
+                }
+
+                .pomodoro-minimized-action-btn {
+                    font-size: 10px;
+                }
+            }
         }
 
         &.minimized-style-minimal {
