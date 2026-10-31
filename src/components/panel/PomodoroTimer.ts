@@ -406,9 +406,13 @@ export class PomodoroTimer {
 
         // 获取BrowserWindow窗口位置信息（如果存在）
         let windowBounds: { x: number; y: number; width: number; height: number } | undefined;
+        let isFullscreen = this.isFullscreen;
         try {
             if (PomodoroTimer.browserWindowInstance && !PomodoroTimer.browserWindowInstance.isDestroyed()) {
-                windowBounds = PomodoroTimer.browserWindowInstance.getBounds();
+                const win = PomodoroTimer.browserWindowInstance;
+                isFullscreen = win.isFullScreen?.() || false;
+                // 继承任务状态时保留全屏前的窗口位置，避免把屏幕尺寸写入迷你窗口缓存。
+                windowBounds = isFullscreen ? win.getNormalBounds() : win.getBounds();
             }
         } catch (e) {
             console.warn("[PomodoroTimer] Cannot get window position:", e);
@@ -444,6 +448,7 @@ export class PomodoroTimer {
             windowBounds: windowBounds, // 窗口位置信息
             isDocked: this.isDocked, // 新增：吸附模式状态
             isMiniMode: this.isMiniMode, // 新增：迷你模式状态
+            isFullscreen,
             isPinned: this.isAlwaysOnTopPinned, // 是否置顶
             normalWindowBounds: this.normalWindowBounds, // 新增：保存的正常窗口位置
             miniWindowBounds: this.miniWindowBounds, // 新增：保存的迷你窗口位置
@@ -5217,6 +5222,12 @@ export class PomodoroTimer {
         }));
 
         const pomodoroWindow = PomodoroTimer.browserWindowInstance;
+        menu.append(new MenuItem({
+            label: `⛶ ${pomodoroWindow?.isFullScreen?.() ? i18n('exitFullscreen') : i18n('fullscreenMode')}`,
+            accelerator: 'F11',
+            enabled: !this.isDocked,
+            click: () => this.toggleFullscreen()
+        }));
         if (pomodoroWindow && !pomodoroWindow.isDestroyed()) {
             menu.popup({ window: pomodoroWindow });
         } else {
@@ -8367,11 +8378,44 @@ export class PomodoroTimer {
     }
 
     private toggleFullscreen() {
+        const win = this.container as any;
+        if (win?.webContents && !win.isDestroyed()) {
+            this.setBrowserWindowFullscreen(!win.isFullScreen());
+            return;
+        }
         if (this.isFullscreen) {
             this.exitFullscreen();
         } else {
             this.enterFullscreen();
         }
+    }
+
+    private setBrowserWindowFullscreen(fullscreen: boolean) {
+        const win = this.container as any;
+        if (!win?.webContents || win.isDestroyed() || win.isFullScreen() === fullscreen || (fullscreen && this.isDocked)) {
+            return;
+        }
+        // 圆环 mini 的正方形约束不能带入全屏，否则宽屏会被限制为正方形。
+        if (fullscreen) win.setAspectRatio(0);
+        win.setFullScreen(fullscreen);
+    }
+
+    private setupBrowserWindowFullscreen(pomodoroWindow: any) {
+        // 热重载后复用的旧窗口也需要解除创建时的 fullscreenable 限制。
+        pomodoroWindow.setFullScreenable(true);
+        const syncFullscreen = () => {
+            const timer = PomodoroTimer.browserWindowTimer;
+            if (!timer || pomodoroWindow.isDestroyed() || PomodoroTimer.browserWindowInstance !== pomodoroWindow) return;
+            timer.isFullscreen = pomodoroWindow.isFullScreen();
+            if (!timer.isFullscreen) {
+                pomodoroWindow.setAspectRatio(timer.isMiniMode && timer.getMiniWindowStyle() === 'ring' ? 1 : 0);
+            }
+            timer.updateBrowserWindowDisplay(pomodoroWindow);
+        };
+        pomodoroWindow.removeAllListeners('enter-full-screen');
+        pomodoroWindow.removeAllListeners('leave-full-screen');
+        pomodoroWindow.on('enter-full-screen', syncFullscreen);
+        pomodoroWindow.on('leave-full-screen', syncFullscreen);
     }
 
     /**
@@ -8646,6 +8690,10 @@ export class PomodoroTimer {
     }
 
     private exitFullscreen() {
+        if ((this.container as any)?.webContents) {
+            this.setBrowserWindowFullscreen(false);
+            return;
+        }
         this.isFullscreen = false;
         this.container.classList.remove('fullscreen');
 
@@ -8959,7 +9007,7 @@ export class PomodoroTimer {
                 hasShadow: !this.isDocked,
                 resizable: !this.isDocked,
                 maximizable: false,
-                fullscreenable: false,
+                fullscreenable: true,
                 minWidth: 40,
                 minHeight: 40,
                 transparent: transparent,
@@ -9022,6 +9070,7 @@ export class PomodoroTimer {
             // 保存窗口实例到静态变量
             PomodoroTimer.browserWindowInstance = pomodoroWindow;
             PomodoroTimer.browserWindowTimer = this;
+            this.setupBrowserWindowFullscreen(pomodoroWindow);
 
             pomodoroWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(htmlContent));
 
@@ -9097,7 +9146,7 @@ export class PomodoroTimer {
 
                 pomodoroWindow.removeAllListeners('moved');
                 pomodoroWindow.on('moved', () => {
-                    if (!pomodoroWindow || pomodoroWindow.isDestroyed() || this.isDocked) return;
+                    if (!pomodoroWindow || pomodoroWindow.isDestroyed() || this.isDocked || pomodoroWindow.isFullScreen()) return;
                     try {
                         const bounds = pomodoroWindow.getBounds();
                         if (this.isMiniMode) {
@@ -9581,7 +9630,7 @@ document.body.classList.remove('docked-mode');
                 // 恢复孤儿窗口后也要把移动位置写回新实例，避免继续引用旧插件实例。
                 pomodoroWindow.removeAllListeners('moved');
                 pomodoroWindow.on('moved', () => {
-                    if (!pomodoroWindow || pomodoroWindow.isDestroyed() || this.isDocked) return;
+                    if (!pomodoroWindow || pomodoroWindow.isDestroyed() || this.isDocked || pomodoroWindow.isFullScreen()) return;
                     try {
                         const bounds = pomodoroWindow.getBounds();
                         if (this.isMiniMode) {
@@ -10459,6 +10508,129 @@ document.body.classList.remove('docked-mode');
             font-size: clamp(6px, calc(var(--mini-h) * 0.18), 9px);
         }
         
+        .fullscreen-exit-btn {
+            display: none;
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 100;
+            width: 44px;
+            height: 44px;
+            border: 1px solid ${borderColor};
+            border-radius: 12px;
+            background: ${surfaceColor};
+            color: ${textColor};
+            font-size: 26px;
+            cursor: pointer;
+        }
+        body.fullscreen-mode,
+        body.fullscreen-mode.mini-mode {
+            background: ${bgColor} !important;
+        }
+        body.fullscreen-mode,
+        body.fullscreen-mode * {
+            -webkit-app-region: no-drag !important;
+        }
+        body.fullscreen-mode .fullscreen-exit-btn {
+            display: block;
+        }
+        body.fullscreen-mode:not(.mini-mode) .titlebar-buttons {
+            margin-right: 68px;
+        }
+        body.fullscreen-mode.mini-mode .pomodoro-content {
+            flex: 1;
+            height: 100vh;
+        }
+        body.fullscreen-mode.mini-mode.mini-style-ring .progress-container {
+            width: 72vmin;
+            height: 72vmin;
+            max-width: none;
+            max-height: none;
+        }
+        body.fullscreen-mode.mini-mode.mini-style-ring .pomodoro-status-icon {
+            font-size: 22vmin;
+        }
+        body.fullscreen-mode.mini-mode.mini-style-ring .circle-control-btn {
+            width: 20vmin;
+            height: 20vmin;
+            font-size: 9vmin;
+        }
+        body.fullscreen-mode.mini-mode:not(.mini-style-ring) .mini-layout {
+            flex: 0 1 auto;
+            width: min(90vw, 1400px);
+        }
+        body.fullscreen-mode.mini-mode.mini-style-bar .mini-layout {
+            height: clamp(180px, 30vh, 340px);
+        }
+        body.fullscreen-mode.mini-mode.mini-style-bar .mini-card {
+            border-radius: 24px;
+            padding: 64px 28px 24px;
+            gap: 24px;
+        }
+        body.fullscreen-mode.mini-mode.mini-style-bar .mini-task-title {
+            top: 20px;
+            left: 28px;
+            right: 28px;
+            font-size: clamp(20px, 3vmin, 36px);
+        }
+        body.fullscreen-mode.mini-mode.mini-style-bar .mini-emoji-btn {
+            width: clamp(56px, 9vmin, 112px);
+            height: clamp(56px, 9vmin, 112px);
+            font-size: clamp(36px, 6vmin, 72px);
+            border-radius: 16px;
+        }
+        body.fullscreen-mode.mini-mode.mini-style-bar .mini-bar-center {
+            gap: 16px;
+        }
+        body.fullscreen-mode.mini-mode.mini-style-bar .mini-bar-header {
+            gap: 24px;
+        }
+        body.fullscreen-mode.mini-mode.mini-style-bar .mini-time-label {
+            font-size: clamp(42px, 8vmin, 96px);
+        }
+        body.fullscreen-mode.mini-mode .mini-progress-track {
+            height: clamp(8px, 1.2vmin, 14px);
+        }
+        body.fullscreen-mode.mini-mode.mini-style-bar .mini-bar-actions {
+            gap: 12px;
+        }
+        body.fullscreen-mode.mini-mode.mini-style-bar .mini-action-btn {
+            width: clamp(44px, 6vmin, 72px);
+            height: clamp(44px, 6vmin, 72px);
+            font-size: clamp(24px, 3vmin, 36px);
+            border-radius: 12px;
+        }
+        body.fullscreen-mode.mini-mode.mini-style-minimal .mini-layout {
+            height: clamp(100px, 16vh, 180px);
+        }
+        body.fullscreen-mode.mini-mode.mini-style-minimal .mini-card {
+            padding: 16px 24px;
+        }
+        body.fullscreen-mode.mini-mode.mini-style-minimal .mini-bar-center {
+            padding-top: 44px;
+        }
+        body.fullscreen-mode.mini-mode.mini-style-minimal .mini-minimal-actions {
+            top: 8px;
+            gap: 12px;
+            opacity: 1;
+            pointer-events: auto;
+        }
+        body.fullscreen-mode.mini-mode.mini-style-minimal .mini-action-btn {
+            width: 36px;
+            height: 36px;
+            font-size: 20px;
+            border-radius: 8px;
+        }
+        body.fullscreen-mode.mini-mode .mini-restore-btn {
+            position: fixed;
+            top: auto;
+            bottom: 20px;
+            right: 20px;
+            width: 44px;
+            height: 44px;
+            font-size: 24px;
+        }
+
         /* 吸附模式样式 */
         body.docked-mode { background: transparent !important; overflow: hidden; }
         body.docked-mode .custom-titlebar,
@@ -10502,7 +10674,8 @@ document.body.classList.remove('docked-mode');
     </style>
 </head>
 </head>
-<body class="${this.isDocked ? 'docked-mode' : ''} ${this.isMiniMode ? `mini-mode ${initialStyleClass}` : ''}">
+<body class="${this.isDocked ? 'docked-mode' : ''} ${this.isMiniMode ? `mini-mode ${initialStyleClass}` : ''} ${currentState.isFullscreen ? 'fullscreen-mode' : ''}">
+    <button class="fullscreen-exit-btn" onclick="callMethod('exitFullscreen')" title="${i18n('exitFullscreen')} (Esc)">⛶</button>
     <div class="custom-titlebar">
         <div class="titlebar-left">
             <button class="titlebar-btn" id="miniModeBtn" onclick="toggleMiniMode()" title="${miniModeTitle}">
@@ -11024,6 +11197,7 @@ document.body.classList.remove('docked-mode');
 
         function render() {
             if (!localState) return;
+            document.body.classList.toggle('fullscreen-mode', !!localState.isFullscreen);
             applyMiniStyleClass();
             applyMiniResponsiveVars();
             applyNormalResponsiveLayout();
@@ -11293,6 +11467,15 @@ document.body.classList.remove('docked-mode');
             applyMiniResponsiveVars();
             render();
         });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && localState.isFullscreen) {
+                event.preventDefault();
+                callMethod('exitFullscreen');
+            } else if (event.key === 'F11' && !event.repeat) {
+                event.preventDefault();
+                callMethod('toggleFullscreen');
+            }
+        });
 
     </script>
 </body>
@@ -11309,6 +11492,7 @@ document.body.classList.remove('docked-mode');
         }
 
         try {
+            this.setupBrowserWindowFullscreen(pomodoroWindow);
             const currentState = this.getCurrentState();
             const actionChannel = `pomodoro-action-${pomodoroWindow.id}`;
             const controlChannel = `pomodoro-control-${pomodoroWindow.id}`;
@@ -11346,7 +11530,10 @@ document.body.classList.remove('docked-mode');
 
             // 加载完成后，根据当前实例的模式（迷你/吸附）修正窗口大小、bounds 和 DOM class
             try {
-                if (this.isMiniMode) {
+                if (pomodoroWindow.isFullScreen()) {
+                    // 重载内容或切换任务不能缩小全屏窗口，也不能重写全屏前的 bounds。
+                    pomodoroWindow.setAspectRatio(0);
+                } else if (this.isMiniMode) {
                     // 不要在复用/重载内容时缓存当前 bounds，避免把迷你尺寸误存为正常尺寸
                     try {
                         const bounds = pomodoroWindow.getBounds();
@@ -11579,6 +11766,12 @@ document.body.classList.remove('docked-mode');
                 case 'openPomodoroSettings':
                     this.openPomodoroSettings();
                     break;
+                case 'toggleFullscreen':
+                    this.toggleFullscreen();
+                    break;
+                case 'exitFullscreen':
+                    this.exitFullscreen();
+                    break;
                 case 'openRelatedNote':
                     this.openRelatedNote();
                     break;
@@ -11626,6 +11819,13 @@ document.body.classList.remove('docked-mode');
         }
 
         try {
+            if (pomodoroWindow.isFullScreen()) {
+                pomodoroWindow.once('leave-full-screen', () => {
+                    if (!pomodoroWindow.isDestroyed()) this.toggleBrowserWindowMiniMode(pomodoroWindow);
+                });
+                this.setBrowserWindowFullscreen(false);
+                return;
+            }
             // 如果窗口是最大化状态，先退出最大化
             if (pomodoroWindow.isMaximized && pomodoroWindow.isMaximized()) {
                 pomodoroWindow.unmaximize();
@@ -11795,6 +11995,13 @@ document.body.classList.remove('mini-mode');
         }
 
         try {
+            if (pomodoroWindow.isFullScreen()) {
+                pomodoroWindow.once('leave-full-screen', () => {
+                    if (!pomodoroWindow.isDestroyed()) this.toggleBrowserWindowDock(pomodoroWindow, _screen);
+                });
+                this.setBrowserWindowFullscreen(false);
+                return;
+            }
             if (!this.isDocked) {
                 // Entering docked mode -> Save current bounds
                 if (!pomodoroWindow.isMaximized()) {

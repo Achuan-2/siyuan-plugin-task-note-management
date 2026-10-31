@@ -697,6 +697,7 @@
     "pomodoroHintTitle": "Pomodoro Usage Introduction",
     "pomodoroHintDesc": "See my article <a href=\"https://mp.weixin.qq.com/s/SoZ0ccPc7kJTYfwBnB5IGw\" target=\"_blank\">\"In-depth Guide to Pomodoro Technique\"</a>",
     "fullscreenMode": "Fullscreen Mode",
+    "exitFullscreen": "Exit Fullscreen",
     "openInNewWindow": "Open in New Window",
     "pomodoroTimer": "Pomodoro Timer",
     "alwaysOnTop": "Always on Top",
