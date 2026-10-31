@@ -1,4 +1,5 @@
 import { Dialog, showMessage, confirm, openEmoji } from "siyuan";
+import { getDragHandleIcon } from "../../utils/dragHandleIcon";
 import { ProjectFolderManager, ProjectFolder } from "../dataManager/projectFolderManager";
 import { i18n } from "../../pluginInstance";
 
@@ -135,12 +136,8 @@ export class ProjectFolderManageDialog {
                     display: flex;
                     align-items: center;
                     margin-right: 4px;
-                }
-
-                .folder-drag-handle::before {
-                    content: "⋮⋮";
-                    font-size: 14px;
-                    line-height: 1;
+                    justify-content: center;
+                    flex-shrink: 0;
                 }
 
                 .folder-chevron {
@@ -293,7 +290,7 @@ export class ProjectFolderManageDialog {
         folderEl.dataset.folderId = folder.id;
         folderEl.style.paddingLeft = `${8 + depth * 6}px`;
         folderEl.innerHTML = `
-            <div class="folder-drag-handle ariaLabel" aria-label="${i18n("dragToSort")}"></div>
+            <div class="folder-drag-handle ariaLabel" aria-label="${i18n("dragToSort")}">${getDragHandleIcon()}</div>
             <button class="b3-button b3-button--text folder-chevron ${folder.collapsed ? 'is-collapsed' : ''} ${hasChildren ? '' : 'folder-chevron--empty'} ariaLabel" data-action="toggle" aria-label="${folder.collapsed ? i18n("expand") : i18n("collapse")}">
                 <svg><use xlink:href="#iconDown"></use></svg>
             </button>

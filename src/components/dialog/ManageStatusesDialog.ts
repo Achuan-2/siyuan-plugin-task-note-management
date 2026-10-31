@@ -1,4 +1,5 @@
 import { Dialog, showMessage, confirm } from "siyuan";
+import { getDragHandleIcon } from "../../utils/dragHandleIcon";
 import { i18n } from "../../pluginInstance";
 import { getLocalDateTimeString } from "../../utils/dateUtils";
 import { saveReminders } from "../../utils/icsSubscription";
@@ -172,11 +173,7 @@ export async function showManageKanbanStatusesDialog(view: any) {
             });
 
             const dragHandle = document.createElement('span');
-            dragHandle.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
-                <circle cx="9" cy="5" r="1.8"/><circle cx="15" cy="5" r="1.8"/>
-                <circle cx="9" cy="12" r="1.8"/><circle cx="15" cy="12" r="1.8"/>
-                <circle cx="9" cy="19" r="1.8"/><circle cx="15" cy="19" r="1.8"/>
-            </svg>`;
+            dragHandle.innerHTML = getDragHandleIcon();
             dragHandle.style.cssText = `
                 display: inline-flex;
                 align-items: center;

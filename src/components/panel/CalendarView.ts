@@ -1,4 +1,5 @@
 import { Calendar, formatDate, formatRange } from '@fullcalendar/core';
+import { getDragHandleIcon } from "../../utils/dragHandleIcon";
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import multiMonthPlugin from '@fullcalendar/multimonth';
@@ -12300,10 +12301,7 @@ export class CalendarView {
             this.dragHandleEl.style.boxShadow = '0 2px 4px rgba(0,0,0,0.15)';
             this.dragHandleEl.style.zIndex = '100';
 
-            // 胶囊形三条横线菜单图标
-            this.dragHandleEl.innerHTML = `
-                <svg style="width: 10px; height: 10px; fill: currentColor;"><use xlink:href="#iconMenu"></use></svg>
-            `;
+            this.dragHandleEl.innerHTML = getDragHandleIcon(10);
 
             // 加入提示
             this.dragHandleEl.classList.add('ariaLabel');

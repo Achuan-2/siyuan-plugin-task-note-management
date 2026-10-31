@@ -6,6 +6,7 @@
     import { showMessage, confirm } from 'siyuan';
     import { AVAILABLE_SORT_METHODS } from '../../utils/sortConfig';
     import type { SortCriterion } from '../../utils/sortConfig';
+    import { getDragHandleIcon } from '../../utils/dragHandleIcon';
 
     export let plugin: any;
     export let onFilterApplied: (filter: FilterConfig) => void;
@@ -1030,7 +1031,7 @@
                             <span
                                 class="drag-handle"
                             >
-                                ⋮⋮
+                                {@html getDragHandleIcon()}
                             </span>
                             <span class="filter-name-text">{filter.name}</span>
                             {#if filter.isBuiltIn}
@@ -1688,7 +1689,10 @@
     }
 
     .drag-handle {
-        cursor: move;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: grab;
         opacity: 0.35;
         margin-right: 4px;
         touch-action: none;

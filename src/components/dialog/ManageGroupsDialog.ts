@@ -1,4 +1,5 @@
 import { Dialog, showMessage, openEmoji } from "siyuan";
+import { getDragHandleIcon } from "../../utils/dragHandleIcon";
 import { i18n } from "../../pluginInstance";
 import { generateRandomColor } from "../../utils/uiUtils";
 import { BlockBindingDialog } from "./BlockBindingDialog";
@@ -414,12 +415,15 @@ export async function loadAndDisplayGroups(view: any, container: HTMLElement) {
 
             const dragHandle = document.createElement('span');
             dragHandle.className = 'group-drag-handle';
-            dragHandle.innerHTML = '⋮⋮';
+            dragHandle.innerHTML = getDragHandleIcon();
             dragHandle.style.cssText = `
-                font-size: 14px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
                 color: var(--b3-theme-on-surface);
                 opacity: 0.6;
-                cursor: move;
+                cursor: grab;
                 padding: 4px 6px;
                 margin-right: 8px;
                 border-radius: 4px;

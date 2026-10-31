@@ -1,4 +1,5 @@
 import { Dialog, showMessage, confirm, openEmoji } from "siyuan";
+import { getDragHandleIcon } from "../../utils/dragHandleIcon";
 import { CategoryManager, Category } from "../dataManager/categoryManager";
 import { i18n } from "../../pluginInstance";
 export class CategoryManageDialog {
@@ -117,17 +118,13 @@ export class CategoryManageDialog {
                     display: flex;
                     align-items: center;
                     margin-right: 12px;
+                    justify-content: center;
+                    flex-shrink: 0;
                     transition: color 0.2s ease;
                 }
                 
                 .category-drag-handle:hover {
                     color: #3498db;
-                }
-                
-                .category-drag-handle::before {
-                    content: "⋮⋮";
-                    font-size: 16px;
-                    line-height: 1;
                 }
                 
                 .category-info {
@@ -258,7 +255,7 @@ export class CategoryManageDialog {
         categoryEl.draggable = true;
         categoryEl.dataset.categoryId = category.id;
         categoryEl.innerHTML = `
-            <div class="category-drag-handle ariaLabel" aria-label="${i18n("dragToSort")}"></div>
+            <div class="category-drag-handle ariaLabel" aria-label="${i18n("dragToSort")}">${getDragHandleIcon()}</div>
             <div class="category-info">
                 <div class="category-visual">
                     <div class="category-icon" style="background-color: ${category.color};">

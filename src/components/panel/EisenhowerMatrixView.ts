@@ -1,4 +1,5 @@
 import { getFile, putFile, openBlock, getBlockByID, removeFile } from "../../api";
+import { getDragHandleIcon } from "../../utils/dragHandleIcon";
 import { getAllReminders, saveReminders } from "../../utils/icsSubscription";
 import { ProjectManager } from "../dataManager/projectManager";
 import { CategoryManager } from "../dataManager/categoryManager";
@@ -4116,7 +4117,7 @@ export class EisenhowerMatrixView {
                 item.setAttribute('data-project-id', project.id);
                 item.setAttribute('draggable', 'true');
                 item.innerHTML = `
-                    <span style="cursor: grab; color: var(--b3-theme-on-surface); opacity: 0.7;">⋮⋮</span>
+                    <span style="display: inline-flex; flex-shrink: 0; cursor: grab; color: var(--b3-theme-on-surface); opacity: 0.7;">${getDragHandleIcon()}</span>
                     <span>${project.name}</span>
                     <span style="color: var(--b3-theme-on-surface-light); font-size: 12px; margin-left: auto;">${this.getStatusDisplayName(project.status)}</span>
                 `;

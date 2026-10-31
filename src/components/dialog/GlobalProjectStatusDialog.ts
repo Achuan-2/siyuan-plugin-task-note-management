@@ -1,4 +1,5 @@
 import { Dialog, showMessage, confirm, openEmoji } from "siyuan";
+import { getDragHandleIcon } from "../../utils/dragHandleIcon";
 import { i18n } from "../../pluginInstance";
 
 interface GlobalKanbanStatusConfig {
@@ -227,11 +228,8 @@ export class GlobalProjectStatusDialog {
                     display: flex;
                     align-items: center;
                     margin-right: 10px;
-                }
-                .status-drag-handle::before {
-                    content: "⋮⋮";
-                    font-size: 16px;
-                    line-height: 1;
+                    justify-content: center;
+                    flex-shrink: 0;
                 }
                 .status-info {
                     display: flex;
@@ -318,7 +316,7 @@ export class GlobalProjectStatusDialog {
         el.draggable = true;
         el.dataset.statusId = status.id;
         el.innerHTML = `
-            <div class="status-drag-handle ariaLabel" aria-label="${i18n("dragHint") || "拖拽排序"}"></div>
+            <div class="status-drag-handle ariaLabel" aria-label="${i18n("dragHint") || "拖拽排序"}">${getDragHandleIcon()}</div>
             <div class="status-info">
                 <span class="status-color-dot" style="background: ${status.color};"></span>
                 <span class="status-icon">${status.icon || "📋"}</span>

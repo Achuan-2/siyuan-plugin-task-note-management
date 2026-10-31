@@ -1,4 +1,5 @@
 ﻿import { Dialog, showMessage, confirm, openEmoji } from "siyuan";
+import { getDragHandleIcon } from "../../utils/dragHandleIcon";
 import { StatusManager, Status } from "../dataManager/statusManager";
 import { i18n } from "../../pluginInstance";
 
@@ -120,9 +121,6 @@ export class StatusManageDialog {
                 .status-drag-handle:hover {
                     color: #3498db;
                 }
-                .status-manage-dialog .status-drag-handle::before {
-                    content: none;
-                }
                 .status-info {
                     display: flex;
                     align-items: center;
@@ -224,11 +222,7 @@ export class StatusManageDialog {
         statusEl.dataset.statusId = status.id;
         statusEl.innerHTML = `
             <div class="status-drag-handle ariaLabel" aria-label="${i18n("dragToSort")}">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
-                    <circle cx="9" cy="5" r="1.8"/><circle cx="15" cy="5" r="1.8"/>
-                    <circle cx="9" cy="12" r="1.8"/><circle cx="15" cy="12" r="1.8"/>
-                    <circle cx="9" cy="19" r="1.8"/><circle cx="15" cy="19" r="1.8"/>
-                </svg>
+                ${getDragHandleIcon()}
             </div>
             <div class="status-info">
                 <div class="status-icon">${status.icon || '📝'}</div>

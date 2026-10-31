@@ -1,4 +1,5 @@
 ﻿import { Dialog } from "siyuan";
+import { getDragHandleIcon } from "../../utils/dragHandleIcon";
 import { i18n } from "../../pluginInstance";
 import { SortCriterion, AVAILABLE_SORT_METHODS, getSortCriterionName } from "../../utils/sortConfig";
 
@@ -108,8 +109,8 @@ export class SortMenuDialog {
 
             // 拖拽手柄
             const dragHandle = document.createElement('span');
-            dragHandle.innerHTML = '☰';
-            dragHandle.style.cssText = 'cursor: move; opacity: 0.5; font-size: 12px;';
+            dragHandle.innerHTML = getDragHandleIcon();
+            dragHandle.style.cssText = 'display: inline-flex; align-items: center; flex-shrink: 0; cursor: grab; opacity: 0.5;';
 
             // 排序序号
             const orderNum = document.createElement('span');
