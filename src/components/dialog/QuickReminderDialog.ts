@@ -530,7 +530,7 @@ export class QuickReminderDialog {
     private singleDateDefaultRole: SingleDateRole = 'deadline'; // 单日期无关键词时默认识别目标
     private defaultProjectId?: string;
     private showKanbanStatus?: 'todo' | 'term' | 'none' = 'term'; // 看板状态显示模式，默认为 'term'
-    private defaultStatus?: 'short_term' | 'long_term' | 'doing' | 'todo' | 'completed'; // 默认任务状态
+    private defaultStatus?: string; // 默认任务状态，包含项目自定义状态 ID
     private defaultCustomGroupId?: string | null;
     private defaultMilestoneId?: string;
     private defaultCustomReminderTime?: string;
@@ -590,7 +590,7 @@ export class QuickReminderDialog {
             autoDetectDateTime?: boolean;
             defaultProjectId?: string;
             showKanbanStatus?: 'todo' | 'term' | 'none';
-            defaultStatus?: 'short_term' | 'long_term' | 'doing' | 'todo';
+            defaultStatus?: string;
             defaultCustomGroupId?: string | null;
             defaultMilestoneId?: string;
             defaultCustomReminderTime?: string;
@@ -3860,6 +3860,9 @@ export class QuickReminderDialog {
         this.bindEvents();
         await this.renderCategorySelector();
         await this.renderProjectSelector();
+        // 等待项目状态和分组加载完成后再初始化，避免临时内置状态覆盖自定义默认状态。
+        // 未选择项目时，也在这里填充内置状态。
+        this.updateKanbanStatusSelector();
         await this.renderHabitSelector();
         await this.renderPrioritySelector();
         await this.renderTagsSelector();
@@ -4015,19 +4018,7 @@ export class QuickReminderDialog {
             return '';
         }
 
-        // 如果没有加载kanbanStatuses，使用默认配置
-        if (this.currentKanbanStatuses.length === 0) {
-            // 延迟初始化默认配置
-            setTimeout(() => {
-                if (this.currentKanbanStatuses.length === 0) {
-                    const projectManager = ProjectManager.getInstance(this.plugin);
-                    this.currentKanbanStatuses = projectManager.getDefaultKanbanStatuses();
-                    this.updateKanbanStatusSelector();
-                }
-            }, 0);
-        }
-
-        // 返回一个占位符，稍后通过updateKanbanStatusSelector填充
+        // 返回占位符，项目选择器初始化完成后再填充实际可用的状态。
         return `
             <div class="b3-form__group">
                 <label class="b3-form__label">${i18n("taskStatus")}</label>
