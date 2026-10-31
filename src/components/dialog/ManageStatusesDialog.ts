@@ -172,12 +172,19 @@ export async function showManageKanbanStatusesDialog(view: any) {
             });
 
             const dragHandle = document.createElement('span');
-            dragHandle.innerHTML = '⋮⋮';
+            dragHandle.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                <circle cx="9" cy="5" r="1.8"/><circle cx="15" cy="5" r="1.8"/>
+                <circle cx="9" cy="12" r="1.8"/><circle cx="15" cy="12" r="1.8"/>
+                <circle cx="9" cy="19" r="1.8"/><circle cx="15" cy="19" r="1.8"/>
+            </svg>`;
             dragHandle.style.cssText = `
-                font-size: 14px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
                 color: var(--b3-theme-on-surface);
                 opacity: 0.6;
-                cursor: move;
+                cursor: grab;
                 padding: 2px 4px;
                 user-select: none;
             `;

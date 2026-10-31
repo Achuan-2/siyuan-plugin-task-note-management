@@ -112,16 +112,16 @@ export class StatusManageDialog {
                     color: #999;
                     display: flex;
                     align-items: center;
+                    justify-content: center;
+                    flex-shrink: 0;
                     margin-right: 12px;
                     transition: color 0.2s ease;
                 }
                 .status-drag-handle:hover {
                     color: #3498db;
                 }
-                .status-drag-handle::before {
-                    content: "⋮⋮";
-                    font-size: 16px;
-                    line-height: 1;
+                .status-manage-dialog .status-drag-handle::before {
+                    content: none;
                 }
                 .status-info {
                     display: flex;
@@ -223,7 +223,13 @@ export class StatusManageDialog {
         statusEl.draggable = true;
         statusEl.dataset.statusId = status.id;
         statusEl.innerHTML = `
-            <div class="status-drag-handle ariaLabel" aria-label="${i18n("dragToSort")}"></div>
+            <div class="status-drag-handle ariaLabel" aria-label="${i18n("dragToSort")}">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                    <circle cx="9" cy="5" r="1.8"/><circle cx="15" cy="5" r="1.8"/>
+                    <circle cx="9" cy="12" r="1.8"/><circle cx="15" cy="12" r="1.8"/>
+                    <circle cx="9" cy="19" r="1.8"/><circle cx="15" cy="19" r="1.8"/>
+                </svg>
+            </div>
             <div class="status-info">
                 <div class="status-icon">${status.icon || '📝'}</div>
                 <div class="status-name">${status.name}</div>
