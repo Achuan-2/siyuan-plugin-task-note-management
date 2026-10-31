@@ -3155,9 +3155,10 @@ export class ProjectKanbanView {
     }
 
     public async getReminders(forceRefresh: boolean = false): Promise<any> {
-        if (forceRefresh || !this.reminderData) {
-            this.reminderData = await getAllReminders(this.plugin, undefined, forceRefresh);
-        }
+        // 后续操作会整份保存数据，必须基于插件的最新全量缓存。
+        // 看板快照可能已落后于其他项目的移动、新建或删除，不能作为写入依据。
+        // forceRefresh 仍控制是否从磁盘读取，普通操作继续使用插件缓存。
+        this.reminderData = await getAllReminders(this.plugin, undefined, forceRefresh);
         return this.reminderData;
     }
 
@@ -11305,14 +11306,8 @@ export class ProjectKanbanView {
                     }
 
                     if (this.reminderData) {
-                        if (this.isTaskInCurrentView(savedTask)) {
-                            this.reminderData[savedTask.id] = {
-                                ...(this.reminderData[savedTask.id] || {}),
-                                ...savedTask
-                            };
-                        } else {
-                            delete this.reminderData[savedTask.id];
-                        }
+                        // 转出任务只从当前看板的 tasks 移除，全量数据仍需保留。
+                        this.reminderData[savedTask.id] = savedTask;
                     }
 
                     this.sortTasks();
@@ -11420,14 +11415,8 @@ export class ProjectKanbanView {
                     }
 
                     if (this.reminderData) {
-                        if (this.isTaskInCurrentView(savedTask)) {
-                            this.reminderData[savedTask.id] = {
-                                ...(this.reminderData[savedTask.id] || {}),
-                                ...savedTask
-                            };
-                        } else {
-                            delete this.reminderData[savedTask.id];
-                        }
+                        // 转出任务只从当前看板的 tasks 移除，全量数据仍需保留。
+                        this.reminderData[savedTask.id] = savedTask;
                     }
 
                     // 2. 立即重新排序和渲染（无延迟）
