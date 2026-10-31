@@ -1523,6 +1523,18 @@
                     name: i18n('subGroupPomodoroStyle'),
                     items: [
                         {
+                            key: 'pomodoroDefaultWindowMode',
+                            value: settings.pomodoroDefaultWindowMode || 'full',
+                            type: 'select',
+                            title: i18n('pomodoroDefaultWindowMode'),
+                            description: i18n('pomodoroDefaultWindowModeDesc'),
+                            options: {
+                                full: i18n('pomodoroWindowModeFull'),
+                                mini: i18n('pomodoroWindowModeMini'),
+                                docked: i18n('dockMode'),
+                            },
+                        },
+                        {
                             key: 'pomodoroDockPosition',
                             value: settings.pomodoroDockPosition,
                             type: 'select',

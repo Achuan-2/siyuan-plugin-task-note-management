@@ -285,6 +285,7 @@ export const DEFAULT_SETTINGS = {
     pomodoroSystemNotification: true, // 新增：番茄结束后系统弹窗
     pomodoroEndPopupWindow: true, // 新增：番茄钟结束弹窗提醒，默认关闭
     pomodoroCompletionNotePopup: false, // 番茄钟完成后弹出备注记录窗口
+    pomodoroDefaultWindowMode: 'full', // 独立窗口默认模式 'full' | 'mini' | 'docked'
     pomodoroDockPosition: 'right', // 新增：番茄钟吸附位置 'right' | 'left' | 'top'
     pomodoroMiniWindowStyle: 'horizontal', // mini窗口样式 'ring' | 'horizontal' | 'minimal'
     reminderSystemNotification: true, // 新增：事件到期提醒系统弹窗
@@ -2155,6 +2156,7 @@ export default class ReminderPlugin extends Plugin {
             randomRestPopupWindow: settings.randomRestPopupWindow,
             pomodoroEndPopupWindow: settings.pomodoroEndPopupWindow,
             pomodoroCompletionNotePopup: settings.pomodoroCompletionNotePopup === true,
+            pomodoroDefaultWindowMode: settings.pomodoroDefaultWindowMode || 'full',
             pomodoroDockPosition: settings.pomodoroDockPosition || 'top',
             pomodoroMiniWindowStyle: settings.pomodoroMiniWindowStyle || 'ring'
         };

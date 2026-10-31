@@ -138,6 +138,7 @@ export class PomodoroTimer {
     private currentCircumference: number = 2 * Math.PI * 36; // 当前圆周长度，用于进度计算
     private isMiniMode: boolean = false; // BrowserWindow 迷你模式状态
     private isDocked: boolean = false; // BrowserWindow 吸附模式状态
+    private browserWindowModeInitialized: boolean = false;
     private isAlwaysOnTopPinned: boolean = true; // BrowserWindow 是否置顶
     private normalWindowBounds: { x: number; y: number; width: number; height: number } | null = null; // 保存正常窗口位置和大小
     private miniWindowBounds: { x: number; y: number; width: number; height: number } | null = null; // 保存迷你窗口位置和大小
@@ -228,6 +229,7 @@ export class PomodoroTimer {
         }
 
         if (orphanedWindow) {
+            this.browserWindowModeInitialized = true;
             PomodoroTimer.browserWindowInstance = orphanedWindow;
             this.container = orphanedWindow;
             PomodoroTimer.browserWindowTimer = this;
@@ -333,6 +335,9 @@ export class PomodoroTimer {
      * 仅继承窗口模式及位置设置（用于未运行状态下切换任务）
      */
     private applyInheritedWindowSettings(inheritState: any) {
+        if (inheritState.isDocked !== undefined || inheritState.isMiniMode !== undefined) {
+            this.browserWindowModeInitialized = true;
+        }
         // 保存继承的窗口位置信息（稍后在窗口创建后应用）
         if (inheritState.windowBounds) {
             this.inheritedWindowBounds = inheritState.windowBounds;
@@ -8711,6 +8716,14 @@ export class PomodoroTimer {
         }
     }
 
+    private initializeBrowserWindowMode() {
+        // 默认模式只用于首次创建，后续重建和任务继承保留当前窗口模式。
+        if (this.browserWindowModeInitialized) return;
+        this.isMiniMode = this.settings.pomodoroDefaultWindowMode === 'mini';
+        this.isDocked = this.settings.pomodoroDefaultWindowMode === 'docked';
+        this.browserWindowModeInitialized = true;
+    }
+
     private async createBrowserWindow() {
         this.isWindowClosed = false; // 重置窗口关闭状态，确保计时器逻辑能正常运行
         try {
@@ -8752,8 +8765,7 @@ export class PomodoroTimer {
                     try {
                         // 只有在没有继承状态时，才从旧实例复制模式状态
                         // 如果有继承状态（通过applyInheritedState设置），则保持继承的状态
-                        // 检查是否已经通过继承设置了状态（通过检查是否与默认值不同）
-                        const hasInheritedState = this.isDocked !== false || this.isMiniMode !== false;
+                        const hasInheritedState = this.browserWindowModeInitialized;
 
                         if (!hasInheritedState) {
                             // 复制吸附/迷你与窗口 bounds 状态，保证新实例反映实际窗口行为
@@ -8780,6 +8792,7 @@ export class PomodoroTimer {
                 }
 
                 // 更新当前实例引用
+                this.browserWindowModeInitialized = true;
                 PomodoroTimer.browserWindowTimer = this;
                 this.container = pomodoroWindow;
 
@@ -8792,6 +8805,7 @@ export class PomodoroTimer {
             }
 
             // 创建新窗口
+            this.initializeBrowserWindowMode();
 
             const screen = remote.screen || electron.screen;
             if (!screen) {
@@ -9393,6 +9407,7 @@ document.body.classList.remove('docked-mode');
                 }
 
                 PomodoroTimer.browserWindowInstance = win;
+                this.browserWindowModeInitialized = true;
                 this.container = win;
                 PomodoroTimer.browserWindowTimer = this;
 
