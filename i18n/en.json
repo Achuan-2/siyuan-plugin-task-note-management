@@ -527,6 +527,7 @@
     "backgroundAudioMuted": "Background audio muted",
     "backgroundAudioEnabled": "Background audio enabled",
     "switchPhase": "Switch Phase",
+    "pomodoroSwitchStatus": "Switch Status",
     "backgroundVolume": "Background Volume",
     "todayFocus": "Today",
     "weekFocus": "This Week",

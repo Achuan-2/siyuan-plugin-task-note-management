@@ -5184,20 +5184,14 @@ export class PomodoroTimer {
             label: `${this.isCountUp ? '🍅' : '⏱'} ${this.isCountUp ? switchToCountdownText : switchToCountUpText}`,
             click: () => this.toggleMode()
         }));
-        menu.append(new MenuItem({ type: 'separator' }));
         menu.append(new MenuItem({
-            label: `💪 ${workText}`,
-            click: () => this.startWorkTime()
+            label: `🔄 ${i18n('pomodoroSwitchStatus')}`,
+            submenu: [
+                { label: `💪 ${workText}`, click: () => this.startWorkTime() },
+                { label: `🍵 ${shortBreakText}`, click: () => this.startShortBreak() },
+                { label: `🧘 ${longBreakText}`, click: () => this.startLongBreak() }
+            ]
         }));
-        menu.append(new MenuItem({
-            label: `🍵 ${shortBreakText}`,
-            click: () => this.startShortBreak()
-        }));
-        menu.append(new MenuItem({
-            label: `🧘 ${longBreakText}`,
-            click: () => this.startLongBreak()
-        }));
-        menu.append(new MenuItem({ type: 'separator' }));
         menu.append(new MenuItem({
             label: `✏️ ${i18n('pomodoroEditDuration')}`,
             enabled: !(this.isCountUp && this.isWorkPhase),
@@ -9863,7 +9857,7 @@ document.body.classList.remove('docked-mode');
             overflow: visible;
             flex-shrink: 0;
         }
-        .switch-menu {
+        .switch-menu, .phase-menu {
             -webkit-app-region: no-drag;
             position: fixed;
             top: 0;
@@ -9879,7 +9873,10 @@ document.body.classList.remove('docked-mode');
             min-width: 128px;
             pointer-events: auto;
         }
-        .switch-menu.show { display: flex; }
+        .switch-menu.show, .phase-menu.show { display: flex; }
+        .phase-menu { min-width: 100px; z-index: 10001; }
+        .phase-menu-group { display: flex; flex-direction: column; }
+        .phase-menu-trigger { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
         /* Electron 拖拽区域不会触发点击；菜单展开时允许空白处接收关闭事件。 */
         body.switch-menu-open,
         body.switch-menu-open *,
@@ -9904,7 +9901,6 @@ document.body.classList.remove('docked-mode');
         }
         .menu-item:not(:disabled):hover { background: ${hoverColor}; }
         .menu-item:disabled { opacity: 0.5; cursor: default !important; }
-        .menu-item-settings { border-top: 1px solid ${borderColor}; border-radius: 0 0 6px 6px; margin-top: 3px; }
         .volume-menu {
             -webkit-app-region: no-drag;
             position: fixed;
@@ -10628,11 +10624,18 @@ document.body.classList.remove('docked-mode');
         <button class="menu-item" id="switchModeMenuItem" onclick="callMethod('toggleMode')">
             ${currentState.isCountUp ? '🍅' : '⏱'} ${currentState.isCountUp ? switchToCountdownText : switchToCountUpText}
         </button>
-        <button class="menu-item" onclick="callMethod('startWorkTime')">💪 ${workText}</button>
-        <button class="menu-item" onclick="callMethod('startShortBreak')">🍵 ${shortBreakText}</button>
-        <button class="menu-item" onclick="callMethod('startLongBreak')">🧘 ${longBreakText}</button>
+        <div class="phase-menu-group" onmouseenter="showPhaseMenu()" onmouseleave="schedulePhaseMenuClose()">
+            <button class="menu-item phase-menu-trigger" id="phaseMenuTrigger" onclick="showPhaseMenu(event)" aria-haspopup="menu" aria-expanded="false">
+                <span>🔄 ${i18n('pomodoroSwitchStatus')}</span><span aria-hidden="true">›</span>
+            </button>
+            <div class="phase-menu" id="phaseMenu" role="menu">
+                <button class="menu-item" role="menuitem" onclick="callMethod('startWorkTime')">💪 ${workText}</button>
+                <button class="menu-item" role="menuitem" onclick="callMethod('startShortBreak')">🍵 ${shortBreakText}</button>
+                <button class="menu-item" role="menuitem" onclick="callMethod('startLongBreak')">🧘 ${longBreakText}</button>
+            </div>
+        </div>
         <button class="menu-item" id="editDurationMenuItem" onclick="callMethod('editTime')" ${currentState.isCountUp && currentState.isWorkPhase ? 'disabled' : ''}>✏️ ${i18n('pomodoroEditDuration')}</button>
-        <button class="menu-item menu-item-settings" onclick="callMethod('openPomodoroSettings')">${i18n('pomodoroSettings') || '番茄钟设置'}</button>
+        <button class="menu-item" onclick="callMethod('openPomodoroSettings')">${i18n('pomodoroSettings') || '番茄钟设置'}</button>
     </div>
     <div class="volume-menu" id="volumeMenu">
         <div class="volume-menu-controls">
@@ -10762,7 +10765,7 @@ document.body.classList.remove('docked-mode');
             const isSilent = isMuted || vol === 0;
             const icon = isSilent ? '🔇' : '🔊';
             if (muteBtn) {
-                muteBtn.textContent = isSilent ? '🔊' : '🔇';
+                muteBtn.textContent = icon;
                 muteBtn.title = isSilent ? '${i18n('enableBackgroundAudio') || '开启背景音'}' : '${i18n('muteBackgroundAudio') || '静音背景音'}';
                 muteBtn.setAttribute('aria-label', muteBtn.title);
             }
@@ -10831,7 +10834,53 @@ document.body.classList.remove('docked-mode');
             ipcRenderer.send('${actionChannel}', 'syncTimerState');
         }
         
+        let phaseMenuHideTimer = null;
+
+        function hidePhaseMenu() {
+            clearTimeout(phaseMenuHideTimer);
+            phaseMenuHideTimer = null;
+            document.getElementById('phaseMenu')?.classList.remove('show');
+            document.getElementById('phaseMenuTrigger')?.setAttribute('aria-expanded', 'false');
+        }
+
+        function schedulePhaseMenuClose() {
+            clearTimeout(phaseMenuHideTimer);
+            phaseMenuHideTimer = setTimeout(hidePhaseMenu, 160);
+        }
+
+        function showPhaseMenu(event) {
+            if (event) event.stopPropagation();
+            clearTimeout(phaseMenuHideTimer);
+            phaseMenuHideTimer = null;
+            const rootMenu = document.getElementById('switchMenu');
+            const submenu = document.getElementById('phaseMenu');
+            const trigger = document.getElementById('phaseMenuTrigger');
+            if (!rootMenu?.classList.contains('show') || !submenu || !trigger) return;
+
+            submenu.classList.add('show');
+            trigger.setAttribute('aria-expanded', 'true');
+            const padding = 4;
+            const gap = 3;
+            const submenuRect = submenu.getBoundingClientRect();
+            let rootRect = rootMenu.getBoundingClientRect();
+            let left = rootRect.right + gap;
+            if (left + submenuRect.width > window.innerWidth - padding) {
+                if (rootRect.left - gap - submenuRect.width >= padding) {
+                    left = rootRect.left - gap - submenuRect.width;
+                } else {
+                    // 两侧空间都不足时移动一级菜单，尽量让两级菜单完整显示。
+                    rootMenu.style.left = Math.max(padding, window.innerWidth - padding - submenuRect.width - gap - rootRect.width) + 'px';
+                    rootRect = rootMenu.getBoundingClientRect();
+                    left = rootRect.right + gap;
+                }
+            }
+            const triggerRect = trigger.getBoundingClientRect();
+            submenu.style.left = Math.max(padding, Math.min(left, window.innerWidth - submenuRect.width - padding)) + 'px';
+            submenu.style.top = Math.max(padding, Math.min(triggerRect.top, window.innerHeight - submenuRect.height - padding)) + 'px';
+        }
+
         function closeSwitchMenu() {
+            hidePhaseMenu();
             document.body.classList.remove('switch-menu-open');
             const m = document.getElementById('switchMenu');
             if (m) m.classList.remove('show');
@@ -10846,6 +10895,7 @@ document.body.classList.remove('docked-mode');
 
         function toggleSwitchMenu(e) {
             e.stopPropagation();
+            hidePhaseMenu();
             closeVolumeMenu();
             const m = document.getElementById('switchMenu');
             const btn = document.getElementById('statusBtn');
