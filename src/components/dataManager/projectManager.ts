@@ -39,6 +39,8 @@ export interface ProjectGroup {
     visibleStatusIds?: string[]; // 分组可见状态ID，空或未设置表示显示全部状态
 }
 
+export type GroupTabCountMode = 'doing' | 'unfinished' | 'all';
+
 export interface Project {
     id: string;
     name: string;
@@ -63,6 +65,7 @@ export interface Project {
     isSubscription?: boolean;
     subscriptionId?: string;
     customGroupTabsMode?: boolean;
+    groupTabCountMode?: GroupTabCountMode;
     activeCustomGroupTabId?: string;
     kanbanStatuses?: KanbanStatus[];
     updatedTime?: string;

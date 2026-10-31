@@ -1,3 +1,5 @@
+import type { GroupTabCountMode } from './projectManager';
+
 export interface FolderKanbanSettings {
     sortCriteria?: { method: string; order: 'asc' | 'desc' }[];
     kanbanMode?: 'status' | 'custom' | 'list';
@@ -10,6 +12,7 @@ export interface FolderKanbanSettings {
     hideNoDoingGroups?: boolean;
     hideNoTodayGroups?: boolean;
     customGroupTabsMode?: boolean;
+    groupTabCountMode?: GroupTabCountMode;
     statusTabsMode?: boolean;
     columnWidths?: { [columnKey: string]: number };
 }

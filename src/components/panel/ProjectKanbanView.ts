@@ -7,7 +7,7 @@ import { refreshSql, getBlockByID, updateBindBlockAtrrs, openBlock, addBlockProj
 import { i18n } from "../../pluginInstance";
 import { getLocalDateString, getLocalDateTimeString, compareDateStrings, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../../utils/dateUtils";
 import { CategoryManager } from "../dataManager/categoryManager";
-import { ProjectManager } from "../dataManager/projectManager";
+import { ProjectManager, type GroupTabCountMode } from "../dataManager/projectManager";
 import { PomodoroTimer } from "./PomodoroTimer";
 import { PomodoroManager } from "../dataManager/pomodoroManager";
 import { PomodoroRecordManager } from "../dataManager/pomodoroRecord"; // Add import
@@ -226,6 +226,8 @@ export class ProjectKanbanView {
     public manageGroupsHideNoDoingCheckbox: HTMLInputElement | null = null;
     public manageGroupsHideNoTodayCheckbox: HTMLInputElement | null = null;
     private customGroupTabsMode: boolean = false; // 自定义分组看板是否使用页签显示
+    private groupTabCountMode: GroupTabCountMode = 'doing';
+    private displayGroupTabCountSelect: HTMLSelectElement | null = null;
     private activeCustomGroupTabId: string | null = null; // 当前选中的分组页签
     private statusTabsMode: boolean = false; // 状态看板是否使用页签显示
     private activeStatusTabId: string | null = null; // 当前选中的状态页签
@@ -608,6 +610,9 @@ export class ProjectKanbanView {
         });
 
         this.syncGroupVisibilityCheckboxes();
+        if (this.displayGroupTabCountSelect?.isConnected) {
+            this.displayGroupTabCountSelect.value = this.groupTabCountMode;
+        }
     }
 
     public async saveGroupVisibilitySettings(hideNoDoingGroups: boolean, hideNoTodayGroups: boolean): Promise<void> {
@@ -820,6 +825,10 @@ export class ProjectKanbanView {
             const customGroups = await this.getProjectCustomGroupsForView();
             this.hasCustomGroups = customGroups.some((group: any) => !group.archived);
             this.customGroupTabsMode = !!this.project?.customGroupTabsMode;
+            const groupTabCountMode = this.project?.groupTabCountMode;
+            this.groupTabCountMode = groupTabCountMode === 'unfinished' || groupTabCountMode === 'all'
+                ? groupTabCountMode
+                : 'doing';
             this.activeCustomGroupTabId = typeof this.project?.activeCustomGroupTabId === 'string'
                 ? this.project.activeCustomGroupTabId
                 : null;
@@ -1436,6 +1445,33 @@ export class ProjectKanbanView {
             this._lastRenderedProjectId = null;
             await this.queueLoadTasks();
         }));
+
+        const groupTabCountSetting = document.createElement('label');
+        groupTabCountSetting.style.cssText = 'display:flex; flex-direction:column; gap:6px; padding:6px 12px;';
+        const groupTabCountLabel = document.createElement('span');
+        groupTabCountLabel.textContent = i18n('groupTabCountMode');
+        const groupTabCountSelect = document.createElement('select');
+        groupTabCountSelect.className = 'b3-select';
+        const groupTabCountOptions: Array<{ value: GroupTabCountMode; label: string }> = [
+            { value: 'doing', label: i18n('groupTabCountDoing') },
+            { value: 'unfinished', label: i18n('groupTabCountUnfinished') },
+            { value: 'all', label: i18n('groupTabCountAll') }
+        ];
+        groupTabCountOptions.forEach(({ value, label }) => {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = label;
+            groupTabCountSelect.appendChild(option);
+        });
+        groupTabCountSelect.value = this.groupTabCountMode;
+        groupTabCountSelect.addEventListener('change', async () => {
+            await this.saveGroupTabCountMode(groupTabCountSelect.value as GroupTabCountMode);
+            await this.renderKanban();
+        });
+        this.displayGroupTabCountSelect = groupTabCountSelect;
+        groupTabCountSetting.appendChild(groupTabCountLabel);
+        groupTabCountSetting.appendChild(groupTabCountSelect);
+        displaySettingsDropdown.appendChild(groupTabCountSetting);
 
         // 状态看板：页签显示模式
         displaySettingsDropdown.appendChild(createSwitchItem(i18n("statusTabsMode") || "状态看板使用页签显示", this.statusTabsMode, async (checked) => {
@@ -5584,13 +5620,47 @@ export class ProjectKanbanView {
         }
     }
 
+    private async saveGroupTabCountMode(mode: GroupTabCountMode): Promise<void> {
+        this.groupTabCountMode = mode;
+        if (this.isAggregateView) {
+            await this.saveFolderKanbanSetting({ groupTabCountMode: mode });
+        } else {
+            const projectData = await this.plugin.loadProjectData() || {};
+            if (projectData[this.projectId]) {
+                projectData[this.projectId].groupTabCountMode = mode;
+                await this.plugin.saveProjectData(projectData);
+            }
+        }
+        if (this.project) this.project.groupTabCountMode = mode;
+    }
+
+    private appendCustomGroupTabCount(button: HTMLButtonElement, tasks: any[]): void {
+        // 各统计口径共用顶层任务范围，避免子任务跨状态或重复出现时被重复计数。
+        const uniqueTasks = new Map(tasks.map(task => [task.id, task]));
+        const count = Array.from(uniqueTasks.values()).filter(task => {
+            if (task.parentId && uniqueTasks.has(task.parentId)) return false;
+            if (this.groupTabCountMode === 'doing') {
+                return !task.completed && this.getTaskStatus(task) === 'doing';
+            }
+            if (this.groupTabCountMode === 'unfinished') {
+                return !task.completed && !this.isAbandonedTask(task);
+            }
+            return true;
+        }).length;
+        const badge = document.createElement('span');
+        badge.className = 'custom-group-tab-count';
+        badge.textContent = String(count);
+        button.appendChild(badge);
+    }
+
     private async renderCustomGroupKanbanTabs(
         kanbanContainer: HTMLElement,
         activeGroups: any[],
         statusTasks: { [status: string]: any[] },
         todayStr: string
     ) {
-        const tabEntries: Array<{ group: any; statusTasks: { [status: string]: any[] } }> = [];
+        const tabEntries: Array<{ group: any; statusTasks: { [status: string]: any[] }; tasks: any[] }> = [];
+        const allTasks = Object.values(statusTasks).flat();
 
         // 普通分组
         activeGroups.forEach((group: any) => {
@@ -5609,7 +5679,8 @@ export class ProjectKanbanView {
 
             tabEntries.push({
                 group,
-                statusTasks: groupStatusTasks
+                statusTasks: groupStatusTasks,
+                tasks: allTasks.filter(task => task.customGroupId === group.id)
             });
         });
 
@@ -5642,7 +5713,8 @@ export class ProjectKanbanView {
                     icon: '📋',
                     milestones: defaultMilestones
                 },
-                statusTasks: ungroupedStatusTasks
+                statusTasks: ungroupedStatusTasks,
+                tasks: Object.values(ungroupedStatusTasks).flat()
             });
         }
 
@@ -5709,6 +5781,7 @@ export class ProjectKanbanView {
             const isActive = entry.group.id === this.activeCustomGroupTabId;
             tabButton.className = `b3-button ${isActive ? 'b3-button--primary' : 'b3-button--outline'} custom-group-tab-btn`;
             tabButton.textContent = `${entry.group.icon || ''} ${entry.group.name}`;
+            this.appendCustomGroupTabCount(tabButton, entry.tasks);
             tabButton.addEventListener('click', async () => {
                 if (this.activeCustomGroupTabId === entry.group.id) return;
                 this.activeCustomGroupTabId = entry.group.id;
@@ -6442,6 +6515,7 @@ export class ProjectKanbanView {
             const isActive = entry.group.id === this.activeCustomGroupTabId;
             tabButton.className = `b3-button ${isActive ? 'b3-button--primary' : 'b3-button--outline'} custom-group-tab-btn`;
             tabButton.textContent = `${entry.group.icon || ''} ${entry.group.name}`;
+            this.appendCustomGroupTabCount(tabButton, entry.tasks);
             tabButton.addEventListener('click', async () => {
                 if (this.activeCustomGroupTabId === entry.group.id) return;
                 this.activeCustomGroupTabId = entry.group.id;
