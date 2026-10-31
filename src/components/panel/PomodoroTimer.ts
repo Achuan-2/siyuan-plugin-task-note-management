@@ -2867,7 +2867,7 @@ export class PomodoroTimer {
                 border: 1px solid var(--b3-table-border-color);
                 border-radius: 12px;
                 box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
-                z-index: 11;
+                z-index: 20;
                 user-select: none;
                 transition: transform 0.2s ease, opacity 0.2s ease;
                 overflow: hidden;
