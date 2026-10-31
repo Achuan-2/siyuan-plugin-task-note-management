@@ -25,6 +25,10 @@ function extract(relative, className, names) {
 const methods = extract('src/components/panel/ProjectKanbanView.ts', 'ProjectKanbanView', [
     'getReminders', 'editTask', 'showTaskNotePreview', 'setReminderPinned',
     'batchUpdateTasks', 'findOrCreateUiTask', 'getAllDescendantIds',
+    'prepareCrossProjectMove', 'getDroppedTaskIds', 'isTaskDrag', 'bindProjectTabDropTarget', 'unbindProjectTabDropTarget',
+    'handleDrop', 'buildCustomGroupDropUpdates', 'buildStatusDropUpdates',
+    'addDropZoneEvents', 'addCustomGroupDropZoneEvents', 'addStatusSubGroupDropEvents', 'addTaskDragEvents',
+    'dispatchReminderUpdate',
 ]);
 const persistence = extract('src/utils/icsSubscription.ts', null, ['getAllReminders', 'saveReminders']);
 const code = ts.transpileModule(`${persistence}\nclass Board { ${methods} }`, {
@@ -36,14 +40,17 @@ function task(id, projectId, kanbanStatus = 'doing') {
 }
 
 function fixture(initial) {
-    const state = { data: clone(initial), writes: 0, reads: [], dialog: null };
+    const state = { data: clone(initial), writes: 0, reads: [], dialog: null, events: [] };
     class QuickReminderDialog {
         constructor(_date, _time, callback) { state.dialog = { callback }; }
         show() {}
     }
     const Board = new Function('loadSubscriptions', 'QuickReminderDialog', 'i18n', 'showMessage',
-        'getLogicalDateString', code + ';return Board;')(
+        'getLogicalDateString', 'Constants', 'window', 'CustomEvent', code + ';return Board;')(
         async () => ({ subscriptions: {} }), QuickReminderDialog, key => key, () => {}, () => '2026-10-31',
+        { SIYUAN_DROP_GUTTER: 'siyuan-gutter', SIYUAN_DROP_FILE: 'siyuan-file', SIYUAN_DROP_TAB: 'siyuan-tab' },
+        { dispatchEvent: event => state.events.push(event) },
+        class CustomEvent { constructor(type, options) { this.type = type; this.detail = options.detail; } },
     );
     const plugin = {
         async loadReminderData(force) {
@@ -57,13 +64,21 @@ function fixture(initial) {
     };
     function board(projectId, visibleProjects = [projectId]) {
         return Object.assign(new Board(), {
-            plugin, projectId, tasks: [], reminderData: null,
+            plugin, projectId, kanbanInstanceId: `board-${projectId}`, tasks: [], reminderData: null, canCreateTask: true,
+            projectManager: { async getProjectKanbanStatuses() {
+                return ['doing', 'todo', 'waiting', 'completed'].map(id => ({ id }));
+            } },
             isAggregateView: visibleProjects.length > 1,
             isTaskInCurrentView: item => visibleProjects.includes(item.projectId),
             toViewTask: item => ({ ...item }),
             getTaskStatus: item => item.completed ? 'completed' : item.kanbanStatus || 'doing',
             getTaskRealProjectId: item => item.projectId,
-            sortTasks() {}, renderKanban() {}, dispatchReminderUpdate() {},
+            resolveAggregateGroupTarget: () => null,
+            getFallbackStatusForGroupDrop: async () => null,
+            clearDropZoneHighlights() {}, clearAllIndicators() {}, updateIndicator() {},
+            calculateAdjacentInsertSort: (_task, before) => before ? 90 : 110,
+            getTaskSortValue: item => item.sort || 0,
+            sortTasks() {}, renderKanban() {},
             async queueLoadTasks() {}, async refreshRecurringMobileNotifications() {},
         });
     }
@@ -149,4 +164,179 @@ test('每次取全量数据使用插件最新缓存，并保留显式强制读�
     assert.deepEqual(await view.getReminders(), state.data);
     await view.getReminders(true);
     assert.deepEqual(state.reads, [false, false, true]);
+});
+
+function element(groupId) {
+    const listeners = new Map();
+    const classes = new Set();
+    const el = {
+        dataset: groupId ? { groupId } : {}, style: {}, outerHTML: '<div></div>',
+        classList: { add: name => classes.add(name), remove: name => classes.delete(name), contains: name => classes.has(name) },
+        contains: node => node === el,
+        closest: () => groupId ? el : null,
+        getBoundingClientRect: () => ({ top: 0, height: 100 }),
+        addEventListener(type, handler, options) {
+            const handlers = listeners.get(type) || new Set();
+            handlers.add(handler);
+            listeners.set(type, handlers);
+            options?.signal?.addEventListener('abort', () => handlers.delete(handler));
+        },
+        async fire(type, event) {
+            for (const handler of listeners.get(type) || []) {
+                await handler(event);
+                if (event.immediateStopped) break;
+            }
+        },
+    };
+    return el;
+}
+
+function dragEvent(ids, type = 'application/vnd.siyuan.kanban-task-move') {
+    const values = new Map(ids ? [[type, JSON.stringify(ids)]] : []);
+    return {
+        clientY: 10, relatedTarget: null,
+        dataTransfer: {
+            get types() { return [...values.keys()]; },
+            getData: key => values.get(key) || '',
+            setData: (key, value) => values.set(key, value),
+        },
+        preventDefault() { this.prevented = true; },
+        stopPropagation() { this.stopped = true; },
+        stopImmediatePropagation() { this.immediateStopped = true; },
+    };
+}
+
+test('拖到另一项目页签标题移动任务，并保留目标项目原有任务', async () => {
+    const { state, board } = fixture({ source: task('source', 'A'), target: task('target', 'B', 'waiting') });
+    const header = element(), targetBoard = board('B');
+    targetBoard.bindProjectTabDropTarget(header);
+    const event = dragEvent(['source']);
+    await header.fire('dragover', event);
+    assert.equal(event.prevented, true);
+    assert.equal(header.classList.contains('kanban-project-tab-drop-active'), true);
+    await header.fire('drop', event);
+    assert.equal(state.data.source.projectId, 'B');
+    assert.deepEqual(state.data.target, task('target', 'B', 'waiting'));
+    assert.equal(state.writes, 1);
+    assert.equal(header.classList.contains('kanban-project-tab-drop-active'), false);
+    assert.equal(state.events.at(-1).detail.projectId, undefined, '移动广播同时触发源看板刷新');
+    assert.equal(state.events.at(-1).detail.source, 'board-B');
+});
+
+test('页签批量移动保持父子关系，移动单个子任务则脱离源项目父任务', async () => {
+    for (const ids of [['child', 'parent'], ['child']]) {
+        const { state, board } = fixture({
+            parent: task('parent', 'A'), child: { ...task('child', 'A'), parentId: 'parent' },
+            grandchild: { ...task('grandchild', 'A'), parentId: 'child' },
+        });
+        const targetBoard = board('B'), header = element();
+        targetBoard.bindProjectTabDropTarget(header);
+        await header.fire('drop', dragEvent(ids));
+        assert.equal(state.data.child.projectId, 'B');
+        assert.equal(state.data.grandchild.projectId, 'B');
+        assert.equal(state.data.grandchild.parentId, 'child');
+        assert.equal(state.data.child.parentId, ids.includes('parent') ? 'parent' : undefined);
+        assert.equal(state.data.parent.projectId, ids.includes('parent') ? 'B' : 'A');
+    }
+});
+
+test('跨项目清理项目专属字段，自定义状态不兼容时回退，已完成子任务保留完成状态', async () => {
+    const { state, board } = fixture({
+        parent: { ...task('parent', 'A', 'source-only'), customGroupId: 'old-group', milestoneId: 'old-milestone', tagIds: ['old-tag'] },
+        child: { ...task('child', 'A', 'completed'), completed: true, parentId: 'parent', customGroupId: 'old-group' },
+    });
+    await board('B').batchUpdateTasks(['parent'], { projectId: 'B' });
+    assert.equal(state.data.parent.kanbanStatus, 'doing');
+    assert.equal(state.data.parent.customGroupId, undefined);
+    assert.equal(state.data.parent.milestoneId, undefined);
+    assert.equal(state.data.parent.tagIds, undefined);
+    assert.equal(state.data.child.customGroupId, undefined);
+    assert.equal(state.data.child.completed, true);
+    assert.equal(state.data.child.kanbanStatus, 'completed');
+    assert.equal(state.data.child.parentId, 'parent');
+});
+
+test('同项目拖到页签标题不改变任务配置、不写入数据', async () => {
+    const initial = { source: { ...task('source', 'B'), customGroupId: 'group', tagIds: ['tag'], milestoneId: 'milestone' } };
+    const { state, board } = fixture(initial);
+    const header = element();
+    board('B').bindProjectTabDropTarget(header);
+    await header.fire('drop', dragEvent(['source']));
+    assert.deepEqual(state.data, initial);
+    assert.equal(state.writes, 0);
+});
+
+test('页签关闭后移除拖放监听，聚合项目页签不接收直接移动', async () => {
+    const { state, board } = fixture({ source: task('source', 'A') });
+    const targetBoard = board('B'), header = element();
+    targetBoard.bindProjectTabDropTarget(header);
+    targetBoard.unbindProjectTabDropTarget();
+    await header.fire('drop', dragEvent(['source']));
+    board('B', ['B', 'C']).bindProjectTabDropTarget(header);
+    await header.fire('drop', dragEvent(['source']));
+    assert.equal(state.writes, 0);
+});
+
+for (const target of ['status', 'group', 'subgroup']) {
+    test(`跨看板拖到 ${target} 区域：单个及批量任务写入目标项目、状态或分组`, async () => {
+        for (const multi of [false, true]) {
+            const { state, board } = fixture({ source: task('source', 'A'), other: task('other', 'A') });
+            const targetBoard = board('B'), zone = element(target === 'subgroup' ? 'group-B' : undefined);
+            if (target === 'status') targetBoard.addDropZoneEvents(zone, 'waiting');
+            if (target === 'group') targetBoard.addCustomGroupDropZoneEvents(zone, 'group-B');
+            if (target === 'subgroup') targetBoard.addStatusSubGroupDropEvents(zone, 'waiting');
+            const ids = multi ? ['source', 'other'] : ['source'];
+            const event = dragEvent(ids, multi ? 'application/vnd.siyuan.kanban-tasks' : 'application/x-reminder');
+            if (!multi) event.dataTransfer.setData('application/x-reminder', JSON.stringify({ id: 'source' }));
+            await zone.fire('dragover', event);
+            assert.equal(event.prevented, true);
+            await zone.fire('drop', event);
+            for (const id of ids) {
+                assert.equal(state.data[id].projectId, 'B');
+                assert.equal(state.data[id].kanbanStatus, target === 'group' ? 'doing' : 'waiting');
+                assert.equal(state.data[id].customGroupId, target === 'status' ? undefined : 'group-B');
+            }
+        }
+    });
+}
+
+test('真实任务拖拽事件携带 ID，跨看板落到任务卡片后移动并排到目标前', async () => {
+    const { state, board } = fixture({ source: task('source', 'A'), target: { ...task('target', 'B', 'waiting'), sort: 100 } });
+    const sourceBoard = board('A'), targetBoard = board('B');
+    const sourceEl = element(), targetEl = element(), event = dragEvent();
+    sourceBoard.addTaskDragEvents(sourceEl, state.data.source);
+    await sourceEl.fire('dragstart', event);
+    assert.equal(event.stopped, true);
+    assert.deepEqual(JSON.parse(event.dataTransfer.getData('application/vnd.siyuan.kanban-task-move')), ['source']);
+    targetBoard.addTaskDragEvents(targetEl, state.data.target);
+    await targetEl.fire('drop', event);
+    assert.equal(state.data.source.projectId, 'B');
+    assert.equal(state.data.source.kanbanStatus, 'waiting');
+    assert.equal(state.data.source.sort, 90);
+    assert.equal(event.immediateStopped, true);
+    assert.equal(state.writes, 1);
+});
+
+test('跨看板批量落到任务卡片时保持顺序，避免同卡片内部监听器重复保存', async () => {
+    const { state, board } = fixture({ first: task('first', 'A'), second: task('second', 'A'), target: { ...task('target', 'B'), sort: 100 } });
+    const targetBoard = board('B'), targetEl = element();
+    targetBoard.addTaskDragEvents(targetEl, state.data.target);
+    targetEl.addEventListener('drop', () => assert.fail('内部批量排序监听器不应再接收外部任务'));
+    await targetEl.fire('drop', dragEvent(['first', 'second'], 'application/vnd.siyuan.kanban-tasks'));
+    assert.equal(state.data.first.projectId, 'B');
+    assert.equal(state.data.second.projectId, 'B');
+    assert.ok(state.data.first.sort < state.data.second.sort);
+    assert.ok(state.data.second.sort < state.data.target.sort);
+    assert.equal(state.writes, 1);
+});
+
+test('忽略页签上的文档拖拽和无效任务列表', async () => {
+    const { state, board } = fixture({ source: task('source', 'A') });
+    const targetBoard = board('B'), header = element();
+    targetBoard.bindProjectTabDropTarget(header);
+    await header.fire('drop', dragEvent(['source'], 'siyuan-file'));
+    const invalid = dragEvent([]);
+    invalid.dataTransfer.setData('application/vnd.siyuan.kanban-task-move', '{invalid');
+    await header.fire('drop', invalid);
+    assert.equal(state.writes, 0);
 });

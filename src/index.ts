@@ -2417,9 +2417,19 @@ export default class ReminderPlugin extends Plugin {
                 }
 
                 const projectKanbanView = new ProjectKanbanView(tab.element, this, projectId, tab.data || {});
+                projectKanbanView.bindProjectTabDropTarget(tab.tab?.headElement);
+                tab._projectKanbanView = projectKanbanView;
                 // 保存实例引用用于清理
                 this.tabViews.set(tab.id, projectKanbanView);
-            }) as any
+            }) as any,
+            destroy: function (this: any) {
+                const view = this._projectKanbanView;
+                view?.unbindProjectTabDropTarget();
+                for (const [tabId, tabView] of thisPlugin.tabViews) {
+                    if (tabView === view) thisPlugin.tabViews.delete(tabId);
+                }
+                this._projectKanbanView = null;
+            } as any
         });
 
         // 注册番茄钟标签页

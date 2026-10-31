@@ -160,6 +160,7 @@ export class ProjectKanbanView {
 
     // 看板实例ID，用于区分事件来源
     private kanbanInstanceId: string = `kanban_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    private projectTabDropController?: AbortController;
 
     // 记录最后一次渲染的模式和项目ID，用于判断是否需要全量清空
     private _lastRenderMode: string | null = null;
@@ -2544,7 +2545,7 @@ export class ProjectKanbanView {
             const isSiYuanDrag = types.some(t => t.startsWith(Constants.SIYUAN_DROP_GUTTER)) ||
                 types.includes(Constants.SIYUAN_DROP_FILE) ||
                 types.includes(Constants.SIYUAN_DROP_TAB);
-            const isExternalDrag = e.dataTransfer?.types.includes('application/x-reminder') || e.dataTransfer?.types.includes('text/plain');
+            const isExternalDrag = this.isTaskDrag(e.dataTransfer);
 
             if (this.isDragging && this.draggedTask) {
                 // 检查是否可以改变状态或解除父子关系
@@ -2648,7 +2649,7 @@ export class ProjectKanbanView {
             const isSiYuanDrag = types.some(t => t.startsWith(Constants.SIYUAN_DROP_GUTTER)) ||
                 types.includes(Constants.SIYUAN_DROP_FILE) ||
                 types.includes(Constants.SIYUAN_DROP_TAB);
-            const isExternalDrag = e.dataTransfer?.types.includes('application/x-reminder') || e.dataTransfer?.types.includes('text/plain');
+            const isExternalDrag = this.isTaskDrag(e.dataTransfer);
 
             if (this.isDragging && this.draggedTask) {
                 // 将 undefined 或字符串 'ungrouped' 视为 null，对比当前分组是否与目标一致
@@ -2770,7 +2771,7 @@ export class ProjectKanbanView {
             const isSiYuanDrag = types.some(t => t.startsWith(Constants.SIYUAN_DROP_GUTTER)) ||
                 types.includes(Constants.SIYUAN_DROP_FILE) ||
                 types.includes(Constants.SIYUAN_DROP_TAB);
-            const isExternalDrag = e.dataTransfer?.types.includes('application/x-reminder') || e.dataTransfer?.types.includes('text/plain');
+            const isExternalDrag = this.isTaskDrag(e.dataTransfer);
 
             if (this.isDragging && this.draggedTask) {
                 const currentStatus = this.getTaskStatus(this.draggedTask);
@@ -8309,7 +8310,7 @@ export class ProjectKanbanView {
                     this.addTaskDragEvents(taskEl, task);
 
                     taskEl.addEventListener('dragover', (e) => {
-                        const isExternalDrag = e.dataTransfer?.types.includes('application/x-reminder') || e.dataTransfer?.types.includes('text/plain');
+                        const isExternalDrag = this.isTaskDrag(e.dataTransfer);
                         if (this.isDragging && this.draggedElement && this.draggedElement !== taskEl) {
                             const targetTask = this.getTaskFromElement(taskEl);
                             if (!targetTask) return;
@@ -8687,7 +8688,7 @@ export class ProjectKanbanView {
     private addTaskDragEvents(element: HTMLElement, task: any) {
         element.addEventListener('dragover', (e) => {
             const types = e.dataTransfer?.types || [];
-            const isExternalDrag = e.dataTransfer?.types.includes('application/x-reminder') || e.dataTransfer?.types.includes('text/plain') ||
+            const isExternalDrag = this.isTaskDrag(e.dataTransfer) ||
                 types.some(t => t.startsWith(Constants.SIYUAN_DROP_GUTTER)) || types.includes('application/vnd.siyuan-gutter') ||
                 types.includes(Constants.SIYUAN_DROP_FILE) || types.includes('application/vnd.siyuan-file') ||
                 types.includes(Constants.SIYUAN_DROP_TAB) || types.includes('application/vnd.siyuan-tab');
@@ -8728,7 +8729,7 @@ export class ProjectKanbanView {
         element.addEventListener('drop', async (e) => {
             // Handle external drop on task (for sorting)
             const types = e.dataTransfer?.types || [];
-            const isExternalDrag = e.dataTransfer?.types.includes('application/x-reminder') || e.dataTransfer?.types.includes('text/plain') ||
+            const isExternalDrag = this.isTaskDrag(e.dataTransfer) ||
                 types.some(t => t.startsWith(Constants.SIYUAN_DROP_GUTTER)) || types.includes('application/vnd.siyuan-gutter') ||
                 types.includes(Constants.SIYUAN_DROP_FILE) || types.includes('application/vnd.siyuan-file') ||
                 types.includes(Constants.SIYUAN_DROP_TAB) || types.includes('application/vnd.siyuan-tab');
@@ -8737,6 +8738,10 @@ export class ProjectKanbanView {
                 this.clearAllIndicators();
                 e.preventDefault();
                 e.stopPropagation();
+                if (e.dataTransfer && this.getDroppedTaskIds(e.dataTransfer).length) {
+                    // 同一卡片还绑定了内部批量排序监听器，外部任务在这里统一接收。
+                    e.stopImmediatePropagation();
+                }
                 // Determine sort position based on drop
                 // Logic delegates to handleDrop on the column/group/status which called this creation, or we handle it here if possible.
                 // However, external drop handling is currently in the container/column 'drop' event.
@@ -8770,6 +8775,7 @@ export class ProjectKanbanView {
             }
         });
         element.addEventListener('dragstart', (e) => {
+            e.stopPropagation(); // 嵌套子任务的拖拽不能被父卡片覆盖。
             this.isDragging = true;
             this.draggedTask = task;
             this.draggedElement = element;
@@ -13899,12 +13905,93 @@ export class ProjectKanbanView {
         return [...new Set(matches)];
     }
 
+    public bindProjectTabDropTarget(header?: HTMLElement) {
+        this.unbindProjectTabDropTarget();
+        // 聚合页签没有唯一目标项目，仍通过看板中的具体项目分组接收任务。
+        if (!header || this.isAggregateView) return;
+        const controller = new AbortController();
+        this.projectTabDropController = controller;
+        const isTaskDrag = (event: DragEvent) => this.canCreateTask &&
+            event.dataTransfer?.types.includes('application/vnd.siyuan.kanban-task-move');
+        header.addEventListener('dragover', event => {
+            if (!isTaskDrag(event)) return;
+            event.preventDefault();
+            event.stopPropagation();
+            event.dataTransfer!.dropEffect = 'move';
+            header.classList.add('kanban-project-tab-drop-active');
+        }, { signal: controller.signal });
+        header.addEventListener('dragleave', event => {
+            if (!header.contains(event.relatedTarget as Node)) {
+                header.classList.remove('kanban-project-tab-drop-active');
+            }
+        }, { signal: controller.signal });
+        header.addEventListener('drop', async event => {
+            if (!isTaskDrag(event)) return;
+            event.preventDefault();
+            event.stopPropagation();
+            header.classList.remove('kanban-project-tab-drop-active');
+            const taskIds = this.getDroppedTaskIds(event.dataTransfer!);
+            if (taskIds.length) {
+                await this.batchUpdateTasks(taskIds, { projectId: this.projectId });
+            }
+        }, { signal: controller.signal });
+        controller.signal.addEventListener('abort', () => header.classList.remove('kanban-project-tab-drop-active'));
+    }
+
+    public unbindProjectTabDropTarget() {
+        this.projectTabDropController?.abort();
+        this.projectTabDropController = undefined;
+    }
+
+    private getDroppedTaskIds(dataTransfer: DataTransfer): string[] {
+        for (const type of ['application/vnd.siyuan.kanban-tasks', 'application/vnd.siyuan.kanban-task-move']) {
+            const raw = dataTransfer.getData(type);
+            if (!raw) continue;
+            try {
+                const ids = JSON.parse(raw);
+                if (Array.isArray(ids)) return [...new Set(ids.filter(id => typeof id === 'string' && id.length > 0))];
+            } catch { /* 忽略无效拖拽数据，继续尝试兼容格式。 */ }
+        }
+        try {
+            const payload = JSON.parse(dataTransfer.getData('application/x-reminder') || 'null');
+            if (typeof payload?.id === 'string' && payload.id) return [payload.id];
+        } catch { /* 普通文本和思源文档块仍由原有路径处理。 */ }
+        return [];
+    }
+
+    private isTaskDrag(dataTransfer: DataTransfer | null): boolean {
+        return !!dataTransfer?.types.some(type => [
+            'application/vnd.siyuan.kanban-tasks',
+            'application/vnd.siyuan.kanban-task-move',
+            'application/x-reminder',
+            'text/plain',
+        ].includes(type));
+    }
+
     private async handleDrop(event: DragEvent, status: string, customGroupId: string | null = null, options?: { targetTask?: any, insertBefore?: boolean }) {
         event.preventDefault();
         event.stopPropagation();
 
         const dt = event.dataTransfer;
         if (!dt) return;
+
+        // 跨看板拖到任务卡片上也进入这里；任务 ID 应更新现有任务，而不是按文档块新建。
+        const taskIds = this.getDroppedTaskIds(dt);
+        if (taskIds.length) {
+            if (!this.canCreateTask || (options?.targetTask && taskIds.includes(options.targetTask.id))) return;
+            const reminderData = await this.getReminders();
+            const sourceTask = this.findOrCreateUiTask(taskIds[0], reminderData);
+            const updates = await this.buildCustomGroupDropUpdates(sourceTask, customGroupId);
+            updates.kanbanStatus = status;
+            const sort = options?.targetTask
+                ? this.calculateAdjacentInsertSort(options.targetTask, !!options.insertBefore, reminderData)
+                : undefined;
+            const sortStep = sort !== undefined && options?.targetTask
+                ? Math.abs(this.getTaskSortValue(options.targetTask) - sort) / (taskIds.length + 1)
+                : undefined;
+            await this.batchUpdateTasks(taskIds, { ...updates, sort, sortStep });
+            return;
+        }
 
         let blockIds: string[] = [];
         const types = Array.from(dt.types);
@@ -14132,12 +14219,12 @@ export class ProjectKanbanView {
         }
     }
 
-    private dispatchReminderUpdate(skipSelfUpdate: boolean = true) {
+    private dispatchReminderUpdate(skipSelfUpdate: boolean = true, refreshAllProjects: boolean = false) {
 
         window.dispatchEvent(new CustomEvent('reminderUpdated', {
             detail: {
                 source: skipSelfUpdate ? this.kanbanInstanceId : null,
-                projectId: this.isAggregateView ? undefined : this.projectId
+                projectId: this.isAggregateView || refreshAllProjects ? undefined : this.projectId
             }
         }));
     }
@@ -15772,9 +15859,43 @@ export class ProjectKanbanView {
     }
 
     /**
-     * 批量更新任务属性 (用于拖拽)
+     * 跨项目移动前清理项目专属字段，并确定需要解除的父子关系。
      */
-    private async batchUpdateTasks(taskIds: string[], updates: { kanbanStatus?: string, customGroupId?: string | null, tagIds?: string[], milestoneId?: string | null, projectId?: string | null, priority?: string }) {
+    private async prepareCrossProjectMove(taskIds: string[], reminderData: any, targetProjectId?: string | null): Promise<Set<string>> {
+        const changedIds = new Set<string>();
+        if (!targetProjectId) return changedIds;
+        const movingIds = new Set<string>();
+        for (const taskId of taskIds) {
+            const task = this.findOrCreateUiTask(taskId, reminderData);
+            const dbId = task?.isRepeatInstance ? task.originalId : task?.id;
+            if (!dbId || !reminderData[dbId]) continue;
+            movingIds.add(dbId);
+            this.getAllDescendantIds(dbId, reminderData).forEach(id => movingIds.add(id));
+        }
+        const crossProjectIds = [...movingIds].filter(id => reminderData[id].projectId !== targetProjectId);
+        if (!crossProjectIds.length) return changedIds;
+        const statuses = await this.projectManager.getProjectKanbanStatuses(targetProjectId);
+        const validStatuses = new Set(statuses.map(status => status.id));
+        const fallbackStatus = statuses.find(status => status.id === 'doing') || statuses.find(status => status.id !== 'completed');
+        for (const id of crossProjectIds) {
+            const task = reminderData[id];
+            // 这些 ID 属于源项目，目标分组等显式值随后由批量更新写入。
+            delete task.customGroupId;
+            delete task.milestoneId;
+            delete task.tagIds;
+            if (!task.completed && !validStatuses.has(task.kanbanStatus) && fallbackStatus) {
+                task.kanbanStatus = fallbackStatus.id;
+            }
+            if (task.parentId && !movingIds.has(task.parentId) && reminderData[task.parentId]?.projectId !== targetProjectId) {
+                delete task.parentId;
+            }
+            changedIds.add(id);
+        }
+        return changedIds;
+    }
+
+    /** 批量更新任务属性（用于拖拽）。 */
+    private async batchUpdateTasks(taskIds: string[], updates: { kanbanStatus?: string, customGroupId?: string | null, tagIds?: string[], milestoneId?: string | null, projectId?: string | null, priority?: string, sort?: number, sortStep?: number }) {
         // console.log('[Kanban] batchUpdateTasks called:', { taskIds, updates });
         try {
             if (updates.kanbanStatus === 'completed' && this.plugin?.playTaskCompleteSound) {
@@ -15854,8 +15975,13 @@ export class ProjectKanbanView {
             } catch (err) {
                 // 忽略日期解析错误，继续后续更新
             }
+            const movedIds = await this.prepareCrossProjectMove(taskIds, reminderData, updates.projectId);
             const blocksToUpdate = new Set<string>();
-            let hasChanges = false;
+            movedIds.forEach(id => {
+                const task = reminderData[id];
+                if (task.blockId || task.docId) blocksToUpdate.add(task.blockId || task.docId);
+            });
+            let hasChanges = movedIds.size > 0;
             let updatedCount = 0;
             const recurringOriginalIds = new Set<string>();
 
@@ -16000,7 +16126,7 @@ export class ProjectKanbanView {
 
                     const originalParentStatus = this.getTaskStatus(uiTask);
 
-                    for (const oid of allSubtaskIdsToUpdate) {
+                    for (const oid of originalIdsToUpdate) {
                         if (oid === originalId) continue; // 跳过根任务，根任务的普通更新在 instMod 循环外由 normal item 逻辑或后续逻辑处理并不准确，
                         // 实际上这里的逻辑是处理 “当拖动实例 A 时，A 的子任务 B (也是DB中的一条记录) 该如何更新”。
 
@@ -16099,6 +16225,11 @@ export class ProjectKanbanView {
                         if (!item) continue;
 
                         let itemChanged = false;
+
+                        if (uid === dbId && updates.sort !== undefined) {
+                            item.sort = updates.sort + taskIds.indexOf(taskId) * (updates.sortStep ?? 0);
+                            itemChanged = true;
+                        }
 
                         let shouldUpdateStatus = (uid === dbId);
                         if (!shouldUpdateStatus && updates.kanbanStatus) {
@@ -16199,22 +16330,6 @@ export class ProjectKanbanView {
                             }
                         }
 
-                        // Parent detachment: 仅当跨项目移动且父任务不在新项目中时才解除父子关系
-                        // 修复：不应因为状态或分组变化而解除父子关系，子任务可以独立改变状态/分组
-                        if (uid === dbId && item.parentId) {
-                            const projectChanged = updates.projectId !== undefined && item.projectId !== updates.projectId;
-                            if (projectChanged) {
-                                // 只有当父任务不在目标项目中时才解除父子关系
-                                const parentInDb = reminderData[item.parentId];
-                                const parentInNewProject = parentInDb && parentInDb.projectId === updates.projectId;
-                                if (!parentInNewProject) {
-                                    delete item.parentId;
-                                    itemChanged = true;
-                                }
-                            }
-                            // 注意：仅状态或分组变化时，保留 parentId，子任务仍属于父任务
-                        }
-
                         if (itemChanged) {
                             // console.log('[Kanban] Task updated in DB cache:', { taskId: item.id, itemChanged, finalProject: item.projectId, finalStatus: item.kanbanStatus });
                             hasChanges = true;
@@ -16230,7 +16345,8 @@ export class ProjectKanbanView {
             if (hasChanges) {
                 await saveReminders(this.plugin, reminderData);
                 await this.refreshRecurringMobileNotifications(reminderData, recurringOriginalIds);
-                this.dispatchReminderUpdate(true);
+                // 跨项目时源看板也要刷新，不能仅广播目标项目。
+                this.dispatchReminderUpdate(true, movedIds.size > 0);
                 await this.queueLoadTasks(); // Full reload
                 showMessage(i18n('batchUpdateSuccess', { count: String(updatedCount) }) || `成功更新 ${updatedCount} 个任务`);
 
