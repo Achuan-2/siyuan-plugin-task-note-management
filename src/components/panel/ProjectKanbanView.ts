@@ -7327,7 +7327,8 @@ export class ProjectKanbanView {
             e.stopPropagation();
             const gid = group.id === 'ungrouped' ? null : group.id;
             const filterKey = group.id === 'ungrouped' ? 'ungrouped' : group.id;
-            this.showCreateTaskDialog(undefined, gid, undefined, this.getSingleFilteredMilestoneId(filterKey));
+            const status = this.getActiveCustomGroupStatus(group.id);
+            this.showCreateTaskDialog(undefined, gid, status, this.getSingleFilteredMilestoneId(filterKey));
         });
 
         // 粘贴新建任务按钮（对应该自定义分组）
@@ -7339,7 +7340,7 @@ export class ProjectKanbanView {
             e.stopPropagation();
             const gid = group.id === 'ungrouped' ? null : group.id;
             // 显示选择器
-            this.showPasteTaskDialog(undefined, gid, undefined, true);
+            this.showPasteTaskDialog(undefined, gid, this.getActiveCustomGroupStatus(group.id), true);
         });
 
         const headerRight = document.createElement('div');
@@ -7527,15 +7528,23 @@ export class ProjectKanbanView {
         }
     }
 
+    private getActiveCustomGroupStatus(groupId: string): string | undefined {
+        if (this.kanbanMode !== 'custom' || !this.statusTabsMode) return undefined;
+        return this.activeGroupStatusTabIds.get(`${this.projectId}:${groupId}`);
+    }
+
     private renderCustomGroupStatusTabs(
         container: HTMLElement,
         group: any,
         entries: Array<{ status: any; tasks: any[] }>
     ) {
-        if (entries.length === 0) return;
-
         // 项目和分组共同标识选中状态，避免切换项目后串用同名分组的状态。
         const selectionKey = `${this.projectId}:${group.id}`;
+        if (entries.length === 0) {
+            this.activeGroupStatusTabIds.delete(selectionKey);
+            return;
+        }
+
         const previousStatusId = this.activeGroupStatusTabIds.get(selectionKey);
         const activeStatusId = entries.some(entry => entry.status.id === previousStatusId)
             ? previousStatusId
@@ -7557,11 +7566,19 @@ export class ProjectKanbanView {
         };
 
         const buttons = new Map<string, HTMLButtonElement>();
-        entries.forEach(({ status }) => {
+        entries.forEach(({ status, tasks }) => {
             const button = document.createElement('button');
             button.type = 'button';
             button.className = 'b3-button custom-group-status-tab-btn';
             button.textContent = status.icon ? `${status.icon} ${status.name}` : status.name;
+
+            // 与原状态 header 一致，只统计当前状态中的顶层任务，不计入其子任务。
+            const taskIds = new Set(tasks.map(task => task.id));
+            const count = document.createElement('span');
+            count.className = 'custom-group-status-tab-count';
+            count.textContent = String(tasks.filter(task => !task.parentId || !taskIds.has(task.parentId)).length);
+            button.appendChild(count);
+
             button.dataset.groupId = group.id;
             button.dataset.status = status.id;
             this.addStatusSubGroupDropEvents(button, status.id);
@@ -7727,6 +7744,10 @@ export class ProjectKanbanView {
             padding-top: 8px; /* 添加一点顶部间距 */
             min-height: 20px; /* 确保即使没有任务也有拖放区域 */
         `;
+        if (tabbed) {
+            groupContainer.classList.add('custom-status-group--tabbed');
+            groupTasksContainer.style.paddingTop = '0';
+        }
 
         // 为子分组添加拖放事件处理器
         this.addStatusSubGroupDropEvents(groupTasksContainer, status);
@@ -7780,7 +7801,9 @@ export class ProjectKanbanView {
             groupTitle.insertBefore(collapseBtn, groupIcon);
         }
 
-        groupContainer.appendChild(groupHeaderWrapper);
+        if (!tabbed) {
+            groupContainer.appendChild(groupHeaderWrapper);
+        }
 
         // 渲染任务
         const pageKey = `custom-mode-${groupKey}`;

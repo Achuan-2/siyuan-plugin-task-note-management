@@ -1265,7 +1265,7 @@ export class PasteTaskDialog {
                 priority: inheritedPriority,
                 categoryId: categoryId,
                 projectId: projectId,
-                completed: !!task.completed,
+                completed: kanbanStatus === 'completed' || !!task.completed,
                 kanbanStatus: kanbanStatus,
                 createdTime: new Date().toISOString(),
                 created: getLocalDateTimeString(new Date()),
@@ -1276,6 +1276,10 @@ export class PasteTaskDialog {
                 reminderTimes: task.reminderTimes,
                 sort: sortCounter,
             };
+
+            if (kanbanStatus === 'completed') {
+                newTask.completedTime = getLocalDateTimeString(new Date());
+            }
 
             if (selectedMilestoneId) {
                 newTask.milestoneId = selectedMilestoneId;
@@ -1415,10 +1419,10 @@ export class PasteTaskDialog {
             'completed': i18n('completed') || '已完成'
         };
 
-        // 构建状态选项（排除已完成状态）
+        // 从已完成页签新建时保留该默认选项，避免下拉框回退到其他状态。
         let statusOptionsHtml = '';
         kanbanStatuses
-            .filter((status: any) => status.id !== 'completed')
+            .filter((status: any) => status.id !== 'completed' || defaultStatus === 'completed')
             .forEach((status: any) => {
                 const name = status.name || statusNameMap[status.id] || status.id;
                 const selected = status.id === defaultStatus ? 'selected' : '';

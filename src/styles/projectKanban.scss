@@ -746,10 +746,21 @@
     box-shadow: inset 0 0 0 2px var(--b3-theme-primary);
 }
 
+.custom-group-status-tab-count {
+    margin-inline-start: 6px;
+    font-size: 12px;
+    opacity: 0.8;
+}
+
 .custom-status-group {
     background: var(--b3-theme-background);
     border-radius: 8px;
     border: 1px solid var(--b3-border-color);
+}
+
+.custom-status-group--tabbed {
+    border: 0;
+    background: transparent;
 }
 
 .custom-status-group-header {
