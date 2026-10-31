@@ -108,6 +108,7 @@ export class PomodoroTimer {
     private static bwAudioPlaybackGeneration = Date.now();
 
     private isWindowClosed: boolean = false; // 新增：窗口关闭状态标记
+    private nativePhaseMenu: any = null;
     private isRecreatingWindow: boolean = false; // 窗口重建中标记（吸附模式切换时防止 closed 事件杀死计时器和音频）
     private bwAudioDataUrlCache: Map<string, string> = new Map(); // BW 音频 data URL 缓存
     private pendingSettings: any = null; // pending settings when update skipped due to running
@@ -5165,6 +5166,61 @@ export class PomodoroTimer {
         showMessage((i18n('switchedToMode') || '已切换到') + modeText + (i18n('mode') || '模式'), 2000);
     }
 
+    private hideNativePhaseMenuPopup() {
+        const menu = this.nativePhaseMenu;
+        this.nativePhaseMenu = null;
+        if (menu) menu.closePopup();
+    }
+
+    private showNativePhaseMenuPopup(anchor: { x: number; y: number }) {
+        const owner = PomodoroTimer.browserWindowInstance;
+        if (!owner || owner.isDestroyed()) return;
+        this.hideNativePhaseMenuPopup();
+
+        const notifyClosed = (selected: boolean, cursor: { x: number; y: number } | null = null) => {
+            if (owner.isDestroyed()) return;
+            owner.webContents.executeJavaScript(
+                `window.onPhaseMenuClosed?.(${selected}, ${JSON.stringify(cursor)});`
+            ).catch(() => { });
+        };
+
+        try {
+            // 子窗口不一定启用了 @electron/remote，沿用主界面已建立的 IPC 通道创建原生菜单。
+            const electronReq = (window as any).require;
+            const remote = electronReq('@electron/remote') || electronReq('electron')?.remote;
+            const zoom = owner.webContents.getZoomFactor();
+            let selected = false;
+            const selectPhase = (method: string) => {
+                selected = true;
+                this.callMethod(method);
+                notifyClosed(true);
+            };
+            const menu = remote.Menu.buildFromTemplate([
+                { label: `💪 ${i18n('pomodoroWork') || '工作时间'}`, click: () => selectPhase('startWorkTime') },
+                { label: `🍵 ${i18n('pomodoroBreak') || '短时休息'}`, click: () => selectPhase('startShortBreak') },
+                { label: `🧘 ${i18n('pomodoroLongBreak') || '长时休息'}`, click: () => selectPhase('startLongBreak') }
+            ]);
+            this.nativePhaseMenu = menu;
+            menu.popup({
+                window: owner,
+                x: Math.round(anchor.x * zoom + 3),
+                y: Math.round(anchor.y * zoom),
+                callback: () => {
+                    if (this.nativePhaseMenu !== menu) return;
+                    this.nativePhaseMenu = null;
+                    if (owner.isDestroyed()) return;
+                    const cursor = remote.screen.getCursorScreenPoint();
+                    const bounds = owner.getContentBounds();
+                    notifyClosed(selected, { x: (cursor.x - bounds.x) / zoom, y: (cursor.y - bounds.y) / zoom });
+                }
+            });
+        } catch (error) {
+            this.hideNativePhaseMenuPopup();
+            notifyClosed(false);
+            console.error('[PomodoroTimer] Failed to show phase menu', error);
+        }
+    }
+
     private showNativeSwitchMenuPopup() {
         const electronReq = typeof window !== 'undefined' ? ((window as any).require || (window as any).exports?.require || (window as any).parent?.require) : null;
         if (!electronReq) return;
@@ -9857,7 +9913,7 @@ document.body.classList.remove('docked-mode');
             overflow: visible;
             flex-shrink: 0;
         }
-        .switch-menu, .phase-menu {
+        .switch-menu {
             -webkit-app-region: no-drag;
             position: fixed;
             top: 0;
@@ -9873,9 +9929,7 @@ document.body.classList.remove('docked-mode');
             min-width: 128px;
             pointer-events: auto;
         }
-        .switch-menu.show, .phase-menu.show { display: flex; }
-        .phase-menu { min-width: 100px; z-index: 10001; }
-        .phase-menu-group { display: flex; flex-direction: column; }
+        .switch-menu.show { display: flex; }
         .phase-menu-trigger { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
         /* Electron 拖拽区域不会触发点击；菜单展开时允许空白处接收关闭事件。 */
         body.switch-menu-open,
@@ -9900,6 +9954,7 @@ document.body.classList.remove('docked-mode');
             white-space: nowrap;
         }
         .menu-item:not(:disabled):hover { background: ${hoverColor}; }
+        .phase-menu-trigger[aria-expanded="true"] { background: ${hoverColor}; }
         .menu-item:disabled { opacity: 0.5; cursor: default !important; }
         .volume-menu {
             -webkit-app-region: no-drag;
@@ -10624,16 +10679,9 @@ document.body.classList.remove('docked-mode');
         <button class="menu-item" id="switchModeMenuItem" onclick="callMethod('toggleMode')">
             ${currentState.isCountUp ? '🍅' : '⏱'} ${currentState.isCountUp ? switchToCountdownText : switchToCountUpText}
         </button>
-        <div class="phase-menu-group" onmouseenter="showPhaseMenu()" onmouseleave="schedulePhaseMenuClose()">
-            <button class="menu-item phase-menu-trigger" id="phaseMenuTrigger" onclick="showPhaseMenu(event)" aria-haspopup="menu" aria-expanded="false">
-                <span>🔄 ${i18n('pomodoroSwitchStatus')}</span><span aria-hidden="true">›</span>
-            </button>
-            <div class="phase-menu" id="phaseMenu" role="menu">
-                <button class="menu-item" role="menuitem" onclick="callMethod('startWorkTime')">💪 ${workText}</button>
-                <button class="menu-item" role="menuitem" onclick="callMethod('startShortBreak')">🍵 ${shortBreakText}</button>
-                <button class="menu-item" role="menuitem" onclick="callMethod('startLongBreak')">🧘 ${longBreakText}</button>
-            </div>
-        </div>
+        <button class="menu-item phase-menu-trigger" id="phaseMenuTrigger" onmouseenter="showPhaseMenu()" onclick="showPhaseMenu(event)" aria-haspopup="menu" aria-expanded="false">
+            <span>🔄 ${i18n('pomodoroSwitchStatus')}</span><span aria-hidden="true">›</span>
+        </button>
         <button class="menu-item" id="editDurationMenuItem" onclick="callMethod('editTime')" ${currentState.isCountUp && currentState.isWorkPhase ? 'disabled' : ''}>✏️ ${i18n('pomodoroEditDuration')}</button>
         <button class="menu-item" onclick="callMethod('openPomodoroSettings')">${i18n('pomodoroSettings') || '番茄钟设置'}</button>
     </div>
@@ -10834,50 +10882,38 @@ document.body.classList.remove('docked-mode');
             ipcRenderer.send('${actionChannel}', 'syncTimerState');
         }
         
-        let phaseMenuHideTimer = null;
+        let phaseMenuOpen = false;
 
         function hidePhaseMenu() {
-            clearTimeout(phaseMenuHideTimer);
-            phaseMenuHideTimer = null;
-            document.getElementById('phaseMenu')?.classList.remove('show');
+            const wasOpen = phaseMenuOpen;
+            phaseMenuOpen = false;
             document.getElementById('phaseMenuTrigger')?.setAttribute('aria-expanded', 'false');
-        }
-
-        function schedulePhaseMenuClose() {
-            clearTimeout(phaseMenuHideTimer);
-            phaseMenuHideTimer = setTimeout(hidePhaseMenu, 160);
+            if (wasOpen) ipcRenderer.send('${actionChannel}', 'hidePhaseMenuPopup');
         }
 
         function showPhaseMenu(event) {
             if (event) event.stopPropagation();
-            clearTimeout(phaseMenuHideTimer);
-            phaseMenuHideTimer = null;
+            if (phaseMenuOpen) return;
             const rootMenu = document.getElementById('switchMenu');
-            const submenu = document.getElementById('phaseMenu');
             const trigger = document.getElementById('phaseMenuTrigger');
-            if (!rootMenu?.classList.contains('show') || !submenu || !trigger) return;
+            if (!rootMenu?.classList.contains('show') || !trigger) return;
 
-            submenu.classList.add('show');
-            trigger.setAttribute('aria-expanded', 'true');
-            const padding = 4;
-            const gap = 3;
-            const submenuRect = submenu.getBoundingClientRect();
-            let rootRect = rootMenu.getBoundingClientRect();
-            let left = rootRect.right + gap;
-            if (left + submenuRect.width > window.innerWidth - padding) {
-                if (rootRect.left - gap - submenuRect.width >= padding) {
-                    left = rootRect.left - gap - submenuRect.width;
-                } else {
-                    // 两侧空间都不足时移动一级菜单，尽量让两级菜单完整显示。
-                    rootMenu.style.left = Math.max(padding, window.innerWidth - padding - submenuRect.width - gap - rootRect.width) + 'px';
-                    rootRect = rootMenu.getBoundingClientRect();
-                    left = rootRect.right + gap;
-                }
-            }
+            const rootRect = rootMenu.getBoundingClientRect();
             const triggerRect = trigger.getBoundingClientRect();
-            submenu.style.left = Math.max(padding, Math.min(left, window.innerWidth - submenuRect.width - padding)) + 'px';
-            submenu.style.top = Math.max(padding, Math.min(triggerRect.top, window.innerHeight - submenuRect.height - padding)) + 'px';
+            phaseMenuOpen = true;
+            trigger.setAttribute('aria-expanded', 'true');
+            // 不使用 callMethod，避免打开二级菜单时同时关闭一级菜单。
+            ipcRenderer.send('${actionChannel}', 'showPhaseMenuPopup', { x: rootRect.right, y: triggerRect.top });
         }
+
+        window.onPhaseMenuClosed = (selected, cursor) => {
+            phaseMenuOpen = false;
+            document.getElementById('phaseMenuTrigger')?.setAttribute('aria-expanded', 'false');
+            const target = cursor ? document.elementFromPoint(cursor.x, cursor.y) : null;
+            if (selected || (cursor && !target?.closest('#switchMenu, #statusBtn'))) closeSwitchMenu();
+        };
+
+        window.addEventListener('beforeunload', hidePhaseMenu);
 
         function closeSwitchMenu() {
             hidePhaseMenu();
@@ -11679,6 +11715,12 @@ document.body.classList.remove('docked-mode');
                     break;
                 case 'showSwitchMenuPopup':
                     this.showNativeSwitchMenuPopup();
+                    break;
+                case 'showPhaseMenuPopup':
+                    this.showNativePhaseMenuPopup(args[0]);
+                    break;
+                case 'hidePhaseMenuPopup':
+                    this.hideNativePhaseMenuPopup();
                     break;
                 case 'openPomodoroSettings':
                     this.plugin?.openSetting?.(i18n('pomodoroSettings'));
