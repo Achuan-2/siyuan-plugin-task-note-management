@@ -9812,6 +9812,11 @@ document.body.classList.remove('docked-mode');
             pointer-events: auto;
         }
         .switch-menu.show { display: flex; }
+        /* Electron 拖拽区域不会触发点击；菜单展开时允许空白处接收关闭事件。 */
+        body.switch-menu-open,
+        body.switch-menu-open * {
+            -webkit-app-region: no-drag !important;
+        }
         .menu-item {
             -webkit-app-region: no-drag;
             background: none;
@@ -10699,6 +10704,7 @@ document.body.classList.remove('docked-mode');
         }
         
         function closeSwitchMenu() {
+            document.body.classList.remove('switch-menu-open');
             const m = document.getElementById('switchMenu');
             if (m) m.classList.remove('show');
             const miniMenu = document.getElementById('miniSwitchMenu');
@@ -10721,7 +10727,8 @@ document.body.classList.remove('docked-mode');
                 m.style.top = (rect.bottom + 4) + 'px';
                 m.style.left = rect.left + 'px';
             }
-            m.classList.toggle('show');
+            m.classList.toggle('show', willShow);
+            document.body.classList.toggle('switch-menu-open', willShow);
             const miniMenu = document.getElementById('miniSwitchMenu');
             if (miniMenu) miniMenu.classList.remove('show');
         }
