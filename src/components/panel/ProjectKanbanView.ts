@@ -7681,11 +7681,7 @@ export class ProjectKanbanView {
             text-align: center;
         `;
 
-        if (!tabbed) {
-            groupHeader.appendChild(groupTitle);
-        } else {
-            groupHeader.style.justifyContent = 'flex-end';
-        }
+        groupHeader.appendChild(groupTitle);
 
         const headerRight = document.createElement('div');
         headerRight.style.cssText = 'display:flex; align-items:center; gap:8px;';
