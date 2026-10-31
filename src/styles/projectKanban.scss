@@ -733,7 +733,8 @@
     padding: 4px;
 }
 
-.custom-group-status-tabs-bar {
+.custom-group-status-tabs-bar,
+.status-group-tabs-bar {
     position: sticky;
     top: 0;
     z-index: 11;
@@ -742,7 +743,8 @@
     background: var(--b3-theme-background);
 }
 
-.custom-group-status-tab-btn.kanban-drop-zone-active {
+.custom-group-status-tab-btn.kanban-drop-zone-active,
+.status-group-tab-btn.kanban-drop-zone-active {
     box-shadow: inset 0 0 0 2px var(--b3-theme-primary);
 }
 
@@ -759,7 +761,8 @@
     border: 1px solid var(--b3-border-color);
 }
 
-.custom-status-group--tabbed {
+.custom-status-group--tabbed,
+.custom-group-in-status--tabbed {
     border: 0;
     background: transparent;
 }
