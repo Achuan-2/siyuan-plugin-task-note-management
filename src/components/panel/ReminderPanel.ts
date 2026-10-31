@@ -13,6 +13,7 @@ import { showAddTaskReminderTimeDialog } from "../dialog/AddTaskReminderTimeDial
 import { i18n } from "../../pluginInstance";
 import { TaskRenderer } from "../render/TaskRenderer";
 import { cleanReminderItem } from "../../utils/reminderLoadUtils";
+import { TaskHierarchyIndex } from '../../utils/taskHierarchy';
 import { generateRepeatInstances, generateRepeatInstancesWithFutureGuarantee, getRepeatDescription, getDaysDifference, addDaysToDate, generateSubtreeInstances, parseReminderInstanceId, getRepeatInstanceOriginalKey, isRepeatInstanceCompleted, getRepeatInstanceCompletedTime, setRepeatInstanceCompletion, setRepeatInstanceOverride, patchRepeatInstanceState, removeRepeatInstance, deleteRepeatInstanceState, getRepeatInstanceState, getInstanceField } from "../dataManager/repeatUtils";
 import { PomodoroTimer } from "./PomodoroTimer";
 import { getLastStatsMode } from "../stats/statsMode";
@@ -42,6 +43,11 @@ interface ReminderPanelFilterSortConfig {
 }
 
 const FILTER_SETTINGS_FILE = 'filter-settings.json';
+
+interface ReminderRenderIndexes {
+    all: TaskHierarchyIndex;
+    visible: TaskHierarchyIndex;
+}
 
 interface ReminderElementRenderState {
     reminder: any;
@@ -2411,8 +2417,6 @@ export class ReminderPanel {
                         return group;
                     };
 
-                    const groups = roots.map(r => buildGroup(r));
-
                     const startParent = (this.currentPage - 1) * this.itemsPerPage;
                     const endParent = startParent + this.itemsPerPage;
                     const selectedRoots = roots.slice(startParent, endParent);
@@ -2455,7 +2459,8 @@ export class ReminderPanel {
             }
 
             // 6. 保留已有卡片，等新列表准备完成后按任务 ID 更新。
-            const topLevelReminders = displayReminders.filter(r => !r.parentId || !displayReminders.some(p => p.id === r.parentId));
+            const visibleIds = new Set(displayReminders.map(reminder => reminder.id));
+            const topLevelReminders = displayReminders.filter(r => !r.parentId || !visibleIds.has(r.parentId));
 
             if (topLevelReminders.length === 0) {
                 this.totalItems = 0;
@@ -2598,89 +2603,41 @@ export class ReminderPanel {
         }
 
         // 批量获取番茄钟计数和总专注时长（分钟）
-        const pomodoroPromises = reminders.map(async (reminder) => {
-            try {
-                // 每个实例使用自己的ID来获取独立的番茄钟计数
-                const fullData = reminderDataFull || reminders;
-                const stats = await this.pomodoroRecordManager.resolveReminderPomodoroStats(reminder, fullData);
-                return { id: reminder.id, ...stats };
-            } catch (error) {
-                console.warn(`Failed to get pomodoro count for task ${reminder.id}:`, error);
-                return { id: reminder.id, pomodoroCount: 0, focusTime: 0, todayPomodoroCount: 0, todayFocusTime: 0, totalRepeatingPomodoroCount: 0, totalRepeatingFocusTime: 0 };
-            }
-        });
-
-        // 批量获取项目信息
-        const projectPromises = reminders
-            .filter(reminder => reminder.projectId)
-            .map(async (reminder) => {
-                try {
-                    const projectData = await this.plugin.loadProjectData();
-                    const project = projectData[reminder.projectId];
-                    return { id: reminder.id, project };
-                } catch (error) {
-                    console.warn(`Failed to get project information for task ${reminder.id}:`, error);
-                    return { id: reminder.id, project: null };
-                }
+        const pomodoroPromise = this.pomodoroRecordManager
+            .resolveReminderPomodoroStatsBatch(reminders, reminderDataFull || reminders)
+            .catch(error => {
+                console.warn('Failed to get task pomodoro statistics:', error);
+                return new Map();
             });
 
-        // 批量获取习惯绑定信息
-        const habitResults = reminders.map((reminder) => {
-            if (!reminder.linkedHabitId) {
-                return { id: reminder.id, habit: null };
-            }
-            return { id: reminder.id, habit: habitData?.[reminder.linkedHabitId] || null };
-        });
+        // 批量获取项目信息
+        const projectPromise = reminders.some(reminder => reminder.projectId)
+            ? this.plugin.loadProjectData().catch(error => {
+                console.warn('Failed to get project information:', error);
+                return {};
+            })
+            : Promise.resolve({});
 
         // 并行执行所有异步操作
-        const [pomodoroResults, projectResults] = await Promise.all([
-            Promise.all(pomodoroPromises),
-            Promise.all(projectPromises)
+        const [pomodoroStats, projectData] = await Promise.all([
+            pomodoroPromise,
+            projectPromise,
         ]);
 
         // 构建缓存
-        pomodoroResults.forEach(result => {
+        reminders.forEach(reminder => {
+            const result = { id: reminder.id, ...pomodoroStats.get(reminder.id) };
             asyncDataCache.set(result.id, {
-                pomodoroCount: result.pomodoroCount,
+                pomodoroCount: result.pomodoroCount || 0,
                 focusTime: result.focusTime || 0,
                 todayPomodoroCount: result.todayPomodoroCount || 0,
                 todayFocusTime: result.todayFocusTime || 0,
                 totalRepeatingPomodoroCount: result.totalRepeatingPomodoroCount || 0,
                 totalRepeatingFocusTime: result.totalRepeatingFocusTime || 0,
                 docTitle: docTitleByReminderId.get(result.id) || '',
-                project: null,
-                habit: null
+                project: reminder.projectId ? projectData?.[reminder.projectId] : null,
+                habit: reminder.linkedHabitId ? habitData?.[reminder.linkedHabitId] || null : null,
             });
-        });
-
-        projectResults.forEach(result => {
-            if (asyncDataCache.has(result.id)) {
-                asyncDataCache.get(result.id).project = result.project;
-            } else {
-                asyncDataCache.set(result.id, {
-                    pomodoroCount: 0,
-                    todayPomodoroCount: 0,
-                    todayFocusTime: 0,
-                    docTitle: docTitleByReminderId.get(result.id) || '',
-                    project: result.project,
-                    habit: null
-                });
-            }
-        });
-
-        habitResults.forEach(result => {
-            if (asyncDataCache.has(result.id)) {
-                asyncDataCache.get(result.id).habit = result.habit;
-            } else {
-                asyncDataCache.set(result.id, {
-                    pomodoroCount: 0,
-                    todayPomodoroCount: 0,
-                    todayFocusTime: 0,
-                    docTitle: docTitleByReminderId.get(result.id) || '',
-                    project: null,
-                    habit: result.habit
-                });
-            }
         });
 
         return asyncDataCache;
@@ -2829,16 +2786,22 @@ export class ReminderPanel {
      * @param today 今天的日期字符串
      */
     private renderRemindersIteratively(reminders: any[], asyncDataCache: Map<string, any>, today: string) {
+        const indexes: ReminderRenderIndexes = {
+            all: new TaskHierarchyIndex(this.allRemindersMap.values()),
+            visible: new TaskHierarchyIndex(reminders),
+        };
         // 先收集目标节点；复用的卡片在提交前保持连接，避免移入 fragment 时先消失。
         const elements: HTMLElement[] = [];
 
-        // 创建队列来处理任务渲染（广度优先）
+        // 使用栈按深度优先渲染，避免 shift/unshift 反复搬移整个数组。
         const renderQueue: Array<{ reminder: any; level: number }> = [];
 
         // 初始化队列：只添加顶级任务（没有父任务的任务）
         // 注意：如果某个任务的父任务不在当前可见列表中，也应当将其视为顶级（例如祖先被过滤掉的情况）
-        const topLevelReminders = reminders.filter(r => !r.parentId || !reminders.some(p => p.id === r.parentId));
-        topLevelReminders.forEach(reminder => renderQueue.push({ reminder, level: 0 }));
+        const topLevelReminders = reminders.filter(r => !r.parentId || !indexes.visible.byId.has(r.parentId));
+        for (let i = topLevelReminders.length - 1; i >= 0; i--) {
+            renderQueue.push({ reminder: topLevelReminders[i], level: 0 });
+        }
         const isTodayTaskGroupedView = this.isTodayLikeView();
         const isTodayCompletedGroupedView = this.currentTab === 'todayCompleted';
         const sectionCounts = topLevelReminders.reduce((counts, item) => {
@@ -2853,11 +2816,11 @@ export class ReminderPanel {
 
         // 处理渲染队列
         while (renderQueue.length > 0) {
-            const { reminder, level } = renderQueue.shift()!;
+            const { reminder, level } = renderQueue.pop()!;
 
             try {
                 // 创建任务元素（使用预处理的异步数据）
-                const element = this.createReminderElementOptimized(reminder, asyncDataCache, today, level, reminders);
+                const element = this.createReminderElementOptimized(reminder, asyncDataCache, today, level, reminders, indexes);
 
                 // 添加到文档片段
 
@@ -2893,13 +2856,13 @@ export class ReminderPanel {
                 elements.push(element);
 
                 // 如果任务有子任务且未折叠，添加到队列中
-                const hasChildren = reminders.some(r => r.parentId === reminder.id);
+                const children = indexes.visible.children(reminder.id);
+                const hasChildren = children.length > 0;
                 // 传入 hasChildren 给 isTaskCollapsed，保证折叠判定在渲染时与元素创建时一致
                 if (hasChildren && !this.isTaskCollapsed(reminder.id, hasChildren)) {
-                    const children = reminders.filter(r => r.parentId === reminder.id);
-                    // 按排序添加子任务到队列前面（深度优先）
+                    // 倒序入栈以保持既有的同级排序。
                     for (let i = children.length - 1; i >= 0; i--) {
-                        renderQueue.unshift({ reminder: children[i], level: level + 1 });
+                        renderQueue.push({ reminder: children[i], level: level + 1 });
                     }
                 }
             } catch (error) {
@@ -2927,9 +2890,9 @@ export class ReminderPanel {
     }
 
     /** 仅嵌套展示时隐藏与直接父任务相同的项目、分类；独立展示的子任务保留标签。 */
-    private getReminderBadgeVisibility(reminder: any, level: number, allVisibleReminders: any[]): { showProjectBadge: boolean; showCategoryBadge: boolean } {
+    private getReminderBadgeVisibility(reminder: any, level: number, allVisibleReminders: any[], indexes?: ReminderRenderIndexes): { showProjectBadge: boolean; showCategoryBadge: boolean } {
         const parent = level > 0 && reminder.parentId
-            ? allVisibleReminders.find(task => task.id === reminder.parentId)
+            ? (indexes ? indexes.visible.byId.get(reminder.parentId) : allVisibleReminders.find(task => task.id === reminder.parentId))
                 || this.currentRemindersCache.find(task => task.id === reminder.parentId)
                 || this.allRemindersMap.get(reminder.parentId)
             : null;
@@ -2944,10 +2907,11 @@ export class ReminderPanel {
     }
 
     /** 标题、备注和排序位置可局部更新；其他渲染依赖变化时重建对应卡片。 */
-    private getReminderElementSignature(reminder: any, asyncDataCache: Map<string, any>, today: string, level: number, allVisibleReminders: any[]): string {
-        const allTasks = Array.from(this.allRemindersMap.values());
-        const children = allTasks.filter(task => task.parentId === reminder.id);
-        const visibleMap = new Map(allVisibleReminders.map(task => [task.id, task]));
+    private getReminderElementSignature(reminder: any, asyncDataCache: Map<string, any>, today: string, level: number, allVisibleReminders: any[], indexes?: ReminderRenderIndexes): string {
+        const all = indexes?.all || new TaskHierarchyIndex(this.allRemindersMap.values());
+        const visible = indexes?.visible || new TaskHierarchyIndex(allVisibleReminders);
+        const children = all.children(reminder.id);
+        const visibleMap = visible.byId;
         const ancestors: string[] = [];
         const visited = new Set<string>();
         let parentId = reminder.parentId;
@@ -2974,9 +2938,9 @@ export class ReminderPanel {
             reminder: renderReminder,
             today, level, tab: this.currentTab,
             children: children.map(task => ({ id: task.id, completed: !!task.completed })),
-            visibleDescendants: this.getAllDescendantIds(reminder.id, visibleMap),
+            visibleDescendants: visible.descendantIds(reminder.id),
             parentVisible: visibleMap.has(reminder.parentId),
-            badges: this.getReminderBadgeVisibility(reminder, level, allVisibleReminders),
+            badges: this.getReminderBadgeVisibility(reminder, level, allVisibleReminders, indexes),
             ancestors,
             collapsed: this.isTaskCollapsed(reminder.id, children.length > 0),
             selected: this.selectedReminderIds.has(reminder.id),
@@ -3049,8 +3013,8 @@ export class ReminderPanel {
         }
     }
 
-    private createReminderElementOptimized(reminder: any, asyncDataCache: Map<string, any>, today: string, level: number = 0, allVisibleReminders: any[] = []): HTMLElement {
-        const signature = this.getReminderElementSignature(reminder, asyncDataCache, today, level, allVisibleReminders);
+    private createReminderElementOptimized(reminder: any, asyncDataCache: Map<string, any>, today: string, level: number = 0, allVisibleReminders: any[] = [], indexes?: ReminderRenderIndexes): HTMLElement {
+        const signature = this.getReminderElementSignature(reminder, asyncDataCache, today, level, allVisibleReminders, indexes);
         const existing = this.remindersContainer.querySelector<HTMLElement>(`[data-reminder-id="${reminder.id}"]`);
         const renderState = existing && this.reminderElementStates.get(existing);
         if (existing && renderState?.signature === signature) {
@@ -3066,10 +3030,12 @@ export class ReminderPanel {
             showCompletedSubtasks: this.showCompletedSubtasks,
             clipTitleToOneLine: this.clipTitleToOneLine,
             showProjectKanbanStatus: this.showProjectKanbanStatus,
-            ...this.getReminderBadgeVisibility(reminder, level, allVisibleReminders),
+            ...this.getReminderBadgeVisibility(reminder, level, allVisibleReminders, indexes),
             showDocumentTitle: this.isTaskCardDocumentTitleEnabled(),
+            taskHierarchy: this.allRemindersMap.size > 0 ? indexes?.all : undefined,
+            visibleTaskHierarchy: indexes?.visible,
             allTasks: this.allRemindersMap && this.allRemindersMap.size > 0
-                ? Array.from(this.allRemindersMap.values())
+                ? (indexes?.all.tasks || Array.from(this.allRemindersMap.values()))
                 : this.currentRemindersCache,
             categoryManager: this.categoryManager,
             milestoneMap: this.milestoneMap,

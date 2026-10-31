@@ -1,4 +1,5 @@
 import { getLogicalDateString } from "../../utils/dateUtils";
+import { ReminderPomodoroStatsSnapshot, type EventPomodoroTotals } from '../../utils/reminderPomodoroStats';
 
 // 单个番茄钟会话记录
 export interface PomodoroSession {
@@ -1046,9 +1047,35 @@ export class PomodoroRecordManager {
         await this.saveRecords();
     }
 
-    /**
-     * 一键解析提醒的各项番茄钟统计数据
-     */
+    /** 批量解析时共用本轮快照，避免逐个任务重建索引和扫描当天会话。 */
+    async resolveReminderPomodoroStatsBatch(reminders: any[], reminderData: any): Promise<Map<string, PomodoroStats>> {
+        if (reminders.length === 0) return new Map();
+        if (!this.isInitialized) await this.initialize();
+        const dataMap = await this.getReminderStatsDataMap(undefined, reminderData);
+        let localData: any = {};
+        if (reminders.some(reminder => reminder && !reminder.isRepeatInstance)) {
+            try {
+                localData = await this.plugin.loadReminderData() || {};
+            } catch (error) {
+                console.warn('Failed to load local tasks for pomodoro statistics:', error);
+            }
+        }
+        const today = this.getToday();
+        const todayTotals = new Map<string, EventPomodoroTotals>();
+        for (const session of this.getDateSessions(today)) {
+            if (session.type !== 'work') continue;
+            const stats = todayTotals.get(session.eventId) || { count: 0, duration: 0 };
+            stats.count += this.calculateSessionCount(session);
+            stats.duration += session.duration;
+            todayTotals.set(session.eventId, stats);
+        }
+        const snapshot = new ReminderPomodoroStatsSnapshot(
+            dataMap.values(), Object.values(localData), this.eventStats, todayTotals, today,
+        );
+        return new Map(reminders.map(reminder => [reminder?.id, snapshot.resolve(reminder)]));
+    }
+
+    /** 单个任务的兼容入口；列表刷新使用上面的批量方法。 */
     async resolveReminderPomodoroStats(reminder: any, reminderData: any): Promise<PomodoroStats> {
         if (!this.isInitialized) {
             await this.initialize();

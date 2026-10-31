@@ -5,6 +5,7 @@
  * 供侧边栏面板、看板视图、四象限视图等各模块统一调用，以保证整体插件中任务 UI 和交互逻辑的一致性。
  */
 import { colorWithOpacity } from "../../utils/uiUtils";
+import type { TaskHierarchyIndex } from '../../utils/taskHierarchy';
 import { updateBindBlockAtrrs } from "../../api";
 import { getLuteInstance } from "../../utils/luteSingleton";
 import { i18n } from "../../pluginInstance";
@@ -32,6 +33,8 @@ export interface TaskRenderContext {
     showCategoryBadge?: boolean; // 是否显示分类标签（默认 true）
     priorityDisplayStyle?: TaskPriorityDisplayStyle;
     allTasks?: any[]; // All tasks in context (e.g. for subtask progress ratio)
+    taskHierarchy?: TaskHierarchyIndex;
+    visibleTaskHierarchy?: TaskHierarchyIndex;
     customContainerClass?: string; // 自定义容器类名（如 'kanban-task'）
 
     // Managers / Helpers
@@ -625,7 +628,8 @@ export class TaskRenderer {
             shouldShow = true;
             percent = task.completed ? 100 : customPercent;
         } else if (context.allTasks) {
-            const directChildren = context.allTasks.filter((t: any) => t.parentId === task.id);
+            const directChildren = context.taskHierarchy?.children(task.id)
+                ?? context.allTasks.filter((t: any) => t.parentId === task.id);
             if (directChildren.length > 0) {
                 shouldShow = true;
                 const completedCount = directChildren.filter((c: any) => c.completed).length;
@@ -849,10 +853,14 @@ export class TaskRenderer {
         const priority = task.priority || 'none';
 
         // 判断是否有子任务
-        const childrenInVisibleBatch = allVisibleTasks.some(r => r.parentId === task.id);
+        const childrenInVisibleBatch = context.visibleTaskHierarchy
+            ? context.visibleTaskHierarchy.children(task.id).length > 0
+            : allVisibleTasks.some(r => r.parentId === task.id);
         let hasChildren = childrenInVisibleBatch;
         if (!hasChildren && context.allTasks) {
-            hasChildren = context.allTasks.some(r => r.parentId === task.id);
+            hasChildren = context.taskHierarchy
+                ? context.taskHierarchy.children(task.id).length > 0
+                : context.allTasks.some(r => r.parentId === task.id);
         }
 
         // 如果子任务不在当前渲染批次（如侧栏今日视图子任务无今日日期），则视为折叠状态，
@@ -867,7 +875,8 @@ export class TaskRenderer {
         let maxChildDepth = 0;
         if (hasChildren && allVisibleTasks.length > 0) {
             const calculateDepth = (id: string, currentDepth: number): number => {
-                const children = allVisibleTasks.filter(r => r.parentId === id);
+                const children = context.visibleTaskHierarchy?.children(id)
+                    ?? allVisibleTasks.filter(r => r.parentId === id);
                 if (children.length === 0) return currentDepth;
 
                 let maxDepth = currentDepth;
@@ -1050,10 +1059,14 @@ export class TaskRenderer {
         }
 
         // 新增：父任务层级路径显示
-        const isParentHidden = task.parentId && !allVisibleTasks.some(r => r.id === task.parentId);
+        const isParentHidden = task.parentId && (context.visibleTaskHierarchy
+            ? !context.visibleTaskHierarchy.byId.has(task.parentId)
+            : !allVisibleTasks.some(r => r.id === task.parentId));
         let isIndependentKanbanSubtask = false;
         if (context.customContainerClass === 'kanban-task' && task.parentId && context.getTaskStatus && context.allTasks) {
-            const parent = context.allTasks.find((t: any) => t.id === task.parentId);
+            const parent = context.taskHierarchy
+                ? context.taskHierarchy.byId.get(task.parentId)
+                : context.allTasks.find((t: any) => t.id === task.parentId);
             if (parent) {
                 const currentStatus = context.getTaskStatus(task);
                 const parentStatus = context.getTaskStatus(parent);
@@ -1067,7 +1080,9 @@ export class TaskRenderer {
             const ancestors: string[] = [];
             let currentParentId = task.parentId;
             while (currentParentId) {
-                const parent = context.allTasks.find((t: any) => t.id === currentParentId);
+                const parent = context.taskHierarchy
+                    ? context.taskHierarchy.byId.get(currentParentId)
+                    : context.allTasks.find((t: any) => t.id === currentParentId);
                 if (parent) {
                     ancestors.unshift(parent.title || i18n("unnamedNote"));
                     currentParentId = parent.parentId;

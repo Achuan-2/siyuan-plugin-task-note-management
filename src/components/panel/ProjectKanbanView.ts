@@ -3581,7 +3581,8 @@ export class ProjectKanbanView {
                 }
             });
 
-            this.tasks = await Promise.all(allTasksWithInstances.map(async (reminder: any) => {
+            const pomodoroStats = await this.pomodoroRecordManager.resolveReminderPomodoroStatsBatch(allTasksWithInstances, reminderData);
+            this.tasks = allTasksWithInstances.map((reminder: any) => {
                 let status;
                 if (reminder.parentId && taskMap.has(reminder.parentId)) {
                     // For ALL subtasks, their column is determined by their root parent's status
@@ -3591,7 +3592,7 @@ export class ProjectKanbanView {
                     status = this.getTaskStatus(reminder);
                 }
                 // 获取番茄钟计数（支持重复实例的单独计数）
-                const stats = await this.pomodoroRecordManager.resolveReminderPomodoroStats(reminder, reminderData);
+                const stats = pomodoroStats.get(reminder.id)!;
 
                 return this.toViewTask({
                     ...reminder,
@@ -3602,7 +3603,7 @@ export class ProjectKanbanView {
                     totalRepeatingPomodoroCount: stats.totalRepeatingPomodoroCount,
                     totalRepeatingFocusTime: stats.totalRepeatingFocusTime
                 });
-            }));
+            });
 
             // 任务数量大时，让出主线程以避免阻塞用户输入和绘制
             if (this.tasks.length > 100) {
