@@ -873,10 +873,11 @@ export class TaskRenderer {
 
         // 计算最大深度
         let maxChildDepth = 0;
-        if (hasChildren && allVisibleTasks.length > 0) {
+        if (hasChildren && context.visibleTaskHierarchy) {
+            maxChildDepth = context.visibleTaskHierarchy.maxDescendantDepth(task.id);
+        } else if (hasChildren && allVisibleTasks.length > 0) {
             const calculateDepth = (id: string, currentDepth: number): number => {
-                const children = context.visibleTaskHierarchy?.children(id)
-                    ?? allVisibleTasks.filter(r => r.parentId === id);
+                const children = allVisibleTasks.filter(r => r.parentId === id);
                 if (children.length === 0) return currentDepth;
 
                 let maxDepth = currentDepth;

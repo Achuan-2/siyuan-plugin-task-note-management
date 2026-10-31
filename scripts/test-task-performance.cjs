@@ -169,7 +169,8 @@ test('5000 条独立任务只读一次本地任务和当天会话，不逐任务
 function panelClass() {
     const relative = 'src/components/panel/ReminderPanel.ts';
     const source = ts.createSourceFile(relative, fs.readFileSync(path.join(root, relative), 'utf8'), ts.ScriptTarget.Latest, true);
-    const names = ['renderRemindersIteratively', 'getReminderElementSignature', 'getReminderBadgeVisibility', 'preprocessAsyncData'];
+    const names = ['renderRemindersIteratively', 'getReminderElementSignature', 'getReminderBadgeVisibility', 'preprocessAsyncData',
+        'createReminderRenderIndexes', 'serializeReminderRenderState', 'getReminderSharedRenderVersion', 'createReminderElementOptimized'];
     const members = source.statements.find(node => ts.isClassDeclaration(node) && node.name.text === 'ReminderPanel').members;
     const code = ts.transpileModule(`class Panel { ${members.filter(node => names.includes(node.name?.getText(source))).map(node => node.getText(source)).join('\n')} }`, {
         compilerOptions: { target: ts.ScriptTarget.ES2020 },
@@ -191,6 +192,7 @@ test('侧栏共用本轮索引，保持深度优先顺序、折叠和隐藏父�
     Object.assign(panel, {
         allRemindersMap: new Map(tasks.map(t => [t.id, t])),
         isTodayLikeView: () => false, currentTab: 'all', isTaskCollapsed: id => id === 'child',
+        remindersContainer: { querySelectorAll: () => [] }, isTaskCardDocumentTitleEnabled: () => false,
         createReminderElementOptimized: (task, _cache, _today, level, _visible, indexes) => {
             contexts.add(indexes); return `${task.id}:${level}`;
         },
@@ -200,6 +202,165 @@ test('侧栏共用本轮索引，保持深度优先顺序、折叠和隐藏父�
     assert.deepEqual(rendered, ['root:0', 'child:1', 'other:0', 'orphan:0']);
     assert.equal(contexts.size, 1);
     assert.equal([...contexts][0].all.byId.size, tasks.length);
+});
+
+test('5000 层子树深度按后序复用，逐卡片查询不反复遍历且无需递归', () => {
+    const tasks = Array.from({ length: 5000 }, (_, i) => ({ id: String(i), ...(i ? { parentId: String(i - 1) } : {}) }));
+    const hierarchy = new TaskHierarchyIndex(tasks);
+    let childQueries = 0;
+    const children = hierarchy.children.bind(hierarchy);
+    hierarchy.children = id => { childQueries++; return children(id); };
+    for (let i = 0; i < tasks.length; i++) assert.equal(hierarchy.maxDescendantDepth(String(i)), tasks.length - 1 - i);
+    assert.ok(childQueries <= tasks.length * 2, `Repeated subtree work: ${childQueries}`);
+    tasks[1].parentId = 'missing';
+    assert.equal(new TaskHierarchyIndex(tasks).maxDescendantDepth('0'), 0);
+    assert.equal(hierarchy.maxDescendantDepth('0'), 4999);
+    const cyclic = new TaskHierarchyIndex([{ id: 'a', parentId: 'b' }, { id: 'b', parentId: 'a' }]);
+    assert.ok(Number.isFinite(cyclic.maxDescendantDepth('a')));
+});
+
+test('5000 张复用卡片只扫描一次 DOM 并序列化一次公共设置与节假日', () => {
+    const Panel = panelClass();
+    const panel = new Panel();
+    const tasks = Array.from({ length: 5000 }, (_, i) => ({ id: `task-${i}`, title: `任务${i}` }));
+    const nodes = tasks.map(task => ({ dataset: { reminderId: task.id } }));
+    let domScans = 0, settingsReads = 0, holidayReads = 0, reused = 0;
+    Object.assign(panel, {
+        allRemindersMap: new Map(tasks.map(t => [t.id, t])), currentRemindersCache: tasks,
+        currentTab: 'all', selectedReminderIds: new Set(), milestoneMap: new Map(),
+        plugin: { settings: { get bulky() { settingsReads++; return ['公共设置']; } } },
+        reminderSkipHolidayData: { get holiday() { holidayReads++; return '节假日'; } },
+        categoryManager: { getCategoryById: () => null },
+        isTaskCollapsed: () => false, isTodayLikeView: () => false,
+        isTaskCardDocumentTitleEnabled: () => true, getReminderKanbanStatusInfo: () => null,
+        reminderElementStates: new WeakMap(),
+        remindersContainer: {
+            querySelectorAll: () => { domScans++; return nodes; },
+            querySelector: () => { throw new Error('逐卡片扫描 DOM'); },
+        },
+        updateReminderElementText: () => { reused++; },
+        reconcileReminderElements: elements => assert.deepEqual(elements, nodes),
+    });
+    const indexes = panel.createReminderRenderIndexes(tasks, today);
+    tasks.forEach((task, i) => panel.reminderElementStates.set(nodes[i], {
+        signature: panel.getReminderElementSignature(task, new Map(), today, 0, tasks, indexes),
+    }));
+    panel.renderRemindersIteratively(tasks, new Map(), today);
+    assert.equal(reused, 5000);
+    // 一次建立既有状态，一次正式刷新；每轮均只扫描、序列化一次。
+    assert.equal(domScans, 2);
+    assert.equal(settingsReads, 2);
+    assert.equal(holidayReads, 2);
+});
+
+test('公共签名识别原地设置修改、节假日、显示选项和日期变化，字段重排不失效', () => {
+    const Panel = panelClass();
+    const panel = Object.assign(new Panel(), {
+        plugin: { settings: { nested: { a: 1, b: 2 } } }, reminderSkipHolidayData: {},
+        isTaskCardDocumentTitleEnabled: () => true,
+    });
+    const version = panel.getReminderSharedRenderVersion(today);
+    panel.plugin.settings.nested = { b: 2, a: 1 };
+    assert.equal(panel.getReminderSharedRenderVersion(today), version);
+    panel.plugin.settings.nested.a = 3;
+    assert.equal(panel.getReminderSharedRenderVersion(today), version + 1);
+    panel.reminderSkipHolidayData[today] = '假期';
+    assert.equal(panel.getReminderSharedRenderVersion(today), version + 2);
+    panel.clipTitleToOneLine = true;
+    assert.equal(panel.getReminderSharedRenderVersion(today), version + 3);
+    assert.equal(panel.getReminderSharedRenderVersion('2026-11-01'), version + 4);
+});
+
+function boardRenderingClass(renderTask) {
+    const relative = 'src/components/panel/ProjectKanbanView.ts';
+    const source = ts.createSourceFile(relative, fs.readFileSync(path.join(root, relative), 'utf8'), ts.ScriptTarget.Latest, true);
+    const names = ['renderTasksInColumn', 'renderTaskTree', 'renderColumn', 'createTaskElement'];
+    const members = source.statements.find(node => ts.isClassDeclaration(node) && node.name.text === 'ProjectKanbanView').members;
+    const code = ts.transpileModule(`class Board { ${members.filter(node => names.includes(node.name?.getText(source))).map(node => node.getText(source)).join('\n')} }`, {
+        compilerOptions: { target: ts.ScriptTarget.ES2020 },
+    }).outputText;
+    return new Function('TaskHierarchyIndex', 'TaskRenderer', 'getLogicalDateString', code + '; return Board;')(
+        TaskHierarchyIndex, { render: renderTask }, () => today,
+    );
+}
+
+function boardRenderingFixture(tasks) {
+    const Board = boardRenderingClass();
+    const rendered = [], indexes = new Set();
+    const board = Object.assign(new Board(), {
+        tasks, showCompletedSubtasks: false, collapsedTasks: new Set(),
+        isAbandonedStatus: status => status === 'abandoned',
+        getActiveSortCriteria: () => [], sortByCriteria: (a, b) => (a.sort || 0) - (b.sort || 0),
+        createTaskElement: (task, level, hierarchy) => { indexes.add(hierarchy); return `${task.id}:${level}`; },
+    });
+    const content = { appendChild: element => rendered.push(element) };
+    return { board, content, rendered, indexes };
+}
+
+test('看板保留子任务排序、完成/放弃筛选与折叠，移动后重新建立索引', () => {
+    const tasks = [
+        { id: 'root' }, { id: 'high', parentId: 'root', sort: 20 },
+        { id: 'low', parentId: 'root', sort: 10 }, { id: 'leaf', parentId: 'low' },
+        { id: 'done', parentId: 'root', sort: 30, completed: true },
+        { id: 'abandoned', parentId: 'root', sort: 40, kanbanStatus: 'abandoned' },
+        { id: 'orphan', parentId: 'missing' },
+    ];
+    const f = boardRenderingFixture(tasks);
+    f.board.renderTasksInColumn(f.content, tasks, 'todo');
+    assert.deepEqual(f.rendered, ['root:0', 'low:1', 'leaf:2', 'high:1', 'orphan:0']);
+    assert.equal(f.indexes.size, 1);
+    assert.equal([...f.indexes][0].byId.size, tasks.length);
+    f.rendered.length = 0;
+    f.board.collapsedTasks.add('low');
+    f.board.showCompletedSubtasks = true;
+    f.board.renderTasksInColumn(f.content, tasks, 'abandoned');
+    assert.deepEqual(f.rendered, ['root:0', 'low:1', 'high:1', 'done:1', 'abandoned:1', 'orphan:0']);
+    f.rendered.length = 0;
+    tasks[2].parentId = 'orphan';
+    f.board.renderTasksInColumn(f.content, tasks, 'todo');
+    assert.deepEqual(f.rendered, ['root:0', 'high:1', 'done:1', 'orphan:0', 'low:1']);
+});
+
+test('看板分页只渲染选中父任务及其后代，顶层计数和显示顺序保持一致', () => {
+    const tasks = ['a', 'b', 'c', 'd'].flatMap(id => [{ id }, { id: `${id}-child`, parentId: id }]);
+    const f = boardRenderingFixture(tasks), count = {};
+    const column = { querySelector: selector => ({ '.kanban-column-content': f.content, '.kanban-column-count': count })[selector] || null };
+    Object.assign(f.board, {
+        container: { querySelector: () => column }, kanbanStatuses: [],
+        augmentTasksWithDescendants: value => value, pageSize: 2, pageIndexMap: { todo: 2 },
+    });
+    f.board.renderColumn('todo', tasks);
+    assert.deepEqual(f.rendered, ['c:0', 'c-child:1', 'd:0', 'd-child:1']);
+    assert.equal(count.textContent, '4');
+});
+
+test('真实看板卡片将共享索引传给渲染器，并保留嵌套与独立子任务标签规则', () => {
+    const contexts = [];
+    const Board = boardRenderingClass((_task, context, _callbacks, _level, visible) => {
+        contexts.push({ context, visible }); return { dataset: {} };
+    });
+    const tasks = [{ id: 'root', categoryId: 'a,b' }, { id: 'child', parentId: 'root', categoryId: 'b,a' }];
+    const hierarchy = new TaskHierarchyIndex(tasks);
+    tasks.find = () => { throw new Error('逐卡片查找父任务'); };
+    const board = Object.assign(new Board(), { tasks, plugin: {}, showTaskCategories: true });
+    board.createTaskElement(tasks[1], 1, hierarchy);
+    board.createTaskElement(tasks[1], 0, hierarchy);
+    assert.equal(contexts[0].context.showCategoryBadge, false);
+    assert.equal(contexts[1].context.showCategoryBadge, true);
+    assert.equal(contexts[0].context.taskHierarchy, hierarchy);
+    assert.equal(contexts[0].context.visibleTaskHierarchy, hierarchy);
+    assert.equal(contexts[0].visible, tasks);
+});
+
+test('5000 层看板遍历不依赖递归，整批卡片复用同一完整任务索引', () => {
+    let parentReads = 0;
+    const tasks = Array.from({ length: 5000 }, (_, i) => ({ id: String(i), get parentId() { parentReads++; return i ? String(i - 1) : undefined; } }));
+    const f = boardRenderingFixture(tasks);
+    f.board.renderTasksInColumn(f.content, tasks, 'todo');
+    assert.equal(f.rendered.length, 5000);
+    assert.equal(f.rendered[4999], '4999:4999');
+    assert.equal(f.indexes.size, 1);
+    assert.ok(parentReads < tasks.length * 12, `Repeated task scans: ${parentReads}`);
 });
 
 test('侧栏预处理只读取一次项目并批量统计，保留项目、习惯和缺省值', async () => {

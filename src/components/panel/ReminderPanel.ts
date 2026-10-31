@@ -47,6 +47,8 @@ const FILTER_SETTINGS_FILE = 'filter-settings.json';
 interface ReminderRenderIndexes {
     all: TaskHierarchyIndex;
     visible: TaskHierarchyIndex;
+    elementsById: Map<string, HTMLElement>;
+    sharedVersion: number;
 }
 
 interface ReminderElementRenderState {
@@ -104,6 +106,8 @@ export class ReminderPanel {
     private allRemindersMap: Map<string, any> = new Map(); // 存储所有任务的完整信息，用于计算进度
     private optimisticUpdatesCache: Map<string, any> = new Map(); // 存储乐观更新缓存，避免刷新跳动
     private reminderElementStates = new WeakMap<HTMLElement, ReminderElementRenderState>();
+    private reminderSharedRenderSignature: string | undefined;
+    private reminderSharedRenderVersion: number = 0;
     private loadingDialog: Dialog | null = null;
     private isLoading: boolean = false;
     private reminderLoadVersion: number = 0;
@@ -2779,17 +2783,24 @@ export class ReminderPanel {
         });
     }
 
-    /**
-     * 迭代式渲染提醒任务，使用队列避免递归深度限制
-     * @param reminders 要渲染的任务列表
-     * @param asyncDataCache 预处理的异步数据缓存
-     * @param today 今天的日期字符串
-     */
-    private renderRemindersIteratively(reminders: any[], asyncDataCache: Map<string, any>, today: string) {
-        const indexes: ReminderRenderIndexes = {
+    /** 本轮统一建立任务、已有卡片与公共渲染依赖索引。 */
+    private createReminderRenderIndexes(reminders: any[], today: string): ReminderRenderIndexes {
+        const elementsById = new Map<string, HTMLElement>();
+        this.remindersContainer.querySelectorAll<HTMLElement>('[data-reminder-id]').forEach(element => {
+            // 与原 querySelector 一致，重复 ID 时采用首个元素。
+            if (!elementsById.has(element.dataset.reminderId)) elementsById.set(element.dataset.reminderId, element);
+        });
+        return {
             all: new TaskHierarchyIndex(this.allRemindersMap.values()),
             visible: new TaskHierarchyIndex(reminders),
+            elementsById,
+            sharedVersion: this.getReminderSharedRenderVersion(today),
         };
+    }
+
+    /** 按既有顺序迭代渲染，保留未变化卡片及其交互状态。 */
+    private renderRemindersIteratively(reminders: any[], asyncDataCache: Map<string, any>, today: string) {
+        const indexes = this.createReminderRenderIndexes(reminders, today);
         // 先收集目标节点；复用的卡片在提交前保持连接，避免移入 fragment 时先消失。
         const elements: HTMLElement[] = [];
 
@@ -2906,6 +2917,35 @@ export class ReminderPanel {
         };
     }
 
+    private serializeReminderRenderState(value: unknown): string {
+        return JSON.stringify(value, (_key, item) => {
+            if (item && typeof item === 'object' && !Array.isArray(item)) {
+                return Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]]));
+            }
+            return item;
+        });
+    }
+
+    /** 全局依赖只比较一次，卡片只保存版本令牌；原地修改设置也能使下一轮签名失效。 */
+    private getReminderSharedRenderVersion(today: string): number {
+        const signature = this.serializeReminderRenderState({
+            today, tab: this.currentTab,
+            multiSelect: this.isMultiSelectMode,
+            clipTitle: this.clipTitleToOneLine,
+            showCompletedSubtasks: this.showCompletedSubtasks,
+            showProjectKanbanStatus: this.showProjectKanbanStatus,
+            showDocumentTitle: this.isTaskCardDocumentTitleEnabled(),
+            isMobileClient: this.isMobileClient,
+            settings: this.plugin?.settings,
+            holidays: this.reminderSkipHolidayData,
+        });
+        if (signature !== this.reminderSharedRenderSignature) {
+            this.reminderSharedRenderSignature = signature;
+            this.reminderSharedRenderVersion = (this.reminderSharedRenderVersion || 0) + 1;
+        }
+        return this.reminderSharedRenderVersion;
+    }
+
     /** 标题、备注和排序位置可局部更新；其他渲染依赖变化时重建对应卡片。 */
     private getReminderElementSignature(reminder: any, asyncDataCache: Map<string, any>, today: string, level: number, allVisibleReminders: any[], indexes?: ReminderRenderIndexes): string {
         const all = indexes?.all || new TaskHierarchyIndex(this.allRemindersMap.values());
@@ -2936,7 +2976,7 @@ export class ReminderPanel {
         const cachedData = asyncDataCache.get(reminder.id);
         const signature = {
             reminder: renderReminder,
-            today, level, tab: this.currentTab,
+            level, sharedVersion: indexes?.sharedVersion ?? this.getReminderSharedRenderVersion(today),
             children: children.map(task => ({ id: task.id, completed: !!task.completed })),
             visibleDescendants: visible.descendantIds(reminder.id),
             parentVisible: visibleMap.has(reminder.parentId),
@@ -2944,13 +2984,6 @@ export class ReminderPanel {
             ancestors,
             collapsed: this.isTaskCollapsed(reminder.id, children.length > 0),
             selected: this.selectedReminderIds.has(reminder.id),
-            multiSelect: this.isMultiSelectMode,
-            clipTitle: this.clipTitleToOneLine,
-            showCompletedSubtasks: this.showCompletedSubtasks,
-            showProjectKanbanStatus: this.showProjectKanbanStatus,
-            showDocumentTitle: this.isTaskCardDocumentTitleEnabled(),
-            isMobileClient: this.isMobileClient,
-            settings: this.plugin?.settings,
             asyncData: cachedData ? {
                 ...cachedData,
                 // 卡片只显示习惯名称与图标，无需比较整份打卡历史。
@@ -2960,15 +2993,9 @@ export class ReminderPanel {
             categories: String(reminder.categoryId || '').split(',').filter(Boolean)
                 .map(id => this.categoryManager.getCategoryById(id)),
             milestone: this.milestoneMap.get(reminder.milestoneId),
-            holidays: this.reminderSkipHolidayData,
         };
         // 对象字段顺序不应影响复用，例如对话框保存与文件重读的字段排列不同。
-        return JSON.stringify(signature, (_key, value) => {
-            if (value && typeof value === 'object' && !Array.isArray(value)) {
-                return Object.fromEntries(Object.keys(value).sort().map(key => [key, value[key]]));
-            }
-            return value;
-        });
+        return this.serializeReminderRenderState(signature);
     }
 
     private updateReminderElementText(element: HTMLElement, reminder: any, state: ReminderElementRenderState): void {
@@ -3015,7 +3042,9 @@ export class ReminderPanel {
 
     private createReminderElementOptimized(reminder: any, asyncDataCache: Map<string, any>, today: string, level: number = 0, allVisibleReminders: any[] = [], indexes?: ReminderRenderIndexes): HTMLElement {
         const signature = this.getReminderElementSignature(reminder, asyncDataCache, today, level, allVisibleReminders, indexes);
-        const existing = this.remindersContainer.querySelector<HTMLElement>(`[data-reminder-id="${reminder.id}"]`);
+        const existing = indexes
+            ? indexes.elementsById.get(reminder.id)
+            : this.remindersContainer.querySelector<HTMLElement>(`[data-reminder-id="${reminder.id}"]`);
         const renderState = existing && this.reminderElementStates.get(existing);
         if (existing && renderState?.signature === signature) {
             this.updateReminderElementText(existing, reminder, renderState);

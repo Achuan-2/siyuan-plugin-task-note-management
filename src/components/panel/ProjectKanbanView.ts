@@ -1,5 +1,6 @@
 import { colorWithOpacity, generateRandomColor } from "../../utils/uiUtils";
 import { getLuteInstance } from "../../utils/luteSingleton";
+import { TaskHierarchyIndex } from '../../utils/taskHierarchy';
 import { showMessage, confirm, Menu, Dialog, Constants, openEmoji, platformUtils } from "siyuan";
 
 
@@ -7271,9 +7272,8 @@ export class ProjectKanbanView {
 
         // 为了确保父任务下显示所有后代（包括已完成的子任务），扩展传入的任务列表
         const expandedTasks = this.augmentTasksWithDescendants(tasks);
-        const taskMap = new Map(expandedTasks.map(t => [t.id, t]));
-        const topLevelTasks = expandedTasks.filter(t => !t.parentId || !taskMap.has(t.parentId));
-        const childTasks = expandedTasks.filter(t => t.parentId && taskMap.has(t.parentId));
+        const hierarchy = new TaskHierarchyIndex(expandedTasks);
+        const topLevelTasks = expandedTasks.filter(t => !t.parentId || !hierarchy.byId.has(t.parentId));
 
         // 分页计算
         const totalTop = topLevelTasks.length;
@@ -7284,37 +7284,7 @@ export class ProjectKanbanView {
         const endIdx = startIdx + this.pageSize;
         const pagedTopLevel = topLevelTasks.slice(startIdx, endIdx);
 
-        // 子任务排序函数：根据当前排序设置排序
-        const sortChildren = (children: any[]) => {
-            const sorted = [...children];
-            const criteria = this.getActiveSortCriteria();
-            sorted.sort((a, b) => this.sortByCriteria(a, b, criteria));
-            return sorted;
-        };
-
-        const renderTaskWithChildren = (task: any, level: number) => {
-            const taskEl = this.createTaskElement(task, level);
-            content.appendChild(taskEl);
-
-            let children = childTasks.filter(t => t.parentId === task.id);
-            // 过滤掉放弃状态的子任务（如果当前不是放弃列）
-            if (status !== 'abandoned') {
-                children = children.filter(t => !this.isAbandonedStatus(t.kanbanStatus));
-            }
-            // 如果不显示已完成的子任务，则过滤掉已完成的子任务
-            if (!this.showCompletedSubtasks) {
-                children = children.filter(t => !t.completed);
-            }
-            const isCollapsed = this.collapsedTasks.has(task.id);
-
-            if (children.length > 0 && !isCollapsed) {
-                // 对子任务进行排序
-                children = sortChildren(children);
-                children.forEach(child => renderTaskWithChildren(child, level + 1));
-            }
-        };
-
-        pagedTopLevel.forEach(task => renderTaskWithChildren(task, 0));
+        this.renderTaskTree(content, pagedTopLevel, hierarchy, status);
 
         // 更新列顶部计数为仅统计顶层任务数量
         if (count) {
@@ -7976,23 +7946,26 @@ export class ProjectKanbanView {
 
 
     private renderTasksInColumn(content: HTMLElement, tasks: any[], columnStatus?: string) {
-        const taskMap = new Map(tasks.map(t => [t.id, t]));
-        const topLevelTasks = tasks.filter(t => !t.parentId || !taskMap.has(t.parentId));
-        const childTasks = tasks.filter(t => t.parentId && taskMap.has(t.parentId));
+        const hierarchy = new TaskHierarchyIndex(tasks);
+        const roots = tasks.filter(task => !task.parentId || !hierarchy.byId.has(task.parentId));
+        this.renderTaskTree(content, roots, hierarchy, columnStatus);
+    }
 
-        // 子任务排序函数：根据当前排序设置排序
-        const sortChildren = (children: any[]) => {
-            const sorted = [...children];
-            const criteria = this.getActiveSortCriteria();
-            sorted.sort((a, b) => this.sortByCriteria(a, b, criteria));
-            return sorted;
-        };
-
-        const renderTaskWithChildren = (task: any, level: number) => {
-            const taskEl = this.createTaskElement(task, level);
+    /** 普通列、分组和分页列共用同一遍历，卡片共用本批任务索引。 */
+    private renderTaskTree(content: HTMLElement, roots: any[], hierarchy: TaskHierarchyIndex, columnStatus?: string): void {
+        // 共享渲染器原来以 this.tasks 为可见集合，保留该范围及其父子进度语义。
+        const cardHierarchy = new TaskHierarchyIndex(this.tasks);
+        const stack = roots.map(task => ({ task, level: 0 })).reverse();
+        const visited = new Set<string>();
+        while (stack.length > 0) {
+            const { task, level } = stack.pop()!;
+            if (visited.has(task.id)) continue;
+            visited.add(task.id);
+            const taskEl = this.createTaskElement(task, level, cardHierarchy);
             content.appendChild(taskEl);
 
-            let children = childTasks.filter(t => t.parentId === task.id);
+            if (this.collapsedTasks.has(task.id)) continue;
+            let children = hierarchy.children(task.id);
             // 过滤掉放弃状态的子任务（如果当前不是放弃列）
             if (columnStatus !== 'abandoned') {
                 children = children.filter(t => !this.isAbandonedStatus(t.kanbanStatus));
@@ -8001,16 +7974,14 @@ export class ProjectKanbanView {
             if (!this.showCompletedSubtasks) {
                 children = children.filter(t => !t.completed);
             }
-            const isCollapsed = this.collapsedTasks.has(task.id);
-
-            if (children.length > 0 && !isCollapsed) {
-                // 对子任务进行排序
-                children = sortChildren(children);
-                children.forEach(child => renderTaskWithChildren(child, level + 1));
+            if (children.length > 0) {
+                const criteria = this.getActiveSortCriteria();
+                children = [...children].sort((a, b) => this.sortByCriteria(a, b, criteria));
+                for (let i = children.length - 1; i >= 0; i--) {
+                    stack.push({ task: children[i], level: level + 1 });
+                }
             }
-        };
-
-        topLevelTasks.forEach(task => renderTaskWithChildren(task, 0));
+        }
     }
 
 
@@ -8392,10 +8363,10 @@ export class ProjectKanbanView {
 
 
 
-    private createTaskElement(task: any, level: number = 0): HTMLElement {
+    private createTaskElement(task: any, level: number = 0, hierarchy?: TaskHierarchyIndex): HTMLElement {
         // 仅嵌套展示时与直接父任务比较，独立展示的子任务仍保留分类。
         const parentTask = level > 0 && task.parentId
-            ? this.tasks.find(parent => parent.id === task.parentId)
+            ? (hierarchy ? hierarchy.byId.get(task.parentId) : this.tasks.find(parent => parent.id === task.parentId))
             : null;
         const normalizeCategories = (categoryId: unknown): string => Array.from(new Set(
             String(categoryId || '').split(',').map(id => id.trim()).filter(Boolean)
@@ -8416,6 +8387,8 @@ export class ProjectKanbanView {
             showCategoryBadge: this.showTaskCategories && !hasSameParentCategories,
             customContainerClass: 'kanban-task',
             allTasks: this.tasks,
+            taskHierarchy: hierarchy,
+            visibleTaskHierarchy: hierarchy,
             categoryManager: this.categoryManager,
             milestoneMap: this.milestoneMap,
             lute: this.lute,
