@@ -1,6 +1,7 @@
 import { Calendar, formatDate, formatRange } from '@fullcalendar/core';
 import { getDragHandleIcon } from "../../utils/dragHandleIcon";
 import { CalendarEventReconciler } from '../../utils/calendarEventReconciler';
+import { ViewLifecycle } from '../../utils/viewLifecycle';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import multiMonthPlugin from '@fullcalendar/multimonth';
@@ -45,6 +46,8 @@ import { normalizeReminderSkipWeekendMode, shouldSkipReminderOnDate, type Holida
 import { syncHabitMemoBlock, type HabitMemoCheckInEntry, type HabitMemoEmojiConfig } from "../dataManager/habitMemoBlockSync";
 import { isOpenEndedStartDateTask } from "../../utils/startDateOverdue";
 export class CalendarView {
+    private readonly lifecycle = new ViewLifecycle();
+    private resizeCleanup?: () => void;
     private container: HTMLElement;
     private calendar: Calendar;
     private plugin: any;
@@ -206,7 +209,9 @@ export class CalendarView {
 
 
     private async updateSettings(fromSettingPanel = false) {
+        if (this.disposed) return;
         const settings = await this.plugin.loadSettings();
+        if (this.disposed) return;
         this.reminderSkipSettings = settings || {};
         this.showCategoryAndProject = settings.calendarShowCategoryAndProject !== false;
         this.showLunar = settings.calendarShowLunar !== false;
@@ -215,6 +220,7 @@ export class CalendarView {
 
         if (this.calendarConfigManager) {
             await this.calendarConfigManager.initialize();
+            if (this.disposed) return;
 
             // 在配置初始化完成后再读取显示任务/习惯的开关，确保值最新
             this.showTasks = this.calendarConfigManager.getShowTasks();
@@ -266,8 +272,11 @@ export class CalendarView {
         }
 
         const weekStartDay = await this.getWeekStartDay();
+        if (this.disposed) return;
         const dayStartTime = await this.getDayStartTime();
+        if (this.disposed) return;
         const todayStartTime = await this.getTodayStartTime();
+        if (this.disposed) return;
 
         // 只有从设置面板修改/保存，或者首次加载时，或者配置的值真实发生改变时，才重载 UI 的折叠状态。
         // 其余日常刷新（如其他位置发送的广播）需要保留当前 UI 界面的临时展开/收起状态。
@@ -305,11 +314,12 @@ export class CalendarView {
         this.calendar.setOption('nextDayThreshold', todayStartTime);
 
         await this.handleCollapseUI();
+        if (this.disposed) return;
 
         // 尝试即时滚动到新的一天起始时间 (拖拽事件结束后避免触发跳转)
         if (!this.justDraggedCollapseEnd) {
-            requestAnimationFrame(() => {
-                setTimeout(() => {
+            this.lifecycle.frame(() => {
+                this.lifecycle.timeout(() => {
                     try {
                         this.calendar.scrollToTime(targetScrollTime);
                     } catch (e) {
@@ -346,6 +356,7 @@ export class CalendarView {
 
         // 刷新事件
         await this.refreshEvents();
+        if (this.disposed) return;
 
         // 解决 FC v6 的重绘问题：仅仅 render() 或 changeView() 同类型视图可能不会销毁并重建 DOM
         // 通过切换一个结构性选项（如 dayHeaders）并切回来，可以强制它完全重建内部网格，从而触发 Mount 钩子
@@ -419,8 +430,8 @@ export class CalendarView {
         const mins = String(scrollMin % 60).padStart(2, '0');
         const scrollTimeStr = `${hours}:${mins}:00`;
 
-        requestAnimationFrame(() => {
-            setTimeout(() => {
+        this.lifecycle.frame(() => {
+            this.lifecycle.timeout(() => {
                 try {
                     this.calendar.scrollToTime(scrollTimeStr);
                 } catch (e) {
@@ -474,6 +485,7 @@ export class CalendarView {
                 }
 
                 resizer.classList.add('resizing');
+                const previousCursor = document.body.style.cursor;
                 document.body.style.cursor = 'row-resize';
 
                 const moveHandler = (moveEvent: MouseEvent) => {
@@ -490,26 +502,32 @@ export class CalendarView {
                 };
 
                 const upHandler = () => {
-                    this.isResizingAllDay = false;
-                    resizer.classList.remove('resizing');
-                    document.body.style.cursor = '';
-
-                    document.removeEventListener('mousemove', moveHandler);
-                    document.removeEventListener('mouseup', upHandler);
+                    stopResize();
                 };
 
-                document.addEventListener('mousemove', moveHandler);
-                document.addEventListener('mouseup', upHandler);
+                const removeMove = this.lifecycle.listen(document, 'mousemove', moveHandler);
+                const removeUp = this.lifecycle.listen(document, 'mouseup', upHandler);
+                const stopResize = this.lifecycle.addCleanup(() => {
+                    removeMove(); removeUp();
+                    this.isResizingAllDay = false;
+                    resizer.classList.remove('resizing');
+                    document.body.style.cursor = previousCursor;
+                });
             });
         }
     }
 
     private async initUI() {
+        if (this.disposed) return;
         // 初始化分类管理器
         await this.categoryManager.initialize();
+        if (this.disposed) return;
         await this.projectManager.initialize();
+        if (this.disposed) return;
         await this.statusManager.initialize();
+        if (this.disposed) return;
         await this.calendarConfigManager.initialize();
+        if (this.disposed) return;
 
         if (this.initialProjectFilter) {
             this.currentProjectFilter = new Set([this.initialProjectFilter]);
@@ -519,6 +537,7 @@ export class CalendarView {
         // 从配置中读取colorBy和viewMode设置
         this.colorBy = this.calendarConfigManager.getColorBy();
         const settings = await this.plugin.loadSettings();
+        if (this.disposed) return;
         this.reminderSkipSettings = settings || {};
         this.showCategoryAndProject = settings.calendarShowCategoryAndProject !== false;
         this.showTasks = this.calendarConfigManager.getShowTasks();
@@ -552,15 +571,19 @@ export class CalendarView {
         this.calendarOpacityLight = this.calendarConfigManager.getCalendarOpacityLight();
         this.calendarOpacityDark = this.calendarConfigManager.getCalendarOpacityDark();
         this.holidays = await loadHolidays(this.plugin);
+        if (this.disposed) return;
 
         // 获取周开始日设置
         const weekStartDay = await this.getWeekStartDay();
+        if (this.disposed) return;
 
         // 获取日历视图滚动位置（dayStartTime）
         const dayStartTime = await this.getDayStartTime();
+        if (this.disposed) return;
 
         // 获取逻辑一天起始时间（todayStartTime）与折叠时间区设置
         const todayStartTime = await this.getTodayStartTime();
+        if (this.disposed) return;
         this.isCollapseTimeRangeTemp = settings.calendarCollapseTimeRange === true;
         this.isTopCollapseTemp = settings.calendarCollapseTimeRange === true;
         this.isBottomCollapseTemp = settings.calendarCollapseTimeRange === true;
@@ -1002,7 +1025,9 @@ export class CalendarView {
 
         // 渲染项目和分类筛选器
         await this.renderProjectFilterCheckboxes(projectDropdown, projectFilterButton);
+        if (this.disposed) return;
         await this.renderCategoryFilterCheckboxes(categoryDropdown, categoryFilterButton);
+        if (this.disposed) return;
 
         if (this.initialProjectFilter) {
             this.updateProjectFilterButtonText(projectFilterButton);
@@ -1558,7 +1583,7 @@ export class CalendarView {
         });
 
         // 点击外部关闭所有下拉菜单
-        document.addEventListener('click', () => {
+        this.lifecycle.listen(document, 'click', () => {
             projectDropdown.style.display = 'none';
             categoryDropdown.style.display = 'none';
             viewTypeDropdown.style.display = 'none';
@@ -1969,7 +1994,7 @@ export class CalendarView {
                 }
 
                 // 延迟重置拖动标志，防止拖动结束后立即触发点击
-                setTimeout(() => {
+                this.lifecycle.timeout(() => {
                     this.isDragging = false;
                     if (this.refreshPendingDuringDrag) {
                         this.refreshPendingDuringDrag = false;
@@ -1984,7 +2009,7 @@ export class CalendarView {
             },
             eventResizeStop: (info) => {
                 // 延迟重置拖动标志，防止调整大小结束后立即触发点击
-                setTimeout(() => {
+                this.lifecycle.timeout(() => {
                     this.isDragging = false;
                     if (this.refreshPendingDuringDrag) {
                         this.refreshPendingDuringDrag = false;
@@ -2213,7 +2238,7 @@ export class CalendarView {
                 }
 
                 // 每次 FullCalendar 重绘视图时，都需要重新应用/恢复折叠 UI 行与样式，防止其在内部重绘后消失
-                requestAnimationFrame(() => {
+                this.lifecycle.frame(() => {
                     this.handleCollapseUI();
                 });
             }
@@ -2385,42 +2410,7 @@ export class CalendarView {
             jumpToBtn.classList.add('ariaLabel'); jumpToBtn.setAttribute('aria-label', i18n("jumpToDate") || "跳转到日期");
         }
 
-        // Fix fc-more-popover overflow: when the "+N more" popover appears near the right edge,
-        // FullCalendar may position it with a left value that causes it to overflow the container.
-        // We use a MutationObserver to detect when the popover appears and clamp its position.
-        const popoverObserver = new MutationObserver((mutations) => {
-            for (const mutation of mutations) {
-                for (const node of Array.from(mutation.addedNodes)) {
-                    if (node instanceof HTMLElement) {
-                        const popover = node.classList.contains('fc-popover')
-                            ? node
-                            : node.querySelector?.('.fc-popover');
-                        if (popover instanceof HTMLElement) {
-                            // Use requestAnimationFrame to ensure styles have been applied
-                            requestAnimationFrame(() => {
-                                const containerRect = calendarEl.getBoundingClientRect();
-                                const popoverRect = popover.getBoundingClientRect();
-                                // If popover overflows the right edge of the calendar container
-                                if (popoverRect.right > containerRect.right) {
-                                    const currentLeft = parseFloat(popover.style.left) || 0;
-                                    const overflow = popoverRect.right - containerRect.right;
-                                    const newLeft = Math.max(0, currentLeft - overflow - 4);
-                                    popover.style.left = `${newLeft}px`;
-                                }
-                                // Also ensure it doesn't overflow the left edge
-                                if (popoverRect.left < containerRect.left) {
-                                    popover.style.left = '4px';
-                                }
-                            });
-                        }
-                    }
-                }
-            }
-        });
-        popoverObserver.observe(calendarEl, { childList: true, subtree: true });
-
-        // Store observer reference for cleanup
-        (this as any)._popoverObserver = popoverObserver;
+        this.observeCalendarPopovers(calendarEl);
 
         // Update Pomodoro button visibility after initial render
         this.updatePomodoroButtonVisibility();
@@ -2730,6 +2720,53 @@ export class CalendarView {
 
         // 添加自定义样式
 
+        this.bindUpdateListeners(calendarEl);
+    }
+
+
+    private observeCalendarPopovers(calendarEl: HTMLElement): void {
+        if (this.disposed) return;
+        // Fix fc-more-popover overflow: when the "+N more" popover appears near the right edge,
+        // FullCalendar may position it with a left value that causes it to overflow the container.
+        // We use a MutationObserver to detect when the popover appears and clamp its position.
+        const popoverObserver = new MutationObserver((mutations) => {
+            if (this.disposed) return;
+            for (const mutation of mutations) {
+                for (const node of Array.from(mutation.addedNodes)) {
+                    if (node instanceof HTMLElement) {
+                        const popover = node.classList.contains('fc-popover')
+                            ? node
+                            : node.querySelector?.('.fc-popover');
+                        if (popover instanceof HTMLElement) {
+                            // Use requestAnimationFrame to ensure styles have been applied
+                            this.lifecycle.frame(() => {
+                                const containerRect = calendarEl.getBoundingClientRect();
+                                const popoverRect = popover.getBoundingClientRect();
+                                // If popover overflows the right edge of the calendar container
+                                if (popoverRect.right > containerRect.right) {
+                                    const currentLeft = parseFloat(popover.style.left) || 0;
+                                    const overflow = popoverRect.right - containerRect.right;
+                                    const newLeft = Math.max(0, currentLeft - overflow - 4);
+                                    popover.style.left = `${newLeft}px`;
+                                }
+                                // Also ensure it doesn't overflow the left edge
+                                if (popoverRect.left < containerRect.left) {
+                                    popover.style.left = '4px';
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+        });
+        popoverObserver.observe(calendarEl, { childList: true, subtree: true });
+        this.lifecycle.addCleanup(() => popoverObserver.disconnect());
+
+
+    }
+
+    private bindUpdateListeners(calendarEl: HTMLElement): void {
+        if (this.disposed) return;
         // 监听提醒更新事件
         this.externalReminderUpdatedHandler = (e: Event) => {
             // 获取事件详细信息
@@ -2742,7 +2779,7 @@ export class CalendarView {
 
             this.refreshEvents(false, true);
         };
-        window.addEventListener('reminderUpdated', this.externalReminderUpdatedHandler);
+        this.lifecycle.listen(window, 'reminderUpdated', this.externalReminderUpdatedHandler);
 
         // 监听设置更新事件
         this.settingUpdateHandler = async (e: Event) => {
@@ -2750,21 +2787,22 @@ export class CalendarView {
             const fromSettingPanel = customEvent?.detail?.fromSettingPanel === true;
             await this.updateSettings(fromSettingPanel);
         };
-        window.addEventListener('reminderSettingsUpdated', this.settingUpdateHandler);
+        this.lifecycle.listen(window, 'reminderSettingsUpdated', this.settingUpdateHandler);
 
         this.externalCalendarConfigUpdatedHandler = async () => {
             await this.updateSettings(true);
         };
-        window.addEventListener(CALENDAR_CONFIG_UPDATED_EVENT, this.externalCalendarConfigUpdatedHandler);
+        this.lifecycle.listen(window, CALENDAR_CONFIG_UPDATED_EVENT, this.externalCalendarConfigUpdatedHandler);
 
         // 监听项目颜色更新事件
-        window.addEventListener('projectColorUpdated', () => {
+        this.lifecycle.listen(window, 'projectColorUpdated', () => {
             this.colorCache.clear();
             this.refreshEvents();
         });
 
         // 监听主题变化
         const themeObserver = new MutationObserver((mutations) => {
+            if (this.disposed) return;
             mutations.forEach((mutation) => {
                 if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme-mode') {
                     this.refreshEvents();
@@ -2776,6 +2814,7 @@ export class CalendarView {
             attributes: true,
             attributeFilter: ['data-theme-mode']
         });
+        this.lifecycle.addCleanup(() => themeObserver.disconnect());
 
         // 添加窗口大小变化监听器
         this.addResizeListeners();
@@ -2784,8 +2823,8 @@ export class CalendarView {
         this.addWheelZoomListener(calendarEl);
     }
 
-
     private async renderProjectFilterCheckboxes(container: HTMLElement, button: HTMLButtonElement) {
+        if (this.disposed) return;
         try {
             if (!this.projectFilterPopup || (this.projectFilterPopup as any).container !== container) {
                 this.projectFilterPopup = new ProjectSelectorPopup({
@@ -2803,6 +2842,7 @@ export class CalendarView {
                     }
                 });
                 await this.projectFilterPopup.initialize();
+                if (this.disposed) return;
             } else {
                 this.projectFilterPopup.updateSelection(this.currentProjectFilter);
             }
@@ -2812,6 +2852,7 @@ export class CalendarView {
     }
 
     private async renderCategoryFilterCheckboxes(container: HTMLElement, button: HTMLButtonElement) {
+        if (this.disposed) return;
         try {
             const categories = this.categoryManager.getCategories();
             const categoryIds = categories.map(c => c.id);
@@ -2979,12 +3020,14 @@ export class CalendarView {
     }
 
     private addResizeListeners() {
+        if (this.disposed) return;
+        this.resizeCleanup?.();
         // 窗口大小变化监听器
         const handleResize = () => {
             this.debounceResize();
         };
 
-        window.addEventListener('resize', handleResize);
+        this.lifecycle.listen(window, 'resize', handleResize);
 
         // 使用 ResizeObserver 监听容器大小变化
         if (typeof ResizeObserver !== 'undefined') {
@@ -3001,7 +3044,7 @@ export class CalendarView {
             }
         };
 
-        document.addEventListener('visibilitychange', handleVisibilityChange);
+        this.lifecycle.listen(document, 'visibilitychange', handleVisibilityChange);
 
         // 清理函数
         const cleanup = () => {
@@ -3011,15 +3054,15 @@ export class CalendarView {
                 this.resizeObserver.disconnect();
             }
             if (this.resizeTimeout) {
-                clearTimeout(this.resizeTimeout);
+                this.lifecycle.clearTimeout(this.resizeTimeout);
             }
             // 清理提示框超时
             if (this.hideTooltipTimeout) {
-                clearTimeout(this.hideTooltipTimeout);
+                this.lifecycle.clearTimeout(this.hideTooltipTimeout);
             }
             // 清理提示框显示延迟超时
             if (this.tooltipShowTimeout) {
-                clearTimeout(this.tooltipShowTimeout);
+                this.lifecycle.clearTimeout(this.tooltipShowTimeout);
             }
             // 清理设置更新监听
             if (this.settingUpdateHandler) {
@@ -3035,15 +3078,17 @@ export class CalendarView {
         };
 
         // 将清理函数绑定到容器，以便在组件销毁时调用
-        (this.container as any)._calendarCleanup = cleanup;
+        this.resizeCleanup = this.lifecycle.addCleanup(cleanup);
+        (this.container as any)._calendarCleanup = this.resizeCleanup;
     }
 
     private debounceResize() {
+        if (this.disposed) return;
         if (this.resizeTimeout) {
-            clearTimeout(this.resizeTimeout);
+            this.lifecycle.clearTimeout(this.resizeTimeout);
         }
 
-        this.resizeTimeout = window.setTimeout(() => {
+        this.resizeTimeout = this.lifecycle.timeout(() => {
             // 窗口/面板大小变化时关闭下拉菜单，避免 fixed 定位的菜单停留在错误位置
             this.container?.querySelectorAll('.filter-dropdown-menu').forEach((el) => {
                 (el as HTMLElement).style.display = 'none';
@@ -3093,15 +3138,15 @@ export class CalendarView {
         // 当鼠标进入事件元素时，安排显示提示框
         // 如果已经有一个计划中的显示，则取消它
         if (this.tooltipShowTimeout) {
-            clearTimeout(this.tooltipShowTimeout);
+            this.lifecycle.clearTimeout(this.tooltipShowTimeout);
         }
         // 如果隐藏计时器正在运行，也取消它
         if (this.hideTooltipTimeout) {
-            clearTimeout(this.hideTooltipTimeout);
+            this.lifecycle.clearTimeout(this.hideTooltipTimeout);
             this.hideTooltipTimeout = null;
         }
 
-        this.tooltipShowTimeout = window.setTimeout(() => {
+        this.tooltipShowTimeout = this.lifecycle.timeout(() => {
             this.showEventTooltip(event, latestCalendarEvent);
         }, 500); // 500ms延迟显示
     }
@@ -3110,12 +3155,12 @@ export class CalendarView {
         // 当鼠标离开事件元素时，安排隐藏提示框
         // 如果显示计时器正在运行，取消它
         if (this.tooltipShowTimeout) {
-            clearTimeout(this.tooltipShowTimeout);
+            this.lifecycle.clearTimeout(this.tooltipShowTimeout);
             this.tooltipShowTimeout = null;
         }
 
         // 安排隐藏
-        this.hideTooltipTimeout = window.setTimeout(() => {
+        this.hideTooltipTimeout = this.lifecycle.timeout(() => {
             this.hideEventTooltip();
         }, 300); // 300ms延迟隐藏
     }
@@ -3646,7 +3691,7 @@ export class CalendarView {
             this.hideEventTooltip();
             // 清除任何待执行的提示框超时
             if (this.hideTooltipTimeout) {
-                clearTimeout(this.hideTooltipTimeout);
+                this.lifecycle.clearTimeout(this.hideTooltipTimeout);
                 this.hideTooltipTimeout = null;
             }
         }
@@ -6381,7 +6426,7 @@ export class CalendarView {
         const isSameEvent = this.lastEventClickId === eventId;
 
         if (this.eventClickTimeout) {
-            clearTimeout(this.eventClickTimeout);
+            this.lifecycle.clearTimeout(this.eventClickTimeout);
             this.eventClickTimeout = null;
         }
 
@@ -6394,7 +6439,7 @@ export class CalendarView {
             // 单击：设置延迟，防止误触发双击，如果无后续点击则执行单击动作（打开笔记）
             this.lastEventClickTime = currentTime;
             this.lastEventClickId = eventId;
-            this.eventClickTimeout = window.setTimeout(async () => {
+            this.eventClickTimeout = this.lifecycle.timeout(async () => {
                 this.lastEventClickTime = 0;
                 this.lastEventClickId = null;
                 this.eventClickTimeout = null;
@@ -6734,8 +6779,8 @@ export class CalendarView {
             this.calendar.setOption('slotDuration', slotDurations[currentSlotIndex]);
 
             // 使用双重 requestAnimationFrame 确保 DOM 完全更新后再调整滚动位置
-            requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
+            this.lifecycle.frame(() => {
+                this.lifecycle.frame(() => {
                     const newTimeGridScroller = calendarEl.querySelector('.fc-scroller.fc-scroller-liquid-absolute') as HTMLElement;
                     if (!newTimeGridScroller) return;
 
@@ -7757,7 +7802,7 @@ export class CalendarView {
 
         // 清除之前的单击超时
         if (this.clickTimeout) {
-            clearTimeout(this.clickTimeout);
+            this.lifecycle.clearTimeout(this.clickTimeout);
             this.clickTimeout = null;
         }
 
@@ -7769,7 +7814,7 @@ export class CalendarView {
         } else {
             // 单击事件 - 设置延迟，如果在延迟期间没有第二次点击，则不执行任何操作
             this.lastClickTime = currentTime;
-            this.clickTimeout = window.setTimeout(() => {
+            this.clickTimeout = this.lifecycle.timeout(() => {
                 // 单击事件不执行任何操作（原来是创建快速提醒，现在改为双击才创建）
                 this.lastClickTime = 0;
                 this.clickTimeout = null;
@@ -7986,11 +8031,11 @@ export class CalendarView {
 
         // 清除之前的刷新超时
         if (this.refreshTimeout) {
-            clearTimeout(this.refreshTimeout);
+            this.lifecycle.clearTimeout(this.refreshTimeout);
         }
 
         // 使用防抖机制，避免频繁刷新
-        this.refreshTimeout = window.setTimeout(async () => {
+        this.refreshTimeout = this.lifecycle.timeout(async () => {
             this.refreshTimeout = null;
             if (this.disposed) return;
             if (this.isDragging) {
@@ -8038,7 +8083,7 @@ export class CalendarView {
                     // 注意：FullCalendar 重新渲染可能会保留部分 DOM 结构，如果 el 还在文档中则直接恢复
                     // 如果 DOM 被完全销毁并重建，则需要通过索引或类名重新匹配。
                     // 实践中 FC v6 调用 render() 往往会重用 scroller 容器。
-                    requestAnimationFrame(() => {
+                    this.lifecycle.frame(() => {
                         if (!isCurrent()) return;
                         // 如果最近刚刚点击了"今天"按钮（2秒内），则不要恢复之前的滚动位置
                         // 防止滚动到"今天"后被重置回之前的位置
@@ -10025,7 +10070,7 @@ export class CalendarView {
         try {
             // 清除可能存在的隐藏超时
             if (this.hideTooltipTimeout) {
-                clearTimeout(this.hideTooltipTimeout);
+                this.lifecycle.clearTimeout(this.hideTooltipTimeout);
                 this.hideTooltipTimeout = null;
             }
 
@@ -10114,11 +10159,11 @@ export class CalendarView {
     private forceHideTooltip() {
         // 强制隐藏提示框，清除所有相关定时器
         if (this.tooltipShowTimeout) {
-            clearTimeout(this.tooltipShowTimeout);
+            this.lifecycle.clearTimeout(this.tooltipShowTimeout);
             this.tooltipShowTimeout = null;
         }
         if (this.hideTooltipTimeout) {
-            clearTimeout(this.hideTooltipTimeout);
+            this.lifecycle.clearTimeout(this.hideTooltipTimeout);
             this.hideTooltipTimeout = null;
         }
         if (this.tooltip) {
@@ -10998,31 +11043,33 @@ export class CalendarView {
 
     // 添加销毁方法
     destroy() {
+        if (this.disposed) return;
         this.disposed = true;
+        this.lifecycle.dispose();
         this.refreshVersion++;
         this.refreshPending = false;
         this.eventReconciler.clear();
         // 清理提示框显示延迟超时
         if (this.tooltipShowTimeout) {
-            clearTimeout(this.tooltipShowTimeout);
+            this.lifecycle.clearTimeout(this.tooltipShowTimeout);
             this.tooltipShowTimeout = null;
         }
 
         // 清理提示框超时
         if (this.hideTooltipTimeout) {
-            clearTimeout(this.hideTooltipTimeout);
+            this.lifecycle.clearTimeout(this.hideTooltipTimeout);
             this.hideTooltipTimeout = null;
         }
 
         // 清理双击检测超时
         if (this.clickTimeout) {
-            clearTimeout(this.clickTimeout);
+            this.lifecycle.clearTimeout(this.clickTimeout);
             this.clickTimeout = null;
         }
 
         // 清理刷新防抖超时
         if (this.refreshTimeout) {
-            clearTimeout(this.refreshTimeout);
+            this.lifecycle.clearTimeout(this.refreshTimeout);
             this.refreshTimeout = null;
         }
 
@@ -11038,10 +11085,11 @@ export class CalendarView {
         this.colorCache.clear();
 
         // 调用清理函数
-        const cleanup = (this.container as any)._calendarCleanup;
-        if (cleanup) {
-            cleanup();
+        this.resizeCleanup?.();
+        if ((this.container as any)._calendarCleanup === this.resizeCleanup) {
+            delete (this.container as any)._calendarCleanup;
         }
+        this.resizeCleanup = undefined;
 
         // 移除事件监听器
         if (this.externalReminderUpdatedHandler) {
@@ -11052,10 +11100,13 @@ export class CalendarView {
             window.removeEventListener(CALENDAR_CONFIG_UPDATED_EVENT, this.externalCalendarConfigUpdatedHandler);
             this.externalCalendarConfigUpdatedHandler = null;
         }
-        window.removeEventListener('projectColorUpdated', () => {
-            this.colorCache.clear();
-            this.refreshEvents();
-        });
+        if (this.allDayDragListener) window.removeEventListener('mousemove', this.allDayDragListener);
+        this.allDayDragListener = null;
+        this.allDayDragState = null;
+        this.isDraggingCollapseEnd = false;
+        this.isResizingAllDay = false;
+        this.dragHandleEl?.remove();
+        this.dragHandleEl = null;
 
         // 销毁日历实例
         if (this.calendar) {
@@ -12148,11 +12199,13 @@ export class CalendarView {
      * 折叠条 tooltip 与拖拽手柄。折叠条本身由 fork 版 FullCalendar 原生渲染。
      */
     private async handleCollapseUI() {
+        if (this.disposed) return;
         if (!this.calendar || !this.calendar.view) return;
 
         const viewType = this.calendar.view.type;
         const isTimeGrid = viewType && viewType.startsWith('timeGrid');
         const settings = await this.plugin.loadSettings();
+        if (this.disposed) return;
         const isCollapseEnabled = settings.calendarCollapseTimeRange === true;
 
         // 如果不是时间轴视图，或者未开启折叠时间区，则清除手柄与置灰轴
@@ -12162,10 +12215,12 @@ export class CalendarView {
                 this.dragHandleEl = null;
             }
             await this.styleCollapseAxis('00:00');
+            if (this.disposed) return;
             return;
         }
 
         const todayStartTime = await this.getTodayStartTime();
+        if (this.disposed) return;
         const collapseStart = settings.calendarCollapseStartTime || '00:00';
         const collapseEnd = settings.calendarCollapseEndTime || '08:00';
 
@@ -12205,18 +12260,23 @@ export class CalendarView {
                     greyRanges.push({ start: collapseStart, end: todayStartTime });
                 }
                 await this.styleCollapseAxis(greyRanges.length > 0 ? greyRanges : '00:00');
+                if (this.disposed) return;
             } else {
                 if (!this.isTopCollapseTemp || !this.isBottomCollapseTemp) {
                     await this.styleCollapseAxis(collapseEnd, collapseStart);
+                    if (this.disposed) return;
                 } else {
                     await this.styleCollapseAxis('00:00');
+                    if (this.disposed) return;
                 }
             }
         } else {
             // ================= 展开状态 =================
             // 置灰整个折叠区间的时间轴，并渲染拖拽手柄
             await this.styleCollapseAxis(collapseEnd, collapseStart);
+            if (this.disposed) return;
             await this.updateDragHandle();
+            if (this.disposed) return;
         }
     }
 
@@ -12226,7 +12286,9 @@ export class CalendarView {
      * @param currentStartTime 当 ranges 为单一终点字符串时，可选的折叠区间起点覆盖
      */
     private async styleCollapseAxis(ranges: Array<{ start: string, end: string }> | string, currentStartTime?: string) {
+        if (this.disposed) return;
         const settings = await this.plugin.loadSettings();
+        if (this.disposed) return;
         const collapseStartSetting = settings.calendarCollapseStartTime || '00:00';
 
         let normalizedRanges: Array<{ start: string, end: string }>;
@@ -12292,7 +12354,9 @@ export class CalendarView {
      * 更新或渲染拖拽调整折叠时段边界的手柄
      */
     private async updateDragHandle() {
+        if (this.disposed) return;
         const settings = await this.plugin.loadSettings();
+        if (this.disposed) return;
         const isTimeGrid = this.calendar && this.calendar.view && this.calendar.view.type.startsWith('timeGrid');
         const isCollapseEnabled = settings.calendarCollapseTimeRange === true;
 
@@ -12399,10 +12463,7 @@ export class CalendarView {
                 };
 
                 const handleUp = async (upEvent: MouseEvent) => {
-                    this.isDraggingCollapseEnd = false;
-
-                    document.removeEventListener('mousemove', handleMove);
-                    document.removeEventListener('mouseup', handleUp);
+                    stopTracking();
 
                     // 拖拽释放时，决定最终的时间刻度
                     const currentY = upEvent.clientY;
@@ -12442,8 +12503,12 @@ export class CalendarView {
                     }
                 };
 
-                document.addEventListener('mousemove', handleMove);
-                document.addEventListener('mouseup', handleUp);
+                const removeMove = this.lifecycle.listen(document, 'mousemove', handleMove);
+                const removeUp = this.lifecycle.listen(document, 'mouseup', handleUp);
+                const stopTracking = this.lifecycle.addCleanup(() => {
+                    removeMove(); removeUp();
+                    this.isDraggingCollapseEnd = false;
+                });
             });
 
             slotsParent.appendChild(this.dragHandleEl);
@@ -12472,8 +12537,11 @@ export class CalendarView {
      * 应用当前的折叠状态并修改 FullCalendar 配置
      */
     private async applyCollapseState() {
+        if (this.disposed) return;
         const todayStartTime = await this.getTodayStartTime();
+        if (this.disposed) return;
         const settings = await this.plugin.loadSettings();
+        if (this.disposed) return;
         const collapseStart = settings.calendarCollapseStartTime || '00:00';
         const collapseEnd = settings.calendarCollapseEndTime || '08:00';
 
@@ -12496,10 +12564,11 @@ export class CalendarView {
         }
 
         await this.handleCollapseUI();
+        if (this.disposed) return;
 
         // setOption 触发的是异步重绘，重绘后再做一次 UI 收尾（置灰轴/手柄/tooltip）
-        requestAnimationFrame(() => {
-            setTimeout(() => {
+        this.lifecycle.frame(() => {
+            this.lifecycle.timeout(() => {
                 this.handleCollapseUI();
             }, 50);
         });
@@ -12513,8 +12582,8 @@ export class CalendarView {
             if (this.calendar) {
                 this.calendar.setOption('scrollTime', visibleStartTime);
             }
-            requestAnimationFrame(() => {
-                setTimeout(() => {
+            this.lifecycle.frame(() => {
+                this.lifecycle.timeout(() => {
                     try {
                         this.calendar.scrollToTime(visibleStartTime);
                     } catch (e) {
@@ -12523,8 +12592,8 @@ export class CalendarView {
                 }, 50);
             });
         } else if (savedScrollTop !== null) {
-            requestAnimationFrame(() => {
-                setTimeout(() => {
+            this.lifecycle.frame(() => {
+                this.lifecycle.timeout(() => {
                     try {
                         if (scroller) {
                             scroller.scrollTop = savedScrollTop;

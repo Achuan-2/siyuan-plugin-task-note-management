@@ -45,6 +45,7 @@ test('看板通知阶段只排队，不在防抖前重复读取，仍忽略自�
     );
     let preloads = 0, queued = 0;
     const board = Object.assign(new Board(), {
+        lifecycle: { listen: (_target, name, handler) => handlers.set(name, handler) },
         kanbanInstanceId: 'self', categoryManager: { initialize: async () => {} },
         loadProject: async () => {}, loadKanbanMode: async () => {}, loadKanbanSortConfig: async () => {},
         initUI: () => {}, loadTasks: async () => {}, checkVip: () => {},

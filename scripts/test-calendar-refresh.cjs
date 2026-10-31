@@ -144,11 +144,18 @@ function refreshFixture(read = async () => [event('a')]) {
         removeEventListener: () => {},
     };
     const clearTimeout = id => timers.delete(id);
+    window.clearTimeout = clearTimeout;
+    const lifecycleExports = {};
+    new Function('exports', 'window', 'requestAnimationFrame', 'cancelAnimationFrame',
+        compile(fs.readFileSync(path.join(root, 'src/utils/viewLifecycle.ts'), 'utf8')))(
+        lifecycleExports, window, callback => { frames.push(callback); return frames.length; }, () => {},
+    );
     const CalendarView = new Function('window', 'clearTimeout', 'requestAnimationFrame', 'console',
         compile(`class CalendarView { ${extract(['refreshEvents', 'destroy'])} }`) + '; return CalendarView;')(
         window, clearTimeout, callback => frames.push(callback), { error: (...args) => errors.push(args) },
     );
     const view = Object.assign(new CalendarView(), {
+        lifecycle: new lifecycleExports.ViewLifecycle(),
         refreshVersion: 0, disposed: false, refreshPending: false, refreshPendingForce: false,
         refreshPendingIncremental: true, isDragging: false, isRefreshingEvents: false,
         showTasks: false, showPomodoroDuration: false,

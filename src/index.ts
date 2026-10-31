@@ -367,6 +367,8 @@ export default class ReminderPlugin extends Plugin {
         () => this.updateBadges()
     );
     private tabViews: Map<string, any> = new Map(); // 存储所有Tab视图实例（日历、四象限、项目看板、番茄钟等）
+    private calendarDockView?: CalendarView;
+    private mobileViewDialogs = new Set<Dialog>();
     private registeredDockKeys: Set<string> = new Set(); // 记录已注册的 Dock，避免对未注册项执行可见性切换
     private categoryManager: CategoryManager;
     private settingUtils: SettingUtils;
@@ -2305,7 +2307,9 @@ export default class ReminderPlugin extends Plugin {
             title: i18n("calendarDockTitle"),
             text: "Calendar view dock",
             init: (element) => {
-                new CalendarView(element, this, { isDockMode: true });
+                if (this.storageDisposed) return;
+                this.calendarDockView?.destroy();
+                this.calendarDockView = new CalendarView(element, this, { isDockMode: true });
             }
         });
     }
@@ -2427,7 +2431,7 @@ export default class ReminderPlugin extends Plugin {
             }) as any,
             destroy: function (this: any) {
                 const view = this._projectKanbanView;
-                view?.unbindProjectTabDropTarget();
+                view?.destroy();
                 for (const [tabId, tabView] of thisPlugin.tabViews) {
                     if (tabView === view) thisPlugin.tabViews.delete(tabId);
                 }
@@ -4675,27 +4679,24 @@ export default class ReminderPlugin extends Plugin {
 
         if (isMobile) {
             // 手机端：使用Dialog打开日历视图
+            let calendarView: CalendarView | undefined;
             const dialog = new Dialog({
                 title: calendarTitle,
                 content: '<div id="mobileCalendarContainer" style="height: 100%; width: 100%;"></div>',
                 width: "99%",
                 height: "100%",
                 destroyCallback: () => {
-                    // 清理日历视图实例
-                    const calendarContainer = dialog.element.querySelector('#mobileCalendarContainer') as HTMLElement;
-                    if (calendarContainer && (calendarContainer as any)._calendarView) {
-                        const calendarView = (calendarContainer as any)._calendarView;
-                        if (typeof calendarView.destroy === 'function') {
-                            calendarView.destroy();
-                        }
-                    }
+                    calendarView?.destroy();
+                    calendarView = undefined;
+                    this.mobileViewDialogs.delete(dialog);
                 }
             });
+            this.mobileViewDialogs.add(dialog);
 
             // 在Dialog中创建日历视图
             const calendarContainer = dialog.element.querySelector('#mobileCalendarContainer') as HTMLElement;
             if (calendarContainer) {
-                const calendarView = new CalendarView(calendarContainer, this, data);
+                calendarView = new CalendarView(calendarContainer, this, data);
                 // 保存实例引用用于清理
                 (calendarContainer as any)._calendarView = calendarView;
             }
@@ -4722,27 +4723,24 @@ export default class ReminderPlugin extends Plugin {
 
         if (isMobile) {
             // 手机端：使用Dialog打开项目看板
+            let projectKanbanView: ProjectKanbanView | undefined;
             const dialog = new Dialog({
                 title: projectTitle,
                 content: '<div id="mobileProjectKanbanContainer" style="height: 100%; width: 100%;"></div>',
                 width: "99%",
                 height: "100%",
                 destroyCallback: () => {
-                    // 清理项目看板实例
-                    const kanbanContainer = dialog.element.querySelector('#mobileProjectKanbanContainer') as HTMLElement;
-                    if (kanbanContainer && (kanbanContainer as any)._projectKanbanView) {
-                        const projectKanbanView = (kanbanContainer as any)._projectKanbanView;
-                        if (typeof projectKanbanView.destroy === 'function') {
-                            projectKanbanView.destroy();
-                        }
-                    }
+                    projectKanbanView?.destroy();
+                    projectKanbanView = undefined;
+                    this.mobileViewDialogs.delete(dialog);
                 }
             });
+            this.mobileViewDialogs.add(dialog);
 
             // 在Dialog中创建项目看板
             const kanbanContainer = dialog.element.querySelector('#mobileProjectKanbanContainer') as HTMLElement;
             if (kanbanContainer) {
-                const projectKanbanView = new ProjectKanbanView(kanbanContainer, this, projectId, options || {});
+                projectKanbanView = new ProjectKanbanView(kanbanContainer, this, projectId, options || {});
                 // 保存实例引用用于清理
                 (kanbanContainer as any)._projectKanbanView = projectKanbanView;
             }
@@ -4951,6 +4949,13 @@ export default class ReminderPlugin extends Plugin {
 
     }
 
+    private destroyAuxiliaryViews(): void {
+        this.calendarDockView?.destroy();
+        this.calendarDockView = undefined;
+        for (const dialog of [...this.mobileViewDialogs]) dialog.destroy();
+        this.mobileViewDialogs.clear();
+    }
+
     onunload() {
         this.storageDisposed = true;
         console.log("Task note management plugin disabled; starting resource cleanup...");
@@ -4969,6 +4974,7 @@ export default class ReminderPlugin extends Plugin {
         }
 
         // 清理所有Tab视图实例
+        this.destroyAuxiliaryViews();
         this.tabViews.forEach((view) => {
             if (view && typeof view.destroy === 'function') {
                 view.destroy();

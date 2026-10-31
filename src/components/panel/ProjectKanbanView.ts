@@ -1,6 +1,7 @@
 import { colorWithOpacity, generateRandomColor } from "../../utils/uiUtils";
 import { getLuteInstance } from "../../utils/luteSingleton";
 import { TaskHierarchyIndex } from '../../utils/taskHierarchy';
+import { ViewLifecycle } from '../../utils/viewLifecycle';
 import { showMessage, confirm, Menu, Dialog, Constants, openEmoji, platformUtils } from "siyuan";
 
 
@@ -78,6 +79,8 @@ interface AggregateGroupTarget {
 }
 
 export class ProjectKanbanView {
+    private readonly lifecycle = new ViewLifecycle();
+    private disposed: boolean = false;
     public container: HTMLElement;
     public plugin: any;
     public projectId: string;
@@ -696,19 +699,25 @@ export class ProjectKanbanView {
     }
 
     private async initializeAsync() {
+        if (this.disposed) return;
         await this.categoryManager.initialize();
+        if (this.disposed) return;
         await this.loadProject();
+        if (this.disposed) return;
         await this.loadKanbanMode();
+        if (this.disposed) return;
 
         // 加载项目排序设置（兼容旧版单条件）
         await this.loadKanbanSortConfig();
+        if (this.disposed) return;
 
         this.initUI();
         await this.loadTasks();
+        if (this.disposed) return;
 
         // 监听提醒更新事件（使用防抖加载以避免频繁重绘导致滚动重置）
         // 只有外部触发的事件才重新加载任务
-        window.addEventListener('reminderUpdated', (e: CustomEvent) => {
+        this.lifecycle.listen(window, 'reminderUpdated', (e: CustomEvent) => {
             const detail = e.detail || {};
             // 如果是自己触发的更新，忽略
             if (detail?.source === this.kanbanInstanceId) {
@@ -733,7 +742,7 @@ export class ProjectKanbanView {
         });
 
         // 全局/项目级显示设置变更后刷新当前看板配置
-        window.addEventListener('projectUpdated', async (e: CustomEvent) => {
+        this.lifecycle.listen(window, 'projectUpdated', async (e: CustomEvent) => {
             const detail = e.detail || {};
             const affectsCurrentProject = this.isProjectInCurrentView(detail?.projectId);
             const affectsAllProjectDisplaySettings = detail?.projectKanbanDisplaySettingsUpdated === true;
@@ -742,17 +751,18 @@ export class ProjectKanbanView {
             }
 
             await this.loadProject();
+            if (this.disposed) return;
             this.syncDisplaySettingsCheckboxes();
             await this.queueLoadTasks();
         });
 
-        window.addEventListener('reminderSettingsUpdated', async () => {
+        this.lifecycle.listen(window, 'reminderSettingsUpdated', async () => {
             await this.checkVip();
             await this.queueLoadTasks();
         });
 
         // 监听键盘事件，支持 Esc 退出多选模式
-        document.addEventListener('keydown', (e: KeyboardEvent) => {
+        this.lifecycle.listen(document, 'keydown', (e: KeyboardEvent) => {
             if (e.key === 'Escape' && this.isMultiSelectMode) {
                 this.toggleMultiSelectMode();
             }
@@ -979,7 +989,9 @@ export class ProjectKanbanView {
     };
 
     private async checkVip() {
+        if (this.disposed) return;
         const status = await VipManager.checkAndUpdateVipStatus(this.plugin);
+        if (this.disposed) return;
         this.plugin.vip.isVip = status.isVip;
         this.plugin.vip.expireDate = status.expireDate;
 
@@ -1518,7 +1530,7 @@ export class ProjectKanbanView {
         });
 
         // 点击外部关闭下拉菜单
-        document.addEventListener('click', () => {
+        this.lifecycle.listen(document, 'click', () => {
             displaySettingsDropdown.style.display = 'none';
         });
 
@@ -1570,7 +1582,7 @@ export class ProjectKanbanView {
                 searchInput.style.width = '0';
                 searchInput.style.padding = '4px 0';
                 searchInput.style.opacity = '0';
-                setTimeout(() => { searchInput.style.visibility = 'hidden'; }, 200);
+                this.lifecycle.timeout(() => { searchInput.style.visibility = 'hidden'; }, 200);
                 if (this.searchKeyword) {
                     this.searchKeyword = '';
                     searchInput.value = '';
@@ -1585,12 +1597,12 @@ export class ProjectKanbanView {
         });
 
         // 点击外部关闭搜索框（如果为空）
-        document.addEventListener('click', (e) => {
+        this.lifecycle.listen(document, 'click', (e) => {
             if (!searchContainer.contains(e.target as Node) && !this.searchKeyword && searchInput.style.visibility !== 'hidden') {
                 searchInput.style.width = '0';
                 searchInput.style.padding = '4px 0';
                 searchInput.style.opacity = '0';
-                setTimeout(() => { searchInput.style.visibility = 'hidden'; }, 200);
+                this.lifecycle.timeout(() => { searchInput.style.visibility = 'hidden'; }, 200);
             }
         });
 
@@ -2217,13 +2229,19 @@ export class ProjectKanbanView {
             }
 
             // 点击外部关闭
+            let removeClickListener = () => {};
+            const closePopup = this.lifecycle.addCleanup(() => {
+                menu.remove();
+                removeClickListener();
+            });
             const closeHandler = (e: MouseEvent) => {
                 if (!menu.contains(e.target as Node) && !target.contains(e.target as Node)) {
-                    menu.remove();
-                    document.removeEventListener('click', closeHandler);
+                    closePopup();
                 }
             };
-            setTimeout(() => document.addEventListener('click', closeHandler), 0);
+            this.lifecycle.timeout(() => {
+                if (menu.isConnected) removeClickListener = this.lifecycle.listen(document, 'click', closeHandler);
+            }, 0);
         } catch (error) {
             console.error("Failed to load milestone filter menu:", error);
         }
@@ -2529,9 +2547,11 @@ export class ProjectKanbanView {
      * 为看板列附加右侧拖拽调整宽度手柄事件（支持持久化和双击恢复默认）
      */
     private attachResizeHandle(handle: HTMLElement, column: HTMLElement, columnKey: string): void {
+        if (this.disposed) return;
         let startX = 0;
         let startWidth = 0;
         let isResizing = false;
+        let stopResize: (() => void) | undefined;
 
         const onMouseMove = (e: MouseEvent) => {
             if (!isResizing) return;
@@ -2544,26 +2564,32 @@ export class ProjectKanbanView {
 
         const onMouseUp = () => {
             if (!isResizing) return;
-            isResizing = false;
-            handle.classList.remove('resizing');
-            document.removeEventListener('mousemove', onMouseMove);
-            document.removeEventListener('mouseup', onMouseUp);
-            document.body.style.cursor = '';
-            document.body.style.userSelect = '';
+            stopResize?.();
             // 保存调整后的宽度
             const finalWidth = column.offsetWidth;
             this.saveColumnWidth(columnKey, finalWidth);
         };
 
         handle.addEventListener('mousedown', (e: MouseEvent) => {
+            if (this.disposed) return;
             e.preventDefault();
             e.stopPropagation();
+            stopResize?.();
             isResizing = true;
             startX = e.clientX;
             startWidth = column.offsetWidth;
             handle.classList.add('resizing');
-            document.addEventListener('mousemove', onMouseMove);
-            document.addEventListener('mouseup', onMouseUp);
+            const removeMove = this.lifecycle.listen(document, 'mousemove', onMouseMove);
+            const removeUp = this.lifecycle.listen(document, 'mouseup', onMouseUp);
+            const previousCursor = document.body.style.cursor;
+            const previousSelection = document.body.style.userSelect;
+            stopResize = this.lifecycle.addCleanup(() => {
+                removeMove(); removeUp();
+                isResizing = false;
+                handle.classList.remove('resizing');
+                document.body.style.cursor = previousCursor;
+                document.body.style.userSelect = previousSelection;
+            });
             document.body.style.cursor = 'col-resize';
             document.body.style.userSelect = 'none';
         });
@@ -3251,7 +3277,8 @@ export class ProjectKanbanView {
     }
 
     private async loadTasks() {
-        if (this.isLoading) {
+        if (this.disposed) return;
+        if (this.disposed || this.isLoading) {
             return;
         }
 
@@ -3260,11 +3287,14 @@ export class ProjectKanbanView {
             // 保存当前滚动状态，避免界面刷新时丢失滚动位置
             this.captureScrollState();
             await this.refreshReminderSkipDateContext();
+            if (this.disposed) return;
 
             // 构造里程碑映射
             await this.buildMilestoneMap();
+            if (this.disposed) return;
 
             const reminderData = await this.getReminders();
+            if (this.disposed) return;
             let habitData: Record<string, any> = {};
             try {
                 habitData = await this.plugin.loadHabitData();
@@ -3272,6 +3302,7 @@ export class ProjectKanbanView {
                 console.warn("Failed to load habit data:", error);
                 habitData = {};
             }
+            if (this.disposed) return;
             // 判断当前看板项目是否为「无项目任务归属项目」
             // 如果是，则额外纳入 projectId 为空的任务（即尚未归属任何项目的任务）
             const unassignedProjectId = this.reminderSkipSettings?.unassignedTasksProjectId || '';
@@ -3381,6 +3412,7 @@ export class ProjectKanbanView {
 
                 if (dateCascadeChanged) {
                     await saveReminders(this.plugin, reminderData);
+                    if (this.disposed) return;
                 }
             } catch (err) {
                 console.warn("Failed to automatically cascade statuses based on dates:", err);
@@ -3582,6 +3614,7 @@ export class ProjectKanbanView {
             });
 
             const pomodoroStats = await this.pomodoroRecordManager.resolveReminderPomodoroStatsBatch(allTasksWithInstances, reminderData);
+            if (this.disposed) return;
             this.tasks = allTasksWithInstances.map((reminder: any) => {
                 let status;
                 if (reminder.parentId && taskMap.has(reminder.parentId)) {
@@ -3608,6 +3641,7 @@ export class ProjectKanbanView {
             // 任务数量大时，让出主线程以避免阻塞用户输入和绘制
             if (this.tasks.length > 100) {
                 await this.yieldToMainThread();
+                if (this.disposed) return;
             }
 
             // [NEW] 搜索过滤逻辑
@@ -3916,6 +3950,7 @@ export class ProjectKanbanView {
             // 过滤逻辑较重时让出主线程，提升交互响应
             if (this.tasks.length > 100) {
                 await this.yieldToMainThread();
+                if (this.disposed) return;
             }
 
             this.sortTasks();
@@ -4004,6 +4039,7 @@ export class ProjectKanbanView {
             // 在重新渲染看板前让出主线程，避免长时间同步 DOM 操作阻塞交互
             await this.yieldToMainThread();
 
+            if (this.disposed) return;
             this.renderKanban();
         } catch (error) {
             console.error("Failed to load tasks:", error);
@@ -4017,6 +4053,7 @@ export class ProjectKanbanView {
      * 防抖加载任务队列：避免短时间多次触发导致界面频繁重绘和滚动位置丢失
      */
     public queueLoadTasks(): Promise<void> {
+        if (this.disposed) return Promise.resolve();
         // 如果已有挂起的 promise，则复用
         if (!this._pendingLoadPromise) {
             this._pendingLoadPromise = new Promise<void>((resolve) => { this._pendingLoadResolve = resolve; });
@@ -4030,10 +4067,10 @@ export class ProjectKanbanView {
         }
 
         if (this._debounceTimer) {
-            clearTimeout(this._debounceTimer);
+            this.lifecycle.clearTimeout(this._debounceTimer);
         }
 
-        this._debounceTimer = setTimeout(async () => {
+        this._debounceTimer = this.lifecycle.timeout(async () => {
             try {
                 await this.loadTasks();
             } catch (e) {
@@ -4096,7 +4133,7 @@ export class ProjectKanbanView {
                 } catch (e) { /* ignore */ }
 
                 // setTimeout to ensure layout updated (as a safety fallback)
-                setTimeout(() => {
+                this.lifecycle.timeout(() => {
                     try {
                         kanbanContainer.scrollLeft = Math.max(0, Math.min(kanbanContainer.scrollWidth - kanbanContainer.clientWidth, containerScrollLeft));
                     } catch (e) { /* ignore */ }
@@ -4131,7 +4168,7 @@ export class ProjectKanbanView {
                     } catch (e) { /* ignore */ }
 
                     // setTimeout as fallback
-                    setTimeout(() => {
+                    this.lifecycle.timeout(() => {
                         try {
                             content.scrollTop = Math.max(0, Math.min(content.scrollHeight - content.clientHeight, top));
                         } catch (e) { /* ignore */ }
@@ -4965,6 +5002,7 @@ export class ProjectKanbanView {
     }
 
     private async renderKanban() {
+        if (this.disposed) return;
         // 保存滚动位置（如果还没有被上层保存）
         if (!this._savedScrollState) this.captureScrollState();
 
@@ -4980,20 +5018,26 @@ export class ProjectKanbanView {
 
         if (this.kanbanMode === 'status') {
             await this.renderStatusKanban();
+            if (this.disposed) return;
         } else if (this.kanbanMode === 'list') {
             await this.renderListKanban();
+            if (this.disposed) return;
         } else {
             await this.renderCustomGroupKanban();
+            if (this.disposed) return;
         }
 
         // 恢复滚动位置（如果有的话）
+        if (this.disposed) return;
         this.restoreScrollState();
         this.checkVip();
     }
 
     private async renderCustomGroupKanban() {
+        if (this.disposed) return;
         // 使用项目管理器获取自定义分组
         const projectGroups = await this.getProjectCustomGroupsForView();
+        if (this.disposed) return;
 
         // 过滤掉已归档的分组，并排序
         // 聚合看板：先按项目在 aggregateProjectIds 中的顺序排（确保同一项目的分组聚在一起），再按分组自身 sort 排
@@ -5063,6 +5107,7 @@ export class ProjectKanbanView {
         // 页签模式：每次只展示一个分组，分组内容占满容器
         if (this.customGroupTabsMode) {
             await this.renderCustomGroupKanbanTabs(kanbanContainer, activeGroups, statusTasks, todayStr);
+            if (this.disposed) return;
             return;
         }
 
@@ -5558,12 +5603,14 @@ export class ProjectKanbanView {
     }
 
     private async renderStatusKanban() {
+        if (this.disposed) return;
         const kanbanContainer = this.container.querySelector('.project-kanban-container') as HTMLElement;
         if (!kanbanContainer) return;
 
         // 页签模式
         if (this.statusTabsMode) {
             await this.renderStatusKanbanTabs(kanbanContainer);
+            if (this.disposed) return;
             return;
         }
 
@@ -5583,6 +5630,7 @@ export class ProjectKanbanView {
 
         // 确保状态列存在，如果不存在才创建
         await this.ensureStatusColumnsExist(kanbanContainer);
+        if (this.disposed) return;
 
         // 按任务状态分组 - 使用kanbanStatuses中定义的所有状态
         const statusTasks: { [status: string]: any[] } = {};
@@ -5614,6 +5662,7 @@ export class ProjectKanbanView {
                 tasksForRender = this.sortDoneTasks(tasksForRender);
             }
             const visibleTasksForColumn = await this.renderStatusColumnWithStableGroups(status.id, tasksForRender);
+            if (this.disposed) return;
 
             const column = this.container.querySelector(`.kanban-column-${status.id}`) as HTMLElement;
             if (column) {
@@ -5662,6 +5711,7 @@ export class ProjectKanbanView {
         statusTasks: { [status: string]: any[] },
         todayStr: string
     ) {
+        if (this.disposed) return;
         const tabEntries: Array<{ group: any; statusTasks: { [status: string]: any[] }; tasks: any[] }> = [];
         const allTasks = Object.values(statusTasks).flat();
 
@@ -5807,6 +5857,7 @@ export class ProjectKanbanView {
      * 状态看板页签模式：每个状态作为 tab 按钮，点击切换显示对应状态列
      */
     private async renderStatusKanbanTabs(kanbanContainer: HTMLElement) {
+        if (this.disposed) return;
         // 按任务状态分组
         const statusTasks: { [status: string]: any[] } = {};
         const nonCompletedIncludedIds = new Set<string>();
@@ -5929,6 +5980,7 @@ export class ProjectKanbanView {
         });
 
         await renderActiveTab();
+        if (this.disposed) return;
     }
 
     private async ensureStatusColumnsExist(kanbanContainer: HTMLElement) {
@@ -6068,6 +6120,7 @@ export class ProjectKanbanView {
     }
 
     private async renderStatusColumnWithStableGroups(status: string, tasks: any[], columnOverride?: HTMLElement): Promise<any[]> {
+        if (this.disposed) return [];
         const column = columnOverride || this.container.querySelector(`.kanban-column-${status}`) as HTMLElement;
         if (!column) return [];
 
@@ -6084,6 +6137,7 @@ export class ProjectKanbanView {
 
         // 检查是否有自定义分组
         const hasCustomGroups = await this.hasProjectCustomGroups();
+        if (this.disposed) return [];
         let visibleTasksForCount = tasks;
 
         if (hasCustomGroups) {
@@ -6144,7 +6198,7 @@ export class ProjectKanbanView {
 
         // 恢复高度
         if (oldHeight > 0) {
-            requestAnimationFrame(() => {
+            this.lifecycle.frame(() => {
                 groupTasksContainer.style.minHeight = '';
             });
         }
@@ -6158,8 +6212,10 @@ export class ProjectKanbanView {
     }
 
     private async renderTasksGroupedByCustomGroupInStableContainer(groupsContainer: HTMLElement, tasks: any[], status: string): Promise<any[]> {
+        if (this.disposed) return [];
         // 获取项目自定义分组
         const projectGroups = await this.getProjectCustomGroupsForView();
+        if (this.disposed) return [];
         // 过滤掉已归档的分组，并按 sort 字段排序
         const allActiveGroups = projectGroups
             .filter((g: any) => !g.archived)
@@ -6259,7 +6315,7 @@ export class ProjectKanbanView {
 
         // 恢复高度
         if (oldHeight > 0) {
-            requestAnimationFrame(() => {
+            this.lifecycle.frame(() => {
                 groupTasksContainer.style.minHeight = '';
             });
         }
@@ -6355,6 +6411,7 @@ export class ProjectKanbanView {
     }
 
     private async renderListKanban() {
+        if (this.disposed) return;
         const kanbanContainer = this.container.querySelector('.project-kanban-container') as HTMLElement;
         if (!kanbanContainer) return;
 
@@ -6373,22 +6430,27 @@ export class ProjectKanbanView {
         }
 
         const projectGroups = await this.getProjectCustomGroupsForView();
+        if (this.disposed) return;
         // 过滤掉已归档的分组
         const activeGroups = projectGroups.filter((g: any) => !g.archived);
 
         if (activeGroups.length === 0) {
             // No custom grouping -> Single column
             await this.renderSingleListColumn(kanbanContainer);
+            if (this.disposed) return;
         } else if (this.customGroupTabsMode) {
             // With custom grouping in tab mode -> one group per tab
             await this.renderGroupedListTabs(kanbanContainer, activeGroups);
+            if (this.disposed) return;
         } else {
             // With custom grouping -> Columns per group
             await this.renderGroupedListColumns(kanbanContainer, activeGroups);
+            if (this.disposed) return;
         }
     }
 
     private async renderSingleListColumn(container: HTMLElement) {
+        if (this.disposed) return;
         // Create or get the single column
         let column = container.querySelector('.kanban-column-list-single') as HTMLElement;
         if (!column) {
@@ -6499,6 +6561,7 @@ export class ProjectKanbanView {
     }
 
     private async renderGroupedListTabs(container: HTMLElement, groups: any[]) {
+        if (this.disposed) return;
         const listVisibleTasks = this.getListModeVisibleTasks(this.tasks);
 
         const validGroupIds = new Set(groups.map(g => g.id));
@@ -6611,9 +6674,11 @@ export class ProjectKanbanView {
         });
 
         await renderActiveTab();
+        if (this.disposed) return;
     }
 
     private async renderGroupedListColumns(container: HTMLElement, groups: any[]) {
+        if (this.disposed) return;
         const listVisibleTasks = this.getListModeVisibleTasks(this.tasks);
 
         // Handle ungrouped tasks (orphaned tasks should be considered ungrouped)
@@ -6635,6 +6700,7 @@ export class ProjectKanbanView {
         for (const group of displayGroups) {
             const groupTasks = listVisibleTasks.filter(t => t.customGroupId === group.id);
             await this.renderListModeGroupColumn(container, group, groupTasks);
+            if (this.disposed) return;
             renderedGroupIds.add(`custom-group-${group.id}`);
         }
 
@@ -6646,6 +6712,7 @@ export class ProjectKanbanView {
         if (showUngrouped) {
             const ungroupedGroup = { id: 'ungrouped', name: i18n('ungrouped') || '未分组', color: '#95a5a6', icon: '📋' };
             await this.renderListModeGroupColumn(container, ungroupedGroup, ungroupedTasks);
+            if (this.disposed) return;
             renderedGroupIds.add('custom-group-ungrouped');
         }
 
@@ -6660,6 +6727,7 @@ export class ProjectKanbanView {
     }
 
     private async renderListModeGroupColumn(container: HTMLElement, group: any, tasks: any[], useContainerAsCreateParent: boolean = false) {
+        if (this.disposed) return;
         const columnId = `custom-group-${group.id}`;
         let column = container.querySelector(`.kanban-column-${columnId}`) as HTMLElement;
 
@@ -7179,6 +7247,7 @@ export class ProjectKanbanView {
     }
 
     private renderColumn(status: string, tasks: any[]) {
+        if (this.disposed) return;
         const column = this.container.querySelector(`.kanban-column-${status}`) as HTMLElement;
         if (!column) return;
 
@@ -7627,7 +7696,7 @@ export class ProjectKanbanView {
 
         // 恢复高度
         if (oldHeight > 0) {
-            requestAnimationFrame(() => {
+            this.lifecycle.frame(() => {
                 content.style.minHeight = '';
             });
         }
@@ -7946,6 +8015,7 @@ export class ProjectKanbanView {
 
 
     private renderTasksInColumn(content: HTMLElement, tasks: any[], columnStatus?: string) {
+        if (this.disposed) return;
         const hierarchy = new TaskHierarchyIndex(tasks);
         const roots = tasks.filter(task => !task.parentId || !hierarchy.byId.has(task.parentId));
         this.renderTaskTree(content, roots, hierarchy, columnStatus);
@@ -7953,6 +8023,7 @@ export class ProjectKanbanView {
 
     /** 普通列、分组和分页列共用同一遍历，卡片共用本批任务索引。 */
     private renderTaskTree(content: HTMLElement, roots: any[], hierarchy: TaskHierarchyIndex, columnStatus?: string): void {
+        if (this.disposed) return;
         // 共享渲染器原来以 this.tasks 为可见集合，保留该范围及其父子进度语义。
         const cardHierarchy = new TaskHierarchyIndex(this.tasks);
         const stack = roots.map(task => ({ task, level: 0 })).reverse();
@@ -8355,7 +8426,7 @@ export class ProjectKanbanView {
         });
 
         if (oldHeight > 0) {
-            requestAnimationFrame(() => {
+            this.lifecycle.frame(() => {
                 container.style.minHeight = '';
             });
         }
@@ -9949,7 +10020,7 @@ export class ProjectKanbanView {
             }
 
             if (useDelayedRefresh) {
-                window.setTimeout(() => {
+                this.lifecycle.timeout(() => {
                     this.refreshTaskTreeAround(optimisticTask.id);
                 }, 300);
             }
@@ -9989,7 +10060,7 @@ export class ProjectKanbanView {
                             if (task.parentId && childIds.length > 0) {
                                 if (!this.showCompletedSubtasks) {
                                     // 不显示已完成子任务时，与乐观更新的延迟刷新保持一致，避免打断勾选动画
-                                    window.setTimeout(() => this.refreshTaskTreeAround(task.id), 300);
+                                    this.lifecycle.timeout(() => this.refreshTaskTreeAround(task.id), 300);
                                 } else {
                                     this.refreshTaskTreeAround(task.id);
                                 }
@@ -10033,7 +10104,7 @@ export class ProjectKanbanView {
                         if (needsFullReload) {
                             if (completed && task.parentId && !this.showCompletedSubtasks) {
                                 // 不显示已完成子任务时，等勾选动画播放完再触发整页刷新，避免子任务提前消失
-                                window.setTimeout(() => this.queueLoadTasks(), 300);
+                                this.lifecycle.timeout(() => this.queueLoadTasks(), 300);
                             } else {
                                 this.queueLoadTasks();
                             }
@@ -11062,14 +11133,20 @@ export class ProjectKanbanView {
         }
 
         // 点击外部关闭
+        let removeClickListener = () => {};
+        const closePopup = this.lifecycle.addCleanup(() => {
+            menu.remove();
+            if (this.filterDropdownMenu === menu) this.filterDropdownMenu = null;
+            removeClickListener();
+        });
         const closeHandler = (e: MouseEvent) => {
             if (!menu.contains(e.target as Node) && !this.filterButton.contains(e.target as Node)) {
-                menu.remove();
-                this.filterDropdownMenu = null;
-                document.removeEventListener('click', closeHandler);
+                closePopup();
             }
         };
-        setTimeout(() => document.addEventListener('click', closeHandler), 0);
+        this.lifecycle.timeout(() => {
+            if (menu.isConnected) removeClickListener = this.lifecycle.listen(document, 'click', closeHandler);
+        }, 0);
     }
 
     private updateFilterButtonState(totalTagCount: number) {
@@ -14137,7 +14214,7 @@ export class ProjectKanbanView {
     public bindProjectTabDropTarget(header?: HTMLElement) {
         this.unbindProjectTabDropTarget();
         // 聚合页签没有唯一目标项目，仍通过看板中的具体项目分组接收任务。
-        if (!header || this.isAggregateView) return;
+        if (this.disposed || !header || this.isAggregateView) return;
         const controller = new AbortController();
         this.projectTabDropController = controller;
         const isTaskDrag = (event: DragEvent) => this.canCreateTask &&
@@ -14461,14 +14538,15 @@ export class ProjectKanbanView {
     private clearCompletionMoveTimer(taskId: string): void {
         const timerId = this.completionMoveTimers.get(taskId);
         if (timerId) {
-            clearTimeout(timerId);
+            this.lifecycle.clearTimeout(timerId);
             this.completionMoveTimers.delete(taskId);
         }
     }
 
     private scheduleDelayedMoveToStatusColumn(taskId: string, delayMs: number): void {
+        if (this.disposed) return;
         this.clearCompletionMoveTimer(taskId);
-        const timerId = window.setTimeout(() => {
+        const timerId = this.lifecycle.timeout(() => {
             this.completionMoveTimers.delete(taskId);
 
             const taskEl = this.container.querySelector(`[data-task-id="${taskId}"]`) as HTMLElement | null;
@@ -16921,6 +16999,7 @@ export class ProjectKanbanView {
     }
 
     private handleDragScroll(clientX: number, clientY: number, targetEl: HTMLElement) {
+        if (this.disposed) return;
         this.lastDragClientX = clientX;
         this.lastDragClientY = clientY;
         this.lastDragTime = Date.now();
@@ -16984,6 +17063,29 @@ export class ProjectKanbanView {
         }
         this.lastDragClientX = null;
         this.lastDragClientY = null;
+    }
+
+    /** 关闭页签、替换移动端视图和插件卸载都经过同一个幂等清理入口。 */
+    public destroy(): void {
+        if (this.disposed) return;
+        this.disposed = true;
+        this.lifecycle.dispose();
+        this.unbindProjectTabDropTarget();
+        this.stopDragScroll();
+        if (this._debounceTimer) this.lifecycle.clearTimeout(this._debounceTimer);
+        this._debounceTimer = null;
+        this.completionMoveTimers.forEach(timer => this.lifecycle.clearTimeout(timer));
+        this.completionMoveTimers.clear();
+        this._pendingLoadResolve?.();
+        this._pendingLoadResolve = null;
+        this._pendingLoadPromise = null;
+        this.filterDropdownMenu?.remove();
+        this._groupDropIndicator?.remove();
+        this._groupDragImageEl?.remove();
+        this._columnDropIndicator?.remove();
+        this.reminderData = null;
+        this.tasks = [];
+        this.container.innerHTML = '';
     }
 
 }
