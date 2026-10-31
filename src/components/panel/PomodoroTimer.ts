@@ -8761,6 +8761,14 @@ export class PomodoroTimer {
         this.browserWindowModeInitialized = true;
     }
 
+    private disableBrowserWindowMaximize(pomodoroWindow: any) {
+        // 无边框窗口的拖拽区域仍会响应系统双击最大化，需要单独禁用。
+        if (pomodoroWindow.isMaximized()) {
+            pomodoroWindow.unmaximize();
+        }
+        pomodoroWindow.setMaximizable(false);
+    }
+
     private async createBrowserWindow() {
         this.isWindowClosed = false; // 重置窗口关闭状态，确保计时器逻辑能正常运行
         try {
@@ -8794,6 +8802,7 @@ export class PomodoroTimer {
             let pomodoroWindow = PomodoroTimer.browserWindowInstance;
 
             if (pomodoroWindow && !pomodoroWindow.isDestroyed()) {
+                this.disableBrowserWindowMaximize(pomodoroWindow);
                 // 复用已有窗口，更新内容
 
                 // 如果有之前的Timer实例，先尝试从旧实例同步窗口模式状态
@@ -8935,6 +8944,7 @@ export class PomodoroTimer {
                 skipTaskbar: false,
                 hasShadow: !this.isDocked,
                 resizable: !this.isDocked,
+                maximizable: false,
                 fullscreenable: false,
                 minWidth: 40,
                 minHeight: 40,
@@ -9477,6 +9487,7 @@ document.body.classList.remove('docked-mode');
         if (!pomodoroWindow || pomodoroWindow.isDestroyed()) return;
 
         try {
+            this.disableBrowserWindowMaximize(pomodoroWindow);
             const electronReq = (window as any).require;
             const remote = electronReq?.('@electron/remote') || electronReq?.('electron')?.remote;
             const ipcMain = remote?.ipcMain;
@@ -10551,7 +10562,7 @@ document.body.classList.remove('docked-mode');
                     <circle class="progress-ring-bg" cx="40" cy="40" r="36"></circle>
                     <circle class="progress-ring-circle" id="progressCircle" cx="40" cy="40" r="36"></circle>
                 </svg>
-                <div class="center-content" ondblclick="handleDoubleClick()">
+                <div class="center-content">
                     <div class="pomodoro-status-icon" id="statusIcon" onclick="toggleMiniSwitchMenu(event)">${initialStatusIcon}</div>
                     <div class="control-buttons">
                         <button class="circle-control-btn" id="ringPlayPauseBtn" onclick="callMethod('toggleTimer')">▶️</button>
@@ -11034,12 +11045,6 @@ document.body.classList.remove('docked-mode');
             ipcRenderer.send('${controlChannel}', 'restoreFromDocked');
         }
         
-        function handleDoubleClick() {
-            if (document.body.classList.contains('mini-mode')) {
-                ipcRenderer.send('${controlChannel}', 'toggleMiniMode');
-            }
-        }
-
         // --- Independent Timer Logic ---
         
         function formatTime(seconds) {
