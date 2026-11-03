@@ -40,6 +40,7 @@ function statusLayoutFixture(project = {}) {
         const el = element();
         el.children = [];
         el.appendChild = child => { el.children.push(child); return child; };
+        el.replaceChildren = () => { el.children = []; };
         el.setAttribute = () => {};
         el.classList.toggle = (name, enabled) => enabled ? el.classList.add(name) : el.classList.remove(name);
         Object.defineProperty(el, 'innerHTML', { set() { el.children = []; } });
@@ -47,14 +48,16 @@ function statusLayoutFixture(project = {}) {
     }
     const compiled = ts.transpileModule(`class Board { ${extract('src/components/panel/ProjectKanbanView.ts', 'ProjectKanbanView', [
         'getCustomGroupStatusDisplayMode', 'saveCustomGroupStatusDisplayMode', 'getActiveCustomGroupStatus',
-        'renderCustomGroupColumnWithStatuses', 'renderCustomGroupStatusTabs',
+        'renderCustomGroupColumnWithStatuses', 'renderCustomGroupStatusTabs', 'syncCustomGroupStatusDisplaySelect',
     ])} }`, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
-    const Board = new Function('document', compiled + ';return Board;')({ createElement: node });
+    const Board = new Function('document', 'i18n', compiled + ';return Board;')({ createElement: node }, key => key);
     const content = node(), count = node();
     const column = { querySelector: selector => selector === '.kanban-column-content' ? content : selector === '.kanban-column-count' ? count : null };
     const dropTargets = [];
     const board = Object.assign(new Board(), {
         project, projectId: 'A', kanbanMode: 'custom', statusTabsMode: false,
+        customGroupTabsMode: project.customGroupTabsMode ?? true,
+        displayCustomGroupStatusModeSelect: node(),
         activeGroupStatusTabIds: new Map(), hideEmptyStatusBars: false,
         container: { querySelector: () => column }, lifecycle: { frame: callback => callback() },
         getVisibleStatusesForGroup: () => ['doing', 'waiting', 'completed'].map(id => ({ id, name: id })),
@@ -65,6 +68,33 @@ function statusLayoutFixture(project = {}) {
     });
     return { board, content, count, dropTargets };
 }
+
+test('外层分组看板只提供页签和列表，已有内层看板回退列表，恢复分组页签后可继续使用看板', () => {
+    const { board, content } = statusLayoutFixture({ customGroupStatusDisplayMode: 'kanban', customGroupTabsMode: false });
+    const select = board.displayCustomGroupStatusModeSelect;
+    board.syncCustomGroupStatusDisplaySelect();
+    assert.deepEqual(select.children.map(option => option.value), ['tabs', 'list']);
+    assert.equal(select.value, 'list');
+    board.renderCustomGroupColumnWithStatuses({ id: 'group' }, {});
+    assert.equal(content.classList.contains('custom-group-column-content--status-board'), false);
+    assert.equal(board.project.customGroupStatusDisplayMode, 'kanban');
+
+    board.customGroupTabsMode = true;
+    board.syncCustomGroupStatusDisplaySelect();
+    assert.deepEqual(select.children.map(option => option.value), ['kanban', 'tabs', 'list']);
+    assert.equal(select.value, 'kanban');
+    board.renderCustomGroupColumnWithStatuses({ id: 'group' }, {});
+    assert.equal(content.classList.contains('custom-group-column-content--status-board'), true);
+
+    board.customGroupTabsMode = false;
+    for (const mode of ['tabs', 'list']) {
+        board.project.customGroupStatusDisplayMode = mode;
+        board.syncCustomGroupStatusDisplaySelect();
+        assert.deepEqual(select.children.map(option => option.value), ['tabs', 'list']);
+        assert.equal(select.value, mode);
+        assert.equal(board.getCustomGroupStatusDisplayMode(), mode);
+    }
+});
 
 test('分组内状态布局兼容旧页签开关，显式选择优先且切换后新建任务只在页签中跟随状态', () => {
     const { board } = statusLayoutFixture();

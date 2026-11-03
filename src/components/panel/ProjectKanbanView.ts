@@ -620,7 +620,7 @@ export class ProjectKanbanView {
             this.displayGroupTabCountSelect.value = this.groupTabCountMode;
         }
         if (this.displayCustomGroupStatusModeSelect?.isConnected) {
-            this.displayCustomGroupStatusModeSelect.value = this.getCustomGroupStatusDisplayMode();
+            this.syncCustomGroupStatusDisplaySelect();
         }
     }
 
@@ -1433,6 +1433,7 @@ export class ProjectKanbanView {
         // 自定义分组看板：页签显示模式
         displaySettingsDropdown.appendChild(createSwitchItem(i18n("customGroupTabsMode") || "分组使用页签显示", this.customGroupTabsMode, async (checked) => {
             this.customGroupTabsMode = checked;
+            this.syncCustomGroupStatusDisplaySelect();
             if (!checked) {
                 this.activeCustomGroupTabId = null;
                 this.activeStatusGroupTabIds.clear();
@@ -1497,23 +1498,12 @@ export class ProjectKanbanView {
         groupStatusDisplayLabel.textContent = i18n('customGroupStatusDisplayMode');
         const groupStatusDisplaySelect = document.createElement('select');
         groupStatusDisplaySelect.className = 'b3-select';
-        const groupStatusDisplayOptions: Array<{ value: CustomGroupStatusDisplayMode; label: string }> = [
-            { value: 'kanban', label: i18n('customGroupStatusDisplayKanban') },
-            { value: 'tabs', label: i18n('customGroupStatusDisplayTabs') },
-            { value: 'list', label: i18n('customGroupStatusDisplayList') }
-        ];
-        groupStatusDisplayOptions.forEach(({ value, label }) => {
-            const option = document.createElement('option');
-            option.value = value;
-            option.textContent = label;
-            groupStatusDisplaySelect.appendChild(option);
-        });
-        groupStatusDisplaySelect.value = this.getCustomGroupStatusDisplayMode();
         groupStatusDisplaySelect.addEventListener('change', async () => {
             await this.saveCustomGroupStatusDisplayMode(groupStatusDisplaySelect.value as CustomGroupStatusDisplayMode);
             await this.renderKanban();
         });
         this.displayCustomGroupStatusModeSelect = groupStatusDisplaySelect;
+        this.syncCustomGroupStatusDisplaySelect();
         groupStatusDisplaySetting.append(groupStatusDisplayLabel, groupStatusDisplaySelect);
         displaySettingsDropdown.appendChild(groupStatusDisplaySetting);
 
@@ -1552,7 +1542,7 @@ export class ProjectKanbanView {
         const updateStatusDisplaySettings = () => {
             groupStatusDisplaySetting.style.display = this.kanbanMode === 'custom' ? 'flex' : 'none';
             statusTabsSetting.style.display = this.kanbanMode === 'custom' ? 'none' : 'flex';
-            groupStatusDisplaySelect.value = this.getCustomGroupStatusDisplayMode();
+            this.syncCustomGroupStatusDisplaySelect();
         };
         this.lifecycle.listen(this.container, 'kanbanModeChanged', updateStatusDisplaySettings);
         updateStatusDisplaySettings();
@@ -5726,9 +5716,29 @@ export class ProjectKanbanView {
 
     private getCustomGroupStatusDisplayMode(): CustomGroupStatusDisplayMode {
         const mode = this.project?.customGroupStatusDisplayMode;
-        if (mode === 'kanban' || mode === 'tabs' || mode === 'list') return mode;
+        // 外层分组并排显示时，内层不再嵌套横向看板；保留原配置以便恢复分组页签后复用。
+        if (mode === 'kanban') return this.customGroupTabsMode ? 'kanban' : 'list';
+        if (mode === 'tabs' || mode === 'list') return mode;
         // 旧项目未设置独立布局时，保留原先状态页签开关的显示效果。
         return this.statusTabsMode ? 'tabs' : 'list';
+    }
+
+    private syncCustomGroupStatusDisplaySelect(): void {
+        const select = this.displayCustomGroupStatusModeSelect;
+        if (!select) return;
+        const options: Array<{ value: CustomGroupStatusDisplayMode; label: string }> = [
+            { value: 'kanban', label: i18n('customGroupStatusDisplayKanban') },
+            { value: 'tabs', label: i18n('customGroupStatusDisplayTabs') },
+            { value: 'list', label: i18n('customGroupStatusDisplayList') }
+        ];
+        select.replaceChildren();
+        options.filter(option => option.value !== 'kanban' || this.customGroupTabsMode).forEach(({ value, label }) => {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = label;
+            select.appendChild(option);
+        });
+        select.value = this.getCustomGroupStatusDisplayMode();
     }
 
     private async saveCustomGroupStatusDisplayMode(mode: CustomGroupStatusDisplayMode): Promise<void> {
