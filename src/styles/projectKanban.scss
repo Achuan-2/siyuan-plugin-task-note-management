@@ -740,6 +740,18 @@
     }
 }
 
+.custom-group-tab-dragging {
+    opacity: 0.5;
+}
+
+.custom-group-tab-drop-before {
+    box-shadow: inset 3px 0 0 var(--b3-theme-on-background);
+}
+
+.custom-group-tab-drop-after {
+    box-shadow: inset -3px 0 0 var(--b3-theme-on-background);
+}
+
 /* 自定义分组状态容器样式 */
 .custom-group-status-container {
     display: flex;

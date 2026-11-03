@@ -323,7 +323,11 @@ function element(groupId) {
     const classes = new Set();
     const el = {
         dataset: groupId ? { groupId } : {}, style: {}, outerHTML: '<div></div>',
-        classList: { add: name => classes.add(name), remove: name => classes.delete(name), contains: name => classes.has(name) },
+        classList: {
+            add: (...names) => names.forEach(name => classes.add(name)),
+            remove: (...names) => names.forEach(name => classes.delete(name)),
+            contains: name => classes.has(name),
+        },
         contains: node => node === el,
         closest: () => groupId ? el : null,
         getBoundingClientRect: () => ({ top: 0, height: 100 }),
@@ -357,6 +361,125 @@ function dragEvent(ids, type = 'application/vnd.siyuan.kanban-task-move') {
         stopImmediatePropagation() { this.immediateStopped = true; },
     };
 }
+
+function groupTabSortFixture(groups) {
+    const compiled = ts.transpileModule(`class Board { ${extract('src/components/panel/ProjectKanbanView.ts', 'ProjectKanbanView', [
+        'getCustomGroupTabSortTarget', 'clearCustomGroupTabDropIndicators', 'addCustomGroupTabDragEvents', 'reorderCustomGroupTabs',
+    ])} }`, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
+    const state = { groups: clone(groups), writes: [], refreshes: 0, captures: 0, messages: [], buttons: [] };
+    const Board = new Function('i18n', 'showMessage', compiled + ';return Board;')(key => key, message => state.messages.push(message));
+    const board = Object.assign(new Board(), {
+        projectId: 'P', activeCustomGroupTabId: 'b',
+        aggregateProjectContext: new Map(), resolveAggregateGroupTarget: () => null,
+        container: { querySelectorAll: () => state.buttons },
+        projectManager: {
+            getProjectCustomGroups: async projectId => clone(state.groups[projectId] || []),
+            setProjectCustomGroups: async (projectId, value) => {
+                state.writes.push({ projectId, groups: clone(value) });
+                state.groups[projectId] = clone(value);
+            },
+        },
+        captureScrollState: () => { state.captures++; },
+        queueLoadTasks: async () => { state.refreshes++; },
+    });
+    const tab = id => {
+        const button = element(id);
+        button.getBoundingClientRect = () => ({ left: 100, width: 100 });
+        state.buttons.push(button);
+        board.addCustomGroupTabDragEvents(button, id);
+        return button;
+    };
+    const over = (start, clientX) => Object.assign(dragEvent(), { dataTransfer: start.dataTransfer, clientX });
+    return { board, state, tab, over };
+}
+
+test('拖动分组页签按左右半区插入，保存最新完整列表并保持当前选中分组', async () => {
+    const { board, state, tab, over } = groupTabSortFixture({ P: [
+        { id: 'c', sort: 40 }, { id: 'a', sort: 0 }, { id: 'filtered', sort: 10 },
+        { id: 'archived', sort: 20, archived: true, note: 'keep' }, { id: 'b', sort: 30 },
+    ] });
+    const a = tab('a'), b = tab('b'), c = tab('c');
+    const start = dragEvent();
+    await c.fire('dragstart', start);
+    assert.equal(start.dataTransfer.getData('application/vnd.siyuan.kanban-group-tab'), 'c');
+    assert.equal(start.dataTransfer.getData('text/plain'), '');
+    assert.equal(start.stopped, true);
+    state.groups.P.push({ id: 'late', sort: 35 });
+    const before = over(start, 110);
+    await a.fire('dragover', before);
+    assert.equal(a.classList.contains('custom-group-tab-drop-before'), true);
+    assert.equal(before.immediateStopped, true);
+    await a.fire('drop', over(start, 110));
+    assert.deepEqual(state.groups.P.map(group => group.id), ['c', 'a', 'filtered', 'archived', 'b', 'late']);
+    assert.equal(state.groups.P.find(group => group.id === 'archived').note, 'keep');
+    assert.deepEqual(state.groups.P.map(group => group.sort), [0, 10, 20, 30, 40, 50]);
+    assert.equal(board.activeCustomGroupTabId, 'b');
+    assert.equal(state.refreshes, 1);
+    assert.equal(state.captures, 1);
+    assert.equal(a.classList.contains('custom-group-tab-drop-before'), false);
+    await c.fire('dragend', {});
+
+    const next = dragEvent();
+    await a.fire('dragstart', next);
+    await b.fire('dragover', over(next, 190));
+    assert.equal(b.classList.contains('custom-group-tab-drop-after'), true);
+    await b.fire('drop', over(next, 190));
+    assert.deepEqual(state.groups.P.map(group => group.id), ['c', 'filtered', 'archived', 'b', 'a', 'late']);
+    assert.equal(state.writes.length, 2);
+});
+
+test('分组页签排序忽略未分组、未变化和已删除分组，取消拖拽会清除插入标记', async () => {
+    const { board, state, tab, over } = groupTabSortFixture({ P: [{ id: 'a', sort: 0 }, { id: 'b', sort: 10 }] });
+    const a = tab('a'), b = tab('b'), ungrouped = tab('ungrouped');
+    assert.equal(!!ungrouped.draggable, false);
+    for (const [source, target, before] of [['a', 'b', true], ['b', 'a', false], ['a', 'a', true], ['missing', 'b', true], ['a', 'missing', true], ['a', 'ungrouped', true]]) {
+        assert.equal(await board.reorderCustomGroupTabs(source, target, before), false);
+    }
+    const start = dragEvent();
+    await a.fire('dragstart', start);
+    await b.fire('dragover', over(start, 190));
+    await a.fire('dragend', {});
+    assert.equal(board.draggedGroupTabId, null);
+    assert.equal(b.classList.contains('custom-group-tab-drop-after'), false);
+    assert.equal(a.classList.contains('custom-group-tab-dragging'), false);
+    await b.fire('drop', over(start, 190));
+    assert.equal(state.writes.length, 0);
+});
+
+test('分组页签排序使用独立拖拽类型，不拦截任务或文档拖放', async () => {
+    const { state, tab } = groupTabSortFixture({ P: [{ id: 'a' }, { id: 'b' }] });
+    const a = tab('a'), b = tab('b');
+    await a.fire('dragstart', dragEvent());
+    let taskDrops = 0;
+    b.addEventListener('drop', () => { taskDrops++; });
+    for (const type of ['application/vnd.siyuan.kanban-task-move', 'application/x-reminder', 'siyuan-gutter']) {
+        const event = dragEvent(['task'], type);
+        await b.fire('dragover', event);
+        assert.equal(event.prevented, undefined);
+        await b.fire('drop', event);
+        assert.equal(event.immediateStopped, undefined);
+    }
+    assert.equal(taskDrops, 3);
+    assert.equal(state.writes.length, 0);
+});
+
+test('聚合分组页签仅在同一真实项目内排序，使用真实分组 ID 并刷新聚合上下文', async () => {
+    const { board, state, tab } = groupTabSortFixture({ P: [{ id: 'a', sort: 0 }, { id: 'b', sort: 10 }], Q: [{ id: 'q', sort: 0 }] });
+    board.isAggregateView = true;
+    const targets = new Map([
+        ['virtual-a', { projectId: 'P', customGroupId: 'a' }], ['virtual-b', { projectId: 'P', customGroupId: 'b' }],
+        ['virtual-q', { projectId: 'Q', customGroupId: 'q' }], ['virtual-ungrouped', { projectId: 'P', customGroupId: null }],
+    ]);
+    board.resolveAggregateGroupTarget = id => targets.get(id);
+    board.aggregateProjectContext.set('P', { project: {}, activeGroups: [] });
+    assert.equal(!!tab('virtual-ungrouped').draggable, false);
+    assert.equal(await board.reorderCustomGroupTabs('virtual-a', 'virtual-q', true), false);
+    assert.equal(await board.reorderCustomGroupTabs('virtual-b', 'virtual-a', true), true);
+    assert.equal(state.writes[0].projectId, 'P');
+    assert.deepEqual(state.groups.P.map(group => group.id), ['b', 'a']);
+    assert.deepEqual(board.aggregateProjectContext.get('P').activeGroups.map(group => group.id), ['b', 'a']);
+    assert.deepEqual(state.groups.Q, [{ id: 'q', sort: 0 }]);
+});
 
 test('拖到另一项目页签标题移动任务，并保留目标项目原有任务', async () => {
     const { state, board } = fixture({ source: task('source', 'A'), target: task('target', 'B', 'waiting') });

@@ -111,6 +111,7 @@ export class ProjectKanbanView {
     private lastDragClientY: number | null = null;
     // 当前正在拖拽的分组ID（用于分组管理对话框的拖拽排序）
     public draggedGroupId: string | null = null;
+    private draggedGroupTabId: string | null = null;
     // 当前显示的分组拖拽指示器（绝对定位在 container 内）
     public _groupDropIndicator: HTMLElement | null = null;
     // 拖拽时用于 setDragImage 的克隆元素（用于预览整个 group-item）
@@ -5774,6 +5775,111 @@ export class ProjectKanbanView {
         button.appendChild(badge);
     }
 
+    private getCustomGroupTabSortTarget(groupId: string): AggregateGroupTarget | null {
+        if (this.isAggregateView) {
+            const target = this.resolveAggregateGroupTarget(groupId);
+            return target?.customGroupId ? target : null;
+        }
+        return groupId && groupId !== 'ungrouped' ? { projectId: this.projectId, customGroupId: groupId } : null;
+    }
+
+    private clearCustomGroupTabDropIndicators(): void {
+        this.container.querySelectorAll('.custom-group-tab-drop-before, .custom-group-tab-drop-after').forEach(tab => {
+            tab.classList.remove('custom-group-tab-drop-before', 'custom-group-tab-drop-after');
+        });
+    }
+
+    private addCustomGroupTabDragEvents(button: HTMLButtonElement, groupId: string): void {
+        if (!this.getCustomGroupTabSortTarget(groupId)) return;
+        const dragType = 'application/vnd.siyuan.kanban-group-tab';
+        button.draggable = true;
+        button.dataset.groupId = groupId;
+        const canDrop = (event: DragEvent) => {
+            if (!this.draggedGroupTabId || this.draggedGroupTabId === groupId || !event.dataTransfer?.types.includes(dragType)) return false;
+            const source = this.getCustomGroupTabSortTarget(this.draggedGroupTabId);
+            const target = this.getCustomGroupTabSortTarget(groupId);
+            return !!source && !!target && source.projectId === target.projectId;
+        };
+        const isBefore = (event: DragEvent) => {
+            const rect = button.getBoundingClientRect();
+            return event.clientX < rect.left + rect.width / 2;
+        };
+        button.addEventListener('dragstart', event => {
+            if (!event.dataTransfer) return;
+            event.stopPropagation();
+            this.draggedGroupTabId = groupId;
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData(dragType, groupId);
+            button.classList.add('custom-group-tab-dragging');
+        });
+        button.addEventListener('dragover', event => {
+            if (!canDrop(event)) return;
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+            this.clearCustomGroupTabDropIndicators();
+            button.classList.add(isBefore(event) ? 'custom-group-tab-drop-before' : 'custom-group-tab-drop-after');
+            const bar = button.parentElement;
+            if (bar) {
+                const rect = bar.getBoundingClientRect();
+                if (event.clientX < rect.left + 32) bar.scrollLeft -= 16;
+                else if (event.clientX > rect.right - 32) bar.scrollLeft += 16;
+            }
+        });
+        button.addEventListener('dragleave', event => {
+            if (!button.contains(event.relatedTarget as Node)) {
+                button.classList.remove('custom-group-tab-drop-before', 'custom-group-tab-drop-after');
+            }
+        });
+        button.addEventListener('dragend', () => {
+            this.draggedGroupTabId = null;
+            button.classList.remove('custom-group-tab-dragging');
+            this.clearCustomGroupTabDropIndicators();
+        });
+        button.addEventListener('drop', async event => {
+            const sourceId = this.draggedGroupTabId;
+            if (!sourceId || !canDrop(event)) return;
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            this.draggedGroupTabId = null;
+            this.clearCustomGroupTabDropIndicators();
+            try {
+                if (await this.reorderCustomGroupTabs(sourceId, groupId, isBefore(event))) {
+                    this.captureScrollState();
+                    await this.queueLoadTasks();
+                    showMessage(i18n('groupOrderUpdated'));
+                }
+            } catch (error) {
+                console.error('Failed to reorder group tabs:', error);
+                showMessage(i18n('groupOrderUpdateFailed'));
+            }
+        });
+    }
+
+    private async reorderCustomGroupTabs(sourceId: string, targetId: string, before: boolean): Promise<boolean> {
+        const source = this.getCustomGroupTabSortTarget(sourceId);
+        const target = this.getCustomGroupTabSortTarget(targetId);
+        if (!source || !target || source.projectId !== target.projectId || source.customGroupId === target.customGroupId) return false;
+        // 从最新完整分组列表重排，保留当前被过滤和已归档的分组。
+        const groups = [...await this.projectManager.getProjectCustomGroups(source.projectId)]
+            .sort((a, b) => (a.sort || 0) - (b.sort || 0));
+        const sourceIndex = groups.findIndex(group => group.id === source.customGroupId && !group.archived);
+        if (sourceIndex < 0 || !groups.some(group => group.id === target.customGroupId && !group.archived)) return false;
+        const previousOrder = groups.map(group => group.id);
+        const [draggedGroup] = groups.splice(sourceIndex, 1);
+        const targetIndex = groups.findIndex(group => group.id === target.customGroupId);
+        groups.splice(targetIndex + (before ? 0 : 1), 0, draggedGroup);
+        if (groups.every((group, index) => group.id === previousOrder[index])) return false;
+        const sortedGroups = groups.map((group, index) => ({ ...group, sort: index * 10 }));
+        await this.projectManager.setProjectCustomGroups(source.projectId, sortedGroups);
+        const context = this.isAggregateView ? this.aggregateProjectContext.get(source.projectId) : null;
+        if (context) {
+            context.project.customGroups = sortedGroups;
+            context.activeGroups = sortedGroups.filter(group => !group.archived);
+        }
+        return true;
+    }
+
     private async renderCustomGroupKanbanTabs(
         kanbanContainer: HTMLElement,
         activeGroups: any[],
@@ -5904,6 +6010,7 @@ export class ProjectKanbanView {
             tabButton.className = `b3-button ${isActive ? 'b3-button--primary' : 'b3-button--outline'} custom-group-tab-btn`;
             tabButton.textContent = `${entry.group.icon || ''} ${entry.group.name}`;
             this.appendCustomGroupTabCount(tabButton, entry.tasks);
+            this.addCustomGroupTabDragEvents(tabButton, entry.group.id);
             tabButton.addEventListener('click', async () => {
                 if (this.activeCustomGroupTabId === entry.group.id) return;
                 this.activeCustomGroupTabId = entry.group.id;
@@ -6440,6 +6547,7 @@ export class ProjectKanbanView {
             button.dataset.groupId = group.id;
             button.dataset.status = status;
             this.appendCustomGroupTabCount(button, countTasks);
+            this.addCustomGroupTabDragEvents(button, group.id);
             this.addStatusSubGroupDropEvents(button, status);
             buttons.set(group.id, button);
             button.addEventListener('click', () => {
@@ -6727,6 +6835,7 @@ export class ProjectKanbanView {
             tabButton.className = `b3-button ${isActive ? 'b3-button--primary' : 'b3-button--outline'} custom-group-tab-btn`;
             tabButton.textContent = `${entry.group.icon || ''} ${entry.group.name}`;
             this.appendCustomGroupTabCount(tabButton, entry.tasks);
+            this.addCustomGroupTabDragEvents(tabButton, entry.group.id);
             tabButton.addEventListener('click', async () => {
                 if (this.activeCustomGroupTabId === entry.group.id) return;
                 this.activeCustomGroupTabId = entry.group.id;
