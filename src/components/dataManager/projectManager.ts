@@ -40,6 +40,7 @@ export interface ProjectGroup {
 }
 
 export type GroupTabCountMode = 'doing' | 'unfinished' | 'all';
+export type CustomGroupStatusDisplayMode = 'kanban' | 'tabs' | 'list';
 
 export interface Project {
     id: string;
@@ -66,6 +67,7 @@ export interface Project {
     subscriptionId?: string;
     customGroupTabsMode?: boolean;
     groupTabCountMode?: GroupTabCountMode;
+    customGroupStatusDisplayMode?: CustomGroupStatusDisplayMode;
     activeCustomGroupTabId?: string;
     kanbanStatuses?: KanbanStatus[];
     updatedTime?: string;

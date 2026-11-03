@@ -9,7 +9,7 @@ import { refreshSql, getBlockByID, updateBindBlockAtrrs, openBlock, addBlockProj
 import { i18n } from "../../pluginInstance";
 import { getLocalDateString, getLocalDateTimeString, compareDateStrings, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../../utils/dateUtils";
 import { CategoryManager } from "../dataManager/categoryManager";
-import { ProjectManager, type GroupTabCountMode } from "../dataManager/projectManager";
+import { ProjectManager, type GroupTabCountMode, type CustomGroupStatusDisplayMode } from "../dataManager/projectManager";
 import { PomodoroTimer } from "./PomodoroTimer";
 import { PomodoroManager } from "../dataManager/pomodoroManager";
 import { PomodoroRecordManager } from "../dataManager/pomodoroRecord"; // Add import
@@ -232,6 +232,7 @@ export class ProjectKanbanView {
     private customGroupTabsMode: boolean = false; // 自定义分组看板是否使用页签显示
     private groupTabCountMode: GroupTabCountMode = 'doing';
     private displayGroupTabCountSelect: HTMLSelectElement | null = null;
+    private displayCustomGroupStatusModeSelect: HTMLSelectElement | null = null;
     private activeCustomGroupTabId: string | null = null; // 当前选中的分组页签
     private statusTabsMode: boolean = false; // 状态看板是否使用页签显示
     private activeStatusTabId: string | null = null; // 当前选中的状态页签
@@ -617,6 +618,9 @@ export class ProjectKanbanView {
         this.syncGroupVisibilityCheckboxes();
         if (this.displayGroupTabCountSelect?.isConnected) {
             this.displayGroupTabCountSelect.value = this.groupTabCountMode;
+        }
+        if (this.displayCustomGroupStatusModeSelect?.isConnected) {
+            this.displayCustomGroupStatusModeSelect.value = this.getCustomGroupStatusDisplayMode();
         }
     }
 
@@ -1487,8 +1491,34 @@ export class ProjectKanbanView {
         groupTabCountSetting.appendChild(groupTabCountSelect);
         displaySettingsDropdown.appendChild(groupTabCountSetting);
 
-        // 状态看板：页签显示模式
-        displaySettingsDropdown.appendChild(createSwitchItem(i18n("statusTabsMode") || "状态使用页签显示", this.statusTabsMode, async (checked) => {
+        const groupStatusDisplaySetting = document.createElement('label');
+        groupStatusDisplaySetting.style.cssText = 'display:flex; flex-direction:column; gap:6px; padding:6px 12px;';
+        const groupStatusDisplayLabel = document.createElement('span');
+        groupStatusDisplayLabel.textContent = i18n('customGroupStatusDisplayMode');
+        const groupStatusDisplaySelect = document.createElement('select');
+        groupStatusDisplaySelect.className = 'b3-select';
+        const groupStatusDisplayOptions: Array<{ value: CustomGroupStatusDisplayMode; label: string }> = [
+            { value: 'kanban', label: i18n('customGroupStatusDisplayKanban') },
+            { value: 'tabs', label: i18n('customGroupStatusDisplayTabs') },
+            { value: 'list', label: i18n('customGroupStatusDisplayList') }
+        ];
+        groupStatusDisplayOptions.forEach(({ value, label }) => {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = label;
+            groupStatusDisplaySelect.appendChild(option);
+        });
+        groupStatusDisplaySelect.value = this.getCustomGroupStatusDisplayMode();
+        groupStatusDisplaySelect.addEventListener('change', async () => {
+            await this.saveCustomGroupStatusDisplayMode(groupStatusDisplaySelect.value as CustomGroupStatusDisplayMode);
+            await this.renderKanban();
+        });
+        this.displayCustomGroupStatusModeSelect = groupStatusDisplaySelect;
+        groupStatusDisplaySetting.append(groupStatusDisplayLabel, groupStatusDisplaySelect);
+        displaySettingsDropdown.appendChild(groupStatusDisplaySetting);
+
+        // 状态看板沿用页签开关；分组看板使用三种状态布局选择。
+        const statusTabsSetting = createSwitchItem(i18n("statusTabsMode") || "状态使用页签显示", this.statusTabsMode, async (checked) => {
             this.statusTabsMode = checked;
             if (!checked) {
                 this.activeStatusTabId = null;
@@ -1517,7 +1547,15 @@ export class ProjectKanbanView {
             this._lastRenderMode = null;
             this._lastRenderedProjectId = null;
             await this.queueLoadTasks();
-        }));
+        });
+        displaySettingsDropdown.appendChild(statusTabsSetting);
+        const updateStatusDisplaySettings = () => {
+            groupStatusDisplaySetting.style.display = this.kanbanMode === 'custom' ? 'flex' : 'none';
+            statusTabsSetting.style.display = this.kanbanMode === 'custom' ? 'none' : 'flex';
+            groupStatusDisplaySelect.value = this.getCustomGroupStatusDisplayMode();
+        };
+        this.lifecycle.listen(this.container, 'kanbanModeChanged', updateStatusDisplaySettings);
+        updateStatusDisplaySettings();
 
         displaySettingsContainer.appendChild(displaySettingsDropdown);
         controlsGroup.appendChild(displaySettingsContainer);
@@ -5686,6 +5724,27 @@ export class ProjectKanbanView {
         if (this.project) this.project.groupTabCountMode = mode;
     }
 
+    private getCustomGroupStatusDisplayMode(): CustomGroupStatusDisplayMode {
+        const mode = this.project?.customGroupStatusDisplayMode;
+        if (mode === 'kanban' || mode === 'tabs' || mode === 'list') return mode;
+        // 旧项目未设置独立布局时，保留原先状态页签开关的显示效果。
+        return this.statusTabsMode ? 'tabs' : 'list';
+    }
+
+    private async saveCustomGroupStatusDisplayMode(mode: CustomGroupStatusDisplayMode): Promise<void> {
+        if (this.isAggregateView) {
+            await this.saveFolderKanbanSetting({ customGroupStatusDisplayMode: mode });
+        } else {
+            const projectData = await this.plugin.loadProjectData() || {};
+            if (projectData[this.projectId]) {
+                projectData[this.projectId].customGroupStatusDisplayMode = mode;
+                await this.plugin.saveProjectData(projectData);
+            }
+        }
+        if (this.project) this.project.customGroupStatusDisplayMode = mode;
+        this.syncDisplaySettingsCheckboxes();
+    }
+
     private appendCustomGroupTabCount(button: HTMLButtonElement, tasks: any[]): void {
         // 各统计口径共用顶层任务范围，避免子任务跨状态或重复出现时被重复计数。
         const uniqueTasks = new Map(tasks.map(task => [task.id, task]));
@@ -7645,11 +7704,10 @@ export class ProjectKanbanView {
         // 创建分组容器（参考状态分组样式）
         const groupsContainer = document.createElement('div');
         groupsContainer.className = 'custom-group-status-container';
-        groupsContainer.style.cssText = `
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-        `;
+        const statusDisplayMode = this.getCustomGroupStatusDisplayMode();
+        const isStatusBoard = statusDisplayMode === 'kanban';
+        groupsContainer.classList.toggle('custom-group-status-container--kanban', isStatusBoard);
+        content.classList.toggle('custom-group-column-content--status-board', isStatusBoard);
 
         // 按分组可见状态顺序创建状态分组
         const visibleStatuses = this.getVisibleStatusesForGroup(group);
@@ -7666,7 +7724,7 @@ export class ProjectKanbanView {
             }
         });
 
-        // 第二遍：收集状态分组，页签和纵向布局共用可见状态及空状态过滤
+        // 三种布局共用可见状态、任务层级及空状态过滤。
         visibleStatuses.forEach(status => {
             let tasks: any[];
             if (status.id === 'completed') {
@@ -7684,7 +7742,7 @@ export class ProjectKanbanView {
             statusEntries.push({ status, tasks });
         });
 
-        if (this.statusTabsMode) {
+        if (statusDisplayMode === 'tabs') {
             this.renderCustomGroupStatusTabs(groupsContainer, group, statusEntries);
         } else {
             statusEntries.forEach(({ status, tasks }) => {
@@ -7720,7 +7778,7 @@ export class ProjectKanbanView {
     }
 
     private getActiveCustomGroupStatus(groupId: string): string | undefined {
-        if (this.kanbanMode !== 'custom' || !this.statusTabsMode) return undefined;
+        if (this.kanbanMode !== 'custom' || this.getCustomGroupStatusDisplayMode() !== 'tabs') return undefined;
         return this.activeGroupStatusTabIds.get(`${this.projectId}:${groupId}`);
     }
 
@@ -11436,7 +11494,7 @@ export class ProjectKanbanView {
 
                         // 分组/状态页签的渲染闭包只包含当次数据，新建后重绘以更新页签和隐藏状态的内容，
                         // 同时避免非当前页签分组走局部回退渲染时被插到外层看板容器造成错位。
-                        if ((this.kanbanMode === 'custom' && (this.customGroupTabsMode || this.statusTabsMode)) ||
+                        if ((this.kanbanMode === 'custom' && (this.customGroupTabsMode || this.getCustomGroupStatusDisplayMode() === 'tabs')) ||
                             (this.kanbanMode === 'status' && this.customGroupTabsMode)) {
                             this.captureScrollState();
                             await this.renderKanban();

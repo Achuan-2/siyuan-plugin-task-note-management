@@ -35,6 +35,101 @@ const code = ts.transpileModule(`${persistence}\nclass Board { ${methods} }`, {
     compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS },
 }).outputText;
 
+function statusLayoutFixture(project = {}) {
+    function node() {
+        const el = element();
+        el.children = [];
+        el.appendChild = child => { el.children.push(child); return child; };
+        el.setAttribute = () => {};
+        el.classList.toggle = (name, enabled) => enabled ? el.classList.add(name) : el.classList.remove(name);
+        Object.defineProperty(el, 'innerHTML', { set() { el.children = []; } });
+        return el;
+    }
+    const compiled = ts.transpileModule(`class Board { ${extract('src/components/panel/ProjectKanbanView.ts', 'ProjectKanbanView', [
+        'getCustomGroupStatusDisplayMode', 'saveCustomGroupStatusDisplayMode', 'getActiveCustomGroupStatus',
+        'renderCustomGroupColumnWithStatuses', 'renderCustomGroupStatusTabs',
+    ])} }`, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
+    const Board = new Function('document', compiled + ';return Board;')({ createElement: node });
+    const content = node(), count = node();
+    const column = { querySelector: selector => selector === '.kanban-column-content' ? content : selector === '.kanban-column-count' ? count : null };
+    const dropTargets = [];
+    const board = Object.assign(new Board(), {
+        project, projectId: 'A', kanbanMode: 'custom', statusTabsMode: false,
+        activeGroupStatusTabIds: new Map(), hideEmptyStatusBars: false,
+        container: { querySelector: () => column }, lifecycle: { frame: callback => callback() },
+        getVisibleStatusesForGroup: () => ['doing', 'waiting', 'completed'].map(id => ({ id, name: id })),
+        augmentTasksWithDescendants: tasks => tasks,
+        createStatusGroupInCustomColumn: (group, tasks, status, _name, tabbed) => ({ group, tasks, status, tabbed }),
+        addStatusSubGroupDropEvents: (button, status) => dropTargets.push({ button, status }),
+        syncDisplaySettingsCheckboxes() {},
+    });
+    return { board, content, count, dropTargets };
+}
+
+test('分组内状态布局兼容旧页签开关，显式选择优先且切换后新建任务只在页签中跟随状态', () => {
+    const { board } = statusLayoutFixture();
+    assert.equal(board.getCustomGroupStatusDisplayMode(), 'list');
+    board.statusTabsMode = true;
+    assert.equal(board.getCustomGroupStatusDisplayMode(), 'tabs');
+    board.activeGroupStatusTabIds.set('A:group', 'waiting');
+    assert.equal(board.getActiveCustomGroupStatus('group'), 'waiting');
+    for (const mode of ['kanban', 'list']) {
+        board.project.customGroupStatusDisplayMode = mode;
+        assert.equal(board.getCustomGroupStatusDisplayMode(), mode);
+        assert.equal(board.getActiveCustomGroupStatus('group'), undefined);
+    }
+    board.project.customGroupStatusDisplayMode = 'unknown';
+    assert.equal(board.getCustomGroupStatusDisplayMode(), 'tabs');
+});
+
+test('分组内状态布局分别保存到项目和文件夹，保留其他项目与看板设置', async () => {
+    const data = { A: { statusTabsMode: true, customGroupTabsMode: true }, B: { customGroupStatusDisplayMode: 'tabs' } };
+    const { board } = statusLayoutFixture(clone(data.A));
+    let saved, folderSettings;
+    board.plugin = { loadProjectData: async () => clone(data), saveProjectData: async value => { saved = value; } };
+    await board.saveCustomGroupStatusDisplayMode('kanban');
+    assert.deepEqual(saved, { ...data, A: { ...data.A, customGroupStatusDisplayMode: 'kanban' } });
+    assert.equal(board.getCustomGroupStatusDisplayMode(), 'kanban');
+    board.isAggregateView = true;
+    board.saveFolderKanbanSetting = async value => { folderSettings = value; };
+    saved = null;
+    await board.saveCustomGroupStatusDisplayMode('list');
+    assert.deepEqual(folderSettings, { customGroupStatusDisplayMode: 'list' });
+    assert.equal(saved, null);
+    assert.equal(board.getCustomGroupStatusDisplayMode(), 'list');
+});
+
+test('三种状态布局切换共用可见状态、空状态过滤及父子计数，清除旧布局并保留页签选择', async () => {
+    const { board, content, count, dropTargets } = statusLayoutFixture();
+    const group = { id: 'group' };
+    const statuses = { doing: [{ id: 'p' }, { id: 'child', parentId: 'p' }], waiting: [{ id: 'w' }], completed: [], hidden: [{ id: 'h' }] };
+    for (const mode of ['kanban', 'tabs', 'list', 'kanban']) {
+        board.project.customGroupStatusDisplayMode = mode;
+        board.renderCustomGroupColumnWithStatuses(group, statuses);
+        assert.equal(content.children.length, 1);
+        assert.equal(count.textContent, '2');
+        assert.equal(content.classList.contains('custom-group-column-content--status-board'), mode === 'kanban');
+        const groups = content.children[0];
+        if (mode === 'tabs') {
+            assert.deepEqual(groups.children[0].children.map(button => button.dataset.status), ['doing', 'waiting', 'completed']);
+            await groups.children[0].children[1].fire('click', {});
+            assert.equal(groups.children[1].children[0].status, 'waiting');
+            assert.equal(board.getActiveCustomGroupStatus(group.id), 'waiting');
+            assert.deepEqual(dropTargets.map(target => target.status), ['doing', 'waiting', 'completed']);
+        } else {
+            assert.deepEqual(groups.children.map(child => child.status), ['doing', 'waiting', 'completed']);
+        }
+    }
+    board.hideEmptyStatusBars = true;
+    board.project.customGroupStatusDisplayMode = 'tabs';
+    board.renderCustomGroupColumnWithStatuses(group, statuses);
+    assert.equal(board.getActiveCustomGroupStatus(group.id), 'waiting');
+    board.renderCustomGroupColumnWithStatuses(group, { doing: statuses.doing });
+    assert.equal(board.getActiveCustomGroupStatus(group.id), 'doing');
+    board.renderCustomGroupColumnWithStatuses(group, {});
+    assert.equal(board.getActiveCustomGroupStatus(group.id), undefined);
+});
+
 test('看板通知阶段只排队，不在防抖前重复读取，仍忽略自身和无关项目更新', async () => {
     const handlers = new Map();
     const compiled = ts.transpileModule(`class Board { ${extract('src/components/panel/ProjectKanbanView.ts', 'ProjectKanbanView', ['initializeAsync'])} }`, {

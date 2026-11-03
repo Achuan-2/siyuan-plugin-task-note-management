@@ -742,7 +742,40 @@
 
 /* 自定义分组状态容器样式 */
 .custom-group-status-container {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
     padding: 4px;
+}
+
+.custom-group-column-content--status-board {
+    overflow: hidden !important;
+
+    > .custom-group-status-container--kanban {
+        flex-direction: row;
+        height: 100%;
+        box-sizing: border-box;
+        overflow-x: auto;
+        overflow-y: hidden;
+
+        > .custom-status-group {
+            display: flex;
+            flex-direction: column;
+            flex: 0 0 280px;
+            min-width: 0;
+
+            > .custom-status-group-header-wrapper {
+                flex-shrink: 0;
+            }
+
+            > .custom-status-group-tasks {
+                flex: 1;
+                min-height: 0;
+                overflow-y: auto;
+            }
+        }
+    }
 }
 
 .custom-group-status-tabs-bar,
