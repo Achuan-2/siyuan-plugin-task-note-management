@@ -844,22 +844,15 @@
 
         const rawAllTimeStats: { [id: string]: { count: number; minutes: number } } = {};
         if (pomodoroRecordManager) {
-            const allRecords = (pomodoroRecordManager as any).records || {};
-            Object.keys(allRecords).forEach(dateStr => {
-                const record = allRecords[dateStr];
-                if (record && record.sessions) {
-                    record.sessions.forEach((s: any) => {
-                        if (s.type === "work") {
-                            const evtId = s.eventId;
-                            if (evtId) {
-                                if (!rawAllTimeStats[evtId]) rawAllTimeStats[evtId] = { count: 0, minutes: 0 };
-                                rawAllTimeStats[evtId].count += pomodoroRecordManager!.calculateSessionCount(s);
-                                rawAllTimeStats[evtId].minutes += s.duration || 0;
-                            }
-                        }
-                    });
+            await pomodoroRecordManager.initialize();
+            for (const summary of Object.values(pomodoroRecordManager.getDailySummaries())) {
+                for (const [id, stats] of Object.entries(summary.workByEvent)) {
+                    if (!id) continue;
+                    const total = rawAllTimeStats[id] ||= { count: 0, minutes: 0 };
+                    total.count += stats.count;
+                    total.minutes += stats.duration;
                 }
-            });
+            }
         }
 
         const allTimeTaskStats: { [id: string]: { count: number; minutes: number } } = {};
@@ -903,32 +896,14 @@
         while (current <= end) {
             const dateStr = getLogicalDateString(current);
             if (pomodoroRecordManager) {
-                const record = (pomodoroRecordManager as any).records[dateStr];
+                const record = pomodoroRecordManager.getDaySummary(dateStr);
                 if (record) {
-                    const dayTotal = record.sessions
-                        ? record.sessions.reduce((sum: number, s: any) => {
-                              if (s.type === "work") {
-                                  return sum + pomodoroRecordManager!.calculateSessionCount(s);
-                              }
-                              return sum;
-                          }, 0)
-                        : record.workSessions || 0;
-
+                    const dayTotal = Object.values(record.workByEvent).reduce((sum, stats) => sum + stats.count, 0);
                     totalPomodoros += dayTotal;
                     totalMinutes += record.totalWorkTime || 0;
-
                     const rawTaskStats: { [id: string]: { count: number; minutes: number } } = {};
-                    if (record.sessions) {
-                        record.sessions.forEach((s: any) => {
-                            if (s.type === "work") {
-                                const evtId = s.eventId;
-                                if (evtId) {
-                                    if (!rawTaskStats[evtId]) rawTaskStats[evtId] = { count: 0, minutes: 0 };
-                                    rawTaskStats[evtId].count += pomodoroRecordManager!.calculateSessionCount(s);
-                                    rawTaskStats[evtId].minutes += s.duration || 0;
-                                }
-                            }
-                        });
+                    for (const [id, stats] of Object.entries(record.workByEvent)) {
+                        if (id) rawTaskStats[id] = { count: stats.count, minutes: stats.duration };
                     }
 
                     const aggregatedTaskStats: { [id: string]: { count: number; minutes: number } } = {};

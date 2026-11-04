@@ -150,7 +150,7 @@ async function loadHabits() {
         if (pomodoroRecordManager) {
             await pomodoroRecordManager.refreshData();
             pomodoroStatsRevision += 1;
-            const records = pomodoroRecordManager.getSaveData() || {};
+            const records = pomodoroRecordManager.getDailySummaries() || {};
             const linkedData = buildLinkedHabitPomodoroData(
                 reminderData,
                 records,
@@ -286,10 +286,9 @@ function getHabitPomodoroTargetMinutes(habit: Habit): number {
 function getHabitPomodoroFocusMinutes(habit: Habit, dateStr: string): number {
     if (!pomodoroReady || !pomodoroRecordManager) return 0;
     const direct = pomodoroRecordManager.getEventFocusTime(habit.id, dateStr) || 0;
-    const sessions = pomodoroRecordManager.getDateSessions(dateStr) || [];
-    const fromInstances = sessions
-        .filter(s => s.type === "work" && s.eventId && s.eventId.startsWith(`${habit.id}_`))
-        .reduce((sum, s) => sum + (s.duration || 0), 0);
+    const fromInstances = Object.entries(pomodoroRecordManager.getDaySummary(dateStr)?.workByEvent || {})
+        .filter(([id]) => id.startsWith(`${habit.id}_`))
+        .reduce((sum, [, stats]) => sum + stats.duration, 0);
     const linked = getLinkedTaskPomodoroStatsByDateUtil(linkedTaskPomodoroStats, habit.id, dateStr).focusMinutes;
     return Math.max(direct, fromInstances) + linked;
 }
@@ -552,16 +551,12 @@ function getOverviewStats(habit: Habit, _revision: number): HabitOverviewStats {
     let totalPomodoroMinutes = 0;
 
     if (pomodoroReady && pomodoroRecordManager) {
-        const daySessions = pomodoroRecordManager.getDateSessions(today) || [];
-        daySessions.forEach(session => {
-            if (
-                session.type === "work" &&
-                (session.eventId === habit.id || session.eventId.startsWith(`${habit.id}_`))
-            ) {
-                todayPomodoro += pomodoroRecordManager!.calculateSessionCount(session as any);
-                todayPomodoroMinutes += session.duration || 0;
+        for (const [id, stats] of Object.entries(pomodoroRecordManager.getDaySummary(today)?.workByEvent || {})) {
+            if (id === habit.id || id.startsWith(`${habit.id}_`)) {
+                todayPomodoro += stats.count;
+                todayPomodoroMinutes += stats.duration;
             }
-        });
+        }
 
         const directTotalCount = pomodoroRecordManager.getEventTotalPomodoroCount(habit.id) || 0;
         const repeatTotalCount = pomodoroRecordManager.getRepeatingEventTotalPomodoroCount(habit.id) || 0;

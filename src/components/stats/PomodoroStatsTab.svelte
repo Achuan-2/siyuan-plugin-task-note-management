@@ -59,8 +59,10 @@ class PomodoroStatsView {
     private currentMonthOffset: number = 0; // 月偏移量，0表示本月，-1表示上月，1表示下月
     private currentYearOffset: number = 0; // 年偏移量，0表示今年，-1表示去年，1表示明年
     private plugin;
+    private renderGeneration = 0;
+    private disposed = false;
     constructor(plugin: any, embeddedHost?: HTMLElement) {
-        this.recordManager = PomodoroRecordManager.getInstance();
+        this.recordManager = PomodoroRecordManager.getInstance(plugin);
         this.plugin = plugin;
         this.embeddedHost = embeddedHost;
         this.embeddedMode = !!embeddedHost;
@@ -166,7 +168,6 @@ class PomodoroStatsView {
 
                 <!-- 内容区域 -->
                 <div class="stats-content">
-                    ${this.renderCurrentView()}
                 </div>
             </div>
         `;
@@ -383,10 +384,7 @@ class PomodoroStatsView {
 
     private renderTodayProgress(): string {
         const todayTime = this.recordManager.getTodayFocusTime();
-        const todaySessions = this.recordManager.getTodaySessions();
-        const completedPomodoros = todaySessions
-            .filter(s => s.type === 'work')
-            .reduce((sum, s) => sum + this.recordManager.calculateSessionCount(s), 0);
+        const completedPomodoros = this.getTodayPomodoroCount();
 
         return `
             <div class="progress-info">
@@ -552,7 +550,7 @@ class PomodoroStatsView {
     private calculateTotalFocusTime(): number {
         // 获取所有记录的总专注时间
         let totalTime = 0;
-        const allRecords = (this.recordManager as any).records || {};
+        const allRecords = this.recordManager.getDailySummaries();
 
         Object.values(allRecords).forEach((record: any) => {
             if (record && record.totalWorkTime) {
@@ -564,23 +562,26 @@ class PomodoroStatsView {
     }
 
     private getTodayPomodoroCount(): number {
-        const todaySessions = this.recordManager.getTodaySessions();
-        return todaySessions
-            .filter(s => s.type === 'work')
-            .reduce((sum, s) => sum + this.recordManager.calculateSessionCount(s), 0);
+        return Object.values(this.recordManager.getDaySummary(getLogicalDateString())?.workByEvent || {})
+            .reduce((sum, stats) => sum + stats.count, 0);
     }
 
     private getWeekPomodoroCount(): number {
-        const weekSessions = this.recordManager.getWeekSessions();
-        return weekSessions
-            .filter(s => s.type === 'work')
-            .reduce((sum, s) => sum + this.recordManager.calculateSessionCount(s), 0);
+        const today = new Date(`${getLogicalDateString()}T00:00:00`);
+        const start = new Date(today);
+        start.setDate(today.getDate() - today.getDay());
+        const end = new Date(start);
+        end.setDate(start.getDate() + 6);
+        end.setHours(23, 59, 59, 999);
+        return Object.entries(this.recordManager.getDailySummaries())
+            .filter(([date]) => date >= getLogicalDateString(start) && date <= getLogicalDateString(end))
+            .reduce((sum, [, day]) => sum + Object.values(day.workByEvent).reduce((n, stats) => n + stats.count, 0), 0);
     }
 
     private getTotalPomodoroCount(): number {
         // 获取所有记录的总番茄钟数量
         let totalCount = 0;
-        const allRecords = (this.recordManager as any).records || {};
+        const allRecords = this.recordManager.getDailySummaries();
 
         Object.values(allRecords).forEach((record: any) => {
             if (record && record.workSessions) {
@@ -599,10 +600,7 @@ class PomodoroStatsView {
             const date = new Date(today);
             date.setDate(today.getDate() - i);
             const dateStr = getLocalDateString(date);
-            const sessions = this.recordManager.getDateSessions(dateStr);
-            const value = sessions
-                .filter(s => s.type === 'work')
-                .reduce((sum, s) => sum + s.duration, 0);
+            const value = Object.values(this.recordManager.getDaySummary(dateStr)?.workByEvent || {}).reduce((sum, stats) => sum + stats.duration, 0);
 
             data.push({
                 label: i === 0 ? i18n("today") : date.toLocaleDateString(getLocaleTag(), { weekday: 'short' }),
@@ -613,103 +611,39 @@ class PomodoroStatsView {
         return data;
     }
 
+    private getCurrentRange(): [string, string] {
+        const today = new Date(`${getLogicalDateString()}T00:00:00`);
+        let start = new Date(today), end = new Date(today);
+        if (this.currentTimeRange === 'today') {
+            start.setDate(start.getDate() + this.currentWeekOffset);
+            end = new Date(start);
+        } else if (this.currentTimeRange === 'week') {
+            start.setDate(today.getDate() + (today.getDay() === 0 ? -6 : 1 - today.getDay()) + this.currentWeekOffset * 7);
+            end = new Date(start);
+            end.setDate(start.getDate() + 6);
+        } else if (this.currentTimeRange === 'month') {
+            start = new Date(today.getFullYear(), today.getMonth() + this.currentMonthOffset, 1);
+            end = new Date(start.getFullYear(), start.getMonth() + 1, 0);
+        } else {
+            start = new Date(today.getFullYear() + this.currentYearOffset, 0, 1);
+            end = new Date(start.getFullYear(), 11, 31);
+        }
+        return [getLocalDateString(start), getLocalDateString(end)];
+    }
+
     private getTaskCategoryStats(): Record<string, { time: number, count: number }> {
-        let sessions: PomodoroSession[] = [];
-
-        // 根据当前时间范围和偏移量获取会话数据
-        switch (this.currentTimeRange) {
-            case 'today':
-                sessions = this.getTodaySessionsWithOffset();
-                break;
-            case 'week':
-                sessions = this.getWeekSessionsWithOffset();
-                break;
-            case 'month':
-                sessions = this.getMonthSessionsWithOffset();
-                break;
-            case 'year':
-                sessions = this.getYearSessionsWithOffset();
-                break;
-            default:
-                sessions = this.recordManager.getTodaySessions();
-        }
-
-        const stats: Record<string, { time: number, count: number }> = {};
-
-        sessions.filter(s => s.type === 'work').forEach(session => {
-            const category = session.eventTitle || i18n("uncategorized");
-            if (!stats[category]) {
-                stats[category] = { time: 0, count: 0 };
+        const [start, end] = this.getCurrentRange();
+        const stats: Record<string, { time: number; count: number }> = Object.create(null);
+        for (const [date, day] of Object.entries(this.recordManager.getDailySummaries())) {
+            if (date < start || date > end) continue;
+            for (const [title, value] of Object.entries(day.workByTitle)) {
+                const category = title || i18n('uncategorized');
+                const total = stats[category] ||= { time: 0, count: 0 };
+                total.time += value.duration;
+                total.count += value.count;
             }
-            stats[category].time += session.duration;
-            stats[category].count += this.recordManager.calculateSessionCount(session);
-        });
-
+        }
         return stats;
-    }
-
-    private getTodaySessionsWithOffset(): PomodoroSession[] {
-        const today = new Date(`${getLogicalDateString()}T00:00:00`);
-        const targetDate = new Date(today);
-        targetDate.setDate(today.getDate() + this.currentWeekOffset); // 复用weekOffset作为日偏移
-        const dateStr = getLocalDateString(targetDate);
-        return this.recordManager.getDateSessions(dateStr);
-    }
-
-    private getWeekSessionsWithOffset(): PomodoroSession[] {
-        const sessions = [];
-        const today = new Date(`${getLogicalDateString()}T00:00:00`);
-
-        // 计算目标周的开始日期（星期一）
-        const startOfWeek = new Date(today);
-        const dayOfWeek = today.getDay();
-        // 计算到星期一的偏移量：如果是星期日(0)，则偏移-6；否则偏移1-dayOfWeek
-        const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-        startOfWeek.setDate(today.getDate() + mondayOffset + (this.currentWeekOffset * 7));
-
-        for (let i = 0; i < 7; i++) {
-            const date = new Date(startOfWeek);
-            date.setDate(startOfWeek.getDate() + i);
-            const dateStr = getLocalDateString(date);
-            sessions.push(...this.recordManager.getDateSessions(dateStr));
-        }
-
-        return sessions;
-    }
-
-    private getMonthSessionsWithOffset(): PomodoroSession[] {
-        const sessions = [];
-        const today = new Date(`${getLogicalDateString()}T00:00:00`);
-
-        // 计算目标月份
-        const targetDate = new Date(today.getFullYear(), today.getMonth() + this.currentMonthOffset, 1);
-        const daysInMonth = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0).getDate();
-
-        for (let day = 1; day <= daysInMonth; day++) {
-            const date = new Date(targetDate.getFullYear(), targetDate.getMonth(), day);
-            const dateStr = getLocalDateString(date);
-            sessions.push(...this.recordManager.getDateSessions(dateStr));
-        }
-
-        return sessions;
-    }
-
-    private getYearSessionsWithOffset(): PomodoroSession[] {
-        const sessions = [];
-        const today = new Date(`${getLogicalDateString()}T00:00:00`);
-        const targetYear = today.getFullYear() + this.currentYearOffset;
-
-        // 获取整年的数据
-        for (let month = 0; month < 12; month++) {
-            const daysInMonth = new Date(targetYear, month + 1, 0).getDate();
-            for (let day = 1; day <= daysInMonth; day++) {
-                const date = new Date(targetYear, month, day);
-                const dateStr = getLocalDateString(date);
-                sessions.push(...this.recordManager.getDateSessions(dateStr));
-            }
-        }
-
-        return sessions;
     }
 
     private getRecentSessions(days: number): PomodoroSession[] {
@@ -755,10 +689,7 @@ class PomodoroStatsView {
             const date = new Date(startOfWeek);
             date.setDate(startOfWeek.getDate() + i);
             const dateStr = getLocalDateString(date);
-            const sessions = this.recordManager.getDateSessions(dateStr);
-            const value = sessions
-                .filter(s => s.type === 'work')
-                .reduce((sum, s) => sum + s.duration, 0);
+            const value = Object.values(this.recordManager.getDaySummary(dateStr)?.workByEvent || {}).reduce((sum, stats) => sum + stats.duration, 0);
 
             data.push({
                 label: date.toLocaleDateString(getLocaleTag(), { weekday: 'short' }),
@@ -781,10 +712,7 @@ class PomodoroStatsView {
         for (let day = 1; day <= daysInMonth; day++) {
             const date = new Date(targetDate.getFullYear(), targetDate.getMonth(), day);
             const dateStr = getLocalDateString(date);
-            const sessions = this.recordManager.getDateSessions(dateStr);
-            const time = sessions
-                .filter(s => s.type === 'work')
-                .reduce((sum, s) => sum + s.duration, 0);
+            const time = Object.values(this.recordManager.getDaySummary(dateStr)?.workByEvent || {}).reduce((sum, stats) => sum + stats.duration, 0);
 
             data.push({
                 label: day.toString(),
@@ -812,10 +740,7 @@ class PomodoroStatsView {
             for (let day = 1; day <= daysInMonth; day++) {
                 const date = new Date(targetYear, index, day);
                 const dateStr = getLocalDateString(date);
-                const sessions = this.recordManager.getDateSessions(dateStr);
-                monthlyTime += sessions
-                    .filter(s => s.type === 'work')
-                    .reduce((sum, s) => sum + s.duration, 0);
+                monthlyTime += Object.values(this.recordManager.getDaySummary(dateStr)?.workByEvent || {}).reduce((sum, stats) => sum + stats.duration, 0);
             }
 
             data.push({
@@ -1057,10 +982,7 @@ class PomodoroStatsView {
 
         for (let date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
             const dateStr = getLocalDateString(date);
-            const sessions = this.recordManager.getDateSessions(dateStr);
-            const time = sessions
-                .filter(s => s.type === 'work')
-                .reduce((sum, s) => sum + s.duration, 0);
+            const time = Object.values(this.recordManager.getDaySummary(dateStr)?.workByEvent || {}).reduce((sum, stats) => sum + stats.duration, 0);
 
             // 根据时间计算热力图等级 (0-4)
             let level = 0;
@@ -1653,15 +1575,8 @@ class PomodoroStatsView {
         return colors[index % colors.length];
     }
 
-    private findSessionById(sessionId: string): PomodoroSession | null {
-        const allRecords = (this.recordManager as any).records || {};
-        for (const date in allRecords) {
-            const session = allRecords[date]?.sessions?.find((item: PomodoroSession) => item.id === sessionId);
-            if (session) {
-                return session;
-            }
-        }
-        return null;
+    private async findSessionById(sessionId: string): Promise<PomodoroSession | null> {
+        return (await this.recordManager.getFocusById(sessionId))?.session || null;
     }
 
     private formatDateTimeLocal(date: Date): string {
@@ -1678,7 +1593,7 @@ class PomodoroStatsView {
     }
 
     private async handleEditSession(sessionId: string) {
-        const session = this.findSessionById(sessionId);
+        const session = await this.findSessionById(sessionId);
         if (!session) {
             showMessage(i18n("editPomodoroFailed") || "修改番茄钟失败", 3000, "error");
             return;
@@ -1941,7 +1856,25 @@ class PomodoroStatsView {
         this.updateContent();
     }
 
-    private updateContent() {
+    private async updateContent() {
+        const generation = ++this.renderGeneration;
+        try {
+            await this.recordManager.initialize();
+            if (this.currentView === 'records') {
+                const today = new Date(`${getLogicalDateString()}T00:00:00`);
+                const start = new Date(today);
+                start.setDate(start.getDate() - 6);
+                await this.recordManager.ensureRangeLoaded(getLocalDateString(start), getLocalDateString(today));
+            } else if (this.currentView === 'timeline') {
+                const [start, end] = this.getCurrentRange();
+                await this.recordManager.ensureRangeLoaded(start, end);
+            }
+        } catch (error) {
+            console.error('Failed to load pomodoro statistics:', error);
+            if (!this.disposed && generation === this.renderGeneration) showMessage(i18n('loadFailed'), 3000, 'error');
+            return;
+        }
+        if (this.disposed || generation !== this.renderGeneration) return;
         // 清理之前的echarts实例
         this.cleanupCharts();
 
@@ -1987,6 +1920,13 @@ class PomodoroStatsView {
         }
     }
 
+    public destroy() {
+        this.disposed = true;
+        this.renderGeneration++;
+        this.cleanupCharts();
+        this.dialog.destroy();
+    }
+
     private cleanupCharts() {
         // 清理所有echarts实例
         this.dialog.element.querySelectorAll('.echarts-pie-chart, .echarts-heatmap-chart, .echarts-timeline-chart').forEach(element => {
@@ -2011,7 +1951,7 @@ onMount(async () => {
 
 onDestroy(() => {
     try {
-        statsView?.dialog?.destroy?.();
+        statsView?.destroy();
     } catch {
         // ignore
     }

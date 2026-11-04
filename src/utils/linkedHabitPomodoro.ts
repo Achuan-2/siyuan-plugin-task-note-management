@@ -89,6 +89,21 @@ export function buildLinkedHabitPomodoroData(
     for (const [date, record] of Object.entries(records || {})) {
         const sessions = Array.isArray((record as any)?.sessions) ? (record as any).sessions : [];
 
+        // 持久化的按日、按事件摘要，与明细保持同一聚合口径。
+        if (record?.workByEvent) {
+            for (const [eventId, value] of Object.entries(record.workByEvent) as [string, { count: number; duration: number }][]) {
+                const habitId = resolveLinkedHabitIdForSession(eventId, taskHabitMap);
+                if (!habitId) continue;
+                if (!statsByHabit.has(habitId)) statsByHabit.set(habitId, new Map());
+                const byDate = statsByHabit.get(habitId)!;
+                const current = byDate.get(date) || { count: 0, focusMinutes: 0 };
+                current.count += Math.max(0, value.count || 0);
+                current.focusMinutes += Math.max(0, value.duration || 0);
+                byDate.set(date, current);
+            }
+            continue;
+        }
+
         for (const session of sessions) {
             if (!session || session.type !== "work" || !session.eventId) continue;
 

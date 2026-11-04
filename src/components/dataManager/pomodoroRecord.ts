@@ -1,5 +1,6 @@
 import { getLogicalDateString } from "../../utils/dateUtils";
 import { ReminderPomodoroStatsSnapshot, type EventPomodoroTotals } from '../../utils/reminderPomodoroStats';
+import { PomodoroStore, summarizePomodoroDay, type PomodoroDaySummary, type PomodoroEventTotals } from '../../utils/pomodoroStore';
 
 // 单个番茄钟会话记录
 export interface PomodoroSession {
@@ -50,9 +51,11 @@ export class PomodoroRecordManager {
     private eventStats: { [eventId: string]: { count: number, duration: number } } = {};
     private isLoading: boolean = false;
     private isSaving: boolean = false;
-    private pendingSaveDates: Set<string> = new Set();
     private isInitialized: boolean = false;
     private plugin: any;
+    private store?: PomodoroStore;
+    private initializing?: Promise<void>;
+    private operationTail: Promise<unknown> = Promise.resolve();
 
     private constructor(plugin: any) {
         this.plugin = plugin;
@@ -69,8 +72,107 @@ export class PomodoroRecordManager {
 
     async initialize() {
         if (this.isInitialized) return;
-        await this.loadRecords(true);
-        this.isInitialized = true;
+        if (this.initializing) return this.initializing;
+        this.initializing = (async () => {
+            if (this.plugin?.createPomodoroStoreAdapter) {
+                this.store ||= new PomodoroStore(this.plugin.createPomodoroStoreAdapter(), s => this.calculateSessionCount(s));
+                await this.store.initialize();
+                this.records = this.store.records;
+                this.eventStats = this.store.eventTotals;
+            } else {
+                await this.loadRecords(true);
+            }
+            this.isInitialized = true;
+        })().finally(() => { this.initializing = undefined; });
+        return this.initializing;
+    }
+
+    /** 所有业务写入和外部刷新共用队列，刷新不会穿过尚未落盘的编辑。 */
+    private serialize<T>(operation: () => Promise<T>): Promise<T> {
+        const pending = this.operationTail.then(operation);
+        this.operationTail = pending.catch(() => {});
+        return pending;
+    }
+
+    async ensureDatesLoaded(dates: string[]): Promise<void> {
+        await this.initialize();
+        await this.store?.ensureDates(dates);
+    }
+
+    async ensureRangeLoaded(startDate: string, endDate: string): Promise<void> {
+        await this.initialize();
+        await this.ensureDatesLoaded(Object.keys(this.records).filter(date => date >= startDate && date <= endDate));
+    }
+
+    async ensureAllRecordsLoaded(): Promise<void> {
+        await this.initialize();
+        await this.ensureDatesLoaded(Object.keys(this.records));
+    }
+
+    getDailySummaries(): Record<string, PomodoroDaySummary> {
+        if (this.store) return this.store.summaries;
+        return Object.fromEntries(Object.entries(this.records).map(([date, record]) =>
+            [date, summarizePomodoroDay(date, record, s => this.calculateSessionCount(s))]));
+    }
+
+    getDaySummary(date: string): PomodoroDaySummary | undefined {
+        if (this.store) return this.store.summaries[date];
+        const record = this.records[date];
+        return record ? summarizePomodoroDay(date, record, s => this.calculateSessionCount(s)) : undefined;
+    }
+
+    getEventStats(): Readonly<Record<string, PomodoroEventTotals>> { return this.eventStats; }
+
+    async getSessionsMatchingEvent(matches: (eventId: string) => boolean): Promise<PomodoroSession[]> {
+        await this.initialize();
+        const dates = Object.entries(this.getDailySummaries()).filter(([, day]) => day.eventIds.some(matches)).map(([date]) => date);
+        await this.ensureDatesLoaded(dates);
+        return dates.flatMap(date => this.getDateSessions(date).filter(session => matches(session.eventId)));
+    }
+
+    private async loadSessionDate(id: string): Promise<void> {
+        const date = this.store?.dateForSession(id);
+        if (date) await this.ensureDatesLoaded([date]);
+    }
+
+    async recordWorkSession(...args: Parameters<PomodoroRecordManager['recordWorkSessionImpl']>) {
+        return this.serialize(() => this.recordWorkSessionImpl(...args));
+    }
+
+    async recordBreakSession(...args: Parameters<PomodoroRecordManager['recordBreakSessionImpl']>) {
+        return this.serialize(() => this.recordBreakSessionImpl(...args));
+    }
+
+    async startWorkSession(...args: Parameters<PomodoroRecordManager['startWorkSessionImpl']>) {
+        return this.serialize(() => this.startWorkSessionImpl(...args));
+    }
+
+    async finishWorkSession(...args: Parameters<PomodoroRecordManager['finishWorkSessionImpl']>) {
+        return this.serialize(() => this.finishWorkSessionImpl(...args));
+    }
+
+    async updateSession(...args: Parameters<PomodoroRecordManager['updateSessionImpl']>) {
+        return this.serialize(() => this.updateSessionImpl(...args));
+    }
+
+    async updateSessionNote(...args: Parameters<PomodoroRecordManager['updateSessionNoteImpl']>) {
+        return this.serialize(() => this.updateSessionNoteImpl(...args));
+    }
+
+    async deleteSession(...args: Parameters<PomodoroRecordManager['deleteSessionImpl']>) {
+        return this.serialize(() => this.deleteSessionImpl(...args));
+    }
+
+    async regenerateRecordsByDate(...args: Parameters<PomodoroRecordManager['regenerateRecordsByDateImpl']>) {
+        return this.serialize(() => this.regenerateRecordsByDateImpl(...args));
+    }
+
+    async createFocus(...args: Parameters<PomodoroRecordManager['createFocusImpl']>) {
+        return this.serialize(() => this.createFocusImpl(...args));
+    }
+
+    async refreshData(...args: Parameters<PomodoroRecordManager['refreshDataImpl']>) {
+        return this.serialize(() => this.refreshDataImpl(...args));
     }
 
     private generateSessionId(): string {
@@ -146,7 +248,9 @@ export class PomodoroRecordManager {
     }
 
     private findSessionLocation(sessionId: string): { date: string; index: number; session: PomodoroSession } | null {
-        for (const date in this.records) {
+        const dateForSession = this.store?.dateForSession(sessionId);
+        const dates = this.store ? (dateForSession ? [dateForSession] : []) : Object.keys(this.records);
+        for (const date of dates) {
             const record = this.records[date];
             if (!record || !record.sessions) continue;
 
@@ -163,6 +267,10 @@ export class PomodoroRecordManager {
     }
 
     private async loadRecords(force: boolean = false) {
+        if (this.store) {
+            await this.store.refresh(undefined, force);
+            return;
+        }
         if (this.isLoading) return;
         this.isLoading = true;
 
@@ -193,6 +301,7 @@ export class PomodoroRecordManager {
      * 构建事件统计索引，用于快速查询
      */
     private buildStatsIndex() {
+        if (this.store) return; // 保存时由 store 按日期替换统计贡献。
         this.eventStats = {};
         Object.keys(this.records).forEach(date => {
             const record = this.records[date];
@@ -218,6 +327,7 @@ export class PomodoroRecordManager {
      * 更新索引中的单个统计信息
      */
     private updateStatsIndex(eventId: string, count: number, duration: number) {
+        if (this.store) return;
         if (!this.eventStats[eventId]) {
             this.eventStats[eventId] = { count: 0, duration: 0 };
         }
@@ -226,32 +336,19 @@ export class PomodoroRecordManager {
     }
 
     private async saveRecords(dates?: string[]) {
-        const requestedDates = dates && dates.length > 0 ? dates : Object.keys(this.records);
-        requestedDates.forEach(date => this.pendingSaveDates.add(date));
-
-        if (this.isSaving) {
-            return;
-        }
-
+        const requestedDates = dates?.length ? [...new Set(dates)] : Object.keys(this.records);
         this.isSaving = true;
-
         try {
-            while (this.pendingSaveDates.size > 0) {
-                const keysToSync = Array.from(this.pendingSaveDates);
-                this.pendingSaveDates.clear();
-
-                for (const date of keysToSync) {
+            if (this.store) {
+                await this.store.saveMany(requestedDates.filter(date => this.records[date]).map(date => [date, this.records[date]]));
+            } else {
+                for (const date of requestedDates) {
                     const record = this.records[date];
-                    if (record) {
-                        await this.plugin.saveData(`pomodoroRecords/${date}.json`, record);
-                        if (this.plugin.pomodoroRecordsCache) {
-                            this.plugin.pomodoroRecordsCache[date] = record;
-                        }
-                    }
+                    if (!record) continue;
+                    await this.plugin.saveData(`pomodoroRecords/${date}.json`, record);
+                    if (this.plugin.pomodoroRecordsCache) this.plugin.pomodoroRecordsCache[date] = record;
                 }
             }
-        } catch (error) {
-            console.error("Failed to save pomodoro records:", error);
         } finally {
             this.isSaving = false;
         }
@@ -277,7 +374,7 @@ export class PomodoroRecordManager {
         }
     }
 
-    async recordWorkSession(
+    private async recordWorkSessionImpl(
         workMinutes: number,
         eventId: string = '',
         eventTitle: string = '番茄专注',
@@ -295,6 +392,7 @@ export class PomodoroRecordManager {
         const endTime = this.normalizeSessionDate(options.endTime) || new Date();
         const startTime = this.normalizeSessionDate(options.startTime) || new Date(endTime.getTime() - roundedWorkMinutes * 60000);
         const logicalDate = getLogicalDateString(startTime);
+        await this.ensureDatesLoaded([logicalDate]);
         this.ensureTodayRecord(logicalDate);
 
         // console.log('Before recording work session:', JSON.stringify(this.records[today]));
@@ -334,7 +432,7 @@ export class PomodoroRecordManager {
         return session;
     }
 
-    async recordBreakSession(
+    private async recordBreakSessionImpl(
         breakMinutes: number,
         eventId: string = '',
         _eventTitle: string = '休息时间',
@@ -353,6 +451,7 @@ export class PomodoroRecordManager {
         const endTime = this.normalizeSessionDate(options.endTime) || new Date();
         const startTime = this.normalizeSessionDate(options.startTime) || new Date(endTime.getTime() - roundedBreakMinutes * 60000);
         const logicalDate = getLogicalDateString(startTime);
+        await this.ensureDatesLoaded([logicalDate]);
         this.ensureTodayRecord(logicalDate);
 
         // console.log('Before recording break session:', JSON.stringify(this.records[today]));
@@ -382,7 +481,7 @@ export class PomodoroRecordManager {
         await this.saveRecords([logicalDate]);
     }
 
-    async startWorkSession(
+    private async startWorkSessionImpl(
         eventId: string = '',
         eventTitle: string = '番茄专注',
         plannedDuration: number = 25,
@@ -395,6 +494,7 @@ export class PomodoroRecordManager {
 
         const startTime = this.normalizeSessionDate(startTimeInput) || new Date();
         const logicalDate = getLogicalDateString(startTime);
+        await this.ensureDatesLoaded([logicalDate]);
         this.ensureTodayRecord(logicalDate);
 
         const session: PomodoroSession = {
@@ -418,7 +518,7 @@ export class PomodoroRecordManager {
         return session.id;
     }
 
-    async finishWorkSession(
+    private async finishWorkSessionImpl(
         sessionId: string,
         workMinutes: number,
         eventId: string = '',
@@ -432,9 +532,10 @@ export class PomodoroRecordManager {
             await this.initialize();
         }
 
+        await this.loadSessionDate(sessionId);
         const location = sessionId ? this.findSessionLocation(sessionId) : null;
         if (!location) {
-            return await this.recordWorkSession(workMinutes, eventId, eventTitle, plannedDuration, completed, isCountUp, options);
+            return await this.recordWorkSessionImpl(workMinutes, eventId, eventTitle, plannedDuration, completed, isCountUp, options);
         }
 
         const roundedWorkMinutes = this.roundSessionMinutes(workMinutes);
@@ -461,11 +562,11 @@ export class PomodoroRecordManager {
             note: this.normalizeSessionNote(options.note ?? location.session.note)
         };
 
-        await this.updateSession(updatedSession);
+        await this.updateSessionImpl(updatedSession);
         return updatedSession;
     }
 
-    async updateSession(session: PomodoroSession): Promise<boolean> {
+    private async updateSessionImpl(session: PomodoroSession): Promise<boolean> {
         if (!this.isInitialized) {
             await this.initialize();
         }
@@ -515,6 +616,8 @@ export class PomodoroRecordManager {
             delete normalizedSession.isCountUp;
         }
 
+        await this.loadSessionDate(normalizedSession.id);
+        await this.ensureDatesLoaded([getLogicalDateString(startTime)]);
         const location = this.findSessionLocation(normalizedSession.id);
         const datesToSave = new Set<string>();
         if (location) {
@@ -531,15 +634,16 @@ export class PomodoroRecordManager {
         datesToSave.add(logicalDate);
 
         this.buildStatsIndex();
-        await this.saveRecords(Array.from(datesToSave));
+        await this.saveRecords([logicalDate, ...Array.from(datesToSave).filter(date => date !== logicalDate)]);
         return true;
     }
 
-    async updateSessionNote(sessionId: string, note: string): Promise<boolean> {
+    private async updateSessionNoteImpl(sessionId: string, note: string): Promise<boolean> {
         if (!this.isInitialized) {
             await this.initialize();
         }
 
+        await this.loadSessionDate(sessionId);
         const location = this.findSessionLocation(sessionId);
         if (!location) {
             return false;
@@ -739,7 +843,12 @@ export class PomodoroRecordManager {
      * 手动刷新数据（仅在需要时调用）
      * 如果缓存已存在且没有指定强制更新，则跳过文件读取
      */
-    async refreshData(force: boolean = false) {
+    private async refreshDataImpl(force: boolean = false) {
+        await this.initialize();
+        if (this.store) {
+            if (force) await this.store.refresh(undefined, true);
+            return;
+        }
         if (this.isSaving || this.isLoading) {
             console.log("File operation in progress; skipping refresh");
             return;
@@ -775,6 +884,7 @@ export class PomodoroRecordManager {
      * 计算并获取指定日期的某个事件的番茄钟数量（兼容旧数据）
      */
     getEventPomodoroCount(eventId: string, date: string): number {
+        if (this.store) return this.store.summaries[date]?.workByEvent[eventId]?.count || 0;
         if (!this.records[date]) {
             return 0;
         }
@@ -825,6 +935,7 @@ export class PomodoroRecordManager {
      */
     getEventFocusTime(eventId: string, date?: string): number {
         const targetDate = date || this.getToday();
+        if (this.store) return this.store.summaries[targetDate]?.workByEvent[eventId]?.duration || 0;
         const sessions = this.getDateSessions(targetDate);
 
         return sessions
@@ -895,7 +1006,8 @@ export class PomodoroRecordManager {
     /**
      * 获取日期范围内的会话记录
      */
-    getDateRangeSessions(startDate: string, endDate: string): PomodoroSession[] {
+    async getDateRangeSessions(startDate: string, endDate: string): Promise<PomodoroSession[]> {
+        await this.ensureRangeLoaded(startDate, endDate);
         const sessions: PomodoroSession[] = [];
         const start = new Date(startDate);
         const end = new Date(endDate);
@@ -913,7 +1025,7 @@ export class PomodoroRecordManager {
     /**
      * 获取本周的会话记录
      */
-    getWeekSessions(): PomodoroSession[] {
+    async getWeekSessions(): Promise<PomodoroSession[]> {
         const today = new Date(`${getLogicalDateString()}T00:00:00`);
         const weekStart = new Date(today);
         weekStart.setDate(today.getDate() - today.getDay());
@@ -932,13 +1044,16 @@ export class PomodoroRecordManager {
     /**
      * 删除指定的会话记录
      */
-    async deleteSession(sessionId: string): Promise<boolean> {
+    private async deleteSessionImpl(sessionId: string): Promise<boolean> {
         // 确保已初始化
         if (!this.isInitialized) {
             await this.initialize();
         }
 
-        for (const date in this.records) {
+        await this.loadSessionDate(sessionId);
+        const dateForSession = this.store?.dateForSession(sessionId);
+        const dates = this.store ? (dateForSession ? [dateForSession] : []) : Object.keys(this.records);
+        for (const date of dates) {
             const record = this.records[date];
             if (!record || !record.sessions) continue;
 
@@ -974,12 +1089,13 @@ export class PomodoroRecordManager {
      * 根据当前的一天起始时间设置，重新生成按天分组的番茄钟记录
      * 当用户修改一天起始时间后，需要调用此方法重新计算所有会话的逻辑日期
      */
-    async regenerateRecordsByDate(): Promise<void> {
+    private async regenerateRecordsByDateImpl(): Promise<void> {
         // 确保已初始化
         if (!this.isInitialized) {
             await this.initialize();
         }
 
+        await this.ensureAllRecordsLoaded();
         // 收集所有会话
         const allSessions: PomodoroSession[] = [];
         for (const date in this.records) {
@@ -998,7 +1114,7 @@ export class PomodoroRecordManager {
         const oldDates = Object.keys(this.records);
 
         // 清空现有记录
-        this.records = {};
+        for (const date of oldDates) delete this.records[date];
 
         // 根据会话的开始时间重新分组
         for (const session of allSessions) {
@@ -1033,18 +1149,21 @@ export class PomodoroRecordManager {
             }
         }
 
+        this.buildStatsIndex();
+        await this.saveRecords();
+
         // 删除已经无用的日期记录
         for (const date of oldDates) {
             if (!this.records[date]) {
-                await this.plugin.removeData(`pomodoroRecords/${date}.json`);
+                if (this.store) await this.store.remove(date);
+                else await this.plugin.removeData(`pomodoroRecords/${date}.json`);
                 if (this.plugin.pomodoroRecordsCache) {
                     delete this.plugin.pomodoroRecordsCache[date];
                 }
             }
         }
 
-        // 保存重新生成的记录
-        await this.saveRecords();
+        this.buildStatsIndex();
     }
 
     /** 批量解析时共用本轮快照，避免逐个任务重建索引和扫描当天会话。 */
@@ -1062,12 +1181,18 @@ export class PomodoroRecordManager {
         }
         const today = this.getToday();
         const todayTotals = new Map<string, EventPomodoroTotals>();
-        for (const session of this.getDateSessions(today)) {
-            if (session.type !== 'work') continue;
-            const stats = todayTotals.get(session.eventId) || { count: 0, duration: 0 };
-            stats.count += this.calculateSessionCount(session);
-            stats.duration += session.duration;
-            todayTotals.set(session.eventId, stats);
+        if (this.store) {
+            for (const [id, stats] of Object.entries(this.getDaySummary(today)?.workByEvent || {})) {
+                todayTotals.set(id, { ...stats });
+            }
+        } else {
+            for (const session of this.getDateSessions(today)) {
+                if (session.type !== 'work') continue;
+                const stats = todayTotals.get(session.eventId) || { count: 0, duration: 0 };
+                stats.count += this.calculateSessionCount(session);
+                stats.duration += session.duration;
+                todayTotals.set(session.eventId, stats);
+            }
         }
         const snapshot = new ReminderPomodoroStatsSnapshot(
             dataMap.values(), Object.values(localData), this.eventStats, todayTotals, today,
@@ -1372,14 +1497,19 @@ export class PomodoroRecordManager {
     /**
      * MCP kernel compat: reload records
      */
-    public async reloadRecords() {
-        await this.loadRecords(true);
+    public async reloadRecords(dates?: string[], verifyAll = false) {
+        return this.serialize(async () => {
+            await this.initialize();
+            if (this.store) await this.store.refresh(dates, verifyAll);
+            else await this.loadRecords(true);
+        });
     }
 
     /**
      * MCP kernel compat: get focuses by time range
      */
-    public getFocusesByTime(startDate: string, endDate: string, eventId?: string): PomodoroSession[] {
+    public async getFocusesByTime(startDate: string, endDate: string, eventId?: string): Promise<PomodoroSession[]> {
+        await this.ensureRangeLoaded(startDate, endDate);
         const results: PomodoroSession[] = [];
         Object.values(this.records).forEach((record) => {
             if (record.date < startDate || record.date > endDate) return;
@@ -1396,7 +1526,9 @@ export class PomodoroRecordManager {
     /**
      * MCP kernel compat: get focus by ID
      */
-    public getFocusById(sessionId: string): { session: PomodoroSession; date: string } | undefined {
+    public async getFocusById(sessionId: string): Promise<{ session: PomodoroSession; date: string } | undefined> {
+        await this.initialize();
+        await this.loadSessionDate(sessionId);
         const loc = this.findSessionLocation(sessionId);
         if (loc) {
             return { session: loc.session, date: loc.date };
@@ -1407,7 +1539,7 @@ export class PomodoroRecordManager {
     /**
      * MCP kernel compat: create focus
      */
-    public async createFocus(input: {
+    private async createFocusImpl(input: {
         type: 'work' | 'shortBreak' | 'longBreak';
         eventId?: string;
         eventTitle?: string;
@@ -1433,7 +1565,9 @@ export class PomodoroRecordManager {
             completed: input.completed ?? true,
             note: input.note || '',
         };
+        await this.initialize();
         const date = getLogicalDateString(startTimeObj);
+        await this.ensureDatesLoaded([date]);
         if (!this.records[date]) {
             this.records[date] = {
                 date,

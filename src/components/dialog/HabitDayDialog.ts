@@ -290,6 +290,8 @@ export class HabitDayDialog {
             const { taskIdsByHabit } = buildLinkedHabitTaskMaps(reminderData);
             const linkedTaskIdSet = taskIdsByHabit.get(this.habit.id) || new Set<string>();
 
+            await this.pomodoroManager.ensureDatesLoaded(dates);
+
             // 一次刷新数据后读取整周，避免每天重复读取任务和番茄文件。
             const sessionsByDate = new Map<string, HabitDayPomodoroSessionItem[]>();
             dates.forEach(date => {
@@ -618,21 +620,7 @@ export class HabitDayDialog {
                 };
 
                 const logicalDate = getLogicalDateString(startTime);
-                const records = (this.pomodoroManager as any).records;
-                if (!records[logicalDate]) {
-                    records[logicalDate] = {
-                        date: logicalDate,
-                        workSessions: 0,
-                        totalWorkTime: 0,
-                        totalBreakTime: 0,
-                        sessions: []
-                    };
-                }
-                records[logicalDate].sessions.push(session);
-                records[logicalDate].workSessions += this.pomodoroManager.calculateSessionCount(session);
-                records[logicalDate].totalWorkTime += duration;
-                await (this.pomodoroManager as any).saveRecords([logicalDate]);
-                this.pomodoroManager.refreshIndex();
+                await this.pomodoroManager.updateSession(session);
 
                 let autoCheckInApplied = false;
                 if (session.type === "work") {
@@ -761,53 +749,15 @@ export class HabitDayDialog {
 
             try {
                 await this.pomodoroManager.initialize();
-                const records = (this.pomodoroManager as any).records || {};
-                let affectedDate = "";
-                Object.keys(records).forEach(date => {
-                    const record = records[date];
-                    if (!record?.sessions) return;
-                    const sessionIndex = record.sessions.findIndex((s: PomodoroSession) => s.id === session.id);
-                    if (sessionIndex === -1 || affectedDate) return;
-
-                    affectedDate = date;
-                    const target = record.sessions[sessionIndex];
-
-                    // 1. 还原旧统计
-                    const oldCount = this.pomodoroManager.calculateSessionCount(target);
-                    if (target.type === 'work') {
-                        record.workSessions = Math.max(0, record.workSessions - oldCount);
-                        record.totalWorkTime = Math.max(0, record.totalWorkTime - (target.duration || 0));
-                    } else {
-                        record.totalBreakTime = Math.max(0, record.totalBreakTime - (target.duration || 0));
-                    }
-
-                    // 2. 更新数据
-                    target.duration = newDuration;
-                    const start = new Date(target.startTime);
-                    target.endTime = new Date(start.getTime() + newDuration * 60000).toISOString();
-                    if (target.isCountUp) {
-                        target.count = Math.max(1, Math.round(newDuration / Math.max(1, target.plannedDuration || 25)));
-                    } else if (typeof target.count === "number") {
-                        target.count = Math.max(1, target.count);
-                    }
-
-                    // 3. 应用新统计
-                    const newCount = this.pomodoroManager.calculateSessionCount(target);
-                    if (target.type === 'work') {
-                        record.workSessions += newCount;
-                        record.totalWorkTime += newDuration;
-                    } else {
-                        record.totalBreakTime += newDuration;
-                    }
+                const updated = await this.pomodoroManager.updateSession({
+                    ...session,
+                    duration: newDuration,
+                    endTime: new Date(new Date(session.startTime).getTime() + newDuration * 60000).toISOString(),
                 });
-
-                if (!affectedDate) {
+                if (!updated) {
                     showMessage(i18n("pomodoroRecordMissingMessage"), 3000, "error");
                     return;
                 }
-
-                await (this.pomodoroManager as any).saveRecords([affectedDate]);
-                this.pomodoroManager.refreshIndex();
                 showMessage("✅ " + (i18n("habitSaveSuccess") || "保存成功"), 2000);
                 dialog.destroy();
 

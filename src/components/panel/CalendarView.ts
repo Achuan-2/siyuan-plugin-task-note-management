@@ -8133,9 +8133,7 @@ export class CalendarView {
         const events = [];
         // 使用记录所属的逻辑日期，与番茄钟统计页保持一致；activeEnd 为不含当天的边界。
         for (let date = startDate; date < endDate; date = addDaysToDate(date, 1)) {
-            const duration = this.pomodoroRecordManager.getDateSessions(date)
-                .filter(session => session.type === 'work' && !session.inProgress)
-                .reduce((total, session) => total + Math.max(0, Math.round(Number(session.duration) || 0)), 0);
+            const duration = this.pomodoroRecordManager.getDaySummary(date)?.workTimeFromSessions || 0;
             events.push({
                 id: `pomodoro-daily-summary-${date}`,
                 title: `${i18n('totalFocusDurationTitle')}${this.pomodoroRecordManager.formatTime(duration)}`,
@@ -8776,7 +8774,7 @@ export class CalendarView {
                 const reminderData = (await this.plugin.loadReminderData()) || {};
                 this.linkedHabitPomodoroStats = buildLinkedHabitPomodoroData(
                     reminderData,
-                    this.pomodoroRecordManager.getSaveData() || {},
+                    this.pomodoroRecordManager.getDailySummaries() || {},
                     session => this.pomodoroRecordManager.calculateSessionCount(session)
                 ).statsByHabit;
             } else {

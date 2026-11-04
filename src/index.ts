@@ -43,6 +43,8 @@ import { showVipDialog } from "./components/vip/VipDialog";
 import { performDataMigration } from "./components/dataManager/dataMigration";
 import { initIcsSync, initIcsSubscriptionSync, handleIcsSyncSettingsChange, cleanupIcsSync } from "./utils/icsSync";
 import { cleanReminderItem } from "./utils/reminderLoadUtils";
+import { createPomodoroCache } from './utils/pomodoroCache';
+import type { PomodoroStoreAdapter } from './utils/pomodoroStore';
 import { ProtectedJsonStorage, type JsonShape } from "./utils/protectedJsonStorage";
 import { TaskNoteDOMManager } from "./components/render/taskNoteDOM";
 import { addDaysToDate, generateRepeatInstances, getDaysDifference, getRelativeReminderWindow, resolveRepeatReminderTimes } from "./components/dataManager/repeatUtils";
@@ -410,6 +412,20 @@ export default class ReminderPlugin extends Plugin {
     private subscriptionTasksCache: { [id: string]: any } = {};
     private holidayDataCache: any = null;
     private pomodoroRecordsCache: any = null;
+    private readonly pendingPomodoroDates = new Set<string>();
+    private pomodoroRefreshTimer?: ReturnType<typeof setTimeout>;
+
+    private queuePomodoroRefresh(date: string): void {
+        this.pendingPomodoroDates.add(date);
+        clearTimeout(this.pomodoroRefreshTimer);
+        this.pomodoroRefreshTimer = setTimeout(() => {
+            const dates = [...this.pendingPomodoroDates];
+            this.pendingPomodoroDates.clear();
+            void PomodoroRecordManager.getInstance(this).reloadRecords(dates).then(() => {
+                if (!this.storageDisposed) window.dispatchEvent(new CustomEvent('reminderUpdated'));
+            }).catch(error => console.error('Failed to refresh pomodoro dates:', error));
+        }, 100);
+    }
     private notifyDataCache: {
         lastNotified?: string,
         notifiedKeys?: Record<string, boolean>,
@@ -442,7 +458,7 @@ export default class ReminderPlugin extends Plugin {
 
     private getProtectedDataShape(file: string): JsonShape | undefined {
         return PROTECTED_DATA_FILES.get(file)
-            ?? (/^(habitCheckin|habit)\/[^/]+\.json$/.test(file) ? 'object' : undefined);
+            ?? (/^(habitCheckin|habit|pomodoroRecords)\/[^/]+\.json$/.test(file) ? 'object' : undefined);
     }
 
     public async loadData(storageName: string): Promise<any> {
@@ -804,37 +820,23 @@ export default class ReminderPlugin extends Plugin {
      * 加载番茄钟历史记录数据，支持缓存
      * @param update 是否强制更新（从文件读取）
      */
-    public async loadPomodoroRecords(update: boolean = false): Promise<any> {
-        if (update || !this.pomodoroRecordsCache) {
-            try {
-                const dirPath = `/data/storage/petal/${this.name}/${POMODORO_RECORD_DIR}`;
-                const dirData = (await readDir(dirPath).catch(() => null)) as any[];
-                let records: any = {};
-                const fileNames = (dirData && Array.isArray(dirData)) ? dirData.filter(e => !e.isDir && e.name.endsWith('.json')).map(e => e.name) : [];
-                if (fileNames.length > 0) {
-                    const contents = await Promise.all(fileNames.map(name => this.loadData(`${POMODORO_RECORD_DIR}/${name}`)));
+    public createPomodoroStoreAdapter(): PomodoroStoreAdapter {
+        return {
+            list: () => readDir(`/data/storage/petal/${this.name}/pomodoroRecords`) as any,
+            read: date => this.protectedStorage.load(`pomodoroRecords/${date}.json`, 'object'),
+            write: (date, record) => this.saveData(`pomodoroRecords/${date}.json`, record),
+            remove: async date => { await this.removeData(`pomodoroRecords/${date}.json`); },
+            readLegacy: () => this.loadData(POMODORO_RECORD_DATA_FILE),
+            ...createPomodoroCache(this.name, 'frontend', (path, init) => fetch(path, init)),
+        };
+    }
 
-                    fileNames.forEach((fileName, index) => {
-                        const record = contents[index];
-                        if (record && typeof record === 'object') {
-                            const dateMatch = fileName.match(/^(.+)\.json$/i);
-                            if (dateMatch) {
-                                records[dateMatch[1]] = record;
-                            } else {
-                                records[fileName] = record;
-                            }
-                        }
-                    });
-                } else {
-                    const data = await this.loadData(POMODORO_RECORD_DATA_FILE);
-                    records = data || {};
-                }
-                this.pomodoroRecordsCache = records;
-            } catch (error) {
-                console.error('Failed to load pomodoro records:', error);
-                this.pomodoroRecordsCache = {};
-            }
-        }
+    public async loadPomodoroRecords(update: boolean = false): Promise<any> {
+        const manager = PomodoroRecordManager.getInstance(this);
+        await manager.initialize();
+        if (update) await manager.reloadRecords(undefined, true);
+        await manager.ensureAllRecordsLoaded();
+        this.pomodoroRecordsCache = manager.getSaveData();
         return this.pomodoroRecordsCache;
     }
 
@@ -1595,9 +1597,8 @@ export default class ReminderPlugin extends Plugin {
                         window.dispatchEvent(new CustomEvent('habitUpdated'));
                         window.dispatchEvent(new CustomEvent('reminderUpdated'));
                     } else if (normalizedPath.startsWith('pomodoroRecords/')) {
-                        await this.loadPomodoroRecords(true);
-                        await PomodoroRecordManager.getInstance(this).reloadRecords();
-                        window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                        const date = normalizedPath.match(/^pomodoroRecords\/(\d{4}-\d{2}-\d{2})\.json$/)?.[1];
+                        if (date) this.queuePomodoroRefresh(date);
                     }
                 } catch (e) {
                     console.error('[plugin] failed to process data update from kernel:', e);
@@ -4640,7 +4641,7 @@ export default class ReminderPlugin extends Plugin {
         reminderData?: Record<string, any>
     ): Map<string, Map<string, LinkedTaskPomodoroDayStats>> {
         const recordManager = PomodoroRecordManager.getInstance(this);
-        const records = recordManager.getSaveData() || this.pomodoroRecordsCache || {};
+        const records = recordManager.getDailySummaries() || this.pomodoroRecordsCache || {};
         return buildLinkedHabitPomodoroData(
             reminderData || this.reminderDataCache || {},
             records,
@@ -4958,6 +4959,8 @@ export default class ReminderPlugin extends Plugin {
 
     onunload() {
         this.storageDisposed = true;
+        clearTimeout(this.pomodoroRefreshTimer);
+        this.pendingPomodoroDates.clear();
         console.log("Task note management plugin disabled; starting resource cleanup...");
         this.reminderNotifications.destroy();
         // 清理音频资源
@@ -5021,7 +5024,7 @@ export default class ReminderPlugin extends Plugin {
                 this.loadCategories(true),
                 this.loadHabitData(true),
                 this.loadHabitGroupData(true),
-                this.loadPomodoroRecords(true),
+                PomodoroRecordManager.getInstance(this).reloadRecords(),
                 this.isInMobileApp ? this.loadMobileNotifyData(true) : Promise.resolve(),
                 this.isInMobileApp ? this.loadMobileHabitNotifyData(true) : Promise.resolve(),
             ]);
@@ -6148,7 +6151,7 @@ export default class ReminderPlugin extends Plugin {
         const now = getLocalDateTimeString(new Date());
         const recordManager = PomodoroRecordManager.getInstance(this);
         await recordManager.initialize();
-        const records = recordManager.getSaveData() || {};
+        const records = recordManager.getDailySummaries() || {};
         const allDates = Object.keys(records);
 
         const reminderData = (await this.loadReminderData()) || {};

@@ -4,8 +4,8 @@ import { REMINDER_DATA_FILE } from "./constants";
 export interface KernelStorage {
     loadData(path: string, strict?: boolean): Promise<any>;
     saveData(path: string, data: any): Promise<void>;
-    removeData(path: string): Promise<void>;
-    readDir(dir: string): Promise<Array<{ name: string; isDir: boolean; isSymlink: boolean; updated: number }>>;
+    removeData(path: string, strict?: boolean): Promise<void>;
+    readDir(dir: string, strict?: boolean): Promise<Array<{ name: string; isDir: boolean; isSymlink: boolean; updated: number }>>;
 }
 
 export function createKernelStorage(): KernelStorage {
@@ -36,15 +36,16 @@ export function createKernelStorage(): KernelStorage {
             await storage.put(path, JSON.stringify(data ?? null));
         },
 
-        async removeData(path: string): Promise<void> {
+        async removeData(path: string, strict = false): Promise<void> {
             try {
                 await storage.remove(path);
             } catch (error: any) {
+                if (strict) throw error;
                 console.warn(`[kernel] removeData failed for ${path}:`, error);
             }
         },
 
-        async readDir(dir: string): Promise<Array<{ name: string; isDir: boolean; isSymlink: boolean; updated: number }>> {
+        async readDir(dir: string, strict = false): Promise<Array<{ name: string; isDir: boolean; isSymlink: boolean; updated: number }>> {
             try {
                 const entries = await storage.list(dir);
                 return entries.map((e) => ({
@@ -54,6 +55,7 @@ export function createKernelStorage(): KernelStorage {
                     updated: e.updated,
                 }));
             } catch (error: any) {
+                if (strict && !/not exist|no such file|cannot find the file/i.test(String(error?.message || error))) throw error;
                 console.warn(`[kernel] readDir failed for ${dir}:`, error);
                 return [];
             }

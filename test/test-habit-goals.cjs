@@ -95,7 +95,8 @@ function fixture(value, minutes) {
     const tasks = { task: { id: 'task', linkedHabitId: 'habit', linkedHabitSyncPomodoroToday: true } };
     const manager = {
         initialize: async () => {}, refreshData: async () => {},
-        getSaveData: () => records, getEventFocusTime: () => 0, calculateSessionCount: () => 1
+        getDailySummaries: () => ({ [date]: load('src/utils/pomodoroStore.ts').summarizePomodoroDay(date, records[date], () => 1) }),
+        getEventFocusTime: () => 0, calculateSessionCount: () => 1
     };
     const { HabitPanel } = loadFrontend('src/components/panel/HabitPanel.ts', manager);
     const panel = Object.create(HabitPanel.prototype);

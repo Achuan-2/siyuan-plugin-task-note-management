@@ -122,7 +122,7 @@ export class HabitStatsDialog {
             const reminderData = this.plugin && typeof this.plugin.loadReminderData === 'function'
                 ? ((await this.plugin.loadReminderData()) || {})
                 : {};
-            const records = this.pomodoroRecordManager.getSaveData() || {};
+            const records = this.pomodoroRecordManager.getDailySummaries() || {};
             const linkedData = buildLinkedHabitPomodoroData(
                 reminderData,
                 records,
@@ -483,10 +483,9 @@ export class HabitStatsDialog {
     private getHabitPomodoroFocusMinutes(habit: Habit, dateStr: string): number {
         if (!this.pomodoroReady || !this.pomodoroRecordManager) return 0;
         const direct = this.pomodoroRecordManager.getEventFocusTime(habit.id, dateStr) || 0;
-        const sessions = this.pomodoroRecordManager.getDateSessions(dateStr) || [];
-        const fromInstances = sessions
-            .filter(s => s.type === "work" && s.eventId && s.eventId.startsWith(`${habit.id}_`))
-            .reduce((sum, s) => sum + (s.duration || 0), 0);
+        const fromInstances = Object.entries(this.pomodoroRecordManager.getDaySummary(dateStr)?.workByEvent || {})
+            .filter(([id]) => id.startsWith(`${habit.id}_`))
+            .reduce((sum, [, stats]) => sum + stats.duration, 0);
         const linked = getLinkedTaskPomodoroStatsByDateUtil(this.linkedTaskPomodoroStats, habit.id, dateStr).focusMinutes;
         return Math.max(direct, fromInstances) + linked;
     }

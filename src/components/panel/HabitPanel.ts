@@ -785,7 +785,7 @@ export class HabitPanel {
     }
 
     private rebuildLinkedTaskPomodoroStats(reminderData: Record<string, any>) {
-        const records = this.pomodoroRecordManager.getSaveData() || {};
+        const records = this.pomodoroRecordManager.getDailySummaries() || {};
         const linkedData = buildLinkedHabitPomodoroData(
             reminderData || {},
             records,

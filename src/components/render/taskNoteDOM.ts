@@ -221,21 +221,14 @@ export class TaskNoteDOMManager {
             try {
                 const recordManager = PomodoroRecordManager.getInstance(this.plugin);
                 await recordManager.initialize();
-                const records = (recordManager as any).records || {};
                 const statsByEventId = new Map<string, PomodoroStats>();
                 const statsByBaseEventId = new Map<string, PomodoroStats>();
 
-                for (const dateKey of Object.keys(records)) {
-                    const record = records[dateKey];
-                    const sessions = Array.isArray(record?.sessions) ? record.sessions : [];
-                    for (const session of sessions) {
-                        if (!session || session.type !== "work") continue;
-                        const eventId = String(session.eventId || "").trim();
-                        if (!eventId) continue;
-                        const count = Math.max(0, Math.floor(Number(recordManager.calculateSessionCount(session)) || 0));
-                        const minutes = Math.max(0, Math.floor(Number(session.duration) || 0));
-                        if (count <= 0 && minutes <= 0) continue;
-                        this.setPomodoroStats(statsByEventId, eventId, count, minutes);
+                for (const summary of Object.values(recordManager.getDailySummaries())) {
+                    for (const [eventId, stats] of Object.entries(summary.workByEvent)) {
+                        const id = eventId.trim();
+                        if (!id) continue;
+                        this.setPomodoroStats(statsByEventId, id, stats.displayCount, stats.displayDuration);
                     }
                 }
 

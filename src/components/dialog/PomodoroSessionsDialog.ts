@@ -166,20 +166,7 @@ export class PomodoroSessionsDialog {
     private async loadSessions() {
         await this.recordManager.initialize();
 
-        // 获取所有日期范围内的会话
-        const allSessions: PomodoroSession[] = [];
-
-        // 遍历所有日期的记录
-        for (const date in (this.recordManager as any).records) {
-            const record = (this.recordManager as any).records[date];
-            if (record && record.sessions) {
-                // 筛选出属于当前提醒的会话
-                const eventSessions = record.sessions.filter((session: PomodoroSession) => {
-                    return this.shouldIncludeEventId(session.eventId);
-                });
-                allSessions.push(...eventSessions);
-            }
-        }
+        const allSessions = await this.recordManager.getSessionsMatchingEvent(id => this.shouldIncludeEventId(id));
 
         // 按开始时间降序排列（最新的在前）
         this.sessions = allSessions.sort((a, b) =>
@@ -904,38 +891,7 @@ export class PomodoroSessionsDialog {
                     note
                 };
 
-                // 手动添加到记录中
-                const { getLogicalDateString } = await import("../../utils/dateUtils");
-                const logicalDate = getLogicalDateString(startTime);
-
-                // 获取或创建该日期的记录
-                const records = (this.recordManager as any).records;
-                if (!records[logicalDate]) {
-                    records[logicalDate] = {
-                        date: logicalDate,
-                        workSessions: 0,
-                        totalWorkTime: 0,
-                        totalBreakTime: 0,
-                        sessions: []
-                    };
-                }
-
-                // 添加会话
-                records[logicalDate].sessions.push(session);
-
-                // 更新统计
-                if (type === 'work') {
-                    records[logicalDate].workSessions += this.recordManager.calculateSessionCount(session);
-                    records[logicalDate].totalWorkTime += duration;
-                } else {
-                    records[logicalDate].totalBreakTime += duration;
-                }
-
-                // 保存记录
-                await (this.recordManager as any).saveRecords([logicalDate]);
-
-                // 刷新统计索引
-                this.recordManager.refreshIndex();
+                await this.recordManager.updateSession(session);
 
                 showMessage("✅ " + (i18n("addPomodoroSuccess") || "补录番茄钟成功"), 3000, "info");
 
@@ -1026,9 +982,6 @@ export class PomodoroSessionsDialog {
             }
 
             try {
-                // 先删除旧会话
-                await this.recordManager.deleteSession(session.id);
-
                 // 创建新会话
                 const targetEventId = session.eventId || this.reminderId;
                 const eventTitle = await this.resolveEventTitle(targetEventId, session.eventTitle);
@@ -1062,34 +1015,7 @@ export class PomodoroSessionsDialog {
                     newSession.count = Math.max(1, Math.round(newSession.duration / Math.max(1, base)));
                 }
 
-                // 添加新会话
-                const { getLogicalDateString } = await import("../../utils/dateUtils");
-                const logicalDate = getLogicalDateString(startTime);
-
-                const records = (this.recordManager as any).records;
-                if (!records[logicalDate]) {
-                    records[logicalDate] = {
-                        date: logicalDate,
-                        workSessions: 0,
-                        totalWorkTime: 0,
-                        totalBreakTime: 0,
-                        sessions: []
-                    };
-                }
-
-                records[logicalDate].sessions.push(newSession);
-
-                if (type === 'work') {
-                    records[logicalDate].workSessions += this.recordManager.calculateSessionCount(newSession);
-                    records[logicalDate].totalWorkTime += duration;
-                } else {
-                    records[logicalDate].totalBreakTime += duration;
-                }
-
-                await (this.recordManager as any).saveRecords([logicalDate]);
-
-                // 刷新统计索引
-                this.recordManager.refreshIndex();
+                await this.recordManager.updateSession(newSession);
 
                 showMessage("✅ " + (i18n("editPomodoroSuccess") || "修改番茄钟成功"), 3000, "info");
 

@@ -12,6 +12,8 @@ import { PomodoroManager } from "./components/dataManager/pomodoroRecord";
 import { SummaryManager } from "./components/dataManager/summaryManager";
 import { createMcpRegistry, type ToolDefinition } from "./kernel/tools/index";
 import { STATUSES_DATA_FILE } from "./kernel/constants";
+import { createPomodoroCache } from './utils/pomodoroCache';
+import type { PomodoroStoreAdapter } from './utils/pomodoroStore';
 import { KernelReminderService } from "./kernel/reminderService";
 
 class KernelPluginBridge {
@@ -32,7 +34,7 @@ class KernelPluginBridge {
     }
 
     async removeData(path: string): Promise<void> {
-        await this.storage.removeData(path);
+        await this.storage.removeData(path, path.startsWith('pomodoroRecords/'));
         await this.notifyDataUpdated(path);
     }
 
@@ -97,28 +99,16 @@ class KernelPluginBridge {
             || await this.loadData(`subscribe/${subscriptionId}.json`);
     }
 
-    async loadPomodoroRecords(force: boolean = false): Promise<any> {
-        try {
-            const files = await this.storage.readDir("pomodoroRecords");
-            const records: Record<string, any> = {};
-            await Promise.all(
-                files
-                    .filter((f) => !f.isDir && f.name.endsWith(".json"))
-                    .map(async (f) => {
-                        const name = f.name;
-                        const record = await this.storage.loadData(`pomodoroRecords/${name}`);
-                        if (record && typeof record === "object") {
-                            const dateMatch = name.match(/^(.+)\.json$/i);
-                            const date = dateMatch ? dateMatch[1] : name;
-                            records[date] = record;
-                        }
-                    })
-            );
-            return records;
-        } catch (e) {
-            console.error("[kernel] failed to load pomodoro records:", e);
-            return {};
-        }
+    createPomodoroStoreAdapter(): PomodoroStoreAdapter {
+        const host = (globalThis as any).siyuan;
+        return {
+            list: () => this.storage.readDir('pomodoroRecords', true),
+            read: date => this.storage.loadData(`pomodoroRecords/${date}.json`, true),
+            write: (date, record) => this.saveData(`pomodoroRecords/${date}.json`, record),
+            remove: date => this.removeData(`pomodoroRecords/${date}.json`),
+            readLegacy: () => this.storage.loadData('pomodoro_record.json', true),
+            ...createPomodoroCache(host.plugin.name, 'kernel', (path, init) => host.client.fetch(path, init)),
+        };
     }
 
     private async notifyDataUpdated(path: string) {

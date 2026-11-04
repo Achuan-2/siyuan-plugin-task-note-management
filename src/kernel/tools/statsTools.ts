@@ -117,6 +117,7 @@ export function createStatsTool(pomodoroManager: PomodoroManager, summaryManager
         },
         handler: wrapHandler(async (input) => {
             const action = assertEnum(input.action, "action", STATS_ACTIONS);
+            await pomodoroManager.reloadRecords();
 
             switch (action) {
                 case "get_focuses_by_time": {
