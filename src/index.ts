@@ -833,6 +833,10 @@ export default class ReminderPlugin extends Plugin {
             remove: async date => { await this.removeData(`pomodoroRecords/${date}.json`); },
             listDates: async () => (await list())
                 .filter(entry => !entry.isDir && /^\d{4}-\d{2}-\d{2}\.json$/.test(entry.name)).map(entry => entry.name.slice(0, -5)),
+            locateSession: async id => {
+                const manager = PomodoroRecordManager.getInstance(this);
+                return manager.locateSessionForWrite(id);
+            },
         });
         return {
             list,

@@ -104,6 +104,21 @@ test('内核构建产物没有页面也能启动 Croner、响应文件变更并�
         assert.ok(saved.sessions.some(session => session.id === 'frontend'));
         assert.ok(saved.sessions.some(session => session.id === mcp.data.id));
         assert.equal(saved.totalWorkTime, 75);
+
+        // 自然日文件中的凌晨专注属于前一逻辑日；后台习惯提醒必须使用索引。
+        files['habit.json'] = JSON.stringify({ focused: { id: 'focused', title: '凌晨已达标', startDate: date,
+            goalType: 'pomodoro', target: 25, reminderTimes: ['09:32'], frequency: { type: 'daily' } } });
+        const early = { ...original, id: 'early', eventId: 'focused', startTime: '2026-10-09T01:00:00', endTime: '2026-10-09T01:25:00' };
+        files['pomodoroRecords/2026-10-09.json'] = JSON.stringify({ date: '2026-10-09', sessions: [early],
+            workSessions: 1, totalWorkTime: 25, totalBreakTime: 0 });
+        await runtime.event.handler({ type: 'fs-notify', detail: { path: 'habit.json' } });
+        t.mock.timers.tick(250); await flush();
+        t.mock.timers.tick(59_750); await flush();
+        assert.equal(sends, 2, '达标习惯不能因数据存放在次日文件而误报');
+        assert.equal(emails.length, 2);
+        const earlyFocus = (await stats({ action: 'get_focuses_by_time', startDate: date, endDate: date })).data;
+        assert.ok(earlyFocus.some(session => session.id === 'early'));
+        assert.equal(errors.length, 0);
     } finally {
         await runtime.plugin.lifecycle.onunload();
         global.siyuan = original;

@@ -1,4 +1,5 @@
 import type { PomodoroRecord, PomodoroSession } from '../components/dataManager/pomodoroRecord';
+import { attachPomodoroStorageMetadata } from './pomodoroDates';
 
 export interface PomodoroChange {
     date: string;
@@ -15,6 +16,7 @@ export interface PomodoroCommitStorage {
     write(date: string, record: PomodoroRecord): Promise<void>;
     remove(date: string): Promise<void>;
     listDates?(): Promise<string[]>;
+    locateSession?(id: string): Promise<string | undefined>;
 }
 export type PomodoroCommitResult = Record<string, PomodoroRecord | null>;
 
@@ -23,6 +25,23 @@ function canonical(value: any): string {
     if (value && typeof value === 'object') return `{${Object.keys(value).sort().filter(key => value[key] !== undefined)
         .map(key => `${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}`;
     return JSON.stringify(value);
+}
+
+function sessionContent(session?: PomodoroSession): string {
+    if (!session) return canonical(session);
+    const { revision: _revision, updatedAt: _updatedAt, storageDate: _storageDate, timezoneOffsetMinutes: _offset, ...content } = session;
+    for (const key of ['startTime', 'endTime'] as const) {
+        const time = new Date(content[key]);
+        if (Number.isFinite(time.getTime())) content[key] = time.toISOString();
+    }
+    return canonical(content);
+}
+
+export function getPomodoroDeleteMarker(record: PomodoroRecord, id: string) {
+    if (!Object.prototype.hasOwnProperty.call(record.tombstones || {}, id)) return undefined;
+    const marker = record.tombstones[id];
+    if (!marker || !Number.isSafeInteger(marker.revision) || marker.revision <= 0 || !Number.isFinite(Date.parse(marker.updatedAt))) throw new Error('番茄钟删除标记格式无效');
+    return marker;
 }
 
 export function calculatePomodoroSessionCount(session: PomodoroSession): number {
@@ -45,9 +64,15 @@ function sessionTotals(sessions: PomodoroSession[]) {
 function validateRecord(record: PomodoroRecord | null) {
     if (record === null) return;
     if (!record || typeof record !== 'object' || (record.sessions != null && !Array.isArray(record.sessions))) throw new Error('番茄钟记录格式无效');
+    if ((record.schemaVersion || 0) > 2) throw new Error('番茄钟数据版本较新，请升级插件后编辑');
+    if (record.tombstones && (typeof record.tombstones !== 'object' || Array.isArray(record.tombstones))) throw new Error('番茄钟删除标记格式无效');
+    for (const marker of Object.values(record.tombstones || {})) {
+        if (!marker || !Number.isSafeInteger(marker.revision) || marker.revision <= 0 || !Number.isFinite(Date.parse(marker.updatedAt))) throw new Error('番茄钟删除标记格式无效');
+    }
     const ids = new Set<string>();
     for (const session of record.sessions || []) {
         if (!session || typeof session.id !== 'string' || !session.id || ids.has(session.id)) throw new Error('番茄钟会话 ID 无效或重复');
+        if (session.revision !== undefined && (!Number.isSafeInteger(session.revision) || session.revision < 0)) throw new Error('番茄钟会话版本无效');
         ids.add(session.id);
     }
 }
@@ -60,16 +85,24 @@ function mergeDay(change: PomodoroChange, current: PomodoroRecord | null): Pomod
     const base = new Map(baseSessions.map(session => [session.id, session]));
     const next = new Map(nextSessions.map(session => [session.id, session]));
     const merged = new Map(currentSessions.map(session => [session.id, session]));
+    const tombstones = Object.assign(Object.create(null), current?.tombstones || {});
     let changed = false;
     for (const id of new Set([...base.keys(), ...next.keys()])) {
         const before = base.get(id), after = next.get(id), latest = merged.get(id);
-        if (canonical(before) === canonical(after)) continue;
-        if (canonical(latest) === canonical(after)) continue; // 已经提交过的变更不重复累计。
-        if (canonical(latest) !== canonical(before)) throw new Error(`番茄钟记录已被其他窗口修改，请刷新后重试 (${id})`);
-        if (after) merged.set(id, after); else merged.delete(id);
+        if (sessionContent(before) === sessionContent(after)) continue;
+        if (after && tombstones[id]) throw new Error(`番茄钟记录已删除，拒绝恢复旧快照 (${id})`);
+        if (sessionContent(latest) === sessionContent(after)) continue; // 请求重放不重复累计。
+        if (sessionContent(latest) !== sessionContent(before) || (latest?.revision || 0) !== (before?.revision || 0)) {
+            throw new Error(`番茄钟记录已被其他窗口修改，请刷新后重试 (${id})`);
+        }
+        const revision = (latest?.revision || before?.revision || 0) + 1;
+        const updatedAt = new Date().toISOString();
+        if (after) merged.set(id, { ...attachPomodoroStorageMetadata(after, change.date), revision, updatedAt });
+        else { merged.delete(id); tombstones[id] = { revision, updatedAt }; }
         changed = true;
     }
-    if (!changed && current) return current;
+    const dailyTotals = (value: PomodoroRecord | null) => value && [value.workSessions, value.totalWorkTime, value.totalBreakTime];
+    if (!changed && current && canonical(dailyTotals(change.base)) === canonical(dailyTotals(change.next))) return current;
     const sessions = [...merged.values()].sort((a, b) => a.startTime.localeCompare(b.startTime));
     const totals = sessionTotals(sessions);
     const currentTotals = sessionTotals(currentSessions), beforeTotals = sessionTotals(baseSessions), afterTotals = sessionTotals(nextSessions);
@@ -83,13 +116,14 @@ function mergeDay(change: PomodoroChange, current: PomodoroRecord | null): Pomod
             totals[key] += currentResidual + nextResidual - residual(change.base, beforeTotals);
         }
     }
-    return { ...current, ...change.next, date: change.date, sessions, ...totals };
+    return { ...current, ...change.next, schemaVersion: 2, date: change.date, sessions, tombstones, ...totals };
 }
 
 /** 同一工作空间的前端和 MCP 均调用这个内核实例，锁覆盖读取、合并、落盘和失败恢复。 */
 export class PomodoroWriteCoordinator {
     private tail: Promise<unknown> = Promise.resolve();
     private disposed = false;
+    private readonly locations = new Map<string, { date: string; deleted: boolean }>();
 
     constructor(private readonly storage: PomodoroCommitStorage) {}
 
@@ -120,12 +154,35 @@ export class PomodoroWriteCoordinator {
             validateRecord(change.base); validateRecord(change.next);
             const current = await this.storage.read(change.date);
             validateRecord(current);
-            if (current) { current.date = change.date; current.sessions ||= []; }
+            if (current) {
+                current.date = change.date;
+                current.sessions = (current.sessions || []).filter(session => !getPomodoroDeleteMarker(current, session.id));
+            }
             originals[change.date] = current;
             if (input.mode === 'replace' || change.next === null) {
                 if (canonical(current) !== canonical(change.base)) throw new Error(`番茄钟日期记录已变化，请重新加载后重试 (${change.date})`);
-                results[change.date] = change.next;
+                const next = change.next || { date: change.date, sessions: [], workSessions: 0, totalWorkTime: 0, totalBreakTime: 0 };
+                results[change.date] = mergeDay({ ...change, next }, current);
             } else results[change.date] = mergeDay(change, current);
+        }
+        // 旧文件可能使用旧逻辑日命名；依靠会话定位索引检查另一分片中的删除标记。
+        for (const change of input.changes) {
+            const existing = new Set((change.base?.sessions || []).map(session => session.id));
+            for (const session of change.next?.sessions || []) {
+                if (existing.has(session.id)) continue;
+                const known = this.locations.get(session.id);
+                if (known?.deleted) throw new Error(`番茄钟记录已删除，拒绝恢复旧快照 (${session.id})`);
+                const originDate = known?.date || await this.storage.locateSession?.(session.id);
+                if (!originDate || originDate === change.date) continue;
+                const origin = originals[originDate] || await this.storage.read(originDate);
+                if (!origin) continue;
+                validateRecord(origin);
+                if (getPomodoroDeleteMarker(origin, session.id)) throw new Error(`番茄钟记录已删除，拒绝恢复旧快照 (${session.id})`);
+                const removedHere = input.changes.some(item => item.date === originDate
+                    && item.base?.sessions.some(value => value.id === session.id)
+                    && !item.next?.sessions.some(value => value.id === session.id));
+                if (!removedHere && origin.sessions?.some(value => value.id === session.id)) throw new Error(`番茄钟会话已存在于其他日期 (${session.id})`);
+            }
         }
         // 源日已被另一事务移走时，不能把同一会话再添加到另一个目标日。
         const beforeDates = new Map<string, string>();
@@ -154,7 +211,7 @@ export class PomodoroWriteCoordinator {
             for (const date of attempted.reverse()) {
                 try {
                     const current = await this.storage.read(date);
-                    if (current) { current.date = date; current.sessions ||= []; }
+                    if (current) { current.date = date; current.sessions = (current.sessions || []).filter(session => !getPomodoroDeleteMarker(current, session.id)); }
                     if (canonical(current) === canonical(originals[date])) continue;
                     // 文件系统同步或外部写入未经过本队列，不能用旧快照覆盖它。
                     if (canonical(current) !== canonical(results[date])) throw new Error(`恢复时检测到外部修改 (${date})`);
@@ -164,6 +221,10 @@ export class PomodoroWriteCoordinator {
             }
             if (rollbackErrors.length) throw Object.assign(new Error('番茄钟保存及恢复失败，请重新加载记录后重试'), { errors: [error, ...rollbackErrors] });
             throw error;
+        }
+        for (const [date, record] of Object.entries(results)) {
+            for (const session of record?.sessions || []) this.locations.set(session.id, { date, deleted: false });
+            for (const id of Object.keys(record?.tombstones || {})) this.locations.set(id, { date, deleted: true });
         }
         return results;
     }

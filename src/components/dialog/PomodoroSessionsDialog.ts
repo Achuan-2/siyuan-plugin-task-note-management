@@ -993,6 +993,7 @@ export class PomodoroSessionsDialog {
                     ? Math.max(1, Math.round(Number(session.plannedDuration) || duration))
                     : duration;
                 const newSession: PomodoroSession = {
+                    ...session,
                     id: session.id, // 保持原ID
                     type,
                     eventId: targetEventId,

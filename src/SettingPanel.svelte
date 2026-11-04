@@ -2439,7 +2439,7 @@
                     const recordManager = PomodoroRecordManager.getInstance(plugin);
                     await recordManager.regenerateRecordsByDate();
                 } catch (error) {
-                    console.error("Failed to regenerate pomodoro records:", error);
+                    console.error("Failed to rebuild pomodoro statistics:", error);
                 }
             })();
         }

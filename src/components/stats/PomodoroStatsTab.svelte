@@ -574,7 +574,7 @@ class PomodoroStatsView {
         end.setDate(start.getDate() + 6);
         end.setHours(23, 59, 59, 999);
         return Object.entries(this.recordManager.getDailySummaries())
-            .filter(([date]) => date >= getLogicalDateString(start) && date <= getLogicalDateString(end))
+            .filter(([date]) => date >= getLocalDateString(start) && date <= getLocalDateString(end))
             .reduce((sum, [, day]) => sum + Object.values(day.workByEvent).reduce((n, stats) => n + stats.count, 0), 0);
     }
 

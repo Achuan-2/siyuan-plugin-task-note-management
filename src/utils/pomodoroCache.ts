@@ -46,21 +46,21 @@ export function createPomodoroCache(pluginName: string, runtime: 'frontend' | 'k
             await mapPomodoroFiles(manifest.months as string[], async month => {
                 try {
                     const shard = await readJson(`${directory}/${month}.json`);
-                    if (shard?.version !== manifest.version || !shard.days || typeof shard.days !== 'object') return;
+                    if (shard?.version !== manifest.version || shard.configuration !== manifest.configuration || !shard.days || typeof shard.days !== 'object') return;
                     for (const [date, day] of Object.entries(shard.days)) if (date.slice(0, 7) === month) days[date] = day;
                 } catch { /* 某月损坏只重建该月。 */ }
             });
             lastManifest = JSON.stringify(manifest);
-            return { version: manifest.version, days };
+            return { version: manifest.version, configuration: manifest.configuration, days };
         },
         async writeCache(cache: any, changedMonths?: string[]): Promise<void> {
             const months: string[] = cache.months || [...new Set(Object.keys(cache.days).map(date => date.slice(0, 7)))].sort();
             await mapPomodoroFiles(changedMonths || months, async month => {
                 if (!/^\d{4}-\d{2}$/.test(month)) throw new Error('番茄钟缓存月份无效');
                 const days = Object.fromEntries(Object.entries(cache.days).filter(([date]) => date.slice(0, 7) === month));
-                await writeJson(`${directory}/${month}.json`, { version: cache.version, days });
+                await writeJson(`${directory}/${month}.json`, { version: cache.version, configuration: cache.configuration, days });
             });
-            const manifest = { version: cache.version, months };
+            const manifest = { version: cache.version, configuration: cache.configuration, months };
             if (JSON.stringify(manifest) !== lastManifest) {
                 await writeJson(`${directory}/manifest.json`, manifest);
                 lastManifest = JSON.stringify(manifest);

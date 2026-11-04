@@ -139,6 +139,33 @@ test('习惯读取独立打卡文件，已完成及番茄时长达标的习惯�
     assert.match(f.requests[0].payload.text.content, /待打卡习惯/);
 });
 
+test('习惯提醒使用逻辑日摘要，直接专注和关联任务共同达标时不提醒', async () => {
+    const f = fixture({
+        'reminder.json': { linked: { id: 'linked', linkedHabitId: 'focused', linkedHabitSyncPomodoroToday: true } },
+        'habit.json': {
+            focused: { id: 'focused', title: '专注达标', startDate: '2026-10-01', goalType: 'pomodoro', target: 25,
+                reminderTimes: ['09:30'], frequency: { type: 'daily' } },
+            pending: { id: 'pending', title: '专注未达标', startDate: '2026-10-01', goalType: 'pomodoro', target: 25,
+                reminderTimes: ['09:30'], frequency: { type: 'daily' } }
+        }
+    });
+    const loadData = f.storage.loadData;
+    f.storage.loadData = async file => {
+        assert.ok(!file.startsWith('pomodoroRecords/'), '提醒不应把逻辑日期当作物理文件名');
+        return loadData(file);
+    };
+    const dates = [];
+    const scheduler = new KernelReminderService(f.storage, f.client, f.logger, undefined, async date => {
+        dates.push(date);
+        return { workByEvent: { focused: { count: 1, duration: 10 }, linked: { count: 1, duration: 15 }, pending: { count: 1, duration: 24 } } };
+    });
+    await scheduler.check(now());
+    assert.deepEqual(dates, ['2026-10-08']);
+    assert.equal(f.requests.length, 1);
+    assert.match(f.requests[0].payload.text.content, /专注未达标/);
+    assert.doesNotMatch(f.requests[0].payload.text.content, /专注达标/);
+});
+
 test('每日汇总单独去重，不会受前端通知记录影响', async () => {
     const f = fixture({ 'notify.json': { lastNotified: '2026-10-08' } });
     Object.assign(f.files['reminder-settings.json'], { dailyNotificationEnabled: true, dailyNotificationTime: '08:00' });

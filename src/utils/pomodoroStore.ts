@@ -1,5 +1,8 @@
 import type { PomodoroRecord, PomodoroSession } from '../components/dataManager/pomodoroRecord';
 import type { PomodoroCommit, PomodoroCommitResult } from './pomodoroWriteCoordinator';
+import { getPomodoroDeleteMarker } from './pomodoroWriteCoordinator';
+import { getDayStartMinutes } from './dateUtils';
+import { getPomodoroLogicalDate } from './pomodoroDates';
 
 export interface PomodoroEventTotals { count: number; duration: number; }
 interface PomodoroWorkTotals extends PomodoroEventTotals { displayCount: number; displayDuration: number; }
@@ -15,6 +18,7 @@ export interface PomodoroDaySummary {
     events: Record<string, PomodoroEventTotals>;
     eventIds: string[];
     sessionIds: string[];
+    deletedSessionIds: string[];
 }
 
 export interface PomodoroFileEntry { name: string; isDir: boolean; updated: number; }
@@ -27,8 +31,13 @@ export interface PomodoroStoreAdapter {
     writeCache(cache: any, months?: string[]): Promise<void>;
 }
 
-interface CachedDay { updated: number; verifiedAt: number; summary: PomodoroDaySummary; }
-const CACHE_VERSION = 4;
+interface CachedDay {
+    updated: number;
+    verifiedAt: number;
+    summary: PomodoroDaySummary; // 物理分片总量及会话定位
+    logicalDays: Record<string, PomodoroDaySummary>; // 此分片对各逻辑日的贡献
+}
+const CACHE_VERSION = 5;
 const DATE_FILE = /^(\d{4}-\d{2}-\d{2})\.json$/;
 const CONCURRENCY = 6;
 
@@ -84,6 +93,7 @@ export function summarizePomodoroDay(date: string, record: PomodoroRecord, count
         workByEvent, workByTitle, events,
         eventIds: [...new Set(record.sessions.map(s => s.eventId).filter(id => typeof id === 'string'))],
         sessionIds: record.sessions.map(s => s.id).filter(id => typeof id === 'string'),
+        deletedSessionIds: Object.keys(record.tombstones || {}),
     };
 }
 
@@ -94,6 +104,7 @@ function validSummary(value: any, date: string): value is PomodoroDaySummary {
         && totals(value.events) && totals(value.workByEvent) && totals(value.workByTitle)
         && Object.values(value.workByEvent).every((v: any) => Number.isFinite(v.displayCount) && Number.isFinite(v.displayDuration))
         && Array.isArray(value.sessionIds) && value.sessionIds.every((id: any) => typeof id === 'string')
+        && Array.isArray(value.deletedSessionIds) && value.deletedSessionIds.every((id: any) => typeof id === 'string')
         && Array.isArray(value.eventIds) && value.eventIds.every((id: any) => typeof id === 'string');
 }
 
@@ -105,8 +116,51 @@ function normalizeRecord(date: string, record: PomodoroRecord): PomodoroRecord {
         else throw new Error(`番茄钟记录格式无效: ${date}`);
     }
     record.date = date;
+    record.sessions = record.sessions.filter(session => !getPomodoroDeleteMarker(record, session.id));
     return record;
 }
+
+function combineSummaries(date: string, values: PomodoroDaySummary[]): PomodoroDaySummary {
+    const result = summarizePomodoroDay(date, { date, sessions: [] } as PomodoroRecord, () => 0);
+    for (const value of values) {
+        for (const key of ['workSessions', 'totalWorkTime', 'totalBreakTime', 'workTimeFromSessions'] as const) result[key] += value[key];
+        for (const key of ['events', 'workByEvent', 'workByTitle'] as const) {
+            for (const [id, stats] of Object.entries(value[key])) {
+                const map = result[key] as unknown as Record<string, Record<string, number>>;
+                const total = map[id] ||= {};
+                for (const [metric, amount] of Object.entries(stats)) total[metric] = (total[metric] || 0) + amount;
+            }
+        }
+        result.eventIds.push(...value.eventIds);
+        result.sessionIds.push(...value.sessionIds);
+    }
+    result.eventIds = [...new Set(result.eventIds)];
+    return result;
+}
+
+function summarizeFile(date: string, record: PomodoroRecord, count: (s: PomodoroSession) => number, dayStart: number): CachedDay {
+    const summary = summarizePomodoroDay(date, record, count);
+    const grouped: Record<string, PomodoroSession[]> = Object.create(null);
+    for (const session of record.sessions) (grouped[getPomodoroLogicalDate(session, date, dayStart)] ||= []).push(session);
+    const logicalDays: Record<string, PomodoroDaySummary> = Object.create(null);
+    for (const [logicalDate, sessions] of Object.entries(grouped)) {
+        logicalDays[logicalDate] = summarizePomodoroDay(logicalDate, { date: logicalDate, sessions } as PomodoroRecord, count);
+    }
+    // 没有详细会话的历史正余额保留在原日期，不能因补录一条凌晨会话而整体移到前一天。
+    const sessionTotals = summarizePomodoroDay(date, { date, sessions: record.sessions } as PomodoroRecord, count);
+    const targetDate = Object.keys(grouped).length === 1 ? Object.keys(grouped)[0] : date;
+    for (const key of ['workSessions', 'totalWorkTime', 'totalBreakTime'] as const) {
+        const residual = summary[key] - sessionTotals[key];
+        if (residual || !Object.keys(grouped).length) {
+            const residualDate = residual > 0 ? date : targetDate;
+            const target = logicalDays[residualDate] ||= summarizePomodoroDay(residualDate, { date: residualDate, sessions: [] } as PomodoroRecord, count);
+            target[key] += residual;
+        }
+    }
+    return { summary, logicalDays, updated: 0, verifiedAt: Date.now() };
+}
+
+function statisticsConfiguration(): string { return `${getDayStartMinutes()}:${new Date().getTimezoneOffset()}`; }
 
 /** 原始日期文件是唯一事实来源。持久缓存仅含摘要，不含会话明细，损坏时可完整重建。 */
 export class PomodoroStore {
@@ -117,6 +171,10 @@ export class PomodoroStore {
     private readonly loaded = new Set<string>();
     private readonly committed = new Map<string, PomodoroRecord>();
     private readonly sessionDates = new Map<string, string>();
+    private readonly deletedDates = new Map<string, string>();
+    private readonly logicalBuckets = new Map<string, Set<string>>();
+    private configuration = statisticsConfiguration();
+    private dayStart = getDayStartMinutes();
     private initializing?: Promise<void>;
     private initialized = false;
     private legacyMode = false;
@@ -138,16 +196,21 @@ export class PomodoroStore {
     }
 
     initialize(): Promise<void> {
-        if (this.initialized) return Promise.resolve();
+        if (this.initialized) return this.configuration === statisticsConfiguration() ? Promise.resolve() : this.rebuildStatistics();
         if (this.initializing) return this.initializing;
         this.initializing = this.serial(async () => {
             let cache: any;
             try { cache = await this.adapter.readCache(); } catch { /* 临时目录被清除时重建。 */ }
-            if (cache?.version === CACHE_VERSION && cache.days && typeof cache.days === 'object') {
-                for (const [date, day] of Object.entries(cache.days) as [string, CachedDay][]) {
+            if (cache?.version === CACHE_VERSION && cache.configuration === this.configuration && cache.days && typeof cache.days === 'object') {
+                for (const [date, cached] of Object.entries(cache.days) as [string, CachedDay & { logicalDate?: string }][]) {
+                    const day = cached?.logicalDate && DATE_FILE.test(`${cached.logicalDate}.json`) && validSummary(cached.summary, date)
+                        ? { ...cached, logicalDays: { [cached.logicalDate]: { ...cached.summary, date: cached.logicalDate, deletedSessionIds: [] } } }
+                        : cached;
                     if (DATE_FILE.test(`${date}.json`) && Number.isFinite(day?.updated)
-                        && Number.isFinite(day?.verifiedAt) && validSummary(day.summary, date)) {
-                        this.replace(date, day.summary, day.updated, day.verifiedAt);
+                        && Number.isFinite(day?.verifiedAt) && validSummary(day.summary, date)
+                        && day.logicalDays && typeof day.logicalDays === 'object'
+                        && Object.entries(day.logicalDays).every(([key, value]) => validSummary(value, key))) {
+                        this.replace(date, day);
                     }
                 }
             }
@@ -158,43 +221,107 @@ export class PomodoroStore {
         return this.initializing;
     }
 
-    private replace(date: string, summary?: PomodoroDaySummary, updated = 0, verifiedAt = Date.now()) {
-        const old = this.summaries[date];
-        for (const [id, value] of Object.entries(old?.events || {})) {
+    private replace(date: string, day?: CachedDay) {
+        const old = this.days[date];
+        const affected = new Set([...Object.keys(old?.logicalDays || {}), ...Object.keys(day?.logicalDays || {})]);
+        for (const [id, value] of Object.entries(old?.summary.events || {})) {
             const total = this.eventTotals[id];
             if (!total) continue;
-            total.count -= value.count;
-            total.duration -= value.duration;
-            if (total.count === 0 && total.duration === 0) delete this.eventTotals[id];
+            total.count -= value.count; total.duration -= value.duration;
+            if (!total.count && !total.duration) delete this.eventTotals[id];
         }
-        for (const id of old?.sessionIds || []) if (this.sessionDates.get(id) === date) this.sessionDates.delete(id);
-        if (!summary) {
-            delete this.summaries[date]; delete this.days[date]; delete this.records[date];
-            this.loaded.delete(date);
-            this.committed.delete(date);
-            return;
+        for (const id of old?.summary.sessionIds || []) if (this.sessionDates.get(id) === date) this.sessionDates.delete(id);
+        for (const id of old?.summary.deletedSessionIds || []) if (this.deletedDates.get(id) === date) this.deletedDates.delete(id);
+        for (const logicalDate of Object.keys(old?.logicalDays || {})) this.logicalBuckets.get(logicalDate)?.delete(date);
+        if (!day) {
+            delete this.days[date]; delete this.records[date];
+            this.loaded.delete(date); this.committed.delete(date);
+        } else {
+            this.days[date] = day;
+            for (const [id, value] of Object.entries(day.summary.events)) {
+                const total = this.eventTotals[id] ||= { count: 0, duration: 0 };
+                total.count += value.count; total.duration += value.duration;
+            }
+            for (const id of day.summary.sessionIds) this.sessionDates.set(id, date);
+            for (const id of day.summary.deletedSessionIds) this.deletedDates.set(id, date);
+            for (const logicalDate of Object.keys(day.logicalDays)) {
+                if (!this.logicalBuckets.has(logicalDate)) this.logicalBuckets.set(logicalDate, new Set());
+                this.logicalBuckets.get(logicalDate)!.add(date);
+            }
+            if (!this.loaded.has(date)) this.records[date] = this.placeholder(date);
         }
-        this.summaries[date] = summary;
-        this.days[date] = { summary, updated, verifiedAt };
-        for (const [id, value] of Object.entries(summary.events)) {
-            const total = this.eventTotals[id] ||= { count: 0, duration: 0 };
-            total.count += value.count; total.duration += value.duration;
+        for (const logicalDate of affected) {
+            const buckets = this.logicalBuckets.get(logicalDate);
+            if (!buckets?.size) { this.logicalBuckets.delete(logicalDate); delete this.summaries[logicalDate]; }
+            else this.summaries[logicalDate] = combineSummaries(logicalDate, [...buckets].map(key => this.days[key].logicalDays[logicalDate]));
         }
-        for (const id of summary.sessionIds) this.sessionDates.set(id, date);
-        // 占位只保留每日总量；读取明细必须经 ensureDates，不能据此写入。
-        if (!this.loaded.has(date)) this.records[date] = {
-            date, workSessions: summary.workSessions, totalWorkTime: summary.totalWorkTime,
-            totalBreakTime: summary.totalBreakTime, sessions: [],
-        };
+    }
+
+    private placeholder(date: string): PomodoroRecord {
+        const day = this.days[date].summary;
+        return { date, workSessions: day.workSessions, totalWorkTime: day.totalWorkTime, totalBreakTime: day.totalBreakTime, sessions: [] };
     }
 
     private async readDate(date: string, updated: number): Promise<void> {
         const record = normalizeRecord(date, await this.adapter.read(date));
-        const summary = summarizePomodoroDay(date, record, this.count);
+        const day = summarizeFile(date, record, this.count, this.dayStart);
+        day.updated = updated;
         this.records[date] = record;
         this.committed.set(date, JSON.parse(JSON.stringify(record)));
         this.loaded.add(date);
-        this.replace(date, summary, updated);
+        this.replace(date, day);
+    }
+
+    logicalDates(): string[] { return Object.keys(this.summaries); }
+
+    async ensureLogicalDates(dates: string[]): Promise<void> {
+        await this.initialize();
+        const buckets = new Set<string>();
+        for (const date of dates) for (const bucket of this.logicalBuckets.get(date) || []) buckets.add(bucket);
+        await this.ensureDates([...buckets]);
+    }
+
+    getLogicalDateSessions(date: string): PomodoroSession[] {
+        return [...this.logicalBuckets.get(date) || []].flatMap(bucket => (this.records[bucket]?.sessions || [])
+            .filter(session => getPomodoroLogicalDate(session, bucket, this.dayStart) === date));
+    }
+
+    /** 日界限只改变索引；读取全部源文件成功前保留旧索引，绝不重写历史文件。 */
+    async rebuildStatistics(): Promise<void> {
+        await this.serial(async () => {
+            const configuration = statisticsConfiguration(), dayStart = getDayStartMinutes();
+            const entries = (await this.adapter.list()).filter(entry => !entry.isDir && DATE_FILE.test(entry.name));
+            const staged = new Map<string, { day: CachedDay; record?: PomodoroRecord }>();
+            let legacy = false;
+            if (!entries.length && this.adapter.readLegacy) {
+                const values = await this.adapter.readLegacy();
+                legacy = !!values && Object.keys(values).length > 0;
+                for (const [date, value] of Object.entries(values || {})) {
+                    if (!DATE_FILE.test(date + '.json')) continue;
+                    const record = normalizeRecord(date, value);
+                    staged.set(date, { day: summarizeFile(date, record, this.count, dayStart), record });
+                }
+            } else await mapPomodoroFiles(entries, async entry => {
+                const date = entry.name.slice(0, -5);
+                const record = normalizeRecord(date, await this.adapter.read(date));
+                const day = summarizeFile(date, record, this.count, dayStart);
+                day.updated = entry.updated;
+                staged.set(date, { day, record: this.loaded.has(date) ? record : undefined });
+            });
+            if (configuration !== statisticsConfiguration()) throw new Error('日界限设置在统计重建期间发生变化，请重试');
+            const oldDates = Object.keys(this.days);
+            for (const date of oldDates) this.replace(date);
+            this.configuration = configuration; this.dayStart = dayStart; this.legacyMode = legacy;
+            for (const [date, { day, record }] of staged) {
+                if (record) {
+                    this.records[date] = record; this.loaded.add(date);
+                    this.committed.set(date, JSON.parse(JSON.stringify(record)));
+                }
+                this.replace(date, day);
+            }
+            if (!legacy) this.persist([...oldDates, ...staged.keys()]);
+            this.trimDetails();
+        });
     }
 
     private persist(dates: string[]) {
@@ -211,9 +338,18 @@ export class PomodoroStore {
         if (!months.length) return this.cacheTail;
         this.dirtyMonths.clear();
         const selected = new Set(months);
-        const days = Object.fromEntries(Object.entries(this.days).filter(([date]) => selected.has(date.slice(0, 7))));
+        const days = Object.fromEntries(Object.entries(this.days).filter(([date]) => selected.has(date.slice(0, 7))).map(([date, day]) => {
+            const logicalDates = Object.keys(day.logicalDays);
+            // 整个物理分片只贡献一个逻辑日时，复用汇总，避免缓存重复保存整套事件索引。
+            if (logicalDates.length === 1) {
+                const { logicalDays: _logicalDays, ...physical } = day;
+                return [date, { ...physical, logicalDate: logicalDates[0] }];
+            }
+            return [date, day];
+        }));
         const manifest = [...new Set(Object.keys(this.days).map(date => date.slice(0, 7)))].sort();
-        this.cacheTail = this.cacheTail.then(() => this.adapter.writeCache({ version: CACHE_VERSION, days, months: manifest }, months))
+        const configuration = this.configuration;
+        this.cacheTail = this.cacheTail.then(() => this.adapter.writeCache({ version: CACHE_VERSION, configuration, days, months: manifest }, months))
             .catch(error => {
                 months.forEach(month => this.dirtyMonths.add(month));
                 console.warn('Failed to persist rebuildable pomodoro statistics cache:', error);
@@ -236,9 +372,7 @@ export class PomodoroStore {
             if (protectedDates.has(date)) continue;
             this.loaded.delete(date);
             this.committed.delete(date);
-            const day = this.summaries[date];
-            if (day) this.records[date] = { date, workSessions: day.workSessions, totalWorkTime: day.totalWorkTime,
-                totalBreakTime: day.totalBreakTime, sessions: [] };
+            if (this.days[date]) this.records[date] = this.placeholder(date);
         }
     }
 
@@ -253,7 +387,7 @@ export class PomodoroStore {
                 const record = normalizeRecord(date, value);
                 this.records[date] = record; this.loaded.add(date);
                 this.committed.set(date, JSON.parse(JSON.stringify(record)));
-                this.replace(date, summarizePomodoroDay(date, record, this.count));
+                this.replace(date, summarizeFile(date, record, this.count, this.dayStart));
             }
             // 旧版单文件在迁移到逐日文件之前不持久化摘要，避免误判为空目录。
             return;
@@ -272,9 +406,7 @@ export class PomodoroStore {
             if (!retain) {
                 this.loaded.delete(date);
                 this.committed.delete(date);
-                const summary = this.summaries[date];
-                this.records[date] = { date, workSessions: summary.workSessions, totalWorkTime: summary.totalWorkTime,
-                    totalBreakTime: summary.totalBreakTime, sessions: [] };
+                this.records[date] = this.placeholder(date);
             }
         });
         const deleted = Object.keys(this.days).filter(date => !dates.has(date));
@@ -316,6 +448,7 @@ export class PomodoroStore {
     }
 
     dateForSession(id: string): string | undefined { return this.sessionDates.get(id); }
+    locateSession(id: string): string | undefined { return this.deletedDates.get(id) || this.sessionDates.get(id); }
 
     private publish(result: PomodoroCommitResult): void {
         for (const [date, record] of Object.entries(result)) {
@@ -323,7 +456,7 @@ export class PomodoroStore {
             this.records[date] = record;
             this.loaded.add(date);
             this.committed.set(date, JSON.parse(JSON.stringify(record)));
-            this.replace(date, summarizePomodoroDay(date, record, this.count), 0);
+            this.replace(date, summarizeFile(date, record, this.count, this.dayStart));
         }
         this.legacyMode = false;
         this.persist(Object.keys(result));

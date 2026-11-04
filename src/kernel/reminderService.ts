@@ -78,7 +78,7 @@ export class KernelReminderService {
     private logicalDate = '';
 
     constructor(private readonly storage: KernelStorage, private readonly client: IClient, private readonly logger: ILogger,
-        private readonly runtime?: ISiyuan) {
+        private readonly runtime?: ISiyuan, private readonly getPomodoroDay?: (date: string) => Promise<any>) {
         this.frontend = new KernelFrontendReminderDelivery(storage);
         this.cron = new ReminderCronService({
             readSchedule: now => this.readSchedule(now),
@@ -439,16 +439,18 @@ export class KernelReminderService {
         this.activeHabitIds.clear();
         const habits = await this.storage.loadData(HABIT_DATA_FILE, true) || {};
         const hasPomodoroHabit = Object.values(habits).some((habit: any) => hasHabitPomodoroGoal(habit));
-        const record = hasPomodoroHabit ? await this.storage.loadData(`pomodoroRecords/${date}.json`, true) : null;
+        const record = hasPomodoroHabit ? (this.getPomodoroDay ? await this.getPomodoroDay(date)
+            : await this.storage.loadData(`pomodoroRecords/${date}.json`, true)) : null;
         const sessions = Array.isArray(record?.sessions) ? record.sessions.filter((session: any) => !session.inProgress) : [];
-        const linkedStats = buildLinkedHabitPomodoroData(tasks, { [date]: { sessions } }).statsByHabit;
+        const linkedStats = buildLinkedHabitPomodoroData(tasks, { [date]: record?.workByEvent ? record : { sessions } }).statsByHabit;
         for (const habit of Object.values(habits) as any[]) {
             if (!habit?.id || habit.abandoned || !shouldCheckInOnDate(habit, date)) continue;
             const checkIn = await this.storage.loadData(`${HABIT_CHECKIN_DIR}/${habit.id}.json`, true);
             const currentHabit = { ...habit, checkIns: checkIn?.checkIns || habit.checkIns || {} };
             if (isHabitCompletedOnDate(currentHabit, date, {
-                getPomodoroFocusMinutes: id => sessions.filter((session: any) => session.type === 'work' && session.eventId === id)
-                    .reduce((sum: number, session: any) => sum + session.duration, 0)
+                getPomodoroFocusMinutes: id => (record?.workByEvent ? record.workByEvent[id]?.duration || 0
+                    : sessions.filter((session: any) => session.type === 'work' && session.eventId === id)
+                        .reduce((sum: number, session: any) => sum + session.duration, 0))
                     + getLinkedTaskPomodoroStatsByDate(linkedStats, id, date).focusMinutes
             })) continue;
             this.activeHabitIds.add(habit.id);

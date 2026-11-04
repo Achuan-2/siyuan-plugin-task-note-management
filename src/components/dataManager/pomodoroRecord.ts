@@ -1,7 +1,8 @@
-import { getLogicalDateString } from "../../utils/dateUtils";
+import { getLocalDateString, getLogicalDateString } from "../../utils/dateUtils";
 import { ReminderPomodoroStatsSnapshot, type EventPomodoroTotals } from '../../utils/reminderPomodoroStats';
 import { PomodoroStore, summarizePomodoroDay, type PomodoroDaySummary, type PomodoroEventTotals } from '../../utils/pomodoroStore';
 import { calculatePomodoroSessionCount } from '../../utils/pomodoroWriteCoordinator';
+import { attachPomodoroStorageMetadata, getPomodoroCalendarDate } from '../../utils/pomodoroDates';
 
 // 单个番茄钟会话记录
 export interface PomodoroSession {
@@ -18,6 +19,10 @@ export interface PomodoroSession {
     count?: number; // 完成的番茄钟数量（正计时模式下根据时长计算）
     inProgress?: boolean; // 是否为开始计时时预创建、等待结束或补录的记录
     note?: string; // 备注
+    storageDate?: string; // 稳定的物理分片日期，编辑开始时间时不迁移文件
+    timezoneOffsetMinutes?: number; // 记录时的 Date.getTimezoneOffset()，避免换时区后改变日期归属
+    revision?: number; // 写入协调器生成的记录版本
+    updatedAt?: string; // 协调器生成的修改时间，仅供追踪，不单独用于裁定冲突
 }
 
 export interface PomodoroRecord {
@@ -26,6 +31,8 @@ export interface PomodoroRecord {
     totalWorkTime: number; // 总工作时间（分钟）
     totalBreakTime: number; // 总休息时间（分钟）
     sessions: PomodoroSession[]; // 详细的会话记录
+    schemaVersion?: number;
+    tombstones?: Record<string, { revision: number; updatedAt: string }>;
 }
 
 export interface PomodoroStats {
@@ -72,7 +79,7 @@ export class PomodoroRecordManager {
     }
 
     async initialize() {
-        if (this.isInitialized) return;
+        if (this.isInitialized) { await this.store?.initialize(); return; }
         if (this.initializing) return this.initializing;
         this.initializing = (async () => {
             if (this.plugin?.createPomodoroStoreAdapter) {
@@ -89,9 +96,9 @@ export class PomodoroRecordManager {
     }
 
     /** 所有业务写入和外部刷新共用队列，刷新不会穿过尚未落盘的编辑。 */
-    private serialize<T>(operation: () => Promise<T>): Promise<T> {
+    private serialize<T>(operation: () => Promise<T>, checkStatistics = true): Promise<T> {
         const pending = this.operationTail.then(async () => {
-            await this.initialize();
+            if (checkStatistics || !this.isInitialized) await this.initialize();
             const release = this.retainDetails();
             try { return await operation(); } finally { release(); }
         });
@@ -101,23 +108,35 @@ export class PomodoroRecordManager {
 
     async ensureDatesLoaded(dates: string[]): Promise<void> {
         await this.initialize();
+        await this.store?.ensureLogicalDates(dates);
+    }
+
+    private async ensureStorageDatesLoaded(dates: string[]): Promise<void> {
+        await this.initialize();
         await this.store?.ensureDates(dates);
     }
 
     async ensureRangeLoaded(startDate: string, endDate: string): Promise<void> {
         await this.initialize();
-        await this.ensureDatesLoaded(Object.keys(this.records).filter(date => date >= startDate && date <= endDate));
+        const dates = this.store ? this.store.logicalDates() : Object.keys(this.records);
+        await this.ensureDatesLoaded(dates.filter(date => date >= startDate && date <= endDate));
     }
 
     async ensureAllRecordsLoaded(): Promise<void> {
         await this.initialize();
-        await this.ensureDatesLoaded(Object.keys(this.records));
+        await this.ensureStorageDatesLoaded(Object.keys(this.records));
     }
 
     retainDetails(): () => void { return this.store?.retainDetails() || (() => {}); }
     releaseDetails(): void { this.store?.trimDetails(); }
     async flushCache(): Promise<void> { await this.store?.flushCache(); }
     async closeStorage(): Promise<void> { await this.store?.close(); }
+    getSessionStorageDate(id: string): string | undefined { return this.store?.locateSession(id); }
+    async locateSessionForWrite(id: string): Promise<string | undefined> {
+        // 物理定位不依赖日界限；写入协调器内不能排队重建同一个正在保存的 store。
+        if (!this.isInitialized) await this.initialize();
+        return this.getSessionStorageDate(id);
+    }
 
     getDailySummaries(): Record<string, PomodoroDaySummary> {
         if (this.store) return this.store.summaries;
@@ -144,7 +163,7 @@ export class PomodoroRecordManager {
 
     private async loadSessionDate(id: string): Promise<void> {
         const date = this.store?.dateForSession(id);
-        if (date) await this.ensureDatesLoaded([date]);
+        if (date) await this.ensureStorageDatesLoaded([date]);
     }
 
     async recordWorkSession(...args: Parameters<PomodoroRecordManager['recordWorkSessionImpl']>) {
@@ -176,7 +195,7 @@ export class PomodoroRecordManager {
     }
 
     async regenerateRecordsByDate(...args: Parameters<PomodoroRecordManager['regenerateRecordsByDateImpl']>) {
-        return this.serialize(() => this.regenerateRecordsByDateImpl(...args));
+        return this.serialize(() => this.regenerateRecordsByDateImpl(...args), false);
     }
 
     async createFocus(...args: Parameters<PomodoroRecordManager['createFocusImpl']>) {
@@ -403,9 +422,9 @@ export class PomodoroRecordManager {
         const roundedWorkMinutes = this.roundSessionMinutes(workMinutes);
         const endTime = this.normalizeSessionDate(options.endTime) || new Date();
         const startTime = this.normalizeSessionDate(options.startTime) || new Date(endTime.getTime() - roundedWorkMinutes * 60000);
-        const logicalDate = getLogicalDateString(startTime);
-        await this.ensureDatesLoaded([logicalDate]);
-        this.ensureTodayRecord(logicalDate);
+        const storageDate = getPomodoroCalendarDate({ startTime: startTime.toISOString() }, this.getToday());
+        await this.ensureStorageDatesLoaded([storageDate]);
+        this.ensureTodayRecord(storageDate);
 
         // console.log('Before recording work session:', JSON.stringify(this.records[today]));
 
@@ -428,20 +447,20 @@ export class PomodoroRecordManager {
         };
 
         // 添加到会话记录
-        this.records[logicalDate].sessions.push(session);
+        this.records[storageDate].sessions.push(attachPomodoroStorageMetadata(session, storageDate));
 
         // 更新统计数据
-        this.records[logicalDate].workSessions += count;
+        this.records[storageDate].workSessions += count;
 
-        this.records[logicalDate].totalWorkTime += roundedWorkMinutes;
+        this.records[storageDate].totalWorkTime += roundedWorkMinutes;
 
         // 更新索引，使用取整后的分钟数
         this.updateStatsIndex(eventId, count, roundedWorkMinutes);
 
         // console.log('After recording work session:', JSON.stringify(this.records[today]));
 
-        await this.saveRecords([logicalDate]);
-        return session;
+        await this.saveRecords([storageDate]);
+        return this.findSessionLocation(session.id)?.session || session;
     }
 
     private async recordBreakSessionImpl(
@@ -462,9 +481,9 @@ export class PomodoroRecordManager {
         const roundedBreakMinutes = this.roundSessionMinutes(breakMinutes);
         const endTime = this.normalizeSessionDate(options.endTime) || new Date();
         const startTime = this.normalizeSessionDate(options.startTime) || new Date(endTime.getTime() - roundedBreakMinutes * 60000);
-        const logicalDate = getLogicalDateString(startTime);
-        await this.ensureDatesLoaded([logicalDate]);
-        this.ensureTodayRecord(logicalDate);
+        const storageDate = getPomodoroCalendarDate({ startTime: startTime.toISOString() }, this.getToday());
+        await this.ensureStorageDatesLoaded([storageDate]);
+        this.ensureTodayRecord(storageDate);
 
         // console.log('Before recording break session:', JSON.stringify(this.records[today]));
 
@@ -483,14 +502,14 @@ export class PomodoroRecordManager {
         };
 
         // 添加到会话记录
-        this.records[logicalDate].sessions.push(session);
+        this.records[storageDate].sessions.push(attachPomodoroStorageMetadata(session, storageDate));
 
         // 更新统计数据
-        this.records[logicalDate].totalBreakTime += roundedBreakMinutes;
+        this.records[storageDate].totalBreakTime += roundedBreakMinutes;
 
         // console.log('After recording break session:', JSON.stringify(this.records[today]));
 
-        await this.saveRecords([logicalDate]);
+        await this.saveRecords([storageDate]);
     }
 
     private async startWorkSessionImpl(
@@ -505,9 +524,9 @@ export class PomodoroRecordManager {
         }
 
         const startTime = this.normalizeSessionDate(startTimeInput) || new Date();
-        const logicalDate = getLogicalDateString(startTime);
-        await this.ensureDatesLoaded([logicalDate]);
-        this.ensureTodayRecord(logicalDate);
+        const storageDate = getPomodoroCalendarDate({ startTime: startTime.toISOString() }, this.getToday());
+        await this.ensureStorageDatesLoaded([storageDate]);
+        this.ensureTodayRecord(storageDate);
 
         const session: PomodoroSession = {
             id: this.generateSessionId(),
@@ -525,8 +544,8 @@ export class PomodoroRecordManager {
             note: ''
         };
 
-        this.records[logicalDate].sessions.push(session);
-        await this.saveRecords([logicalDate]);
+        this.records[storageDate].sessions.push(attachPomodoroStorageMetadata(session, storageDate));
+        await this.saveRecords([storageDate]);
         return session.id;
     }
 
@@ -575,7 +594,7 @@ export class PomodoroRecordManager {
         };
 
         await this.updateSessionImpl(updatedSession);
-        return updatedSession;
+        return this.findSessionLocation(updatedSession.id)?.session || updatedSession;
     }
 
     private async updateSessionImpl(session: PomodoroSession): Promise<boolean> {
@@ -629,8 +648,16 @@ export class PomodoroRecordManager {
         }
 
         await this.loadSessionDate(normalizedSession.id);
-        await this.ensureDatesLoaded([getLogicalDateString(startTime)]);
         const location = this.findSessionLocation(normalizedSession.id);
+        if (location && (session.revision || 0) !== (location.session.revision || 0)) {
+            throw new Error('番茄钟记录已变化，请刷新后重试');
+        }
+        const storageDate = location?.date || normalizedSession.storageDate
+            || getPomodoroCalendarDate(normalizedSession, this.getToday());
+        await this.ensureStorageDatesLoaded([storageDate]);
+        Object.assign(normalizedSession, attachPomodoroStorageMetadata({ ...normalizedSession,
+            timezoneOffsetMinutes: normalizedSession.timezoneOffsetMinutes ?? location?.session.timezoneOffsetMinutes,
+        }, storageDate));
         const datesToSave = new Set<string>();
         if (location) {
             this.records[location.date].sessions.splice(location.index, 1);
@@ -638,15 +665,14 @@ export class PomodoroRecordManager {
             datesToSave.add(location.date);
         }
 
-        const logicalDate = getLogicalDateString(startTime);
-        this.ensureTodayRecord(logicalDate);
-        this.records[logicalDate].sessions.push(normalizedSession);
-        this.records[logicalDate].sessions.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
-        this.recalculateRecordTotals(logicalDate);
-        datesToSave.add(logicalDate);
+        this.ensureTodayRecord(storageDate);
+        this.records[storageDate].sessions.push(normalizedSession);
+        this.records[storageDate].sessions.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+        this.recalculateRecordTotals(storageDate);
+        datesToSave.add(storageDate);
 
         this.buildStatsIndex();
-        await this.saveRecords([logicalDate, ...Array.from(datesToSave).filter(date => date !== logicalDate)]);
+        await this.saveRecords([storageDate, ...Array.from(datesToSave).filter(date => date !== storageDate)]);
         return true;
     }
 
@@ -668,7 +694,7 @@ export class PomodoroRecordManager {
 
     getTodayFocusTime(): number {
         const today = this.getToday();
-        return this.records[today]?.totalWorkTime || 0;
+        return this.getDaySummary(today)?.totalWorkTime || 0;
     }
 
     getWeekFocusTime(): number {
@@ -684,9 +710,9 @@ export class PomodoroRecordManager {
         for (let i = 0; i < 7; i++) {
             const date = new Date(monday);
             date.setDate(monday.getDate() + i);
-            const dateStr = getLogicalDateString(date);
+            const dateStr = getLocalDateString(date);
 
-            totalMinutes += this.records[dateStr]?.totalWorkTime || 0;
+            totalMinutes += this.getDaySummary(dateStr)?.totalWorkTime || 0;
         }
 
         return totalMinutes;
@@ -836,7 +862,7 @@ export class PomodoroRecordManager {
     async getTodayTotalPomodoroCount(): Promise<number> {
         // Using records instead of reminderData
         const today = getLogicalDateString();
-        const record = this.records[today];
+        const record = this.getDaySummary(today);
         return record ? record.workSessions : 0;
     }
 
@@ -881,6 +907,7 @@ export class PomodoroRecordManager {
      * 获取指定日期的会话记录
      */
     getDateSessions(date: string): PomodoroSession[] {
+        if (this.store) return this.store.getLogicalDateSessions(date);
         return this.records[date]?.sessions || [];
     }
 
@@ -1009,10 +1036,11 @@ export class PomodoroRecordManager {
         const start = new Date(startDate);
         const end = new Date(endDate);
 
-        for (const date in this.records) {
+        const dates = this.store ? this.store.logicalDates() : Object.keys(this.records);
+        for (const date of dates) {
             const recordDate = new Date(date);
             if (recordDate >= start && recordDate <= end) {
-                sessions.push(...this.records[date].sessions);
+                sessions.push(...this.getDateSessions(date));
             }
         }
 
@@ -1034,8 +1062,8 @@ export class PomodoroRecordManager {
         weekEnd.setHours(23, 59, 59, 999);
 
         return this.getDateRangeSessions(
-            getLogicalDateString(weekStart),
-            getLogicalDateString(weekEnd)
+            getLocalDateString(weekStart),
+            getLocalDateString(weekEnd)
         );
     }
 
@@ -1083,45 +1111,11 @@ export class PomodoroRecordManager {
         return false; // 未找到会话
     }
 
-    /**
-     * 根据当前的一天起始时间设置，重新生成按天分组的番茄钟记录
-     * 当用户修改一天起始时间后，需要调用此方法重新计算所有会话的逻辑日期
-     */
+    /** 保留旧接口名：一天起始时间变化后仅重建统计，不移动或改写源文件。 */
     private async regenerateRecordsByDateImpl(): Promise<void> {
-        await this.ensureAllRecordsLoaded();
-        const staged: Record<string, PomodoroRecord> = Object.create(null);
-        for (const [date, record] of Object.entries(this.records)) {
-            // 没有明细的旧总量无法重新归属，保留在原日期。
-            if (!record.sessions.length) {
-                const day = staged[date] ||= { date, workSessions: 0, totalWorkTime: 0, totalBreakTime: 0, sessions: [] };
-                day.workSessions += record.workSessions;
-                day.totalWorkTime += record.totalWorkTime;
-                day.totalBreakTime += record.totalBreakTime;
-                continue;
-            }
-            for (const session of record.sessions) {
-                const start = this.normalizeSessionDate(session.startTime);
-                if (!start) throw new Error(`番茄钟开始时间无效: ${session.id}`);
-                const target = getLogicalDateString(start);
-                const day = staged[target] ||= { date: target, workSessions: 0, totalWorkTime: 0, totalBreakTime: 0, sessions: [] };
-                day.sessions.push(session);
-                if (session.type === 'work') {
-                    day.workSessions += this.calculateSessionCount(session);
-                    day.totalWorkTime += session.duration;
-                } else day.totalBreakTime += session.duration;
-            }
-        }
-        if (this.store) {
-            await this.store.replaceAll(staged);
-        } else {
-            const original = this.records;
-            try {
-                this.records = staged;
-                await this.saveRecords();
-                for (const date of Object.keys(original)) if (!staged[date]) await this.plugin.removeData(`pomodoroRecords/${date}.json`);
-            } catch (error) { this.records = original; throw error; }
-            this.buildStatsIndex();
-        }
+        // 显式重建逻辑日索引；原始文件不参与重分组。
+        if (this.store) await this.store.rebuildStatistics();
+        else this.buildStatsIndex();
     }
 
     /** 批量解析时共用本轮快照，避免逐个任务重建索引和扫描当天会话。 */
@@ -1467,19 +1461,8 @@ export class PomodoroRecordManager {
      * MCP kernel compat: get focuses by time range
      */
     public async getFocusesByTime(startDate: string, endDate: string, eventId?: string): Promise<PomodoroSession[]> {
-        await this.ensureRangeLoaded(startDate, endDate);
-        const results: PomodoroSession[] = [];
-        Object.values(this.records).forEach((record) => {
-            if (record.date < startDate || record.date > endDate) return;
-            if (record.sessions) {
-                record.sessions.forEach((session) => {
-                    if (eventId && session.eventId !== eventId) return;
-                    results.push(session);
-                });
-            }
-        });
-        this.releaseDetails();
-        return results.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+        const sessions = await this.getDateRangeSessions(startDate, endDate);
+        return eventId ? sessions.filter(session => session.eventId === eventId) : sessions;
     }
 
     /**
@@ -1525,8 +1508,8 @@ export class PomodoroRecordManager {
             note: input.note || '',
         };
         await this.initialize();
-        const date = getLogicalDateString(startTimeObj);
-        await this.ensureDatesLoaded([date]);
+        const date = getPomodoroCalendarDate(session, this.getToday());
+        await this.ensureStorageDatesLoaded([date]);
         if (!this.records[date]) {
             this.records[date] = {
                 date,
@@ -1536,10 +1519,10 @@ export class PomodoroRecordManager {
                 sessions: []
             };
         }
-        this.records[date].sessions.push(session);
+        this.records[date].sessions.push(attachPomodoroStorageMetadata(session, date));
         this.recalculateRecordTotals(date);
         await this.saveRecords([date]);
-        return session;
+        return this.findSessionLocation(session.id)?.session || session;
     }
 
     /**

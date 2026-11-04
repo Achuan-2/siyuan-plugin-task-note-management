@@ -30,6 +30,10 @@ class KernelPluginBridge {
             remove: date => storage.removeData(`pomodoroRecords/${date}.json`, true),
             listDates: async () => (await storage.readDir('pomodoroRecords', true))
                 .filter(entry => !entry.isDir && /^\d{4}-\d{2}-\d{2}\.json$/.test(entry.name)).map(entry => entry.name.slice(0, -5)),
+            locateSession: async id => {
+                const manager = PomodoroManager.getInstance(this);
+                return manager.locateSessionForWrite(id);
+            },
         });
     }
 
@@ -165,7 +169,10 @@ class KernelPlugin {
     constructor() {
         this.siyuan = siyuan;
         this.logger = this.siyuan.logger;
-        this.reminderService = new KernelReminderService(this.storage, this.siyuan.client, this.logger, this.siyuan);
+        this.reminderService = new KernelReminderService(this.storage, this.siyuan.client, this.logger, this.siyuan, async date => {
+            await this.pomodoroManager.reloadRecords();
+            return { workByEvent: this.pomodoroManager.getDaySummary(date)?.events || {} };
+        });
 
         this.siyuan.plugin.lifecycle.onload = this.onload.bind(this);
         this.siyuan.plugin.lifecycle.onunload = this.onunload.bind(this);

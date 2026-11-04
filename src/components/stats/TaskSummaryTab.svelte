@@ -894,7 +894,7 @@
         const current = new Date(start);
 
         while (current <= end) {
-            const dateStr = getLogicalDateString(current);
+            const dateStr = getLocalDateString(current);
             if (pomodoroRecordManager) {
                 const record = pomodoroRecordManager.getDaySummary(dateStr);
                 if (record) {
