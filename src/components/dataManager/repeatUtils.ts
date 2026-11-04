@@ -501,6 +501,12 @@ export function generateRepeatInstances(
     const hasEndCount = repeatConfig.endType === 'count' && repeatConfig.endCount;
     const repeatEndDate = hasEndDate ? new Date(repeatConfig.endDate + 'T23:59:59') : null;
 
+    // 匹配规则仍以 reminder.date 为基准，无需从任务创建日逐日走到查询区间。
+    // 顺延最多检查原周期起的 366 天，所以只需额外回溯 365 天。
+    const firstCandidate = new Date(startDate + 'T00:00:00');
+    if (repeatConfig.skippedDateAction === 'postpone') firstCandidate.setDate(firstCandidate.getDate() - 365);
+    if (currentDate < firstCandidate) currentDate = firstCandidate;
+
     const generatedInstanceKeys = new Set<string>();
     const resolveOccurrenceDate = (originalDate: string, state?: RepeatInstanceState): string | null => {
         if (state?.deleted || state?.date === null) return null;

@@ -90,6 +90,7 @@ export class KernelReminderService {
     public async start(): Promise<void> {
         if (this.started) return;
         this.started = true;
+        const startedAt = Date.now();
         try {
             const response = await this.client.fetch('/api/system/getConf', { method: 'POST', body: '{}' });
             const conf = await response.json();
@@ -111,7 +112,7 @@ export class KernelReminderService {
             }
         }
         await this.cron.start();
-        await this.logger.info('[kernel] Reminder scheduler started');
+        await this.logger.info(`[kernel] Reminder scheduler started (${Date.now() - startedAt}ms)`);
     }
 
     public async stop(): Promise<void> {
