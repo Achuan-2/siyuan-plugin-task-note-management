@@ -1,3 +1,23 @@
+## v7.1.9 / 20261104
+
+- ✨ 项目看板：支持拖动分组页签调整顺序，页签保持单行并支持横向滚动。
+- 🎨 项目看板：分组内状态支持看板、页签和列表布局，根据外层布局调整可选项，并缩小工具栏与页签之间的留白。
+- ⚡ 任务视图：减少侧栏和看板的重复查询、任务层级计算及番茄统计扫描；日历增量更新事件并合并刷新请求，完善视图关闭后的资源清理。
+- ⚡ 番茄钟：按日期增量更新统计，按需加载记录明细，减少历史数据读取和缓存开销。
+- 🐛 番茄钟：改进并发写入、失败恢复与旧记录冲突检测，防止陈旧编辑覆盖记录或恢复已删除的会话。
+- 🐛 番茄钟：分离记录存储日期与逻辑日统计，调整日界限时保留历史文件位置，修复周统计重复应用日界限的问题。
+- 🐛 声音设置：增加上传结果与文件回读校验，修复同名覆盖后使用旧缓存、重新上传的已删除声音仍被隐藏及试听失败无提示的问题；读取失败后不再直接访问私有存储路径。
+
+---
+
+- ✨ Project boards: reorder group tabs by dragging; keep tabs on one line with horizontal scrolling.
+- 🎨 Project boards: choose board, tab or list layouts for statuses within groups, adapt available options to the outer layout, and reduce spacing between the toolbar and tabs.
+- ⚡ Task views: reduce repeated sidebar and board queries, hierarchy calculations and Pomodoro scans; update calendar events incrementally, merge refresh requests, and release resources when views close.
+- ⚡ Pomodoro: update statistics incrementally by date and load session details on demand to reduce historical reads and cache overhead.
+- 🐛 Pomodoro: improve concurrent writes, failure recovery and stale-edit conflict detection to prevent overwriting records or restoring deleted sessions.
+- 🐛 Pomodoro: separate storage dates from logical-day statistics, preserve historical file locations when changing the day boundary, and fix the day boundary being applied twice in weekly statistics.
+- 🐛 Sound settings: validate upload results and stored files; fix stale audio after overwriting a file, reuploaded sounds remaining hidden, and missing preview error messages. Failed reads no longer fall back to direct private-storage URLs.
+
 ## v7.1.8 / 20261031
 
 - ✨ 任务侧栏：新建任务自动填入当前筛选项对应的日期和日期范围，无日期筛选保持留空；粘贴新建同步跟随筛选日期。
