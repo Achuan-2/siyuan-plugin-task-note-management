@@ -256,6 +256,7 @@ test('内核生命周期注册测试 RPC 并启动调度；管理工具失败不
     class FailingManager {
         static getInstance() { return new FailingManager(); }
         async initialize() { throw new Error('manager initialization failure'); }
+        async closeStorage() {}
     }
     const source = fs.readFileSync(path.join(__dirname, '../src/kernel.ts'), 'utf8');
     const compiled = ts.transpileModule(source, {
@@ -265,6 +266,7 @@ test('内核生命周期注册测试 RPC 并启动调度；管理工具失败不
         if (name === './kernel/storageAdapter') return { createKernelStorage: () => f.storage };
         if (name === './kernel/reminderService') return { KernelReminderService };
         if (name === './kernel/constants') return load('src/kernel/constants.ts');
+        if (name === './utils/pomodoroWriteCoordinator') return load('src/utils/pomodoroWriteCoordinator.ts');
         if (name === './kernel/tools/index') return { createMcpRegistry: () => [] };
         return new Proxy({}, { get: () => FailingManager });
     }, {}, siyuan);

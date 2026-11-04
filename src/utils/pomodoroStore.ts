@@ -1,4 +1,5 @@
 import type { PomodoroRecord, PomodoroSession } from '../components/dataManager/pomodoroRecord';
+import type { PomodoroCommit, PomodoroCommitResult } from './pomodoroWriteCoordinator';
 
 export interface PomodoroEventTotals { count: number; duration: number; }
 interface PomodoroWorkTotals extends PomodoroEventTotals { displayCount: number; displayDuration: number; }
@@ -20,15 +21,14 @@ export interface PomodoroFileEntry { name: string; isDir: boolean; updated: numb
 export interface PomodoroStoreAdapter {
     list(): Promise<PomodoroFileEntry[]>;
     read(date: string): Promise<PomodoroRecord | null>;
-    write(date: string, record: PomodoroRecord): Promise<void>;
-    remove(date: string): Promise<void>;
+    commit(input: PomodoroCommit): Promise<PomodoroCommitResult>;
     readLegacy?(): Promise<Record<string, PomodoroRecord> | null>;
     readCache(): Promise<any>;
-    writeCache(cache: any): Promise<void>;
+    writeCache(cache: any, months?: string[]): Promise<void>;
 }
 
 interface CachedDay { updated: number; verifiedAt: number; summary: PomodoroDaySummary; }
-const CACHE_VERSION = 3;
+const CACHE_VERSION = 4;
 const DATE_FILE = /^(\d{4}-\d{2}-\d{2})\.json$/;
 const CONCURRENCY = 6;
 
@@ -121,6 +121,13 @@ export class PomodoroStore {
     private initialized = false;
     private legacyMode = false;
     private tail: Promise<unknown> = Promise.resolve();
+    private detailLeases = 0;
+    private readonly maxLoadedDays = 62;
+    private readonly dirtyMonths = new Set<string>();
+    private cacheTimer?: ReturnType<typeof setTimeout>;
+    private cacheTail: Promise<void> = Promise.resolve();
+    private disposed = false;
+    needsReload = false;
 
     constructor(private readonly adapter: PomodoroStoreAdapter, private readonly count: (s: PomodoroSession) => number) {}
 
@@ -145,6 +152,7 @@ export class PomodoroStore {
                 }
             }
             await this.reconcileFiles(false);
+            await this.flushCache();
             this.initialized = true;
         }).finally(() => { this.initializing = undefined; });
         return this.initializing;
@@ -189,9 +197,49 @@ export class PomodoroStore {
         this.replace(date, summary, updated);
     }
 
-    private async persist() {
-        try { await this.adapter.writeCache({ version: CACHE_VERSION, days: this.days }); }
-        catch (error) { console.warn('Failed to persist rebuildable pomodoro statistics cache:', error); }
+    private persist(dates: string[]) {
+        dates.forEach(date => this.dirtyMonths.add(date.slice(0, 7)));
+        if (!this.dirtyMonths.size || this.disposed || this.cacheTimer) return;
+        this.cacheTimer = setTimeout(() => { this.cacheTimer = undefined; void this.flushCache(); }, 500);
+    }
+
+    /** 源记录成功后立即返回；可重建缓存另排队，仅序列化发生变化的月份。 */
+    async flushCache(): Promise<void> {
+        clearTimeout(this.cacheTimer);
+        this.cacheTimer = undefined;
+        const months = [...this.dirtyMonths];
+        if (!months.length) return this.cacheTail;
+        this.dirtyMonths.clear();
+        const selected = new Set(months);
+        const days = Object.fromEntries(Object.entries(this.days).filter(([date]) => selected.has(date.slice(0, 7))));
+        const manifest = [...new Set(Object.keys(this.days).map(date => date.slice(0, 7)))].sort();
+        this.cacheTail = this.cacheTail.then(() => this.adapter.writeCache({ version: CACHE_VERSION, days, months: manifest }, months))
+            .catch(error => {
+                months.forEach(month => this.dirtyMonths.add(month));
+                console.warn('Failed to persist rebuildable pomodoro statistics cache:', error);
+            });
+        return this.cacheTail;
+    }
+
+    async close(): Promise<void> { this.disposed = true; await this.flushCache(); }
+
+    retainDetails(): () => void {
+        this.detailLeases++;
+        let released = false;
+        return () => { if (!released) { released = true; this.detailLeases--; this.trimDetails(); } };
+    }
+
+    trimDetails(protectedDates: Set<string> = new Set()): void {
+        if (this.detailLeases || this.legacyMode) return;
+        for (const date of this.loaded) {
+            if (this.loaded.size <= this.maxLoadedDays) break;
+            if (protectedDates.has(date)) continue;
+            this.loaded.delete(date);
+            this.committed.delete(date);
+            const day = this.summaries[date];
+            if (day) this.records[date] = { date, workSessions: day.workSessions, totalWorkTime: day.totalWorkTime,
+                totalBreakTime: day.totalBreakTime, sessions: [] };
+        }
     }
 
     private async reconcileFiles(verifyAll: boolean) {
@@ -231,12 +279,18 @@ export class PomodoroStore {
         });
         const deleted = Object.keys(this.days).filter(date => !dates.has(date));
         for (const date of deleted) this.replace(date);
-        if (changed.length || deleted.length) await this.persist();
+        this.persist([...changed.map(entry => entry.name.slice(0, -5)), ...deleted]);
+        this.trimDetails();
     }
 
     async refresh(dates?: string[], verifyAll = false): Promise<void> {
         await this.initialize();
         await this.serial(async () => {
+            if (this.needsReload) {
+                await this.reconcileFiles(true);
+                this.needsReload = false;
+                return;
+            }
             if (!dates) return this.reconcileFiles(verifyAll);
             const entries = await this.adapter.list();
             const byDate = new Map(entries.filter(e => !e.isDir && DATE_FILE.test(e.name)).map(e => [e.name.slice(0, -5), e]));
@@ -246,65 +300,80 @@ export class PomodoroStore {
                 if (entry) await this.readDate(date, entry.updated);
                 else this.replace(date);
             });
-            await this.persist();
+            this.persist(dates);
+            this.trimDetails();
         });
     }
 
     async ensureDates(dates: string[]): Promise<void> {
         await this.initialize();
-        await this.serial(() => mapPomodoroFiles([...new Set(dates)].filter(date => this.days[date] && !this.loaded.has(date)),
-            date => this.readDate(date, this.days[date].updated)));
+        await this.serial(async () => {
+            await mapPomodoroFiles([...new Set(dates)].filter(date => this.days[date] && !this.loaded.has(date)),
+                date => this.readDate(date, this.days[date].updated));
+            for (const date of dates) if (this.loaded.has(date)) { this.loaded.delete(date); this.loaded.add(date); }
+            this.trimDetails(new Set(dates));
+        });
     }
 
     dateForSession(id: string): string | undefined { return this.sessionDates.get(id); }
 
+    private publish(result: PomodoroCommitResult): void {
+        for (const [date, record] of Object.entries(result)) {
+            if (!record) { this.replace(date); continue; }
+            this.records[date] = record;
+            this.loaded.add(date);
+            this.committed.set(date, JSON.parse(JSON.stringify(record)));
+            this.replace(date, summarizePomodoroDay(date, record, this.count), 0);
+        }
+        this.legacyMode = false;
+        this.persist(Object.keys(result));
+        this.trimDetails();
+    }
+
     async saveMany(records: [string, PomodoroRecord][]): Promise<void> {
         await this.serial(async () => {
-            // 旧版单文件首次落盘时迁移完整历史，不能只生成一个日期文件后遮蔽其他旧日期。
             if (this.legacyMode) {
                 const requested = new Set(records.map(([date]) => date));
                 records = [...records, ...Object.entries(this.records).filter(([date]) => !requested.has(date))];
             }
-            const snapshots = records.map(([date, record]): [string, PomodoroRecord] => {
+            const changes = records.map(([date, record]) => {
                 if (this.days[date] && !this.loaded.has(date)) throw new Error(`番茄钟明细尚未加载，禁止覆盖: ${date}`);
-                return [date, JSON.parse(JSON.stringify(record))];
+                // 旧单文件迁移到新日期文件时，该文件尚不存在。
+                const base = this.legacyMode ? null : this.committed.get(date) || null;
+                return { date, base, next: JSON.parse(JSON.stringify(record)) };
             });
-            const written: string[] = [];
             try {
-                for (const [date, snapshot] of snapshots) {
-                    await this.adapter.write(date, snapshot);
-                    written.push(date);
-                }
+                if (this.needsReload) throw new Error('上次番茄钟保存状态未恢复，请刷新记录后重试');
+                this.publish(await this.adapter.commit({ changes }));
             } catch (error) {
-                // 跨天移动先保存目标日。后续写入失败时尽力恢复已经写入的日期，避免丢失原记录。
-                const rollbackErrors: unknown[] = [];
-                for (const date of written.reverse()) {
-                    try {
-                        const original = this.committed.get(date);
-                        if (original) await this.adapter.write(date, original);
-                        else await this.adapter.remove(date);
-                    } catch (rollbackError) { rollbackErrors.push(rollbackError); }
-                }
+                if (String((error as Error)?.message || error).includes('保存及恢复失败')) this.needsReload = true;
+                // 恢复完整的本地编辑快照；失败的重新分组不曾修改 records。
                 for (const [date] of records) {
                     const original = this.committed.get(date);
                     if (original) this.records[date] = JSON.parse(JSON.stringify(original));
                     else delete this.records[date];
                 }
-                if (rollbackErrors.length) throw Object.assign(new Error('番茄钟保存及恢复失败，请重新加载记录后重试'), { errors: [error, ...rollbackErrors] });
                 throw error;
             }
-            for (const [date, snapshot] of snapshots) {
-                this.records[date] = snapshot; this.loaded.add(date);
-                this.committed.set(date, JSON.parse(JSON.stringify(snapshot)));
-                // 未知时间戳会在下次校验时重新读取，避免同秒修改漏检。
-                this.replace(date, summarizePomodoroDay(date, snapshot, this.count), 0);
-            }
-            this.legacyMode = false;
-            await this.persist();
         });
     }
 
-    async remove(date: string): Promise<void> {
-        await this.serial(async () => { await this.adapter.remove(date); this.replace(date); await this.persist(); });
+    /** 新分组独立暂存，协调器同时校验所有源日期，成功后才发布新状态。 */
+    async replaceAll(records: Record<string, PomodoroRecord>): Promise<void> {
+        await this.serial(async () => {
+            if (this.needsReload) throw new Error('上次番茄钟保存状态未恢复，请刷新记录后重试');
+            const dates = new Set([...Object.keys(this.days), ...Object.keys(records)]);
+            const changes = [...dates].map(date => ({ date,
+                base: this.legacyMode ? null : this.committed.get(date) || null,
+                next: records[date] || null,
+            }));
+            const expectedDates = this.legacyMode ? [] : Object.keys(this.days);
+            try {
+                this.publish(await this.adapter.commit({ changes, mode: 'replace', expectedDates }));
+            } catch (error) {
+                if (String((error as Error)?.message || error).includes('保存及恢复失败')) this.needsReload = true;
+                throw error;
+            }
+        });
     }
 }

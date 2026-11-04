@@ -1,6 +1,7 @@
 import { getLogicalDateString } from "../../utils/dateUtils";
 import { ReminderPomodoroStatsSnapshot, type EventPomodoroTotals } from '../../utils/reminderPomodoroStats';
 import { PomodoroStore, summarizePomodoroDay, type PomodoroDaySummary, type PomodoroEventTotals } from '../../utils/pomodoroStore';
+import { calculatePomodoroSessionCount } from '../../utils/pomodoroWriteCoordinator';
 
 // 单个番茄钟会话记录
 export interface PomodoroSession {
@@ -89,7 +90,11 @@ export class PomodoroRecordManager {
 
     /** 所有业务写入和外部刷新共用队列，刷新不会穿过尚未落盘的编辑。 */
     private serialize<T>(operation: () => Promise<T>): Promise<T> {
-        const pending = this.operationTail.then(operation);
+        const pending = this.operationTail.then(async () => {
+            await this.initialize();
+            const release = this.retainDetails();
+            try { return await operation(); } finally { release(); }
+        });
         this.operationTail = pending.catch(() => {});
         return pending;
     }
@@ -109,6 +114,11 @@ export class PomodoroRecordManager {
         await this.ensureDatesLoaded(Object.keys(this.records));
     }
 
+    retainDetails(): () => void { return this.store?.retainDetails() || (() => {}); }
+    releaseDetails(): void { this.store?.trimDetails(); }
+    async flushCache(): Promise<void> { await this.store?.flushCache(); }
+    async closeStorage(): Promise<void> { await this.store?.close(); }
+
     getDailySummaries(): Record<string, PomodoroDaySummary> {
         if (this.store) return this.store.summaries;
         return Object.fromEntries(Object.entries(this.records).map(([date, record]) =>
@@ -127,7 +137,9 @@ export class PomodoroRecordManager {
         await this.initialize();
         const dates = Object.entries(this.getDailySummaries()).filter(([, day]) => day.eventIds.some(matches)).map(([date]) => date);
         await this.ensureDatesLoaded(dates);
-        return dates.flatMap(date => this.getDateSessions(date).filter(session => matches(session.eventId)));
+        const sessions = dates.flatMap(date => this.getDateSessions(date).filter(session => matches(session.eventId)));
+        this.releaseDetails();
+        return sessions;
     }
 
     private async loadSessionDate(id: string): Promise<void> {
@@ -846,7 +858,7 @@ export class PomodoroRecordManager {
     private async refreshDataImpl(force: boolean = false) {
         await this.initialize();
         if (this.store) {
-            if (force) await this.store.refresh(undefined, true);
+            if (force || this.store.needsReload) await this.store.refresh(undefined, true);
             return;
         }
         if (this.isSaving || this.isLoading) {
@@ -985,22 +997,7 @@ export class PomodoroRecordManager {
      * @param session 番茄钟会话
      */
     public calculateSessionCount(session: PomodoroSession): number {
-        // 进行中记录只是为了保存开始时间，等待结束或手动补录前不计入统计
-        if (session.inProgress) {
-            return 0;
-        }
-
-        // 对于正计时番茄，直接使用记录的count，不进行额外计算
-        if (session.isCountUp && typeof session.count === 'number') {
-            return session.count;
-        }
-
-        // 按照用户需求：有count值的按count值统计，没有count值的都算一个番茄
-        // 即使记录的 count 为 0（旧数据或短时间中断），也按 1 个番茄计算（积极反馈原则）
-        if (typeof session.count === 'number') {
-            return Math.max(1, session.count);
-        }
-        return 1;
+        return calculatePomodoroSessionCount(session);
     }
 
     /**
@@ -1019,6 +1016,7 @@ export class PomodoroRecordManager {
             }
         }
 
+        this.releaseDetails();
         return sessions.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
     }
 
@@ -1090,80 +1088,40 @@ export class PomodoroRecordManager {
      * 当用户修改一天起始时间后，需要调用此方法重新计算所有会话的逻辑日期
      */
     private async regenerateRecordsByDateImpl(): Promise<void> {
-        // 确保已初始化
-        if (!this.isInitialized) {
-            await this.initialize();
-        }
-
         await this.ensureAllRecordsLoaded();
-        // 收集所有会话
-        const allSessions: PomodoroSession[] = [];
-        for (const date in this.records) {
-            const record = this.records[date];
-            if (record && record.sessions) {
-                allSessions.push(...record.sessions);
+        const staged: Record<string, PomodoroRecord> = Object.create(null);
+        for (const [date, record] of Object.entries(this.records)) {
+            // 没有明细的旧总量无法重新归属，保留在原日期。
+            if (!record.sessions.length) {
+                const day = staged[date] ||= { date, workSessions: 0, totalWorkTime: 0, totalBreakTime: 0, sessions: [] };
+                day.workSessions += record.workSessions;
+                day.totalWorkTime += record.totalWorkTime;
+                day.totalBreakTime += record.totalBreakTime;
+                continue;
             }
-        }
-
-        if (allSessions.length === 0) {
-            return;
-        }
-
-
-        // 保存旧有键，以防后续无法删除
-        const oldDates = Object.keys(this.records);
-
-        // 清空现有记录
-        for (const date of oldDates) delete this.records[date];
-
-        // 根据会话的开始时间重新分组
-        for (const session of allSessions) {
-            try {
-                // 使用会话的开始时间计算逻辑日期
-                const sessionStartTime = new Date(session.startTime);
-                const logicalDate = getLogicalDateString(sessionStartTime);
-
-                // 确保该日期的记录存在
-                if (!this.records[logicalDate]) {
-                    this.records[logicalDate] = {
-                        date: logicalDate,
-                        workSessions: 0,
-                        totalWorkTime: 0,
-                        totalBreakTime: 0,
-                        sessions: []
-                    };
-                }
-
-                // 添加会话到对应日期
-                this.records[logicalDate].sessions.push(session);
-
-                // 更新统计数据
+            for (const session of record.sessions) {
+                const start = this.normalizeSessionDate(session.startTime);
+                if (!start) throw new Error(`番茄钟开始时间无效: ${session.id}`);
+                const target = getLogicalDateString(start);
+                const day = staged[target] ||= { date: target, workSessions: 0, totalWorkTime: 0, totalBreakTime: 0, sessions: [] };
+                day.sessions.push(session);
                 if (session.type === 'work') {
-                    this.records[logicalDate].workSessions += this.calculateSessionCount(session);
-                    this.records[logicalDate].totalWorkTime += session.duration;
-                } else {
-                    this.records[logicalDate].totalBreakTime += session.duration;
-                }
-            } catch (error) {
-                console.error("Error processing session:", session, error);
+                    day.workSessions += this.calculateSessionCount(session);
+                    day.totalWorkTime += session.duration;
+                } else day.totalBreakTime += session.duration;
             }
         }
-
-        this.buildStatsIndex();
-        await this.saveRecords();
-
-        // 删除已经无用的日期记录
-        for (const date of oldDates) {
-            if (!this.records[date]) {
-                if (this.store) await this.store.remove(date);
-                else await this.plugin.removeData(`pomodoroRecords/${date}.json`);
-                if (this.plugin.pomodoroRecordsCache) {
-                    delete this.plugin.pomodoroRecordsCache[date];
-                }
-            }
+        if (this.store) {
+            await this.store.replaceAll(staged);
+        } else {
+            const original = this.records;
+            try {
+                this.records = staged;
+                await this.saveRecords();
+                for (const date of Object.keys(original)) if (!staged[date]) await this.plugin.removeData(`pomodoroRecords/${date}.json`);
+            } catch (error) { this.records = original; throw error; }
+            this.buildStatsIndex();
         }
-
-        this.buildStatsIndex();
     }
 
     /** 批量解析时共用本轮快照，避免逐个任务重建索引和扫描当天会话。 */
@@ -1520,6 +1478,7 @@ export class PomodoroRecordManager {
                 });
             }
         });
+        this.releaseDetails();
         return results.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
     }
 

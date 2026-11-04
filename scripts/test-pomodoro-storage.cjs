@@ -31,6 +31,7 @@ function load(relative) {
 const { PomodoroRecordManager } = load('src/components/dataManager/pomodoroRecord.ts');
 const { summarizePomodoroDay } = load('src/utils/pomodoroStore.ts');
 const { createPomodoroCache } = load('src/utils/pomodoroCache.ts');
+const { PomodoroWriteCoordinator } = load('src/utils/pomodoroWriteCoordinator.ts');
 const { buildLinkedHabitPomodoroData } = load('src/utils/linkedHabitPomodoro.ts');
 const clone = value => value == null ? value : JSON.parse(JSON.stringify(value));
 const session = (date, id, eventId = 'task', extra = {}) => ({
@@ -45,7 +46,7 @@ const record = (date, sessions) => ({
 function fixture(input = {}) {
     const files = new Map(Object.entries(clone(input)));
     const mtimes = new Map([...files.keys()].map(date => [date, 1700000000]));
-    const stats = { reads: [], writes: [], removes: [], lists: 0, cacheReads: 0, cacheWrites: 0, active: 0, peak: 0 };
+    const stats = { reads: [], commitReads: [], writes: [], removes: [], lists: 0, cacheReads: 0, cacheWrites: 0, cacheMonths: [], active: 0, peak: 0 };
     let cache = null;
     let readError, writeError, listError, cacheReadError, cacheWriteError;
     let legacy = null;
@@ -66,17 +67,30 @@ function fixture(input = {}) {
         async remove(date) { stats.removes.push(date); files.delete(date); mtimes.delete(date); },
         async readLegacy() { return clone(legacy); },
         async readCache() { stats.cacheReads++; if (cacheReadError) throw cacheReadError; return clone(cache); },
-        async writeCache(data) { stats.cacheWrites++; if (cacheWriteError) throw cacheWriteError; cache = clone(data); },
+        async writeCache(data, months = Object.keys(data.days).map(date => date.slice(0, 7))) {
+            stats.cacheWrites++; stats.cacheMonths.push([...months]);
+            if (cacheWriteError) throw cacheWriteError;
+            if (!cache || cache.version !== data.version) cache = { version: data.version, days: {} };
+            for (const date of Object.keys(cache.days)) if (months.includes(date.slice(0, 7))) delete cache.days[date];
+            Object.assign(cache.days, clone(data.days));
+            cache.months = data.months;
+        },
     };
+    const writer = new PomodoroWriteCoordinator({
+        read: async date => { stats.commitReads.push(date); if (readError) throw readError; return clone(files.get(date)) || null; },
+        write: (date, value) => adapter.write(date, value), remove: date => adapter.remove(date),
+        listDates: async () => [...files.keys()],
+    });
+    adapter.commit = input => writer.commit(input);
     const plugin = { createPomodoroStoreAdapter: () => adapter, loadReminderData: async () => ({ task: { id: 'task' } }) };
     return {
-        files, mtimes, stats, manager: () => new PomodoroRecordManager(plugin),
+        files, mtimes, stats, adapter, writer, manager: () => new PomodoroRecordManager(plugin),
         setCache: value => { cache = clone(value); }, getCache: () => clone(cache),
         setLegacy: value => { legacy = value; },
         failRead: value => { readError = value; }, failWrite: value => { writeError = value; },
         failList: value => { listError = value; }, failCacheRead: value => { cacheReadError = value; },
         failCacheWrite: value => { cacheWriteError = value; },
-        reset() { stats.reads = []; stats.writes = []; stats.removes = []; stats.lists = 0; stats.cacheReads = 0; stats.cacheWrites = 0; stats.peak = 0; },
+        reset() { stats.reads = []; stats.commitReads = []; stats.writes = []; stats.removes = []; stats.lists = 0; stats.cacheReads = 0; stats.cacheWrites = 0; stats.cacheMonths = []; stats.peak = 0; },
     };
 }
 const twoDays = () => ({
@@ -137,6 +151,7 @@ test('目录差异检查只读变更和新增文件，并清除删除日期的�
     assert.equal(m.getEventTotalPomodoroCount('task'), 1);
     assert.equal(m.getEventTotalPomodoroCount('other'), 1);
     assert.equal(m.getDaySummary('2026-11-03'), undefined);
+    await m.flushCache();
     f.reset();
     await f.manager().initialize();
     assert.equal(f.stats.reads.length, 0);
@@ -308,20 +323,37 @@ test('旧版单文件回退保留历史，第一次写入日期文件不丢失�
     assert.equal(restarted.getEventTotalPomodoroCount('task'), 3);
 });
 
-test('本地缓存适配器使用 /temp，前端内核隔离且不触发数据通知', async () => {
-    const requests = [];
-    const fakeFetch = async (url, init) => {
-        requests.push([url, init]);
-        return { ok: true, status: 200, json: async () => url.endsWith('putFile') ? { code: 0 } : { version: 2 } };
+function cacheTransport() {
+    const files = new Map(), writes = [], reads = [];
+    const fetch = async (url, init) => {
+        if (url.endsWith('getFile')) {
+            const key = JSON.parse(init.body).path; reads.push(key);
+            return { ok: files.has(key), status: files.has(key) ? 200 : 404, json: async () => clone(files.get(key)) };
+        }
+        const key = init.body.match(/name="path"\r\n\r\n([^\r]+)/)[1];
+        const boundary = init.headers['Content-Type'].split('boundary=')[1];
+        const data = init.body.split('Content-Type: application/json\r\n\r\n')[1].split('\r\n--' + boundary)[0];
+        files.set(key, JSON.parse(data)); writes.push(key);
+        return { ok: true, status: 200, json: async () => ({ code: 0 }) };
     };
-    const frontend = createPomodoroCache('plugin-name', 'frontend', fakeFetch);
-    await frontend.readCache(); await frontend.writeCache({ version: 2 });
-    await createPomodoroCache('plugin-name', 'kernel', fakeFetch).readCache();
-    assert.equal(JSON.parse(requests[0][1].body).path, '/temp/petal/plugin-name/pomodoro-stats/frontend.json');
-    assert.equal(JSON.parse(requests[2][1].body).path, '/temp/petal/plugin-name/pomodoro-stats/kernel.json');
-    assert.ok(requests[1][1].body.includes('name="file"; filename="summary.json"'));
-    assert.ok(requests[1][1].body.endsWith('--\r\n'));
-    assert.deepEqual(await frontend.readCache(), { version: 2 });
+    return { fetch, files, writes, reads };
+}
+
+test('本地缓存按月分片，更新一个月只写该月，前端和内核隔离', async () => {
+    const transport = cacheTransport();
+    const frontend = createPomodoroCache('plugin-name', 'frontend', transport.fetch);
+    const kernel = createPomodoroCache('plugin-name', 'kernel', transport.fetch);
+    const days = { '2026-10-03': { value: 1 }, '2026-11-04': { value: 2 } };
+    await frontend.writeCache({ version: 4, days });
+    assert.equal(transport.writes.length, 3); // 两个月和清单。
+    assert.deepEqual(clone((await frontend.readCache()).days), days);
+    transport.writes.length = 0;
+    await frontend.writeCache({ version: 4, days: { '2026-11-04': { value: 3 } }, months: ['2026-10', '2026-11'] }, ['2026-11']);
+    assert.deepEqual(transport.writes, ['/temp/petal/plugin-name/pomodoro-stats/frontend/2026-11.json']);
+    assert.equal((await frontend.readCache()).days['2026-10-03'].value, 1);
+    assert.equal((await frontend.readCache()).days['2026-11-04'].value, 3);
+    assert.equal(await kernel.readCache(), null);
+    assert.ok(transport.reads.some(key => key.endsWith('kernel/manifest.json')));
 });
 
 test('恶意对象键不会污染按事件和标题汇总', () => {
@@ -417,4 +449,238 @@ test('坏会话导致统计失败时不替换已经加载的有效日期', async
     await assert.rejects(m.reloadRecords(['2026-11-04']));
     assert.equal(m.getDateSessions('2026-11-04')[0].id, 'today');
     assert.equal(m.getEventTotalPomodoroCount('task'), 2);
+});
+
+test('重新分组保存失败后继续记录，原历史会话仍保留', async () => {
+    const date = '2026-11-04';
+    const f = fixture({ [date]: record(date, [session(date, 'historical', 'task', { startTime: `${date}T01:00:00` })]) });
+    const m = f.manager(); await m.initialize();
+    dayStartHours = 3; f.failWrite(new Error('disk full'));
+    try { await assert.rejects(m.regenerateRecordsByDate(), /disk full/); }
+    finally { dayStartHours = 0; f.failWrite(null); }
+    assert.equal((await m.getFocusById('historical')).date, date);
+    await m.recordWorkSession(25, 'task', 'new', 25, true, false, { startTime: `${date}T13:00:00` });
+    assert.ok(f.files.get(date).sessions.some(s => s.id === 'historical'));
+    assert.equal(f.files.get(date).sessions.length, 2);
+});
+
+test('重新分组删除源文件的响应失败时恢复源日和目标日，随后可正常写入', async () => {
+    const date = '2026-11-04';
+    const f = fixture({ [date]: record(date, [session(date, 'old', 'task', { startTime: `${date}T01:00:00` })]) });
+    const original = clone(f.files.get(date));
+    const remove = f.adapter.remove;
+    f.adapter.remove = async key => { await remove(key); if (key === date) throw new Error('response lost'); };
+    const m = f.manager(); await m.initialize(); dayStartHours = 3;
+    try { await assert.rejects(m.regenerateRecordsByDate(), /response lost/); }
+    finally { dayStartHours = 0; f.adapter.remove = remove; }
+    assert.deepEqual(f.files.get(date), original);
+    assert.equal(f.files.has('2026-11-03'), false);
+    assert.equal((await m.getFocusById('old')).date, date);
+});
+
+test('两个管理器并发补录同一天，保留原记录和双方新增会话', async () => {
+    const f = fixture(twoDays()), a = f.manager(), b = f.manager();
+    await a.initialize(); await b.initialize();
+    await a.ensureDatesLoaded(['2026-11-04']); await b.ensureDatesLoaded(['2026-11-04']);
+    await Promise.all([a.updateSession(session('2026-11-04', 'a')), b.updateSession(session('2026-11-04', 'b'))]);
+    assert.deepEqual(f.files.get('2026-11-04').sessions.map(s => s.id).sort(), ['a', 'b', 'today']);
+    assert.equal(f.files.get('2026-11-04').workSessions, 3);
+    await a.reloadRecords(['2026-11-04']);
+    assert.equal(a.getEventTotalPomodoroCount('task'), 4);
+});
+
+test('并发编辑不同会话可以合并；同一会话冲突拒绝覆盖', async () => {
+    const date = '2026-11-04';
+    const f = fixture({ [date]: record(date, [session(date, 'x'), session(date, 'y')]) });
+    const a = f.manager(), b = f.manager(); await a.initialize(); await b.initialize();
+    await a.ensureDatesLoaded([date]); await b.ensureDatesLoaded([date]);
+    await a.updateSession({ ...a.getDateSessions(date)[0], duration: 40 });
+    await b.updateSession({ ...b.getDateSessions(date)[1], duration: 35 });
+    assert.equal(f.files.get(date).totalWorkTime, 75);
+    const stale = b.getDateSessions(date).find(s => s.id === 'x');
+    await a.updateSessionNote('x', 'A changed note');
+    await assert.rejects(b.updateSession({ ...stale, duration: 45 }), /其他窗口修改/);
+    assert.equal(f.files.get(date).sessions.find(s => s.id === 'x').note, 'A changed note');
+});
+
+test('两个管理器同时把同一会话移到不同日期，第二次移动报冲突且不产生重复', async () => {
+    const f = fixture(twoDays()), a = f.manager(), b = f.manager(); await a.initialize(); await b.initialize();
+    await a.ensureDatesLoaded(['2026-11-04']); await b.ensureDatesLoaded(['2026-11-04']);
+    await a.updateSession(session('2026-11-05', 'today'));
+    await assert.rejects(b.updateSession(session('2026-11-06', 'today')), /已被移动/);
+    assert.equal([...f.files.values()].flatMap(r => r.sessions).filter(s => s.id === 'today').length, 1);
+    assert.equal(f.files.has('2026-11-06'), false);
+});
+
+test('重新分组遇到源记录被外部修改时整体拒绝，保留外部新增记录', async () => {
+    const f = fixture(twoDays()), m = f.manager(); await m.initialize(); await m.ensureAllRecordsLoaded();
+    f.files.get('2026-11-04').sessions.push(session('2026-11-04', 'external'));
+    await assert.rejects(m.regenerateRecordsByDate(), /日期记录已变化/);
+    assert.ok(f.files.get('2026-11-04').sessions.some(s => s.id === 'external'));
+    assert.deepEqual(f.stats.writes, []);
+});
+
+test('缓存写入挂起不会阻塞原始记录保存，连续编辑按月合并写回', async () => {
+    const f = fixture(twoDays()), m = f.manager(); await m.initialize(); f.reset();
+    let release;
+    const original = f.adapter.writeCache;
+    f.adapter.writeCache = async (...args) => { await new Promise(resolve => { release = resolve; }); await original(...args); };
+    await m.updateSession(session('2026-11-04', 'one'));
+    assert.equal(f.stats.cacheWrites, 0);
+    const pending = m.flushCache();
+    await new Promise(resolve => setImmediate(resolve));
+    await m.updateSession(session('2026-11-04', 'two'));
+    assert.equal(f.files.get('2026-11-04').sessions.length, 3);
+    release(); await pending;
+    f.adapter.writeCache = original;
+    await m.flushCache();
+    assert.deepEqual(f.stats.cacheMonths, [['2026-11'], ['2026-11']]);
+});
+
+test('长时间浏览历史后仅保留 62 天明细，淘汰后的记录仍可定位、编辑和删除', async () => {
+    const data = {};
+    for (let i = 0; i < 150; i++) {
+        const date = new Date(2020, 0, i + 1).toISOString().slice(0, 10);
+        data[date] = record(date, [session(date, `s${i}`)]);
+    }
+    const f = fixture(data), m = f.manager(); await m.initialize();
+    for (const date of Object.keys(data)) await m.ensureDatesLoaded([date]);
+    assert.equal(m.store.loaded.size, 62);
+    assert.equal(m.store.committed.size, 62);
+    assert.equal(m.getEventTotalPomodoroCount('task'), 150);
+    const originalDate = Object.keys(data)[0];
+    assert.equal(m.getDateSessions(originalDate).length, 0);
+    await m.updateSessionNote('s0', 'edited after eviction');
+    assert.equal(f.files.get(originalDate).sessions[0].note, 'edited after eviction');
+    await m.deleteSession('s0');
+    assert.equal(f.files.get(originalDate).sessions.length, 0);
+    assert.ok(m.store.loaded.size <= 62);
+});
+
+test('大范围读取返回完整结果，释放缓存后统计不变', async () => {
+    const data = {};
+    for (let i = 0; i < 100; i++) {
+        const date = new Date(2020, 0, i + 1).toISOString().slice(0, 10);
+        data[date] = record(date, [session(date, `s${i}`)]);
+    }
+    const f = fixture(data), m = f.manager(); await m.initialize();
+    const dates = Object.keys(data).sort();
+    const sessions = await m.getDateRangeSessions(dates[0], dates[dates.length - 1]);
+    assert.equal(sessions.length, 100);
+    assert.ok(m.store.loaded.size <= 62);
+    assert.equal(m.getEventTotalFocusTime('task'), 2500);
+});
+
+test('缓存某月损坏只重建该月；关闭管理器会提交待写缓存并清除定时器', async () => {
+    const transport = cacheTransport(), f = fixture(twoDays());
+    Object.assign(f.adapter, createPomodoroCache('test', 'frontend', transport.fetch));
+    const m = f.manager(); await m.initialize();
+    await m.updateSession(session('2026-11-04', 'extra'));
+    assert.ok(m.store.cacheTimer);
+    await m.closeStorage();
+    assert.equal(m.store.cacheTimer, undefined);
+    transport.files.set('/temp/petal/test/pomodoro-stats/frontend/2026-11.json', { broken: true });
+    f.reset();
+    const warm = f.manager(); await warm.initialize();
+    assert.equal(f.stats.reads.length, 2);
+    assert.equal(warm.getEventTotalPomodoroCount('task'), 3);
+    await warm.closeStorage();
+});
+
+test('重新分组时其他实例新增日期，整体拒绝并保留双方记录', async () => {
+    const f = fixture(twoDays()), m = f.manager(); await m.initialize(); await m.ensureAllRecordsLoaded();
+    f.files.set('2026-11-05', record('2026-11-05', [session('2026-11-05', 'new-day')]));
+    await assert.rejects(m.regenerateRecordsByDate(), /历史日期已变化/);
+    assert.equal(f.files.get('2026-11-05').sessions[0].id, 'new-day');
+    assert.equal(m.getDateSessions('2026-11-04')[0].id, 'today');
+});
+
+test('旧单文件已经被迁移成日期文件时，首次补录不会重复累计旧总量', async () => {
+    const date = '2026-11-04';
+    const legacy = { [date]: { date, workSessions: 10, totalWorkTime: 250, totalBreakTime: 0, sessions: [] } };
+    const f = fixture(); f.setLegacy(legacy); const m = f.manager(); await m.initialize();
+    f.files.set(date, clone(legacy[date]));
+    await m.recordWorkSession(25, 'task', 'new', 25, true, false, { startTime: `${date}T12:00:00` });
+    assert.equal(f.files.get(date).workSessions, 11);
+    assert.equal(f.files.get(date).totalWorkTime, 275);
+});
+
+test('跨天写入部分失败的恢复期间发现外部修改，不用旧快照覆盖外部数据', async () => {
+    const f = fixture(twoDays()), m = f.manager(); await m.initialize();
+    const write = f.adapter.write;
+    f.adapter.write = async (date, value) => {
+        if (date === '2026-11-03') {
+            f.files.get('2026-11-04').sessions.push(session('2026-11-04', 'external-during-rollback'));
+            throw new Error('source write failed');
+        }
+        return write(date, value);
+    };
+    await assert.rejects(m.updateSession(session('2026-11-04', 'old')), /保存及恢复失败/);
+    assert.ok(f.files.get('2026-11-04').sessions.some(s => s.id === 'external-during-rollback'));
+    assert.ok(f.files.get('2026-11-03').sessions.some(s => s.id === 'old'));
+    const beforeRetry = clone(Object.fromEntries(f.files));
+    await assert.rejects(m.recordWorkSession(25, 'task', 'retry'), /状态未恢复/);
+    assert.deepEqual(Object.fromEntries(f.files), beforeRetry);
+    f.adapter.write = write;
+    await m.refreshData();
+    assert.equal(m.store.needsReload, false);
+});
+
+function frontendAdapter({ kernel, locks, readonly = false, files = new Map() }) {
+    const relative = 'src/index.ts';
+    const source = fs.readFileSync(path.join(root, relative), 'utf8');
+    const ast = ts.createSourceFile(relative, source, ts.ScriptTarget.Latest, true);
+    const cls = ast.statements.find(node => ts.isClassDeclaration(node) && node.name?.text === 'ReminderPlugin');
+    const method = cls.members.find(node => node.name?.getText(ast) === 'createPomodoroStoreAdapter').getText(ast);
+    const compiled = ts.transpileModule(`class Fixture { ${method} }`, { compilerOptions: { target: ts.ScriptTarget.ES2021 } }).outputText;
+    const Fixture = new Function('PomodoroWriteCoordinator', 'createPomodoroCache', 'readDir', 'window', 'navigator', 'POMODORO_RECORD_DATA_FILE',
+        `${compiled}; return Fixture;`)(PomodoroWriteCoordinator, () => ({}), async () => [], { siyuan: { config: { readonly } } }, { locks }, 'legacy.json');
+    const instance = Object.assign(new Fixture(), {
+        name: 'test', kernel, storageDisposed: false,
+        protectedStorage: { load: async file => clone(files.get(file)) || null },
+        saveData: async (file, value) => { files.set(file, clone(value)); }, removeData: async file => { files.delete(file); },
+        getWorkspaceScopedChannelName: name => `workspace:${name}`,
+    });
+    return instance.createPomodoroStoreAdapter();
+}
+
+test('前端提交始终路由到内核 RPC，RPC 失败不绕开队列写入，且遵守只读状态', async () => {
+    const requests = []; let fallback = 0;
+    const locks = { request: async () => { fallback++; } };
+    const kernel = { rpc: { call: { 'commit-pomodoro-records': async input => { requests.push(input); return {}; } } } };
+    await frontendAdapter({ kernel, locks }).commit({ changes: [] });
+    assert.equal(requests.length, 1);
+    kernel.rpc.call['commit-pomodoro-records'] = async () => { throw new Error('kernel unavailable'); };
+    await assert.rejects(frontendAdapter({ kernel, locks }).commit({ changes: [] }), /kernel unavailable/);
+    assert.equal(fallback, 0);
+    await assert.rejects(frontendAdapter({ kernel, locks, readonly: true }).commit({ changes: [] }), /不可写/);
+});
+
+test('无内核的旧宿主使用共享 Web Lock，两个前端也不会覆盖彼此的补录', async () => {
+    const date = '2026-11-04', base = record(date, [session(date, 'original')]);
+    const files = new Map([[`pomodoroRecords/${date}.json`, base]]);
+    let tail = Promise.resolve(); const names = [];
+    const locks = { request(name, run) { names.push(name); const result = tail.then(run); tail = result.catch(() => {}); return result; } };
+    const a = frontendAdapter({ locks, files }), b = frontendAdapter({ locks, files });
+    await Promise.all(['a', 'b'].map((id, index) => [a,b][index].commit({ changes: [{ date, base,
+        next: record(date, [...base.sessions, session(date, id)]),
+    }] })));
+    assert.equal(new Set(names).size, 1);
+    assert.deepEqual(files.get(`pomodoroRecords/${date}.json`).sessions.map(s => s.id).sort(), ['a', 'b', 'original']);
+});
+
+test('20 个陈旧快照并发补录仍全部保留，重放相同提交不重复累计', async () => {
+    const date = '2026-11-04', base = record(date, [session(date, 'original')]);
+    const f = fixture({ [date]: base });
+    const managers = Array.from({ length: 20 }, () => f.manager());
+    await Promise.all(managers.map(m => m.initialize()));
+    await Promise.all(managers.map(m => m.ensureDatesLoaded([date])));
+    await Promise.all(managers.map((m, index) => m.updateSession(session(date, `added-${index}`))));
+    assert.equal(f.files.get(date).sessions.length, 21);
+    assert.equal(f.files.get(date).totalWorkTime, 525);
+    const applied = f.files.get(date).sessions.find(s => s.id === 'added-0');
+    const replay = { changes: [{ date, base, next: record(date, [...base.sessions, applied]) }] };
+    await f.writer.commit(replay);
+    assert.equal(f.files.get(date).workSessions, 21);
+    await Promise.all(managers.map(m => m.closeStorage()));
 });

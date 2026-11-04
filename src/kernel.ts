@@ -14,15 +14,32 @@ import { createMcpRegistry, type ToolDefinition } from "./kernel/tools/index";
 import { STATUSES_DATA_FILE } from "./kernel/constants";
 import { createPomodoroCache } from './utils/pomodoroCache';
 import type { PomodoroStoreAdapter } from './utils/pomodoroStore';
+import { PomodoroWriteCoordinator, type PomodoroCommit } from './utils/pomodoroWriteCoordinator';
 import { KernelReminderService } from "./kernel/reminderService";
 
 class KernelPluginBridge {
     private storage: KernelStorage;
+    private readonly pomodoroWriter: PomodoroWriteCoordinator;
     public settings: any = null;
 
     constructor(storage: KernelStorage) {
         this.storage = storage;
+        this.pomodoroWriter = new PomodoroWriteCoordinator({
+            read: date => storage.loadData(`pomodoroRecords/${date}.json`, true),
+            write: (date, record) => storage.saveData(`pomodoroRecords/${date}.json`, record),
+            remove: date => storage.removeData(`pomodoroRecords/${date}.json`, true),
+            listDates: async () => (await storage.readDir('pomodoroRecords', true))
+                .filter(entry => !entry.isDir && /^\d{4}-\d{2}-\d{2}\.json$/.test(entry.name)).map(entry => entry.name.slice(0, -5)),
+        });
     }
+
+    async commitPomodoro(input: PomodoroCommit) {
+        const result = await this.pomodoroWriter.commit(input);
+        await Promise.all(Object.keys(result).map(date => this.notifyDataUpdated(`pomodoroRecords/${date}.json`)));
+        return result;
+    }
+
+    async closePomodoroWriter() { await this.pomodoroWriter.close(); }
 
     async loadData(path: string): Promise<any> {
         return this.storage.loadData(path);
@@ -104,8 +121,7 @@ class KernelPluginBridge {
         return {
             list: () => this.storage.readDir('pomodoroRecords', true),
             read: date => this.storage.loadData(`pomodoroRecords/${date}.json`, true),
-            write: (date, record) => this.saveData(`pomodoroRecords/${date}.json`, record),
-            remove: date => this.removeData(`pomodoroRecords/${date}.json`),
+            commit: input => this.commitPomodoro(input),
             readLegacy: () => this.storage.loadData('pomodoro_record.json', true),
             ...createPomodoroCache(host.plugin.name, 'kernel', (path, init) => host.client.fetch(path, init)),
         };
@@ -180,6 +196,7 @@ class KernelPlugin {
 
     private async onload(): Promise<void> {
         await this.logger.info("[kernel] Agent capability plugin loading");
+        await this.siyuan.rpc.bind('commit-pomodoro-records', input => this.bridge.commitPomodoro(input as PomodoroCommit));
         await this.siyuan.rpc.bind('test-webhook', options => this.reminderService.testWebhook(options));
         await this.siyuan.rpc.bind('test-email', options => this.reminderService.testEmail(options));
         await this.siyuan.rpc.bind('get-smtp-email-events', () => this.reminderService.getDesktopEmailEvents());
@@ -230,6 +247,9 @@ class KernelPlugin {
     private async onunload(): Promise<void> {
         await this.logger.info("[kernel] Agent capability plugin unloading");
         await this.reminderService.stop();
+        await this.siyuan.rpc.unbind('commit-pomodoro-records');
+        await this.bridge.closePomodoroWriter();
+        await this.pomodoroManager.closeStorage();
         await this.siyuan.rpc.unbind('test-webhook');
         await this.siyuan.rpc.unbind('test-email');
         for (const method of ['get-smtp-email-events', 'claim-smtp-email', 'finish-smtp-email']) {

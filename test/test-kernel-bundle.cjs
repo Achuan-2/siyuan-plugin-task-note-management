@@ -17,23 +17,27 @@ test('内核构建产物没有页面也能启动 Croner、响应文件变更并�
             reminderEmailFrom: 'sender@example.com', reminderEmailTo: 'recipient@example.com' }),
         'reminder.json': JSON.stringify({ task: { id: 'task', date: '2026-10-08', time: '09:30', title: '无页面任务' } })
     };
-    const rpc = new Map(), watched = new Set(), errors = [], broadcasts = [];
+    const rpc = new Map(), capabilities = new Map(), watched = new Set(), errors = [], broadcasts = [];
     let sends = 0;
     const emails = [];
     const original = global.siyuan;
     const runtime = {
-        plugin: { lifecycle: {} }, event: { handler: null },
+        plugin: { name: 'test-plugin', lifecycle: {} }, event: { handler: null },
         storage: {
             get: async filename => {
                 if (!(filename in files)) throw new Error('no such file');
                 return { text: async () => files[filename] };
             },
             put: async (filename, data) => { files[filename] = data; },
-            list: async () => [], remove: async filename => { delete files[filename]; },
+            list: async dir => Object.keys(files).filter(key => key.startsWith(dir + '/')).map(key => ({
+                name: key.slice(dir.length + 1), isDir: false, updated: Math.floor(Date.now() / 1000),
+            })), remove: async filename => { delete files[filename]; },
             watcher: { add: async path => watched.add(path), remove: async path => watched.delete(path) }
         },
         client: { fetch: async (url, options) => {
             if (url === '/api/system/getConf') return { json: async () => ({}) };
+            if (url === '/api/file/getFile') return { ok: false, status: 404, json: async () => ({ code: 404 }) };
+            if (url === '/api/file/putFile') return { ok: true, status: 200, json: async () => ({ code: 0 }) };
             assert.equal(url, '/api/network/forwardProxy');
             const request = JSON.parse(options.body);
             if (request.url === 'https://mail.example.invalid/emails') {
@@ -45,7 +49,8 @@ test('内核构建产物没有页面也能启动 Croner、响应文件变更并�
         } },
         rpc: { bind: async (name, handler) => rpc.set(name, handler), unbind: async name => rpc.delete(name),
             broadcast: async (method, params) => broadcasts.push({ method, params }) },
-        agent: { registerCapability: async name => ({ name }), unregisterCapability: async () => {} },
+        agent: { registerCapability: async (name, _config, handler) => { capabilities.set(name, handler); return { name }; },
+            unregisterCapability: async name => { capabilities.delete(name); } },
         logger: { info: async () => {}, debug: async () => {}, warn: async () => {}, error: async (...args) => errors.push(args) }
     };
     global.siyuan = runtime;
@@ -55,6 +60,7 @@ test('内核构建产物没有页面也能启动 Croner、响应文件变更并�
         assert.ok(watched.has('.'));
         assert.ok(rpc.has('refresh-reminder-schedule'));
         assert.ok(rpc.has('test-email'));
+        assert.ok(rpc.has('commit-pomodoro-records'));
         assert.equal(sends, 0);
         t.mock.timers.tick(30_000); await flush();
         assert.equal(sends, 1);
@@ -76,6 +82,28 @@ test('内核构建产物没有页面也能启动 Croner、响应文件变更并�
         assert.equal(emails.length, 2);
         assert.match(emails[1].text, /修改时间/);
         assert.equal(errors.length, 0);
+
+        // 前端 RPC 与 MCP 走同一个真实内核写入队列，陈旧快照不能覆盖另一端的新会话。
+        const date = '2026-10-08';
+        const original = { id: 'original', eventId: 'task', eventTitle: 'task', type: 'work',
+            startTime: `${date}T10:00:00`, endTime: `${date}T10:25:00`, duration: 25, plannedDuration: 25, count: 1, completed: true };
+        const base = { date, sessions: [original], workSessions: 1, totalWorkTime: 25, totalBreakTime: 0 };
+        files[`pomodoroRecords/${date}.json`] = JSON.stringify(base);
+        const stats = capabilities.get('stats');
+        assert.equal((await stats({ action: 'get_focuses_by_time', startDate: date, endDate: date })).data.length, 1);
+        const frontendSession = { ...original, id: 'frontend' };
+        const [, mcp] = await Promise.all([
+            rpc.get('commit-pomodoro-records')({ changes: [{ date, base, next: {
+                ...base, sessions: [original, frontendSession], workSessions: 2, totalWorkTime: 50,
+            } }] }),
+            stats({ action: 'create_focus', type: 'work', eventId: 'task', startTime: `${date}T11:00:00`, endTime: `${date}T11:25:00` }),
+        ]);
+        assert.equal(mcp.success, true);
+        const saved = JSON.parse(files[`pomodoroRecords/${date}.json`]);
+        assert.equal(saved.sessions.length, 3);
+        assert.ok(saved.sessions.some(session => session.id === 'frontend'));
+        assert.ok(saved.sessions.some(session => session.id === mcp.data.id));
+        assert.equal(saved.totalWorkTime, 75);
     } finally {
         await runtime.plugin.lifecycle.onunload();
         global.siyuan = original;
@@ -83,6 +111,7 @@ test('内核构建产物没有页面也能启动 Croner、响应文件变更并�
     assert.equal(rpc.size, 0);
     assert.equal(watched.size, 0);
     assert.equal(runtime.event.handler, null);
+    assert.equal(capabilities.size, 0);
     t.mock.timers.tick(60_000); await flush();
     assert.equal(sends, 2);
     assert.equal(emails.length, 2);

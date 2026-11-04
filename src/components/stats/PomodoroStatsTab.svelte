@@ -1319,6 +1319,7 @@ class PomodoroStatsView {
     }
 
     private initTimelineChart(chartId: string) {
+        const timelineData = this.getTimelineData();
         // 延迟执行以确保DOM元素已渲染
         setTimeout(() => {
             const chartElement = this.dialog.element.querySelector(`#${chartId}`) as HTMLElement;
@@ -1327,7 +1328,6 @@ class PomodoroStatsView {
                 return;
             }
 
-            const timelineData = this.getTimelineData();
 
             if (timelineData.length === 0) {
                 chartElement.innerHTML = `<div class="no-data" style="text-align: center; padding: 50px;">${i18n("noData")}</div>`;
@@ -1858,8 +1858,10 @@ class PomodoroStatsView {
 
     private async updateContent() {
         const generation = ++this.renderGeneration;
+        let release = () => {};
         try {
             await this.recordManager.initialize();
+            release = this.recordManager.retainDetails();
             if (this.currentView === 'records') {
                 const today = new Date(`${getLogicalDateString()}T00:00:00`);
                 const start = new Date(today);
@@ -1869,54 +1871,55 @@ class PomodoroStatsView {
                 const [start, end] = this.getCurrentRange();
                 await this.recordManager.ensureRangeLoaded(start, end);
             }
+            if (this.disposed || generation !== this.renderGeneration) return;
+            // 清理之前的echarts实例
+            this.cleanupCharts();
+
+            const contentElement = this.dialog.element.querySelector('.stats-content');
+            if (contentElement) {
+                contentElement.innerHTML = this.renderCurrentView();
+            }
+
+            // 更新导航按钮状态
+            this.dialog.element.querySelectorAll('.nav-btn').forEach(btn => {
+                const element = btn as HTMLElement;
+                element.classList.toggle('active', element.dataset.view === this.currentView);
+            });
+
+            // 更新时间范围按钮状态
+            this.dialog.element.querySelectorAll('.range-btn').forEach(btn => {
+                const element = btn as HTMLElement;
+                element.classList.toggle('active', element.dataset.range === this.currentTimeRange);
+            });
+
+            // 如果当前是详情视图，初始化饼图
+            if (this.currentView === 'details') {
+                const chartElement = this.dialog.element.querySelector('.echarts-pie-chart') as HTMLElement;
+                if (chartElement) {
+                    this.initPieChart(chartElement.id);
+                }
+            }
+
+            // 如果当前是热力图视图，初始化热力图
+            if (this.currentView === 'heatmap') {
+                const heatmapElement = this.dialog.element.querySelector('.echarts-heatmap-chart') as HTMLElement;
+                if (heatmapElement) {
+                    this.initHeatmapChart(heatmapElement.id);
+                }
+            }
+
+            // 如果当前是时间线视图，初始化时间线图表
+            if (this.currentView === 'timeline') {
+                const timelineElement = this.dialog.element.querySelector('.echarts-timeline-chart') as HTMLElement;
+                if (timelineElement) {
+                    this.initTimelineChart(timelineElement.id);
+                }
+            }
         } catch (error) {
             console.error('Failed to load pomodoro statistics:', error);
             if (!this.disposed && generation === this.renderGeneration) showMessage(i18n('loadFailed'), 3000, 'error');
-            return;
-        }
-        if (this.disposed || generation !== this.renderGeneration) return;
-        // 清理之前的echarts实例
-        this.cleanupCharts();
-
-        const contentElement = this.dialog.element.querySelector('.stats-content');
-        if (contentElement) {
-            contentElement.innerHTML = this.renderCurrentView();
-        }
-
-        // 更新导航按钮状态
-        this.dialog.element.querySelectorAll('.nav-btn').forEach(btn => {
-            const element = btn as HTMLElement;
-            element.classList.toggle('active', element.dataset.view === this.currentView);
-        });
-
-        // 更新时间范围按钮状态
-        this.dialog.element.querySelectorAll('.range-btn').forEach(btn => {
-            const element = btn as HTMLElement;
-            element.classList.toggle('active', element.dataset.range === this.currentTimeRange);
-        });
-
-        // 如果当前是详情视图，初始化饼图
-        if (this.currentView === 'details') {
-            const chartElement = this.dialog.element.querySelector('.echarts-pie-chart') as HTMLElement;
-            if (chartElement) {
-                this.initPieChart(chartElement.id);
-            }
-        }
-
-        // 如果当前是热力图视图，初始化热力图
-        if (this.currentView === 'heatmap') {
-            const heatmapElement = this.dialog.element.querySelector('.echarts-heatmap-chart') as HTMLElement;
-            if (heatmapElement) {
-                this.initHeatmapChart(heatmapElement.id);
-            }
-        }
-
-        // 如果当前是时间线视图，初始化时间线图表
-        if (this.currentView === 'timeline') {
-            const timelineElement = this.dialog.element.querySelector('.echarts-timeline-chart') as HTMLElement;
-            if (timelineElement) {
-                this.initTimelineChart(timelineElement.id);
-            }
+        } finally {
+            release();
         }
     }
 

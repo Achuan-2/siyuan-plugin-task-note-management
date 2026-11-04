@@ -45,6 +45,7 @@ import { initIcsSync, initIcsSubscriptionSync, handleIcsSyncSettingsChange, clea
 import { cleanReminderItem } from "./utils/reminderLoadUtils";
 import { createPomodoroCache } from './utils/pomodoroCache';
 import type { PomodoroStoreAdapter } from './utils/pomodoroStore';
+import { PomodoroWriteCoordinator } from './utils/pomodoroWriteCoordinator';
 import { ProtectedJsonStorage, type JsonShape } from "./utils/protectedJsonStorage";
 import { TaskNoteDOMManager } from "./components/render/taskNoteDOM";
 import { addDaysToDate, generateRepeatInstances, getDaysDifference, getRelativeReminderWindow, resolveRepeatReminderTimes } from "./components/dataManager/repeatUtils";
@@ -821,11 +822,28 @@ export default class ReminderPlugin extends Plugin {
      * @param update 是否强制更新（从文件读取）
      */
     public createPomodoroStoreAdapter(): PomodoroStoreAdapter {
-        return {
-            list: () => readDir(`/data/storage/petal/${this.name}/pomodoroRecords`) as any,
+        const list = async () => {
+            const entries: unknown = await readDir(`/data/storage/petal/${this.name}/pomodoroRecords`);
+            if (!Array.isArray(entries)) throw new Error('读取番茄钟记录目录失败');
+            return entries;
+        };
+        const fallback = new PomodoroWriteCoordinator({
             read: date => this.protectedStorage.load(`pomodoroRecords/${date}.json`, 'object'),
             write: (date, record) => this.saveData(`pomodoroRecords/${date}.json`, record),
             remove: async date => { await this.removeData(`pomodoroRecords/${date}.json`); },
+            listDates: async () => (await list())
+                .filter(entry => !entry.isDir && /^\d{4}-\d{2}-\d{2}\.json$/.test(entry.name)).map(entry => entry.name.slice(0, -5)),
+        });
+        return {
+            list,
+            read: date => this.protectedStorage.load(`pomodoroRecords/${date}.json`, 'object'),
+            commit: async input => {
+                if (this.storageDisposed || window.siyuan.config.readonly || (window.siyuan as any).isPublish) throw new Error('当前插件不可写');
+                if (this.kernel?.rpc) return this.kernel.rpc.call['commit-pomodoro-records'](input);
+                // 旧版宿主无内核插件时，浏览器共享锁仍覆盖读取、合并和写入。
+                if (!navigator.locks) throw new Error('番茄钟写入服务尚未就绪，请稍后重试');
+                return navigator.locks.request(this.getWorkspaceScopedChannelName('pomodoro-records-write'), () => fallback.commit(input));
+            },
             readLegacy: () => this.loadData(POMODORO_RECORD_DATA_FILE),
             ...createPomodoroCache(this.name, 'frontend', (path, init) => fetch(path, init)),
         };
@@ -836,7 +854,8 @@ export default class ReminderPlugin extends Plugin {
         await manager.initialize();
         if (update) await manager.reloadRecords(undefined, true);
         await manager.ensureAllRecordsLoaded();
-        this.pomodoroRecordsCache = manager.getSaveData();
+        this.pomodoroRecordsCache = { ...manager.getSaveData() };
+        manager.releaseDetails();
         return this.pomodoroRecordsCache;
     }
 
@@ -4961,6 +4980,7 @@ export default class ReminderPlugin extends Plugin {
         this.storageDisposed = true;
         clearTimeout(this.pomodoroRefreshTimer);
         this.pendingPomodoroDates.clear();
+        void PomodoroRecordManager.getInstance(this).closeStorage();
         console.log("Task note management plugin disabled; starting resource cleanup...");
         this.reminderNotifications.destroy();
         // 清理音频资源
