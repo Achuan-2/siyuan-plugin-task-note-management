@@ -22,7 +22,6 @@
         pushErrMsg,
         pushMsg,
         removeFile,
-        putFile,
         resetDoingAndAbandonedTaskListMarkers,
         restoreTaskListMarkers,
     } from './api';
@@ -30,7 +29,7 @@
     import { importIcsFile } from './utils/icsImport';
     import { syncHolidays } from './utils/icsSubscription';
     import { PomodoroManager } from './components/dataManager/pomodoroManager';
-    import { resolveAudioPath } from './utils/audioUtils';
+    import { resolveAudioPath, storeAudioFile } from './utils/audioUtils';
     import { getGlobalReminderSkipWeekendMode } from './utils/reminderSkipDate';
     import VipPanel from './components/vip/VipPanel.svelte';
     import SubscriptionPanel from './components/settings/icsSubscriptionPanel.svelte';
@@ -128,9 +127,6 @@
     let playingPath: string | null = null; // 当前播放中的音频路径
     let isAudioPlaying = false; // 当前是否处于播放状态
 
-    const AUDIO_DIR = 'data/storage/petal/siyuan-plugin-task-note-management/audios';
-    const AUDIO_URL_PREFIX = '/data/storage/petal/siyuan-plugin-task-note-management/audios/';
-
     /** 获取指定 key 的音频文件列表（合并内置声音并过滤已删除项） */
     function getAudioFilesForKey(key: string): { name: string; path: string }[] {
         const userList: AudioFileItem[] = (settings.audioFileLists ?? {})[key] ?? [];
@@ -172,10 +168,15 @@
     }
 
     async function uploadAudioFile(file: File) {
-        const path = `${AUDIO_DIR}/${file.name}`;
-        await putFile(path, false, file);
+        const path = await storeAudioFile(file);
+        if (playingPath === path && audioPreviewEl) {
+            audioPreviewEl.pause();
+            audioPreviewEl = null;
+            playingPath = null;
+            isAudioPlaying = false;
+        }
         await pushMsg(i18n('audioUploadSuccess').replace('${name}', file.name));
-        return AUDIO_URL_PREFIX + file.name;
+        return path;
     }
 
     async function deleteAudioFileForKey(url: string, key: string) {
@@ -218,8 +219,6 @@
         try {
             isDownloadingAudio = true;
             const fileName = url.split('/').pop()?.split('?')[0] || 'online_audio.mp3';
-            const localPath = `${AUDIO_DIR}/${fileName}`;
-            const localUrl = AUDIO_URL_PREFIX + fileName;
 
             await pushMsg(i18n('audioDownloading'));
             const response = await fetch(url);
@@ -227,7 +226,7 @@
             const blob = await response.blob();
             const file = new File([blob], fileName, { type: blob.type });
 
-            await putFile(localPath, false, file);
+            const localUrl = await storeAudioFile(file);
 
             // 核心改进：引入 replaces 字段，并确保本地版紧跟在在线版之后以保持排序
             if (!settings.audioFileLists) settings.audioFileLists = {};
@@ -308,8 +307,14 @@
                 audioPreviewEl.pause();
                 isAudioPlaying = false;
             } else {
-                audioPreviewEl.play().catch(() => {});
-                isAudioPlaying = true;
+                try {
+                    await audioPreviewEl.play();
+                    isAudioPlaying = true;
+                } catch (error) {
+                    console.warn('[AudioUtils] Failed to resume audio:', path, error);
+                    isAudioPlaying = false;
+                    await pushErrMsg(i18n('audioLoadFailed'));
+                }
             }
             return;
         }
@@ -319,17 +324,24 @@
             audioPreviewEl = null;
         }
 
-        const resolvedUrl = await resolveAudioPath(path);
-        const audio = new Audio(resolvedUrl);
-        audio.volume = Math.max(0, Math.min(1, volume));
-        audio.play().catch(() => {});
-        audio.addEventListener('ended', () => {
-            isAudioPlaying = false;
-            playingPath = null;
-        });
-        audioPreviewEl = audio;
-        playingPath = path;
-        isAudioPlaying = true;
+        playingPath = null;
+        isAudioPlaying = false;
+        try {
+            const resolvedUrl = await resolveAudioPath(path);
+            const audio = new Audio(resolvedUrl);
+            audio.volume = Math.max(0, Math.min(1, volume));
+            await audio.play();
+            audio.addEventListener('ended', () => {
+                isAudioPlaying = false;
+                playingPath = null;
+            });
+            audioPreviewEl = audio;
+            playingPath = path;
+            isAudioPlaying = true;
+        } catch (error) {
+            console.warn('[AudioUtils] Failed to preview audio:', path, error);
+            await pushErrMsg(i18n('audioLoadFailed'));
+        }
     }
 
     function handleAudioUploadInput(event: Event, settingKey: string) {
@@ -353,7 +365,10 @@
                 if (!settings.audioFileLists) settings.audioFileLists = {};
                 const list: AudioFileItem[] = settings.audioFileLists[settingKey] || [];
                 for (const url of validUrls) {
-                    if (!list.some(i => i.path === url)) {
+                    const existing = list.find(i => i.path === url);
+                    if (existing) {
+                        existing.removed = false;
+                    } else {
                         list.push({ path: url, removed: false });
                     }
                 }

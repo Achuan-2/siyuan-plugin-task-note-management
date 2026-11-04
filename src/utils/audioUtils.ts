@@ -1,7 +1,49 @@
 import { getFileBlob } from "../api";
+import { fetchSyncPost } from "siyuan";
 
 // 缓存路径到 Blob URL 的映射
 const audioCache: Record<string, string> = {};
+const AUDIO_DIR = 'data/storage/petal/siyuan-plugin-task-note-management/audios';
+
+function isStorageAudioPath(path: string): boolean {
+    return /^\/?data\/storage\/petal\//.test(path);
+}
+
+async function readStorageAudio(path: string): Promise<Blob> {
+    const blob = await getFileBlob(path.replace(/^\//, ''));
+    // getFile 在文件不存在时可能返回 HTTP 202 + JSON，不能将错误信息用于播放。
+    const contentType = blob?.type.split(';')[0].toLowerCase();
+    if (!blob || blob.size === 0 || contentType === 'application/json' || contentType === 'text/html') {
+        throw new Error(`Cannot read stored audio: ${path}`);
+    }
+    return blob;
+}
+
+/** 复制文件内容后上传，并确认存储文件可读取，再允许设置面板保存该路径。 */
+export async function storeAudioFile(file: File): Promise<string> {
+    // Electron 的 File 可能引用磁盘文件；先读取快照，避免上传时再依赖原文件。
+    const contents = await file.arrayBuffer();
+    if (contents.byteLength === 0) throw new Error('Audio file is empty');
+    const path = `${AUDIO_DIR}/${file.name}`;
+    const form = new FormData();
+    form.append('path', path);
+    form.append('isDir', 'false');
+    form.append('file', new Blob([contents], { type: file.type }), file.name);
+    // 通用 putFile 会把失败与成功的空 data 都返回为 null，这里必须检查原始 code。
+    const result = await fetchSyncPost('/api/file/putFile', form);
+    if (!result || result.code !== 0) {
+        throw new Error(result?.msg || 'Audio upload failed');
+    }
+
+    // 同名覆盖后不能继续使用旧内容；校验失败时也不能留下旧缓存。
+    delete audioCache[path];
+    const blob = await readStorageAudio(path);
+    if (blob.size !== contents.byteLength) {
+        throw new Error(`Stored audio size mismatch: ${path}`);
+    }
+    audioCache[path] = URL.createObjectURL(blob);
+    return `/${path}`;
+}
 
 /**
  * 获取思源服务端的基础 URL
@@ -23,24 +65,24 @@ function getSiYuanBaseUrl(): string {
 export async function resolveAudioPath(path: string): Promise<string> {
     if (!path) return "";
 
-    // 检查缓存
-    if (audioCache[path]) {
-        return audioCache[path];
+    // storage 路径的两种写法共享缓存。
+    const cacheKey = isStorageAudioPath(path) ? path.replace(/^\//, '') : path;
+    if (audioCache[cacheKey]) {
+        return audioCache[cacheKey];
     }
 
     // 只有在是 storage 路径时才需要 getFileBlob
     // 兼容 /data/storage/ 和 storage/ 前缀
-    if (path.startsWith("/data/storage/petal/") || path.startsWith("data/storage/petal/")) {
-        const apiPath = path.startsWith("/") ? path.substring(1) : path;
+    if (isStorageAudioPath(path)) {
         try {
-            const blob = await getFileBlob(apiPath);
-            if (blob) {
-                const url = URL.createObjectURL(blob);
-                audioCache[path] = url;
-                return url;
-            }
+            const blob = await readStorageAudio(path);
+            const url = URL.createObjectURL(blob);
+            audioCache[cacheKey] = url;
+            return url;
         } catch (e) {
             console.warn("[AudioUtils] Failed to resolve storage audio path:", path, e);
+            // 私有 storage 路径不是静态资源 URL，失败时交回调用方处理，不能直接播放。
+            throw e;
         }
     }
 
