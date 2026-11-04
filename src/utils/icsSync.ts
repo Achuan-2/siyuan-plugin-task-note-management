@@ -14,6 +14,7 @@ interface IcsSyncState {
     subscriptionTimer: number | null;
     isPerforming: boolean;
     lastCheckedAt: number;
+    generation: number;
 }
 
 const ICS_SYNC_STATE = new WeakMap<object, IcsSyncState>();
@@ -21,14 +22,17 @@ const ICS_SYNC_STATE = new WeakMap<object, IcsSyncState>();
 function getState(plugin: IcsSyncPlugin): IcsSyncState {
     let state = ICS_SYNC_STATE.get(plugin as unknown as object);
     if (!state) {
-        state = { timer: null, subscriptionTimer: null, isPerforming: false, lastCheckedAt: 0 };
+        state = { timer: null, subscriptionTimer: null, isPerforming: false, lastCheckedAt: 0, generation: 0 };
         ICS_SYNC_STATE.set(plugin as unknown as object, state);
     }
     return state;
 }
 
 export async function initIcsSync(plugin: IcsSyncPlugin): Promise<void> {
+    const state = getState(plugin);
+    const generation = state.generation;
     const settings = await plugin.loadSettings();
+    if (generation !== state.generation) return;
     if (settings.icsSyncEnabled && settings.icsSyncInterval && settings.icsSyncInterval !== "manual") {
         // 启用时执行：如果是 dailyAt 模式，不立即执行，等待到指定时间点
         const executeImmediately = settings.icsSyncInterval !== "dailyAt";
@@ -47,6 +51,8 @@ export async function handleIcsSyncSettingsChange(plugin: IcsSyncPlugin, setting
 
 export function cleanupIcsSync(plugin: IcsSyncPlugin): void {
     const state = getState(plugin);
+    // 使仍在等待网络或设置读取的旧调度失效，防止清理后重新创建定时器。
+    state.generation++;
     if (state.timer) {
         clearInterval(state.timer);
         state.timer = null;
@@ -166,7 +172,10 @@ async function scheduleIcsSync(plugin: IcsSyncPlugin, interval: IcsSyncInterval,
     const state = getState(plugin);
     if (state.timer) {
         clearInterval(state.timer);
+        state.timer = null;
     }
+    const generation = ++state.generation;
+    const isCurrent = () => generation === state.generation;
 
     const intervalMsMap: Record<string, number> = {
         "15min": 15 * 60 * 1000,
@@ -256,20 +265,25 @@ async function scheduleIcsSync(plugin: IcsSyncPlugin, interval: IcsSyncInterval,
     }
 
     // 立即触发（当需要时）
+    if (!isCurrent()) return;
     if (executeImmediately && Date.now() >= nextDueMs) {
-        await performIcsSync(plugin);
+        await performIcsSync(plugin, isCurrent);
+        if (!isCurrent()) return;
         nextDueMs = await calculateNextDueMs();
     }
+    if (!isCurrent()) return;
 
     // 启动短轮询，比较当前时间与 nextDue
     state.timer = window.setInterval(async () => {
+        if (!isCurrent()) return;
         if (!plugin.isPrimaryInstance()) return;
         try {
             const now = Date.now();
             if (now < nextDueMs) return;
 
             if (state.isPerforming) return;
-            await performIcsSync(plugin);
+            await performIcsSync(plugin, isCurrent);
+            if (!isCurrent()) return;
 
             // 同步成功后，重新计算下一次触发时间
             nextDueMs = await calculateNextDueMs();
@@ -279,17 +293,19 @@ async function scheduleIcsSync(plugin: IcsSyncPlugin, interval: IcsSyncInterval,
     }, shortPollMs);
 }
 
-async function performIcsSync(plugin: IcsSyncPlugin): Promise<void> {
+async function performIcsSync(plugin: IcsSyncPlugin, isCurrent: () => boolean): Promise<void> {
     const state = getState(plugin);
-    if (state.isPerforming) return;
+    if (!isCurrent() || state.isPerforming) return;
     state.isPerforming = true;
     try {
         const settings = await plugin.loadSettings();
+        if (!isCurrent()) return;
         if (!settings.icsSyncEnabled) return;
 
         // 检查reminder.json是否有新事件
         const reminderPath = "/data/storage/petal/siyuan-plugin-task-note-management/reminder.json";
         const stat = await getFileStat(reminderPath);
+        if (!isCurrent()) return;
         const lastSync = settings.icsLastSyncAt ? new Date(settings.icsLastSyncAt).getTime() : 0;
         if (stat && stat.mtime <= lastSync) {
             // 没有新事件时不回写设置，避免定时检查触发思源同步。

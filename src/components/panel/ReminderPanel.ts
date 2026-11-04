@@ -60,6 +60,7 @@ interface ReminderElementRenderState {
 }
 
 export class ReminderPanel {
+    private disposed = false;
     private container: HTMLElement;
     private remindersContainer: HTMLElement;
     private filterSelect: HTMLSelectElement;
@@ -215,15 +216,19 @@ export class ReminderPanel {
     }
 
     private async initializeAsync() {
+        if (this.disposed) return;
         // 初始化分类管理器
         await this.categoryManager.initialize();
+        if (this.disposed) return;
 
         // 初始化番茄钟记录管理器，确保番茄数据已加载
         await this.pomodoroRecordManager.initialize();
+        if (this.disposed) return;
 
         // 加载持久化设置（例如 showCompletedSubtasks）
         try {
             const settings = await this.plugin.loadSettings();
+            if (this.disposed) return;
             if (settings.showCompletedSubtasks !== undefined) {
                 this.showCompletedSubtasks = !!settings.showCompletedSubtasks;
             }
@@ -244,11 +249,16 @@ export class ReminderPanel {
         }
 
         await this.refreshReminderSkipDateContext();
+        if (this.disposed) return;
         this.initUI();
         await this.loadSortConfig();
+        if (this.disposed) return;
         await this.loadCustomFilters(); // 加载自定义过滤器配置
+        if (this.disposed) return;
         await this.updateFilterSelect(); // 先确保自定义筛选选项已创建，再恢复上次选择
+        if (this.disposed) return;
         await this.loadFilterTab(); // 加载筛选配置（在选项创建后设置值）
+        if (this.disposed) return;
         this.loadReminders();
 
         // Escape：如果右键菜单已打开则关闭菜单（不退出多选）；否则退出多选模式
@@ -306,6 +316,11 @@ export class ReminderPanel {
 
     // 添加销毁方法以清理事件监听器
     public destroy() {
+        if (this.disposed) return;
+        this.disposed = true;
+        this.reminderLoadVersion++;
+        this.pendingReminderLoad = false;
+        this.pendingReminderForceLoad = false;
         this.stopDragScroll();
         // 清理定时器
         if (this.loadTimeoutId) {
@@ -2226,6 +2241,7 @@ export class ReminderPanel {
 
 
     private async loadReminders(force: boolean = false) {
+        if (this.disposed) return;
         const version = ++this.reminderLoadVersion;
         // 串行加载。新请求使旧结果失效，最后合并执行一次最新刷新。
         if (this.isLoading) {
@@ -2235,7 +2251,7 @@ export class ReminderPanel {
         }
 
         this.isLoading = true;
-        const isCurrentLoad = () => version === this.reminderLoadVersion;
+        const isCurrentLoad = () => !this.disposed && version === this.reminderLoadVersion;
 
         // 保存当前滚动位置
         const scrollTop = this.remindersContainer.scrollTop;

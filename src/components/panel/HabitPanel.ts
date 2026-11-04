@@ -49,6 +49,7 @@ interface HabitPomodoroStats {
 }
 
 export class HabitPanel {
+    private disposed = false;
     private container: HTMLElement;
     private plugin: any;
     private habitsContainer: HTMLElement;
@@ -103,10 +104,15 @@ export class HabitPanel {
     }
 
     private async initializeAsync() {
+        if (this.disposed) return;
         await this.groupManager.initialize();
+        if (this.disposed) return;
         await this.pomodoroRecordManager.initialize();
+        if (this.disposed) return;
         await this.loadCollapseStates();
+        if (this.disposed) return;
         await this.restorePanelSettings();
+        if (this.disposed) return;
 
         this.initUI();
         this.loadHabits();
@@ -116,6 +122,8 @@ export class HabitPanel {
     }
 
     public destroy() {
+        if (this.disposed) return;
+        this.disposed = true;
         this.saveCollapseStates();
         if (this.loadHabitsTimer) {
             clearTimeout(this.loadHabitsTimer);
@@ -519,6 +527,7 @@ export class HabitPanel {
     }
 
     private async loadHabits() {
+        if (this.disposed) return;
         try {
             // 保存滚动位置
             const scrollTop = this.habitsContainer?.scrollTop || 0;
@@ -528,13 +537,16 @@ export class HabitPanel {
             } catch (error) {
                 console.warn("Failed to refresh pomodoro data:", error);
             }
+            if (this.disposed) return;
 
             const [habitData, reminderData] = await Promise.all([
                 this.plugin.loadHabitData(),
                 this.plugin.loadReminderData()
             ]);
+            if (this.disposed) return;
 
             await this.syncTaskCompletionAutoCheckIns(habitData || {}, reminderData || {});
+            if (this.disposed) return;
             this.rebuildLinkedTaskPomodoroStats(reminderData || {});
 
             const habits: Habit[] = Object.values(habitData || {});
@@ -554,6 +566,7 @@ export class HabitPanel {
                 });
             }
         } catch (error) {
+            if (this.disposed) return;
             console.error('loadHabits failed:', error);
             this.habitsContainer.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--b3-theme-error);">${i18n("loadHabitFailed")}</div>`;
         }

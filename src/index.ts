@@ -83,6 +83,7 @@ import { getDatabaseSelectedIds, readDatabaseTaskSources, buildDatabasePomodoroR
 import { getTaskListSortTargets, sortTaskLists } from "./utils/taskListSort";
 import { TaskListAutoSorter } from "./utils/taskListAutoSort";
 import { TaskListAutoCompleter } from "./utils/taskListAutoComplete";
+import { ElementWaiter } from "./utils/elementWaiter";
 
 
 export const SETTINGS_FILE = "reminder-settings.json";
@@ -382,6 +383,8 @@ export default class ReminderPlugin extends Plugin {
     // Guard to prevent overlapping notification sounds
     private isPlayingNotificationSound: boolean = false;
     private projectPanel: ProjectPanel;
+    private habitPanel?: HabitPanel;
+    private readonly elementWaiter = new ElementWaiter();
     private projectDockElement: HTMLElement;
     private taskNoteDOM: TaskNoteDOMManager;
     private mobileTaskShortcut: MobileTaskShortcut | null = null;
@@ -1523,14 +1526,20 @@ export default class ReminderPlugin extends Plugin {
         registerCustomIcons(this);
         // 先初始化 UI，避免加载数据记录异常/耗时影响 Dock 注册
         setPluginInstance(this);
+        // UI 注册期间就可能收到更新事件，先准备文档按钮管理器。
+        this.taskNoteDOM = new TaskNoteDOMManager(this);
         await this.initializeUI();
+        if (this.storageDisposed) return;
         // 数据加载
         await this.loadSettings();
-        this.taskNoteDOM = new TaskNoteDOMManager(this);
+        if (this.storageDisposed) return;
         const taskNoteWarmupTimer = window.setTimeout(() => {
             void Promise.allSettled([
                 this.loadReminderData(),
                 this.loadProjectData(),
+                this.loadHabitData(),
+                this.loadHabitGroupData(),
+                this.loadHolidayData(),
             ]);
         }, 800);
         this.addCleanup(() => clearTimeout(taskNoteWarmupTimer));
@@ -1544,19 +1553,16 @@ export default class ReminderPlugin extends Plugin {
             console.warn("Failed to initialize pomodoro records (fallback applied; Dock registration unaffected):", error);
         });
 
-        // 初始化数据并缓存
-        await this.loadHabitData();
-        await this.loadHabitGroupData();
-        await this.loadHolidayData();
-
-
-
         // 初始化上次番茄钟设置缓存，避免第一次设置更新时误判
         this.lastPomodoroSettings = await this.getPomodoroSettings();
+        if (this.storageDisposed) return;
 
         this.categoryManager = CategoryManager.getInstance(this);
-        await this.categoryManager.initialize();
-        await ProjectManager.getInstance(this).initialize();
+        await Promise.all([
+            this.categoryManager.initialize(),
+            ProjectManager.getInstance(this).initialize(),
+        ]);
+        if (this.storageDisposed) return;
 
         // 处理文档中的项目看板链接：siyuan://plugins/<插件名>/project-kanban?projectId=<项目ID>
         const handleOpenSiYuanUrlPlugin = (event: CustomEvent<{ url: string }>) => {
@@ -1644,6 +1650,7 @@ export default class ReminderPlugin extends Plugin {
         const onSettingsUpdated = async () => {
             try {
                 const settings = await this.loadSettings();
+                if (this.storageDisposed) return;
                 const isMobile = getFrontend().endsWith('mobile');
                 if (!isMobile || settings.enableProjectDock !== false) this.ensureProjectDockRegistered();
                 if (!isMobile || settings.enableReminderDock !== false) this.ensureReminderDockRegistered();
@@ -1779,20 +1786,26 @@ export default class ReminderPlugin extends Plugin {
         this.eventBus.on('open-menu-doctree', handleDocTreeMenu);
         this.addCleanup(() => this.eventBus.off('open-menu-doctree', handleDocTreeMenu));
 
-        // 初始化ICS云端同步
-        await initIcsSync(this);
-
-        // 初始化ICS订阅同步
-        await initIcsSubscriptionSync(this);
-
         // 初始化当前逻辑日期
         this.currentLogicalDate = getLogicalDateString();
 
         // 执行数据迁移
         await performDataMigration(this);
+        if (this.storageDisposed) return;
 
         // 初始化多窗口协调器
         this.initCoordinator();
+
+        // 云端同步不占用思源等待 onload 的关键路径；禁用时取消未开始的任务。
+        const icsStartupTimer = setTimeout(() => {
+            if (this.storageDisposed) return;
+            void Promise.allSettled([initIcsSync(this), initIcsSubscriptionSync(this)]).then(results => {
+                for (const result of results) {
+                    if (result.status === 'rejected') console.warn('Failed to initialize ICS sync:', result.reason);
+                }
+            });
+        }, 0);
+        this.addCleanup(() => clearTimeout(icsStartupTimer));
 
         const frontend = getFrontend();
         const isBrowser = frontend.startsWith('browser');
@@ -1820,23 +1833,30 @@ export default class ReminderPlugin extends Plugin {
             // 先询问其他窗口是否已有活跃番茄钟，避免多窗口同时恢复导致重复计时
             import("./components/panel/PomodoroTimer").then(async ({ PomodoroTimer }) => {
                 try {
+                    if (this.storageDisposed) return;
                     const hasActiveInOtherWindow = await new Promise<boolean>(resolve => {
-                        const timeout = setTimeout(() => resolve(false), 500);
+                        const finish = (active: boolean) => {
+                            clearTimeout(timeout);
+                            this.coordinatorChannel.removeEventListener('message', handler);
+                            resolve(active);
+                        };
+                        const timeout = setTimeout(() => finish(false), 500);
                         const handler = (event: MessageEvent) => {
                             if (event.data?.type === 'pomodoroActiveConfirm') {
-                                clearTimeout(timeout);
-                                this.coordinatorChannel.removeEventListener('message', handler);
-                                resolve(true);
+                                finish(true);
                             }
                         };
                         this.coordinatorChannel.addEventListener('message', handler);
                         this.coordinatorChannel.postMessage({ type: 'pomodoroQueryActive' });
+                        this.addCleanup(() => finish(false));
                     });
+                    if (this.storageDisposed) return;
                     if (hasActiveInOtherWindow) {
                         console.log("[PomodoroRecovery] Another window has an active pomodoro timer; skipping recovery in this window");
                         return;
                     }
                     const settings = await this.getPomodoroSettings();
+                    if (this.storageDisposed) return;
                     const timer = await PomodoroTimer.recoverOrphanedWindow(this, settings);
                     if (timer) {
                         PomodoroManager.getInstance().setCurrentPomodoroTimer(timer);
@@ -2291,6 +2311,8 @@ export default class ReminderPlugin extends Plugin {
             title: i18n("projectDockTitle"),
             text: "This is my custom dock",
             init: (element) => {
+                if (this.storageDisposed) return;
+                this.projectPanel?.destroy();
                 this.projectDockElement = element;
                 this.projectPanel = new ProjectPanel(element, this);
             }
@@ -2305,6 +2327,8 @@ export default class ReminderPlugin extends Plugin {
             title: i18n("dockPanelTitle"),
             text: "This is my custom dock",
             init: (element) => {
+                if (this.storageDisposed) return;
+                this.reminderPanel?.destroy();
                 this.reminderPanel = new ReminderPanel(element, this);
             }
         });
@@ -2318,7 +2342,9 @@ export default class ReminderPlugin extends Plugin {
             title: i18n("habitDockTitle"),
             text: "Habit tracking dock",
             init: (element) => {
-                new HabitPanel(element, this);
+                if (this.storageDisposed) return;
+                this.habitPanel?.destroy();
+                this.habitPanel = new HabitPanel(element, this);
             }
         });
     }
@@ -2341,6 +2367,7 @@ export default class ReminderPlugin extends Plugin {
     private async initializeUI() {
         // 加载设置（用于初始显示/隐藏某些停靠栏）
         const settings = await this.loadSettings();
+        if (this.storageDisposed) return;
         const isMobile = getFrontend().endsWith('mobile');
 
         // 手机端在对应侧栏开关关闭时不注册 Dock（移动端无法可靠 hide）
@@ -2528,6 +2555,7 @@ export default class ReminderPlugin extends Plugin {
             this.mobileTaskShortcut?.destroy();
             this.mobileTaskShortcut = null;
         });
+        if (this.storageDisposed) return;
 
         // 文档块标添加菜单
         const handleDocMenu = this.handleDocumentMenu.bind(this);
@@ -2676,6 +2704,7 @@ export default class ReminderPlugin extends Plugin {
     }
 
     async onLayoutReady() {
+        if (this.storageDisposed) return;
         // 初始化批量设置对话框（确保在UI初始化时创建）
         this.batchReminderDialog = new BatchReminderDialog(this);
 
@@ -2686,6 +2715,15 @@ export default class ReminderPlugin extends Plugin {
 
         // 布局就绪后创建日历视图顶栏按钮（桌面端）
         const topBarSettings = await this.loadSettings();
+        if (this.storageDisposed) return;
+        // 首次迁移可能超过元素等待的超时时间，布局就绪后补应用 Dock 状态。
+        this.toggleDockVisibility('TN_project_dock', topBarSettings.enableProjectDock !== false);
+        this.toggleDockVisibility('TN_reminder_dock', topBarSettings.enableReminderDock !== false);
+        this.toggleDockVisibility('TN_habit_dock', topBarSettings.enableHabitDock !== false);
+        this.toggleDockVisibility('TN_calendar_dock', topBarSettings.enableCalendarDock !== false);
+        this.updateBadges();
+        this.updateProjectBadges();
+        this.updateHabitBadges();
         if (topBarSettings.enableCalendarTopBar !== false && !this.calendarTopBarEl) {
             this.calendarTopBarEl = this.addTopBar({
                 icon: 'iconTNCalendar',
@@ -2792,27 +2830,12 @@ export default class ReminderPlugin extends Plugin {
     }
 
     // 等待元素渲染完成后执行的函数
-    private whenElementExist(selector: string | (() => Element | null)): Promise<Element> {
-        return new Promise(resolve => {
-            const checkForElement = () => {
-                let element = null;
-                if (typeof selector === 'function') {
-                    element = selector();
-                } else {
-                    element = document.querySelector(selector);
-                }
-                if (element) {
-                    resolve(element);
-                } else {
-                    // 如果元素不存在，等浏览器再次重绘，递归调用checkForElement，直到元素出现
-                    requestAnimationFrame(checkForElement);
-                }
-            };
-            checkForElement();
-        });
+    private whenElementExist(selector: string | (() => Element | null)): Promise<Element | null> {
+        return this.elementWaiter.wait(selector);
     }
 
     private async setDockBadgeByType(type: "reminder" | "project" | "habit", count: number) {
+        if (this.storageDisposed || !this.registeredDockKeys.has(`TN_${type}_dock`)) return;
         await applyDockBadgeByType({
             plugin: {
                 name: this.name,
@@ -4981,10 +5004,22 @@ export default class ReminderPlugin extends Plugin {
     }
 
     onunload() {
+        if (this.storageDisposed) return;
         this.storageDisposed = true;
+        // 先停止事件、观察器及延时任务，避免删除 DOM 时再次触发旧实例刷新。
+        const cleanups = this.cleanupFunctions.splice(0);
+        cleanups.forEach(fn => {
+            try { fn(); } catch (e) { console.warn("Failed to execute cleanup function:", e); }
+        });
+        this.elementWaiter.dispose();
+        this.reminderPanel?.destroy();
+        this.projectPanel?.destroy();
+        this.habitPanel?.destroy();
         clearTimeout(this.pomodoroRefreshTimer);
         this.pendingPomodoroDates.clear();
-        void PomodoroRecordManager.getInstance(this).closeStorage();
+        void PomodoroRecordManager.getInstance(this).closeStorage().catch(error => {
+            console.warn('Failed to close pomodoro storage:', error);
+        });
         console.log("Task note management plugin disabled; starting resource cleanup...");
         this.reminderNotifications.destroy();
         // 清理音频资源
@@ -5010,7 +5045,7 @@ export default class ReminderPlugin extends Plugin {
         this.tabViews.clear();
 
         // 清理所有面包屑和块按钮
-        document.querySelectorAll('.view-reminder-breadcrumb-btn, .project-breadcrumb-btn, .block-project-btn').forEach(btn => {
+        document.querySelectorAll('[data-plugin-added="reminder-plugin"], .view-reminder-breadcrumb-btn, .project-breadcrumb-btn, .block-project-btn').forEach(btn => {
             btn.remove();
         });
         // 清理 ICS 同步定时器
@@ -5023,15 +5058,6 @@ export default class ReminderPlugin extends Plugin {
         this.frontendReminders?.stop();
         this.frontendReminders = null;
 
-        // 执行所有注册的清理函数
-        this.cleanupFunctions.forEach(fn => {
-            try {
-                fn();
-            } catch (e) {
-                console.warn("Failed to execute cleanup function:", e);
-            }
-        });
-        this.cleanupFunctions = [];
     }
     uninstall() {
         // 卸载插件时删除插件数据
@@ -5147,7 +5173,8 @@ export default class ReminderPlugin extends Plugin {
         }
     }
     private addCleanup(fn: () => void) {
-        this.cleanupFunctions.push(fn);
+        if (this.storageDisposed) fn();
+        else this.cleanupFunctions.push(fn);
     }
 
     // ==================== 移动端定时通知管理 ====================

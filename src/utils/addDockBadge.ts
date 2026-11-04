@@ -138,7 +138,7 @@ export async function setDockBadgeByType(options: {
     plugin: {
         name: string;
         loadSettings: () => Promise<any>;
-        whenElementExist: (selector: string | (() => Element | null)) => Promise<Element>;
+        whenElementExist: (selector: string | (() => Element | null)) => Promise<Element | null>;
     };
     type: DockBadgeType;
     count: number;
@@ -156,6 +156,7 @@ export async function setDockBadgeByType(options: {
 
     try {
         const dockIcon = await plugin.whenElementExist(selector);
+        if (!dockIcon) return;
         applyDockBadge(dockIcon, config, finalCount);
     } catch (error) {
         console.warn(`Failed to set ${config.displayName} dock badge:`, error);

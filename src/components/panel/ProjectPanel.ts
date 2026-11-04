@@ -232,6 +232,7 @@ export function compareProjectsByPanelSort(
 }
 
 export class ProjectPanel {
+    private disposed = false;
     private container: HTMLElement;
     private projectsContainer: HTMLElement;
     private filterSelect: HTMLSelectElement;
@@ -308,12 +309,17 @@ export class ProjectPanel {
     }
 
     private async initializeAsync() {
+        if (this.disposed) return;
         this.isMobileClient = getFrontend().endsWith('mobile') || (this.plugin && this.plugin.isInMobileApp);
         await this.categoryManager.initialize();
+        if (this.disposed) return;
         await this.statusManager.initialize();
+        if (this.disposed) return;
         await this.restorePanelSettings();
+        if (this.disposed) return;
         const folderManager = ProjectFolderManager.getInstance(this.plugin);
         await folderManager.initialize();
+        if (this.disposed) return;
         this.initUI();
         this.loadProjects();
 
@@ -324,6 +330,8 @@ export class ProjectPanel {
     }
 
     public destroy() {
+        if (this.disposed) return;
+        this.disposed = true;
         if (this.projectUpdatedHandler) {
             window.removeEventListener('projectUpdated', this.projectUpdatedHandler);
         }
@@ -819,9 +827,12 @@ export class ProjectPanel {
     }
 
     private async loadProjects() {
+        if (this.disposed) return;
         try {
             await ProjectManager.getInstance(this.plugin).loadProjects();
+            if (this.disposed) return;
             const projectData = await this.plugin.loadProjectData();
+            if (this.disposed) return;
 
             if (!projectData || typeof projectData !== 'object') {
                 this.renderProjects([]);
@@ -832,6 +843,7 @@ export class ProjectPanel {
             let statuses = StatusManager.getInstance(this.plugin).getStatuses();
             if (!statuses || statuses.length === 0) {
                 await StatusManager.getInstance(this.plugin).initialize();
+                if (this.disposed) return;
                 statuses = StatusManager.getInstance(this.plugin).getStatuses();
             }
             const statusIds = new Set(statuses.map((s: any) => s.id));
@@ -981,6 +993,7 @@ export class ProjectPanel {
     }
 
     private renderProjects(projects: any[]) {
+        if (this.disposed) return;
         this.projectsContainer.classList.toggle('project-document-tree', this.currentViewMode === 'list');
 
         // 文件夹视图下，即使没有项目也要渲染文件夹
