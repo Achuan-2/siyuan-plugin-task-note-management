@@ -1,3 +1,15 @@
+## v7.1.10 / 20261105
+
+- ⚡ 插件启停：将 ICS 云端同步移出启动等待流程，延迟预热非必要数据，并行加载分类与项目；禁用时及时释放面板、监听器和定时任务，避免异步操作重新创建资源。
+- ⚡ 重复任务：直接从查询区间生成实例，减少长历史任务启动时的逐日回溯，保留跳过日期顺延、农历和实例状态等行为。
+- 🐛 番茄钟：修复记录目录尚未创建时任务面板无法加载的问题，兼容旧版单文件记录；读取异常时保留历史数据，任务和习惯列表继续加载并支持后续重试。
+
+---
+
+- ⚡ Plugin lifecycle: move ICS cloud sync out of the startup wait path, defer nonessential data warm-up, and load categories and projects in parallel. Release panels, listeners and timers when disabling the plugin, and prevent pending operations from recreating resources.
+- ⚡ Recurring tasks: generate instances from the requested date range to reduce day-by-day scans of long task histories, while preserving skipped-date postponement, lunar-calendar rules and instance states.
+- 🐛 Pomodoro: fix task panels failing to load before the records directory exists, and retain compatibility with legacy single-file records. Preserve historical data on read errors and continue loading task and habit lists with support for later retries.
+
 ## v7.1.9 / 20261104
 
 - ✨ 项目看板：支持拖动分组页签调整顺序，页签保持单行并支持横向滚动。

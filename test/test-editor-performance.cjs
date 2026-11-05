@@ -221,6 +221,9 @@ test('文档加载和切换事件合并初始化，关闭文档及卸载取消�
     let habitSyncs = 0;
     const plugin = Object.assign(new PluginFixture(), {
         registerCommands: () => {}, loadSettings: async () => ({ enableCalendarTopBar: false }),
+        // 布局就绪时也恢复 Dock 状态；此处只验证编辑器初始化和清理。
+        toggleDockVisibility: () => {},
+        updateBadges: () => {}, updateProjectBadges: () => {}, updateHabitBadges: () => {},
         addCleanup: callback => cleanups.push(callback),
         syncHabitPomodoroAutoCheckIns: async () => { habitSyncs++; },
         eventBus: { on: (name, callback) => events.set(name, callback), off: name => events.delete(name) },

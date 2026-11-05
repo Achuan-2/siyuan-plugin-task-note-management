@@ -1,6 +1,6 @@
 {
   "name": "plugin-sample-vite-svelte",
-  "version": "7.1.9",
+  "version": "7.1.10",
   "type": "module",
   "description": "This is a sample plugin based on vite and svelte for Siyuan (https://b3log.org/siyuan)",
   "repository": "",
