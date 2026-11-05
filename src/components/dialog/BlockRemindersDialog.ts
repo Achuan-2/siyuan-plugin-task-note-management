@@ -6,6 +6,9 @@ import { ProjectManager } from "../dataManager/projectManager";
 import { i18n } from "../../pluginInstance";
 import { TaskRenderer } from "../render/TaskRenderer";
 import { PomodoroRecordManager } from "../dataManager/pomodoroRecord";
+import { PomodoroManager } from "../dataManager/pomodoroManager";
+import { PomodoroTimer } from "../panel/PomodoroTimer";
+import { createPomodoroStartSubmenu } from "../../utils/pomodoroPresets";
 import { resolveRepeatReminderTimes, addDaysToDate, getDaysDifference, generateRepeatInstancesWithFutureGuarantee, getRepeatInstanceOriginalKey, isRepeatInstanceCompleted, getRepeatInstanceCompletedTime, setRepeatInstanceCompletion } from "../dataManager/repeatUtils";
 import type { HolidayData } from "../../utils/reminderSkipDate";
 
@@ -368,6 +371,34 @@ export class BlockRemindersDialog {
         });
 
         menu.addItem({
+            iconHTML: "🍅",
+            label: i18n("startPomodoro") || "开始番茄钟",
+            ...(this.plugin?.settings?.pomodoroDirectStart
+                ? { click: () => this.startReminderTimer(reminder) }
+                : {
+                    submenu: createPomodoroStartSubmenu({
+                        source: reminder,
+                        plugin: this.plugin,
+                        startPomodoro: (workDurationOverride?: number) => this.startReminderTimer(reminder, false, workDurationOverride)
+                    })
+                })
+        });
+        menu.addItem({
+            iconHTML: "⏱️",
+            label: i18n("startCountUp") || "开始正计时",
+            click: () => this.startReminderTimer(reminder, true)
+        });
+        menu.addItem({
+            iconHTML: "📊",
+            label: i18n("viewPomodoros") || "查看番茄钟",
+            click: async () => {
+                const { PomodoroSessionsDialog } = await import("./PomodoroSessionsDialog");
+                await new PomodoroSessionsDialog(reminder.id, this.plugin).show();
+            }
+        });
+        menu.addSeparator();
+
+        menu.addItem({
             iconHTML: "🗑️",
             label: i18n("delete") || "删除",
             click: () => {
@@ -379,6 +410,58 @@ export class BlockRemindersDialog {
             x: position.clientX,
             y: position.clientY
         });
+    }
+
+    private async startReminderTimer(reminder: any, isCountUp: boolean = false, workDurationOverride?: number): Promise<void> {
+        try {
+            const settings = await this.plugin.getPomodoroSettings();
+            const runtimeSettings = workDurationOverride && workDurationOverride > 0
+                ? { ...settings, workDuration: workDurationOverride }
+                : settings;
+            const manager = PomodoroManager.getInstance();
+            const start = async (inheritState?: any) => {
+                try {
+                    manager.cleanupInactiveTimer();
+                    if (this.plugin.pomodoroWindowId && typeof this.plugin.openPomodoroWindow === 'function') {
+                        await this.plugin.openPomodoroWindow(reminder, runtimeSettings, isCountUp, inheritState);
+                    } else {
+                        manager.closeCurrentTimer();
+                        const timer = new PomodoroTimer(reminder, runtimeSettings, isCountUp, inheritState, this.plugin);
+                        manager.setCurrentPomodoroTimer(timer);
+                        await timer.show();
+                    }
+                } catch (error) {
+                    console.error("Failed to start bound task timer:", error);
+                    showMessage(i18n("operationFailed"), 3000, "error");
+                }
+            };
+
+            if (manager.hasActivePomodoroTimer()) {
+                const currentState = manager.getCurrentState();
+                const wasRunning = currentState.isRunning && !currentState.isPaused;
+                if (wasRunning) {
+                    manager.pauseCurrentTimer();
+                }
+                confirm(
+                    i18n("switchPomodoroTask"),
+                    i18n("switchPomodoroTaskConfirm", {
+                        current: String(currentState.reminderTitle || i18n("untitledTask")),
+                        next: String(reminder.title || i18n("untitledTask"))
+                    }) + (wasRunning ? i18n("pomodoroSwitchProgressHint") : ''),
+                    () => { void start(currentState); },
+                    () => {
+                        if (wasRunning) {
+                            manager.resumeCurrentTimer();
+                        }
+                    }
+                );
+            } else {
+                await start();
+            }
+        } catch (error) {
+            console.error("Failed to prepare bound task timer:", error);
+            showMessage(i18n("operationFailed"), 3000, "error");
+        }
     }
 
     private async openEditDialog(reminder: any, mode: 'edit' | 'note' = 'edit') {
