@@ -221,8 +221,12 @@ export class ReminderPanel {
         await this.categoryManager.initialize();
         if (this.disposed) return;
 
-        // 初始化番茄钟记录管理器，确保番茄数据已加载
-        await this.pomodoroRecordManager.initialize();
+        // 番茄统计不可用时仍加载任务；存储管理器保留失败状态，后续刷新可重试。
+        try {
+            await this.pomodoroRecordManager.initialize();
+        } catch (error) {
+            console.warn("Failed to initialize task panel pomodoro statistics:", error);
+        }
         if (this.disposed) return;
 
         // 加载持久化设置（例如 showCompletedSubtasks）

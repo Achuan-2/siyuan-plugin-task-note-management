@@ -826,7 +826,7 @@ export default class ReminderPlugin extends Plugin {
      */
     public createPomodoroStoreAdapter(): PomodoroStoreAdapter {
         const list = async () => {
-            const entries: unknown = await readDir(`/data/storage/petal/${this.name}/pomodoroRecords`);
+            const entries: unknown = await readDir(`/data/storage/petal/${this.name}/pomodoroRecords`, true);
             if (!Array.isArray(entries)) throw new Error('读取番茄钟记录目录失败');
             return entries;
         };
@@ -1550,7 +1550,7 @@ export default class ReminderPlugin extends Plugin {
         // 后台初始化番茄钟记录管理器，失败也不阻断插件主流程
         const pomodoroRecordManager = PomodoroRecordManager.getInstance(this);
         pomodoroRecordManager.initialize().catch((error: any) => {
-            console.warn("Failed to initialize pomodoro records (fallback applied; Dock registration unaffected):", error);
+            console.warn("Failed to initialize pomodoro records (task panels remain available):", error);
         });
 
         // 初始化上次番茄钟设置缓存，避免第一次设置更新时误判

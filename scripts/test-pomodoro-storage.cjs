@@ -636,7 +636,7 @@ test('跨天写入部分失败的恢复期间发现外部修改，不用旧快�
     assert.equal(m.store.needsReload, false);
 });
 
-function frontendAdapter({ kernel, locks, readonly = false, files = new Map() }) {
+function frontendAdapter({ kernel, locks, readonly = false, files = new Map(), directory = async () => [], legacy = null }) {
     const relative = 'src/index.ts';
     const source = fs.readFileSync(path.join(root, relative), 'utf8');
     const ast = ts.createSourceFile(relative, source, ts.ScriptTarget.Latest, true);
@@ -644,15 +644,94 @@ function frontendAdapter({ kernel, locks, readonly = false, files = new Map() })
     const method = cls.members.find(node => node.name?.getText(ast) === 'createPomodoroStoreAdapter').getText(ast);
     const compiled = ts.transpileModule(`class Fixture { ${method} }`, { compilerOptions: { target: ts.ScriptTarget.ES2021 } }).outputText;
     const Fixture = new Function('PomodoroRecordManager', 'PomodoroWriteCoordinator', 'createPomodoroCache', 'readDir', 'window', 'navigator', 'POMODORO_RECORD_DATA_FILE',
-        `${compiled}; return Fixture;`)({ getInstance: () => ({ locateSessionForWrite: async id => [...files].find(([, record]) => record.sessions?.some(s => s.id === id) || record.tombstones?.[id])?.[0].match(/([^/]+)\.json$/)?.[1] }) }, PomodoroWriteCoordinator, () => ({}), async () => [], { siyuan: { config: { readonly } } }, { locks }, 'legacy.json');
+        `${compiled}; return Fixture;`)({ getInstance: () => ({ locateSessionForWrite: async id => [...files].find(([, record]) => record.sessions?.some(s => s.id === id) || record.tombstones?.[id])?.[0].match(/([^/]+)\.json$/)?.[1] }) }, PomodoroWriteCoordinator, () => ({}), directory, { siyuan: { config: { readonly } } }, { locks }, 'legacy.json');
     const instance = Object.assign(new Fixture(), {
         name: 'test', kernel, storageDisposed: false,
         protectedStorage: { load: async file => clone(files.get(file)) || null },
         saveData: async (file, value) => { files.set(file, clone(value)); }, removeData: async file => { files.delete(file); },
         getWorkspaceScopedChannelName: name => `workspace:${name}`,
+        loadData: async () => clone(legacy),
     });
     return instance.createPomodoroStoreAdapter();
 }
+
+function directoryApi(fetchSyncPost) {
+    const source = fs.readFileSync(path.join(root, 'src/api.ts'), 'utf8');
+    const ast = ts.createSourceFile('api.ts', source, ts.ScriptTarget.Latest, true);
+    const methods = ast.statements.filter(node => ts.isFunctionDeclaration(node) && ['request', 'readDir'].includes(node.name?.text));
+    const compiled = ts.transpileModule(methods.map(node => node.getText(ast).replace(/^export /, '')).join('\n'), {
+        compilerOptions: { target: ts.ScriptTarget.ES2021 },
+    }).outputText;
+    return new Function('fetchSyncPost', `${compiled}; return readDir;`)(fetchSyncPost);
+}
+
+test('前端首次启动缺少番茄目录时初始化为空，且不创建或覆盖记录', async () => {
+    const calls = [];
+    const directory = directoryApi(async (url, data) => {
+        calls.push({ url, data }); return { code: 404, msg: 'path does not exist', data: null };
+    });
+    const adapter = frontendAdapter({ directory }), f = fixture();
+    Object.assign(f.adapter, { list: adapter.list, readLegacy: adapter.readLegacy });
+    const m = f.manager();
+    await m.initialize();
+    assert.deepEqual(Object.keys(m.getDailySummaries()), []);
+    assert.deepEqual(f.stats.writes, []);
+    assert.deepEqual(f.stats.removes, []);
+    assert.deepEqual(calls, [{ url: '/api/file/readDir', data: { path: '/data/storage/petal/test/pomodoroRecords' } }]);
+});
+
+test('目录 API 保留默认非严格读取行为，严格读取返回完整目录条目', async () => {
+    let response = { code: 500, msg: 'disk error', data: null };
+    const directory = directoryApi(async () => response);
+    assert.equal(await directory('/missing'), null);
+    const entries = [{ name: '2026-11-04.json', isDir: false, isSymlink: false, updated: 1700000000 }];
+    response = { code: 0, data: entries };
+    assert.deepEqual(await directory('/records', true), entries);
+});
+
+test('缺少每日目录时仍加载旧版单文件历史，目录恢复后可重试', async () => {
+    let response = { code: 404, data: null };
+    const adapter = frontendAdapter({ directory: directoryApi(async () => response), legacy: twoDays() });
+    const f = fixture(twoDays());
+    Object.assign(f.adapter, { list: adapter.list, readLegacy: adapter.readLegacy });
+    const m = f.manager();
+    await m.initialize();
+    assert.equal(m.getEventTotalFocusTime('task'), 50);
+    response = { code: 0, data: await fixture(twoDays()).adapter.list() };
+    await m.reloadRecords();
+    assert.equal(m.getEventTotalFocusTime('task'), 50);
+    assert.deepEqual(f.stats.writes, []);
+});
+
+test('目录权限、服务、格式及网络错误保留历史，失败初始化恢复后可重试', async () => {
+    let response = { code: 0, data: [] }, networkError;
+    const directory = directoryApi(async () => { if (networkError) throw networkError; return response; });
+    const f = fixture(twoDays()), m = f.manager();
+    await m.initialize();
+    const cache = f.getCache();
+    f.adapter.list = frontendAdapter({ directory }).list;
+    for (const failure of [
+        { code: 403, msg: 'permission denied', data: null },
+        { code: 500, msg: 'disk error', data: null },
+        { code: 0, data: null },
+        { code: 0, data: {} },
+        null,
+    ]) {
+        response = failure;
+        await assert.rejects(m.reloadRecords(), /读取目录失败/);
+        assert.equal(m.getEventTotalFocusTime('task'), 50);
+        assert.deepEqual(f.getCache(), cache);
+    }
+    networkError = new Error('network unavailable');
+    await assert.rejects(m.reloadRecords(), /network unavailable/);
+    const retry = f.manager();
+    await assert.rejects(retry.initialize(), /network unavailable/);
+    networkError = null;
+    response = { code: 0, data: await fixture(twoDays()).adapter.list() };
+    await retry.initialize();
+    assert.equal(retry.getEventTotalFocusTime('task'), 50);
+    assert.deepEqual(f.stats.writes, []);
+});
 
 test('前端提交始终路由到内核 RPC，RPC 失败不绕开队列写入，且遵守只读状态', async () => {
     const requests = []; let fallback = 0;

@@ -206,6 +206,36 @@ for (const [name, stages] of [
     });
 }
 
+for (const name of ['ReminderPanel', 'HabitPanel']) {
+    test(`${name} 番茄统计初始化失败仍加载列表，关闭后失败不会重新加载`, async () => {
+        for (const closeBeforeFailure of [false, true]) {
+            const pending = deferred(), warnings = [], calls = [];
+            const Panel = loadMethods(`src/components/panel/${name}.ts`, name, ['initializeAsync'], {
+                window: new EventTarget(), document: new EventTarget(),
+                console: { warn: (...args) => warnings.push(args) },
+            });
+            const panel = Object.assign(new Panel(), {
+                disposed: false,
+                categoryManager: { initialize: async () => {} }, groupManager: { initialize: async () => {} },
+                pomodoroRecordManager: { initialize: async () => { await pending.promise; throw new Error('permission denied'); } },
+                plugin: { loadSettings: async () => ({}) },
+                initUI: () => calls.push('ui'), loadReminders: () => calls.push('tasks'), loadHabits: () => calls.push('habits'),
+                reminderUpdatedHandler() {}, habitUpdatedHandler() {}, sortConfigUpdatedHandler() {}, settingsUpdatedHandler() {},
+                addReminderDialogStyles() {},
+            });
+            for (const method of ['refreshReminderSkipDateContext', 'loadSortConfig', 'loadCustomFilters',
+                'updateFilterSelect', 'loadFilterTab', 'loadCollapseStates', 'restorePanelSettings']) panel[method] = async () => {};
+            const running = panel.initializeAsync();
+            await drain();
+            if (closeBeforeFailure) panel.disposed = true;
+            pending.resolve();
+            await running;
+            assert.equal(warnings.length, 1);
+            assert.deepEqual(calls, closeBeforeFailure ? [] : ['ui', name === 'ReminderPanel' ? 'tasks' : 'habits']);
+        }
+    });
+}
+
 function icsFixture() {
     const intervals = new Map(), exports = {}, upload = deferred();
     let id = 0, uploads = 0;

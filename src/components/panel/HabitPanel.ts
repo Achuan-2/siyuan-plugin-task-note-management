@@ -107,7 +107,12 @@ export class HabitPanel {
         if (this.disposed) return;
         await this.groupManager.initialize();
         if (this.disposed) return;
-        await this.pomodoroRecordManager.initialize();
+        // 统计读取异常不应阻断习惯列表，也不修改原始番茄钟记录。
+        try {
+            await this.pomodoroRecordManager.initialize();
+        } catch (error) {
+            console.warn("Failed to initialize habit panel pomodoro statistics:", error);
+        }
         if (this.disposed) return;
         await this.loadCollapseStates();
         if (this.disposed) return;

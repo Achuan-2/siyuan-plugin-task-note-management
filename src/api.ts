@@ -644,11 +644,20 @@ export async function removeFile(path: string) {
 
 
 
-export async function readDir(path: string): Promise<IResReadDir> {
+/** 严格读取仅将不存在的目录视为空，其他错误保留给调用方处理。 */
+export async function readDir(path: string, strict = false): Promise<Array<IResReadDir & { updated: number }>> {
     let data = {
         path: path
     }
     let url = '/api/file/readDir';
+    if (strict) {
+        const response = await fetchSyncPost(url, data);
+        if (response?.code === 404) return [];
+        if (response?.code !== 0 || !Array.isArray(response.data)) {
+            throw new Error(`读取目录失败 (${path}): ${response?.msg || '无效的目录响应'}`);
+        }
+        return response.data;
+    }
     return request(url, data);
 }
 
