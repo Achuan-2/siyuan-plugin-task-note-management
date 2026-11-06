@@ -65,7 +65,7 @@ export class HabitPanel {
     private checkInDaysMode: HabitCheckInDaysMode = 'total';
     private groupManager: HabitGroupManager;
     private habitUpdatedHandler: () => void;
-    private reminderUpdatedHandler: () => void;
+    private reminderUpdatedHandler: (event: CustomEvent) => void;
     private loadHabitsTimer: any = null;
     private searchTimer: number | undefined;
     private collapsedGroups: Set<string> = new Set();
@@ -96,7 +96,8 @@ export class HabitPanel {
         this.habitUpdatedHandler = () => {
             debounceLoad();
         };
-        this.reminderUpdatedHandler = () => {
+        this.reminderUpdatedHandler = (event: CustomEvent) => {
+            if (event.detail?.source === 'icsSubscription') return;
             debounceLoad();
         };
 

@@ -57,7 +57,7 @@
         });
         data.subscriptions = newSubDict;
         await saveSubscriptions(plugin, data);
-        window.dispatchEvent(new CustomEvent('reminderUpdated'));
+        window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'icsSubscription' } }));
     }
 
     function handleDragStart(index: number) {
@@ -128,7 +128,7 @@
         data.subscriptions[sub.id] = sub;
         await saveSubscriptions(plugin, data);
         subscriptions = [...subscriptions];
-        window.dispatchEvent(new CustomEvent('reminderUpdated'));
+        window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'icsSubscription' } }));
     }
 
     async function handleSync(sub: any) {

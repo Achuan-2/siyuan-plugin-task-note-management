@@ -142,7 +142,8 @@ export async function saveSubscriptionTasks(plugin: any, subscriptionId: string,
     try {
         const filePath = getSubscriptionFilePath(subscriptionId);
         const content = JSON.stringify(tasks, null, 2);
-        await putFile(filePath, false, new Blob([content]));
+        // 与宿主 saveData 一样标记写入前端，避免本窗口收到自己的覆盖通知。
+        await putFile(filePath, false, new Blob([content]), plugin?.app?.appId);
 
         // Refresh cache
         if (plugin && typeof plugin.loadSubscriptionTasks === 'function') {
@@ -567,10 +568,9 @@ async function fetchIcsContent(url: string): Promise<string> {
 async function buildTasksFromSubscriptionEvents(
     plugin: any,
     subscription: IcsSubscription,
-    events: Array<ParsedIcsEvent & Record<string, any>>
+    events: Array<ParsedIcsEvent & Record<string, any>>,
+    existingTasks: any
 ): Promise<any> {
-    const existingTasks = await loadSubscriptionTasks(plugin, subscription.id);
-
     // Build set of manually-deleted UIDs so they don't reappear after sync
     const manuallyDeletedUids = new Set<string>();
     const manuallyDeletedTasks: any = {};
@@ -688,19 +688,14 @@ export async function syncSubscription(
             events = await parseIcsFile(icsContent);
         }
 
-        if (events.length === 0) {
-            // Clear subscription file if no events
-            await saveSubscriptionTasks(plugin, subscription.id, {});
-            return { success: true, eventsCount: 0 };
+        const existingTasks = await loadSubscriptionTasks(plugin, subscription.id);
+        const tasks = await buildTasksFromSubscriptionEvents(plugin, subscription, events, existingTasks);
+
+        // 无变化时不重写文件或刷新视图；空订阅也要保留手动删除标记。
+        if (!isSameReminderPayload(existingTasks, tasks)) {
+            await saveSubscriptionTasks(plugin, subscription.id, tasks);
+            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'icsSubscription' } }));
         }
-
-        const tasks = await buildTasksFromSubscriptionEvents(plugin, subscription, events);
-
-        // Save to subscription's dedicated file
-        await saveSubscriptionTasks(plugin, subscription.id, tasks);
-
-        // Trigger update event
-        window.dispatchEvent(new CustomEvent('reminderUpdated'));
 
         return { success: true, eventsCount: events.length };
     } catch (error) {
@@ -804,7 +799,7 @@ export async function removeSubscription(plugin: any, subscriptionId: string): P
         await removeFile(filePath);
 
         // Trigger update event
-        window.dispatchEvent(new CustomEvent('reminderUpdated'));
+        window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'icsSubscription' } }));
     } catch (error) {
         console.error('Failed to remove subscription:', error);
         throw error;
@@ -835,7 +830,7 @@ export async function updateSubscriptionTaskMetadata(
 
         await saveSubscriptionTasks(plugin, subscription.id, tasks);
         // Trigger update event
-        window.dispatchEvent(new CustomEvent('reminderUpdated'));
+        window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'icsSubscription' } }));
     } catch (error) {
         console.error('Failed to update subscription task metadata:', error);
         throw error;

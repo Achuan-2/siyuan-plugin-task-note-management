@@ -84,6 +84,7 @@ import { getTaskListSortTargets, sortTaskLists } from "./utils/taskListSort";
 import { TaskListAutoSorter } from "./utils/taskListAutoSort";
 import { TaskListAutoCompleter } from "./utils/taskListAutoComplete";
 import { ElementWaiter } from "./utils/elementWaiter";
+import { PluginDataChanges, type PluginDataGroup } from "./utils/pluginDataChanges";
 
 
 export const SETTINGS_FILE = "reminder-settings.json";
@@ -414,6 +415,7 @@ export default class ReminderPlugin extends Plugin {
     private habitGroupDataCache: any = null;
     private subscriptionCache: any = null;
     private subscriptionTasksCache: { [id: string]: any } = {};
+    private readonly pluginDataChanges = new PluginDataChanges(readDir, () => `/data/storage/petal/${this.name}`);
     private holidayDataCache: any = null;
     private pomodoroRecordsCache: any = null;
     private readonly pendingPomodoroDates = new Set<string>();
@@ -1530,6 +1532,11 @@ export default class ReminderPlugin extends Plugin {
         this.taskNoteDOM = new TaskNoteDOMManager(this);
         await this.initializeUI();
         if (this.storageDisposed) return;
+        try {
+            this.pluginDataChanges.commit(await this.pluginDataChanges.scan());
+        } catch (error) {
+            console.warn('Failed to initialize plugin data snapshot:', error);
+        }
         // 数据加载
         await this.loadSettings();
         if (this.storageDisposed) return;
@@ -2642,9 +2649,9 @@ export default class ReminderPlugin extends Plugin {
         this.addCleanup(() => clearTimeout(badgeTimer));
 
         // 监听提醒更新事件，更新徽章
-        const onReminderUpdated = () => {
+        const onReminderUpdated = (event: CustomEvent) => {
             this.updateBadges();
-            this.scheduleHabitPomodoroAutoSync();
+            if (event.detail?.source !== 'icsSubscription') this.scheduleHabitPomodoroAutoSync();
             this.taskNoteDOM.addBreadcrumbButtonsToExistingProtyles();
         };
         window.addEventListener('reminderUpdated', onReminderUpdated);
@@ -4244,11 +4251,11 @@ export default class ReminderPlugin extends Plugin {
             const type = event.data?.type;
             if (type === 'reminderUpdated' || type === 'habitUpdated' || type === 'calendarConfigUpdated') {
                 // 转发给当前窗口的其他组件，附带标记避免循环发送
-                window.dispatchEvent(new CustomEvent(type, { detail: { _fromSync: true } }));
+                window.dispatchEvent(new CustomEvent(type, { detail: { _fromSync: true, source: event.data?.source } }));
                 // 刷新徽章
                 this.updateBadges();
                 this.updateProjectBadges();
-                this.updateHabitBadges();
+                if (event.data?.source !== 'icsSubscription') this.updateHabitBadges();
             } else if (type === 'pomodoroQueryActive') {
                 // 若本窗口有活跃的番茄钟，通知询问方无需再次恢复
                 if (PomodoroManager.getInstance().hasActivePomodoroTimer()) {
@@ -4260,7 +4267,7 @@ export default class ReminderPlugin extends Plugin {
         // 监听当前窗口的事件并广播
         const broadcastEvent = (e: CustomEvent) => {
             if (e.detail?._fromSync) return;
-            this.coordinatorChannel?.postMessage({ type: e.type });
+            this.coordinatorChannel?.postMessage({ type: e.type, source: e.detail?.source });
         };
 
         window.addEventListener('reminderUpdated', broadcastEvent as any);
@@ -5063,26 +5070,48 @@ export default class ReminderPlugin extends Plugin {
         // 卸载插件时删除插件数据
 
     }
-    async onDataChanged() {
-        console.log("onDataChanged");
+    async onDataChanged(reason?: 'sync' | 'overwrite') {
         try {
-            await Promise.all([
-                this.loadSettings(true),
-                this.loadReminderData(true),
-                this.loadProjectData(true),
-                this.loadProjectStatus(true),
-                this.loadCategories(true),
-                this.loadHabitData(true),
-                this.loadHabitGroupData(true),
-                PomodoroRecordManager.getInstance(this).reloadRecords(),
-                this.isInMobileApp ? this.loadMobileNotifyData(true) : Promise.resolve(),
-                this.isInMobileApp ? this.loadMobileHabitNotifyData(true) : Promise.resolve(),
-            ]);
-            window.dispatchEvent(new CustomEvent('reminderUpdated'));
-            window.dispatchEvent(new CustomEvent('habitUpdated'));
+            let snapshot: Awaited<ReturnType<PluginDataChanges['scan']>> | undefined;
+            try {
+                snapshot = await this.pluginDataChanges.scan();
+            } catch (error) {
+                // 无法确定变化范围时保留原有的全量刷新，不能漏掉外部修改。
+                console.warn('Failed to inspect plugin data changes, reloading all data:', error);
+            }
+            const changed = snapshot ? this.pluginDataChanges.changed(snapshot, reason === 'sync') : null;
+            const has = (group: PluginDataGroup) => !changed || changed.has(group);
+            const reloads: Promise<any>[] = [];
+            if (has('settings')) reloads.push(this.loadSettings(true));
+            if (has('reminders')) reloads.push(this.loadReminderData(true));
+            if (has('projects')) reloads.push(this.loadProjectData(true));
+            if (has('statuses')) reloads.push(this.loadProjectStatus(true));
+            if (has('categories')) reloads.push(this.loadCategories(true));
+            if (has('habits')) reloads.push(this.loadHabitData(true));
+            if (has('habitGroups')) reloads.push(this.loadHabitGroupData(true).then(() => HabitGroupManager.getInstance().initialize(true)));
+            if (has('holidays')) reloads.push(this.loadHolidayData(true));
+            if (has('subscriptions')) {
+                this.subscriptionTasksCache = {};
+                reloads.push(this.loadSubscriptionData(true));
+            }
+            if (has('pomodoros')) reloads.push(PomodoroRecordManager.getInstance(this).reloadRecords());
+            if (this.isInMobileApp && has('mobileNotifications')) {
+                reloads.push(this.loadMobileNotifyData(true), this.loadMobileHabitNotifyData(true));
+            }
+            await Promise.all(reloads);
+            if (this.storageDisposed) return;
+            if (snapshot) this.pluginDataChanges.commit(snapshot);
+            const habitsChanged = has('habits') || has('habitGroups') || has('settings');
+            const remindersChanged = habitsChanged || has('reminders') || has('projects') || has('statuses')
+                || has('categories') || has('subscriptions') || has('pomodoros') || has('holidays');
+            const subscriptionsOnly = changed?.size === 1 && changed.has('subscriptions');
+            if (remindersChanged) window.dispatchEvent(new CustomEvent('reminderUpdated', {
+                detail: subscriptionsOnly ? { source: 'icsSubscription' } : undefined,
+            }));
+            if (habitsChanged) window.dispatchEvent(new CustomEvent('habitUpdated'));
 
             // 移动端：数据变化时（包括从其他设备同步），清空当前设备的通知记录并重新生成。
-            if (this.isInMobileApp) {
+            if (this.isInMobileApp && !subscriptionsOnly && (remindersChanged || has('mobileNotifications'))) {
                 try {
                     // 加载所有未完成的任务（使用已更新的缓存）
                     const reminderData = this.reminderDataCache || await this.loadReminderData(true);

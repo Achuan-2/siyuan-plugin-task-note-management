@@ -625,11 +625,12 @@ export const getFileStat = async (path: string): Promise<{ mtime: number } | nul
 }
 
 
-export async function putFile(path: string, isDir: boolean, file: any) {
+export async function putFile(path: string, isDir: boolean, file: any, app?: string) {
     let form = new FormData();
     form.append('path', path);
     form.append('isDir', isDir.toString());
     form.append('file', file);
+    if (app) form.append('app', app);
     let url = '/api/file/putFile';
     return request(url, form);
 }
