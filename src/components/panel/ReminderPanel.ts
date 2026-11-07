@@ -15,6 +15,7 @@ import { TaskRenderer } from "../render/TaskRenderer";
 import { cleanReminderItem } from "../../utils/reminderLoadUtils";
 import { TaskHierarchyIndex } from '../../utils/taskHierarchy';
 import { CompletedSubtaskCollapseState } from '../../utils/completedSubtaskCollapse';
+import { LongPressTaskDrag, type TaskDragPoint } from '../../utils/longPressTaskDrag';
 import { generateRepeatInstances, generateRepeatInstancesWithFutureGuarantee, getRepeatDescription, getDaysDifference, addDaysToDate, generateSubtreeInstances, parseReminderInstanceId, getRepeatInstanceOriginalKey, isRepeatInstanceCompleted, getRepeatInstanceCompletedTime, setRepeatInstanceCompletion, setRepeatInstanceOverride, patchRepeatInstanceState, removeRepeatInstance, deleteRepeatInstanceState, getRepeatInstanceState, getInstanceField } from "../dataManager/repeatUtils";
 import { PomodoroTimer } from "./PomodoroTimer";
 import { getLastStatsMode } from "../stats/statsMode";
@@ -85,6 +86,7 @@ export class ReminderPanel {
     private isDragging: boolean = false;
     private draggedElement: HTMLElement | null = null;
     private draggedReminder: any = null;
+    private mobileTaskDrag: LongPressTaskDrag<any> | null = null;
     private dragScrollIntervalId: number | null = null;
     private lastDragTime: number = 0;
     private lastDragClientY: number | null = null;
@@ -327,6 +329,8 @@ export class ReminderPanel {
         this.reminderLoadVersion++;
         this.pendingReminderLoad = false;
         this.pendingReminderForceLoad = false;
+        this.mobileTaskDrag?.dispose();
+        this.mobileTaskDrag = null;
         this.stopDragScroll();
         // 清理定时器
         if (this.loadTimeoutId) {
@@ -2825,6 +2829,7 @@ export class ReminderPanel {
 
     /** 按既有顺序迭代渲染，保留未变化卡片及其交互状态。 */
     private renderRemindersIteratively(reminders: any[], asyncDataCache: Map<string, any>, today: string) {
+        this.mobileTaskDrag?.cancel();
         const indexes = this.createReminderRenderIndexes(reminders, today);
         // 先收集目标节点；复用的卡片在提交前保持连接，避免移入 fragment 时先消失。
         const elements: HTMLElement[] = [];
@@ -5840,10 +5845,66 @@ export class ReminderPanel {
         }
     }
 
+    /** 移动端参照思源文档树，长按任务卡片后直接拖动，不增加额外控件。 */
+    private ensureMobileTaskDrag(): void {
+        if (this.mobileTaskDrag) return;
+        this.mobileTaskDrag = new LongPressTaskDrag(this.remindersContainer, {
+            getSource: target => {
+                if (this.disposed || this.isMultiSelectMode || this.isDragDisabledBySortMode()) return null;
+                // 标题可长按拖动，短按仍打开绑定块；其他链接和控件保留原有操作。
+                if (!target.closest || target.closest('button, input, textarea, select, [contenteditable="true"], [contenteditable=""], .reminder-item__progress-wrap')) return null;
+                const link = target.closest('a, [data-type="a"], [data-href]');
+                if (link && !link.classList.contains('reminder-item__title')) return null;
+                const element = target.closest<HTMLElement>('.reminder-item[data-reminder-id]');
+                if (!element || !this.remindersContainer.contains(element)) return null;
+                const task = this.currentRemindersCache.find(item => item.id === element.dataset.reminderId);
+                return task ? { element, task, title: task.title || '' } : null;
+            },
+            onStart: ({ element, task }) => {
+                this.isDragging = true;
+                this.draggedElement = element;
+                this.draggedReminder = task;
+            },
+            onMove: (task, point) => {
+                const target = this.getMobileTaskDropTarget(task, point);
+                if (target) this.showDropIndicator(target.element, point);
+                else this.hideDropIndicator();
+            },
+            onDrop: (task, point) => {
+                const target = this.getMobileTaskDropTarget(task, point);
+                if (target) void this.handleDrop(target.source, target.reminder, point, target.dropType);
+            },
+            onEnd: () => {
+                this.isDragging = false;
+                this.draggedElement = null;
+                this.draggedReminder = null;
+                this.hideDropIndicator();
+            },
+        });
+    }
+
+    private getMobileTaskDropTarget(task: any, point: TaskDragPoint) {
+        if (this.disposed || this.isMultiSelectMode) return null;
+        const element = document.elementFromPoint(point.clientX, point.clientY)
+            ?.closest<HTMLElement>('.reminder-item[data-reminder-id]');
+        if (!element || !this.remindersContainer.contains(element)) return null;
+        // 只使用当前视图的数据，避免触摸期间任务被刷新、删除后仍使用旧对象。
+        const source = this.currentRemindersCache.find(item => item.id === task.id);
+        const reminder = this.currentRemindersCache.find(item => item.id === element.dataset.reminderId);
+        if (!source || !reminder) return null;
+        const dropType = this.getDropType(element, point);
+        return this.canDropHere(source, reminder, dropType === 'set-parent')
+            ? { source, reminder, element, dropType } : null;
+    }
+
     // 新增：添加拖拽功能
     private addDragFunctionality(element: HTMLElement, reminder: any) {
 
-        if (this.isMobileClient || (this.plugin && this.plugin.isInMobileApp)) return; // 移动端不启用拖拽，避免手势冲突导致无法滑动
+        if (this.isMobileClient || this.plugin?.isInMobileApp) {
+            element.draggable = false;
+            this.ensureMobileTaskDrag();
+            return;
+        }
         if (this.isDragDisabledBySortMode()) return;
 
         element.draggable = true;
@@ -7324,7 +7385,7 @@ export class ReminderPanel {
     }
 
     // 新增：显示拖放指示器
-    private showDropIndicator(element: HTMLElement, event: DragEvent) {
+    private showDropIndicator(element: HTMLElement, event: Pick<DragEvent, 'clientY'>) {
         this.hideDropIndicator(); // 先清除之前的指示器
 
         const rect = element.getBoundingClientRect();
@@ -7404,7 +7465,7 @@ export class ReminderPanel {
     }
 
     // 新增：判断拖放类型（根据鼠标位置）
-    private getDropType(element: HTMLElement, event: DragEvent): 'before' | 'after' | 'set-parent' {
+    private getDropType(element: HTMLElement, event: Pick<DragEvent, 'clientY'>): 'before' | 'after' | 'set-parent' {
         const rect = element.getBoundingClientRect();
         const height = rect.height;
         const mouseY = event.clientY - rect.top;
@@ -7426,7 +7487,7 @@ export class ReminderPanel {
     }
 
     // 新增：处理拖放
-    private async handleDrop(draggedReminder: any, targetReminder: any, event: DragEvent, dropType: 'before' | 'after' | 'set-parent') {
+    private async handleDrop(draggedReminder: any, targetReminder: any, event: Pick<DragEvent, 'clientY'>, dropType: 'before' | 'after' | 'set-parent') {
         try {
             if (dropType === 'set-parent') {
                 // 设置父子关系

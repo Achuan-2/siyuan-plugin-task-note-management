@@ -1496,6 +1496,34 @@
     padding: 20px;
 }
 
+.reminder-list--touch-draggable {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+}
+
+.reminder-item--touch-dragging {
+    opacity: 0.38 !important;
+}
+
+.reminder-touch-drag-preview {
+    position: fixed;
+    z-index: 2147483647;
+    pointer-events: none;
+    transform: translate(-50%, 20px);
+    box-sizing: border-box;
+    max-width: calc(100vw - 24px);
+    padding: 10px 12px;
+    border: 1px solid var(--b3-theme-primary);
+    border-radius: 6px;
+    background: var(--b3-theme-surface);
+    color: var(--b3-theme-on-surface);
+    box-shadow: var(--b3-point-shadow);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .reminder-item {
     border: 1px solid var(--b3-theme-surface-lighter);
     border-radius: 4px;
