@@ -31,6 +31,8 @@ export class PomodoroTimer {
     private modeToggleBtn: HTMLElement;
     private minimizeBtn: HTMLElement;
     private mainSwitchBtn: HTMLElement; // 新增：主切换按钮
+    private moreMenuBtn: HTMLElement;
+    private switchMenuMode: 'status' | 'more' = 'status';
     private switchMenu: HTMLElement; // 新增：切换菜单
     private switchMenuAnchor: HTMLElement | null = null;
     private switchMenuHideTimer: number | null = null;
@@ -3048,6 +3050,7 @@ export class PomodoroTimer {
 
         const editDurationBtn = document.createElement('button');
         editDurationBtn.className = 'pomodoro-menu-item';
+        editDurationBtn.dataset.editDuration = '';
         editDurationBtn.style.cssText = this.getMenuItemStyle();
         editDurationBtn.textContent = `✏️ ${i18n('pomodoroEditDuration')}`;
         editDurationBtn.addEventListener('click', (e) => {
@@ -3058,15 +3061,43 @@ export class PomodoroTimer {
         });
         this.initMenuItemHoverEffects(editDurationBtn);
 
+        const settingsBtn = document.createElement('button');
+        settingsBtn.className = 'pomodoro-menu-item';
+        settingsBtn.style.cssText = this.getMenuItemStyle();
+        settingsBtn.textContent = i18n('pomodoroSettings');
+        settingsBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.hideSwitchMenu();
+            this.openPomodoroSettings();
+        });
+        this.initMenuItemHoverEffects(settingsBtn);
+
+        for (const item of [workBtn, shortBreakBtn, longBreakBtn]) item.dataset.menuGroup = 'status';
+        for (const item of [this.modeToggleBtn, editDurationBtn, settingsBtn]) item.dataset.menuGroup = 'more';
+
         // 将菜单项添加到菜单中
-        this.switchMenu.appendChild(this.modeToggleBtn);
         this.switchMenu.appendChild(workBtn);
         this.switchMenu.appendChild(shortBreakBtn);
         this.switchMenu.appendChild(longBreakBtn);
+        this.switchMenu.appendChild(this.modeToggleBtn);
         this.switchMenu.appendChild(editDurationBtn);
+        this.switchMenu.appendChild(settingsBtn);
+
+        this.moreMenuBtn = document.createElement('button');
+        this.moreMenuBtn.className = 'pomodoro-more-btn';
+        this.moreMenuBtn.style.cssText = this.mainSwitchBtn.style.cssText;
+        this.moreMenuBtn.textContent = '⋯';
+        this.moreMenuBtn.title = i18n('more');
+        this.moreMenuBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.toggleSwitchMenu('more');
+        });
 
         // 将按钮和菜单添加到容器中
         switchContainer.appendChild(this.mainSwitchBtn);
+        switchContainer.appendChild(this.moreMenuBtn);
         switchContainer.appendChild(this.switchMenu);
 
         // 主按钮点击事件
@@ -3123,29 +3154,19 @@ export class PomodoroTimer {
 
         // 全屏模式切换按钮
         this.fullscreenBtn = document.createElement('button');
-        this.fullscreenBtn.className = 'pomodoro-fullscreen-btn';
-        this.fullscreenBtn.style.cssText = `
-            background: none;
-            border: none;
-            color: var(--b3-theme-on-surface);
-            cursor: pointer;
-            padding: 4px;
-            border-radius: 4px;
-            font-size: 14px;
-            line-height: 1;
-            opacity: 0.7;
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        `;
-        this.fullscreenBtn.innerHTML = '↕️';
+        this.fullscreenBtn.className = 'pomodoro-menu-item pomodoro-fullscreen-btn';
+        this.fullscreenBtn.dataset.menuGroup = 'more';
+        this.fullscreenBtn.style.cssText = this.getMenuItemStyle();
+        this.fullscreenBtn.textContent = `⛶ ${i18n('fullscreenMode')}`;
         this.fullscreenBtn.title = i18n('fullscreenMode') || '全屏模式';
         this.fullscreenBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
+            this.hideSwitchMenu();
             this.toggleFullscreen();
         });
+        this.initMenuItemHoverEffects(this.fullscreenBtn);
+        this.switchMenu.appendChild(this.fullscreenBtn);
 
 
 
@@ -3213,7 +3234,6 @@ export class PomodoroTimer {
         title.appendChild(switchContainer);
 
         headerButtons.appendChild(this.expandToggleBtn);
-        headerButtons.appendChild(this.fullscreenBtn);
         headerButtons.appendChild(closeBtn);
         header.appendChild(title);
         header.appendChild(headerButtons);
@@ -5003,21 +5023,18 @@ export class PomodoroTimer {
     private updateMainSwitchButton() {
         if (!this.mainSwitchBtn) return;
 
-        let icon = '⚙️'; // 默认设置图标
-        let title = i18n('switcherMenu') || '切换菜单';
-
-
-        this.mainSwitchBtn.innerHTML = icon;
-        this.mainSwitchBtn.title = title;
+        this.mainSwitchBtn.textContent = '🔄';
+        this.mainSwitchBtn.title = i18n('pomodoroSwitchStatus');
     }
 
     /**
      * 切换显示/隐藏切换菜单
      */
-    private toggleSwitchMenu() {
-        if (this.switchMenu.style.display === 'flex') {
+    private toggleSwitchMenu(mode: 'status' | 'more' = 'status') {
+        if (this.switchMenu.style.display === 'flex' && this.switchMenuMode === mode) {
             this.hideSwitchMenu();
         } else {
+            this.switchMenuMode = mode;
             this.showSwitchMenu();
         }
     }
@@ -5026,7 +5043,7 @@ export class PomodoroTimer {
      * 显示切换菜单
      */
     private showSwitchMenu() {
-        const anchorBtn = this.isMinimized && this.minimizedModeBtn ? this.minimizedModeBtn : this.mainSwitchBtn;
+        const anchorBtn = this.getSwitchMenuAnchorButton();
         if (!this.switchMenu || !anchorBtn) return;
 
         if (this.switchMenuHideTimer) {
@@ -5045,6 +5062,15 @@ export class PomodoroTimer {
         this.switchMenu.style.opacity = '1';
         this.switchMenu.style.transform = 'none';
         this.switchMenu.style.display = 'flex';
+        this.switchMenu.querySelectorAll<HTMLElement>('[data-menu-group]').forEach(item => {
+            const visible = this.isMinimized || item.dataset.menuGroup === this.switchMenuMode;
+            item.style.display = visible ? '' : 'none';
+        });
+        this.fullscreenBtn.style.display = this.isTabMode ? 'none' : this.fullscreenBtn.style.display;
+        this.fullscreenBtn.textContent = `⛶ ${i18n(this.isFullscreen ? 'exitFullscreen' : 'fullscreenMode')}`;
+        (this.fullscreenBtn as HTMLButtonElement).disabled = this.isDocked;
+        const editDurationBtn = this.switchMenu.querySelector<HTMLButtonElement>('[data-edit-duration]');
+        if (editDurationBtn) editDurationBtn.disabled = this.isCountUp && this.isWorkPhase;
         // 更新菜单内容
         this.updateSwitchMenuContent();
         this.updateSwitchMenuPosition();
@@ -5068,8 +5094,13 @@ export class PomodoroTimer {
         this.restoreSwitchMenuPosition();
     }
 
+    private getSwitchMenuAnchorButton() {
+        if (this.isMinimized && this.minimizedModeBtn) return this.minimizedModeBtn;
+        return this.switchMenuMode === 'more' ? this.moreMenuBtn : this.mainSwitchBtn;
+    }
+
     private updateSwitchMenuPosition() {
-        const anchorBtn = this.isMinimized && this.minimizedModeBtn ? this.minimizedModeBtn : this.mainSwitchBtn;
+        const anchorBtn = this.getSwitchMenuAnchorButton();
         if (!this.switchMenu || !anchorBtn) return;
         if (this.switchMenu.style.display !== 'flex') return;
 
@@ -5184,7 +5215,7 @@ export class PomodoroTimer {
         this.plugin?.openSetting?.(i18n('pomodoroSettings'));
     }
 
-    private showNativeSwitchMenuPopup() {
+    private showNativeSwitchMenuPopup(kind: 'status' | 'more' | 'all' = 'all') {
         const electronReq = typeof window !== 'undefined' ? ((window as any).require || (window as any).exports?.require || (window as any).parent?.require) : null;
         if (!electronReq) return;
         const remote = electronReq('@electron/remote') || electronReq('electron')?.remote;
@@ -5199,35 +5230,41 @@ export class PomodoroTimer {
         const switchToCountdownText = i18n('switchToCountdown') || '切换到倒计时';
         const switchToCountUpText = i18n('switchToCountUp') || '切换到正计时';
 
-        menu.append(new MenuItem({
+        const phaseItems = [
+            { label: `💪 ${workText}`, click: () => this.startWorkTime() },
+            { label: `🍵 ${shortBreakText}`, click: () => this.startShortBreak() },
+            { label: `🧘 ${longBreakText}`, click: () => this.startLongBreak() }
+        ];
+        if (kind !== 'more') {
+            for (const item of phaseItems) menu.append(new MenuItem(item));
+        }
+
+        const modeItem = {
             label: `${this.isCountUp ? '🍅' : '⏱'} ${this.isCountUp ? switchToCountdownText : switchToCountUpText}`,
             click: () => this.toggleMode()
-        }));
-        menu.append(new MenuItem({
-            label: `🔄 ${i18n('pomodoroSwitchStatus')}`,
-            submenu: [
-                { label: `💪 ${workText}`, click: () => this.startWorkTime() },
-                { label: `🍵 ${shortBreakText}`, click: () => this.startShortBreak() },
-                { label: `🧘 ${longBreakText}`, click: () => this.startLongBreak() }
-            ]
-        }));
-        menu.append(new MenuItem({
+        };
+        const pomodoroWindow = PomodoroTimer.browserWindowInstance;
+        const moreItems = [{
             label: `✏️ ${i18n('pomodoroEditDuration')}`,
             enabled: !(this.isCountUp && this.isWorkPhase),
             click: () => this.editTime()
-        }));
-        menu.append(new MenuItem({
+        }, {
             label: i18n('pomodoroSettings') || '番茄钟设置',
             click: () => this.openPomodoroSettings()
-        }));
-
-        const pomodoroWindow = PomodoroTimer.browserWindowInstance;
-        menu.append(new MenuItem({
+        }, {
             label: `⛶ ${pomodoroWindow?.isFullScreen?.() ? i18n('exitFullscreen') : i18n('fullscreenMode')}`,
             accelerator: 'F11',
             enabled: !this.isDocked,
             click: () => this.toggleFullscreen()
-        }));
+        }];
+        if (kind === 'more') {
+            menu.append(new MenuItem(modeItem));
+            for (const item of moreItems) menu.append(new MenuItem(item));
+        } else if (kind === 'all') {
+            // 迷你窗口只有一个菜单入口，状态直接显示在首层，其余操作收进更多。
+            menu.append(new MenuItem(modeItem));
+            menu.append(new MenuItem({ label: i18n('more'), submenu: moreItems }));
+        }
         if (pomodoroWindow && !pomodoroWindow.isDestroyed()) {
             menu.popup({ window: pomodoroWindow });
         } else {
@@ -10685,12 +10722,13 @@ document.body.classList.remove('docked-mode');
                 ${this.getDockPositionEmoji(this.settings.pomodoroDockPosition)}
             </button>
             <div class="switch-container">
-                <button class="titlebar-btn" id="statusBtn" onclick="toggleSwitchMenu(event)" title="${i18n('switchPhase') || '切换阶段'}">
-                    ⚙️
+                <button class="titlebar-btn" id="statusBtn" onclick="toggleStatusMenu(event)" title="${i18n('pomodoroSwitchStatus')}">
+                    🔄
                 </button>
             </div>
         </div>
         <div class="titlebar-buttons">
+            <button class="titlebar-btn" id="moreBtn" onclick="toggleMoreMenu(event)" title="${i18n('more')}">⋯</button>
             <button class="titlebar-btn" id="soundBtn" onclick="toggleVolumeMenu(event)" title="${i18n('backgroundVolume') || '背景音量'}">
                 ${isBackgroundAudioMuted ? '🔇' : '🔊'}
             </button>
@@ -10990,6 +11028,20 @@ document.body.classList.remove('docked-mode');
 
         function toggleMiniSwitchMenu(e) {
             toggleSwitchMenu(e);
+        }
+
+        function toggleStatusMenu(e) {
+            if (e) e.stopPropagation();
+            closeVolumeMenu();
+            closeSwitchMenu();
+            ipcRenderer.send('${actionChannel}', 'showStatusMenuPopup');
+        }
+
+        function toggleMoreMenu(e) {
+            if (e) e.stopPropagation();
+            closeVolumeMenu();
+            closeSwitchMenu();
+            ipcRenderer.send('${actionChannel}', 'showMoreMenuPopup');
         }
 
         function applyMiniStyleClass() {
@@ -11762,6 +11814,12 @@ document.body.classList.remove('docked-mode');
                     break;
                 case 'showSwitchMenuPopup':
                     this.showNativeSwitchMenuPopup();
+                    break;
+                case 'showStatusMenuPopup':
+                    this.showNativeSwitchMenuPopup('status');
+                    break;
+                case 'showMoreMenuPopup':
+                    this.showNativeSwitchMenuPopup('more');
                     break;
                 case 'openPomodoroSettings':
                     this.openPomodoroSettings();
