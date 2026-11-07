@@ -43,6 +43,7 @@ function fixture({ browserWindow = false, waitForLoad = false, abortPlay = false
         load() { if (!waitForLoad) this.ready(); }
         ready() { this.readyState = 3; this.emit('loadeddata'); }
         pause() { this.paused = true; this.emit('pause'); }
+        removeAttribute(name) { if (name === 'src') this.src = ''; }
         play() {
             this.plays++;
             if (abortPlay && this.plays === 1) return Promise.reject({ name: 'AbortError' });
@@ -65,15 +66,39 @@ function fixture({ browserWindow = false, waitForLoad = false, abortPlay = false
     };
     const popups = [];
     class Popup extends EventEmitter {
-        constructor() {
+        constructor(options) {
             super();
             popups.push(this);
+            this.options = options;
+            this.audios = [];
+            this.renderer = new EventEmitter();
+            this.renderer.addEventListener = this.renderer.on.bind(this.renderer);
+            const popupContext = vm.createContext({
+                window: this.renderer,
+                document: {
+                    createElement: () => new Audio(),
+                    body: { appendChild: audio => this.audios.push(audio) }
+                },
+                console
+            });
             this.webContents = new EventEmitter();
+            this.webContents.executeJavaScript = script => Promise.resolve(vm.runInContext(script, popupContext));
+            this.webContents.setAudioMuted = muted => { this.muted = muted; };
         }
         setMenu() {}
-        loadURL() {}
+        loadURL(url) {
+            this.html = decodeURIComponent(url.split(',').slice(1).join(','));
+            const script = this.html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+            if (script) return this.webContents.executeJavaScript(script);
+            return Promise.resolve();
+        }
         isDestroyed() { return !!this.destroyed; }
-        destroy() { this.destroyed = true; this.emit('closed'); }
+        destroy() {
+            this.renderer.emit('pagehide');
+            this.renderer.emit('unload');
+            this.destroyed = true;
+            this.emit('closed');
+        }
     }
     class Dialog {
         constructor(options) { this.options = options; }
@@ -102,7 +127,8 @@ function fixture({ browserWindow = false, waitForLoad = false, abortPlay = false
         } }),
         Notification,
         setTimeout,
-        clearTimeout
+        clearTimeout,
+        setInterval: () => 1
     };
     new Function('require', 'module', 'exports', 'window', 'setTimeout', 'clearTimeout', 'Notification', compiled)(
         name => dependencies[name] || {}, module, module.exports, window, setTimeout, clearTimeout, Notification
@@ -113,6 +139,7 @@ function fixture({ browserWindow = false, waitForLoad = false, abortPlay = false
     const startedSources = [];
     Object.assign(timer, {
         settings: { pomodoroEndPopupWindow: true }, audioPlaybackGeneration: 0,
+        bwAudioDataUrlCache: new Map(), bwAudioDataUrlRequests: new Map(),
         audioInitialized: true, isWindowClosed: false, activeSources: new Map(),
         workEndAudio: new Audio(), breakEndAudio: new Audio(), randomRestSounds: [],
         workEndVolume: 1, breakEndVolume: 1,
@@ -249,6 +276,107 @@ test('旧原生弹窗关闭事件不会清空新弹窗，直接销毁新弹窗�
     newPopup.emit('destroyed');
     assert.equal(timer.pomodoroEndWindow, null);
     assert.equal(startedSources[0].stopped, true);
+});
+
+for (const phase of ['workEndAudio', 'breakEndAudio']) {
+    test(`${phase}：原生结束弹窗加载后自行播放，关闭即释放自身音源`, async () => {
+        const { timer, audios, startedSources } = fixture({ browserWindow: true });
+        timer[phase].src = 'blob:cached-end-sound';
+        timer.bwAudioDataUrlCache.set(timer[phase].src, 'data:audio/wav;base64,AAAA');
+        timer.getAudioDataUrlForBW = () => { throw new Error('已缓存的提示音不应再次下载'); };
+        timer.openPomodoroEndWindowImpl('结束', '结束', '🍅', timer[phase]);
+        const popup = timer.pomodoroEndWindow;
+        assert.equal(popup.options.webPreferences.backgroundThrottling, false);
+        assert.equal(popup.audios.length, 1);
+        assert.equal(popup.audios[0].plays, 1);
+        assert.equal(popup.audios[0].loop, true);
+        assert.equal(await timer.safePlayAudio(timer[phase]), true);
+        assert.equal(popup.audios[0].plays, 1);
+        assert.equal(audios.length, 0, '计时器窗口不能重复发声');
+        assert.equal(startedSources.length, 0, '宿主窗口不能重复发声');
+
+        popup.destroy();
+        assert.equal(popup.audios[0].paused, true);
+        assert.equal(popup.audios[0].src, '');
+        assert.equal(await timer.safePlayAudio(timer[phase]), false, '关闭后自动切换的晚到回调不能补播');
+        assert.equal(audios.length, 0);
+    });
+}
+
+test('原生结束弹窗在下载完成前关闭或被替换，晚到的音频不能补播', async () => {
+    const { timer, popups } = fixture({ browserWindow: true });
+    const downloaded = deferred();
+    timer.workEndAudio.src = 'blob:pending';
+    timer.getAudioDataUrlForBW = () => downloaded.promise;
+    timer.openPomodoroEndWindowImpl('旧结束', '结束', '🍅', timer.workEndAudio);
+    const oldPopup = popups[0];
+    assert.equal(oldPopup.audios.length, 0);
+    timer.openPomodoroEndWindowImpl('新结束', '结束', '🍵', timer.breakEndAudio);
+    const newPopup = timer.pomodoroEndWindow;
+    downloaded.resolve('data:audio/wav;base64,AAAA');
+    await flush();
+    assert.equal(oldPopup.audios.length, 0);
+    assert.equal(newPopup.audios.length, 1);
+    assert.equal(await timer.safePlayAudio(timer.workEndAudio), false, '旧阶段不能在新弹窗期间补播');
+    oldPopup.emit('closed');
+    assert.equal(timer.pomodoroEndWindow, newPopup);
+    assert.equal(newPopup.muted, undefined);
+});
+
+test('原生弹窗下载未完成就关闭，不会回退到其他窗口发声', async () => {
+    const { timer, audios } = fixture({ browserWindow: true });
+    const downloaded = deferred();
+    timer.workEndAudio.src = 'blob:pending';
+    timer.getAudioDataUrlForBW = () => downloaded.promise;
+    timer.openPomodoroEndWindowImpl('结束', '结束', '🍅', timer.workEndAudio);
+    const popup = timer.pomodoroEndWindow;
+    popup.destroy();
+    downloaded.resolve('data:audio/wav;base64,AAAA');
+    await flush();
+    assert.equal(popup.audios.length, 0);
+    assert.equal(await timer.safePlayAudio(timer.workEndAudio), false);
+    assert.equal(audios.length, 0);
+});
+
+for (const method of ['autoSwitchToBreak', 'autoSwitchToWork']) {
+    test(`${method}：自动切换保留弹窗提示音，手动停止仍能静音`, async () => {
+        const { timer } = fixture({ browserWindow: true });
+        timer.openPomodoroEndWindowImpl('结束', '结束', '🍅', timer.workEndAudio);
+        const popup = timer.pomodoroEndWindow;
+        Object.assign(timer, {
+            settings: { workDuration: 25, breakDuration: 5 },
+            stopRandomRestTimer() {}, startRandomRestTimer() {},
+            ensureActiveWorkSessionStarted: async () => {},
+            scheduleAllMobileNotifications() {}, updateDisplay() {}, updateStatsDisplay() {}
+        });
+        await timer[method]();
+        assert.equal(popup.muted, undefined);
+        assert.equal(popup.audios[0].paused, false);
+        timer.stopAllAudio();
+        assert.equal(popup.muted, true);
+        await timer.safePlayAudio(timer.workEndAudio);
+        assert.equal(popup.muted, true, '晚到的播放调用不能撤销手动停止');
+    });
+}
+
+test('音频预取和弹窗共享同一次数据转换，完成后复用缓存', async () => {
+    const { timer } = fixture();
+    const downloaded = deferred();
+    let requests = 0;
+    timer.fetchAudioDataUrlForBW = async src => {
+        requests++;
+        const data = await downloaded.promise;
+        timer.bwAudioDataUrlCache.set(src, data);
+        return data;
+    };
+    const preload = timer.getAudioDataUrlForBW('blob:test');
+    const popup = timer.getAudioDataUrlForBW('blob:test');
+    assert.equal(requests, 1);
+    downloaded.resolve('data:audio/wav;base64,AAAA');
+    assert.equal(await preload, await popup);
+    await timer.getAudioDataUrlForBW('blob:test');
+    assert.equal(requests, 1);
+    assert.equal(timer.bwAudioDataUrlRequests.size, 0);
 });
 
 for (const testCase of [
