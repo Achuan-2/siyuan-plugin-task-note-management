@@ -21,6 +21,7 @@ function load(relative) {
     return exports;
 }
 const { TaskHierarchyIndex } = load('src/utils/taskHierarchy.ts');
+const { CompletedSubtaskCollapseState } = load('src/utils/completedSubtaskCollapse.ts');
 const { ReminderPomodoroStatsSnapshot } = load('src/utils/reminderPomodoroStats.ts');
 const { PomodoroRecordManager } = load('src/components/dataManager/pomodoroRecord.ts');
 function fixture(tasks, sessions = []) {
@@ -256,14 +257,14 @@ test('5000 条独立任务只读一次本地任务和当天会话，不逐任务
 function panelClass() {
     const relative = 'src/components/panel/ReminderPanel.ts';
     const source = ts.createSourceFile(relative, fs.readFileSync(path.join(root, relative), 'utf8'), ts.ScriptTarget.Latest, true);
-    const names = ['renderRemindersIteratively', 'getReminderElementSignature', 'getReminderBadgeVisibility', 'preprocessAsyncData',
+    const names = ['completedSubtaskCollapse', 'isTaskCollapsed', 'renderRemindersIteratively', 'getReminderElementSignature', 'getReminderBadgeVisibility', 'preprocessAsyncData',
         'createReminderRenderIndexes', 'serializeReminderRenderState', 'getReminderSharedRenderVersion', 'createReminderElementOptimized'];
     const members = source.statements.find(node => ts.isClassDeclaration(node) && node.name.text === 'ReminderPanel').members;
     const code = ts.transpileModule(`class Panel { ${members.filter(node => names.includes(node.name?.getText(source))).map(node => node.getText(source)).join('\n')} }`, {
         compilerOptions: { target: ts.ScriptTarget.ES2020 },
     }).outputText;
-    return new Function('TaskHierarchyIndex', 'cleanReminderItem', 'parseReminderInstanceId', 'i18n', code + '; return Panel;')(
-        TaskHierarchyIndex, load('src/utils/reminderLoadUtils.ts').cleanReminderItem, () => null, key => key,
+    return new Function('TaskHierarchyIndex', 'CompletedSubtaskCollapseState', 'cleanReminderItem', 'parseReminderInstanceId', 'i18n', code + '; return Panel;')(
+        TaskHierarchyIndex, CompletedSubtaskCollapseState, load('src/utils/reminderLoadUtils.ts').cleanReminderItem, () => null, key => key,
     );
 }
 
@@ -361,13 +362,13 @@ test('公共签名识别原地设置修改、节假日、显示选项和日期�
 function boardRenderingClass(renderTask) {
     const relative = 'src/components/panel/ProjectKanbanView.ts';
     const source = ts.createSourceFile(relative, fs.readFileSync(path.join(root, relative), 'utf8'), ts.ScriptTarget.Latest, true);
-    const names = ['renderTasksInColumn', 'renderTaskTree', 'renderColumn', 'createTaskElement'];
+    const names = ['completedSubtaskCollapse', 'isTaskCollapsed', 'renderTasksInColumn', 'renderTaskTree', 'renderColumn', 'createTaskElement'];
     const members = source.statements.find(node => ts.isClassDeclaration(node) && node.name.text === 'ProjectKanbanView').members;
     const code = ts.transpileModule(`class Board { ${members.filter(node => names.includes(node.name?.getText(source))).map(node => node.getText(source)).join('\n')} }`, {
         compilerOptions: { target: ts.ScriptTarget.ES2020 },
     }).outputText;
-    return new Function('TaskHierarchyIndex', 'TaskRenderer', 'getLogicalDateString', code + '; return Board;')(
-        TaskHierarchyIndex, { render: renderTask }, () => today,
+    return new Function('TaskHierarchyIndex', 'CompletedSubtaskCollapseState', 'TaskRenderer', 'getLogicalDateString', code + '; return Board;')(
+        TaskHierarchyIndex, CompletedSubtaskCollapseState, { render: renderTask }, () => today,
     );
 }
 
@@ -383,6 +384,81 @@ function boardRenderingFixture(tasks) {
     const content = { appendChild: element => rendered.push(element) };
     return { board, content, rendered, indexes };
 }
+
+test('侧栏已完成子任务覆盖历史展开状态，手动展开保留到关闭视图', () => {
+    const Panel = panelClass();
+    const done = { id: 'done', parentId: 'root', completed: true, fold: false };
+    const pending = { id: 'pending', parentId: 'root', completed: false, fold: false };
+    const root = { id: 'root', completed: true, fold: false };
+    const setup = () => Object.assign(new Panel(), {
+        allRemindersMap: new Map([done, pending, root].map(t => [t.id, t])),
+        collapsedTasks: new Set(), userExpandedTasks: new Set(['done']),
+    });
+    const panel = setup();
+    assert.equal(panel.isTaskCollapsed('done', true), true);
+    assert.equal(panel.isTaskCollapsed('pending', true), false);
+    assert.equal(panel.isTaskCollapsed('root', true), false);
+    assert.equal(panel.isTaskCollapsed('done', false), false);
+
+    panel.completedSubtaskCollapse.setExpanded(done, true);
+    assert.equal(panel.isTaskCollapsed('done', true), false);
+    panel.completedSubtaskCollapse.sync(panel.allRemindersMap.values());
+    assert.equal(panel.isTaskCollapsed('done', true), false);
+    assert.equal(setup().isTaskCollapsed('done', true), true);
+    panel.completedSubtaskCollapse.setExpanded(done, false);
+    assert.equal(panel.isTaskCollapsed('done', true), true);
+});
+
+test('看板展开父任务时只显示已完成子任务本身，折叠图标与遍历规则一致', () => {
+    const tasks = [
+        { id: 'root', fold: false },
+        { id: 'done', parentId: 'root', completed: true, fold: false },
+        { id: 'doneLeaf', parentId: 'done', completed: true },
+        { id: 'pending', parentId: 'root', fold: false },
+        { id: 'pendingLeaf', parentId: 'pending' },
+    ];
+    const f = boardRenderingFixture(tasks);
+    f.board.showCompletedSubtasks = true;
+    f.board.renderTasksInColumn(f.content, tasks);
+    assert.deepEqual(f.rendered, ['root:0', 'done:1', 'pending:1', 'pendingLeaf:2']);
+
+    let cardContext, cardCallbacks;
+    const Board = boardRenderingClass((_task, context, callbacks) => {
+        cardContext = context;
+        cardCallbacks = callbacks;
+        return { dataset: {} };
+    });
+    const cards = Object.assign(new Board(), { tasks, collapsedTasks: new Set(), plugin: {}, renderKanban() {} });
+    cards.createTaskElement(tasks[1], 1, new TaskHierarchyIndex(tasks));
+    assert.equal(cardContext.isTaskCollapsed(tasks[1], true), true);
+    const click = { target: { closest: () => null } };
+    cardCallbacks.onCollapseClick(tasks[1], false, click);
+    assert.equal(cardContext.isTaskCollapsed(tasks[1], true), false);
+    cardCallbacks.onCollapseClick(tasks[1], true, click);
+    assert.equal(cardContext.isTaskCollapsed(tasks[1], true), true);
+
+    f.board.completedSubtaskCollapse.setExpanded(tasks[1], true);
+    f.rendered.length = 0;
+    f.board.renderTasksInColumn(f.content, tasks);
+    assert.deepEqual(f.rendered, ['root:0', 'done:1', 'doneLeaf:2', 'pending:1', 'pendingLeaf:2']);
+    f.board.completedSubtaskCollapse.sync(tasks);
+    assert.equal(f.board.isTaskCollapsed(tasks[1], true), false);
+    assert.equal(boardRenderingFixture(tasks).board.isTaskCollapsed(tasks[1], true), true);
+});
+
+test('已完成子任务取消完成、解除父子关系或删除后，清除本次手动展开记录', () => {
+    const state = new CompletedSubtaskCollapseState();
+    const task = { id: 'done', parentId: 'root', completed: true };
+    for (const changed of [{ ...task, completed: false }, { ...task, parentId: undefined }, null]) {
+        state.setExpanded(task, true);
+        assert.equal(state.getCollapsed(task, true), false);
+        state.sync(changed ? [changed] : []);
+        assert.equal(state.getCollapsed(task, true), true);
+    }
+    state.setExpanded(task, true);
+    assert.equal(state.getCollapsed({ ...task, completed: false }, true), undefined);
+    assert.equal(state.getCollapsed(task, true), true);
+});
 
 test('看板保留子任务排序、完成/放弃筛选与折叠，移动后重新建立索引', () => {
     const tasks = [

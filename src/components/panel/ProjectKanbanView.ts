@@ -1,6 +1,7 @@
 import { colorWithOpacity, generateRandomColor } from "../../utils/uiUtils";
 import { getLuteInstance } from "../../utils/luteSingleton";
 import { TaskHierarchyIndex } from '../../utils/taskHierarchy';
+import { CompletedSubtaskCollapseState } from '../../utils/completedSubtaskCollapse';
 import { ViewLifecycle } from '../../utils/viewLifecycle';
 import { showMessage, confirm, Menu, Dialog, Constants, openEmoji, platformUtils } from "siyuan";
 
@@ -124,6 +125,7 @@ export class ProjectKanbanView {
     private searchKeyword: string = '';
     private searchInput: HTMLInputElement;
     private collapsedTasks: Set<string> = new Set();
+    private completedSubtaskCollapse = new CompletedSubtaskCollapseState();
     // 临时保存要在下一次渲染后恢复的父任务折叠状态
     private _preserveCollapsedTasks: Set<string> | null = null;
 
@@ -3666,6 +3668,8 @@ export class ProjectKanbanView {
                     totalRepeatingFocusTime: stats.totalRepeatingFocusTime
                 });
             });
+
+            this.completedSubtaskCollapse.sync(this.tasks);
 
             // 任务数量大时，让出主线程以避免阻塞用户输入和绘制
             if (this.tasks.length > 100) {
@@ -8191,6 +8195,11 @@ export class ProjectKanbanView {
     }
 
 
+    private isTaskCollapsed(task: any, hasChildren: boolean): boolean {
+        return this.completedSubtaskCollapse.getCollapsed(task, hasChildren)
+            ?? this.collapsedTasks.has(task.id);
+    }
+
     private renderTasksInColumn(content: HTMLElement, tasks: any[], columnStatus?: string) {
         if (this.disposed) return;
         const hierarchy = new TaskHierarchyIndex(tasks);
@@ -8212,7 +8221,7 @@ export class ProjectKanbanView {
             const taskEl = this.createTaskElement(task, level, cardHierarchy);
             content.appendChild(taskEl);
 
-            if (this.collapsedTasks.has(task.id)) continue;
+            if (this.isTaskCollapsed(task, cardHierarchy.children(task.id).length > 0)) continue;
             let children = hierarchy.children(task.id);
             // 过滤掉放弃状态的子任务（如果当前不是放弃列）
             if (columnStatus !== 'abandoned') {
@@ -8626,6 +8635,7 @@ export class ProjectKanbanView {
             plugin: this.plugin,
             today: getLogicalDateString(),
             collapsedTasks: this.collapsedTasks,
+            isTaskCollapsed: (t: any, hasChildren: boolean) => this.isTaskCollapsed(t, hasChildren),
             selectedTaskIds: this.selectedTaskIds,
             isMultiSelectMode: this.isMultiSelectMode,
             showCompletedSubtasks: true,
@@ -8655,6 +8665,7 @@ export class ProjectKanbanView {
                 this.toggleTaskCompletion(task, checked);
             },
             onCollapseClick: (task: any, collapsed: boolean, e: MouseEvent) => {
+                this.completedSubtaskCollapse.setExpanded(task, !collapsed);
                 // collapsed=true 表示要折叠，collapsed=false 表示要展开
                 if (collapsed) {
                     this.collapsedTasks.add(task.id);

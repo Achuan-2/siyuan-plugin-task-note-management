@@ -22,12 +22,14 @@ function extract(relative, className, names) {
         .map(node => node.getText(source).replace(/^export /, '')).join('\n');
 }
 const methods = extract('src/components/panel/ReminderPanel.ts', 'ReminderPanel', [
+    'completedSubtaskCollapse',
     'loadReminders', 'renderReminders', 'mergeOptimisticReminderUpdates', 'invalidatePendingReminderLoad',
     'shouldSingleReminderShowInCurrentView', 'filterRemindersByTab', 'filterTodayTabReminders',
     'getAllDescendantIds', 'getAllAncestorIds',
 ]);
 const cleaning = extract('src/utils/reminderLoadUtils.ts', null, ['cleanReminderItem', 'cleanInstanceState']);
-const code = ts.transpileModule(`${cleaning}\nclass Panel { ${methods} }`, {
+const collapseState = extract('src/utils/completedSubtaskCollapse.ts', null, ['CompletedSubtaskCollapseState']);
+const code = ts.transpileModule(`${cleaning}\n${collapseState}\nclass Panel { ${methods} }`, {
     compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS },
 }).outputText;
 const Panel = new Function('getAllReminders', 'saveReminders', 'getLogicalDateString', 'getRelativeDateString',

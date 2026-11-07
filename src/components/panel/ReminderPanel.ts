@@ -14,6 +14,7 @@ import { i18n } from "../../pluginInstance";
 import { TaskRenderer } from "../render/TaskRenderer";
 import { cleanReminderItem } from "../../utils/reminderLoadUtils";
 import { TaskHierarchyIndex } from '../../utils/taskHierarchy';
+import { CompletedSubtaskCollapseState } from '../../utils/completedSubtaskCollapse';
 import { generateRepeatInstances, generateRepeatInstancesWithFutureGuarantee, getRepeatDescription, getDaysDifference, addDaysToDate, generateSubtreeInstances, parseReminderInstanceId, getRepeatInstanceOriginalKey, isRepeatInstanceCompleted, getRepeatInstanceCompletedTime, setRepeatInstanceCompletion, setRepeatInstanceOverride, patchRepeatInstanceState, removeRepeatInstance, deleteRepeatInstanceState, getRepeatInstanceState, getInstanceField } from "../dataManager/repeatUtils";
 import { PomodoroTimer } from "./PomodoroTimer";
 import { getLastStatsMode } from "../stats/statsMode";
@@ -88,6 +89,7 @@ export class ReminderPanel {
     private lastDragTime: number = 0;
     private lastDragClientY: number | null = null;
     private collapsedTasks: Set<string> = new Set(); // 管理任务的折叠状态
+    private completedSubtaskCollapse = new CompletedSubtaskCollapseState();
     // 记录用户手动展开的任务（优先于默认折叠）
     private userExpandedTasks: Set<string> = new Set();
     private milestoneMap: Map<string, { name: string, icon?: string, projectId?: string, projectName?: string, blockId?: string }> = new Map();
@@ -1927,12 +1929,14 @@ export class ReminderPanel {
     }
     /**
      * 判断任务是否应该被折叠
-     * 优先考虑用户手动展开，其次是collapsedTasks集合，
-     * 如果都没有，则使用默认行为：父任务默认折叠（如果有子任务）
+     * 已完成子任务优先使用当前视图的自动折叠规则；其余任务沿用持久化和默认状态。
      */
     private isTaskCollapsed(taskId: string, hasChildren: boolean = false): boolean {
-        // 优先检查持久化的 fold 属性
         const reminder = this.allRemindersMap ? this.allRemindersMap.get(taskId) : null;
+        const completedCollapsed = this.completedSubtaskCollapse.getCollapsed(reminder, hasChildren);
+        if (completedCollapsed !== undefined) return completedCollapsed;
+
+        // 其他任务优先检查持久化的 fold 属性
         if (reminder && reminder.fold !== undefined) {
             return reminder.fold;
         }
@@ -2234,7 +2238,7 @@ export class ReminderPanel {
                 insertAfterEl = el;
 
                 // 如果用户手动展开了该 child，则继续展示其子项（递归）
-                if (this.userExpandedTasks.has(child.id)) {
+                if (this.userExpandedTasks.has(child.id) && !this.isTaskCollapsed(child.id, true)) {
                     await this.showChildrenRecursively(child.id);
                 }
             }
@@ -2310,6 +2314,7 @@ export class ReminderPanel {
 
             // 将所有任务保存到 allRemindersMap 中，用于后续计算进度
             this.allRemindersMap = new Map(reminderMap);
+            this.completedSubtaskCollapse.sync(allRemindersWithInstances);
 
             // 刷新项目看板状态名称缓存（供“看板状态名称筛选”与“默认隐藏放弃”使用）
             await this.ensureProjectKanbanStatusNameCache(filteredReminders);
@@ -3194,6 +3199,7 @@ export class ReminderPanel {
                 }
             },
             onCollapseClick: async (r: any, collapsed: boolean, e: MouseEvent) => {
+                this.completedSubtaskCollapse.setExpanded(r, !collapsed);
                 const targetReminder = this.currentRemindersCache.find(rem => rem.id === r.id);
                 if (!collapsed) {
                     if (targetReminder) targetReminder.fold = false;
@@ -11118,6 +11124,7 @@ export class ReminderPanel {
                 this.collapsedTasks.delete(currentAncestorId);
                 const ancTask = this.allRemindersMap.get(currentAncestorId)
                     || this.currentRemindersCache.find(r => r.id === currentAncestorId || r.originalId === currentAncestorId);
+                if (ancTask) this.completedSubtaskCollapse.setExpanded(ancTask, true);
                 currentAncestorId = ancTask?.parentId;
             }
 
