@@ -441,6 +441,8 @@
     "longBreakVolume": "Long Break Background Volume",
     "longBreakVolumeDesc": "Set the volume of background music during long break phase independently, range 0-1",
     "workEndVolume": "Work End Alert Volume",
+    "pomodoroEndSoundLoop": "Loop Work/Break End Alert Sound",
+    "pomodoroEndSoundLoopDesc": "Off by default. Play the alert sound once.",
     "workEndVolumeDesc": "Set the volume of work end alert sound independently, range 0-1",
     "breakEndVolume": "Break End Alert Volume",
     "breakEndVolumeDesc": "Set the volume of break end alert sound independently, range 0-1",

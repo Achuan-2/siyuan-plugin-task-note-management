@@ -441,6 +441,8 @@
     "longBreakVolume": "长休息背景音音量",
     "longBreakVolumeDesc": "单独设置长休息阶段背景音的音量大小，范围0-1",
     "workEndVolume": "工作结束提示音音量",
+    "pomodoroEndSoundLoop": "工作/休息结束后循环播放提示音",
+    "pomodoroEndSoundLoopDesc": "默认关闭，仅播放一次提示音。",
     "workEndVolumeDesc": "单独设置工作结束提示音的音量大小，范围0-1",
     "breakEndVolume": "休息结束提示音音量",
     "breakEndVolumeDesc": "单独设置休息结束提示音的音量大小，范围0-1",

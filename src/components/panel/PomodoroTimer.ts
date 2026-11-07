@@ -2026,7 +2026,7 @@ export class PomodoroTimer {
             const audio = document.createElement('audio');
             audio.id = 'pomodoro-end-audio';
             audio.preload = 'auto';
-            audio.loop = true;
+            audio.loop = ${this.settings.pomodoroEndSoundLoop === true};
             audio.volume = ${actualVolume};
             audio.src = ${source};
             document.body.appendChild(audio);
@@ -2805,12 +2805,7 @@ export class PomodoroTimer {
                 return this.pomodoroEndWindowAudio === audio;
             }
             if (this.settings.pomodoroEndPopupWindow && this.nativeEndPopupDismissed && !this.pomodoroEndWindow && !this.pomodoroEndDialog) return false;
-            // 如果开启了结束弹窗，且弹窗（Electron 窗口或思源 Dialog）处于活动状态，则提示音循环播放；若弹窗已被关闭或未成功弹出，则不循环
-            const isWindowActive = !!(
-                (this.pomodoroEndWindow && !this.pomodoroEndWindow.isDestroyed()) ||
-                this.pomodoroEndDialog
-            );
-            loop = !!(this.settings.pomodoroEndPopupWindow && isWindowActive);
+            loop = this.settings.pomodoroEndSoundLoop === true;
         } else if (!isBackgroundAudio) {
             loop = false;
         }

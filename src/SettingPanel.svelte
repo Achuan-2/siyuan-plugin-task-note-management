@@ -1646,6 +1646,13 @@
                             description: i18n('pomodoroLongBreakSoundDesc') || '',
                         },
                         {
+                            key: 'pomodoroEndSoundLoop',
+                            value: settings.pomodoroEndSoundLoop === true,
+                            type: 'checkbox',
+                            title: i18n('pomodoroEndSoundLoop'),
+                            description: i18n('pomodoroEndSoundLoopDesc'),
+                        },
+                        {
                             key: 'workEndVolume',
                             value: settings.workEndVolume ?? 1,
                             type: 'slider',

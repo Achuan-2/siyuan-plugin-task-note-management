@@ -138,7 +138,7 @@ function fixture({ browserWindow = false, waitForLoad = false, abortPlay = false
     const timer = Object.create(Timer.prototype);
     const startedSources = [];
     Object.assign(timer, {
-        settings: { pomodoroEndPopupWindow: true }, audioPlaybackGeneration: 0,
+        settings: { pomodoroEndPopupWindow: true, pomodoroEndSoundLoop: true }, audioPlaybackGeneration: 0,
         bwAudioDataUrlCache: new Map(), bwAudioDataUrlRequests: new Map(),
         audioInitialized: true, isWindowClosed: false, activeSources: new Map(),
         workEndAudio: new Audio(), breakEndAudio: new Audio(), randomRestSounds: [],
@@ -279,6 +279,32 @@ test('旧原生弹窗关闭事件不会清空新弹窗，直接销毁新弹窗�
 });
 
 for (const phase of ['workEndAudio', 'breakEndAudio']) {
+    for (const loopSetting of [undefined, false, true]) {
+        test(`${phase}：循环设置为 ${loopSetting} 时，原生弹窗、思源弹窗及独立计时窗口行为一致`, async () => {
+            const native = fixture();
+            native.timer.settings.pomodoroEndSoundLoop = loopSetting;
+            native.timer.openPomodoroEndWindowImpl('结束', '结束', '🍅', native.timer[phase]);
+            const popupAudio = native.timer.pomodoroEndWindow.audios[0];
+            assert.equal(popupAudio.loop, loopSetting === true);
+            assert.equal(popupAudio.plays, 1);
+            await native.timer.safePlayAudio(native.timer[phase]);
+            assert.equal(popupAudio.plays, 1, '后续播放请求不能重复提示音');
+
+            const dialog = fixture();
+            dialog.timer.settings.pomodoroEndSoundLoop = loopSetting;
+            await dialog.timer.safePlayAudio(dialog.timer[phase]);
+            assert.equal(dialog.startedSources[0].loop, loopSetting === true);
+
+            const independent = fixture({ browserWindow: true });
+            independent.timer.settings.pomodoroEndSoundLoop = loopSetting;
+            independent.timer.settings.pomodoroEndPopupWindow = false;
+            independent.timer.pomodoroEndDialog = null;
+            await independent.timer.safePlayAudio(independent.timer[phase]);
+            assert.equal(independent.audios[0].loop, loopSetting === true);
+            assert.equal(independent.audios[0].plays, 1);
+        });
+    }
+
     test(`${phase}：原生结束弹窗加载后自行播放，关闭即释放自身音源`, async () => {
         const { timer, audios, startedSources } = fixture({ browserWindow: true });
         timer[phase].src = 'blob:cached-end-sound';
