@@ -1,3 +1,4 @@
+import { TaskActionUndo } from "../../utils/taskActionUndo";
 import { getFile, putFile, openBlock, getBlockByID, removeFile } from "../../api";
 import { getDragHandleIcon } from "../../utils/dragHandleIcon";
 import { getAllReminders, saveReminders } from "../../utils/icsSubscription";
@@ -1851,6 +1852,7 @@ export class EisenhowerMatrixView {
     private async deleteTaskByBlockId(blockId: string) {
         try {
             const reminderData = await getAllReminders(this.plugin);
+            const undo = new TaskActionUndo(this.plugin, reminderData);
             let taskFound = false;
 
             for (const [taskId, reminder] of Object.entries(reminderData as any)) {
@@ -1863,9 +1865,9 @@ export class EisenhowerMatrixView {
             }
 
             if (taskFound) {
-                await saveReminders(this.plugin, reminderData);
+                await undo.save(reminderData);
                 window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.viewId } }));
-                showMessage(i18n('reminderDeleted'));
+                undo.show(i18n('reminderDeleted'));
                 await this.refresh();
             } else {
                 showMessage(i18n('reminderNotExist'));
@@ -3207,6 +3209,7 @@ export class EisenhowerMatrixView {
             async () => {
                 try {
                     const reminderData = await getAllReminders(this.plugin);
+                    const undo = new TaskActionUndo(this.plugin, reminderData);
                     if (!reminderData) {
                         console.warn('No reminder data found');
                         showMessage(i18n('reminderDataNotExist'));
@@ -3247,7 +3250,7 @@ export class EisenhowerMatrixView {
                     };
 
                     if (deletedCount > 0) {
-                        await saveReminders(this.plugin, reminderData);
+                        await undo.save(reminderData);
                         if (affectedBlockIds.size > 0) {
                             const { updateBindBlockAtrrs } = await import('../../api');
                             for (const bId of affectedBlockIds) {
@@ -3260,9 +3263,9 @@ export class EisenhowerMatrixView {
                         window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.viewId } }));
 
                         if (deletedCount > 1) {
-                            showMessage(i18n('deletedTasksWithSubtasks').replace('${count}', deletedCount.toString()));
+                            undo.show(i18n('deletedTasksWithSubtasks').replace('${count}', deletedCount.toString()));
                         } else {
-                            showMessage(i18n('reminderDeleted'));
+                            undo.show(i18n('reminderDeleted'));
                         }
                     } else {
                         console.warn('No tasks found to delete');
@@ -4827,9 +4830,9 @@ export class EisenhowerMatrixView {
                     const originalId = task.originalId!;
                     const instanceDate = task.date;
 
-                    await this.addExcludedDate(originalId, instanceDate);
+                    const undo = await this.addExcludedDate(originalId, instanceDate);
 
-                    showMessage(i18n('instanceDeleted'));
+                    undo.show(i18n('instanceDeleted'));
                     await this.loadTasks();
                     window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.viewId } }));
                 } catch (error) {
@@ -4846,6 +4849,7 @@ export class EisenhowerMatrixView {
     private async addExcludedDate(originalId: string, excludeDate: string) {
         try {
             const reminderData = await getAllReminders(this.plugin);
+            const undo = new TaskActionUndo(this.plugin, reminderData);
 
             if (reminderData[originalId]) {
                 if (!reminderData[originalId].repeat) {
@@ -4862,8 +4866,9 @@ export class EisenhowerMatrixView {
                     reminderData[originalId].repeat.excludeDates.push(excludeDate);
                 }
 
-                await saveReminders(this.plugin, reminderData);
+                await undo.save(reminderData);
                 await this.refreshRecurringMobileNotifications(reminderData, [originalId]);
+                return undo;
             } else {
                 throw new Error(i18n("originalEventMissing"));
             }

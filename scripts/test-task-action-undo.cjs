@@ -22,14 +22,30 @@ function element(tag) {
 }
 
 function fixture(initial = {}) {
-    const state = { data: clone(initial), writes: 0, events: [], blocks: [], notifications: [], messages: [], reads: [], localReads: [] };
+    const state = { data: clone(initial), writes: 0, events: [], blocks: [], notifications: [], messages: [], reads: [], localReads: [], confirmations: [] };
     const timers = new Map();
+    const listeners = new Map();
     let timerId = 0;
     const document = { body: element('body'), createElement: element, activeElement: null };
     const dependencies = {
         document,
-        window: { dispatchEvent: event => state.events.push(event) },
-        CustomEvent: class { constructor(type, options) { this.type = type; this.detail = options.detail; } },
+        window: {
+            addEventListener(name, handler) {
+                if (!listeners.has(name)) listeners.set(name, new Set());
+                listeners.get(name).add(handler);
+            },
+            removeEventListener(name, handler) { listeners.get(name)?.delete(handler); },
+            dispatchEvent(event) {
+                state.events.push(event);
+                for (const handler of listeners.get(event.type) || []) handler(event);
+            },
+        },
+        confirm(_title, _message, accept) {
+            const pending = Promise.resolve().then(accept);
+            state.confirmations.push(pending);
+            return pending;
+        },
+        CustomEvent: class { constructor(type, options = {}) { this.type = type; this.detail = options.detail; } },
         setTimeout(callback, delay) { timers.set(++timerId, { callback, delay }); return timerId; },
         clearTimeout(id) { timers.delete(id); },
         i18n: key => key,
@@ -57,7 +73,7 @@ function fixture(initial = {}) {
         updateMobileNotification: async task => state.notifications.push(task.id),
         cancelMobileNotification: async id => state.notifications.push(`cancel:${id}`),
     };
-    return { ...undoModule, state, timers, document, dependencies, plugin,
+    return { ...undoModule, state, timers, listeners, document, dependencies, plugin,
         action: () => new undoModule.TaskActionUndo(plugin, state.data) };
 }
 
@@ -289,10 +305,12 @@ function compileView(f, file, className, methods) {
     const repeat = extract('src/components/dataManager/repeatUtils.ts', null, [
         'ensureRepeatInstances', 'getRepeatInstanceState', 'setRepeatInstanceCompletion', 'getInstanceField',
         'parseReminderInstanceId',
+        'deleteRepeatInstanceState', 'getRepeatInstanceOriginalKey', 'isRepeatInstanceCompleted', 'getRepeatInstanceCompletedTime', 'patchRepeatInstanceState',
     ]);
     const globals = { ...f.dependencies, TaskActionUndo: f.TaskActionUndo,
         getTaskStatusUndoMessage: f.getTaskStatusUndoMessage,
-        getLocalDateTimeString: () => '2026-11-08 12:00:00', getLocalDateString: () => '2026-11-08' };
+        getLocalDateTimeString: () => '2026-11-08 12:00:00', getLocalDateString: () => '2026-11-08',
+        getLogicalDateString: () => '2026-11-08', getLocalDateTime: () => ({ dateStr: '2026-11-08', timeStr: '12:00' }) };
     const code = ts.transpileModule(`${repeat}\nclass View { ${extract(file, className, methods)} }`, {
         compilerOptions: { target: ts.ScriptTarget.ES2020 },
     }).outputText;
@@ -382,6 +400,168 @@ test('真实看板拖到已完成任务前：状态和排序可一并撤回', as
     });
     assert.equal(await view.reorderTasks(clone(before.p), clone(before.target), true), true);
     assert.equal(f.state.data.p.completed, true);
+    await f.document.body.children[0].children[1].fire('click');
+    assert.deepEqual(f.state.data, before);
+});
+
+test('日历删除普通任务及保留已完成实例的系列删除都可撤回', async () => {
+    for (const keepCompleted of [false, true]) {
+        const before = { task: { id: 'task', title: 'task', ...(keepCompleted ? { repeat: { enabled: true, type: 'daily' } } : {}) } };
+        const f = fixture(before);
+        f.dependencies.createCompletedInstanceReminders = () => ({ kept: { id: 'kept', completed: true } });
+        const view = compileView(f, 'src/components/panel/CalendarView.ts', 'CalendarView', ['performDeleteEvent']);
+        Object.assign(view, { calendar: { getEvents: () => [] }, refreshEvents: async () => {} });
+        await view.performDeleteEvent('task', keepCompleted);
+        assert.equal(f.state.data.task, undefined);
+        assert.equal(!!f.state.data.kept, keepCompleted);
+        await f.document.body.children[0].children[1].fire('click');
+        assert.deepEqual(f.state.data, before);
+    }
+});
+
+test('日历和四象限的单实例删除撤回恢复排除日期', async () => {
+    for (const className of ['CalendarView', 'EisenhowerMatrixView']) {
+        const before = { series: { id: 'series', repeat: { enabled: true, type: 'daily', excludeDates: ['2026-11-01'] } } };
+        const f = fixture(before);
+        const view = compileView(f, `src/components/panel/${className}.ts`, className, ['deleteInstanceOnly', 'addExcludedDate']);
+        Object.assign(view, { calendar: { getEvents: () => [] }, loadTasks: async () => {} });
+        await view.deleteInstanceOnly({ id: 'series_2026-11-08', title: 'series', date: '2026-11-08', originalId: 'series',
+            extendedProps: { originalId: 'series', date: '2026-11-08' } });
+        await f.state.confirmations.at(-1);
+        assert.ok(f.state.data.series.repeat.excludeDates.includes('2026-11-08'));
+        await f.document.body.children[0].children[1].fire('click');
+        assert.deepEqual(f.state.data, before);
+    }
+});
+
+test('日历删除提醒时间可撤回，并保留确认期间新增的其他任务', async () => {
+    const before = { task: { id: 'task', reminderTimes: [{ time: '12:00' }, { time: '18:00' }] } };
+    const f = fixture(before);
+    const confirm = f.dependencies.confirm;
+    f.dependencies.confirm = (...args) => {
+        f.state.data.newTask = { id: 'newTask' };
+        return confirm(...args);
+    };
+    const view = compileView(f, 'src/components/panel/CalendarView.ts', 'CalendarView', ['deleteReminderTimeEvent']);
+    Object.assign(view, { getReminderTimeEventIndex: () => 0, calendar: { getEventById: () => null }, refreshEvents: async () => {} });
+    await view.deleteReminderTimeEvent({ id: 'time', title: 'task', start: '2026-11-08', extendedProps: { originalId: 'task' } });
+    assert.deepEqual(f.state.data.task.reminderTimes, [{ time: '18:00' }]);
+    await f.document.body.children[0].children[1].fire('click');
+    assert.deepEqual(f.state.data, { ...before, newTask: { id: 'newTask' } });
+});
+
+test('四象限删除父子任务后一并撤回，不覆盖期间新建的任务', async () => {
+    const before = { p: { id: 'p', title: 'parent' }, c: { id: 'c', parentId: 'p' } };
+    const f = fixture(before);
+    const view = compileView(f, 'src/components/panel/EisenhowerMatrixView.ts', 'EisenhowerMatrixView', ['deleteTask']);
+    Object.assign(view, { allTasks: Object.values(before), refresh: async () => {} });
+    await view.deleteTask(before.p);
+    await f.state.confirmations.at(-1);
+    assert.deepEqual(f.state.data, {});
+    f.state.data.other = { id: 'other' };
+    await f.document.body.children[0].children[1].fire('click');
+    assert.deepEqual(f.state.data, { ...before, other: { id: 'other' } });
+});
+
+test('块绑定任务删除后弹窗保持打开，撤回无需等待书签更新即可解析恢复任务', async () => {
+    const before = { task: { id: 'task', title: 'task', blockId: 'block' } };
+    const f = fixture(before);
+    const view = compileView(f, 'src/components/dialog/BlockRemindersDialog.ts', 'BlockRemindersDialog', ['deleteReminder', 'resolveBoundReminders']);
+    let destroyed = false, visible = [];
+    Object.assign(view, { blockId: 'block', dialog: { destroy() { destroyed = true; } } });
+    f.dependencies.window.addEventListener('reminderUpdated', () => { visible = view.resolveBoundReminders(f.state.data, []); });
+    await view.deleteReminder(before.task);
+    assert.equal(destroyed, false);
+    assert.deepEqual(visible, []);
+    await f.document.body.children[0].children[1].fire('click');
+    assert.equal(destroyed, false);
+    assert.deepEqual(visible, [before.task]);
+});
+
+test('块绑定实例删除可撤回，旧书签缺失时仍能恢复独立绑定的实例', async () => {
+    const before = { series: { id: 'series', repeat: { enabled: true, instances: { '2026-11-08': { blockId: 'block', title: 'bound' } } } } };
+    const f = fixture(before);
+    f.dependencies.resolveRepeatReminderTimes = times => times;
+    const view = compileView(f, 'src/components/dialog/BlockRemindersDialog.ts', 'BlockRemindersDialog', ['deleteReminder', 'resolveBoundReminders']);
+    view.blockId = 'block';
+    await view.deleteReminder({ id: 'series_2026-11-08', originalId: 'series', instanceDate: '2026-11-08', isRepeatInstance: true });
+    assert.deepEqual(view.resolveBoundReminders(f.state.data, []), []);
+    await f.document.body.children[0].children[1].fire('click');
+    assert.deepEqual(f.state.data, before);
+    assert.equal(view.resolveBoundReminders(f.state.data, [])[0].id, 'series_2026-11-08');
+});
+
+test('文档任务的普通任务和重复实例删除都可撤回', async () => {
+    for (const instance of [false, true]) {
+        const before = { task: { id: 'task', title: 'task', ...(instance ? { repeat: { enabled: true, instances: { '2026-11-08': { title: 'instance' } } } } : {}) } };
+        const f = fixture(before);
+        const view = compileView(f, 'src/components/dialog/DocumentReminderDialog.ts', 'DocumentReminderDialog', ['performDeleteReminder', 'deleteRepeatInstance', 'deleteNormalReminder']);
+        await view.performDeleteReminder(instance ? { id: 'task_2026-11-08', originalId: 'task', instanceDate: '2026-11-08', isRepeatInstance: true } : before.task);
+        assert.equal(instance ? f.state.data.task.repeat.excludeDates[0] : f.state.data.task, instance ? '2026-11-08' : undefined);
+        await f.document.body.children[0].children[1].fire('click');
+        assert.deepEqual(f.state.data, before);
+    }
+});
+
+test('子任务弹窗删除已保存任务及 ghost 实例后都可撤回', async () => {
+    for (const instance of [false, true]) {
+        const before = { task: { id: 'task', title: 'task', projectId: 'A' }, child: { id: 'child', parentId: 'task' } };
+        const f = fixture(before);
+        const view = compileView(f, 'src/components/dialog/SubtasksDialog.ts', 'SubtasksDialog', ['deleteSubtask']);
+        Object.assign(view, { isTempMode: false, isInstanceEdit: instance, isModifyAllInstances: false, loadSubtasks: async () => {}, renderSubtasks() {} });
+        await view.deleteSubtask(instance ? 'task_2026-11-08' : 'task');
+        await f.state.confirmations.at(-1);
+        assert.equal(instance ? f.state.data.task.repeat.excludeDates[0] : f.state.data.task, instance ? '2026-11-08' : undefined);
+        await f.document.body.children[0].children[1].fire('click');
+        assert.deepEqual(f.state.data, before);
+    }
+});
+
+test('文档任务和子任务弹窗响应撤回，关闭后移除刷新监听', async () => {
+    for (const className of ['DocumentReminderDialog', 'SubtasksDialog']) {
+        const f = fixture();
+        let destroyed;
+        f.dependencies.Dialog = class { constructor(options) { destroyed = options.destroyCallback; } };
+        const lifecycleMethod = className === 'DocumentReminderDialog' ? 'createDialog' : 'show';
+        const view = compileView(f, `src/components/dialog/${className}.ts`, className, ['reminderUpdatedHandler', lifecycleMethod]);
+        let loads = 0;
+        Object.assign(view, {
+            createContent: () => '', ensureRenderDependencies: async () => {},
+            loadReminders: async () => { loads++; }, loadSubtasks: async () => { loads++; },
+            renderDialogTitle: () => '', renderContent: () => '', renderSubtasks() {}, bindEvents() {}, updateSortDisplay() {},
+        });
+        await view[lifecycleMethod]();
+        const beforeUndo = loads;
+        f.dependencies.window.dispatchEvent(new f.dependencies.CustomEvent('reminderUpdated', { detail: { taskUndo: true } }));
+        for (let i = 0; i < 5; i++) await Promise.resolve();
+        assert.equal(loads, beforeUndo + 1);
+        destroyed();
+        assert.equal(f.listeners.get('reminderUpdated').size, 0);
+        f.dependencies.window.dispatchEvent(new f.dependencies.CustomEvent('reminderUpdated', { detail: { taskUndo: true } }));
+        assert.equal(loads, beforeUndo + 1);
+    }
+});
+
+test('侧栏和四象限清理同块任务记录也可撤回，不影响其他任务', async () => {
+    for (const [className, method] of [['ReminderPanel', 'deleteRemindersByBlockId'], ['EisenhowerMatrixView', 'deleteTaskByBlockId']]) {
+        const before = { a: { id: 'a', blockId: 'gone' }, b: { id: 'b', blockId: 'gone' }, other: { id: 'other' } };
+        const f = fixture(before);
+        const view = compileView(f, `src/components/panel/${className}.ts`, className, [method]);
+        Object.assign(view, { removeReminderFromDOM() {}, refresh: async () => {} });
+        await view[method]('gone');
+        assert.deepEqual(f.state.data, { other: before.other });
+        await f.document.body.children[0].children[1].fire('click');
+        assert.deepEqual(f.state.data, before);
+    }
+});
+
+test('日历跳过首次发生可撤回，恢复开始日期及该次实例历史', async () => {
+    const before = { task: { id: 'task', date: '2026-11-01', repeat: { enabled: true, type: 'daily', instances: { '2026-11-01': { completed: true } } } } };
+    const f = fixture(before);
+    const view = compileView(f, 'src/components/panel/CalendarView.ts', 'CalendarView', ['skipFirstOccurrence']);
+    view.calculateNextDate = () => new Date('2026-11-08T12:00:00');
+    await view.skipFirstOccurrence(before.task);
+    assert.equal(f.state.data.task.date, '2026-11-08');
     await f.document.body.children[0].children[1].fire('click');
     assert.deepEqual(f.state.data, before);
 });

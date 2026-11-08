@@ -5805,6 +5805,7 @@ export class ReminderPanel {
 
         try {
             const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
+            const undo = new TaskActionUndo(this.plugin, reminderData);
             let deletedCount = 0;
             const deletedIds: string[] = [];
 
@@ -5819,7 +5820,7 @@ export class ReminderPanel {
             }
 
             if (deletedCount > 0) {
-                await saveReminders(this.plugin, reminderData);
+                await undo.save(reminderData);
 
                 // 批量取消移动端通知
                 if (this.plugin.cancelMobileNotification) {
@@ -5840,7 +5841,7 @@ export class ReminderPanel {
                     this.removeReminderFromDOM(deletedIds[0], deletedIds);
                 }
 
-                showMessage(i18n("deletedRelatedReminders", { count: deletedCount.toString() }));
+                undo.show(i18n("deletedRelatedReminders", { count: deletedCount.toString() }));
 
                 // 触发其他组件更新
                 window.dispatchEvent(new CustomEvent('reminderUpdated', {

@@ -1,4 +1,5 @@
 import { Dialog, showMessage, confirm, Menu } from "siyuan";
+import { TaskActionUndo } from "../../utils/taskActionUndo";
 import { getBlockByID, updateBindBlockAtrrs, getBlockReminderIds, openBlock } from "../../api";
 import { getLocaleTag, getLogicalDateString } from "../../utils/dateUtils";
 import { CategoryManager } from "../dataManager/categoryManager";
@@ -53,10 +54,6 @@ export class BlockRemindersDialog {
 
             // 获取绑定的提醒ID
             const reminderIds = await getBlockReminderIds(this.blockId);
-            if (reminderIds.length === 0) {
-                showMessage(i18n("noBoundTasks") || "该块没有绑定任务", 3000, "info");
-                return;
-            }
 
             // 获取提醒数据
             const reminderData = await this.plugin.loadReminderData();
@@ -159,7 +156,18 @@ export class BlockRemindersDialog {
         const result: any[] = [];
         const today = getLogicalDateString();
 
-        for (const id of reminderIds) {
+        // 撤回后块属性在后台更新，先以任务数据补齐绑定，避免等待旧书签同步。
+        const currentIds = new Set(reminderIds);
+        for (const [id, task] of Object.entries(reminderData) as [string, any][]) {
+            if (task?.blockId === this.blockId) currentIds.add(id);
+            for (const [date, state] of Object.entries(task?.repeat?.instances || {}) as [string, any][]) {
+                if (state?.blockId === this.blockId && !state.deleted &&
+                    !(task.repeat.excludeDates || []).includes(date)) {
+                    currentIds.add(`${id}_${date}`);
+                }
+            }
+        }
+        for (const id of currentIds) {
             if (reminderData[id]) {
                 const reminder = reminderData[id];
                 if (reminder.repeat?.enabled) {
@@ -270,7 +278,7 @@ export class BlockRemindersDialog {
                 }
             }
         }
-        return result;
+        return Array.from(new Map(result.map(reminder => [reminder.id, reminder])).values());
     }
 
     private async createReminderItem(reminder: any): Promise<HTMLElement> {
@@ -625,8 +633,9 @@ export class BlockRemindersDialog {
             async () => {
                 // 用户确认删除
                 try {
+                    const reminderData = await this.plugin.loadReminderData();
+                    const undo = new TaskActionUndo(this.plugin, reminderData);
                     if (reminder.isRepeatInstance && reminder.originalId && reminder.instanceDate) {
-                        const reminderData = await this.plugin.loadReminderData();
                         const original = reminderData[reminder.originalId];
                         if (!original) {
                             throw new Error(i18n("originalTaskMissing"));
@@ -636,18 +645,12 @@ export class BlockRemindersDialog {
                         if (!original.repeat.excludeDates.includes(reminder.instanceDate)) {
                             original.repeat.excludeDates.push(reminder.instanceDate);
                         }
-                        await this.plugin.saveReminderData(reminderData);
                     } else {
-                        // 使用插件的 deleteReminder 方法，会自动取消移动端通知
-                        await this.plugin.deleteReminder(reminder.id);
+                        if (!reminderData[reminder.id]) throw new Error(i18n("reminderNotExistError"));
+                        delete reminderData[reminder.id];
+                        await this.plugin.cancelMobileNotification(reminder.id);
                     }
-                    
-                    const reminderData = await this.plugin.loadReminderData();
-
-                    // 更新块的书签状态
-                    await updateBindBlockAtrrs(this.blockId, this.plugin);
-
-                    // 触发更新事件
+                    await undo.save(reminderData);
 
                     // 更新块的书签状态
                     await updateBindBlockAtrrs(this.blockId, this.plugin);
@@ -655,16 +658,8 @@ export class BlockRemindersDialog {
                     // 触发更新事件
                     window.dispatchEvent(new CustomEvent('reminderUpdated'));
 
-                    const reminderIds = await getBlockReminderIds(this.blockId);
-                    const reminders = this.resolveBoundReminders(reminderData, reminderIds);
-
-                    if (reminders.length === 0) {
-                        // 如果没有任务了，关闭对话框
-                        this.dialog.destroy();
-                        showMessage(i18n("allTasksDeleted") || "所有任务已删除", 2000);
-                    } else {
-                        showMessage(i18n("taskDeleted") || "任务已删除", 2000);
-                    }
+                    // 保留空列表，撤回最后一个任务后可以在当前弹窗中直接恢复。
+                    undo.show(i18n("taskDeleted"));
                 } catch (error) {
                     console.error("Failed to delete task:", error);
                     showMessage(i18n("deleteFailed") || "删除失败", 3000, "error");

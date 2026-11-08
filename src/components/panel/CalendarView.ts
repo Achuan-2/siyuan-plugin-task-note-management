@@ -1,3 +1,4 @@
+import { TaskActionUndo } from "../../utils/taskActionUndo";
 import { Calendar, formatDate, formatRange } from '@fullcalendar/core';
 import { getDragHandleIcon } from "../../utils/dragHandleIcon";
 import { CalendarEventReconciler } from '../../utils/calendarEventReconciler';
@@ -3568,7 +3569,7 @@ export class CalendarView {
         if (reminderIndex < 0) return;
 
         try {
-            const reminderData = await getAllReminders(this.plugin);
+            let reminderData = await getAllReminders(this.plugin);
             const originalReminderId = calendarEvent.extendedProps.originalId;
             const sourceEventId = calendarEvent.extendedProps.sourceEventId || '';
             const isRepeated = !!calendarEvent.extendedProps.isRepeated;
@@ -3604,6 +3605,23 @@ export class CalendarView {
             }
 
             const performDelete = async (shouldDeleteAll: boolean) => {
+                // 确认框打开期间可能有其他编辑；重读数据并确认仍在删除同一个提醒时间。
+                const latestData = await getAllReminders(this.plugin);
+                const latestReminder = latestData[originalReminderId || sourceEventId || calendarEvent.id];
+                const latestState = isRepeated ? getRepeatInstanceState(latestReminder, instanceDate) : undefined;
+                const latestTimes = isRepeated
+                    ? getInstanceField(latestState, 'reminderTimes', latestReminder?.reminderTimes)
+                    : latestReminder?.reminderTimes;
+                if (!latestReminder || !Array.isArray(latestTimes) ||
+                    JSON.stringify(latestTimes[reminderIndex]) !== JSON.stringify(reminderTimes[reminderIndex])) {
+                    showMessage(i18n("operationFailed"));
+                    return;
+                }
+                reminderData = latestData;
+                originalReminder = isRepeated ? latestReminder : null;
+                reminder = isRepeated ? null : latestReminder;
+                reminderTimes = JSON.parse(JSON.stringify(latestTimes));
+                const undo = new TaskActionUndo(this.plugin, reminderData);
                 if (isRepeated) {
                     if (!originalReminder) return;
                     if (shouldDeleteAll) {
@@ -3618,7 +3636,7 @@ export class CalendarView {
                     }
 
                     patchRepeatInstanceState(originalReminder, instanceDate, { reminderTimes: reminderTimes });
-                    await saveReminders(this.plugin, reminderData);
+                    await undo.save(reminderData);
                     if (this.plugin?.updateMobileNotification) {
                         try {
                             await this.plugin.updateMobileNotification(originalReminder);
@@ -3645,7 +3663,7 @@ export class CalendarView {
                         reminder.reminderTimes = reminderTimes;
                     }
 
-                    await saveReminders(this.plugin, reminderData);
+                    await undo.save(reminderData);
                     if (this.plugin?.updateMobileNotification) {
                         try {
                             await this.plugin.updateMobileNotification(reminder);
@@ -3662,7 +3680,7 @@ export class CalendarView {
 
                 await this.refreshEvents();
                 window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
-                showMessage(i18n("deleteSuccess") || '删除成功');
+                undo.show(i18n("deleteSuccess"));
             };
 
             if (isEveryDay) {
@@ -5138,9 +5156,9 @@ export class CalendarView {
                         }
                     });
 
-                    await this.addExcludedDate(originalId, instanceDate);
+                    const undo = await this.addExcludedDate(originalId, instanceDate);
 
-                    showMessage(i18n("instanceDeleted"));
+                    undo.show(i18n("instanceDeleted"));
                     window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
                 } catch (error) {
                     console.error("Failed to delete repeat instance:", error);
@@ -5153,6 +5171,7 @@ export class CalendarView {
         // 为原始重复事件添加排除日期
         try {
             const reminderData = await getAllReminders(this.plugin);
+            const undo = new TaskActionUndo(this.plugin, reminderData);
 
             if (reminderData[originalId]) {
                 if (!reminderData[originalId].repeat) {
@@ -5169,8 +5188,9 @@ export class CalendarView {
                     reminderData[originalId].repeat.excludeDates.push(excludeDate);
                 }
 
-                await saveReminders(this.plugin, reminderData);
+                await undo.save(reminderData);
                 await this.refreshRecurringMobileNotifications(reminderData, [originalId]);
+                return undo;
             } else {
                 throw new Error(i18n("originalEventMissing"));
             }
@@ -5449,6 +5469,7 @@ export class CalendarView {
         await (async () => {
             try {
                 const reminderData = await getAllReminders(this.plugin);
+                const undo = new TaskActionUndo(this.plugin, reminderData);
 
                 if (reminderData[reminderId]) {
                     const reminder = reminderData[reminderId];
@@ -5468,7 +5489,7 @@ export class CalendarView {
                     delete reminderData[reminderId];
                     Object.assign(reminderData, completedReminders);
                     // 保存数据到存储
-                    await saveReminders(this.plugin, reminderData);
+                    await undo.save(reminderData);
                     if (keepCompletedInstances) {
                         await this.refreshEvents();
                     }
@@ -5487,7 +5508,7 @@ export class CalendarView {
                     }
 
 
-                    showMessage(i18n("reminderDeleted"));
+                    undo.show(i18n("reminderDeleted"));
                 }
             } catch (error) {
                 console.error("Error deleting reminder in background:", error);
@@ -11260,6 +11281,7 @@ export class CalendarView {
             async () => {
                 try {
                     const reminderData = await getAllReminders(this.plugin);
+                    const undo = new TaskActionUndo(this.plugin, reminderData);
                     const originalReminder = reminderData[reminder.id];
 
                     if (!originalReminder || !originalReminder.repeat?.enabled) {
@@ -11298,9 +11320,9 @@ export class CalendarView {
                         }
                     }
 
-                    await saveReminders(this.plugin, reminderData);
+                    await undo.save(reminderData);
                     await this.refreshRecurringMobileNotifications(reminderData, [reminder.id]);
-                    showMessage(i18n("firstOccurrenceSkipped"));
+                    undo.show(i18n("firstOccurrenceSkipped"));
                     window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
                 } catch (error) {
                     console.error("Failed to skip first occurrence:", error);

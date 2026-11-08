@@ -1,4 +1,5 @@
 import { Dialog, showMessage, confirm } from "siyuan";
+import { TaskActionUndo } from "../../utils/taskActionUndo";
 import { openBlock } from "../../api";
 import { i18n } from "../../pluginInstance";
 import { QuickReminderDialog } from "./QuickReminderDialog";
@@ -19,6 +20,14 @@ export class SubtasksDialog {
     private plugin: any;
     private subtasks: any[] = [];
     private onUpdate?: () => void;
+    private closed = false;
+    private reminderUpdatedHandler = async (event: CustomEvent) => {
+        if (this.closed || this.isTempMode || !event.detail?.taskUndo) return;
+        await this.loadSubtasks();
+        if (this.closed) return;
+        this.renderSubtasks();
+        this.onUpdate?.();
+    };
     private draggingId: string | null = null;
     private currentSortCriteria: SortCriterion[] = [{ method: 'time', order: 'asc' }];
     private isTempMode: boolean = false; // 是否为临时模式（新建任务的子任务）
@@ -184,9 +193,13 @@ export class SubtasksDialog {
             content: this.renderContent(true),
             width: "420px",
             destroyCallback: () => {
+                this.closed = true;
+                window.removeEventListener('reminderUpdated', this.reminderUpdatedHandler);
                 if (this.onUpdate) this.onUpdate();
             }
         });
+        this.closed = false;
+        window.addEventListener('reminderUpdated', this.reminderUpdatedHandler);
 
         this.renderSubtasks();
         this.bindEvents();
@@ -1053,7 +1066,7 @@ export class SubtasksDialog {
             return;
         }
 
-        const reminderData = await this.plugin.loadReminderData() || {};
+        let reminderData = await this.plugin.loadReminderData() || {};
 
         // 解析 ID
         let targetId = id;
@@ -1075,6 +1088,10 @@ export class SubtasksDialog {
 
         // 定义执行删除的函数
         const doDelete = async () => {
+            // 确认时重读最新数据，避免弹窗期间其他任务的修改被旧快照覆盖。
+            reminderData = await this.plugin.loadReminderData() || {};
+            if (!reminderData[targetId]) return;
+            const undo = new TaskActionUndo(this.plugin, reminderData);
             // Recursive delete
             const deleteRecursive = async (idToDelete: string) => {
                 const children = (Object.values(reminderData) as any[]).filter((r: any) => r.parentId === idToDelete);
@@ -1087,7 +1104,7 @@ export class SubtasksDialog {
             };
 
             await deleteRecursive(targetId);
-            await this.plugin.saveReminderData(reminderData);
+            await undo.save(reminderData);
             await this.loadSubtasks();
             this.renderSubtasks();
             
@@ -1105,7 +1122,7 @@ export class SubtasksDialog {
                 this.onUpdate();
             }
             
-            showMessage(i18n("deleteSuccess"));
+            undo.show(i18n("deleteSuccess"));
         };
 
         if (date) {
@@ -1119,13 +1136,17 @@ export class SubtasksDialog {
                     i18n("confirmDelete") || "确认删除",
                     i18n("hideSubtaskInstanceConfirm", { title: String(task.title) }),
                     async () => {
+                        reminderData = await this.plugin.loadReminderData() || {};
+                        const task = reminderData[targetId];
+                        if (!task) return;
+                        const undo = new TaskActionUndo(this.plugin, reminderData);
                         // 将 ghost 子任务标记为在当前日期隐藏
                         if (!task.repeat) task.repeat = {};
                         if (!task.repeat.excludeDates) task.repeat.excludeDates = [];
                         if (!task.repeat.excludeDates.includes(date)) {
                             task.repeat.excludeDates.push(date);
                         }
-                        await this.plugin.saveReminderData(reminderData);
+                        await undo.save(reminderData);
                         await this.loadSubtasks();
                         this.renderSubtasks();
                         
@@ -1139,7 +1160,7 @@ export class SubtasksDialog {
                             this.onUpdate();
                         }
                         
-                        showMessage(i18n("hideSuccess") || "已隐藏");
+                        undo.show(i18n("hideSuccess"));
                     }
                 );
             } else {

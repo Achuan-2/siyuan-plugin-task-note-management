@@ -1,3 +1,4 @@
+import { TaskActionUndo } from "../../utils/taskActionUndo";
 import { Dialog, showMessage, confirm } from "siyuan";
 import { updateBindBlockAtrrs, getBlockByID, openBlock } from "../../api";
 import { getLocalDateString, getLocalDateTimeString, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../../utils/dateUtils";
@@ -18,6 +19,9 @@ export class DocumentReminderDialog {
     private projectDataMap: Map<string, any> = new Map();
     private plugin?: any;
     private holidayData: HolidayData = {};
+    private reminderUpdatedHandler = (event: CustomEvent) => {
+        if (event.detail?.taskUndo) void this.loadReminders();
+    };
 
     // 筛选和排序状态
     private currentFilter: 'all' | 'completed' | 'uncompleted' = 'all';
@@ -58,9 +62,10 @@ export class DocumentReminderDialog {
             width: "800px",
             height: "800px",
             destroyCallback: () => {
-                // 清理资源
+                window.removeEventListener('reminderUpdated', this.reminderUpdatedHandler);
             }
         });
+        window.addEventListener('reminderUpdated', this.reminderUpdatedHandler);
 
         // 延迟初始化，确保内容已渲染
         setTimeout(() => {
@@ -923,6 +928,7 @@ export class DocumentReminderDialog {
         // 用户确认删除
         try {
             const reminderData = await this.plugin.loadReminderData();
+            const undo = new TaskActionUndo(this.plugin, reminderData);
 
             if (reminder.isRepeatInstance) {
                 // 删除重复事件实例
@@ -932,7 +938,7 @@ export class DocumentReminderDialog {
                 await this.deleteNormalReminder(reminderData, reminder);
             }
 
-            await this.plugin.saveReminderData(reminderData);
+            await undo.save(reminderData);
 
             // 更新块的书签状态
             const blockId = reminder.blockId || reminder.id;
@@ -946,7 +952,7 @@ export class DocumentReminderDialog {
             // 重新加载提醒列表
             this.loadReminders();
 
-            showMessage(i18n("reminderDeletedSuccess"));
+            undo.show(i18n("reminderDeletedSuccess"));
 
         } catch (error) {
             console.error("Failed to delete reminder:", error);
