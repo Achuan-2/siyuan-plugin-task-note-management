@@ -1,3 +1,23 @@
+## v7.1.12 / 20261108
+
+- ✨ 任务撤回：任务侧栏和项目看板的完成、取消完成、放弃及批量状态操作新增底部撤回提示；日历、四象限、块绑定任务、文档任务和子任务弹窗支持删除撤回，覆盖重复实例及关联子任务。
+- ⚡ 撤回体验：减少普通本地任务撤回时的重复读盘、订阅扫描和番茄记录重载；保存成功后及时反馈，块属性、徽章和通知在后台更新，并保留其他任务和无关编辑。
+- ✨ 移动端任务侧栏：支持长按任务卡片后拖动排序和调整层级。
+- 🎨 子任务显示：侧栏与项目看板默认折叠已完成子任务的下级任务，手动展开在当前视图中保留。
+- 🎨 番茄钟：新增独立状态切换入口，可直接选择工作、短休息和长休息；整理“更多”菜单，块绑定任务菜单支持开始番茄钟。
+- 🐛 番茄钟提示音：改进结束弹窗的跨窗口声音响应，避免重复播放和关闭后补播；新增结束提示音循环开关，默认仅播放一次。
+- ⚡ 订阅同步：按实际变动刷新相关数据，避免订阅同步触发无关的习惯数据重载，并减少内容未变化时的写入和刷新。
+
+---
+
+- ✨ Task undo: added a bottom undo prompt for completion, reopening, abandonment and batch status changes in the task sidebar and project boards. Calendar, Eisenhower matrix, block-bound tasks, document tasks and subtask dialogs support undoing deletions, including recurring instances and affected subtasks.
+- ⚡ Undo responsiveness: reduced repeated disk reads, subscription scans and Pomodoro record reloads when undoing local task actions. Provide feedback after saving while updating block attributes, badges and notifications in the background, and preserve other tasks and unrelated edits.
+- ✨ Mobile task sidebar: long-press task cards to drag them, reorder tasks and adjust their hierarchy.
+- 🎨 Subtasks: collapse descendants of completed subtasks by default in the sidebar and project boards, while retaining manual expansion within the current view.
+- 🎨 Pomodoro: added a separate phase switcher for work, short breaks and long breaks; reorganized the More menu and added Pomodoro actions to the block-bound task menu.
+- 🐛 Pomodoro sounds: improved cross-window audio responsiveness for completion popups and prevented duplicate or late playback after closing. Added an end-sound loop setting, disabled by default so sounds play once.
+- ⚡ Subscription sync: refresh only data affected by actual changes, avoid reloading unrelated habit data after subscription sync, and reduce writes and refreshes when content is unchanged.
+
 ## v7.1.10 / 20261105
 
 - ⚡ 插件启停：将 ICS 云端同步移出启动等待流程，延迟预热非必要数据，并行加载分类与项目；禁用时及时释放面板、监听器和定时任务，避免异步操作重新创建资源。
