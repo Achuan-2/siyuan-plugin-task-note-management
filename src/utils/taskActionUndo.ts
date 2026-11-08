@@ -1,3 +1,4 @@
+import { showTaskUndoToast } from './taskUndoToast';
 import { showMessage } from 'siyuan';
 import { updateBindBlockAtrrs } from '../api';
 import { i18n } from '../pluginInstance';
@@ -5,12 +6,7 @@ import { getAllReminders, saveReminders } from './icsSubscription';
 import { cleanReminderItem } from './reminderLoadUtils';
 import { applyTaskUndoPatches, cloneTaskData, createTaskUndoPatches, type TaskUndoPatch } from './taskUndoPatch';
 
-const activeToasts = new WeakMap<object, () => void>();
-const UNDO_DURATION = 6000;
-
-export function dismissTaskUndo(plugin: object): void {
-    activeToasts.get(plugin)?.();
-}
+export { dismissTaskUndo } from './taskUndoToast';
 
 export function getTaskStatusUndoMessage(status: string): string {
     if (status === 'completed') return i18n('taskCompleted');
@@ -24,24 +20,33 @@ function snapshot(data: any): any {
     return copy;
 }
 
-/** 在更改数据之前创建，在写盘及当前视图更新成功后调用 show。 */
+/** 单次操作的撤回记录：更改数据前创建，成功保存一次后由视图调用 show。 */
 export class TaskActionUndo {
     private before: any;
     private patches: TaskUndoPatch[] = [];
     private touchesSubscription = false;
+    private saveInProgress = false;
 
     constructor(private plugin: any, data: any) {
         this.before = snapshot(data);
     }
 
     async save(data: any): Promise<void> {
-        const after = snapshot(data);
-        const patches = createTaskUndoPatches(this.before, after);
-        this.touchesSubscription = patches.some(({ path }) =>
-            [this.before[path[0]], after[path[0]]].some(task => task?.isSubscribed && task.subscriptionId));
-        await this.saveChanges(data);
-        this.patches = patches;
-        this.before = null;
+        if (this.before === null || this.saveInProgress) {
+            throw new Error('A task undo record can only commit one operation');
+        }
+        this.saveInProgress = true;
+        try {
+            const after = snapshot(data);
+            const patches = createTaskUndoPatches(this.before, after);
+            this.touchesSubscription = patches.some(({ path }) =>
+                [this.before[path[0]], after[path[0]]].some(task => task?.isSubscribed && task.subscriptionId));
+            await this.saveChanges(data);
+            this.patches = patches;
+            this.before = null;
+        } finally {
+            this.saveInProgress = false;
+        }
     }
 
     private async saveChanges(data: any): Promise<void> {
@@ -101,61 +106,6 @@ export class TaskActionUndo {
 
     show(message: string): void {
         if (this.patches.length === 0 || this.plugin.storageDisposed) return;
-        dismissTaskUndo(this.plugin);
-        const toast = document.createElement('div');
-        toast.className = 'task-action-undo';
-        const label = document.createElement('span');
-        label.setAttribute('role', 'status');
-        label.textContent = message;
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'task-action-undo__button';
-        button.setAttribute('aria-label', i18n('undoTaskAction'));
-        button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 4 9l5 5M4 9h10a6 6 0 0 1 0 12h-4"/></svg>';
-        const buttonText = document.createElement('span');
-        buttonText.textContent = i18n('undoTaskAction');
-        button.append(buttonText);
-        toast.append(label, button);
-        document.body.append(toast);
-
-        let timer: ReturnType<typeof setTimeout>;
-        let busy = false;
-        let closed = false;
-        const close = () => {
-            closed = true;
-            clearTimeout(timer);
-            toast.remove();
-            if (activeToasts.get(this.plugin) === close) activeToasts.delete(this.plugin);
-        };
-        const pause = () => clearTimeout(timer);
-        const resume = () => {
-            pause();
-            if (!busy && !closed && !toast.matches(':hover') && !toast.contains(document.activeElement)) {
-                timer = setTimeout(close, UNDO_DURATION);
-            }
-        };
-        toast.addEventListener('mouseenter', pause);
-        toast.addEventListener('mouseleave', resume);
-        toast.addEventListener('focusin', pause);
-        toast.addEventListener('focusout', resume);
-        button.addEventListener('click', async () => {
-            if (busy || closed) return;
-            busy = true;
-            button.disabled = true;
-            pause();
-            try {
-                const undone = await this.undo();
-                close();
-                if (undone) showMessage(i18n('taskActionUndone'));
-            } catch (error) {
-                console.error('Failed to undo task action:', error);
-                showMessage(i18n('taskUndoFailed'), 3000, 'error');
-                busy = false;
-                button.disabled = false;
-                resume();
-            }
-        });
-        activeToasts.set(this.plugin, close);
-        timer = setTimeout(close, UNDO_DURATION);
+        showTaskUndoToast(this.plugin, message, () => this.undo());
     }
 }

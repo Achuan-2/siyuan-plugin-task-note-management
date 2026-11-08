@@ -6,7 +6,7 @@ import { CategoryManager } from "../dataManager/categoryManager";
 import { ProjectManager } from "../dataManager/projectManager";
 import { QuickReminderDialog } from "./QuickReminderDialog";
 import { TaskRenderer } from "../render/TaskRenderer";
-import { generateRepeatInstancesWithFutureGuarantee, getRepeatInstanceOriginalKey, setRepeatInstanceCompletion, deleteRepeatInstanceState, addDaysToDate, getDaysDifference, resolveRepeatReminderTimes } from "../dataManager/repeatUtils";
+import { generateRepeatInstancesWithFutureGuarantee, getRepeatInstanceOriginalKey, setRepeatInstanceCompletion, excludeRepeatInstance, addDaysToDate, getDaysDifference, resolveRepeatReminderTimes } from "../dataManager/repeatUtils";
 import { i18n } from "../../pluginInstance";
 import type { HolidayData } from "../../utils/reminderSkipDate";
 
@@ -972,19 +972,7 @@ export class DocumentReminderDialog {
         // 使用原始日期（从 ID 中提取）作为键，因为 date 可能已被修改
         const originalInstanceDate = reminder.instanceDate || ((reminder.id && reminder.id.includes('_')) ? reminder.id.split('_').pop() : reminder.date);
 
-        // 如果是删除特定日期的实例，我们需要将其标记为已删除
-        // 而不是真正删除，以避免重复生成
-        if (!originalReminder.repeat.excludeDates) {
-            originalReminder.repeat.excludeDates = [];
-        }
-
-        // 添加到已排除实例列表
-        if (!originalReminder.repeat.excludeDates.includes(originalInstanceDate)) {
-            originalReminder.repeat.excludeDates.push(originalInstanceDate);
-        }
-
-        // 删除该实例的统一状态
-        deleteRepeatInstanceState(originalReminder, originalInstanceDate);
+        excludeRepeatInstance(originalReminder, originalInstanceDate, { clearState: true });
     }
 
     // 新增：删除普通提醒

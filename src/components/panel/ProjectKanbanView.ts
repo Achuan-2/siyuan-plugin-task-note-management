@@ -1,3 +1,4 @@
+import { saveExcludedTaskInstance } from "../../utils/taskInstanceActions";
 import { TaskActionUndo, getTaskStatusUndoMessage } from "../../utils/taskActionUndo";
 import { colorWithOpacity, generateRandomColor } from "../../utils/uiUtils";
 import { getLuteInstance } from "../../utils/luteSingleton";
@@ -14354,35 +14355,9 @@ export class ProjectKanbanView {
     /**
      * 为原始周期事件添加排除日期（适用于普通重复实例和 ghost 子任务）
      */
-    private async addExcludedDate(originalId: string, excludeDate: string) {
-        try {
-            const reminderData = await this.getReminders();
-            const undo = new TaskActionUndo(this.plugin, reminderData);
-
-            if (reminderData[originalId]) {
-                if (!reminderData[originalId].repeat) {
-                    throw new Error(i18n("notRecurringEvent"));
-                }
-
-                // 初始化排除日期列表
-                if (!reminderData[originalId].repeat.excludeDates) {
-                    reminderData[originalId].repeat.excludeDates = [];
-                }
-
-                // 添加排除日期（如果还没有的话）
-                if (!reminderData[originalId].repeat.excludeDates.includes(excludeDate)) {
-                    reminderData[originalId].repeat.excludeDates.push(excludeDate);
-                }
-
-                await undo.save(reminderData);
-                return undo;
-            } else {
-                throw new Error(i18n("originalEventMissing"));
-            }
-        } catch (error) {
-            console.error("Failed to add excluded date:", error);
-            throw error;
-        }
+    private async addExcludedDate(originalId: string, excludeDate: string): Promise<TaskActionUndo> {
+        const reminderData = await this.getReminders();
+        return saveExcludedTaskInstance(this.plugin, reminderData, originalId, excludeDate);
     }
 
     /**

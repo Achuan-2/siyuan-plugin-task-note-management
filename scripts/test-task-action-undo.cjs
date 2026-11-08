@@ -154,6 +154,45 @@ test('写盘失败不显示撤回，无变化不显示提示', async () => {
     assert.equal(f.timers.size, 0);
 });
 
+test('同一撤回记录不能重复或并发提交，失败后可重试且仍能撤回', async () => {
+    const f = fixture({ task: { id: 'task' } }), action = f.action();
+    f.state.failWrite = true;
+    await assert.rejects(action.save({}), /write failed/);
+    f.state.failWrite = false;
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    const save = f.plugin.saveReminderData;
+    f.plugin.saveReminderData = async data => { await gate; await save(data); };
+    const first = action.save({});
+    await assert.rejects(action.save({ unexpected: { id: 'unexpected' } }), /only commit one operation/);
+    release();
+    await first;
+    await assert.rejects(action.save({}), /only commit one operation/);
+    assert.equal(f.state.writes, 1);
+    assert.equal(await action.undo(), true);
+    assert.deepEqual(f.state.data, { task: { id: 'task' } });
+});
+
+test('共享实例操作拒绝缺失任务和非周期任务，不产生写入或撤回提示', async () => {
+    const f = fixture({ plain: { id: 'plain' } });
+    await assert.rejects(f.saveExcludedTaskInstance(f.plugin, f.state.data, 'missing', '2026-11-08'), /originalEventMissing/);
+    await assert.rejects(f.saveExcludedTaskInstance(f.plugin, f.state.data, 'plain', '2026-11-08'), /notRecurringEvent/);
+    assert.equal(f.state.writes, 0);
+    assert.equal(f.document.body.children.length, 0);
+    assert.deepEqual(f.state.data, { plain: { id: 'plain' } });
+});
+
+test('共享日期排除保持幂等，普通删除保留实例历史，文档删除按需清除历史', () => {
+    const f = fixture();
+    const task = { repeat: { instances: { '2026-11-08': { note: 'edited' } } } };
+    f.excludeRepeatInstance(task, '2026-11-08');
+    f.excludeRepeatInstance(task, '2026-11-08');
+    assert.deepEqual(task.repeat.excludeDates, ['2026-11-08']);
+    assert.deepEqual(task.repeat.instances['2026-11-08'], { note: 'edited' });
+    f.excludeRepeatInstance(task, '2026-11-08', { clearState: true });
+    assert.equal(task.repeat.instances['2026-11-08'], undefined);
+});
+
 test('提示保留 6 秒，悬停和聚焦暂停计时，新提示替换旧提示且卸载清理', async () => {
     const f = fixture({ task: { id: 'task' } }), action = f.action();
     await action.save({}); action.show('deleted');
@@ -308,6 +347,7 @@ function compileView(f, file, className, methods) {
         'deleteRepeatInstanceState', 'getRepeatInstanceOriginalKey', 'isRepeatInstanceCompleted', 'getRepeatInstanceCompletedTime', 'patchRepeatInstanceState',
     ]);
     const globals = { ...f.dependencies, TaskActionUndo: f.TaskActionUndo,
+        saveExcludedTaskInstance: f.saveExcludedTaskInstance, excludeRepeatInstance: f.excludeRepeatInstance,
         getTaskStatusUndoMessage: f.getTaskStatusUndoMessage,
         getLocalDateTimeString: () => '2026-11-08 12:00:00', getLocalDateString: () => '2026-11-08',
         getLogicalDateString: () => '2026-11-08', getLocalDateTime: () => ({ dateStr: '2026-11-08', timeStr: '12:00' }) };

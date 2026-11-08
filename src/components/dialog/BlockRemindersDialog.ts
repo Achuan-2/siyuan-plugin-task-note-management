@@ -10,7 +10,7 @@ import { PomodoroRecordManager } from "../dataManager/pomodoroRecord";
 import { PomodoroManager } from "../dataManager/pomodoroManager";
 import { PomodoroTimer } from "../panel/PomodoroTimer";
 import { createPomodoroStartSubmenu } from "../../utils/pomodoroPresets";
-import { resolveRepeatReminderTimes, addDaysToDate, getDaysDifference, generateRepeatInstancesWithFutureGuarantee, getRepeatInstanceOriginalKey, isRepeatInstanceCompleted, getRepeatInstanceCompletedTime, setRepeatInstanceCompletion } from "../dataManager/repeatUtils";
+import { excludeRepeatInstance, resolveRepeatReminderTimes, addDaysToDate, getDaysDifference, generateRepeatInstancesWithFutureGuarantee, getRepeatInstanceOriginalKey, isRepeatInstanceCompleted, getRepeatInstanceCompletedTime, setRepeatInstanceCompletion } from "../dataManager/repeatUtils";
 import type { HolidayData } from "../../utils/reminderSkipDate";
 
 /**
@@ -640,11 +640,7 @@ export class BlockRemindersDialog {
                         if (!original) {
                             throw new Error(i18n("originalTaskMissing"));
                         }
-                        if (!original.repeat) original.repeat = {};
-                        if (!original.repeat.excludeDates) original.repeat.excludeDates = [];
-                        if (!original.repeat.excludeDates.includes(reminder.instanceDate)) {
-                            original.repeat.excludeDates.push(reminder.instanceDate);
-                        }
+                        excludeRepeatInstance(original, reminder.instanceDate);
                     } else {
                         if (!reminderData[reminder.id]) throw new Error(i18n("reminderNotExistError"));
                         delete reminderData[reminder.id];

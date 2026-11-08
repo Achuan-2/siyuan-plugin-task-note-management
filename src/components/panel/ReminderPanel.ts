@@ -1,3 +1,4 @@
+import { saveExcludedTaskInstance } from "../../utils/taskInstanceActions";
 import { TaskActionUndo, getTaskStatusUndoMessage } from "../../utils/taskActionUndo";
 import { showMessage, confirm, Dialog, Menu, Constants, getFrontend, getBackend, platformUtils } from "siyuan";
 import { refreshSql, getBlockByID, updateBindBlockAtrrs, openBlock, pushMsg, sql } from "../../api";
@@ -10369,35 +10370,9 @@ export class ReminderPanel {
     }
 
     // 新增：为原始重复事件添加排除日期
-    private async addExcludedDate(originalId: string, excludeDate: string) {
-        try {
-            const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
-            const undo = new TaskActionUndo(this.plugin, reminderData);
-
-            if (reminderData[originalId]) {
-                if (!reminderData[originalId].repeat) {
-                    throw new Error(i18n("notRecurringEvent"));
-                }
-
-                // 初始化排除日期列表
-                if (!reminderData[originalId].repeat.excludeDates) {
-                    reminderData[originalId].repeat.excludeDates = [];
-                }
-
-                // 添加排除日期（如果还没有的话）
-                if (!reminderData[originalId].repeat.excludeDates.includes(excludeDate)) {
-                    reminderData[originalId].repeat.excludeDates.push(excludeDate);
-                }
-
-                await undo.save(reminderData);
-                return undo;
-            } else {
-                throw new Error(i18n("originalEventMissing"));
-            }
-        } catch (error) {
-            console.error("Failed to add excluded date:", error);
-            throw error;
-        }
+    private async addExcludedDate(originalId: string, excludeDate: string): Promise<TaskActionUndo> {
+        const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
+        return saveExcludedTaskInstance(this.plugin, reminderData, originalId, excludeDate);
     }
 
     private async showTimeEditDialog(reminder: any, isSeriesEdit: boolean = false) {

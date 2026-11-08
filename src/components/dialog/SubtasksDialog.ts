@@ -10,7 +10,7 @@ import { CategoryManager } from "../dataManager/categoryManager";
 import { ProjectManager } from "../dataManager/projectManager";
 import { getLogicalDateString } from "../../utils/dateUtils";
 import { getSortCriterionName, loadSortConfig, saveSortConfig, type SortCriterion } from "../../utils/sortConfig";
-import { resolveRepeatReminderTimes, addDaysToDate, getDaysDifference, getRepeatInstanceCompletedTime, setRepeatInstanceCompletion, getRepeatInstanceState } from "../dataManager/repeatUtils";
+import { excludeRepeatInstance, resolveRepeatReminderTimes, addDaysToDate, getDaysDifference, getRepeatInstanceCompletedTime, setRepeatInstanceCompletion, getRepeatInstanceState } from "../dataManager/repeatUtils";
 import { getLuteInstance } from "../../utils/luteSingleton";
 
 export class SubtasksDialog {
@@ -1141,11 +1141,7 @@ export class SubtasksDialog {
                         if (!task) return;
                         const undo = new TaskActionUndo(this.plugin, reminderData);
                         // 将 ghost 子任务标记为在当前日期隐藏
-                        if (!task.repeat) task.repeat = {};
-                        if (!task.repeat.excludeDates) task.repeat.excludeDates = [];
-                        if (!task.repeat.excludeDates.includes(date)) {
-                            task.repeat.excludeDates.push(date);
-                        }
+                        excludeRepeatInstance(task, date);
                         await undo.save(reminderData);
                         await this.loadSubtasks();
                         this.renderSubtasks();

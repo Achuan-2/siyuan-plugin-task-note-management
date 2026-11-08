@@ -1,3 +1,4 @@
+import { saveExcludedTaskInstance } from "../../utils/taskInstanceActions";
 import { TaskActionUndo } from "../../utils/taskActionUndo";
 import { getFile, putFile, openBlock, getBlockByID, removeFile } from "../../api";
 import { getDragHandleIcon } from "../../utils/dragHandleIcon";
@@ -4846,36 +4847,11 @@ export class EisenhowerMatrixView {
     /**
      * 为原始周期事件添加排除日期
      */
-    private async addExcludedDate(originalId: string, excludeDate: string) {
-        try {
-            const reminderData = await getAllReminders(this.plugin);
-            const undo = new TaskActionUndo(this.plugin, reminderData);
-
-            if (reminderData[originalId]) {
-                if (!reminderData[originalId].repeat) {
-                    throw new Error(i18n("notRecurringEvent"));
-                }
-
-                // 初始化排除日期列表
-                if (!reminderData[originalId].repeat.excludeDates) {
-                    reminderData[originalId].repeat.excludeDates = [];
-                }
-
-                // 添加排除日期（如果还没有的话）
-                if (!reminderData[originalId].repeat.excludeDates.includes(excludeDate)) {
-                    reminderData[originalId].repeat.excludeDates.push(excludeDate);
-                }
-
-                await undo.save(reminderData);
-                await this.refreshRecurringMobileNotifications(reminderData, [originalId]);
-                return undo;
-            } else {
-                throw new Error(i18n("originalEventMissing"));
-            }
-        } catch (error) {
-            console.error("Failed to add excluded date:", error);
-            throw error;
-        }
+    private async addExcludedDate(originalId: string, excludeDate: string): Promise<TaskActionUndo> {
+        const reminderData = await getAllReminders(this.plugin);
+        const undo = await saveExcludedTaskInstance(this.plugin, reminderData, originalId, excludeDate);
+        await this.refreshRecurringMobileNotifications(reminderData, [originalId]);
+        return undo;
     }
 
     private async refreshTaskMobileNotification(reminder: any, reminderIdForFallback?: string): Promise<void> {

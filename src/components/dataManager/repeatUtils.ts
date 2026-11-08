@@ -195,6 +195,14 @@ export function deleteRepeatInstanceState(reminder: any, dateKey: string): void 
     if (instances) delete instances[dateKey];
 }
 
+/** 排除一次发生；文档任务删除实例时还需清除该次编辑历史。 */
+export function excludeRepeatInstance(reminder: any, dateKey: string, options: { clearState?: boolean } = {}): void {
+    if (!reminder.repeat) reminder.repeat = {};
+    if (!Array.isArray(reminder.repeat.excludeDates)) reminder.repeat.excludeDates = [];
+    if (!reminder.repeat.excludeDates.includes(dateKey)) reminder.repeat.excludeDates.push(dateKey);
+    if (options.clearState) deleteRepeatInstanceState(reminder, dateKey);
+}
+
 // ===================== 统一 repeat.instances 操作 helper 结束 =====================
 
 /**
