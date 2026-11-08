@@ -28,6 +28,7 @@ function snapshot(data: any): any {
 export class TaskActionUndo {
     private before: any;
     private patches: TaskUndoPatch[] = [];
+    private touchesSubscription = false;
 
     constructor(private plugin: any, data: any) {
         this.before = snapshot(data);
@@ -35,22 +36,39 @@ export class TaskActionUndo {
 
     async save(data: any): Promise<void> {
         const after = snapshot(data);
-        await saveReminders(this.plugin, data);
-        this.patches = createTaskUndoPatches(this.before, after);
+        const patches = createTaskUndoPatches(this.before, after);
+        this.touchesSubscription = patches.some(({ path }) =>
+            [this.before[path[0]], after[path[0]]].some(task => task?.isSubscribed && task.subscriptionId));
+        await this.saveChanges(data);
+        this.patches = patches;
         this.before = null;
+    }
+
+    private async saveChanges(data: any): Promise<void> {
+        if (this.touchesSubscription) {
+            await saveReminders(this.plugin, data);
+            return;
+        }
+        // 本地操作只写完整的本地任务，避免为撤回一个任务重读、同步所有订阅。
+        const localTasks = Object.fromEntries(Object.entries(data).filter(
+            ([, task]: [string, any]) => !(task?.isSubscribed && task.subscriptionId)));
+        await this.plugin.saveReminderData(localTasks);
     }
 
     async undo(): Promise<boolean> {
         if (this.patches.length === 0 || this.plugin.storageDisposed) return false;
-        // 始终读取完整的最新数据，保留其他项目及隐藏订阅中的任务。
-        const current = snapshot(await getAllReminders(this.plugin, undefined, true, undefined, { strict: true }));
+        // 插件缓存是最新的完整本地数据，不使用可能过期的视图快照。
+        // 涉及订阅时仍走严格的全量读取和订阅持久化流程。
+        const current = snapshot(this.touchesSubscription
+            ? await getAllReminders(this.plugin, undefined, true, undefined, { strict: true })
+            : await this.plugin.loadReminderData());
         if (this.plugin.storageDisposed) return false;
         const restored = applyTaskUndoPatches(current, this.patches);
         if (!restored) {
             showMessage(i18n('taskUndoConflict'), 3000, 'error');
             return false;
         }
-        await saveReminders(this.plugin, restored);
+        await this.saveChanges(restored);
         const taskIds = new Set(this.patches.map(patch => patch.path[0]));
         this.patches = [];
         const blockIds = new Set<string>();
@@ -62,7 +80,9 @@ export class TaskActionUndo {
                 });
             }
         }
-        window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { force: true } }));
+        window.dispatchEvent(new CustomEvent('reminderUpdated', {
+            detail: { taskUndo: true, refreshDelayMs: 0 }
+        }));
         const effects = [
             () => this.plugin.updateBadges?.(),
             ...Array.from(blockIds, id => () => updateBindBlockAtrrs(id, this.plugin)),
@@ -70,9 +90,11 @@ export class TaskActionUndo {
                 ? this.plugin.updateMobileNotification?.(restored[id])
                 : this.plugin.cancelMobileNotification?.(id)),
         ];
-        const results = await Promise.allSettled(effects.map(effect => Promise.resolve().then(effect)));
-        results.forEach(result => {
-            if (result.status === 'rejected') console.warn('Failed to refresh task after undo:', result.reason);
+        // 数据已落盘，界面和成功提示不必等待这些附带更新。
+        void Promise.allSettled(effects.map(effect => Promise.resolve().then(effect))).then(results => {
+            results.forEach(result => {
+                if (result.status === 'rejected') console.warn('Failed to refresh task after undo:', result.reason);
+            });
         });
         return true;
     }

@@ -183,10 +183,13 @@ export class ReminderPanel {
             }
             this.loadTimeoutId = window.setTimeout(async () => {
                 this.loadTimeoutId = null;
-                try {
-                    await this.pomodoroRecordManager.refreshData();
-                } catch (e) {
-                    console.warn("Failed to refresh pomodoro data:", e);
+                // 撤回只改变任务数据，沿用已有番茄统计，避免恢复卡片前重读记录文件。
+                if (!event?.detail?.taskUndo) {
+                    try {
+                        await this.pomodoroRecordManager.refreshData();
+                    } catch (e) {
+                        console.warn("Failed to refresh pomodoro data:", e);
+                    }
                 }
                 // 加载中的通知也要排队，不能丢掉后台保存完成后的刷新。
                 void this.loadReminders();

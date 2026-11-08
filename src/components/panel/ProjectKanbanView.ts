@@ -746,7 +746,7 @@ export class ProjectKanbanView {
 
             // loadTasks 会在防抖后读取最新数据，通知阶段只失效快照，避免每条通知重复合并订阅任务。
             this.reminderData = null;
-            void this.queueLoadTasks();
+            void this.queueLoadTasks(detail.taskUndo ? 0 : undefined);
         });
 
         // 全局/项目级显示设置变更后刷新当前看板配置
@@ -4086,7 +4086,7 @@ export class ProjectKanbanView {
     /**
      * 防抖加载任务队列：避免短时间多次触发导致界面频繁重绘和滚动位置丢失
      */
-    public queueLoadTasks(): Promise<void> {
+    public queueLoadTasks(delayMs: number = this._debounceDelay): Promise<void> {
         if (this.disposed) return Promise.resolve();
         // 如果已有挂起的 promise，则复用
         if (!this._pendingLoadPromise) {
@@ -4117,7 +4117,7 @@ export class ProjectKanbanView {
                 this._pendingLoadResolve = null;
                 this._debounceTimer = null;
             }
-        }, this._debounceDelay);
+        }, delayMs);
 
         return this._pendingLoadPromise as Promise<void>;
     }

@@ -22,7 +22,7 @@ function element(tag) {
 }
 
 function fixture(initial = {}) {
-    const state = { data: clone(initial), writes: 0, events: [], blocks: [], notifications: [], messages: [], reads: [] };
+    const state = { data: clone(initial), writes: 0, events: [], blocks: [], notifications: [], messages: [], reads: [], localReads: [] };
     const timers = new Map();
     let timerId = 0;
     const document = { body: element('body'), createElement: element, activeElement: null };
@@ -43,6 +43,16 @@ function fixture(initial = {}) {
     };
     const undoModule = loadTaskActionUndo(dependencies);
     const plugin = {
+        async loadReminderData(force) {
+            state.localReads.push(force);
+            return clone(Object.fromEntries(Object.entries(state.data).filter(([, task]) => !task.isSubscribed)));
+        },
+        async saveReminderData(data) {
+            if (state.failWrite) throw new Error('write failed');
+            const subscriptions = Object.fromEntries(Object.entries(state.data).filter(([, task]) => task.isSubscribed));
+            state.data = { ...subscriptions, ...clone(data) };
+            state.writes++;
+        },
         updateBadges() {},
         updateMobileNotification: async task => state.notifications.push(task.id),
         cancelMobileNotification: async id => state.notifications.push(`cancel:${id}`),
@@ -66,7 +76,9 @@ test('完成父子任务后恢复完成时间、进度和原状态，保留其�
     assert.deepEqual(new Set(f.state.blocks), new Set(['p', 'c']));
     assert.deepEqual(new Set(f.state.notifications), new Set(['parent', 'child']));
     assert.equal(f.state.events.at(-1).type, 'reminderUpdated');
-    assert.deepEqual(f.state.reads.at(-1), [undefined, true, undefined, { strict: true }]);
+    assert.deepEqual(f.state.reads, []);
+    assert.deepEqual(f.state.localReads, [undefined]);
+    assert.deepEqual(f.state.events.at(-1).detail, { taskUndo: true, refreshDelayMs: 0 });
     assert.equal(await action.undo(), false);
 });
 
@@ -177,10 +189,95 @@ test('超时清理提示，读取失败时保留数据且不写盘', async () =>
     [...f.timers.values()][0].callback();
     assert.equal(f.document.body.children.length, 0);
     assert.equal(f.timers.size, 0);
-    f.dependencies.getAllReminders = async () => { throw new Error('read failed'); };
+    f.plugin.loadReminderData = async () => { throw new Error('read failed'); };
     await assert.rejects(action.undo(), /read failed/);
     assert.equal(f.state.writes, 1);
     assert.deepEqual(f.state.data, {});
+});
+
+test('本地删除和撤回不扫描或写入订阅，仍保留最新本地任务及订阅数据', async () => {
+    const subscribed = { id: 'sub', isSubscribed: true, subscriptionId: 'feed', title: 'subscription' };
+    const task = { id: 'task', title: 'local task' };
+    const f = fixture({ task, sub: subscribed }), action = f.action();
+    f.dependencies.getAllReminders = async () => { throw new Error('unexpected subscription read'); };
+    f.dependencies.saveReminders = async () => { throw new Error('unexpected subscription write'); };
+    await action.save({ sub: subscribed });
+    f.state.data.newTask = { id: 'newTask', projectId: 'B' };
+    assert.equal(await action.undo(), true);
+    assert.deepEqual(f.state.data, { task, sub: subscribed, newTask: { id: 'newTask', projectId: 'B' } });
+    assert.deepEqual(f.state.localReads, [undefined]);
+});
+
+test('订阅任务撤回仍使用严格全量读取和订阅保存', async () => {
+    const before = { task: { id: 'task', isSubscribed: true, subscriptionId: 'feed', completed: false } };
+    const f = fixture(before), action = f.action();
+    let subscriptionWrites = 0;
+    const save = f.dependencies.saveReminders;
+    f.dependencies.saveReminders = async (...args) => { subscriptionWrites++; await save(...args); };
+    await action.save({ task: { ...before.task, completed: true } });
+    assert.equal(await action.undo(), true);
+    assert.equal(subscriptionWrites, 2);
+    assert.deepEqual(f.state.reads.at(-1), [undefined, true, undefined, { strict: true }]);
+    assert.deepEqual(f.state.localReads, []);
+    assert.deepEqual(f.state.data, before);
+});
+
+test('绑定块、徽章和通知仍未返回时，撤回已保存并立即关闭提示', async () => {
+    const f = fixture({ task: { id: 'task', blockId: 'bound' } }), action = f.action();
+    await action.save({}); action.show('deleted');
+    let release, finished = false, effects = 0;
+    const pendingEffect = new Promise(resolve => { release = resolve; });
+    const slowEffect = () => { effects++; return pendingEffect; };
+    f.dependencies.updateBindBlockAtrrs = slowEffect;
+    f.plugin.updateBadges = slowEffect;
+    f.plugin.updateMobileNotification = slowEffect;
+    const click = f.document.body.children[0].children[1].fire('click').then(() => { finished = true; });
+    try {
+        for (let i = 0; i < 30; i++) await Promise.resolve();
+        assert.equal(effects, 3);
+        assert.equal(finished, true);
+        assert.equal(f.document.body.children.length, 0);
+        assert.equal(f.state.messages.at(-1)[0], 'taskActionUndone');
+        assert.deepEqual(f.state.data, { task: { id: 'task', blockId: 'bound' } });
+    } finally {
+        release();
+        await click;
+    }
+});
+
+test('侧栏撤回立即排队刷新且不重读番茄记录，普通通知保持原行为', async () => {
+    const file = 'src/components/panel/ReminderPanel.ts';
+    const source = ts.createSourceFile(file, fs.readFileSync(path.join(root, file), 'utf8'), ts.ScriptTarget.Latest, true);
+    const declaration = source.statements.find(ts.isClassDeclaration);
+    const constructor = declaration.members.find(ts.isConstructorDeclaration);
+    const assignment = constructor.body.statements.find(statement =>
+        ts.isExpressionStatement(statement) && ts.isBinaryExpression(statement.expression) &&
+        statement.expression.left.getText(source) === 'this.reminderUpdatedHandler');
+    const code = ts.transpileModule(`class Panel { constructor() { ${assignment.getText(source)} } }`, {
+        compilerOptions: { target: ts.ScriptTarget.ES2020 },
+    }).outputText;
+    const f = fixture();
+    const Panel = new Function('window', 'clearTimeout', code + '; return Panel;')(
+        { setTimeout: f.dependencies.setTimeout }, f.dependencies.clearTimeout,
+    );
+    let loads = 0, statisticsReads = 0;
+    const panel = Object.assign(new Panel(), {
+        panelId: 'panel', loadReminders: () => { loads++; },
+        pomodoroRecordManager: { refreshData: async () => { statisticsReads++; } },
+    });
+    panel.reminderUpdatedHandler({ detail: { taskUndo: true, refreshDelayMs: 0 } });
+    const immediate = [...f.timers.values()][0];
+    assert.equal(immediate.delay, 0);
+    await immediate.callback();
+    assert.equal(loads, 1);
+    assert.equal(statisticsReads, 0);
+    f.timers.clear();
+    panel.reminderUpdatedHandler({ detail: {} });
+    const normal = [...f.timers.values()][0];
+    assert.equal(normal.delay, 100);
+    await normal.callback();
+    assert.equal(loads, 2);
+    assert.equal(statisticsReads, 1);
 });
 
 function extract(file, className, names) {

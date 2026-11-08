@@ -183,13 +183,14 @@ test('看板通知阶段只排队，不在防抖前重复读取，仍忽略自�
         { addEventListener: (name, handler) => handlers.set(name, handler) }, { addEventListener: () => {} },
     );
     let preloads = 0, queued = 0;
+    const delays = [];
     const board = Object.assign(new Board(), {
         lifecycle: { listen: (_target, name, handler) => handlers.set(name, handler) },
         kanbanInstanceId: 'self', categoryManager: { initialize: async () => {} },
         loadProject: async () => {}, loadKanbanMode: async () => {}, loadKanbanSortConfig: async () => {},
         initUI: () => {}, loadTasks: async () => {}, checkVip: () => {},
         isProjectInCurrentView: id => id === 'A', reminderData: { old: {} },
-        getReminders: async () => { preloads++; }, queueLoadTasks: () => { queued++; return Promise.resolve(); },
+        getReminders: async () => { preloads++; }, queueLoadTasks: delay => { queued++; delays.push(delay); return Promise.resolve(); },
     });
     await board.initializeAsync();
     const notify = detail => handlers.get('reminderUpdated')({ detail });
@@ -199,6 +200,8 @@ test('看板通知阶段只排队，不在防抖前重复读取，仍忽略自�
     assert.equal(preloads, 0);
     assert.equal(queued, 2);
     assert.equal(board.reminderData, null);
+    notify({ taskUndo: true });
+    assert.deepEqual(delays, [undefined, undefined, 0]);
 });
 
 function task(id, projectId, kanbanStatus = 'doing') {
