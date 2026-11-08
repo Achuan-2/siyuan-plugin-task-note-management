@@ -166,7 +166,8 @@ export async function getAllReminders(
     plugin: any,
     projectId?: string,
     force: boolean = false,
-    filterType?: 'sidebar' | 'matrix' | 'none'
+    filterType?: 'sidebar' | 'matrix' | 'none',
+    options?: { strict?: boolean }
 ): Promise<any> {
     try {
         // Load main reminders
@@ -263,6 +264,8 @@ export async function getAllReminders(
         return allReminders;
     } catch (error) {
         console.error('Failed to get all reminders:', error);
+        // 撤回等写入操作不能把读取失败当成任务已被删除。
+        if (options?.strict) throw error;
         // Fallback to main reminders only
         return (await plugin.loadReminderData()) || {};
     }

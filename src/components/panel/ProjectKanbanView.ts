@@ -1,3 +1,4 @@
+import { TaskActionUndo, getTaskStatusUndoMessage } from "../../utils/taskActionUndo";
 import { colorWithOpacity, generateRandomColor } from "../../utils/uiUtils";
 import { getLuteInstance } from "../../utils/luteSingleton";
 import { TaskHierarchyIndex } from '../../utils/taskHierarchy';
@@ -10223,6 +10224,7 @@ export class ProjectKanbanView {
                 } else {
                     // 对于普通任务
                     const reminderData = await this.getReminders();
+                    const undo = new TaskActionUndo(this.plugin, reminderData);
                     if (reminderData[task.id]) {
                         reminderData[task.id].completed = completed;
                         this.syncCustomProgressOnCompletion(reminderData[task.id], completed);
@@ -10258,7 +10260,7 @@ export class ProjectKanbanView {
                             // 取消完成父任务时，通常不自动取消子任务
                         }
 
-                        await saveReminders(this.plugin, reminderData);
+                        await undo.save(reminderData);
 
                         // 取消已完成任务的移动端通知
                         if (completed && this.plugin?.cancelMobileNotification) {
@@ -10282,6 +10284,7 @@ export class ProjectKanbanView {
 
                         // 广播更新事件
                         this.dispatchReminderUpdate(true);
+                        undo.show(completed ? i18n("taskCompleted") : i18n("taskUncompleted"));
                         // 标记完成后不再触发整页 queueLoadTasks 刷新，避免滚动条跳动
                         // 但如果是父任务完成（有子任务被级联完成），必须刷新以保持子任务DOM和层级结构一致
                         // 取消完成时仍保留兜底刷新，确保状态回退一致
@@ -10315,6 +10318,7 @@ export class ProjectKanbanView {
     private async toggleRepeatInstanceCompletion(task: any, completed: boolean) {
         try {
             const reminderData = await this.getReminders();
+            const undo = new TaskActionUndo(this.plugin, reminderData);
             const originalReminder = reminderData[task.originalId];
             let affectedBlockIds: Set<string>;
             const recurringOriginalIds = new Set<string>([task.originalId]);
@@ -10342,7 +10346,7 @@ export class ProjectKanbanView {
                 setRepeatInstanceCompletion(originalReminder, instanceDate, false);
             }
 
-            await saveReminders(this.plugin, reminderData);
+            await undo.save(reminderData);
 
             // 取消已完成任务的移动端通知
             if (completed && this.plugin?.cancelMobileNotification) {
@@ -10394,6 +10398,7 @@ export class ProjectKanbanView {
             this.dispatchReminderUpdate(true);
             // 重复实例完成/取消完成后，需要立即重算实例列表（例如补出下一个实例）
             await this.queueLoadTasks();
+            undo.show(completed ? i18n("taskCompleted") : i18n("taskUncompleted"));
         } catch (error) {
             console.error("Failed to toggle repeat instance completion:", error);
             showMessage(i18n("operationFailedRetry"));
@@ -10458,6 +10463,7 @@ export class ProjectKanbanView {
                 // ignore parsing errors and continue
             }
             const reminderData = await this.getReminders();
+            const undo = new TaskActionUndo(this.plugin, reminderData);
 
             // 对于周期实例，使用 originalId；否则使用 task.id
             const actualTaskId = task.isRepeatInstance ? task.originalId : task.id;
@@ -10622,7 +10628,7 @@ export class ProjectKanbanView {
                     }
                 }
 
-                await saveReminders(this.plugin, reminderData);
+                await undo.save(reminderData);
 
                 // 取消已完成任务的移动端通知
                 if (newStatus === 'completed' && this.plugin?.cancelMobileNotification) {
@@ -10684,6 +10690,7 @@ export class ProjectKanbanView {
                     // 非拖拽操作,重新加载以确保正确性
                     await this.queueLoadTasks();
                 }
+                undo.show(getTaskStatusUndoMessage(newStatus));
             }
         } catch (error) {
             console.error("Failed to toggle task state:", error);
@@ -12064,6 +12071,7 @@ export class ProjectKanbanView {
             try {
                 // 重读数据以确保删除时数据为最新
                 const reminderData = { ...await this.getReminders(true) };
+                const undo = new TaskActionUndo(this.plugin, reminderData);
 
                 // 获取所有后代任务ID（递归）
                 const descendantIds = this.getAllDescendantIds(taskToDelete.id, reminderData);
@@ -12105,7 +12113,7 @@ export class ProjectKanbanView {
 
                 // 先保存数据
                 Object.assign(reminderData, completedReminders);
-                await saveReminders(this.plugin, reminderData);
+                await undo.save(reminderData);
                 this.reminderData = null;
 
                 // 保存后再批量更新块的书签状态（忽略错误）
@@ -12123,7 +12131,7 @@ export class ProjectKanbanView {
                 // 当前看板会忽略同源事件，需要主动刷新一次以更新折叠、计数和分页等衍生状态
                 await this.queueLoadTasks();
 
-                // showMessage("任务已删除");
+                undo.show(i18n("reminderDeleted"));
             } catch (error) {
                 console.error("Failed to delete task:", error);
                 showMessage(i18n("deleteTaskFailed"));
@@ -13225,7 +13233,8 @@ export class ProjectKanbanView {
         insertBefore: boolean,
         targetStatus?: string,
         targetGroup?: string | null,
-        targetPriority: string = 'none'
+        targetPriority: string = 'none',
+        undo?: TaskActionUndo
     ): Promise<boolean> {
         try {
             const isDraggedInstance = draggedTask.isRepeatInstance && draggedTask.originalId;
@@ -13535,7 +13544,7 @@ export class ProjectKanbanView {
                 }
             }
 
-            await saveReminders(this.plugin, reminderData);
+            await (undo ? undo.save(reminderData) : saveReminders(this.plugin, reminderData));
             await this.refreshRecurringMobileNotifications(reminderData, recurringOriginalIds);
 
             // 更新本地缓存
@@ -13562,6 +13571,7 @@ export class ProjectKanbanView {
             }
 
             await this.queueLoadTasks();
+            undo?.show(getTaskStatusUndoMessage(targetStatus));
             return true;
         } catch (err) {
             console.warn('Advanced instance reorder failed', err);
@@ -13572,6 +13582,8 @@ export class ProjectKanbanView {
     private async reorderTasks(draggedTask: any, targetTask: any, insertBefore: boolean): Promise<boolean> {
         try {
             const reminderData = await this.getReminders();
+            const undo = this.getTaskStatus(draggedTask) !== this.getTaskStatus(targetTask)
+                ? new TaskActionUndo(this.plugin, reminderData) : undefined;
 
             const draggedId = draggedTask.id;
             const targetId = targetTask.id;
@@ -13638,7 +13650,8 @@ export class ProjectKanbanView {
                             insertBefore,
                             targetStatus,
                             targetGroup,
-                            targetPriority
+                            targetPriority,
+                            undo
                         );
                         if (success) return true;
                     }
@@ -13682,7 +13695,7 @@ export class ProjectKanbanView {
                 siblingTasks.forEach((task: any, index: number) => {
                     reminderData[task.id].sort = index * 10;
                 });
-                await saveReminders(this.plugin, reminderData);
+                await (undo ? undo.save(reminderData) : saveReminders(this.plugin, reminderData));
                 siblingTasks.forEach((task: any) => {
                     const localTask = this.tasks.find(t => t.id === task.id);
                     if (localTask) {
@@ -13703,6 +13716,7 @@ export class ProjectKanbanView {
                 // 依然要重新刷新DOM，避免乐观更新错误
                 await this.queueLoadTasks();
                 this.dispatchReminderUpdate(true);
+                undo?.show(getTaskStatusUndoMessage(newStatus));
                 return true;
             }
 
@@ -13948,7 +13962,7 @@ export class ProjectKanbanView {
                     reminderData[task.id].sort = index * 10;
                 });
 
-                await saveReminders(this.plugin, reminderData);
+                await (undo ? undo.save(reminderData) : saveReminders(this.plugin, reminderData));
 
                 // Update local cache for ALL tasks involved (to keep status/priority/sort in sync)
                 [...sourceList, ...targetList].forEach((task: any) => {
@@ -13995,6 +14009,7 @@ export class ProjectKanbanView {
                 await this.queueLoadTasks();
 
                 this.dispatchReminderUpdate(true);
+                undo?.show(getTaskStatusUndoMessage(newStatus));
                 return true;
             }
 
@@ -14138,7 +14153,7 @@ export class ProjectKanbanView {
                 reminderData[task.id].sort = index * 10;
             });
             console.log('[Kanban] handleSortDrop DB update:', { draggedId, newStatus, newPriority, targetProjectId: this.projectId });
-            await saveReminders(this.plugin, reminderData);
+            await (undo ? undo.save(reminderData) : saveReminders(this.plugin, reminderData));
 
             // Update local cache for ALL tasks involved
             [...sourceList, ...targetList].forEach((task: any) => {
@@ -14183,6 +14198,7 @@ export class ProjectKanbanView {
 
             this.dispatchReminderUpdate(true);
 
+            undo?.show(getTaskStatusUndoMessage(newStatus));
             return true;
         } catch (error) {
             console.error("Failed to reorder tasks:", error);
@@ -14313,7 +14329,7 @@ export class ProjectKanbanView {
                     const instanceDate = task.date;
 
                     // 将当前日期添加到 excludeDates（适用于普通重复实例和 ghost 子任务）
-                    await this.addExcludedDate(originalId, instanceDate);
+                    const undo = await this.addExcludedDate(originalId, instanceDate);
 
                     // 如果该实例绑定了块或文档，更新块属性（忽略错误）
                     if (task.blockId || task.docId) {
@@ -14324,7 +14340,7 @@ export class ProjectKanbanView {
                         }
                     }
 
-                    showMessage(i18n("instanceDeleted"));
+                    undo.show(i18n("instanceDeleted"));
                     this.dispatchReminderUpdate(true);
                 } catch (error) {
                     console.error("Failed to delete recurring instance:", error);
@@ -14341,6 +14357,7 @@ export class ProjectKanbanView {
     private async addExcludedDate(originalId: string, excludeDate: string) {
         try {
             const reminderData = await this.getReminders();
+            const undo = new TaskActionUndo(this.plugin, reminderData);
 
             if (reminderData[originalId]) {
                 if (!reminderData[originalId].repeat) {
@@ -14357,7 +14374,8 @@ export class ProjectKanbanView {
                     reminderData[originalId].repeat.excludeDates.push(excludeDate);
                 }
 
-                await saveReminders(this.plugin, reminderData);
+                await undo.save(reminderData);
+                return undo;
             } else {
                 throw new Error(i18n("originalEventMissing"));
             }
@@ -15360,6 +15378,7 @@ export class ProjectKanbanView {
     private async batchReorderTasks(taskIds: string[], targetTask: any, insertBefore: boolean): Promise<boolean> {
         try {
             const reminderData = await this.getReminders();
+            const undo = new TaskActionUndo(this.plugin, reminderData);
             const blocksToUpdate = new Set<string>();
             const targetId = targetTask.id;
             const targetTaskInDb = reminderData[targetId];
@@ -15550,7 +15569,7 @@ export class ProjectKanbanView {
                 reminderData[task.id].sort = index * 10;
             });
 
-            await saveReminders(this.plugin, reminderData);
+            await undo.save(reminderData);
 
             // Update local cache
             validTaskIds.forEach(id => {
@@ -15573,6 +15592,7 @@ export class ProjectKanbanView {
             this.dispatchReminderUpdate(true);
             validTaskIds.forEach(id => this.refreshTaskElement(id));
 
+            undo.show(getTaskStatusUndoMessage(newStatus));
             return true;
 
         } catch (e) {
@@ -16397,6 +16417,7 @@ export class ProjectKanbanView {
                 this.plugin.playTaskCompleteSound();
             }
             const reminderData = await this.getReminders();
+            const undo = updates.kanbanStatus ? new TaskActionUndo(this.plugin, reminderData) : undefined;
             // 如果尝试修改状态（尤其是将任务移出 doing/completed），在执行前先检查是否有未完成且日期为今天或已过的任务。
             // 若存在此类任务，提示用户需先修改任务时间才能移出“进行中”。
             try {
@@ -16838,18 +16859,20 @@ export class ProjectKanbanView {
             }
 
             if (hasChanges) {
-                await saveReminders(this.plugin, reminderData);
+                if (undo) await undo.save(reminderData);
+                else await saveReminders(this.plugin, reminderData);
                 await this.refreshRecurringMobileNotifications(reminderData, recurringOriginalIds);
                 // 跨项目时源看板也要刷新，不能仅广播目标项目。
                 this.dispatchReminderUpdate(true, movedIds.size > 0);
                 await this.queueLoadTasks(); // Full reload
-                showMessage(i18n('batchUpdateSuccess', { count: String(updatedCount) }) || `成功更新 ${updatedCount} 个任务`);
+                if (!undo) showMessage(i18n("batchUpdateSuccess", { count: String(updatedCount) }));
 
                 for (const blockId of blocksToUpdate) {
                     try {
                         await updateBindBlockAtrrs(blockId, this.plugin);
                     } catch (err) { console.warn(err); }
                 }
+                undo?.show(getTaskStatusUndoMessage(updates.kanbanStatus));
             }
 
         } catch (e) {
@@ -17081,15 +17104,13 @@ export class ProjectKanbanView {
         // 确认对话框 - 思源 confirm 使用回调方式
         confirm(
             i18n('confirmBatchDelete') || '确认批量删除',
-            i18n('confirmBatchDeleteMessage', { count: String(selectedIds.length) }) || `确定要删除选中的 ${selectedIds.length} 个任务吗？此操作不可恢复。`,
+            i18n('confirmBatchDeleteMessage', { count: String(selectedIds.length) }) || `确定要删除选中的 ${selectedIds.length} 个任务吗？`,
             async () => {
                 try {
                     await this.deleteTasksByIds(selectedIds);
 
                     // 清空选择
                     this.selectedTaskIds.clear();
-
-                    showMessage(i18n('batchDeleteSuccess', { count: String(selectedIds.length) }) || `成功删除 ${selectedIds.length} 个任务`);
                 } catch (error) {
                     console.error("Batch deletion failed:", error);
                     showMessage(i18n('batchDeleteFailed') || '批量删除失败');
@@ -17104,6 +17125,7 @@ export class ProjectKanbanView {
      */
     private async deleteTasksByIds(taskIds: string[]): Promise<void> {
         let reminderData = await this.getReminders();
+        const undo = new TaskActionUndo(this.plugin, reminderData);
         const boundIds: string[] = [];
 
         // 收集所有要删除的任务ID，包括子任务
@@ -17136,7 +17158,7 @@ export class ProjectKanbanView {
         }
 
         // 保存更新后的提醒数据
-        await saveReminders(this.plugin, reminderData);
+        await undo.save(reminderData);
 
 
 
@@ -17155,6 +17177,7 @@ export class ProjectKanbanView {
                 /* ignore */
             }
         }
+        undo.show(i18n("reminderDeleted"));
     }
 
     private async refreshRecurringMobileNotifications(reminderData: any, originalIds: Iterable<string>): Promise<void> {

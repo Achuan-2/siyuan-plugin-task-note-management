@@ -1,3 +1,4 @@
+import { dismissTaskUndo } from './utils/taskActionUndo';
 import {
     Plugin,
     Constants,
@@ -5015,6 +5016,7 @@ export default class ReminderPlugin extends Plugin {
     onunload() {
         if (this.storageDisposed) return;
         this.storageDisposed = true;
+        dismissTaskUndo(this);
         // 先停止事件、观察器及延时任务，避免删除 DOM 时再次触发旧实例刷新。
         const cleanups = this.cleanupFunctions.splice(0);
         cleanups.forEach(fn => {

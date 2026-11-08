@@ -89,6 +89,7 @@ function pluginFixture() {
         performDataMigration: async () => { migrations++; },
         initIcsSync: () => { uploads++; return network.promise; },
         initIcsSubscriptionSync: async () => {}, cleanupIcsSync() {},
+        dismissTaskUndo() {},
     });
     const bus = new Map();
     const plugin = Object.assign(new Plugin(), {

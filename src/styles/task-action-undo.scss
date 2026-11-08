@@ -1,0 +1,49 @@
+.task-action-undo {
+    position: fixed;
+    z-index: 100001;
+    left: 50%;
+    bottom: calc(28px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    max-width: calc(100vw - 32px);
+    box-sizing: border-box;
+    padding: 10px 14px 10px 18px;
+    border-radius: 9px;
+    background: rgba(45, 45, 45, 0.96);
+    color: #fff;
+    box-shadow: 0 3px 12px #0003;
+    font-size: 14px;
+    line-height: 22px;
+
+    > span { overflow-wrap: anywhere; }
+
+    &__button {
+        display: inline-flex;
+        flex-shrink: 0;
+        align-items: center;
+        gap: 5px;
+        padding: 4px;
+        border: 0;
+        border-radius: 4px;
+        background: transparent;
+        color: #ffbd35;
+        font: inherit;
+        cursor: pointer;
+
+        svg {
+            width: 20px;
+            height: 20px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 1.8;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        &:hover { background: #ffffff1a; }
+        &:focus-visible { outline: 2px solid currentColor; }
+        &:disabled { opacity: 0.5; cursor: wait; }
+    }
+}

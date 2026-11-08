@@ -5,6 +5,7 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { test } = require('node:test');
 const ts = require('typescript');
+const loadTaskActionUndo = require('./lib/task-action-undo.cjs');
 
 const root = path.resolve(__dirname, '..');
 const clone = value => JSON.parse(JSON.stringify(value));
@@ -34,6 +35,19 @@ const persistence = extract('src/utils/icsSubscription.ts', null, ['getAllRemind
 const code = ts.transpileModule(`${persistence}\nclass Board { ${methods} }`, {
     compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS },
 }).outputText;
+
+test('撤回使用严格读取，订阅读取失败不会回退旧缓存后写入', async () => {
+    const compiled = ts.transpileModule(persistence, {
+        compilerOptions: { target: ts.ScriptTarget.ES2020 },
+    }).outputText;
+    const getAll = new Function('loadSubscriptions', 'console', compiled + ';return getAllReminders;')(
+        async () => { throw new Error('subscription read failed'); }, { error() {} },
+    );
+    const data = { local: { id: 'local' } };
+    const plugin = { loadReminderData: async () => data };
+    assert.deepEqual(await getAll(plugin), data);
+    await assert.rejects(getAll(plugin, undefined, true, undefined, { strict: true }), /subscription read failed/);
+});
 
 function statusLayoutFixture(project = {}) {
     function node() {
@@ -193,16 +207,23 @@ function task(id, projectId, kanbanStatus = 'doing') {
 
 function fixture(initial) {
     const state = { data: clone(initial), writes: 0, reads: [], dialog: null, events: [] };
+    const undoModule = loadTaskActionUndo({
+        i18n: key => key,
+        saveReminders: (plugin, data) => plugin.saveReminderData(data),
+    });
+    // 本套回归关注数据读写，底部提示由 test-task-action-undo.cjs 单独验证。
+    class TaskActionUndo extends undoModule.TaskActionUndo { show() {} }
     class QuickReminderDialog {
         constructor(_date, _time, callback) { state.dialog = { callback }; }
         show() {}
     }
     const Board = new Function('loadSubscriptions', 'QuickReminderDialog', 'i18n', 'showMessage',
-        'getLogicalDateString', 'Constants', 'window', 'CustomEvent', code + ';return Board;')(
+        'getLogicalDateString', 'Constants', 'window', 'CustomEvent', 'TaskActionUndo', 'getTaskStatusUndoMessage', code + ';return Board;')(
         async () => ({ subscriptions: {} }), QuickReminderDialog, key => key, () => {}, () => '2026-10-31',
         { SIYUAN_DROP_GUTTER: 'siyuan-gutter', SIYUAN_DROP_FILE: 'siyuan-file', SIYUAN_DROP_TAB: 'siyuan-tab' },
         { dispatchEvent: event => state.events.push(event) },
         class CustomEvent { constructor(type, options) { this.type = type; this.detail = options.detail; } },
+        TaskActionUndo, undoModule.getTaskStatusUndoMessage,
     );
     const plugin = {
         async loadReminderData(force) {

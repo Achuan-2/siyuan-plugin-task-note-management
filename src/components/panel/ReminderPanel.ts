@@ -1,3 +1,4 @@
+import { TaskActionUndo, getTaskStatusUndoMessage } from "../../utils/taskActionUndo";
 import { showMessage, confirm, Dialog, Menu, Constants, getFrontend, getBackend, platformUtils } from "siyuan";
 import { refreshSql, getBlockByID, updateBindBlockAtrrs, openBlock, pushMsg, sql } from "../../api";
 import { getLocalDateString, compareDateStrings, getLocalDateTimeString, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../../utils/dateUtils";
@@ -3509,6 +3510,7 @@ export class ReminderPanel {
     private async completeDailyDessert(reminder: any, skipReload: boolean = false) {
         try {
             const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
+            const undo = new TaskActionUndo(this.plugin, reminderData);
             const targetId = reminder.isRepeatInstance ? reminder.originalId : reminder.id;
 
             if (reminderData[targetId]) {
@@ -3535,8 +3537,9 @@ export class ReminderPanel {
                 // 但为了在"今日已完成"视图中能看到今天的记录，我们需要某种方式体现
                 // 不过用户明确说 "明天还要继续"，说明它不应该真正变成 completed
 
-                await saveReminders(this.plugin, reminderData);
+                await undo.save(reminderData);
                 window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
+                undo.show(i18n("taskCompleted"));
                 // 刷新界面显示
                 if (!skipReload) {
                     this.loadReminders();
@@ -3551,6 +3554,7 @@ export class ReminderPanel {
     private async undoDailyDessertCompletion(reminder: any, skipReload: boolean = false) {
         try {
             const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
+            const undo = new TaskActionUndo(this.plugin, reminderData);
             const targetId = reminder.isRepeatInstance ? reminder.originalId : reminder.id;
 
             if (reminderData[targetId]) {
@@ -3565,13 +3569,13 @@ export class ReminderPanel {
                         delete reminderData[targetId].dailyDessertCompletedTimes[todayStr];
                     }
 
-                    await saveReminders(this.plugin, reminderData);
+                    await undo.save(reminderData);
                     window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
                     // 刷新界面显示
                     if (!skipReload) {
                         this.loadReminders();
                     }
-                    showMessage(i18n("dailyCompletionCleared"));
+                    undo.show(i18n("dailyCompletionCleared"));
                 }
             }
         } catch (e) {
@@ -3583,6 +3587,7 @@ export class ReminderPanel {
     private async ignoreDailyDessertToday(reminder: any) {
         try {
             const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
+            const undo = new TaskActionUndo(this.plugin, reminderData);
             const targetId = reminder.isRepeatInstance ? reminder.originalId : reminder.id;
 
             if (reminderData[targetId]) {
@@ -3599,11 +3604,11 @@ export class ReminderPanel {
                     reminderData[targetId][ignoreKey].push(todayStr);
                 }
 
-                await saveReminders(this.plugin, reminderData);
+                await undo.save(reminderData);
                 window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
                 // 刷新界面显示
                 this.loadReminders();
-                showMessage(i18n("taskIgnoredToday"));
+                undo.show(i18n("taskIgnoredToday"));
             }
         } catch (e) {
             console.error("Failed to ignore today's task", e);
@@ -3614,6 +3619,7 @@ export class ReminderPanel {
     private async undoDailyDessertIgnore(reminder: any) {
         try {
             const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
+            const undo = new TaskActionUndo(this.plugin, reminderData);
             const targetId = reminder.isRepeatInstance ? reminder.originalId : reminder.id;
 
             if (reminderData[targetId]) {
@@ -3625,11 +3631,11 @@ export class ReminderPanel {
                     reminderData[targetId][ignoreKey] = reminderData[targetId][ignoreKey].filter((d: string) => d !== todayStr);
                 }
 
-                await saveReminders(this.plugin, reminderData);
+                await undo.save(reminderData);
                 window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
                 // 刷新界面显示
                 this.loadReminders();
-                showMessage(i18n("dailyIgnoreCleared"));
+                undo.show(i18n("dailyIgnoreCleared"));
             }
         } catch (e) {
             console.error("Failed to undo ignoring today's task", e);
@@ -5427,6 +5433,7 @@ export class ReminderPanel {
             this.applyOptimisticCompletionForIds(optimisticIds, completed, optimisticCompletedTime);
 
             const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
+            const undo = new TaskActionUndo(this.plugin, reminderData);
 
             if (isRepeatInstance && instanceDate) {
                 // reminderId 是原始提醒的 id
@@ -5448,7 +5455,7 @@ export class ReminderPanel {
                     completedTaskIds.push(...childIds);
                 }
 
-                await saveReminders(this.plugin, reminderData);
+                await undo.save(reminderData);
 
                 // 重复实例完成/取消完成后，重建该系列移动端通知，避免已完成实例继续提醒
                 if (this.plugin?.updateMobileNotification) {
@@ -5505,6 +5512,7 @@ export class ReminderPanel {
                         refreshDelayMs: (completed && this.isTodayLikeView()) ? 300 : 100
                     }
                 }));
+                undo.show(completed ? i18n("taskCompleted") : i18n("taskUncompleted"));
                 return;
             }
 
@@ -5527,7 +5535,7 @@ export class ReminderPanel {
                 delete reminder.completedTime;
             }
 
-            await saveReminders(this.plugin, reminderData);
+            await undo.save(reminderData);
 
             // 取消已完成任务的移动端通知
             if (completed && this.plugin?.cancelMobileNotification) {
@@ -5573,6 +5581,7 @@ export class ReminderPanel {
                     refreshDelayMs: (completed && this.isTodayLikeView()) ? 300 : 100
                 }
             }));
+            undo.show(completed ? i18n("taskCompleted") : i18n("taskUncompleted"));
         } catch (error) {
             console.error("Failed to toggle reminder state:", error);
             showMessage(i18n("operationFailed"));
@@ -8975,6 +8984,7 @@ export class ReminderPanel {
         try {
             const today = getLogicalDateString();
             const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
+            const undo = new TaskActionUndo(this.plugin, reminderData);
 
 
 
@@ -8986,7 +8996,6 @@ export class ReminderPanel {
                 if (target && this.isSpanningTaskLastDayOrOverdue(target, today)) {
                     await this.toggleReminder(targetId, true, false, undefined, targetId);
                     await this.loadReminders();
-                    showMessage(i18n("markedTodayCompleted"), 2000);
                     return;
                 }
             }
@@ -9017,7 +9026,7 @@ export class ReminderPanel {
                 }
             }
 
-            await saveReminders(this.plugin, reminderData);
+            await undo.save(reminderData);
 
             // 局部更新：更新该提醒显示及其父项进度（如果显示）
             // 传入更新后的数据以便正确判断完成状态
@@ -9029,7 +9038,7 @@ export class ReminderPanel {
 
             // 刷新界面显示
             this.loadReminders();
-            showMessage(i18n("markedTodayCompleted"), 2000);
+            undo.show(i18n("markedTodayCompleted"));
         } catch (error) {
             console.error("Failed to mark today completed:", error);
             showMessage(i18n("operationFailed"));
@@ -9044,6 +9053,7 @@ export class ReminderPanel {
         try {
             const today = getLogicalDateString();
             const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
+            const undo = new TaskActionUndo(this.plugin, reminderData);
 
 
 
@@ -9071,7 +9081,7 @@ export class ReminderPanel {
                 }
             }
 
-            await saveReminders(this.plugin, reminderData);
+            await undo.save(reminderData);
 
             // 通知插件更新徽章
             if (this.plugin && typeof this.plugin.updateBadges === 'function') {
@@ -9080,7 +9090,7 @@ export class ReminderPanel {
 
             // 刷新界面显示
             this.loadReminders();
-            showMessage(i18n("unmarkedTodayCompleted"), 2000);
+            undo.show(i18n("unmarkedTodayCompleted"));
         } catch (error) {
             console.error("Failed to undo today's completion:", error);
             showMessage(i18n("operationFailed"));
@@ -9504,7 +9514,7 @@ export class ReminderPanel {
                 i18n("deleteReminder"),
                 `${i18n("confirmDelete", { title: reminder.title })}${extra}`,
                 () => {
-                    this.performDeleteReminder(targetId, reminderData, childrenIndex, initialBlockId);
+                    this.performDeleteReminder(targetId, undefined, undefined, initialBlockId);
                 }
             );
         } catch (error) {
@@ -9586,6 +9596,7 @@ export class ReminderPanel {
 
         try {
             const reminderData = preloadedReminderData || await getAllReminders(this.plugin, undefined, true, 'sidebar');
+            const undo = new TaskActionUndo(this.plugin, reminderData);
 
             const parsed = parseReminderInstanceId(reminderId);
             const baseId = parsed ? parsed.originalId : (reminderId.includes('_') ? reminderId.split('_')[0] : reminderId);
@@ -9675,7 +9686,7 @@ export class ReminderPanel {
 
             if (deletedCount > 0) {
                 Object.assign(reminderData, completedReminders);
-                await saveReminders(this.plugin, reminderData);
+                await undo.save(reminderData);
 
                 // 批量取消移动端通知
                 if (this.plugin.cancelMobileNotification) {
@@ -9715,7 +9726,7 @@ export class ReminderPanel {
                     this.updateParentProgressBar(parentId);
                 }
 
-                showMessage(i18n("reminderDeleted"));
+                undo.show(i18n("reminderDeleted"));
 
                 // 触发其他组件更新
                 window.dispatchEvent(new CustomEvent('reminderUpdated', {
@@ -10153,6 +10164,7 @@ export class ReminderPanel {
     private async setReminderKanbanStatus(reminderId: string, newStatus: string, isRepeatInstance?: boolean, instanceDate?: string) {
         try {
             const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
+            const undo = new TaskActionUndo(this.plugin, reminderData);
             const actualTaskId = reminderId;
 
             const affectedBlockIds = new Set<string>();
@@ -10286,7 +10298,7 @@ export class ReminderPanel {
                 }
             }
 
-            await saveReminders(this.plugin, reminderData);
+            await undo.save(reminderData);
 
             // Rebuild mobile notifications
             await this.refreshRecurringMobileNotifications(reminderData, recurringOriginalIds);
@@ -10306,7 +10318,7 @@ export class ReminderPanel {
 
             await this.loadReminders();
             window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
-            showMessage(i18n("operationSuccessful"));
+            undo.show(getTaskStatusUndoMessage(newStatus));
         } catch (error) {
             console.error("Failed to set task status:", error);
             showMessage(i18n("operationFailed"));
@@ -10324,7 +10336,7 @@ export class ReminderPanel {
                     const originalId = reminder.originalId || parseReminderInstanceId(reminder.id)?.originalId || reminder.id;
                     const instanceDate = reminder.instanceDate || reminder.date;
 
-                    await this.addExcludedDate(originalId, instanceDate);
+                    const undo = await this.addExcludedDate(originalId, instanceDate);
 
                     const affectedBlockId = reminder.blockId;
                     if (affectedBlockId) {
@@ -10338,7 +10350,7 @@ export class ReminderPanel {
                     // 局部移除该实例的DOM，避免全量刷新
                     this.removeReminderFromDOM(reminder.id, [reminder.id]);
 
-                    showMessage(i18n("instanceDeleted"));
+                    undo.show(i18n("instanceDeleted"));
 
                     // 触发其他组件更新
                     window.dispatchEvent(new CustomEvent('reminderUpdated', {
@@ -10356,6 +10368,7 @@ export class ReminderPanel {
     private async addExcludedDate(originalId: string, excludeDate: string) {
         try {
             const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
+            const undo = new TaskActionUndo(this.plugin, reminderData);
 
             if (reminderData[originalId]) {
                 if (!reminderData[originalId].repeat) {
@@ -10372,7 +10385,8 @@ export class ReminderPanel {
                     reminderData[originalId].repeat.excludeDates.push(excludeDate);
                 }
 
-                await saveReminders(this.plugin, reminderData);
+                await undo.save(reminderData);
+                return undo;
             } else {
                 throw new Error(i18n("originalEventMissing"));
             }
@@ -11877,6 +11891,7 @@ export class ReminderPanel {
             }
 
             const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
+            const undo = new TaskActionUndo(this.plugin, reminderData);
             const affectedBlockIds = new Set<string>();
             const completedTaskIds = new Set<string>();
             const recurringOriginalIds = new Set<string>();
@@ -11918,7 +11933,7 @@ export class ReminderPanel {
                 childIds.forEach(id => completedTaskIds.add(id));
             }
 
-            await saveReminders(this.plugin, reminderData);
+            await undo.save(reminderData);
 
             if (this.plugin?.cancelMobileNotification) {
                 for (const taskId of completedTaskIds) {
@@ -11970,7 +11985,7 @@ export class ReminderPanel {
                     refreshDelayMs: this.isTodayLikeView() ? 300 : 100
                 }
             }));
-            showMessage(i18n('batchUpdateSuccess', { count: String(changedCount || ids.length) }) || `成功更新 ${changedCount || ids.length} 个任务`);
+            undo.show(i18n('batchUpdateSuccess', { count: String(changedCount || ids.length) }));
             this.exitPanelMultiSelectMode();
         } catch (e) {
             console.error("Failed to complete tasks in batch:", e);
@@ -12288,11 +12303,12 @@ export class ReminderPanel {
         if (this.isDeleting) return;
         confirm(
             i18n('confirmBatchDelete') || '确认批量删除',
-            i18n('confirmBatchDeleteMessage', { count: String(ids.length) }) || `确定要删除选中的 ${ids.length} 个任务吗？此操作不可恢复。`,
+            i18n('confirmBatchDeleteMessage', { count: String(ids.length) }) || `确定要删除选中的 ${ids.length} 个任务吗？`,
             async () => {
                 this.isDeleting = true;
                 try {
                     const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
+                    const undo = new TaskActionUndo(this.plugin, reminderData);
                     const allValues = Object.values(reminderData) as any[];
                     const childMap = new Map<string, string[]>();
                     allValues.forEach((r: any) => {
@@ -12350,7 +12366,7 @@ export class ReminderPanel {
                         delete reminderData[id];
                     });
 
-                    await saveReminders(this.plugin, reminderData);
+                    await undo.save(reminderData);
 
                     // 批量取消移动端通知
                     if (this.plugin?.cancelMobileNotification) {
@@ -12369,7 +12385,7 @@ export class ReminderPanel {
                     ));
 
                     window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
-                    showMessage(i18n('batchDeleteSuccess', { count: String(allIds.length) }) || `成功删除 ${allIds.length} 个任务`);
+                    undo.show(i18n("reminderDeleted"));
                     this.exitPanelMultiSelectMode();
                 } catch (e) {
                     console.error("Batch deletion failed:", e);
