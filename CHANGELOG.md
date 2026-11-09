@@ -1,3 +1,11 @@
+## v7.1.13 / 20261109
+
+- 🐛 番茄钟：修复没有历史记录时补录、开始番茄钟或正计时及保存记录失败的问题，兼容 Windows 中英文文件和目录缺失提示；读取异常时继续保护已有数据。
+
+---
+
+- 🐛 Pomodoro: fix failures when adding past sessions, starting Pomodoro or count-up timers, and saving sessions without existing history. Handle missing files and directories reported in English or Chinese on Windows, while continuing to protect existing data on read errors.
+
 ## v7.1.12 / 20261108
 
 - ✨ 任务撤回：任务侧栏和项目看板的完成、取消完成、放弃及批量状态操作新增底部撤回提示；日历、四象限、块绑定任务、文档任务和子任务弹窗支持删除撤回，覆盖重复实例及关联子任务。
