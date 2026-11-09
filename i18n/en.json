@@ -2262,6 +2262,8 @@
     "todoTasks": "Todo Tasks",
     "doingTasks": "Doing Tasks",
     "filter": "Filter",
+    "calendarFilterProjects": "Filter projects",
+    "calendarFilterCategories": "Filter categories",
     "blockNotExistError": "Block does not exist",
     "noBoundTasks": "No tasks bound to this block",
     "blockBoundTasks": "Block Bound Tasks",

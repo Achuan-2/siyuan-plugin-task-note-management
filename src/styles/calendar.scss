@@ -30,6 +30,7 @@
                 width: 100%;
                 min-width: 0;
                 flex-wrap: nowrap;
+                gap: 3px;
 
                 > .filter-dropdown-container {
                     flex: 1;
@@ -47,6 +48,10 @@
 
                     &.mobile-calendar-toolbar-action {
                         flex: 0 0 30px;
+                    }
+
+                    &.mobile-calendar-toolbar-period {
+                        flex: 0 0 48px;
                     }
                 }
 

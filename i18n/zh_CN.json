@@ -2262,6 +2262,8 @@
     "todoTasks": "待办任务",
     "doingTasks": "进行中任务",
     "filter": "筛选",
+    "calendarFilterProjects": "筛选项目",
+    "calendarFilterCategories": "筛选分类",
     "blockNotExistError": "块不存在",
     "noBoundTasks": "该块没有绑定任务",
     "blockBoundTasks": "块绑定任务",

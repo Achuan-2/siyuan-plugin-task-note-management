@@ -59,6 +59,8 @@ export class CalendarView {
     private resizeObserver: ResizeObserver;
     private resizeTimeout: number;
     private displaySettingsDropdown: HTMLDivElement | null = null;
+    private filterDropdowns: { project: HTMLDivElement, category: HTMLDivElement } | null = null;
+    private syncFilterControls: (() => void) | null = null;
     private categoryManager: CategoryManager; // 添加分类管理器
     private projectManager: ProjectManager;
     private statusManager: StatusManager; // 添加状态管理器
@@ -718,7 +720,7 @@ export class CalendarView {
 
         if (isMobileClient && viewGroup) {
             const periodContainer = document.createElement('div');
-            periodContainer.className = 'filter-dropdown-container';
+            periodContainer.className = 'filter-dropdown-container mobile-calendar-toolbar-period';
             const periodButton = document.createElement('button');
             periodButton.type = 'button';
             periodButton.className = 'b3-button b3-button--outline';
@@ -736,6 +738,7 @@ export class CalendarView {
                 event.stopPropagation();
                 this.container.querySelectorAll<HTMLElement>('.filter-dropdown-menu').forEach(menu => menu.style.display = 'none');
                 if (this.displaySettingsDropdown) this.displaySettingsDropdown.style.display = 'none';
+                if (this.filterDropdowns) Object.values(this.filterDropdowns).forEach(menu => menu.style.display = 'none');
                 const menu = new Menu('calendar-period-menu');
                 periods.forEach(period => menu.addItem({
                     label: period.label,
@@ -913,12 +916,16 @@ export class CalendarView {
             filterGroup.style.display = 'none';
         }
 
-        // 筛选图标
-        if (!this.isDockMode && !isMobileClient) {
-            const filterIcon = document.createElement('span');
-            filterIcon.innerHTML = '<svg style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"><use xlink:href="#iconFilter"></use></svg>';
-            filterIcon.style.color = 'var(--b3-theme-on-surface-light)';
-            filterGroup.appendChild(filterIcon);
+        // 常驻筛选入口，项目和分类下拉框仅在存在实际筛选时显示。
+        const filterButton = document.createElement('button');
+        filterButton.type = 'button';
+        filterButton.className = 'b3-button b3-button--outline ariaLabel';
+        filterButton.style.padding = '6px';
+        filterButton.setAttribute('aria-label', i18n("filter"));
+        filterButton.setAttribute('aria-haspopup', 'menu');
+        filterButton.innerHTML = '<svg class="b3-button__icon" style="margin-right: 0;"><use xlink:href="#iconFilter"></use></svg>';
+        if (!this.isDockMode) {
+            actionGroup.appendChild(filterButton);
         }
 
         // 如果是 Dock 模式，把视图类型下拉框（时间轴/看板/列表）合并到过滤器组中，紧跟筛选图标
@@ -947,6 +954,7 @@ export class CalendarView {
         projectDropdown.style.display = 'none';
         // 使用 fixed 定位避免被父容器 overflow:hidden 裁剪，同时便于移动端视口适配
         projectDropdown.style.position = 'fixed';
+        projectDropdown.style.boxSizing = 'border-box';
         projectDropdown.style.width = this.isDockMode ? '220px' : '260px';
         projectDropdown.style.maxWidth = 'calc(100vw - 16px)';
         projectDropdown.style.maxHeight = '70vh';
@@ -957,7 +965,6 @@ export class CalendarView {
         projectDropdown.style.borderRadius = '4px';
         projectDropdown.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
         projectDropdown.style.padding = '0';
-        projectFilterContainer.appendChild(projectDropdown);
 
         if (!this.isDockMode) {
             filterGroup.appendChild(projectFilterContainer);
@@ -965,7 +972,7 @@ export class CalendarView {
 
         // 创建分类筛选容器（带下拉菜单）
         const categoryFilterContainer = document.createElement('div');
-        categoryFilterContainer.className = 'filter-dropdown-container';
+        categoryFilterContainer.className = 'filter-dropdown-container calendar-category-filter';
         categoryFilterContainer.style.position = 'relative';
         categoryFilterContainer.style.display = 'inline-block';
 
@@ -984,7 +991,9 @@ export class CalendarView {
         categoryDropdown.style.display = 'none';
         // 使用 fixed 定位避免被父容器 overflow:hidden 裁剪，同时便于移动端视口适配
         categoryDropdown.style.position = 'fixed';
-        categoryDropdown.style.minWidth = this.isDockMode ? '180px' : '200px';
+        categoryDropdown.style.boxSizing = 'border-box';
+        categoryDropdown.style.width = '220px';
+        categoryDropdown.style.minWidth = '0';
         categoryDropdown.style.maxWidth = 'calc(100vw - 16px)';
         categoryDropdown.style.maxHeight = 'min(400px, 70vh)';
         categoryDropdown.style.overflowY = 'auto';
@@ -994,12 +1003,54 @@ export class CalendarView {
         categoryDropdown.style.borderRadius = '4px';
         categoryDropdown.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
         categoryDropdown.style.padding = '8px';
-        categoryFilterContainer.appendChild(categoryDropdown);
 
         if (!this.isDockMode) {
             filterGroup.appendChild(categoryFilterContainer);
         }
 
+        // 菜单独立挂载，未启用筛选时也能从筛选按钮打开，不受隐藏容器裁剪。
+        document.body.append(projectDropdown, categoryDropdown);
+        this.filterDropdowns = { project: projectDropdown, category: categoryDropdown };
+        this.syncFilterControls = () => {
+            const projectActive = !this.currentProjectFilter.has('all');
+            const categoryActive = !this.currentCategoryFilter.has('all');
+            projectFilterContainer.style.display = projectActive ? 'inline-block' : 'none';
+            categoryFilterContainer.style.display = categoryActive ? 'inline-block' : 'none';
+            if (!projectActive) projectDropdown.style.display = 'none';
+            if (!categoryActive) categoryDropdown.style.display = 'none';
+            filterButton.classList.toggle('b3-button--primary', projectActive || categoryActive);
+            filterButton.classList.toggle('b3-button--outline', !projectActive && !categoryActive);
+            if (isMobileClient && !this.isDockMode && !this.openedFromHabitPanel) {
+                filterGroup.style.display = projectActive || categoryActive ? 'flex' : 'none';
+            }
+        };
+        this.syncFilterControls();
+        this.lifecycle.addCleanup(() => {
+            projectDropdown.remove();
+            categoryDropdown.remove();
+            this.filterDropdowns = null;
+            this.syncFilterControls = null;
+        });
+        filterButton.addEventListener('click', (event) => {
+            event.stopPropagation();
+            projectDropdown.style.display = 'none';
+            categoryDropdown.style.display = 'none';
+            viewTypeDropdown.style.display = 'none';
+            if (this.displaySettingsDropdown) this.displaySettingsDropdown.style.display = 'none';
+            const menu = new Menu('calendar-filter-menu');
+            menu.addItem({
+                icon: 'iconTNProject',
+                label: i18n("calendarFilterProjects"),
+                click: () => this.lifecycle.frame(() => this.positionDropdown(projectDropdown, filterButton, 260))
+            });
+            menu.addItem({
+                icon: 'iconTags',
+                label: i18n("calendarFilterCategories"),
+                click: () => this.lifecycle.frame(() => this.positionDropdown(categoryDropdown, filterButton, 220))
+            });
+            const rect = filterButton.getBoundingClientRect();
+            menu.open({ x: rect.left, y: rect.bottom + 4 });
+        });
 
 
         // 渲染项目和分类筛选器
@@ -1581,7 +1632,7 @@ export class CalendarView {
             viewTypeDropdown.style.display = 'none';
             displaySettingsDropdown.style.display = 'none';
             if (!isVisible) {
-                this.positionDropdown(projectDropdown, projectFilterButton);
+                this.positionDropdown(projectDropdown, projectFilterButton, 260);
             }
         });
 
@@ -1594,7 +1645,7 @@ export class CalendarView {
             viewTypeDropdown.style.display = 'none';
             displaySettingsDropdown.style.display = 'none';
             if (!isVisible) {
-                this.positionDropdown(categoryDropdown, categoryFilterButton);
+                this.positionDropdown(categoryDropdown, categoryFilterButton, 220);
             }
         });
 
@@ -2996,6 +3047,7 @@ export class CalendarView {
             const count = this.currentProjectFilter.size;
             textSpan.textContent = `${count} ${i18n("projectsSelected") || "个项目"}`;
         }
+        this.syncFilterControls?.();
     }
 
     private updateCategoryFilterButtonText(button: HTMLButtonElement) {
@@ -3018,20 +3070,17 @@ export class CalendarView {
             const count = this.currentCategoryFilter.size;
             textSpan.textContent = `${count} ${i18n("categoriesSelected") || "个分类"}`;
         }
+        this.syncFilterControls?.();
     }
 
 
     private async showCategoryManageDialog() {
         const categoryDialog = new CategoryManageDialog(this.plugin, async () => {
             // 分类更新后重新渲染分类筛选器和事件
-            const categoryFilterContainers = this.container.querySelectorAll('.filter-dropdown-container');
-            if (categoryFilterContainers.length >= 2) {
-                const categoryContainer = categoryFilterContainers[1]; // 第二个是分类筛选器
-                const categoryDropdown = categoryContainer.querySelector('.filter-dropdown-menu') as HTMLElement;
-                const categoryButton = categoryContainer.querySelector('button') as HTMLButtonElement;
-                if (categoryDropdown && categoryButton) {
-                    await this.renderCategoryFilterCheckboxes(categoryDropdown, categoryButton);
-                }
+            const categoryButton = this.container.querySelector<HTMLButtonElement>('.calendar-category-filter button');
+            const categoryDropdown = this.filterDropdowns?.category;
+            if (categoryDropdown && categoryButton) {
+                await this.renderCategoryFilterCheckboxes(categoryDropdown, categoryButton);
             }
             this.refreshEvents();
             window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
@@ -3116,6 +3165,7 @@ export class CalendarView {
         }
 
         this.resizeTimeout = this.lifecycle.timeout(() => {
+            if (this.filterDropdowns) Object.values(this.filterDropdowns).forEach(menu => menu.style.display = 'none');
             if (this.displaySettingsDropdown) {
                 this.displaySettingsDropdown.style.display = 'none';
             }
@@ -10259,7 +10309,7 @@ export class CalendarView {
         dropdown.style.display = 'block';
 
         const dropdownRect = dropdown.getBoundingClientRect();
-        const naturalWidth = dropdownRect.width || preferWidth || 260;
+        const naturalWidth = preferWidth || dropdownRect.width || 260;
         const naturalHeight = dropdownRect.height || 300;
 
         // 宽度适配：不超过视口可用宽度
