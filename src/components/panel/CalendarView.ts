@@ -55,6 +55,7 @@ export class CalendarView {
     private plugin: any;
     private resizeObserver: ResizeObserver;
     private resizeTimeout: number;
+    private displaySettingsDropdown: HTMLDivElement | null = null;
     private categoryManager: CategoryManager; // 添加分类管理器
     private projectManager: ProjectManager;
     private statusManager: StatusManager; // 添加状态管理器
@@ -1052,19 +1053,18 @@ export class CalendarView {
         const displaySettingsDropdown = document.createElement('div');
         displaySettingsDropdown.className = 'filter-dropdown-menu';
         displaySettingsDropdown.style.display = 'none';
-        displaySettingsDropdown.style.position = 'absolute';
-        displaySettingsDropdown.style.top = '100%';
-        displaySettingsDropdown.style.right = '0';
+        displaySettingsDropdown.style.position = 'fixed';
         displaySettingsDropdown.style.zIndex = '1000';
         displaySettingsDropdown.style.backgroundColor = 'var(--b3-theme-background)';
         displaySettingsDropdown.style.border = '1px solid var(--b3-border-color)';
         displaySettingsDropdown.style.borderRadius = '4px';
         displaySettingsDropdown.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
-        if (this.isDockMode) {
-            displaySettingsDropdown.style.minWidth = '200px';
-        } else {
-            displaySettingsDropdown.style.minWidth = '220px';
-        }
+        displaySettingsDropdown.style.boxSizing = 'border-box';
+        displaySettingsDropdown.style.minWidth = '0';
+        displaySettingsDropdown.style.overflowX = 'hidden';
+        displaySettingsDropdown.style.overscrollBehavior = 'contain';
+        displaySettingsDropdown.style.whiteSpace = 'normal';
+        displaySettingsDropdown.style.overflowWrap = 'anywhere';
         displaySettingsDropdown.style.padding = '8px';
 
         const createSwitchItem = (label: string, value: boolean, onChange: (checked: boolean) => void) => {
@@ -1077,6 +1077,7 @@ export class CalendarView {
                 <input class="b3-switch" type="checkbox" ${value ? 'checked' : ''}>
             `;
             const checkbox = item.querySelector('input') as HTMLInputElement;
+            checkbox.style.flexShrink = '0';
             checkbox.addEventListener('change', () => onChange(checkbox.checked));
             return item;
         };
@@ -1095,6 +1096,7 @@ export class CalendarView {
             toggle.style.gap = '8px';
             toggle.style.color = 'inherit';
             toggle.style.textAlign = 'left';
+            toggle.style.whiteSpace = 'normal';
             toggle.innerHTML = '<svg class="b3-button__icon" style="width: 12px; height: 12px; margin: 0; flex-shrink: 0;" aria-hidden="true"><use xlink:href="#iconRight"></use></svg>';
             const labelText = document.createElement('span');
             labelText.textContent = label;
@@ -1121,6 +1123,59 @@ export class CalendarView {
             item.firstElementChild?.replaceWith(toggle);
             updateExpansion();
             return { item, subItems };
+        };
+
+        const createDisplayLimitItem = (label: string, unit: string, value: number, onChange: (limit: number) => void) => {
+            const item = document.createElement('div');
+            item.className = 'fn__flex fn__flex-center';
+            item.style.padding = '6px 12px';
+            item.style.marginLeft = '20px';
+            item.style.gap = '8px';
+
+            const mode = document.createElement('select');
+            mode.className = 'b3-select';
+            mode.setAttribute('aria-label', label);
+            mode.add(new Option(i18n("displayLimitNone"), 'none'));
+            mode.add(new Option(i18n("displayLimitEnabled"), 'limited'));
+            mode.value = value >= 0 ? 'limited' : 'none';
+            item.appendChild(mode);
+
+            const limitFields = document.createElement('div');
+            limitFields.className = 'fn__flex fn__flex-center fn__flex-1';
+            limitFields.style.minWidth = '0';
+            limitFields.style.gap = '8px';
+            const input = document.createElement('input');
+            input.className = 'b3-text-field';
+            input.type = 'number';
+            input.min = '0';
+            input.style.width = '60px';
+            input.style.flexShrink = '0';
+            input.setAttribute('aria-label', `${label} - ${unit}`);
+            // 保留已有的 0 值含义；切换为不限制时仅写入原有的 -1 标记。
+            let lastLimit = Number.isFinite(value) && value >= 0 ? Math.floor(value) : 3;
+            input.value = String(lastLimit);
+            const unitText = document.createElement('span');
+            unitText.textContent = unit;
+            limitFields.append(input, unitText);
+            item.appendChild(limitFields);
+
+            const updateVisibility = () => {
+                limitFields.style.display = mode.value === 'limited' ? 'flex' : 'none';
+            };
+            mode.addEventListener('change', () => {
+                updateVisibility();
+                onChange(mode.value === 'limited' ? lastLimit : -1);
+            });
+            input.addEventListener('change', () => {
+                const parsed = Number(input.value);
+                if (input.value.trim() && Number.isFinite(parsed)) {
+                    lastLimit = Math.max(0, Math.floor(parsed));
+                }
+                input.value = String(lastLimit);
+                onChange(mode.value === 'limited' ? lastLimit : -1);
+            });
+            updateVisibility();
+            return item;
         };
 
         // 任务显示开关
@@ -1178,22 +1233,9 @@ export class CalendarView {
             await this.refreshEvents();
         }));
 
-        const thresholdItem = document.createElement('div');
-        thresholdItem.className = 'fn__flex-column';
-        thresholdItem.style.padding = '6px 12px';
-        thresholdItem.style.marginLeft = '20px';
-        thresholdItem.innerHTML = `
-            <div class="fn__flex fn__flex-center" style="gap: 8px;">
-                <input class="b3-text-field fn__flex-1" type="number" value="${this.crossDayThreshold}" min="-1" style="width: 50px;">
-                <div>${i18n("crossDayThreshold") || "天及以下显示"}</div>
-            </div>
-            <div style="font-size: 0.8em; color: var(--b3-theme-on-surface-light); margin-top: 4px;">(-1 ${i18n("noLimit") || "表示不限制"})</div>
-        `;
-        const thresholdInput = thresholdItem.querySelector('input') as HTMLInputElement;
-        thresholdInput.addEventListener('change', async () => {
-            this.crossDayThreshold = parseInt(thresholdInput.value);
-            if (isNaN(this.crossDayThreshold)) this.crossDayThreshold = -1;
-            await this.calendarConfigManager.setCrossDayThreshold(this.crossDayThreshold);
+        const thresholdItem = createDisplayLimitItem(i18n("showCrossDayTasks"), i18n("crossDayThreshold"), this.crossDayThreshold, async (limit) => {
+            this.crossDayThreshold = limit;
+            await this.calendarConfigManager.setCrossDayThreshold(limit);
             await this.refreshEvents();
         });
         displaySettingsDropdown.appendChild(thresholdItem);
@@ -1212,23 +1254,9 @@ export class CalendarView {
             await this.refreshEvents();
         }));
 
-        const repeatLimitItem = document.createElement('div');
-        repeatLimitItem.className = 'fn__flex-column';
-        repeatLimitItem.style.padding = '6px 12px';
-        repeatLimitItem.style.marginLeft = '20px';
-        repeatLimitItem.innerHTML = `
-            <div class="fn__flex fn__flex-center" style="gap: 8px;">
-                <div>${i18n("show") || "显示"}</div>
-                <input class="b3-text-field fn__flex-1" type="number" value="${this.repeatInstanceLimit}" min="-1" style="width: 50px;">
-                <div>${i18n("instances") || "个实例"}</div>
-            </div>
-            <div style="font-size: 0.8em; color: var(--b3-theme-on-surface-light); margin-top: 4px;">(-1 ${i18n("noLimit") || "表示不限制"})</div>
-        `;
-        const repeatLimitInput = repeatLimitItem.querySelector('input') as HTMLInputElement;
-        repeatLimitInput.addEventListener('change', async () => {
-            this.repeatInstanceLimit = parseInt(repeatLimitInput.value);
-            if (isNaN(this.repeatInstanceLimit)) this.repeatInstanceLimit = -1;
-            await this.calendarConfigManager.setRepeatInstanceLimit(this.repeatInstanceLimit);
+        const repeatLimitItem = createDisplayLimitItem(i18n("showRepeatTasks"), i18n("instances"), this.repeatInstanceLimit, async (limit) => {
+            this.repeatInstanceLimit = limit;
+            await this.calendarConfigManager.setRepeatInstanceLimit(limit);
             await this.refreshEvents();
         });
         displaySettingsDropdown.appendChild(repeatLimitItem);
@@ -1512,7 +1540,15 @@ export class CalendarView {
             );
         }
 
-        displaySettingsContainer.appendChild(displaySettingsDropdown);
+        // 挂到页面浮层，避免侧栏的 overflow 和变换容器裁剪菜单。
+        document.body.appendChild(displaySettingsDropdown);
+        this.displaySettingsDropdown = displaySettingsDropdown;
+        this.lifecycle.addCleanup(() => {
+            displaySettingsDropdown.remove();
+            if (this.displaySettingsDropdown === displaySettingsDropdown) {
+                this.displaySettingsDropdown = null;
+            }
+        });
         filterGroup.appendChild(displaySettingsContainer);
 
         displaySettingsButton.addEventListener('click', (e) => {
@@ -1522,6 +1558,9 @@ export class CalendarView {
             projectDropdown.style.display = 'none';
             categoryDropdown.style.display = 'none';
             viewTypeDropdown.style.display = 'none';
+            if (!isVisible) {
+                this.positionDisplaySettingsDropdown(displaySettingsDropdown, displaySettingsButton);
+            }
         });
 
         // 更新原有的下拉菜单关闭逻辑
@@ -3070,6 +3109,9 @@ export class CalendarView {
         }
 
         this.resizeTimeout = this.lifecycle.timeout(() => {
+            if (this.displaySettingsDropdown) {
+                this.displaySettingsDropdown.style.display = 'none';
+            }
             // 窗口/面板大小变化时关闭下拉菜单，避免 fixed 定位的菜单停留在错误位置
             this.container?.querySelectorAll('.filter-dropdown-menu').forEach((el) => {
                 (el as HTMLElement).style.display = 'none';
@@ -10172,6 +10214,28 @@ export class CalendarView {
 
         this.tooltip.style.left = `${left}px`;
         this.tooltip.style.top = `${top}px`;
+    }
+
+    /** 显示设置使用页面浮层，并在按钮上下较宽裕的一侧展开。 */
+    private positionDisplaySettingsDropdown(dropdown: HTMLElement, anchor: HTMLElement) {
+        const margin = 8;
+        const gap = 4;
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        const anchorRect = anchor.getBoundingClientRect();
+        const width = Math.max(0, Math.min(340, viewportWidth - margin * 2));
+        const belowTop = Math.max(margin, Math.min(anchorRect.bottom + gap, viewportHeight - margin));
+        const aboveBottom = Math.max(margin, Math.min(viewportHeight - anchorRect.top + gap, viewportHeight - margin));
+        const belowSpace = Math.max(0, viewportHeight - belowTop - margin);
+        const aboveSpace = Math.max(0, viewportHeight - aboveBottom - margin);
+        const openBelow = belowSpace >= Math.min(240, viewportHeight / 2) || belowSpace >= aboveSpace;
+
+        dropdown.style.width = `${width}px`;
+        dropdown.style.left = `${Math.max(margin, Math.min(anchorRect.left, viewportWidth - width - margin))}px`;
+        dropdown.style.right = 'auto';
+        dropdown.style.top = openBelow ? `${belowTop}px` : 'auto';
+        dropdown.style.bottom = openBelow ? 'auto' : `${aboveBottom}px`;
+        dropdown.style.setProperty('max-height', `${Math.min(viewportHeight * 0.75, openBelow ? belowSpace : aboveSpace)}px`, 'important');
     }
 
     /**
