@@ -1082,10 +1082,10 @@ export class CalendarView {
             return item;
         };
 
-        const createCollapsibleSwitchItem = (label: string, value: boolean, onChange: (checked: boolean) => void) => {
+        const createCollapsibleGroup = (label: string) => {
             const subItems = document.createElement('div');
             subItems.style.paddingLeft = '20px';
-            let enabled = value;
+            let enabled = true;
             let expanded = false;
 
             const toggle = document.createElement('button');
@@ -1116,15 +1116,32 @@ export class CalendarView {
                 updateExpansion();
             });
 
+            const item = document.createElement('div');
+            item.className = 'fn__flex fn__flex-center';
+            item.style.padding = '6px 12px';
+            item.style.gap = '8px';
+            item.appendChild(toggle);
+            updateExpansion();
+            return {
+                item,
+                subItems,
+                setEnabled: (value: boolean) => {
+                    enabled = value;
+                    if (!enabled) expanded = false;
+                    updateExpansion();
+                }
+            };
+        };
+
+        const createCollapsibleSwitchItem = (label: string, value: boolean, onChange: (checked: boolean) => void) => {
+            const group = createCollapsibleGroup(label);
             const item = createSwitchItem(label, value, (checked) => {
-                enabled = checked;
-                if (!enabled) expanded = false;
-                updateExpansion();
+                group.setEnabled(checked);
                 onChange(checked);
             });
-            item.firstElementChild?.replaceWith(toggle);
-            updateExpansion();
-            return { item, subItems };
+            item.firstElementChild?.replaceWith(group.item.firstElementChild!);
+            group.setEnabled(value);
+            return { item, subItems: group.subItems };
         };
 
         const createDisplayLimitItem = (label: string, unit: string, value: number, onChange: (limit: number) => void) => {
@@ -1408,13 +1425,18 @@ export class CalendarView {
         });
         habitDisplaySubItems.appendChild(alwaysShowHabitReminderTimeItem);
 
+        // 样式设置统一收纳，默认折叠。
+        const styleSettingsGroup = createCollapsibleGroup(i18n("calendarStyleSettings"));
+        displaySettingsDropdown.append(styleSettingsGroup.item, styleSettingsGroup.subItems);
+        const styleSettingsContent = styleSettingsGroup.subItems;
+
         // 任务样式设置（无复选框 / 有复选框）
         const taskStyleLabel = document.createElement('div');
         taskStyleLabel.style.padding = '4px 12px';
         taskStyleLabel.style.fontSize = '0.9em';
         taskStyleLabel.style.color = 'var(--b3-theme-on-surface-light)';
         taskStyleLabel.innerText = i18n("taskStyle") || "任务样式";
-        displaySettingsDropdown.appendChild(taskStyleLabel);
+        styleSettingsContent.appendChild(taskStyleLabel);
 
         const taskStyleGroup = document.createElement('div');
         taskStyleGroup.className = 'fn__flex fn__flex-center';
@@ -1439,21 +1461,15 @@ export class CalendarView {
 
         taskStyleGroup.appendChild(createTaskStyleBtn(i18n("noEventCheckbox") || "无复选框", false));
         taskStyleGroup.appendChild(createTaskStyleBtn(i18n("withEventCheckbox") || "有复选框", true));
-        displaySettingsDropdown.appendChild(taskStyleGroup);
+        styleSettingsContent.appendChild(taskStyleGroup);
 
         // 上色方案设置
-        const colorDivider = document.createElement('div');
-        colorDivider.style.height = '1px';
-        colorDivider.style.backgroundColor = 'var(--b3-border-color)';
-        colorDivider.style.margin = '8px 0';
-        displaySettingsDropdown.appendChild(colorDivider);
-
         const colorLabel = document.createElement('div');
         colorLabel.style.padding = '4px 12px';
         colorLabel.style.fontSize = '0.9em';
         colorLabel.style.color = 'var(--b3-theme-on-surface-light)';
         colorLabel.innerText = i18n("colorScheme") || "任务上色方案";
-        displaySettingsDropdown.appendChild(colorLabel);
+        styleSettingsContent.appendChild(colorLabel);
 
         const colorGroup = document.createElement('div');
         colorGroup.className = 'fn__flex fn__flex-center';
@@ -1481,21 +1497,15 @@ export class CalendarView {
         colorGroup.appendChild(createColorBtn(i18n("colorByPriority") || "优先级", 'priority'));
         colorGroup.appendChild(createColorBtn(i18n("colorByCategory") || "分类", 'category'));
         colorGroup.appendChild(createColorBtn(i18n("colorByProject") || "项目", 'project'));
-        displaySettingsDropdown.appendChild(colorGroup);
+        styleSettingsContent.appendChild(colorGroup);
 
         // 任务上色透明度设置
-        const opacityDivider = document.createElement('div');
-        opacityDivider.style.height = '1px';
-        opacityDivider.style.backgroundColor = 'var(--b3-border-color)';
-        opacityDivider.style.margin = '8px 0';
-        displaySettingsDropdown.appendChild(opacityDivider);
-
         const opacityLabel = document.createElement('div');
         opacityLabel.style.padding = '4px 12px';
         opacityLabel.style.fontSize = '0.9em';
         opacityLabel.style.color = 'var(--b3-theme-on-surface-light)';
         opacityLabel.innerText = i18n("calendarOpacitySettings") || "任务上色不透明度";
-        displaySettingsDropdown.appendChild(opacityLabel);
+        styleSettingsContent.appendChild(opacityLabel);
 
         const lightOpacityItem = document.createElement('div');
         lightOpacityItem.className = 'fn__flex-column';
@@ -1520,7 +1530,7 @@ export class CalendarView {
         });
         this.lightOpacitySlider = lightSlider;
         this.lightOpacityValueEl = lightValueEl;
-        displaySettingsDropdown.appendChild(lightOpacityItem);
+        styleSettingsContent.appendChild(lightOpacityItem);
 
         const darkOpacityItem = document.createElement('div');
         darkOpacityItem.className = 'fn__flex-column';
@@ -1545,7 +1555,7 @@ export class CalendarView {
         });
         this.darkOpacitySlider = darkSlider;
         this.darkOpacityValueEl = darkValueEl;
-        displaySettingsDropdown.appendChild(darkOpacityItem);
+        styleSettingsContent.appendChild(darkOpacityItem);
 
         // 习惯日历只展示与习惯相关的显示设置，避免混入任务专用选项
         if (this.openedFromHabitPanel) {

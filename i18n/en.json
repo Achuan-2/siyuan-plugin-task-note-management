@@ -1542,6 +1542,7 @@
     "lightMode": "Light Mode",
     "darkMode": "Dark Mode",
     "taskStyle": "Task Style",
+    "calendarStyleSettings": "Style settings",
     "noEventCheckbox": "No Checkbox",
     "withEventCheckbox": "With Checkbox",
     "showCrossDayTasks": "Show Cross-day Tasks",

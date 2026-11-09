@@ -1542,6 +1542,7 @@
     "lightMode": "浅色模式",
     "darkMode": "深色模式",
     "taskStyle": "任务样式",
+    "calendarStyleSettings": "样式设置",
     "noEventCheckbox": "无复选框",
     "withEventCheckbox": "有复选框",
     "showCrossDayTasks": "显示跨天任务",
