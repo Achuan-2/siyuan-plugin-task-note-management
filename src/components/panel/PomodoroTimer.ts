@@ -4,6 +4,10 @@ import { getBlockByID, getBlockAttrs, setBlockAttrs, openBlock, sendNotification
 import { i18n } from "../../pluginInstance";
 import { resolveAudioPath } from "../../utils/audioUtils";
 import { showStatsDialog } from "../stats/ShowStatsDialog";
+import {
+    POMODORO_ICON_SVGS, POMODORO_TOOLBAR_ICON_SVGS, createPomodoroIconRenderer,
+    renderPomodoroIcons, setPomodoroIcon, renderPomodoroToolbarIcon, setPomodoroToolbarIcon
+} from "../render/pomodoroIcons";
 
 
 const BLOCK_POMODORO_COUNT_ATTR = "custom-task-pomodoro-count";
@@ -1931,7 +1935,7 @@ export class PomodoroTimer {
                 </head>
                 <body>
                     <div class="container">
-                        <div class="icon">${icon}</div>
+                        <div class="icon">${renderPomodoroIcons(icon)}</div>
                         <div class="title">${title}</div>
                         <div class="message">${message}</div>
                     </div>
@@ -2194,7 +2198,7 @@ export class PomodoroTimer {
                 </head>
                 <body>
                     <div class="container">
-                        <div class="icon">${icon}</div>
+                        <div class="icon">${renderPomodoroIcons(icon)}</div>
                         <div class="title">${title}</div>
                         <div class="message">${message}</div>
                         <div id="countdown" class="countdown"></div>
@@ -2986,7 +2990,7 @@ export class PomodoroTimer {
             align-items: center;
             justify-content: center;
         `;
-        this.minimizeBtn.innerHTML = '⭕';
+        setPomodoroToolbarIcon(this.minimizeBtn, '⭕');
         this.minimizeBtn.title = i18n('miniMode');
         this.minimizeBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -3060,7 +3064,7 @@ export class PomodoroTimer {
         this.modeToggleBtn = document.createElement('button');
         this.modeToggleBtn.className = 'pomodoro-menu-item';
         this.modeToggleBtn.style.cssText = this.getMenuItemStyle();
-        this.modeToggleBtn.innerHTML = `${this.isCountUp ? '🍅' : '⏱️'} ${this.isCountUp ? (i18n('switchToCountdown') || '切换到倒计时') : (i18n('switchToCountUp') || '切换到正计时')}`;
+        setPomodoroIcon(this.modeToggleBtn, `${this.isCountUp ? '🍅' : '⏱️'} ${this.isCountUp ? (i18n('switchToCountdown') || '切换到倒计时') : (i18n('switchToCountUp') || '切换到正计时')}`);
         this.modeToggleBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -3073,7 +3077,7 @@ export class PomodoroTimer {
         const workBtn = document.createElement('button');
         workBtn.className = 'pomodoro-menu-item';
         workBtn.style.cssText = this.getMenuItemStyle();
-        workBtn.innerHTML = `💪 ${i18n('pomodoroWork') || '工作时间'}`;
+        setPomodoroIcon(workBtn, `💪 ${i18n('pomodoroWork') || '工作时间'}`);
         workBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -3086,7 +3090,7 @@ export class PomodoroTimer {
         const shortBreakBtn = document.createElement('button');
         shortBreakBtn.className = 'pomodoro-menu-item';
         shortBreakBtn.style.cssText = this.getMenuItemStyle();
-        shortBreakBtn.innerHTML = `🍵 ${i18n('pomodoroBreak') || '短时休息'}`;
+        setPomodoroIcon(shortBreakBtn, `🍵 ${i18n('pomodoroBreak') || '短时休息'}`);
         shortBreakBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -3099,7 +3103,7 @@ export class PomodoroTimer {
         const longBreakBtn = document.createElement('button');
         longBreakBtn.className = 'pomodoro-menu-item';
         longBreakBtn.style.cssText = this.getMenuItemStyle();
-        longBreakBtn.innerHTML = `🧘 ${i18n('pomodoroLongBreak') || '长时休息'}`;
+        setPomodoroIcon(longBreakBtn, `🧘 ${i18n('pomodoroLongBreak') || '长时休息'}`);
         longBreakBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -3112,7 +3116,7 @@ export class PomodoroTimer {
         editDurationBtn.className = 'pomodoro-menu-item';
         editDurationBtn.dataset.editDuration = '';
         editDurationBtn.style.cssText = this.getMenuItemStyle();
-        editDurationBtn.textContent = `✏️ ${i18n('pomodoroEditDuration')}`;
+        setPomodoroIcon(editDurationBtn, `✏️ ${i18n('pomodoroEditDuration')}`);
         editDurationBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -3124,7 +3128,7 @@ export class PomodoroTimer {
         const settingsBtn = document.createElement('button');
         settingsBtn.className = 'pomodoro-menu-item';
         settingsBtn.style.cssText = this.getMenuItemStyle();
-        settingsBtn.textContent = i18n('pomodoroSettings');
+        setPomodoroIcon(settingsBtn, i18n('pomodoroSettings'));
         settingsBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -3147,7 +3151,7 @@ export class PomodoroTimer {
         this.moreMenuBtn = document.createElement('button');
         this.moreMenuBtn.className = 'pomodoro-more-btn';
         this.moreMenuBtn.style.cssText = this.mainSwitchBtn.style.cssText;
-        this.moreMenuBtn.textContent = '⋯';
+        setPomodoroToolbarIcon(this.moreMenuBtn, '⋯');
         this.moreMenuBtn.title = i18n('more');
         this.moreMenuBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -3204,7 +3208,7 @@ export class PomodoroTimer {
             align-items: center;
             justify-content: center;
         `;
-        this.expandToggleBtn.innerHTML = this.isExpanded ? '📉' : '📈';
+        setPomodoroIcon(this.expandToggleBtn, this.isExpanded ? '📉' : '📈');
         this.expandToggleBtn.title = this.isExpanded ? i18n('collapse') || '折叠' : i18n('expand') || '展开';
         this.expandToggleBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -3217,7 +3221,7 @@ export class PomodoroTimer {
         this.fullscreenBtn.className = 'pomodoro-menu-item pomodoro-fullscreen-btn';
         this.fullscreenBtn.dataset.menuGroup = 'more';
         this.fullscreenBtn.style.cssText = this.getMenuItemStyle();
-        this.fullscreenBtn.textContent = `⛶ ${i18n('fullscreenMode')}`;
+        setPomodoroIcon(this.fullscreenBtn, `⛶ ${i18n('fullscreenMode')}`);
         this.fullscreenBtn.title = i18n('fullscreenMode') || '全屏模式';
         this.fullscreenBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -3244,7 +3248,7 @@ export class PomodoroTimer {
             opacity: 0.7;
             transition: opacity 0.2s;
         `;
-        closeBtn.innerHTML = '×';
+        setPomodoroToolbarIcon(closeBtn, '×');
         closeBtn.title = i18n('close') || '关闭';
         closeBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -3270,7 +3274,7 @@ export class PomodoroTimer {
             align-items: center;
             justify-content: center;
         `;
-        dockBtn.innerHTML = this.getDockPositionEmoji(this.settings.pomodoroDockPosition);
+        setPomodoroToolbarIcon(dockBtn, this.getDockPositionEmoji(this.settings.pomodoroDockPosition));
         dockBtn.title = i18n('dockToEdge') || '吸附到屏幕边缘';
         // 保存引用以便后续更新
         (this as any).dockBtnElement = dockBtn;
@@ -3444,7 +3448,7 @@ export class PomodoroTimer {
             left: 0;
             transition: opacity 0.2s ease;
         `;
-        statusIcon.innerHTML = '🍅';
+        setPomodoroIcon(statusIcon, '🍅');
 
         this.startPauseBtn = document.createElement('button');
         this.startPauseBtn.className = 'circle-control-btn';
@@ -3469,7 +3473,7 @@ export class PomodoroTimer {
             opacity: 0;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         `;
-        this.startPauseBtn.innerHTML = '▶️';
+        setPomodoroIcon(this.startPauseBtn, '▶️');
         this.startPauseBtn.addEventListener('click', () => this.toggleTimer());
 
         this.stopBtn = document.createElement('button');
@@ -3495,7 +3499,7 @@ export class PomodoroTimer {
             opacity: 0;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         `;
-        this.stopBtn.innerHTML = '⏹';
+        setPomodoroIcon(this.stopBtn, '⏹');
         this.stopBtn.addEventListener('click', () => this.resetTimer());
 
         // 添加悬浮效果
@@ -3624,7 +3628,7 @@ export class PomodoroTimer {
         // 番茄图标与计数
         pomodoroCountLeft.innerHTML = '';
         const pomodoroIcon = document.createElement('span');
-        pomodoroIcon.textContent = '🍅';
+        setPomodoroIcon(pomodoroIcon, '🍅');
         pomodoroIcon.style.cssText = `font-size:14px;`;
         const pomodoroCountSpan = document.createElement('span');
         pomodoroCountSpan.id = 'pomodoroCount';
@@ -3636,7 +3640,7 @@ export class PomodoroTimer {
         // 随机微休息启用时显示骰子图标（靠右，紧邻番茄计数）
         const diceEl = document.createElement('span');
         diceEl.className = 'pomodoro-dice';
-        diceEl.textContent = '🎲';
+        setPomodoroIcon(diceEl, '🎲');
         diceEl.title = i18n('randomRestTitle') || '随机微休息';
         diceEl.style.cssText = `
             margin-left:8px;
@@ -3687,7 +3691,7 @@ export class PomodoroTimer {
             justify-content: center;
             position: relative;
         `;
-        this.soundControlBtn.innerHTML = this.isBackgroundAudioMuted ? '🔇' : '🔊';
+        setPomodoroToolbarIcon(this.soundControlBtn, this.isBackgroundAudioMuted ? '🔇' : '🔊');
         this.soundControlBtn.title = this.isBackgroundAudioMuted ? i18n('enableBackgroundAudio') || '开启背景音' : i18n('muteBackgroundAudio') || '静音背景音';
 
         // 创建音量控制容器
@@ -3852,7 +3856,7 @@ export class PomodoroTimer {
                 transition: all 0.2s ease;
                 z-index: 999;
             `;
-            settingsBtn.innerHTML = '⚙️';
+            setPomodoroIcon(settingsBtn, '⚙️');
             settingsBtn.title = i18n('settings') || '设置';
 
             // 设置按钮悬停效果
@@ -4050,7 +4054,7 @@ export class PomodoroTimer {
             font-size: 14px;
             opacity: 0.7;
         `;
-        volumeIcon.textContent = '🔊';
+        setPomodoroIcon(volumeIcon, '🔊');
 
         // 音量滑块
         this.volumeSlider = document.createElement('input') as HTMLInputElement;
@@ -4211,7 +4215,7 @@ export class PomodoroTimer {
         } else {
             // DOM 模式：更新按钮显示
             if (this.soundControlBtn) {
-                this.soundControlBtn.innerHTML = this.isBackgroundAudioMuted ? '🔇' : '🔊';
+                setPomodoroToolbarIcon(this.soundControlBtn, this.isBackgroundAudioMuted ? '🔇' : '🔊');
                 this.soundControlBtn.title = this.isBackgroundAudioMuted ? i18n('enableBackgroundAudio') || '开启背景音' : i18n('muteBackgroundAudio') || '静音背景音';
             }
         }
@@ -4333,7 +4337,7 @@ export class PomodoroTimer {
             volumePercent.textContent = Math.round(volume * 100) + '%';
         }
         if (this.soundControlBtn) {
-            this.soundControlBtn.innerHTML = (this.isBackgroundAudioMuted || volume === 0) ? '🔇' : '🔊';
+            setPomodoroToolbarIcon(this.soundControlBtn, (this.isBackgroundAudioMuted || volume === 0) ? '🔇' : '🔊');
         }
     }
 
@@ -4413,7 +4417,7 @@ export class PomodoroTimer {
             user-select: none;
             cursor: pointer;
         `;
-        this.minimizedIcon.innerHTML = '🍅';
+        setPomodoroIcon(this.minimizedIcon, '🍅');
 
         this.minimizedModeBtn = document.createElement('button');
         this.minimizedModeBtn.className = 'pomodoro-minimized-mode-btn';
@@ -4429,7 +4433,7 @@ export class PomodoroTimer {
             justify-content: center;
             padding: 0;
         `;
-        this.minimizedModeBtn.innerHTML = '🍅';
+        setPomodoroIcon(this.minimizedModeBtn, '🍅');
         this.minimizedModeBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -4496,7 +4500,7 @@ export class PomodoroTimer {
             align-items: center;
             justify-content: center;
         `;
-        this.minimizedPlayPauseBtn.innerHTML = '▶️';
+        setPomodoroIcon(this.minimizedPlayPauseBtn, '▶️');
         this.minimizedPlayPauseBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -4514,7 +4518,7 @@ export class PomodoroTimer {
             align-items: center;
             justify-content: center;
         `;
-        this.minimizedStopBtn.innerHTML = '⏹';
+        setPomodoroIcon(this.minimizedStopBtn, '⏹');
         this.minimizedStopBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -4563,7 +4567,7 @@ export class PomodoroTimer {
             transition: all 0.2s ease;
             z-index: 10;
         `;
-        this.restoreBtn.innerHTML = '↗';
+        setPomodoroToolbarIcon(this.restoreBtn, '↗');
         this.restoreBtn.title = i18n('restoreWindow') || '恢复窗口';
         this.restoreBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -4775,10 +4779,10 @@ export class PomodoroTimer {
         }
 
         if (this.minimizedIcon) {
-            this.minimizedIcon.innerHTML = icon;
+            setPomodoroIcon(this.minimizedIcon, icon);
         }
         if (this.minimizedModeBtn) {
-            this.minimizedModeBtn.innerHTML = icon;
+            setPomodoroIcon(this.minimizedModeBtn, icon);
         }
         if (this.minimizedTimeDisplay) {
             this.minimizedTimeDisplay.textContent = timeText;
@@ -4788,7 +4792,7 @@ export class PomodoroTimer {
             this.minimizedTitle.title = this.reminder.title || (i18n('unnamedNote') || '未命名笔记');
         }
         if (this.minimizedPlayPauseBtn) {
-            this.minimizedPlayPauseBtn.innerHTML = this.isRunning && !this.isPaused ? '⏸' : '▶️';
+            setPomodoroIcon(this.minimizedPlayPauseBtn, this.isRunning && !this.isPaused ? '⏸' : '▶️');
         }
         if (this.minimizedStopBtn) {
             this.minimizedStopBtn.style.display = this.isRunning && this.isPaused ? 'inline-flex' : 'none';
@@ -5083,7 +5087,7 @@ export class PomodoroTimer {
     private updateMainSwitchButton() {
         if (!this.mainSwitchBtn) return;
 
-        this.mainSwitchBtn.textContent = '🔄';
+        setPomodoroToolbarIcon(this.mainSwitchBtn, '🔄');
         this.mainSwitchBtn.title = i18n('pomodoroSwitchStatus');
     }
 
@@ -5127,7 +5131,7 @@ export class PomodoroTimer {
             item.style.display = visible ? '' : 'none';
         });
         this.fullscreenBtn.style.display = this.isTabMode ? 'none' : this.fullscreenBtn.style.display;
-        this.fullscreenBtn.textContent = `⛶ ${i18n(this.isFullscreen ? 'exitFullscreen' : 'fullscreenMode')}`;
+        setPomodoroIcon(this.fullscreenBtn, `⛶ ${i18n(this.isFullscreen ? 'exitFullscreen' : 'fullscreenMode')}`);
         (this.fullscreenBtn as HTMLButtonElement).disabled = this.isDocked;
         const editDurationBtn = this.switchMenu.querySelector<HTMLButtonElement>('[data-edit-duration]');
         if (editDurationBtn) editDurationBtn.disabled = this.isCountUp && this.isWorkPhase;
@@ -5227,7 +5231,7 @@ export class PomodoroTimer {
         if (!this.modeToggleBtn) return;
 
         // 更新计时模式切换按钮的文字
-        this.modeToggleBtn.innerHTML = `${this.isCountUp ? '🍅' : '⏱️'} ${this.isCountUp ? (i18n('switchToCountdown') || '切换到倒计时') : (i18n('switchToCountUp') || '切换到正计时')}`;
+        setPomodoroIcon(this.modeToggleBtn, `${this.isCountUp ? '🍅' : '⏱️'} ${this.isCountUp ? (i18n('switchToCountdown') || '切换到倒计时') : (i18n('switchToCountUp') || '切换到正计时')}`);
     }
 
     private toggleMode() {
@@ -5484,13 +5488,13 @@ export class PomodoroTimer {
 
         if (this.isExpanded) {
             this.statsContainer.style.display = 'flex';
-            this.expandToggleBtn.innerHTML = '📉';
+            setPomodoroIcon(this.expandToggleBtn, '📉');
             this.expandToggleBtn.title = i18n('collapse') || '折叠';
             this.container.style.height = 'auto';
             this.ensureDomContainerWithinBounds();
         } else {
             this.statsContainer.style.display = 'none';
-            this.expandToggleBtn.innerHTML = '📈';
+            setPomodoroIcon(this.expandToggleBtn, '📈');
             this.expandToggleBtn.title = i18n('expand') || '展开';
             this.container.style.height = 'auto';
             this.ensureDomContainerWithinBounds();
@@ -5713,7 +5717,7 @@ export class PomodoroTimer {
         // 更新状态图标
         const statusIcon = this.container?.querySelector('.pomodoro-status-icon');
         if (statusIcon) {
-            statusIcon.innerHTML = statusIconHtml;
+            setPomodoroIcon(statusIcon, statusIconHtml);
         }
 
         // 更新番茄数量
@@ -5750,12 +5754,12 @@ export class PomodoroTimer {
         if (!this.startPauseBtn) return;
 
         if (!this.isRunning) {
-            this.startPauseBtn.innerHTML = '▶️';
+            setPomodoroIcon(this.startPauseBtn, '▶️');
             // 重置按钮位置
             this.startPauseBtn.style.transform = 'translate(-50%, -50%)';
             if (this.stopBtn) this.stopBtn.style.display = 'none';
         } else if (this.isPaused) {
-            this.startPauseBtn.innerHTML = '▶️';
+            setPomodoroIcon(this.startPauseBtn, '▶️');
             if (this.stopBtn) {
                 this.stopBtn.style.display = 'flex';
                 // 暂停状态下自动设置按钮位置，避免重叠
@@ -5768,7 +5772,7 @@ export class PomodoroTimer {
                 this.stopBtn.style.transform = `translate(-50%, -50%) translateX(${stopOffset}px)`;
             }
         } else {
-            this.startPauseBtn.innerHTML = '⏸';
+            setPomodoroIcon(this.startPauseBtn, '⏸');
             // 重置按钮位置
             this.startPauseBtn.style.transform = 'translate(-50%, -50%)';
             this.stopBtn.style.display = 'none';
@@ -7762,7 +7766,7 @@ export class PomodoroTimer {
         // 更新标题图标（仅在非 BrowserWindow 模式）
         const titleIcon = !isBrowserWindow ? this.container.querySelector('.pomodoro-title span') : null;
         if (titleIcon) {
-            titleIcon.textContent = this.isCountUp ? '🍅' : '🍅';
+            setPomodoroIcon(titleIcon, this.isCountUp ? '🍅' : '🍅');
         }
 
         // 重置状态并更新显示
@@ -10779,29 +10783,29 @@ document.body.classList.remove('docked-mode');
 </head>
 </head>
 <body class="${this.isDocked ? 'docked-mode' : ''} ${this.isMiniMode ? `mini-mode ${initialStyleClass}` : ''} ${currentState.isFullscreen ? 'fullscreen-mode' : ''}">
-    <button class="fullscreen-exit-btn" onclick="callMethod('exitFullscreen')" title="${i18n('exitFullscreen')} (Esc)">⛶</button>
+    <button class="fullscreen-exit-btn" onclick="callMethod('exitFullscreen')" title="${i18n('exitFullscreen')} (Esc)">${renderPomodoroToolbarIcon('⛶')}</button>
     <div class="custom-titlebar">
         <div class="titlebar-left">
             <button class="titlebar-btn" id="miniModeBtn" onclick="toggleMiniMode()" title="${miniModeTitle}">
-                ⭕
+                ${renderPomodoroToolbarIcon('⭕')}
             </button>
             <button class="titlebar-btn" id="dockBtn" onclick="toggleDock()" title="${dockModeTitle}">
-                ${this.getDockPositionEmoji(this.settings.pomodoroDockPosition)}
+                ${renderPomodoroToolbarIcon(this.getDockPositionEmoji(this.settings.pomodoroDockPosition))}
             </button>
             <div class="switch-container">
                 <button class="titlebar-btn" id="statusBtn" onclick="toggleStatusMenu(event)" title="${i18n('pomodoroSwitchStatus')}">
-                    🔄
+                    ${renderPomodoroToolbarIcon('🔄')}
                 </button>
             </div>
         </div>
         <div class="titlebar-buttons">
-            <button class="titlebar-btn" id="moreBtn" onclick="toggleMoreMenu(event)" title="${i18n('more')}">⋯</button>
+            <button class="titlebar-btn" id="moreBtn" onclick="toggleMoreMenu(event)" title="${i18n('more')}">${renderPomodoroToolbarIcon('⋯')}</button>
             <button class="titlebar-btn" id="soundBtn" onclick="toggleVolumeMenu(event)" title="${i18n('backgroundVolume') || '背景音量'}">
-                ${isBackgroundAudioMuted ? '🔇' : '🔊'}
+                ${renderPomodoroToolbarIcon(isBackgroundAudioMuted ? '🔇' : '🔊')}
             </button>
-            <button class="titlebar-btn pin-btn ${currentState.isPinned !== false ? 'active' : ''}" id="pinBtn" onclick="togglePin()" title="${currentState.isPinned !== false ? (i18n('cancelPin') || '取消置顶') : (i18n('pinWindow') || '置顶窗口')}">📌</button>
-            <button class="titlebar-btn" onclick="minimizeWindow()">─</button>
-            <button class="titlebar-btn close-btn" onclick="closeWindow()">×</button>
+            <button class="titlebar-btn pin-btn ${currentState.isPinned !== false ? 'active' : ''}" id="pinBtn" onclick="togglePin()" title="${currentState.isPinned !== false ? (i18n('cancelPin') || '取消置顶') : (i18n('pinWindow') || '置顶窗口')}">${renderPomodoroToolbarIcon('📌')}</button>
+            <button class="titlebar-btn" onclick="minimizeWindow()" title="${i18n('minimize')}">${renderPomodoroToolbarIcon('─')}</button>
+            <button class="titlebar-btn close-btn" onclick="closeWindow()" title="${i18n('close')}">${renderPomodoroToolbarIcon('×')}</button>
         </div>
     </div>
     <div class="pomodoro-content">
@@ -10818,21 +10822,21 @@ document.body.classList.remove('docked-mode');
                     <circle class="progress-ring-circle" id="progressCircle" cx="40" cy="40" r="36"></circle>
                 </svg>
                 <div class="center-content">
-                    <div class="pomodoro-status-icon" id="statusIcon" onclick="toggleMiniSwitchMenu(event)">${initialStatusIcon}</div>
+                    <div class="pomodoro-status-icon" id="statusIcon" onclick="toggleMiniSwitchMenu(event)">${renderPomodoroIcons(initialStatusIcon)}</div>
                     <div class="control-buttons">
-                        <button class="circle-control-btn" id="ringPlayPauseBtn" onclick="callMethod('toggleTimer')">▶️</button>
-                        <button class="circle-control-btn" id="stopBtn" onclick="callMethod('resetTimer')" style="display:none">⏹</button>
+                        <button class="circle-control-btn" id="ringPlayPauseBtn" onclick="callMethod('toggleTimer')">${renderPomodoroIcons('▶️')}</button>
+                        <button class="circle-control-btn" id="stopBtn" onclick="callMethod('resetTimer')" style="display:none">${renderPomodoroIcons('⏹')}</button>
                     </div>
                 </div>
-                <button class="mini-restore-btn" onclick="toggleMiniMode()" title="${i18n('restoreWindow') || '恢复窗口'}">↗</button>
+                <button class="mini-restore-btn" onclick="toggleMiniMode()" title="${i18n('restoreWindow') || '恢复窗口'}">${renderPomodoroToolbarIcon('↗')}</button>
             </div>
             <div class="time-info">
                 <div class="pomodoro-status" id="statusDisplay">${statusText}</div>
                 <div class="pomodoro-time" id="timeDisplay" ondblclick="callMethod('editTime')">${timeStr}</div>
                 <div class="pomodoro-count">
-                    <span>🍅</span>
+                    <span>${renderPomodoroIcons('🍅')}</span>
                     <span id="pomodoroCount">${currentState.completedPomodoros}</span>
-                    <span class="pomodoro-dice" id="diceIcon" style="display:${randomRestEnabled ? 'inline' : 'none'}">🎲</span>
+                    <span class="pomodoro-dice" id="diceIcon" style="display:${randomRestEnabled ? 'inline' : 'none'}">${renderPomodoroIcons('🎲')}</span>
                     <span id="randomCount" style="display:${randomRestEnabled ? 'inline' : 'none'}">${randomRestCount}</span>
                 </div>
             </div>
@@ -10849,15 +10853,15 @@ document.body.classList.remove('docked-mode');
         </div>
         <div class="mini-layout">
             <div class="mini-card">
-                <button class="mini-restore-btn" onclick="toggleMiniMode()" title="${i18n('restoreWindow') || '恢复窗口'}">↗</button>
+                <button class="mini-restore-btn" onclick="toggleMiniMode()" title="${i18n('restoreWindow') || '恢复窗口'}">${renderPomodoroToolbarIcon('↗')}</button>
                 <div class="mini-task-title" id="miniTaskTitle" title="${safeReminderTitle}" onclick="callMethod('handleTaskTitleClick')" oncontextmenu="event.preventDefault(); callMethod('openTaskEditDialog')">${safeReminderTitle}</div>
-                <button class="mini-emoji-btn" id="miniStatusTrigger" onclick="toggleMiniSwitchMenu(event)">${initialStatusIcon}</button>
+                <button class="mini-emoji-btn" id="miniStatusTrigger" onclick="toggleMiniSwitchMenu(event)">${renderPomodoroIcons(initialStatusIcon)}</button>
                 <div class="mini-bar-center">
                     <div class="mini-bar-header">
                         <div class="mini-time-label" id="miniTimeDisplay">${timeStr}</div>
                         <div class="mini-bar-actions">
-                            <button class="mini-action-btn" id="miniPlayPauseBtn" onclick="callMethod('toggleTimer')">▶️</button>
-                            <button class="mini-action-btn is-hidden" id="miniStopBtn" onclick="callMethod('resetTimer')">⏹</button>
+                            <button class="mini-action-btn" id="miniPlayPauseBtn" onclick="callMethod('toggleTimer')">${renderPomodoroIcons('▶️')}</button>
+                            <button class="mini-action-btn is-hidden" id="miniStopBtn" onclick="callMethod('resetTimer')">${renderPomodoroIcons('⏹')}</button>
                         </div>
                     </div>
                     <div class="mini-progress-track">
@@ -10865,17 +10869,17 @@ document.body.classList.remove('docked-mode');
                     </div>
                 </div>
                 <div class="mini-minimal-actions">
-                    <button class="mini-action-btn" id="miniMinimalPlayPauseBtn" onclick="callMethod('toggleTimer')">▶️</button>
-                    <button class="mini-action-btn is-hidden" id="miniMinimalStopBtn" onclick="callMethod('resetTimer')">⏹</button>
+                    <button class="mini-action-btn" id="miniMinimalPlayPauseBtn" onclick="callMethod('toggleTimer')">${renderPomodoroIcons('▶️')}</button>
+                    <button class="mini-action-btn is-hidden" id="miniMinimalStopBtn" onclick="callMethod('resetTimer')">${renderPomodoroIcons('⏹')}</button>
                 </div>
             </div>
             <div class="mini-switch-menu" id="miniSwitchMenu">
                 <button class="mini-switch-item" id="miniSwitchModeMenuItem" onclick="callMethod('toggleMode')">
-                    ${currentState.isCountUp ? '🍅' : '⏱'} ${currentState.isCountUp ? switchToCountdownText : switchToCountUpText}
+                    ${renderPomodoroIcons(`${currentState.isCountUp ? '🍅' : '⏱'} ${currentState.isCountUp ? switchToCountdownText : switchToCountUpText}`)}
                 </button>
-                <button class="mini-switch-item" onclick="callMethod('startWorkTime')">💪 ${workText}</button>
-                <button class="mini-switch-item" onclick="callMethod('startShortBreak')">🍵 ${shortBreakText}</button>
-                <button class="mini-switch-item" onclick="callMethod('startLongBreak')">🧘 ${longBreakText}</button>
+                <button class="mini-switch-item" onclick="callMethod('startWorkTime')">${renderPomodoroIcons(`💪 ${workText}`)}</button>
+                <button class="mini-switch-item" onclick="callMethod('startShortBreak')">${renderPomodoroIcons(`🍵 ${shortBreakText}`)}</button>
+                <button class="mini-switch-item" onclick="callMethod('startLongBreak')">${renderPomodoroIcons(`🧘 ${longBreakText}`)}</button>
             </div>
         </div>
     </div>
@@ -10890,6 +10894,8 @@ document.body.classList.remove('docked-mode');
         <button type="button" class="volume-mute-btn" id="volumeMuteBtn" onclick="toggleVolumeMute(event)"></button>
     </div>
     <script>
+        const { html: renderPomodoroIcons, set: setPomodoroIcon } = (${createPomodoroIconRenderer.toString()})(${JSON.stringify(POMODORO_ICON_SVGS)});
+        const { set: setPomodoroToolbarIcon } = (${createPomodoroIconRenderer.toString()})(${JSON.stringify(POMODORO_TOOLBAR_ICON_SVGS)});
         const { ipcRenderer } = require('electron');
         let remote;
         
@@ -11007,13 +11013,13 @@ document.body.classList.remove('docked-mode');
             const isSilent = isMuted || vol === 0;
             const icon = isSilent ? '🔇' : '🔊';
             if (muteBtn) {
-                muteBtn.textContent = icon;
+                setPomodoroIcon(muteBtn, icon);
                 muteBtn.title = isSilent ? '${i18n('enableBackgroundAudio') || '开启背景音'}' : '${i18n('muteBackgroundAudio') || '静音背景音'}';
                 muteBtn.setAttribute('aria-label', muteBtn.title);
             }
             // 拖动过程中不覆盖按钮状态，避免图标来回闪烁
             if (soundBtn && !isVolumeSliderDragging) {
-                soundBtn.textContent = icon;
+                setPomodoroToolbarIcon(soundBtn, icon);
                 soundBtn.title = isSilent ? '${i18n('enableBackgroundAudio') || '开启背景音'}' : '${i18n('muteBackgroundAudio') || '静音背景音'}';
             }
         }
@@ -11043,7 +11049,7 @@ document.body.classList.remove('docked-mode');
             const soundBtn = document.getElementById('soundBtn');
             if (percent) percent.textContent = Math.round(vol * 100) + '%';
             const icon = vol === 0 ? '🔇' : '🔊';
-            if (soundBtn) soundBtn.textContent = icon;
+            setPomodoroToolbarIcon(soundBtn, icon);
             updateVolumeMenuUI();
             // 本地立即更新音频音量，避免 IPC 往返延迟导致的声音卡顿或滑块回弹
             setLocalAudioVolume(vol);
@@ -11386,9 +11392,9 @@ document.body.classList.remove('docked-mode');
             if (statusDisplay && statusDisplay.textContent !== statusText) statusDisplay.textContent = statusText;
             
             const statusIconEl = document.getElementById('statusIcon');
-            if (statusIconEl && statusIconEl.textContent !== statusIcon) statusIconEl.textContent = statusIcon;
+            setPomodoroIcon(statusIconEl, statusIcon);
             const miniStatusTrigger = document.getElementById('miniStatusTrigger');
-            if (miniStatusTrigger && miniStatusTrigger.textContent !== statusIcon) miniStatusTrigger.textContent = statusIcon;
+            setPomodoroIcon(miniStatusTrigger, statusIcon);
 
             if (circle) circle.style.stroke = color;
             if (dockedBar) dockedBar.style.backgroundColor = color;
@@ -11396,9 +11402,7 @@ document.body.classList.remove('docked-mode');
 
             const miniSwitchModeMenuItem = document.getElementById('miniSwitchModeMenuItem');
             const modeLabel = (localState.isCountUp ? '🍅 ' + '${switchToCountdownText}' : '⏱ ' + '${switchToCountUpText}');
-            if (miniSwitchModeMenuItem && miniSwitchModeMenuItem.textContent !== modeLabel) {
-                miniSwitchModeMenuItem.textContent = modeLabel;
-            }
+            setPomodoroIcon(miniSwitchModeMenuItem, modeLabel);
             
             const stopBtn = document.getElementById('stopBtn');
             const ringPlayBtn = document.getElementById('ringPlayPauseBtn');
@@ -11412,18 +11416,18 @@ document.body.classList.remove('docked-mode');
 
             if (localState.isRunning) {
                 if (localState.isPaused) {
-                     if (ringPlayBtn) ringPlayBtn.textContent = '▶️';
+                     setPomodoroIcon(ringPlayBtn, '▶️');
                      if (stopBtn) stopBtn.style.display = 'flex';
                 } else {
-                     if (ringPlayBtn) ringPlayBtn.textContent = '⏸';
+                     setPomodoroIcon(ringPlayBtn, '⏸');
                      if (stopBtn) stopBtn.style.display = 'none';
                 }
             } else {
-                 if (ringPlayBtn) ringPlayBtn.textContent = '▶️';
+                 setPomodoroIcon(ringPlayBtn, '▶️');
                  if (stopBtn) stopBtn.style.display = 'none';
             }
             [miniPlayPauseBtn, miniMinimalPlayPauseBtn].forEach(btn => {
-                if (btn) btn.textContent = playLabel;
+                setPomodoroIcon(btn, playLabel);
             });
             [miniStopBtn, miniMinimalStopBtn].forEach(btn => {
                 if (!btn) return;
@@ -11511,9 +11515,7 @@ document.body.classList.remove('docked-mode');
                     'right': '➡️'
                 };
                 const emoji = posEmojiMap[settings.pomodoroDockPosition] || '➡️';
-                if (dockBtn.textContent !== emoji) {
-                    dockBtn.textContent = emoji;
-                }
+                setPomodoroToolbarIcon(dockBtn, emoji);
             }
         }
 
@@ -12347,7 +12349,7 @@ document.body.classList.remove('mini-mode');
 
         // 更新 DOM 模式下吸附按钮的 emoji（无论是否处于吸附模式）
         if ((this as any).dockBtnElement) {
-            (this as any).dockBtnElement.innerHTML = this.getDockPositionEmoji(settings.pomodoroDockPosition);
+            setPomodoroToolbarIcon((this as any).dockBtnElement, this.getDockPositionEmoji(settings.pomodoroDockPosition));
         }
 
         const newUseGlobalWindow = this.shouldUseGlobalPomodoroWindow(settings);

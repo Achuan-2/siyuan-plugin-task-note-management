@@ -10,6 +10,12 @@ const compiled = ts.transpileModule(fs.readFileSync(
     path.join(__dirname, '../src/components/panel/PomodoroTimer.ts'), 'utf8'
 ), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
 
+const iconModule = { exports: {} };
+const iconCode = ts.transpileModule(fs.readFileSync(
+    path.join(__dirname, '../src/components/render/pomodoroIcons.ts'), 'utf8'
+), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
+new Function('module', 'exports', iconCode)(iconModule, iconModule.exports);
+
 function deferred() {
     let resolve;
     const promise = new Promise(done => { resolve = done; });
@@ -107,6 +113,7 @@ function fixture({ browserWindow = false, waitForLoad = false, abortPlay = false
     const dependencies = {
         siyuan: { Dialog, showMessage() {}, getFrontend: () => 'desktop' },
         '../../pluginInstance': { i18n: key => key },
+        '../render/pomodoroIcons': iconModule.exports,
         '../../utils/audioUtils': { resolveAudioPath: async src => src }
     };
     const notifications = [];
