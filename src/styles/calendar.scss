@@ -30,10 +30,10 @@
                 width: 100%;
                 min-width: 0;
                 flex-wrap: nowrap;
-                gap: 3px;
+                gap: 2px;
 
                 > .filter-dropdown-container {
-                    flex: 1;
+                    flex: 0 0 80px;
                     min-width: 0;
                     margin-left: 0 !important;
 
