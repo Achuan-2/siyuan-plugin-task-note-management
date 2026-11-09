@@ -776,122 +776,96 @@ export class CalendarView {
         this.viewTypeButton.style.justifyContent = 'space-between';
         this.viewTypeButton.style.alignItems = 'center';
         this.viewTypeButton.style.textAlign = 'left';
+        this.viewTypeButton.setAttribute('aria-haspopup', 'menu');
         this.viewTypeButton.innerHTML = `<span class="filter-button-text" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">${currentViewTypeText}</span> <span style="margin-left: 4px; flex-shrink: 0;">▼</span>`;
         viewTypeContainer.appendChild(this.viewTypeButton);
 
-        const viewTypeDropdown = document.createElement('div');
-        viewTypeDropdown.className = 'filter-dropdown-menu';
-        viewTypeDropdown.style.display = 'none';
-        viewTypeDropdown.style.position = 'absolute';
-        viewTypeDropdown.style.top = '100%';
-        viewTypeDropdown.style.left = '0';
-        viewTypeDropdown.style.zIndex = '1000';
-        viewTypeDropdown.style.backgroundColor = 'var(--b3-theme-background)';
-        viewTypeDropdown.style.border = '1px solid var(--b3-border-color)';
-        viewTypeDropdown.style.borderRadius = '4px';
-        viewTypeDropdown.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
-        viewTypeDropdown.style.minWidth = '150px';
-        viewTypeDropdown.style.padding = '8px';
+        const changeViewType = async (option: typeof viewTypeOptions[number]) => {
+            const selectedViewType = option.value as 'timeline' | 'kanban' | 'list';
+            const currentViewMode = this._getViewMode();
 
-        viewTypeOptions.forEach(option => {
-            const optionItem = document.createElement('div');
-            optionItem.style.padding = '6px 12px';
-            optionItem.style.cursor = 'pointer';
-            optionItem.style.borderRadius = '4px';
-            optionItem.textContent = option.text;
+            // Determine the new view mode based on current view mode and new view type
+            let newViewMode: string;
 
-            optionItem.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                const selectedViewType = option.value as 'timeline' | 'kanban' | 'list';
-                const currentViewMode = this._getViewMode();
-
-                // Determine the new view mode based on current view mode and new view type
-                let newViewMode: string;
-
-                // Extract the time period from current view mode (year, month, week, day)
-                if (currentViewMode === 'multiMonthYear') {
-                    // 对于年视图，按选中的 viewType 决定是保留 timeline/kanban 还是切换为 listYear
-                    if (selectedViewType === 'list') {
-                        newViewMode = 'listYear';
-                    } else {
-                        newViewMode = 'multiMonthYear';
-                    }
-                } else if (currentViewMode === 'dayGridMonth') {
-                    // 对于月视图，按选中的 viewType 决定是保留 dayGridMonth 还是切换为 listMonth
-                    if (selectedViewType === 'list') {
-                        newViewMode = 'listMonth';
-                    } else {
-                        newViewMode = 'dayGridMonth';
-                    }
-                } else if (currentViewMode.includes('Week')) {
-                    // Week view
-                    if (selectedViewType === 'timeline') {
-                        newViewMode = 'timeGridWeek';
-                    } else if (selectedViewType === 'kanban') {
-                        newViewMode = 'dayGridWeek';
-                    } else { // list
-                        newViewMode = 'listWeek';
-                    }
-                } else if (currentViewMode.includes('MultiDays')) {
-                    // Multi-days view
-                    if (selectedViewType === 'timeline') {
-                        newViewMode = 'timeGridMultiDays';
-                    } else if (selectedViewType === 'kanban') {
-                        newViewMode = 'dayGridMultiDays';
-                    } else { // list
-                        newViewMode = 'listMultiDays';
-                    }
-                } else if (currentViewMode.includes('Day')) {
-                    // Day view
-                    if (selectedViewType === 'timeline') {
-                        newViewMode = 'timeGridDay';
-                    } else if (selectedViewType === 'kanban') {
-                        newViewMode = 'dayGridDay';
-                    } else { // list
-                        newViewMode = 'listDay';
-                    }
-                } else if (currentViewMode.includes('Month')) {
-                    // List month view
-                    if (selectedViewType === 'list') {
-                        newViewMode = 'listMonth';
-                    } else {
-                        newViewMode = 'dayGridMonth';
-                    }
-                } else if (currentViewMode.includes('Year')) {
-                    // List year view
-                    if (selectedViewType === 'list') {
-                        newViewMode = 'listYear';
-                    } else {
-                        newViewMode = 'multiMonthYear';
-                    }
+            // Extract the time period from current view mode (year, month, week, day)
+            if (currentViewMode === 'multiMonthYear') {
+                // 对于年视图，按选中的 viewType 决定是保留 timeline/kanban 还是切换为 listYear
+                if (selectedViewType === 'list') {
+                    newViewMode = 'listYear';
                 } else {
-                    // Default to week view
-                    if (selectedViewType === 'timeline') {
-                        newViewMode = 'timeGridWeek';
-                    } else if (selectedViewType === 'kanban') {
-                        newViewMode = 'dayGridWeek';
-                    } else { // list
-                        newViewMode = 'listWeek';
-                    }
+                    newViewMode = 'multiMonthYear';
                 }
-
-                await this._setViewType(selectedViewType);
-                await this._setViewMode(newViewMode as any);
-                this.calendar.changeView(newViewMode);
-                this.updateViewButtonStates();
-                this.updatePomodoroButtonVisibility();
-
-                const textSpan = this.viewTypeButton.querySelector('.filter-button-text');
-                if (textSpan) {
-                    textSpan.textContent = option.text;
+            } else if (currentViewMode === 'dayGridMonth') {
+                // 对于月视图，按选中的 viewType 决定是保留 dayGridMonth 还是切换为 listMonth
+                if (selectedViewType === 'list') {
+                    newViewMode = 'listMonth';
+                } else {
+                    newViewMode = 'dayGridMonth';
                 }
-                viewTypeDropdown.style.display = 'none';
-            });
+            } else if (currentViewMode.includes('Week')) {
+                // Week view
+                if (selectedViewType === 'timeline') {
+                    newViewMode = 'timeGridWeek';
+                } else if (selectedViewType === 'kanban') {
+                    newViewMode = 'dayGridWeek';
+                } else { // list
+                    newViewMode = 'listWeek';
+                }
+            } else if (currentViewMode.includes('MultiDays')) {
+                // Multi-days view
+                if (selectedViewType === 'timeline') {
+                    newViewMode = 'timeGridMultiDays';
+                } else if (selectedViewType === 'kanban') {
+                    newViewMode = 'dayGridMultiDays';
+                } else { // list
+                    newViewMode = 'listMultiDays';
+                }
+            } else if (currentViewMode.includes('Day')) {
+                // Day view
+                if (selectedViewType === 'timeline') {
+                    newViewMode = 'timeGridDay';
+                } else if (selectedViewType === 'kanban') {
+                    newViewMode = 'dayGridDay';
+                } else { // list
+                    newViewMode = 'listDay';
+                }
+            } else if (currentViewMode.includes('Month')) {
+                // List month view
+                if (selectedViewType === 'list') {
+                    newViewMode = 'listMonth';
+                } else {
+                    newViewMode = 'dayGridMonth';
+                }
+            } else if (currentViewMode.includes('Year')) {
+                // List year view
+                if (selectedViewType === 'list') {
+                    newViewMode = 'listYear';
+                } else {
+                    newViewMode = 'multiMonthYear';
+                }
+            } else {
+                // Default to week view
+                if (selectedViewType === 'timeline') {
+                    newViewMode = 'timeGridWeek';
+                } else if (selectedViewType === 'kanban') {
+                    newViewMode = 'dayGridWeek';
+                } else { // list
+                    newViewMode = 'listWeek';
+                }
+            }
 
-            viewTypeDropdown.appendChild(optionItem);
-        });
+            await this._setViewType(selectedViewType);
+            await this._setViewMode(newViewMode as any);
+            this.calendar.changeView(newViewMode);
+            this.updateViewButtonStates();
+            this.updatePomodoroButtonVisibility();
 
-        viewTypeContainer.appendChild(viewTypeDropdown);
+            const textSpan = this.viewTypeButton.querySelector('.filter-button-text');
+            if (textSpan) {
+                textSpan.textContent = option.text;
+            }
+        };
+
         if (this.isDockMode) {
             // 在 Dock 模式下，我们将 viewTypeContainer 放入过滤器组（filterGroup）中，以实现单行自适应排版
         } else if (viewGroup) {
@@ -1035,7 +1009,6 @@ export class CalendarView {
             event.stopPropagation();
             projectDropdown.style.display = 'none';
             categoryDropdown.style.display = 'none';
-            viewTypeDropdown.style.display = 'none';
             if (this.displaySettingsDropdown) this.displaySettingsDropdown.style.display = 'none';
             const menu = new Menu('calendar-filter-menu');
             menu.addItem({
@@ -1615,7 +1588,6 @@ export class CalendarView {
             displaySettingsDropdown.style.display = isVisible ? 'none' : 'block';
             projectDropdown.style.display = 'none';
             categoryDropdown.style.display = 'none';
-            viewTypeDropdown.style.display = 'none';
             if (!isVisible) {
                 this.positionDisplaySettingsDropdown(displaySettingsDropdown, displaySettingsButton);
             }
@@ -1629,7 +1601,6 @@ export class CalendarView {
             const isVisible = projectDropdown.style.display === 'block';
             projectDropdown.style.display = isVisible ? 'none' : 'block';
             categoryDropdown.style.display = 'none';
-            viewTypeDropdown.style.display = 'none';
             displaySettingsDropdown.style.display = 'none';
             if (!isVisible) {
                 this.positionDropdown(projectDropdown, projectFilterButton, 260);
@@ -1642,36 +1613,39 @@ export class CalendarView {
             const isVisible = categoryDropdown.style.display === 'block';
             categoryDropdown.style.display = isVisible ? 'none' : 'block';
             projectDropdown.style.display = 'none';
-            viewTypeDropdown.style.display = 'none';
             displaySettingsDropdown.style.display = 'none';
             if (!isVisible) {
                 this.positionDropdown(categoryDropdown, categoryFilterButton, 220);
             }
         });
 
-        // 更新视图类型按钮的点击事件
+        // 周期和样式统一使用宿主菜单，手机端由宿主提供抽屉交互。
         this.viewTypeButton.onclick = null;
         this.viewTypeButton.addEventListener('click', (e) => {
             e.stopPropagation();
-            const isVisible = viewTypeDropdown.style.display === 'block';
-            viewTypeDropdown.style.display = isVisible ? 'none' : 'block';
             projectDropdown.style.display = 'none';
             categoryDropdown.style.display = 'none';
             displaySettingsDropdown.style.display = 'none';
+            const menu = new Menu('calendar-view-type-menu');
+            viewTypeOptions.forEach(option => menu.addItem({
+                label: option.text,
+                icon: this._getViewType() === option.value ? 'iconSelect' : undefined,
+                click: () => changeViewType(option)
+            }));
+            const rect = this.viewTypeButton.getBoundingClientRect();
+            menu.open({ x: rect.left, y: rect.bottom + 4 });
         });
 
         // 点击外部关闭所有下拉菜单
         this.lifecycle.listen(document, 'click', () => {
             projectDropdown.style.display = 'none';
             categoryDropdown.style.display = 'none';
-            viewTypeDropdown.style.display = 'none';
             displaySettingsDropdown.style.display = 'none';
         });
 
         // 防止下拉菜单内部点击触发全局关闭
         projectDropdown.addEventListener('click', (e) => e.stopPropagation());
         categoryDropdown.addEventListener('click', (e) => e.stopPropagation());
-        viewTypeDropdown.addEventListener('click', (e) => e.stopPropagation());
         displaySettingsDropdown.addEventListener('click', (e) => e.stopPropagation());
 
 
