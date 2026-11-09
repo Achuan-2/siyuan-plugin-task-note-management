@@ -416,6 +416,7 @@
 
     interface ISettingGroup {
         name: string;
+        icon: string;
         items?: ISettingItem[];
         subGroups?: ISettingSubGroup[];
     }
@@ -436,10 +437,12 @@
     let groups: ISettingGroup[] = [
         {
             name: '👑VIP',
+            icon: 'iconTNVip',
             items: [], // 使用 VipPanel 组件渲染
         },
         {
             name: i18n('sidebarAndTopbarSettings'),
+            icon: 'iconTNComponents',
             subGroups: [
                 {
                     name: i18n('subGroupSidebar'),
@@ -523,6 +526,7 @@
         },
         {
             name: i18n('mobileSettings'),
+            icon: 'iconTNMobile',
             subGroups: [
                 {
                     name: i18n('subGroupMobile'),
@@ -562,6 +566,7 @@
         },
         {
             name: i18n('taskSettings') || '📋任务设置',
+            icon: 'iconTNTodoList',
             subGroups: [
                 {
                     name: i18n('subGroupTaskDateDetection'),
@@ -732,6 +737,7 @@
         },
         {
             name: i18n('habitCheckinSettings') || '✅习惯打卡设置',
+            icon: 'iconTNHabit',
             subGroups: [
                 {
                     name: i18n('subGroupHabitSync'),
@@ -753,6 +759,7 @@
         },
         {
             name: i18n('notificationReminder'),
+            icon: 'iconTNNotification',
             subGroups: [
                 {
                     name: i18n('subGroupDailySummary'),
@@ -1019,6 +1026,7 @@
         },
         {
             name: i18n('calendarSettings'),
+            icon: 'iconTNCalendar',
             subGroups: [
                 {
                     name: i18n('subGroupCalendarDisplay'),
@@ -1154,6 +1162,7 @@
         },
         {
             name: '🗂️' + (i18n('projectSettings') || '项目设置'),
+            icon: 'iconTNProject',
             subGroups: [
                 {
                     name: i18n('subGroupProjectKanban'),
@@ -1249,6 +1258,7 @@
         },
         {
             name: i18n('summarySettings') || '📋任务摘要设置',
+            icon: 'iconTNTaskSummary',
             subGroups: [
                 {
                     name: i18n('subGroupSummaryContent'),
@@ -1287,6 +1297,7 @@
         },
         {
             name: '✅' + i18n('taskNoteSettings'),
+            icon: 'iconTNTaskNote',
             subGroups: [
                 {
                     name: i18n('subGroupTaskNoteDoc'),
@@ -1442,6 +1453,7 @@
         },
         {
             name: i18n('pomodoroSettings'),
+            icon: 'iconTNPomodoro',
             subGroups: [
                 {
                     name: i18n('subGroupPomodoroBasic'),
@@ -1688,6 +1700,7 @@
         },
         {
             name: i18n('randomRestSettings'),
+            icon: 'iconTNRandomRest',
             subGroups: [
                 {
                     name: i18n('subGroupRandomRestBasic'),
@@ -1775,10 +1788,12 @@
         },
         {
             name: '📅' + i18n('icsSubscription'),
+            icon: 'iconTNCalendarSubscription',
             items: [], // 使用 SubscriptionPanel 组件渲染
         },
         {
             name: '☁️' + i18n('calendarUpload'),
+            icon: 'iconTNCalendarUpload',
             subGroups: [
                 {
                     name: i18n('subGroupIcsHelpDocs'),
@@ -2037,6 +2052,7 @@
         },
         {
             name: '📁' + i18n('dataStorageLocation'),
+            icon: 'iconTNDataStorage',
             subGroups: [
                 {
                     name: i18n('subGroupDataInfo'),
@@ -2132,6 +2148,7 @@
         },
         {
             name: '⬆️' + i18n('exportSettings'),
+            icon: 'iconTNExport',
             subGroups: [
                 {
                     name: i18n('subGroupExportIcs'),
@@ -2155,6 +2172,7 @@
         },
         {
             name: '⬇️' + i18n('importSettings'),
+            icon: 'iconTNImport',
             subGroups: [
                 {
                     name: i18n('subGroupImportIcs'),
@@ -2197,10 +2215,12 @@
         },
         {
             name: '❓' + i18n('helpDocument'),
+            icon: 'iconTNHelp',
             items: [],
         },
         {
             name: '❤️' + i18n('donate'),
+            icon: 'iconTNDonate',
             subGroups: [
                 {
                     name: i18n('subGroupDonateInfo'),
@@ -2226,6 +2246,11 @@
 
     let focusGroup = groups.find(group => group.name === initialGroup)?.name || groups[0].name;
     let settingSearchKeyword = '';
+
+    // 保留原分组名称用于导航匹配，显示时用专属 SVG 图标替代 emoji 前缀。
+    function getSettingGroupLabel(name: string): string {
+        return name.replace(/^[\p{Extended_Pictographic}\uFE0F\u200D\s]+/u, '');
+    }
 
     interface ChangeEvent {
         group: string;
@@ -3127,13 +3152,14 @@
                     data-name="editor"
                     class:b3-list-item--focus={group.name === focusGroup}
                     class="b3-list-item"
-                    title={group.name}
+                    title={getSettingGroupLabel(group.name)}
                     on:click={() => {
                         focusGroup = group.name;
                     }}
                     on:keydown={() => {}}
                 >
-                    <span class="tab-item__text">{group.name}</span>
+                    <svg class="tab-item__icon" aria-hidden="true"><use href={`#${group.icon}`} /></svg>
+                    <span class="tab-item__text">{getSettingGroupLabel(group.name)}</span>
                 </li>
             {/each}
         </ul>
@@ -3696,6 +3722,15 @@
             text-overflow: ellipsis;
             white-space: nowrap;
             min-width: 0;
+        }
+
+        .tab-item__icon {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+            margin-right: 8px;
+            color: inherit;
+            fill: currentColor;
         }
     }
 

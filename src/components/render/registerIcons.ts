@@ -56,5 +56,97 @@ export function registerCustomIcons(plugin: Plugin) {
                 <path d="m9 16 2 2 4-4"/>
             </symbol>
         `);
+    // 设置面板页签图标：统一使用 24px 线性图形，颜色跟随当前主题。
+    plugin.addIcons(`
+        <symbol id="iconTNVip" viewBox="0 0 24 24">
+            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m2 5 5 4 5-6 5 6 5-4-3 13H5Z"/>
+                <path d="M5 21h14"/>
+            </g>
+        </symbol>
+        <symbol id="iconTNComponents" viewBox="0 0 24 24">
+            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="7" height="7" rx="1"/>
+                <rect x="3" y="14" width="7" height="7" rx="1"/>
+                <rect x="14" y="14" width="7" height="7" rx="1"/>
+                <path d="M14 6h7m-3.5-3.5v7"/>
+            </g>
+        </symbol>
+        <symbol id="iconTNMobile" viewBox="0 0 24 24">
+            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="6" y="2" width="12" height="20" rx="2"/>
+                <path d="M10 5h4m-2 14h.01"/>
+            </g>
+        </symbol>
+        <symbol id="iconTNNotification" viewBox="0 0 24 24">
+            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/>
+                <path d="M10 21h4M12 2V1"/>
+            </g>
+        </symbol>
+        <symbol id="iconTNTaskSummary" viewBox="0 0 24 24">
+            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/>
+                <path d="M14 2v6h6M8 12h8m-8 4h8m-8 4h4"/>
+            </g>
+        </symbol>
+        <symbol id="iconTNTaskNote" viewBox="0 0 24 24">
+            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/>
+                <path d="M14 2v6h6m-12 7 3 3 5-6"/>
+            </g>
+        </symbol>
+        <symbol id="iconTNPomodoro" viewBox="0 0 24 24">
+            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="14" r="8"/>
+                <path d="M12 10v4l3 2M9 2h6m-3 0v4m6 0 2-2"/>
+            </g>
+        </symbol>
+        <symbol id="iconTNRandomRest" viewBox="0 0 24 24">
+            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="3"/>
+                <path d="M7 7h.01M17 7h.01M12 12h.01M7 17h.01M17 17h.01"/>
+            </g>
+        </symbol>
+        <symbol id="iconTNCalendarSubscription" viewBox="0 0 24 24">
+            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2"/>
+                <path d="M8 2v4m8-4v4M3 10h18m-12 6h6m-3-3v6"/>
+            </g>
+        </symbol>
+        <symbol id="iconTNCalendarUpload" viewBox="0 0 24 24">
+            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M7 18H6a4 4 0 0 1-.8-7.9 7 7 0 0 1 13.6 0A4 4 0 0 1 18 18h-1"/>
+                <path d="M12 22V12m-4 4 4-4 4 4"/>
+            </g>
+        </symbol>
+        <symbol id="iconTNDataStorage" viewBox="0 0 24 24">
+            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                <path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5M3 12c0 1.7 4 3 9 3s9-1.3 9-3"/>
+            </g>
+        </symbol>
+        <symbol id="iconTNExport" viewBox="0 0 24 24">
+            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M12 15V3m-5 5 5-5 5 5"/>
+            </g>
+        </symbol>
+        <symbol id="iconTNImport" viewBox="0 0 24 24">
+            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M12 3v12m-5-5 5 5 5-5"/>
+            </g>
+        </symbol>
+        <symbol id="iconTNHelp" viewBox="0 0 24 24">
+            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2-3 4m.1 3h.01"/>
+            </g>
+        </symbol>
+        <symbol id="iconTNDonate" viewBox="0 0 24 24">
+            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0l-1 1-1-1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/>
+            </g>
+        </symbol>
+    `);
 }
 
