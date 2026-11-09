@@ -1131,7 +1131,6 @@ export class CalendarView {
             const item = document.createElement('div');
             item.className = 'fn__flex fn__flex-center';
             item.style.padding = '6px 12px';
-            item.style.marginLeft = '20px';
             item.style.gap = '8px';
 
             const mode = document.createElement('select');
@@ -1181,11 +1180,12 @@ export class CalendarView {
         };
 
         // 任务显示开关
-        displaySettingsDropdown.appendChild(createSwitchItem(i18n("showTasks") || "显示任务", this.showTasks, async (checked) => {
+        const taskDisplayGroup = createCollapsibleSwitchItem(i18n("showTasks") || "显示任务", this.showTasks, async (checked) => {
             this.showTasks = checked;
             await this.calendarConfigManager.setShowTasks(checked);
             await this.refreshEvents();
-        }));
+        });
+        displaySettingsDropdown.append(taskDisplayGroup.item, taskDisplayGroup.subItems);
 
         // 任务状态设置
         const statusLabel = document.createElement('div');
@@ -1193,11 +1193,10 @@ export class CalendarView {
         statusLabel.style.fontSize = '0.9em';
         statusLabel.style.color = 'var(--b3-theme-on-surface-light)';
         statusLabel.innerText = i18n("taskStatusFilter");
-        displaySettingsDropdown.appendChild(statusLabel);
 
         const statusGroup = document.createElement('div');
         statusGroup.className = 'fn__flex fn__flex-center';
-        statusGroup.style.padding = '4px 8px';
+        statusGroup.style.padding = '6px 12px';
         statusGroup.style.gap = '4px';
 
         const createStatusBtn = (label: string, value: 'all' | 'completed' | 'incomplete') => {
@@ -1216,10 +1215,27 @@ export class CalendarView {
             return btn;
         };
 
-        statusGroup.appendChild(createStatusBtn(i18n("all") || "全部", 'all'));
-        statusGroup.appendChild(createStatusBtn(i18n("completed") || "已完成", 'completed'));
-        statusGroup.appendChild(createStatusBtn(i18n("uncompleted") || "未完成", 'incomplete'));
-        displaySettingsDropdown.appendChild(statusGroup);
+        if (this.openedFromHabitPanel) {
+            statusGroup.appendChild(createStatusBtn(i18n("all") || "全部", 'all'));
+            statusGroup.appendChild(createStatusBtn(i18n("completed") || "已完成", 'completed'));
+            statusGroup.appendChild(createStatusBtn(i18n("uncompleted") || "未完成", 'incomplete'));
+        } else {
+            const statusSelect = document.createElement('select');
+            statusSelect.className = 'b3-select';
+            statusSelect.setAttribute('aria-label', i18n("taskStatusFilter"));
+            statusSelect.add(new Option(i18n("all"), 'all'));
+            statusSelect.add(new Option(i18n("completed"), 'completed'));
+            statusSelect.add(new Option(i18n("uncompleted"), 'incomplete'));
+            statusSelect.value = this.currentCompletionFilter;
+            statusSelect.addEventListener('change', async () => {
+                const value = statusSelect.value as 'all' | 'completed' | 'incomplete';
+                this.currentCompletionFilter = value;
+                await this.calendarConfigManager.setCompletionFilter(value);
+                await this.refreshEvents();
+            });
+            statusGroup.appendChild(statusSelect);
+            taskDisplayGroup.subItems.appendChild(statusGroup);
+        }
 
         // 任务提醒时间显示开关
         displaySettingsDropdown.appendChild(createSwitchItem(i18n("showReminderTime") || "显示任务提醒时间", this.showReminderTime, async (checked) => {
@@ -1229,18 +1245,19 @@ export class CalendarView {
         }));
 
         // 跨天任务设置
-        displaySettingsDropdown.appendChild(createSwitchItem(i18n("showCrossDayTasks") || "显示跨天任务", this.showCrossDayTasks, async (checked) => {
+        const crossDayDisplayGroup = createCollapsibleSwitchItem(i18n("showCrossDayTasks") || "显示跨天任务", this.showCrossDayTasks, async (checked) => {
             this.showCrossDayTasks = checked;
             await this.calendarConfigManager.setShowCrossDayTasks(checked);
             await this.refreshEvents();
-        }));
+        });
+        displaySettingsDropdown.append(crossDayDisplayGroup.item, crossDayDisplayGroup.subItems);
 
         const thresholdItem = createDisplayLimitItem(i18n("showCrossDayTasks"), i18n("crossDayThreshold"), this.crossDayThreshold, async (limit) => {
             this.crossDayThreshold = limit;
             await this.calendarConfigManager.setCrossDayThreshold(limit);
             await this.refreshEvents();
         });
-        displaySettingsDropdown.appendChild(thresholdItem);
+        crossDayDisplayGroup.subItems.appendChild(thresholdItem);
 
         // 子任务设置
         displaySettingsDropdown.appendChild(createSwitchItem(i18n("showSubtasks") || "显示子任务", this.showSubtasks, async (checked) => {
@@ -1250,18 +1267,19 @@ export class CalendarView {
         }));
 
         // 重复任务设置
-        displaySettingsDropdown.appendChild(createSwitchItem(i18n("showRepeatTasks") || "显示重复任务", this.showRepeatTasks, async (checked) => {
+        const repeatDisplayGroup = createCollapsibleSwitchItem(i18n("showRepeatTasks") || "显示重复任务", this.showRepeatTasks, async (checked) => {
             this.showRepeatTasks = checked;
             await this.calendarConfigManager.setShowRepeatTasks(checked);
             await this.refreshEvents();
-        }));
+        });
+        displaySettingsDropdown.append(repeatDisplayGroup.item, repeatDisplayGroup.subItems);
 
         const repeatLimitItem = createDisplayLimitItem(i18n("showRepeatTasks"), i18n("instances"), this.repeatInstanceLimit, async (limit) => {
             this.repeatInstanceLimit = limit;
             await this.calendarConfigManager.setRepeatInstanceLimit(limit);
             await this.refreshEvents();
         });
-        displaySettingsDropdown.appendChild(repeatLimitItem);
+        repeatDisplayGroup.subItems.appendChild(repeatLimitItem);
 
         // 同一时段最多显示任务数
         const eventMaxStackItem = document.createElement('div');
