@@ -417,7 +417,6 @@
     interface ISettingGroup {
         name: string;
         icon: string;
-        emoji?: string;
         items?: ISettingItem[];
         subGroups?: ISettingSubGroup[];
     }
@@ -1455,7 +1454,6 @@
         {
             name: i18n('pomodoroSettings'),
             icon: 'iconTNPomodoro',
-            emoji: '🍅',
             subGroups: [
                 {
                     name: i18n('subGroupPomodoroBasic'),
@@ -3160,11 +3158,7 @@
                     }}
                     on:keydown={() => {}}
                 >
-                    {#if group.emoji}
-                        <span class="tab-item__icon" aria-hidden="true">{group.emoji}</span>
-                    {:else}
-                        <svg class="tab-item__icon" aria-hidden="true"><use href={`#${group.icon}`} /></svg>
-                    {/if}
+                    <svg class="tab-item__icon" aria-hidden="true"><use href={`#${group.icon}`} /></svg>
                     <span class="tab-item__text">{getSettingGroupLabel(group.name)}</span>
                 </li>
             {/each}
@@ -3731,13 +3725,8 @@
         }
 
         .tab-item__icon {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
             width: 16px;
             height: 16px;
-            font-size: 16px;
-            line-height: 1;
             flex-shrink: 0;
             margin-right: 8px;
             color: inherit;

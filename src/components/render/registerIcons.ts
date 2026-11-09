@@ -98,8 +98,9 @@ export function registerCustomIcons(plugin: Plugin) {
         </symbol>
         <symbol id="iconTNPomodoro" viewBox="0 0 24 24">
             <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="14" r="8"/>
-                <path d="M12 10v4l3 2M9 2h6m-3 0v4m6 0 2-2"/>
+                <path d="M8 7C5 6 2 8 2 12c0 5 4 10 10 10s10-5 10-10c0-4-3-6-6-5"/>
+                <path d="M12 6V4c0-1 1-2 2-2"/>
+                <path d="m12 6-5-2 2 4-3 2 5-1 1 3 1-3 5 1-3-2 2-4Z"/>
             </g>
         </symbol>
         <symbol id="iconTNRandomRest" viewBox="0 0 24 24">
