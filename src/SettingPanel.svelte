@@ -2695,7 +2695,7 @@
         });
     }
 
-    // 根据 icsSyncEnabled 和 icsSyncMethod 控制相关项的显示和隐藏
+    // 根据同步和通知开关、配置模式控制相关项的显示和隐藏
     $: filteredGroups = groups.map(group => {
         const filterItem = (item) => {
             const updated = { ...item } as any;
@@ -2752,6 +2752,20 @@
             }
             if (item.key.startsWith('reminderEmailSmtp')) {
                 updated.hidden = settings.reminderEmailTransport !== 'smtp';
+            }
+
+            // 通知关闭时隐藏详细配置和测试按钮，保留启用开关。
+            if (
+                (item.key.startsWith('reminderWebhook') && item.key !== 'reminderWebhookEnabled') ||
+                item.key === 'testWebhook'
+            ) {
+                updated.hidden = !settings.reminderWebhookEnabled || !!updated.hidden;
+            }
+            if (
+                (item.key.startsWith('reminderEmail') && item.key !== 'reminderEmailEnabled') ||
+                item.key === 'testEmail'
+            ) {
+                updated.hidden = !settings.reminderEmailEnabled || !!updated.hidden;
             }
 
             return updated;
