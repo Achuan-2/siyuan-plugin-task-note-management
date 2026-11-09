@@ -1093,11 +1093,13 @@ export class CalendarView {
             toggle.className = 'b3-button b3-button--text fn__flex-1';
             toggle.style.padding = '0';
             toggle.style.justifyContent = 'flex-start';
-            toggle.style.gap = '8px';
+            toggle.style.position = 'relative';
+            toggle.style.overflow = 'visible';
             toggle.style.color = 'inherit';
             toggle.style.textAlign = 'left';
             toggle.style.whiteSpace = 'normal';
-            toggle.innerHTML = '<svg class="b3-button__icon" style="width: 12px; height: 12px; margin: 0; flex-shrink: 0;" aria-hidden="true"><use xlink:href="#iconRight"></use></svg>';
+            // 箭头占用行内左侧留白，让父级文字与普通设置项对齐。
+            toggle.innerHTML = '<svg class="b3-button__icon" style="position: absolute; left: -16px; top: 50%; width: 12px; height: 12px; margin: 0;" aria-hidden="true"><use xlink:href="#iconRight"></use></svg>';
             const labelText = document.createElement('span');
             labelText.textContent = label;
             toggle.appendChild(labelText);
@@ -1107,7 +1109,7 @@ export class CalendarView {
                 subItems.style.display = visible ? 'block' : 'none';
                 toggle.setAttribute('aria-expanded', String(visible));
                 toggle.disabled = !enabled;
-                (toggle.querySelector('svg') as SVGElement).style.transform = visible ? 'rotate(90deg)' : '';
+                (toggle.querySelector('svg') as SVGElement).style.transform = visible ? 'translateY(-50%) rotate(90deg)' : 'translateY(-50%)';
             };
             toggle.addEventListener('click', () => {
                 expanded = !expanded;
