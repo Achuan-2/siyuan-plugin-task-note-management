@@ -8,6 +8,13 @@ export interface KernelStorage {
     readDir(dir: string, strict?: boolean): Promise<Array<{ name: string; isDir: boolean; isSymlink: boolean; updated: number }>>;
 }
 
+/** Go 的文件系统错误随平台和系统语言变化；首次使用时父目录也可能尚未创建。 */
+function isMissingStoragePath(error: any): boolean {
+    if (error?.code === 'ENOENT') return true;
+    const message = String(error?.message || error);
+    return /not exist|no such file|cannot find the (?:file|path)|系统找不到指定的(?:文件|路径)/i.test(message);
+}
+
 export function createKernelStorage(): KernelStorage {
     const storage = (globalThis as any).siyuan.storage as IStorage;
 
@@ -21,8 +28,7 @@ export function createKernelStorage(): KernelStorage {
                 }
                 return JSON.parse(text);
             } catch (error: any) {
-                const message = String(error?.message || error);
-                if (/not exist|no such file|cannot find the file/i.test(message)) {
+                if (isMissingStoragePath(error)) {
                     return null;
                 }
                 // 提醒和严格读取的后台状态出错时终止操作，避免覆盖或丢失去重记录。
@@ -55,7 +61,8 @@ export function createKernelStorage(): KernelStorage {
                     updated: e.updated,
                 }));
             } catch (error: any) {
-                if (strict && !/not exist|no such file|cannot find the file/i.test(String(error?.message || error))) throw error;
+                if (isMissingStoragePath(error)) return [];
+                if (strict) throw error;
                 console.warn(`[kernel] readDir failed for ${dir}:`, error);
                 return [];
             }

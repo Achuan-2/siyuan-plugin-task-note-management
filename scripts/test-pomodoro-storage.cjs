@@ -36,6 +36,7 @@ const { PomodoroRecordManager } = load('src/components/dataManager/pomodoroRecor
 const { summarizePomodoroDay } = load('src/utils/pomodoroStore.ts');
 const { createPomodoroCache } = load('src/utils/pomodoroCache.ts');
 const { PomodoroWriteCoordinator } = load('src/utils/pomodoroWriteCoordinator.ts');
+const { createKernelStorage } = load('src/kernel/storageAdapter.ts');
 const { buildLinkedHabitPomodoroData } = load('src/utils/linkedHabitPomodoro.ts');
 const clone = value => value == null ? value : JSON.parse(JSON.stringify(value));
 const session = (date, id, eventId = 'task', extra = {}) => ({
@@ -664,6 +665,106 @@ function directoryApi(fetchSyncPost) {
     }).outputText;
     return new Function('fetchSyncPost', `${compiled}; return readDir;`)(fetchSyncPost);
 }
+
+// 模拟原生内核存储：缺少父目录和仅缺少文件时，Windows 的报错不同。
+function freshKernelStorage(t) {
+    const previous = globalThis.siyuan, files = new Map();
+    let directoryExists = false;
+    const missing = () => new Error(directoryExists
+        ? 'open pomodoroRecords/2026-11-04.json: The system cannot find the file specified.'
+        : 'open pomodoroRecords/2026-11-04.json: The system cannot find the path specified.');
+    globalThis.siyuan = { storage: {
+        async get(file) {
+            if (!files.has(file)) throw missing();
+            return { text: async () => files.get(file) };
+        },
+        async list() {
+            if (!directoryExists) throw missing();
+            return [...files.keys()].map(file => ({ name: file.split('/').pop(), isDir: false, updated: 1700000000 }));
+        },
+        async put(file, text) { directoryExists = true; files.set(file, text); },
+        async remove(file) { files.delete(file); },
+    } };
+    const storage = createKernelStorage();
+    t.after(() => { globalThis.siyuan = previous; });
+    const writer = new PomodoroWriteCoordinator({
+        read: date => storage.loadData(`pomodoroRecords/${date}.json`, true),
+        write: (date, value) => storage.saveData(`pomodoroRecords/${date}.json`, value),
+        remove: date => storage.removeData(`pomodoroRecords/${date}.json`, true),
+    });
+    const manager = new PomodoroRecordManager({ createPomodoroStoreAdapter: () => ({
+        list: () => storage.readDir('pomodoroRecords', true),
+        read: date => storage.loadData(`pomodoroRecords/${date}.json`, true),
+        readLegacy: () => storage.loadData('pomodoro_record.json', true),
+        commit: input => writer.commit(input),
+        readCache: async () => null, writeCache: async () => {},
+    }) });
+    t.after(async () => { await manager.closeStorage(); await writer.close(); });
+    return { manager, files, storage };
+}
+
+test('原生内核缺少番茄目录时可以补录首条记录，并在新日期继续补录', async t => {
+    const { manager, files } = freshKernelStorage(t);
+    await manager.updateSession(session('2026-11-04', 'first-past'));
+    await manager.updateSession(session('2026-11-05', 'second-past'));
+    assert.equal(JSON.parse(files.get('pomodoroRecords/2026-11-04.json')).sessions[0].id, 'first-past');
+    assert.equal(JSON.parse(files.get('pomodoroRecords/2026-11-05.json')).sessions[0].id, 'second-past');
+    assert.equal(manager.getEventTotalFocusTime('task'), 50);
+});
+
+for (const isCountUp of [false, true]) test(`原生内核无历史时可开始${isCountUp ? '正计时' : '番茄钟'}并结束或中断保存`, async t => {
+    const { manager, files } = freshKernelStorage(t);
+    const id = await manager.startWorkSession('task', '首次专注', 25, isCountUp, '2026-11-04T12:00:00');
+    let saved = JSON.parse(files.get('pomodoroRecords/2026-11-04.json'));
+    assert.equal(saved.sessions[0].inProgress, true);
+    assert.equal(manager.getEventTotalFocusTime('task'), 0);
+    await manager.finishWorkSession(id, 20, 'task', '首次专注', 25, !isCountUp, isCountUp);
+    saved = JSON.parse(files.get('pomodoroRecords/2026-11-04.json'));
+    assert.equal(saved.sessions.length, 1);
+    assert.equal(saved.sessions[0].id, id);
+    assert.equal(saved.sessions[0].inProgress, false);
+    assert.equal(saved.totalWorkTime, 20);
+    assert.equal(manager.getEventTotalFocusTime('task'), 20);
+});
+
+test('原生内核无历史时可直接保存工作记录和休息记录', async t => {
+    const { manager, files } = freshKernelStorage(t);
+    await manager.recordWorkSession(25, 'task', '首次专注', 25, true, false, { startTime: '2026-11-04T12:00:00' });
+    await manager.recordBreakSession(5, 'task', '休息', 5, false, true, { startTime: '2026-11-04T12:25:00' });
+    const saved = JSON.parse(files.get('pomodoroRecords/2026-11-04.json'));
+    assert.equal(saved.sessions.length, 2);
+    assert.equal(saved.totalWorkTime, 25);
+    assert.equal(saved.totalBreakTime, 5);
+});
+
+test('内核严格读取兼容各平台的文件和目录缺失，其他错误仍向上传播', async t => {
+    const previous = globalThis.siyuan;
+    t.after(() => { globalThis.siyuan = previous; });
+    let failure;
+    globalThis.siyuan = { storage: {
+        get: async () => { throw failure; }, list: async () => { throw failure; },
+    } };
+    const storage = createKernelStorage();
+    for (const error of [
+        new Error('The system cannot find the file specified.'),
+        new Error('The system cannot find the path specified.'),
+        new Error('系统找不到指定的文件。'), new Error('系统找不到指定的路径。'),
+        new Error('no such file or directory'), new Error('file does not exist'),
+        Object.assign(new Error('missing'), { code: 'ENOENT' }),
+    ]) {
+        failure = error;
+        assert.equal(await storage.loadData('pomodoroRecords/2026-11-04.json', true), null);
+        assert.deepEqual(await storage.readDir('pomodoroRecords', true), []);
+    }
+    for (const error of [new Error('permission denied'), new Error('Access is denied.'),
+        new Error('拒绝访问。'), new Error('disk error'), new Error('Internal error')]) {
+        failure = error;
+        await assert.rejects(storage.loadData('pomodoroRecords/2026-11-04.json', true), value => value === error);
+        await assert.rejects(storage.readDir('pomodoroRecords', true), value => value === error);
+    }
+    globalThis.siyuan.storage.get = async () => ({ text: async () => '{broken json' });
+    await assert.rejects(storage.loadData('pomodoroRecords/2026-11-04.json', true), SyntaxError);
+});
 
 test('前端首次启动缺少番茄目录时初始化为空，且不创建或覆盖记录', async () => {
     const calls = [];
