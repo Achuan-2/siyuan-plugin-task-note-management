@@ -1312,51 +1312,31 @@ export class CalendarView {
             await this.refreshEvents();
         }));
 
+        const pomodoroDisplaySubItems = document.createElement('div');
+        pomodoroDisplaySubItems.style.paddingLeft = '20px';
+        pomodoroDisplaySubItems.style.display = this.showPomodoro ? 'block' : 'none';
         displaySettingsDropdown.appendChild(createSwitchItem(i18n("showPomodoroRecords") || "显示番茄专注", this.showPomodoro, async (checked) => {
             this.showPomodoro = checked;
+            pomodoroDisplaySubItems.style.display = checked ? 'block' : 'none';
             await this.calendarConfigManager.setShowPomodoro(checked);
             this.updatePomodoroButtonState();
-            // 显示/隐藏子选项
-            pomodoroBreakTimeItem.style.display = checked ? 'flex' : 'none';
-            pomodoroUseTaskColorItem.style.display = checked ? 'flex' : 'none';
+            await this.refreshEvents();
+        }));
+        displaySettingsDropdown.appendChild(pomodoroDisplaySubItems);
+
+        // 番茄钟休息时间显示设置（子选项）
+        pomodoroDisplaySubItems.appendChild(createSwitchItem(i18n("showPomodoroBreakTime") || "显示休息时间", this.showPomodoroBreakTime, async (checked) => {
+            this.showPomodoroBreakTime = checked;
+            await this.calendarConfigManager.setShowPomodoroBreakTime(checked);
             await this.refreshEvents();
         }));
 
-        // 番茄钟休息时间显示设置（子选项）
-        const pomodoroBreakTimeItem = document.createElement('div');
-        pomodoroBreakTimeItem.className = 'fn__flex fn__flex-center';
-        pomodoroBreakTimeItem.style.padding = '4px 12px 4px 32px';
-        pomodoroBreakTimeItem.style.gap = '8px';
-        pomodoroBreakTimeItem.style.display = this.showPomodoro ? 'flex' : 'none';
-        pomodoroBreakTimeItem.innerHTML = `
-            <input class="b3-switch" type="checkbox" ${this.showPomodoroBreakTime ? 'checked' : ''}>
-            <span style="font-size: 0.9em; color: var(--b3-theme-on-surface-light);">${i18n("showPomodoroBreakTime") || "显示休息时间"}</span>
-        `;
-        const pomodoroBreakTimeCheckbox = pomodoroBreakTimeItem.querySelector('input') as HTMLInputElement;
-        pomodoroBreakTimeCheckbox.addEventListener('change', async () => {
-            this.showPomodoroBreakTime = pomodoroBreakTimeCheckbox.checked;
-            await this.calendarConfigManager.setShowPomodoroBreakTime(pomodoroBreakTimeCheckbox.checked);
-            await this.refreshEvents();
-        });
-        displaySettingsDropdown.appendChild(pomodoroBreakTimeItem);
-
         // 番茄钟使用任务上色方式设置（子选项）
-        const pomodoroUseTaskColorItem = document.createElement('div');
-        pomodoroUseTaskColorItem.className = 'fn__flex fn__flex-center';
-        pomodoroUseTaskColorItem.style.padding = '4px 12px 4px 32px';
-        pomodoroUseTaskColorItem.style.gap = '8px';
-        pomodoroUseTaskColorItem.style.display = this.showPomodoro ? 'flex' : 'none';
-        pomodoroUseTaskColorItem.innerHTML = `
-            <input class="b3-switch" type="checkbox" ${this.pomodoroUseTaskColor ? 'checked' : ''}>
-            <span style="font-size: 0.9em; color: var(--b3-theme-on-surface-light);">${i18n("pomodoroUseTaskColor") || "使用任务上色方式"}</span>
-        `;
-        const pomodoroUseTaskColorCheckbox = pomodoroUseTaskColorItem.querySelector('input') as HTMLInputElement;
-        pomodoroUseTaskColorCheckbox.addEventListener('change', async () => {
-            this.pomodoroUseTaskColor = pomodoroUseTaskColorCheckbox.checked;
-            await this.calendarConfigManager.setPomodoroUseTaskColor(pomodoroUseTaskColorCheckbox.checked);
+        pomodoroDisplaySubItems.appendChild(createSwitchItem(i18n("pomodoroUseTaskColor") || "使用任务上色方式", this.pomodoroUseTaskColor, async (checked) => {
+            this.pomodoroUseTaskColor = checked;
+            await this.calendarConfigManager.setPomodoroUseTaskColor(checked);
             await this.refreshEvents();
-        });
-        displaySettingsDropdown.appendChild(pomodoroUseTaskColorItem);
+        }));
 
         // 习惯显示开关
         const habitDisplaySubItems = document.createElement('div');
