@@ -1214,85 +1214,43 @@ export class CalendarView {
         displaySettingsDropdown.appendChild(eventMaxStackItem);
 
         // 完成任务时间设置 - 总开关
+        const completedTaskTimeSubItems = document.createElement('div');
+        completedTaskTimeSubItems.style.paddingLeft = '20px';
+        completedTaskTimeSubItems.style.display = this.showCompletedTaskTime ? 'block' : 'none';
         displaySettingsDropdown.appendChild(createSwitchItem(i18n("showCompletedTaskTime") || "显示任务完成时间", this.showCompletedTaskTime, async (checked) => {
             this.showCompletedTaskTime = checked;
-            await this.calendarConfigManager.setShowCompletedTaskTime(checked);
-            // 显示/隐藏子选项
             completedTaskTimeSubItems.style.display = checked ? 'block' : 'none';
+            await this.calendarConfigManager.setShowCompletedTaskTime(checked);
             await this.refreshEvents();
         }));
 
-        // 子选项容器
-        const completedTaskTimeSubItems = document.createElement('div');
-        completedTaskTimeSubItems.style.display = this.showCompletedTaskTime ? 'block' : 'none';
-
         // 子选项：显示非全天任务完成时间
-        const timedItem = document.createElement('div');
-        timedItem.className = 'fn__flex fn__flex-center';
-        timedItem.style.padding = '4px 12px 4px 32px';
-        timedItem.style.gap = '8px';
-        timedItem.innerHTML = `
-            <input class="b3-switch" type="checkbox" ${this.showCompletedTaskTimeTimed ? 'checked' : ''}>
-            <span style="font-size: 0.9em; color: var(--b3-theme-on-surface-light);">${i18n("showCompletedTaskTimeTimed") || "显示非全天任务"}</span>
-        `;
-        const timedCheckbox = timedItem.querySelector('input') as HTMLInputElement;
-        timedCheckbox.addEventListener('change', async () => {
-            this.showCompletedTaskTimeTimed = timedCheckbox.checked;
-            await this.calendarConfigManager.setShowCompletedTaskTimeTimed(timedCheckbox.checked);
+        completedTaskTimeSubItems.appendChild(createSwitchItem(i18n("showCompletedTaskTimeTimed") || "显示非全天任务", this.showCompletedTaskTimeTimed, async (checked) => {
+            this.showCompletedTaskTimeTimed = checked;
+            await this.calendarConfigManager.setShowCompletedTaskTimeTimed(checked);
             await this.refreshEvents();
-        });
-        completedTaskTimeSubItems.appendChild(timedItem);
+        }));
 
         // 子选项：显示全天任务完成时间
-        const allDayItem = document.createElement('div');
-        allDayItem.className = 'fn__flex fn__flex-center';
-        allDayItem.style.padding = '4px 12px 4px 32px';
-        allDayItem.style.gap = '8px';
-        allDayItem.innerHTML = `
-            <input class="b3-switch" type="checkbox" ${this.showCompletedTaskTimeAllDay ? 'checked' : ''}>
-            <span style="font-size: 0.9em; color: var(--b3-theme-on-surface-light);">${i18n("showCompletedTaskTimeAllDay") || "显示全天任务"}</span>
-        `;
-        const allDayCheckbox = allDayItem.querySelector('input') as HTMLInputElement;
-        allDayCheckbox.addEventListener('change', async () => {
-            this.showCompletedTaskTimeAllDay = allDayCheckbox.checked;
-            await this.calendarConfigManager.setShowCompletedTaskTimeAllDay(allDayCheckbox.checked);
+        completedTaskTimeSubItems.appendChild(createSwitchItem(i18n("showCompletedTaskTimeAllDay") || "显示全天任务", this.showCompletedTaskTimeAllDay, async (checked) => {
+            this.showCompletedTaskTimeAllDay = checked;
+            await this.calendarConfigManager.setShowCompletedTaskTimeAllDay(checked);
             await this.refreshEvents();
-        });
-        completedTaskTimeSubItems.appendChild(allDayItem);
+        }));
 
         // 子选项：显示无日期任务完成时间
-        const noDateItem = document.createElement('div');
-        noDateItem.className = 'fn__flex fn__flex-center';
-        noDateItem.style.padding = '4px 12px 4px 32px';
-        noDateItem.style.gap = '8px';
-        noDateItem.innerHTML = `
-            <input class="b3-switch" type="checkbox" ${this.showCompletedTaskTimeNoDate ? 'checked' : ''}>
-            <span style="font-size: 0.9em; color: var(--b3-theme-on-surface-light);">${i18n("showCompletedTaskTimeNoDate") || "显示无日期任务"}</span>
-        `;
-        const noDateCheckbox = noDateItem.querySelector('input') as HTMLInputElement;
-        noDateCheckbox.addEventListener('change', async () => {
-            this.showCompletedTaskTimeNoDate = noDateCheckbox.checked;
-            await this.calendarConfigManager.setShowCompletedTaskTimeNoDate(noDateCheckbox.checked);
+        completedTaskTimeSubItems.appendChild(createSwitchItem(i18n("showCompletedTaskTimeNoDate") || "显示无日期任务", this.showCompletedTaskTimeNoDate, async (checked) => {
+            this.showCompletedTaskTimeNoDate = checked;
+            await this.calendarConfigManager.setShowCompletedTaskTimeNoDate(checked);
             await this.refreshEvents();
-        });
-        completedTaskTimeSubItems.appendChild(noDateItem);
+        }));
 
         // 子选项：使用任务上色方式
-        const completedTaskColorItem = document.createElement('div');
-        completedTaskColorItem.className = 'fn__flex fn__flex-center';
-        completedTaskColorItem.style.padding = '4px 12px 4px 32px';
-        completedTaskColorItem.style.gap = '8px';
-        completedTaskColorItem.innerHTML = `
-            <input class="b3-switch" type="checkbox" ${this.completedTaskTimeUseTaskColor ? 'checked' : ''}>
-            <span style="font-size: 0.9em; color: var(--b3-theme-on-surface-light);">${i18n("completedTaskTimeUseTaskColor") || "使用任务上色方式"}</span>
-        `;
-        const completedTaskColorCheckbox = completedTaskColorItem.querySelector('input') as HTMLInputElement;
-        completedTaskColorCheckbox.addEventListener('change', async () => {
-            this.completedTaskTimeUseTaskColor = completedTaskColorCheckbox.checked;
-            await this.calendarConfigManager.setCompletedTaskTimeUseTaskColor(completedTaskColorCheckbox.checked);
+        completedTaskTimeSubItems.appendChild(createSwitchItem(i18n("completedTaskTimeUseTaskColor") || "使用任务上色方式", this.completedTaskTimeUseTaskColor, async (checked) => {
+            this.completedTaskTimeUseTaskColor = checked;
+            await this.calendarConfigManager.setCompletedTaskTimeUseTaskColor(checked);
             await this.refreshEvents();
-        });
-        completedTaskTimeSubItems.appendChild(completedTaskColorItem);
+        }));
 
         displaySettingsDropdown.appendChild(completedTaskTimeSubItems);
 
