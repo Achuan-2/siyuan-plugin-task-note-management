@@ -1937,6 +1937,13 @@ export class HabitPanel {
             });
         }
 
+        const canUnarchive = !!habit.endDate && habit.endDate <= getLogicalDateString();
+        menu.addItem({
+            label: canUnarchive ? i18n("unarchiveHabitMenuItem") : i18n("archiveHabitMenuItem"),
+            icon: canUnarchive ? "iconUndo" : "iconInbox",
+            click: () => this.setHabitArchived(habit.id, !canUnarchive)
+        });
+
         // 删除习惯
         menu.addItem({
             label: i18n("deleteHabitMenuItem"),
@@ -1956,6 +1963,33 @@ export class HabitPanel {
             x: event.clientX,
             y: event.clientY
         });
+    }
+
+    private async setHabitArchived(habitId: string, archived: boolean) {
+        try {
+            const habitData = await this.plugin.loadHabitData();
+            const previousHabit: Habit | undefined = habitData[habitId];
+            if (!previousHabit) return;
+
+            const habit = { ...previousHabit };
+            if (archived) {
+                const now = new Date();
+                const today = getLogicalDateString(now);
+                const checkIn = habit.checkIns?.[today];
+                // 有任意打卡即可保留今天，不要求次数或番茄目标达标；兼容旧版记录。
+                const hasCheckIn = (checkIn?.count || 0) > 0
+                    || (checkIn?.entries?.length || 0) > 0
+                    || (checkIn?.status?.length || 0) > 0;
+                habit.endDate = hasCheckIn ? today : getRelativeDateString(-1, now);
+            } else {
+                delete habit.endDate;
+            }
+            habit.updatedAt = getLocalDateTimeString(new Date());
+            await this.saveHabit(habit, previousHabit);
+        } catch (error) {
+            console.error('Failed to update habit archive state:', error);
+            showMessage(i18n("saveFailed"), 3000, 'error');
+        }
     }
 
     private createPomodoroStartSubmenu(habit: Habit): any[] {
