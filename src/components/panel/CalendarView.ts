@@ -1359,11 +1359,16 @@ export class CalendarView {
         displaySettingsDropdown.appendChild(pomodoroUseTaskColorItem);
 
         // 习惯显示开关
+        const habitDisplaySubItems = document.createElement('div');
+        habitDisplaySubItems.style.paddingLeft = '20px';
+        habitDisplaySubItems.style.display = this.showHabits ? 'block' : 'none';
         displaySettingsDropdown.appendChild(createSwitchItem(i18n("showHabits") || "显示习惯", this.showHabits, async (checked) => {
             this.showHabits = checked;
+            habitDisplaySubItems.style.display = checked ? 'block' : 'none';
             await this.calendarConfigManager.setShowHabits(checked);
             await this.refreshEvents();
         }));
+        displaySettingsDropdown.appendChild(habitDisplaySubItems);
 
         // 习惯打卡时间显示开关
         const showHabitCheckInTimeItem = createSwitchItem(i18n("showHabitCheckInTime") || "显示习惯实际打卡时间", this.showHabitCheckInTime, async (checked) => {
@@ -1371,7 +1376,7 @@ export class CalendarView {
             await this.calendarConfigManager.setShowHabitCheckInTime(checked);
             await this.refreshEvents();
         });
-        displaySettingsDropdown.appendChild(showHabitCheckInTimeItem);
+        habitDisplaySubItems.appendChild(showHabitCheckInTimeItem);
 
         // 始终显示习惯提醒时间开关
         const alwaysShowHabitReminderTimeItem = createSwitchItem(i18n("alwaysShowHabitReminderTime") || "日历视图始终显示习惯提醒时间", this.alwaysShowHabitReminderTime, async (checked) => {
@@ -1379,7 +1384,7 @@ export class CalendarView {
             await this.calendarConfigManager.setAlwaysShowHabitReminderTime(checked);
             await this.refreshEvents();
         });
-        displaySettingsDropdown.appendChild(alwaysShowHabitReminderTimeItem);
+        habitDisplaySubItems.appendChild(alwaysShowHabitReminderTimeItem);
 
         // 任务样式设置（无复选框 / 有复选框）
         const taskStyleLabel = document.createElement('div');
@@ -1523,11 +1528,11 @@ export class CalendarView {
         // 习惯日历只展示与习惯相关的显示设置，避免混入任务专用选项
         if (this.openedFromHabitPanel) {
             statusLabel.innerText = i18n("habitCheckIn") || "习惯打卡情况";
+            habitDisplaySubItems.style.paddingLeft = '0';
             displaySettingsDropdown.replaceChildren(
                 statusLabel,
                 statusGroup,
-                showHabitCheckInTimeItem,
-                alwaysShowHabitReminderTimeItem
+                habitDisplaySubItems
             );
         }
 
