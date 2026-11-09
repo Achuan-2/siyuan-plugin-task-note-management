@@ -30,6 +30,7 @@ import { createCompletedRemindersForDeletion, showDeleteRepeatTaskDialog } from 
 import { isEventPast } from "../../utils/icsImport";
 import { PasteTaskDialog } from "../dialog/PasteTaskDialog";
 import LoadingDialog from '../dialog/LoadingDialog.svelte';
+import { VipManager } from '../vip/vip';
 import { createPomodoroStartSubmenu as createSharedPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
 import { buildProjectCategoryOrderMap, buildProjectStatusOrderMap, compareProjectsByPanelSort, normalizeProjectPanelSortCriteria } from "./ProjectPanel";
 import type { KanbanStatus } from "../dataManager/projectManager";
@@ -1433,7 +1434,20 @@ export class ReminderPanel {
         categoryDialog.show();
     }
 
-    private showFilterManagement() {
+    private async showFilterManagement() {
+        try {
+            const isVip = await VipManager.isVip(this.plugin);
+            if (this.disposed) return;
+            if (!isVip) {
+                this.plugin.openVipDialog();
+                return;
+            }
+        } catch (error) {
+            console.error("Failed to check filter management membership:", error);
+            if (!this.disposed) showMessage(i18n("loadFailed"), 3000, "error");
+            return;
+        }
+
         const dialog = new Dialog({
             title: i18n("filterManagement") || "过滤器管理",
             // use full-height content wrapper and prevent the wrapper itself from scrolling
