@@ -17,7 +17,7 @@ function deferred() {
 }
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
-function fixture({ browserWindow = false, waitForLoad = false, abortPlay = false } = {}) {
+function fixture({ browserWindow = false, waitForLoad = false, abortPlay = false, runPopupScript = true } = {}) {
     const timeouts = new Map();
     let nextTimeout = 0;
     const setTimeout = (callback, delay) => {
@@ -89,7 +89,7 @@ function fixture({ browserWindow = false, waitForLoad = false, abortPlay = false
         loadURL(url) {
             this.html = decodeURIComponent(url.split(',').slice(1).join(','));
             const script = this.html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
-            if (script) return this.webContents.executeJavaScript(script);
+            if (script && runPopupScript) return this.webContents.executeJavaScript(script);
             return Promise.resolve();
         }
         isDestroyed() { return !!this.destroyed; }
@@ -105,7 +105,7 @@ function fixture({ browserWindow = false, waitForLoad = false, abortPlay = false
         destroy() { this.options.destroyCallback(); }
     }
     const dependencies = {
-        siyuan: { Dialog, showMessage() {} },
+        siyuan: { Dialog, showMessage() {}, getFrontend: () => 'desktop' },
         '../../pluginInstance': { i18n: key => key },
         '../../utils/audioUtils': { resolveAudioPath: async src => src }
     };
@@ -156,8 +156,91 @@ function fixture({ browserWindow = false, waitForLoad = false, abortPlay = false
     });
     // 弹窗销毁执行真实 stopAllAudio，覆盖正在播放和待播放的两类音源。
     timer.openSiyuanDialog('结束', '结束', '🍅', 0, true);
-    return { timer, audios, popups, startedSources, notifications, runTimeouts };
+    return { timer, audios, popups, startedSources, notifications, runTimeouts, Audio };
 }
+
+function microbreakFixture(browserWindow) {
+    // 弹窗内的 DOM 倒计时由窗口自行执行；这里测试主窗口的定时器与关闭事件。
+    const state = fixture({ browserWindow, runPopupScript: false });
+    const { timer, Audio } = state;
+    Object.assign(timer, {
+        settings: { randomRestPopupWindow: true, randomRestBreakDuration: 5 },
+        workAudio: Object.assign(new Audio('data:audio/wav;base64,WORK'), { loop: true }),
+        workVolume: 0.5,
+        randomRestEndSound: new Audio('data:audio/wav;base64,REST'),
+        randomRestEndVolume: 0.6,
+        randomRestEnabled: true,
+        randomRestSystemNotificationEnabled: false,
+        randomRestCount: 0,
+        randomRestNextTriggerTime: Infinity,
+        isWorkPhase: true,
+        isRunning: true,
+        isPaused: false,
+        updateDisplay() {}
+    });
+    return state;
+}
+
+for (const browserWindow of [false, true]) {
+    const mode = browserWindow ? '独立计时窗口' : '主窗口 AudioContext';
+    for (const ending of ['定时结束', '轮询兜底', '手动关闭']) {
+        test(`随机微休息 ${mode}：${ending}保留工作背景音和结束提示音`, async () => {
+            const { timer, audios, popups, startedSources, runTimeouts } = microbreakFixture(browserWindow);
+            assert.equal(await timer.safePlayAudio(timer.workAudio), true);
+            const background = browserWindow ? audios[0] : startedSources[0];
+
+            await timer.playRandomRestSound();
+            assert.equal(popups.length, 1);
+            assert.equal(timer.randomRestWindow, popups[0]);
+            if (ending === '定时结束') {
+                runTimeouts(5000);
+            } else if (ending === '轮询兜底') {
+                timer.randomRestWindowCloseTime = 1;
+                timer.checkRandomRestTrigger();
+            } else {
+                popups[0].emit('close');
+                popups[0].destroy();
+                // 提前关闭弹窗仍保留本次微休息的结束计时。
+                runTimeouts(5000);
+            }
+            await flush();
+
+            assert.equal(timer.randomRestWindow, null);
+            assert.equal(timer.randomRestCount, 1);
+            assert.equal(timer.audioPlaybackGeneration, 0);
+            assert.equal(background.loop, true);
+            if (browserWindow) {
+                assert.equal(background.paused, false);
+                assert.equal(background.plays, 1);
+                assert.equal(audios.length, 2);
+                assert.equal(audios[1].paused, false);
+                assert.equal(audios[1].loop, false);
+            } else {
+                assert.equal(background.stopped, undefined);
+                assert.equal(startedSources.length, 2);
+                assert.equal(startedSources[1].stopped, undefined);
+                assert.equal(startedSources[1].loop, false);
+            }
+            // 计时器显式停止时仍能正常停止所有音频。
+            timer.stopAllAudio();
+            if (browserWindow) assert.ok(audios.every(audio => audio.paused));
+            else assert.ok(startedSources.every(source => source.stopped));
+        });
+    }
+}
+
+test('随机微休息：旧弹窗延迟关闭不会清空新弹窗引用', () => {
+    const { timer, popups } = microbreakFixture(false);
+    timer.openRandomRestWindow();
+    const previous = popups[0];
+    timer.openRandomRestWindow();
+    previous.emit('close');
+    previous.emit('closed');
+    assert.equal(timer.randomRestWindow, popups[1]);
+    assert.equal(popups[1].isDestroyed(), false);
+    timer.closeRandomRestWindow();
+    assert.equal(popups[1].isDestroyed(), true);
+});
 
 for (const phase of ['workEndAudio', 'breakEndAudio']) {
     test(`${phase}：关闭弹窗取消尚未完成的音频初始化`, async () => {

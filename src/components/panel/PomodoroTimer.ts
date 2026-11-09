@@ -2113,8 +2113,9 @@ export class PomodoroTimer {
                 backgroundColor: this.getCssVariable('--b3-theme-background')
             });
 
+            const restWindow = this.randomRestWindow;
             // 移除默认菜单
-            this.randomRestWindow.setMenu(null);
+            restWindow.setMenu(null);
 
             const bgColor = this.getCssVariable('--b3-theme-background');
             const textColor = this.getCssVariable('--b3-theme-on-background');
@@ -2242,12 +2243,12 @@ export class PomodoroTimer {
                     clearTimeout(showTimer);
                     showTimer = null;
                 }
-                if (this.randomRestWindow && !this.randomRestWindow.isDestroyed()) {
+                if (this.randomRestWindow === restWindow && !restWindow.isDestroyed()) {
                     try {
-                        if (!this.randomRestWindow.isVisible()) {
-                            this.randomRestWindow.show();
-                            this.randomRestWindow.focus();
-                            this.randomRestWindow.setAlwaysOnTop(true, "screen-saver");
+                        if (!restWindow.isVisible()) {
+                            restWindow.show();
+                            restWindow.focus();
+                            restWindow.setAlwaysOnTop(true, "screen-saver");
                         }
                     } catch (e) {
                         console.warn("[PomodoroTimer] Failed to explicitly show microbreak popup:", e);
@@ -2256,9 +2257,9 @@ export class PomodoroTimer {
             };
 
             // 监听 ready-to-show 事件后再显示窗口，防止闪烁
-            this.randomRestWindow.once('ready-to-show', () => {
+            restWindow.once('ready-to-show', () => {
                 forceShow();
-                if (this.randomRestWindow && !this.randomRestWindow.isDestroyed()) {
+                if (this.randomRestWindow === restWindow && !restWindow.isDestroyed()) {
                     // 延迟将番茄钟BrowserWindow也置顶，确保在弹窗之上
                     setTimeout(() => {
                         if (PomodoroTimer.browserWindowInstance && !PomodoroTimer.browserWindowInstance.isDestroyed()) {
@@ -2284,19 +2285,21 @@ export class PomodoroTimer {
                     clearTimeout(showTimer);
                     showTimer = null;
                 }
-                this.randomRestWindow = null;
-                this.stopAllAudio();
+                // 微休息弹窗不持有音频，关闭时应保留工作背景音和微休息结束提示音。
+                if (this.randomRestWindow === restWindow) {
+                    this.randomRestWindow = null;
+                }
             };
 
-            this.randomRestWindow.on('close', handleWindowClose);
-            this.randomRestWindow.on('closed', handleWindowClose);
+            restWindow.on('close', handleWindowClose);
+            restWindow.on('closed', handleWindowClose);
 
             // 防止窗口被意外导航
-            this.randomRestWindow.webContents.on('will-navigate', (e: any) => {
+            restWindow.webContents.on('will-navigate', (e: any) => {
                 e.preventDefault();
             });
 
-            this.randomRestWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(htmlContent));
+            restWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(htmlContent));
 
 
         } catch (e) {
