@@ -1081,6 +1081,48 @@ export class CalendarView {
             return item;
         };
 
+        const createCollapsibleSwitchItem = (label: string, value: boolean, onChange: (checked: boolean) => void) => {
+            const subItems = document.createElement('div');
+            subItems.style.paddingLeft = '20px';
+            let enabled = value;
+            let expanded = false;
+
+            const toggle = document.createElement('button');
+            toggle.type = 'button';
+            toggle.className = 'b3-button b3-button--text fn__flex-1';
+            toggle.style.padding = '0';
+            toggle.style.justifyContent = 'flex-start';
+            toggle.style.gap = '8px';
+            toggle.style.color = 'inherit';
+            toggle.style.textAlign = 'left';
+            toggle.innerHTML = '<svg class="b3-button__icon" style="width: 12px; height: 12px; margin: 0; flex-shrink: 0;" aria-hidden="true"><use xlink:href="#iconRight"></use></svg>';
+            const labelText = document.createElement('span');
+            labelText.textContent = label;
+            toggle.appendChild(labelText);
+
+            const updateExpansion = () => {
+                const visible = enabled && expanded;
+                subItems.style.display = visible ? 'block' : 'none';
+                toggle.setAttribute('aria-expanded', String(visible));
+                toggle.disabled = !enabled;
+                (toggle.querySelector('svg') as SVGElement).style.transform = visible ? 'rotate(90deg)' : '';
+            };
+            toggle.addEventListener('click', () => {
+                expanded = !expanded;
+                updateExpansion();
+            });
+
+            const item = createSwitchItem(label, value, (checked) => {
+                enabled = checked;
+                if (!enabled) expanded = false;
+                updateExpansion();
+                onChange(checked);
+            });
+            item.firstElementChild?.replaceWith(toggle);
+            updateExpansion();
+            return { item, subItems };
+        };
+
         // 任务显示开关
         displaySettingsDropdown.appendChild(createSwitchItem(i18n("showTasks") || "显示任务", this.showTasks, async (checked) => {
             this.showTasks = checked;
@@ -1214,15 +1256,13 @@ export class CalendarView {
         displaySettingsDropdown.appendChild(eventMaxStackItem);
 
         // 完成任务时间设置 - 总开关
-        const completedTaskTimeSubItems = document.createElement('div');
-        completedTaskTimeSubItems.style.paddingLeft = '20px';
-        completedTaskTimeSubItems.style.display = this.showCompletedTaskTime ? 'block' : 'none';
-        displaySettingsDropdown.appendChild(createSwitchItem(i18n("showCompletedTaskTime") || "显示任务完成时间", this.showCompletedTaskTime, async (checked) => {
+        const completedTaskTimeGroup = createCollapsibleSwitchItem(i18n("showCompletedTaskTime") || "显示任务完成时间", this.showCompletedTaskTime, async (checked) => {
             this.showCompletedTaskTime = checked;
-            completedTaskTimeSubItems.style.display = checked ? 'block' : 'none';
             await this.calendarConfigManager.setShowCompletedTaskTime(checked);
             await this.refreshEvents();
-        }));
+        });
+        const completedTaskTimeSubItems = completedTaskTimeGroup.subItems;
+        displaySettingsDropdown.appendChild(completedTaskTimeGroup.item);
 
         // 子选项：显示非全天任务完成时间
         completedTaskTimeSubItems.appendChild(createSwitchItem(i18n("showCompletedTaskTimeTimed") || "显示非全天任务", this.showCompletedTaskTimeTimed, async (checked) => {
@@ -1270,16 +1310,14 @@ export class CalendarView {
             await this.refreshEvents();
         }));
 
-        const pomodoroDisplaySubItems = document.createElement('div');
-        pomodoroDisplaySubItems.style.paddingLeft = '20px';
-        pomodoroDisplaySubItems.style.display = this.showPomodoro ? 'block' : 'none';
-        displaySettingsDropdown.appendChild(createSwitchItem(i18n("showPomodoroRecords") || "显示番茄专注", this.showPomodoro, async (checked) => {
+        const pomodoroDisplayGroup = createCollapsibleSwitchItem(i18n("showPomodoroRecords") || "显示番茄专注", this.showPomodoro, async (checked) => {
             this.showPomodoro = checked;
-            pomodoroDisplaySubItems.style.display = checked ? 'block' : 'none';
             await this.calendarConfigManager.setShowPomodoro(checked);
             this.updatePomodoroButtonState();
             await this.refreshEvents();
-        }));
+        });
+        const pomodoroDisplaySubItems = pomodoroDisplayGroup.subItems;
+        displaySettingsDropdown.appendChild(pomodoroDisplayGroup.item);
         displaySettingsDropdown.appendChild(pomodoroDisplaySubItems);
 
         // 番茄钟休息时间显示设置（子选项）
@@ -1297,15 +1335,13 @@ export class CalendarView {
         }));
 
         // 习惯显示开关
-        const habitDisplaySubItems = document.createElement('div');
-        habitDisplaySubItems.style.paddingLeft = '20px';
-        habitDisplaySubItems.style.display = this.showHabits ? 'block' : 'none';
-        displaySettingsDropdown.appendChild(createSwitchItem(i18n("showHabits") || "显示习惯", this.showHabits, async (checked) => {
+        const habitDisplayGroup = createCollapsibleSwitchItem(i18n("showHabits") || "显示习惯", this.showHabits, async (checked) => {
             this.showHabits = checked;
-            habitDisplaySubItems.style.display = checked ? 'block' : 'none';
             await this.calendarConfigManager.setShowHabits(checked);
             await this.refreshEvents();
-        }));
+        });
+        const habitDisplaySubItems = habitDisplayGroup.subItems;
+        displaySettingsDropdown.appendChild(habitDisplayGroup.item);
         displaySettingsDropdown.appendChild(habitDisplaySubItems);
 
         // 习惯打卡时间显示开关
@@ -1466,7 +1502,9 @@ export class CalendarView {
         // 习惯日历只展示与习惯相关的显示设置，避免混入任务专用选项
         if (this.openedFromHabitPanel) {
             statusLabel.innerText = i18n("habitCheckIn") || "习惯打卡情况";
+            // 习惯专用日历没有父级开关，选项保持直接可见。
             habitDisplaySubItems.style.paddingLeft = '0';
+            habitDisplaySubItems.style.display = 'block';
             displaySettingsDropdown.replaceChildren(
                 statusLabel,
                 statusGroup,
