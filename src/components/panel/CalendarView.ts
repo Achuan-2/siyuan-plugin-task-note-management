@@ -11,7 +11,7 @@ import listPlugin from '@fullcalendar/list';
 import interactionPlugin from '@fullcalendar/interaction';
 import { colorWithOpacity } from "../../utils/uiUtils";
 import { getLuteInstance } from "../../utils/luteSingleton";
-import { showMessage, confirm, openTab, Menu, Dialog, Constants, platformUtils } from "siyuan";
+import { showMessage, confirm, openTab, Menu, Dialog, Constants, platformUtils, getFrontend } from "siyuan";
 import { refreshSql, getBlockByID, updateBindBlockAtrrs, openBlock, pushMsg, sql } from "../../api";
 import { getLocalDateString, getLocalDateTime, getLocalDateTimeString, compareDateStrings, getLogicalDateString, getRelativeDateString, getDayStartAdjustedDate, getLocaleTag } from "../../utils/dateUtils";
 import { QuickReminderDialog } from "../dialog/QuickReminderDialog";
@@ -47,6 +47,9 @@ import { HabitGroupManager } from "../dataManager/habitGroupManager";
 import { normalizeReminderSkipWeekendMode, shouldSkipReminderOnDate, type HolidayData, getReminderSkipWeekendsEffective, getReminderSkipHolidaysEffective } from "../../utils/reminderSkipDate";
 import { syncHabitMemoBlock, type HabitMemoCheckInEntry, type HabitMemoEmojiConfig } from "../dataManager/habitMemoBlockSync";
 import { isOpenEndedStartDateTask } from "../../utils/startDateOverdue";
+
+type CalendarViewPeriod = 'year' | 'month' | 'week' | 'day' | 'multiDays';
+
 export class CalendarView {
     private readonly lifecycle = new ViewLifecycle();
     private resizeCleanup?: () => void;
@@ -165,6 +168,7 @@ export class CalendarView {
     private dayBtn: HTMLButtonElement;
     private yearBtn: HTMLButtonElement;
     private multiDaysBtn: HTMLButtonElement;
+    private viewPeriodSelect: HTMLSelectElement | null = null;
     private viewTypeButton: HTMLButtonElement;
     private isDockMode: boolean = false; // 是否在 Dock 面板中显示
 
@@ -654,6 +658,7 @@ export class CalendarView {
 
 
         // 视图切换按钮
+        const isMobileClient = getFrontend().endsWith('mobile') || this.plugin?.isInMobileApp === true;
         let viewGroup: HTMLDivElement | null = null;
         if (!this.isDockMode) {
             viewGroup = document.createElement('div');
@@ -664,40 +669,18 @@ export class CalendarView {
         this.yearBtn.className = 'b3-button b3-button--outline';
         this.yearBtn.textContent = i18n("year");
         this.yearBtn.addEventListener('click', async () => {
-            const viewType = this._getViewType();
-            let viewMode: string;
-            if (viewType === 'list') {
-                viewMode = 'listYear';
-            } else {
-                // timeline and kanban both use multiMonthYear
-                viewMode = 'multiMonthYear';
-            }
-            await this._setViewMode(viewMode as any);
-            this.calendar.changeView(viewMode);
-            this.updateViewButtonStates();
-            this.updatePomodoroButtonVisibility();
+            await this.changeViewPeriod('year');
         });
-        if (!this.isDockMode && viewGroup) {
+        if (!isMobileClient && viewGroup) {
             viewGroup.appendChild(this.yearBtn);
         }
         this.monthBtn = document.createElement('button');
         this.monthBtn.className = 'b3-button b3-button--outline';
         this.monthBtn.textContent = i18n("month");
         this.monthBtn.addEventListener('click', async () => {
-            const viewType = this._getViewType();
-            let viewMode: string;
-            if (viewType === 'list') {
-                viewMode = 'listMonth';
-            } else {
-                // timeline and kanban both use dayGridMonth
-                viewMode = 'dayGridMonth';
-            }
-            await this._setViewMode(viewMode as any);
-            this.calendar.changeView(viewMode);
-            this.updateViewButtonStates();
-            this.updatePomodoroButtonVisibility();
+            await this.changeViewPeriod('month');
         });
-        if (!this.isDockMode && viewGroup) {
+        if (!isMobileClient && viewGroup) {
             viewGroup.appendChild(this.monthBtn);
         }
 
@@ -705,21 +688,9 @@ export class CalendarView {
         this.weekBtn.className = 'b3-button b3-button--outline';
         this.weekBtn.textContent = i18n("week");
         this.weekBtn.addEventListener('click', async () => {
-            const viewType = this._getViewType();
-            let viewMode: string;
-            if (viewType === 'timeline') {
-                viewMode = 'timeGridWeek';
-            } else if (viewType === 'kanban') {
-                viewMode = 'dayGridWeek';
-            } else { // list
-                viewMode = 'listWeek';
-            }
-            await this._setViewMode(viewMode as any);
-            this.calendar.changeView(viewMode);
-            this.updateViewButtonStates();
-            this.updatePomodoroButtonVisibility();
+            await this.changeViewPeriod('week');
         });
-        if (!this.isDockMode && viewGroup) {
+        if (!isMobileClient && viewGroup) {
             viewGroup.appendChild(this.weekBtn);
         }
 
@@ -728,26 +699,9 @@ export class CalendarView {
         this.multiDaysBtn.className = 'b3-button b3-button--outline';
         this.multiDaysBtn.textContent = i18n("multiDays") || "多天";
         this.multiDaysBtn.addEventListener('click', async () => {
-            const viewType = this._getViewType();
-            const multiDaysCount = this.calendarConfigManager.getMultiDaysCount();
-            let viewMode: string;
-            if (viewType === 'timeline') {
-                viewMode = 'timeGridMultiDays';
-            } else if (viewType === 'kanban') {
-                viewMode = 'dayGridMultiDays';
-            } else { // list
-                viewMode = 'listMultiDays';
-            }
-
-            // 计算多天视图的起始日期（今天的前一天），使今天显示为第二天
-            const startDate = getRelativeDateString(-1);
-
-            await this._setViewMode(viewMode as any);
-            this.calendar.changeView(viewMode, startDate);
-            this.updateViewButtonStates();
-            this.updatePomodoroButtonVisibility();
+            await this.changeViewPeriod('multiDays');
         });
-        if (!this.isDockMode && viewGroup) {
+        if (!isMobileClient && viewGroup) {
             viewGroup.appendChild(this.multiDaysBtn);
         }
 
@@ -755,25 +709,30 @@ export class CalendarView {
         this.dayBtn.className = 'b3-button b3-button--outline';
         this.dayBtn.textContent = i18n("day");
         this.dayBtn.addEventListener('click', async () => {
-            const viewType = this._getViewType();
-            let viewMode: string;
-            if (viewType === 'timeline') {
-                viewMode = 'timeGridDay';
-            } else if (viewType === 'kanban') {
-                viewMode = 'dayGridDay';
-            } else { // list
-                viewMode = 'listDay';
-            }
-            await this._setViewMode(viewMode as any);
-            this.calendar.changeView(viewMode);
-            this.updateViewButtonStates();
-            this.updatePomodoroButtonVisibility();
+            await this.changeViewPeriod('day');
         });
-        if (!this.isDockMode && viewGroup) {
+        if (!isMobileClient && viewGroup) {
             viewGroup.appendChild(this.dayBtn);
         }
 
-
+        if (isMobileClient && viewGroup) {
+            const periodSelect = document.createElement('select');
+            periodSelect.className = 'b3-select';
+            periodSelect.setAttribute('aria-label', i18n("currentView"));
+            const periods: Array<{ value: CalendarViewPeriod, label: string }> = [
+                { value: 'year', label: i18n("year") },
+                { value: 'month', label: i18n("month") },
+                { value: 'week', label: i18n("week") },
+                { value: 'day', label: i18n("day") },
+                { value: 'multiDays', label: i18n("multiDays") }
+            ];
+            periods.forEach(period => periodSelect.add(new Option(period.label, period.value)));
+            periodSelect.addEventListener('change', async () => {
+                await this.changeViewPeriod(periodSelect.value as CalendarViewPeriod);
+            });
+            this.viewPeriodSelect = periodSelect;
+            viewGroup.appendChild(periodSelect);
+        }
 
         // 添加视图类型下拉框（按钮样式）
         const viewTypeContainer = document.createElement('div');
@@ -11962,11 +11921,37 @@ export class CalendarView {
         }
     }
 
-    /**
-     * 更新视图按钮的激活状态
-     */
+    /** 手机下拉框和桌面按钮共用周期切换逻辑。 */
+    private async changeViewPeriod(period: CalendarViewPeriod) {
+        const viewModes = {
+            year: { timeline: 'multiMonthYear', kanban: 'multiMonthYear', list: 'listYear' },
+            month: { timeline: 'dayGridMonth', kanban: 'dayGridMonth', list: 'listMonth' },
+            week: { timeline: 'timeGridWeek', kanban: 'dayGridWeek', list: 'listWeek' },
+            day: { timeline: 'timeGridDay', kanban: 'dayGridDay', list: 'listDay' },
+            multiDays: { timeline: 'timeGridMultiDays', kanban: 'dayGridMultiDays', list: 'listMultiDays' }
+        } as const;
+        const viewMode = viewModes[period][this._getViewType()];
+        await this._setViewMode(viewMode);
+        if (period === 'multiDays') {
+            // 保留多日视图以昨天为起点、今日为第二天的行为。
+            this.calendar.changeView(viewMode, getRelativeDateString(-1));
+        } else {
+            this.calendar.changeView(viewMode);
+        }
+        this.updateViewButtonStates();
+        this.updatePomodoroButtonVisibility();
+    }
+
+    /** 更新桌面按钮的激活状态及手机下拉框的当前选项。 */
     private updateViewButtonStates() {
         const currentViewMode = this._getViewMode();
+
+        if (this.viewPeriodSelect) {
+            this.viewPeriodSelect.value = currentViewMode.endsWith('MultiDays') ? 'multiDays'
+                : currentViewMode.endsWith('Year') ? 'year'
+                : currentViewMode.endsWith('Month') ? 'month'
+                : currentViewMode.endsWith('Week') ? 'week' : 'day';
+        }
 
         // 重置所有按钮样式
         this.monthBtn.classList.remove('b3-button--primary');
