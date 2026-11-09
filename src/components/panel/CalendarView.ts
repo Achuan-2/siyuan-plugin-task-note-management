@@ -1204,6 +1204,13 @@ export class CalendarView {
         });
         displaySettingsDropdown.append(taskDisplayGroup.item, taskDisplayGroup.subItems);
 
+        // 隐藏任务设置（强制显示标记为不在日历显示的任务）
+        displaySettingsDropdown.appendChild(createSwitchItem(i18n("showHiddenTasks") || "显示日历隐藏任务", this.showHiddenTasks, async (checked) => {
+            this.showHiddenTasks = checked;
+            await this.calendarConfigManager.setShowHiddenTasks(checked);
+            await this.refreshEvents();
+        }));
+
         // 任务状态设置
         const statusLabel = document.createElement('div');
         statusLabel.style.padding = '4px 12px';
@@ -1358,13 +1365,6 @@ export class CalendarView {
         }));
 
         displaySettingsDropdown.appendChild(completedTaskTimeSubItems);
-
-        // 隐藏任务设置（强制显示标记为不在日历显示的任务）
-        displaySettingsDropdown.appendChild(createSwitchItem(i18n("showHiddenTasks") || "显示日历隐藏任务", this.showHiddenTasks, async (checked) => {
-            this.showHiddenTasks = checked;
-            await this.calendarConfigManager.setShowHiddenTasks(checked);
-            await this.refreshEvents();
-        }));
 
         // 番茄专注设置
         displaySettingsDropdown.appendChild(createSwitchItem(i18n("showPomodoroDuration") || "显示番茄钟总专注时长", this.showPomodoroDuration, async (checked) => {
